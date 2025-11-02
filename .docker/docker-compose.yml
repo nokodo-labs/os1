@@ -1,0 +1,80 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:17-alpine
+    container_name: monorepo-db
+    restart: unless-stopped
+    environment:
+      # Database credentials - change for production
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres # TODO: Change in production
+      POSTGRES_DB: app_db
+    ports:
+      # Change host port if 5432 is already in use
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../.docker/Dockerfile.backend
+    container_name: monorepo-backend
+    restart: unless-stopped
+    ports:
+      # Backend API port - change if needed
+      - "8000:8000"
+    environment:
+      # Database connection (must match db service credentials)
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/app_db
+
+      # Application settings
+      APP_ENV: production # Options: development, staging, production
+      DEBUG: "False" # Set to "True" only for development
+
+      # Security - MUST change in production
+      SECRET_KEY: CHANGE-THIS-SECRET-KEY-IN-PRODUCTION
+
+      # CORS origins - add your frontend domains
+      CORS_ORIGINS: '["http://localhost", "https://yourdomain.com"]'
+
+      # API prefix
+      V1_PREFIX: /v1
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount data directory for file storage
+      - ../backend/data:/app/data
+      # Hot reload for development (remove in production)
+      - ../backend:/app
+      - /app/__pycache__
+    # Development command (replace with production command)
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Svelte Frontend (Nginx)
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../.docker/Dockerfile.frontend
+    container_name: monorepo-frontend
+    restart: unless-stopped
+    ports:
+      # Frontend port - typically 80 or 443
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: monorepo-network

@@ -1,0 +1,38 @@
+{
+	"recommendations": [
+		// Python
+		"ms-python.python",
+		"ms-python.vscode-pylance",
+		"ms-python.debugpy",
+		"charliermarsh.ruff",
+
+		// JavaScript/TypeScript/Svelte
+		"svelte.svelte-vscode",
+		"bradlc.vscode-tailwindcss",
+		"esbenp.prettier-vscode",
+		"dbaeumer.vscode-eslint",
+
+		// YAML
+		"redhat.vscode-yaml",
+
+		// Docker
+		"ms-azuretools.vscode-containers",
+		"ms-vscode-remote.remote-containers",
+		"docker.docker",
+
+		// Git & GitHub
+		"eamodio.gitlens",
+		"github.vscode-github-actions",
+		"eamodio.gitlens",
+
+		// AI Assistants
+		"github.copilot",
+		"github.copilot-chat",
+		"ms-vscode.vscode-websearchforcopilot",
+		"anthropic.claude-code",
+
+		// Utilities
+		"visualstudioexptteam.vscodeintellicode",
+		"gruntfuggly.todo-tree"
+	]
+}

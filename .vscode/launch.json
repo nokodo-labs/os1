@@ -1,0 +1,101 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Python: FastAPI",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "uvicorn",
+			"args": [
+				"api.main:app",
+				"--reload",
+				"--host",
+				"127.0.0.1",
+				"--port",
+				"8000"
+			],
+			"jinja": true,
+			"justMyCode": true,
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			},
+			"console": "integratedTerminal",
+			"purpose": ["debug-in-terminal"]
+		},
+		{
+			"name": "Python: Current File",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${file}",
+			"console": "integratedTerminal",
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			}
+		},
+		{
+			"name": "Python: Pytest",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "pytest",
+			"args": ["-v", "${file}"],
+			"console": "integratedTerminal",
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			}
+		},
+		{
+			"name": "Frontend: Vite Dev Server",
+			"type": "node",
+			"request": "launch",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": ["run", "dev"],
+			"cwd": "${workspaceFolder}/frontend",
+			"console": "integratedTerminal",
+			"skipFiles": ["<node_internals>/**"]
+		},
+		{
+			"name": "Frontend: Chrome",
+			"type": "chrome",
+			"request": "launch",
+			"url": "http://localhost:5173",
+			"webRoot": "${workspaceFolder}/frontend/src",
+			"sourceMapPathOverrides": {
+				"webpack:///src/*": "${webRoot}/*"
+			}
+		},
+		{
+			"name": "Docker: Attach to Backend",
+			"type": "debugpy",
+			"request": "attach",
+			"connect": {
+				"host": "localhost",
+				"port": 5678
+			},
+			"pathMappings": [
+				{
+					"localRoot": "${workspaceFolder}/backend",
+					"remoteRoot": "/app"
+				}
+			]
+		}
+	],
+	"compounds": [
+		{
+			"name": "Full Stack",
+			"configurations": [
+				"Python: FastAPI",
+				"Frontend: Vite Dev Server",
+				"Frontend: Chrome"
+			],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "fullstack",
+				"order": 1
+			}
+		}
+	]
+}

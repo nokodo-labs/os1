@@ -1,0 +1,116 @@
+name: Main CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [dev, stable]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [dev, stable]
+  workflow_dispatch:
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    # Case 1: PR from non-core branch → core branch (dev/stable): Run CI
+    # Case 2: PR from core branch (dev/stable) → any branch: Skip (same repo only)
+    # Case 3: Push to core branch → Run CI + CD
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name != github.repository || (github.head_ref != 'dev' && github.head_ref != 'stable'))) }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      docker: ${{ steps.changes.outputs.docker }}
+      github_actions: ${{ steps.changes.outputs.github_actions }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            docker:
+              - '.docker/**'
+            github_actions:
+              - '.github/workflows/**'
+            docs:
+              - 'docs/**'
+            release:
+              - 'tools/release_please/**'
+
+  backend-ci:
+    name: Backend CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.github_actions == 'true'
+    uses: ./.github/workflows/backend-ci.yml
+    with:
+      run_tests: true
+      run_lint: true
+    secrets: inherit
+
+  frontend-ci:
+    name: Frontend CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.github_actions == 'true'
+    uses: ./.github/workflows/frontend-ci.yml
+    with:
+      run_tests: true
+      run_lint: true
+    secrets: inherit
+
+  release:
+    name: Release
+    needs: [backend-ci, frontend-ci]
+    if: ${{ !cancelled() && (needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (github.ref_name == 'dev' || github.ref_name == 'stable') && github.event_name == 'push' }}
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+
+  promotion:
+    name: Code Promotion
+    needs: [detect-changes, backend-ci, frontend-ci]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name == 'dev' && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.github_actions == 'true' || needs.detect-changes.outputs.docs == 'true') && ((needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped')) }}
+    uses: ./.github/workflows/promotion.yml
+    secrets: inherit
+
+  pages-deploy:
+    name: Deploy Frontend to GitHub Pages
+    needs: [detect-changes, frontend-ci]
+    # Only deploy on push to stable, NOT on PRs (no CD for PRs)
+    if: ${{ !cancelled() && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.github_actions == 'true') && github.event_name == 'push' && github.ref_name == 'stable' }}
+    uses: ./.github/workflows/deploy-frontend-pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: write
+    secrets: inherit
+    with:
+      environment: github-pages
+
+  docker-publish:
+    name: Build and Publish Docker Image
+    needs: [detect-changes, backend-ci, frontend-ci, release]
+    permissions:
+      contents: read
+      packages: write
+    # Only publish on push to core branches (dev or stable), not PRs
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && ((needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.github_actions == 'true') || needs.release.outputs.version != '') }}
+    uses: ./.github/workflows/docker-publish.yml
+    secrets: inherit
+    with:
+      release_version: ${{ needs.release.outputs.version }}
