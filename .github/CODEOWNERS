@@ -1,0 +1,22 @@
+# CODEOWNERS - Define code ownership for pull request reviews
+# Syntax: path/pattern @github-username @github-team
+
+# Root files - replace with your team/handles
+* @your-github-org/your-team
+
+# Backend
+/backend/ @your-github-org/backend-team
+/backend/api/ @your-github-org/backend-team
+/backend/project_slug/ @your-github-org/backend-team
+
+# Frontend
+/frontend/ @your-github-org/frontend-team
+
+# Infrastructure & DevOps
+/.docker/ @your-github-org/devops-team
+/.github/ @your-github-org/devops-team
+/tools/ @your-github-org/devops-team
+
+# Documentation
+/docs/ @your-github-org/docs-team
+*.md @your-github-org/docs-team
