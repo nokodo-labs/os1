@@ -29,7 +29,7 @@
         "autoprefixer": "^10.4.20",
         "eslint": "^9.14.0",
         "eslint-config-prettier": "^10.1.8",
-        "eslint-plugin-svelte": "^3.12.5",
+        "eslint-plugin-svelte": "^3.13.0",
         "happy-dom": "^20.0.10",
         "openapi-typescript": "^7.4.2",
         "postcss": "^8.4.47",
