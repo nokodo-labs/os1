@@ -1,0 +1,103 @@
+{
+	// Editor
+	"editor.formatOnSave": true,
+	"editor.codeActionsOnSave": {
+		"source.fixAll": "explicit",
+		"source.organizeImports": "explicit"
+	},
+	"editor.defaultFormatter": "esbenp.prettier-vscode",
+	"editor.insertSpaces": false,
+	"editor.tabSize": 4,
+	"files.eol": "\n",
+
+	// Files
+	"files.exclude": {
+		"**/__pycache__": true,
+		"**/.pytest_cache": true,
+		"**/.mypy_cache": true,
+		"**/.ruff_cache": true,
+		"**/node_modules": true,
+		"**/.svelte-kit": true
+	},
+	"files.watcherExclude": {
+		"**/__pycache__/**": true,
+		"**/node_modules/**": true
+	},
+
+	// Git & GitHub
+	"git.enableSmartCommit": true,
+	"git.autofetch": true,
+	"git.confirmSync": false,
+	"[github-actions-workflow]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"githubIssues.issueBranchTitle": "issues/${issueNumber}-${user}",
+
+	// Python
+	"python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv",
+	"[python]": {
+		"editor.defaultFormatter": "charliermarsh.ruff",
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.fixAll.ruff": "explicit",
+			"source.organizeImports.ruff": "explicit"
+		}
+	},
+	"python.analysis.typeCheckingMode": "basic",
+	"python.analysis.autoImportCompletions": true,
+	"python.testing.pytestEnabled": true,
+	"python.testing.unittestEnabled": false,
+	"ruff.enable": true,
+	"ruff.organizeImports": true,
+	"ruff.fixAll": true,
+
+	// JavaScript/TypeScript
+	"[javascript]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"[typescript]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"[svelte]": {
+		"editor.defaultFormatter": "svelte.svelte-vscode"
+	},
+	"[json]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"[jsonc]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"[css]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+
+	// Svelte
+	"svelte.enable-ts-plugin": true,
+
+	// Tailwind CSS
+	"tailwindCSS.experimental.classRegex": [
+		["class:\\s*?[\"'`]([^\"'`]*).*?[\"'`]", "[\"'`]([^\"'`]*).*?[\"'`]"]
+	],
+	"files.associations": {
+		"*.css": "tailwindcss"
+	},
+
+	// Docker
+	"containers.commands.build": "${containerCommand} build --pull --rm -f \"${dockerfile}\" -t ${tag} \"${context}\"",
+	"containers.commands.composeUp": [
+		{
+			"label": "Compose Up",
+			"template": "${composeCommand} ${configurationFile} up ${detached} ${build}"
+		}
+	],
+
+	// Search
+	"search.useIgnoreFiles": true,
+	"search.exclude": {
+		"**/node_modules": true,
+		"**/dist": true,
+		"**/.venv": true,
+		"**/__pycache__": true,
+		"**/.pytest_cache": true
+	}
+}
