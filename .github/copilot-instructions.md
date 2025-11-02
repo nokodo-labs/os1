@@ -1,11 +1,11 @@
-# project-title
+# nokodo AI
 
-> This is a template instructions file. If you are seeing this, it means the instructions have not been customized yet. Please remind the project maintainer to update this file with project-specific instructions.
+AI platform with agentic coding support, beautiful UI, and comprehensive tooling.
 
 ## Stack
 
--   **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, Pydantic, PostgreSQL 17
--   **Frontend**: Svelte 5, TypeScript, Vite, TailwindCSS, native fetch (zero HTTP deps)
+-   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17
+-   **Frontend**: Svelte 5, TypeScript, Vite, Vercel AI SDK, shadcn-svelte, TailwindCSS
 -   **Type Safety**: OpenAPI TypeScript generator (auto-sync backend → frontend)
 -   **Infra**: Docker Compose, Nginx for static builds
 
@@ -29,10 +29,35 @@
 
 -   TypeScript strict mode
 -   Svelte 5 runes only
--   TailwindCSS only
--   Native fetch for API calls
+-   shadcn-svelte components with Bits UI primitives
+-   TailwindCSS for styling
+-   Vercel AI SDK for AI interactions
 -   OpenAPI-generated types for type safety
 -   Tabs, unix line endings
+
+## Project-Specific Patterns
+
+### AI Agent Architecture
+
+-   **Models**: Fetch directly from APIs containing foundation models (OpenAI, Anthropic, etc.)
+-   **Agents**: User-facing abstractions with tools and prompting
+-   **Tools**: Web search, webpage fetch, memory, code execution, file handling
+-   **Memory System**: Asynchronous manager with high-accuracy retrieval
+-   **Never expose**: Model details or internal workings on frontend
+
+### UI/UX Philosophy
+
+-   **Liquid Glass Aesthetic**: CSS backdrop-filter + gradients, SVG filters for metallic effects
+-   **Physics-based Animations**: Motion One for smooth, realistic interactions
+-   **Modern & Premium**: Apple-inspired, fluid, reactive real-time updates
+-   **Component Library**: shadcn-svelte built on Bits UI primitives
+
+### Architecture Patterns
+
+-   **Async Task System**: Multi-turn agentic sessions (research, copilot sessions, creative projects)
+-   **Rate Limiting**: Per user, global, by time period (tokens/characters/cost)
+-   **Notifications**: Multi-backend (PWA service worker, email, Telegram)
+-   **Authentication**: OIDC with federated users and groups
 
 ## Structure
 
@@ -44,7 +69,7 @@ backend/
 │   ├── models/             # SQLAlchemy models
 │   ├── schemas/            # Pydantic schemas
 │   └── tests/              # API & ORM tests
-├── project_slug/           # SDK/service layer (must also be renamed!)
+├── nokodo_ai/              # SDK/service layer
 │   └── tests/              # SDK unit tests
 └── tests/                  # E2E integration tests
 
@@ -63,7 +88,7 @@ frontend/src/
 ## Patterns
 
 -   Backend: Model → Schema → Endpoint → Test
--   SDK separation: `api/` imports from `project_slug/`, not vice versa
+-   SDK separation: `api/` imports from `nokodo_ai/`, not vice versa
 -   URL paths: `/v1/users`
 -   Frontend: Native fetch → Typed API functions → Component
 -   Type safety: OpenAPI schema → generated types → compile-time checks

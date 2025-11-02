@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 	)
 
 	# Application
-	PROJECT_NAME: str = "FastAPI Monorepo"
+	PROJECT_NAME: str = "nokodo AI"
 	VERSION: str = "0.1.0"
 	APP_ENV: Literal["development", "staging", "production"] = "development"
 	DEBUG: bool = True

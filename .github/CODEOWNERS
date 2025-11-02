@@ -1,21 +1,21 @@
 # CODEOWNERS - Define code ownership for pull request reviews
 # Syntax: path/pattern @github-username @github-team
 
-# Root files - replace with your team/handles
-* @your-github-org/your-team
+# Root files
+* @nokodo-dev
 
 # Backend
-/backend/ @your-github-org/backend-team
-/backend/api/ @your-github-org/backend-team
-/backend/project_slug/ @your-github-org/backend-team
+/backend/ @nokodo-dev
+/backend/api/ @nokodo-dev
+/backend/nokodo_ai/ @nokodo-dev
 
 # Frontend
-/frontend/ @your-github-org/frontend-team
+/frontend/ @nokodo-dev
 
 # Infrastructure & DevOps
-/.docker/ @your-github-org/devops-team
-/.github/ @your-github-org/devops-team
-/tools/ @your-github-org/devops-team
+/.docker/ @nokodo-dev
+/.github/ @nokodo-dev
+/tools/ @nokodo-dev
 
 # Documentation
 /docs/ @your-github-org/docs-team

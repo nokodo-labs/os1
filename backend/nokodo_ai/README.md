@@ -1,6 +1,4 @@
-# Project Name SDK
-
-**RENAME THIS PACKAGE**: Change `project_slug` to your actual project name throughout the codebase.
+# nokodo AI SDK
 
 ## Purpose
 
@@ -14,7 +12,7 @@ This package contains the core business logic and service layer, separate from t
 ## Structure
 
 ```
-project_slug/
+nokodo_ai/
 ├── __init__.py          # Package initialization
 ├── services/            # Business logic
 ├── utils/               # Helper functions
@@ -25,16 +23,10 @@ project_slug/
 
 ```python
 from api.core.database import get_db
-from project_slug.services import MyService
+from nokodo_ai.services import MyService
 
 @router.get("/example")
 async def example(db: AsyncSession = Depends(get_db)):
 	service = MyService(db)
 	return await service.do_something()
 ```
-
-## Renaming
-
-1. Rename the `project_slug` directory to your project name
-2. Update imports in `api/` files
-3. Update `pyproject.toml` if packaging separately

@@ -5,14 +5,14 @@
 
 ---
 
-<h1>Monorepo Template</h1>
+<h1>nokodo AI</h1>
 
-**Modern & production-ready full-stack template that saves you weeks of setup: FastAPI backend + Svelte 5 frontend with containerization, full CI/CD, VS Code support, and AI integrations.**
+**Modern AI platform with agentic coding support, built for seamless developer experience and beautiful user interfaces.**
 
-[![License](https://img.shields.io/github/license/nokodo-labs/monorepo-template)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/nokodo-labs/monorepo-template?style=social)](https://github.com/nokodo-labs/monorepo-template/stargazers)
-[![Issues](https://img.shields.io/github/issues/nokodo-labs/monorepo-template)](https://github.com/nokodo-labs/monorepo-template/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/nokodo-labs/monorepo-template)](https://github.com/nokodo-labs/monorepo-template/pulls)
+[![License](https://img.shields.io/github/license/nokodo-labs/nokodo-ai)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/nokodo-labs/nokodo-ai?style=social)](https://github.com/nokodo-labs/nokodo-ai/stargazers)
+[![Issues](https://img.shields.io/github/issues/nokodo-labs/nokodo-ai)](https://github.com/nokodo-labs/nokodo-ai/issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/nokodo-labs/nokodo-ai)](https://github.com/nokodo-labs/nokodo-ai/pulls)
 [![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![Node](https://img.shields.io/badge/node-24+-green.svg)](https://nodejs.org/)
 
@@ -20,37 +20,28 @@
 
 ## 🛠️ Stack
 
--   **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, Pydantic, PostgreSQL 17, Alembic
--   **Frontend**: Svelte 5, Vite 6, Tailwind 4, TypeScript, native fetch (zero HTTP deps)
+-   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17, Alembic
+-   **Frontend**: Svelte 5, Vite 6, Vercel AI SDK, shadcn-svelte, Tailwind 4, TypeScript
 -   **Type Safety**: OpenAPI TypeScript generator (auto-sync backend → frontend types)
 -   **Dev**: VS Code (tasks, debugger, extensions), Ruff, pytest, AI instructions
 -   **Deploy**: Docker Compose with production configs
 
 ## ✨ Features
 
--   🏗️ **Production infrastructure**: PostgreSQL 17, multi-stage Docker builds, Nginx configs
--   🔒 **End-to-end type safety**: Python type hints → OpenAPI → auto-generated TypeScript types
--   🤖 **Full CI/CD pipeline**: Automated testing, Docker builds, GHCR publishing, releases
--   🧪 **Complete test setup**: pytest (backend) + Vitest (frontend) with fixtures and full coverage
--   📐 **Modern code standards**: EditorConfig, Ruff, ESLint, Prettier pre-configured
--   💾 **Persistent data storage**: Volume-mounted data directory
--   🛠️ **VS Code integration**: Tasks, debugger configs, recommended extensions
--   🤖 **AI agents ready**: Premade instructions & prompts with extensible patterns
--   🎯 **Minimal boilerplate**: No business logic, just a working foundation
--   🔮 **Future-proof stack**: Latest stable versions of everything, zero tech debt from day one
+-   🤖 **AI Agentic Coding**: Heavy AI agent support baked directly into the platform
+-   🎨 **Liquid Glass UI**: Apple-inspired aesthetic with physics-based animations
+-   🔧 **Built-in Tools**: Web search, webpage fetch, memory system, code execution, file handling
+-   🧠 **Smart Memory**: Asynchronous memory manager with high-accuracy context retrieval
+-   🔄 **Async Task System**: Multi-turn agentic sessions for deep research and complex workflows
+-   🔐 **Enterprise Auth**: OIDC authentication with federated users and groups
+-   ⚡ **Rate Limiting**: Granular controls per user, global, by time period
+-   🔔 **Notifications**: Multi-backend support (PWA, email, Telegram)
+-   🏗️ **Production Infrastructure**: PostgreSQL 17, multi-stage Docker builds, Nginx configs
+-   🔒 **End-to-end Type Safety**: Python type hints → OpenAPI → auto-generated TypeScript types
 
 ## 🚀 Quick Start
 
-### 1️⃣ Create Your Repository
-
--   Click **"Use this template"** on GitHub → Create your repo
--   Clone your new repository locally
-
-### 2️⃣ Customize Project
-
-Rename `backend/project_slug/` to your project name and update references. See [docs/setup.md](docs/setup.md#initial-customization-required) for detailed instructions.
-
-### 3️⃣ Start Development
+### 1️⃣ Start Development
 
 ```bash
 cd .docker
@@ -65,13 +56,13 @@ docker compose up -d
 
 > 💡 **VS Code users**: Open the workspace to get tasks, debugger configs, and recommended extensions automatically.
 
-### 4️⃣ Deploy to Production
+### 2️⃣ Deploy to Production
 
 CI/CD automatically builds and pushes Docker images to **GitHub Container Registry (GHCR)** on every commit. Images are tagged as:
 
--   `ghcr.io/your-org/your-repo:latest` → production branch
--   `ghcr.io/your-org/your-repo:dev` → dev branch
--   `ghcr.io/your-org/your-repo:v1.2.3` → releases
+-   `ghcr.io/nokodo-labs/nokodo-ai:latest` → production branch
+-   `ghcr.io/nokodo-labs/nokodo-ai:dev` → dev branch
+-   `ghcr.io/nokodo-labs/nokodo-ai:v1.2.3` → releases
 
 **Deploy with Docker:**
 
@@ -94,8 +85,8 @@ backend/
 │   ├── schemas/           # Pydantic validation
 │   ├── tests/             # API & ORM tests
 │   └── alembic/           # Database migrations
-├── project_slug/          # SDK/service layer (rename me!)
-│   └── tests/             # SDK unit tests (optional)
+├── nokodo_ai/            # SDK/service layer
+│   └── tests/             # SDK unit tests
 ├── tests/                 # E2E integration tests
 └── data/                  # Data storage (volume mounted)
 
@@ -121,7 +112,7 @@ tools/release_please/      # Release automation config
 **Backend:**
 
 -   **`api/`**: FastAPI app, routes, ORM, database setup
--   **`project_slug/`**: Business logic SDK that can be packaged separately for pip distribution
+-   **`nokodo_ai/`**: Business logic SDK that can be packaged separately for pip distribution
 -   **Testing**: 3 tiers (API tests in `api/tests/`, SDK tests in `project_slug/tests/`, E2E in `tests/`)
 -   **URLs**: `/v1/users` (no `/api` prefix - deploy on `api.yourdomain.com`)
 

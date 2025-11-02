@@ -1,7 +1,7 @@
 [project]
-name = "project-slug"
+name = "nokodo-ai"
 version = "0.1.0"
-description = "Core library for project-title"
+description = "Core library for nokodo AI"
 requires-python = ">=3.13"
 dependencies = [
     # Library-only dependencies (what gets published to PyPI)
@@ -39,7 +39,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["project_slug", "project_slug.*"]
+include = ["nokodo_ai", "nokodo_ai.*"]
 exclude = ["api", "api.*", "tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.ruff]

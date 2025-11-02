@@ -28,10 +28,9 @@
 	],
 	"packages": {
 		".": {
-			"package-name": "project-slug",
-			"pull-request-title-pattern": "chore(release): release project-slug ${version}"
+			"pull-request-title-pattern": "chore(release): release${component} nokodo AI v${version}"
 		},
-		"backend/project-slug": {
+		"backend/nokodo_ai": {
 			"package-name": "library",
 			"release-type": "python",
 			"include-component-in-tag": true,
