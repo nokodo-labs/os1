@@ -35,31 +35,14 @@ AI platform with agentic coding support, beautiful UI, and comprehensive tooling
 -   OpenAPI-generated types for type safety
 -   Tabs, unix line endings
 
-## Project-Specific Patterns
+## UI/UX Philosophy
 
-### AI Agent Architecture
-
--   **Models**: Fetch directly from APIs containing foundation models (OpenAI, Anthropic, etc.)
--   **Agents**: User-facing abstractions with tools and prompting
--   **Tools**: Web search, webpage fetch, memory, code execution, file handling
--   **Memory System**: Asynchronous manager with high-accuracy retrieval
--   **Never expose**: Model details or internal workings on frontend
-
-### UI/UX Philosophy
-
--   **Liquid Glass Aesthetic**: CSS backdrop-filter + gradients, SVG filters for metallic effects
+-   **Liquid UI**: A next-gen aesthetic with liquid elements, unifying Apple-inspired liquid glass with an unique Mercury-like liquid metal effect
 -   **Physics-based Animations**: Motion One for smooth, realistic interactions
 -   **Modern & Premium**: Apple-inspired, fluid, reactive real-time updates
 -   **Component Library**: shadcn-svelte built on Bits UI primitives
 
-### Architecture Patterns
-
--   **Async Task System**: Multi-turn agentic sessions (research, copilot sessions, creative projects)
--   **Rate Limiting**: Per user, global, by time period (tokens/characters/cost)
--   **Notifications**: Multi-backend (PWA service worker, email, Telegram)
--   **Authentication**: OIDC with federated users and groups
-
-## Structure
+## Codebase map
 
 ```
 backend/
@@ -76,9 +59,6 @@ backend/
 frontend/src/
 ├── lib/
 │   ├── api/                # Type-safe API client
-│   │   ├── client.ts       # Native fetch wrapper
-│   │   ├── types.ts        # OpenAPI-generated types
-│   │   └── index.ts        # Typed API functions
 │   └── [components]        # Svelte components
 ├── main.ts                 # Entry
 ├── App.svelte              # Main Svelte app
@@ -87,11 +67,7 @@ frontend/src/
 
 ## Patterns
 
--   Backend: Model → Schema → Endpoint → Test
 -   SDK separation: `api/` imports from `nokodo_ai/`, not vice versa
--   URL paths: `/v1/users`
--   Frontend: Native fetch → Typed API functions → Component
--   Type safety: OpenAPI schema → generated types → compile-time checks
 -   REST conventions, proper HTTP codes
 -   Validate inputs (Pydantic)
 -   Type everything
@@ -107,16 +83,28 @@ When interacting with the user and working, always **keep comms efficient** and 
 As an AI, your context is limited, thus overly verbose responses will directly affect how your performance degrades over time.
 **Less is more** - focus on addressing the user's needs never create extra files or documentation to report changes unless explicitly asked.
 
+### Plan and Reflect
+
+Before executing any tasks, follow this process:
+
+1. **Read** the user's request carefully.
+2. **Fetch and read** any relevant files, documentation, or context.
+3. **Think and plan** your approach step-by-step. Use the TODOs tool to stay grounded as you iterate.
+
+Skipping any of these steps will lead to increased costs and suboptimal results.
+
 ### Running Code
 
-When the user asks you to run code, always:
+**About dev servers**:
 
--   **For backend code**: Always remember to cd into `backend/`. Always enable the virtual environment.
--   **For frontend code**: Always remember to cd into `frontend/`.
+-   Always assume the user is already running a dev server with hot reload.
+-   Always assume the user is monitoring changes live.
+-   Never manually run dev servers like `uvicorn` or `npm run dev` yourself - unless explicitly asked.
+-   If you want feedback on changes, simply ask the user what they see!
+
+When you _do_ want to run code, always:
+
+-   **Backend**: Always remember to cd into `backend/`. Always enable the virtual environment, otherwise your code won't run.
+-   **Frontend**: Always remember to cd into `frontend/`.
 -   Check the current working directory if unsure where you are.
 -   Check terminal output if unsure whether the venv is activated.
-
-## Extended Instructions
-
-Additional domain-specific `.instructions.md` files can be created in the `.github/instructions/` directory. These files use YAML frontmatter with `applyTo` patterns to automatically apply when editing specific file types. The user can also manually attach them via Chat → Add Context → Instructions.
-See readme in the `.github/instructions/` directory for more details.
