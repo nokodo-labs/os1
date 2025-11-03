@@ -8,7 +8,6 @@
     import ModelSelector from './lib/components/chat/ModelSelector.svelte'
     import ChatInputWebGL from './lib/components/chat/webgl/ChatInputWebGL.svelte'
     import ChatMessageWebGL from './lib/components/chat/webgl/ChatMessageWebGL.svelte'
-    import liquidGlassFilter from './lib/styles/liquid-glass-filter.svg?raw'
     import './lib/styles/liquid-glass.css'
     // Initialize sidebar context
     const sidebar = createSidebarContext()
@@ -79,8 +78,6 @@
         console.log('Regenerate message')
     }
 </script>
-
-<svelte:head>{@html liquidGlassFilter}</svelte:head>
 
 <Tooltip.Provider>
     <!-- Galaxy background wraps everything to provide context -->
