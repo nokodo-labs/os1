@@ -5,6 +5,8 @@
     import ModelSelector from './lib/components/chat/ModelSelector.svelte'
     import ChatInputWebGL from './lib/components/chat/webgl/ChatInputWebGL.svelte'
     import ChatMessageWebGL from './lib/components/chat/webgl/ChatMessageWebGL.svelte'
+    import liquidGlassFilter from './lib/styles/liquid-glass-filter.svg?raw'
+    import './lib/styles/liquid-glass.css'
 
     interface Message {
         id: string
@@ -72,6 +74,8 @@
         console.log('Regenerate message')
     }
 </script>
+
+<svelte:head>{@html liquidGlassFilter}</svelte:head>
 
 <!-- Galaxy background wraps everything to provide context -->
 <GalaxyBackgroundWebGL>
@@ -211,6 +215,5 @@
 
     .input-container {
         padding: 1.5rem 2rem 2rem;
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
     }
 </style>

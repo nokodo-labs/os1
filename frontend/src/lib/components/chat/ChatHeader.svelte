@@ -11,7 +11,9 @@
 </script>
 
 <header class="chat-header liquid-glass">
-    <div class="header-content">
+    <span class="liquid-glass__highlight" aria-hidden="true"></span>
+
+    <div class="liquid-glass__content header-content">
         <div class="header-text">
             <h1 class="header-title">{title}</h1>
             {#if subtitle}
@@ -29,36 +31,13 @@
 
 <style>
     .chat-header {
-        position: relative;
-        padding: 1.25rem 1.5rem;
-        backdrop-filter: blur(20px) saturate(180%);
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        z-index: 10;
-    }
-
-    .chat-header::after {
-        content: '';
-        position: absolute;
-        bottom: -1px;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.5), transparent);
-        animation: glowPulse 3s ease-in-out infinite;
-    }
-
-    @keyframes glowPulse {
-        0%,
-        100% {
-            opacity: 0.3;
-        }
-        50% {
-            opacity: 0.8;
-        }
+        margin: 1.25rem 2rem 0;
+        padding: 1.25rem 1.75rem;
+        box-shadow: 0 32px 64px rgba(12, 10, 30, 0.45);
     }
 
     .header-content {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -74,7 +53,7 @@
         font-weight: 600;
         color: rgba(255, 255, 255, 0.95);
         margin: 0;
-        background: linear-gradient(135deg, #a78bfa, #818cf8);
+        background: linear-gradient(135deg, #cdbdff, #7c83ff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -82,7 +61,7 @@
 
     .header-subtitle {
         font-size: 0.875rem;
-        color: rgba(255, 255, 255, 0.6);
+        color: rgba(225, 225, 255, 0.68);
         margin: 0.25rem 0 0 0;
     }
 
