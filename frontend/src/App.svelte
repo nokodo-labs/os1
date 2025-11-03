@@ -1,4 +1,7 @@
 <script lang="ts">
+    import AppSidebar from '$lib/components/sidebar/AppSidebar.svelte'
+    import * as Tooltip from '$lib/components/ui/tooltip'
+    import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
     import GalaxyBackgroundWebGL from './lib/components/backgrounds/webgl/GalaxyBackgroundWebGL.svelte'
     import Button from './lib/components/chat/Button.svelte'
     import ChatHeader from './lib/components/chat/ChatHeader.svelte'
@@ -7,6 +10,8 @@
     import ChatMessageWebGL from './lib/components/chat/webgl/ChatMessageWebGL.svelte'
     import liquidGlassFilter from './lib/styles/liquid-glass-filter.svg?raw'
     import './lib/styles/liquid-glass.css'
+    // Initialize sidebar context
+    const sidebar = createSidebarContext()
 
     interface Message {
         id: string
@@ -77,92 +82,117 @@
 
 <svelte:head>{@html liquidGlassFilter}</svelte:head>
 
-<!-- Galaxy background wraps everything to provide context -->
-<GalaxyBackgroundWebGL>
-    <div class="app-container">
-        <ChatHeader title="nokodo AI" subtitle="Next-gen AI platform">
-            {#snippet actions()}
-                <ModelSelector {models} selected={selectedModel} onSelect={handleModelSelect} />
-                <Button variant="ghost" size="sm">
-                    <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <path
-                            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
-                        />
-                        <circle cx="12" cy="12" r="3" />
-                    </svg>
-                </Button>
-            {/snippet}
-        </ChatHeader>
+<Tooltip.Provider>
+    <!-- Galaxy background wraps everything to provide context -->
+    <GalaxyBackgroundWebGL>
+        <div class="app-layout">
+            <!-- Sidebar -->
+            <AppSidebar />
 
-        <div class="messages-container">
-            {#each messages as message (message.id)}
-                <ChatMessageWebGL
-                    role={message.role}
-                    content={message.content}
-                    timestamp={message.timestamp}
-                >
+            <!-- Main Content -->
+            <div class="app-container">
+                <ChatHeader title="nokodo AI" subtitle="Next-gen AI platform">
                     {#snippet actions()}
-                        {#if message.role === 'assistant'}
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onclick={() => handleCopyMessage(message.content)}
+                        <ModelSelector
+                            {models}
+                            selected={selectedModel}
+                            onSelect={handleModelSelect}
+                        />
+                        <Button variant="ghost" size="sm">
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
                             >
-                                <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                >
-                                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                                    <path
-                                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                                    />
-                                </svg>
-                            </Button>
-                            <Button variant="ghost" size="sm" onclick={handleRegenerateMessage}>
-                                <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                >
-                                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                                    <path d="M21 3v5h-5" />
-                                </svg>
-                            </Button>
-                        {/if}
+                                <path
+                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+                                />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        </Button>
                     {/snippet}
-                </ChatMessageWebGL>
-            {/each}
-        </div>
+                </ChatHeader>
 
-        <div class="input-container">
-            <ChatInputWebGL
-                bind:value={inputValue}
-                onSubmit={handleSendMessage}
-                placeholder="Ask me anything..."
-            />
+                <div class="messages-container">
+                    {#each messages as message (message.id)}
+                        <ChatMessageWebGL
+                            role={message.role}
+                            content={message.content}
+                            timestamp={message.timestamp}
+                        >
+                            {#snippet actions()}
+                                {#if message.role === 'assistant'}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onclick={() => handleCopyMessage(message.content)}
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <rect
+                                                width="14"
+                                                height="14"
+                                                x="8"
+                                                y="8"
+                                                rx="2"
+                                                ry="2"
+                                            />
+                                            <path
+                                                d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                                            />
+                                        </svg>
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onclick={handleRegenerateMessage}
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <path
+                                                d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"
+                                            />
+                                            <path d="M21 3v5h-5" />
+                                        </svg>
+                                    </Button>
+                                {/if}
+                            {/snippet}
+                        </ChatMessageWebGL>
+                    {/each}
+                </div>
+
+                <div class="input-container">
+                    <ChatInputWebGL
+                        bind:value={inputValue}
+                        onSubmit={handleSendMessage}
+                        placeholder="Ask me anything..."
+                    />
+                </div>
+            </div>
         </div>
-    </div>
-</GalaxyBackgroundWebGL>
+    </GalaxyBackgroundWebGL>
+</Tooltip.Provider>
 
 <style>
     :global(body) {
@@ -175,16 +205,22 @@
             sans-serif;
     }
 
-    .app-container {
+    .app-layout {
         display: flex;
-        flex-direction: column;
         height: 100vh;
-        max-width: 1200px;
-        margin: 0 auto;
         position: relative;
         z-index: 1;
     }
 
+    .app-container {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+        max-width: 1200px;
+        margin: 0 auto;
+        width: 100%;
+    }
     .messages-container {
         flex: 1;
         overflow-y: auto;
