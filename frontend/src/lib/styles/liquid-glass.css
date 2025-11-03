@@ -1,76 +1,53 @@
-:root {
-    --liquid-glass-radius: 2.25rem;
-}
-
 .liquid-glass {
     position: relative;
-    border-radius: var(--liquid-glass-radius);
-    overflow: hidden;
     isolation: isolate;
-    color: inherit;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0px 6px 24px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .liquid-glass::before {
     content: '';
     position: absolute;
     inset: 0;
-    padding: 1px;
+    z-index: 0;
     border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.06));
-    -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    opacity: 0.95;
-    pointer-events: none;
-    z-index: 2;
+    box-shadow: inset 0 0 20px -5px rgba(255, 255, 255, 0.65);
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .liquid-glass::after {
     content: '';
     position: absolute;
     inset: 0;
+    z-index: -1;
     border-radius: inherit;
-    background:
-        radial-gradient(
-            130% 145% at 18% -10%,
-            rgba(255, 255, 255, 0.32),
-            rgba(255, 255, 255, 0) 70%
-        ),
-        linear-gradient(160deg, rgba(24, 20, 44, 0.2), rgba(8, 6, 20, 0.24));
-    backdrop-filter: url(#liquid-glass-filter);
-    -webkit-backdrop-filter: url(#liquid-glass-filter);
-    filter: url(#liquid-glass-filter);
-    -webkit-filter: url(#liquid-glass-filter);
-    opacity: 0.62;
-    pointer-events: none;
-    z-index: 0;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    isolation: isolate;
 }
 
 @supports not (backdrop-filter: blur(0)) {
-    .liquid-glass::after {
-        backdrop-filter: blur(12px) saturate(165%);
-        -webkit-backdrop-filter: blur(12px) saturate(165%);
+    .liquid-glass {
+        background: rgba(22, 18, 36, 0.88);
     }
 }
 
 .liquid-glass__highlight {
     position: absolute;
-    inset: 8% 14% 56% 14%;
+    inset: 6% 16% 58% 16%;
     border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
-    filter: blur(14px);
-    opacity: 0.5;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0) 80%);
+    filter: blur(18px);
+    opacity: 0.55;
     mix-blend-mode: screen;
     pointer-events: none;
-    z-index: 3;
+    z-index: 2;
 }
 
 .liquid-glass__content {
     position: relative;
-    z-index: 4;
+    z-index: 3;
 }

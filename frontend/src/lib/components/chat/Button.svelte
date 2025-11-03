@@ -16,116 +16,28 @@
         onclick,
         children,
     }: Props = $props()
+
+    const sizeClasses = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-4 py-2 text-[0.9375rem]',
+        lg: 'px-6 py-3 text-base',
+    }
+
+    const variantClasses = {
+        primary:
+            'bg-linear-to-br from-[rgba(139,92,246,0.8)] to-[rgba(99,102,241,0.7)] text-white/95 shadow-[0_4px_20px_rgba(139,92,246,0.3)] hover:not(:disabled):-translate-y-0.5 hover:not(:disabled):shadow-[0_8px_32px_rgba(139,92,246,0.4)]',
+        secondary:
+            'bg-linear-to-br from-white/15 to-white/5 text-white/90 hover:not(:disabled):from-white/20 hover:not(:disabled):to-white/10 hover:not(:disabled):-translate-y-0.5',
+        ghost: 'bg-transparent text-white/70 hover:not(:disabled):bg-white/10 hover:not(:disabled):text-white/95',
+    }
 </script>
 
 <button
-    class="liquid-button"
-    class:primary={variant === 'primary'}
-    class:secondary={variant === 'secondary'}
-    class:ghost={variant === 'ghost'}
-    class:sm={size === 'sm'}
-    class:md={size === 'md'}
-    class:lg={size === 'lg'}
+    class="active:not(:disabled):translate-y-0 active:not(:disabled):scale-[0.98] relative inline-flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl border-none font-medium backdrop-blur-[10px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-linear-to-br before:from-white/30 before:to-white/10 before:mask-exclude before:p-px before:opacity-0 before:transition-opacity before:duration-300 before:content-[''] before:[-webkit-mask-composite:xor] before:[-webkit-mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] before:[mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] hover:before:opacity-100 disabled:cursor-not-allowed disabled:opacity-50 {sizeClasses[
+        size
+    ]} {variantClasses[variant]}"
     {disabled}
     {onclick}
 >
     {@render children()}
 </button>
-
-<style>
-    .liquid-button {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        border: none;
-        border-radius: 0.75rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        backdrop-filter: blur(10px);
-        overflow: hidden;
-    }
-
-    .liquid-button::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        padding: 1px;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
-        -webkit-mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
-        mask-composite: exclude;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-
-    .liquid-button:hover::before {
-        opacity: 1;
-    }
-
-    /* Sizes */
-    .liquid-button.sm {
-        padding: 0.375rem 0.75rem;
-        font-size: 0.875rem;
-    }
-
-    .liquid-button.md {
-        padding: 0.5rem 1rem;
-        font-size: 0.9375rem;
-    }
-
-    .liquid-button.lg {
-        padding: 0.75rem 1.5rem;
-        font-size: 1rem;
-    }
-
-    /* Variants */
-    .liquid-button.primary {
-        background: linear-gradient(135deg, rgba(139, 92, 246, 0.8), rgba(99, 102, 241, 0.7));
-        color: rgba(255, 255, 255, 0.95);
-        box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
-    }
-
-    .liquid-button.primary:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 32px rgba(139, 92, 246, 0.4);
-    }
-
-    .liquid-button.secondary {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .liquid-button.secondary:hover:not(:disabled) {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.1));
-        transform: translateY(-2px);
-    }
-
-    .liquid-button.ghost {
-        background: transparent;
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .liquid-button.ghost:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.95);
-    }
-
-    .liquid-button:active:not(:disabled) {
-        transform: translateY(0) scale(0.98);
-    }
-
-    .liquid-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-</style>

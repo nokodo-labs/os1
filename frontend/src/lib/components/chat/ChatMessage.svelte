@@ -10,36 +10,42 @@
 
     let { role, content, timestamp, actions }: Props = $props()
     const isUser = $derived(role === 'user')
+
+    const userClasses = 'self-end items-end'
+    const assistantClasses = 'self-start items-start'
+    const userBubbleClasses =
+        'bg-linear-to-br from-[rgba(99,102,241,0.3)] to-[rgba(139,92,246,0.2)]'
+    const assistantBubbleClasses = 'bg-linear-to-br from-white/15 to-white/5'
 </script>
 
-<div class="message-container" class:user={isUser} class:assistant={!isUser}>
-    <div class="message-bubble liquid-glass">
-        <div class="message-content">
+<div
+    class="flex max-w-[80%] animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2 {isUser
+        ? userClasses
+        : assistantClasses}"
+>
+    <div
+        class="liquid-glass relative rounded-3xl px-5 py-4 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-linear-to-br before:from-white/40 before:to-white/10 before:mask-exclude before:p-px before:content-[''] before:[-webkit-mask-composite:xor] before:[-webkit-mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] before:[mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] {isUser
+            ? userBubbleClasses
+            : assistantBubbleClasses}"
+    >
+        <div class="text-[0.95rem] leading-relaxed wrap-break-word text-white/95">
             {content}
         </div>
         {#if timestamp}
-            <div class="message-timestamp">
+            <div class="mt-2 text-xs text-white/50">
                 {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
         {/if}
     </div>
 
     {#if actions}
-        <div class="message-actions">
+        <div class="flex gap-2 px-2">
             {@render actions()}
         </div>
     {/if}
 </div>
 
 <style>
-    .message-container {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        max-width: 80%;
-        animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
     @keyframes messageSlideIn {
         from {
             opacity: 0;
@@ -49,73 +55,5 @@
             opacity: 1;
             transform: translateY(0) scale(1);
         }
-    }
-
-    .message-container.user {
-        align-self: flex-end;
-        align-items: flex-end;
-    }
-
-    .message-container.assistant {
-        align-self: flex-start;
-        align-items: flex-start;
-    }
-
-    .message-bubble {
-        position: relative;
-        padding: 1rem 1.25rem;
-        border-radius: 1.5rem;
-        backdrop-filter: blur(20px) saturate(180%);
-        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    .message-bubble::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        padding: 1px;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.1));
-        -webkit-mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
-        mask-composite: exclude;
-        pointer-events: none;
-    }
-
-    .message-bubble:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    }
-
-    .user .message-bubble {
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.2));
-    }
-
-    .assistant .message-bubble {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-    }
-
-    .message-content {
-        color: rgba(255, 255, 255, 0.95);
-        font-size: 0.95rem;
-        line-height: 1.6;
-        word-wrap: break-word;
-    }
-
-    .message-timestamp {
-        margin-top: 0.5rem;
-        font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.5);
-    }
-
-    .message-actions {
-        display: flex;
-        gap: 0.5rem;
-        padding: 0 0.5rem;
     }
 </style>
