@@ -1,6 +1,5 @@
 <script lang="ts">
     import AppSidebar from '$lib/components/sidebar/AppSidebar.svelte'
-    import ChatSidebar from '$lib/components/sidebar/ChatSidebar.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
     import GalaxyBackgroundWebGL from './lib/components/backgrounds/webgl/GalaxyBackgroundWebGL.svelte'
@@ -9,7 +8,6 @@
     import ModelSelector from './lib/components/chat/ModelSelector.svelte'
     import ChatInputWebGL from './lib/components/chat/webgl/ChatInputWebGL.svelte'
     import ChatMessageWebGL from './lib/components/chat/webgl/ChatMessageWebGL.svelte'
-
     // Initialize sidebar context
     const sidebar = createSidebarContext()
 
@@ -84,11 +82,8 @@
     <!-- Galaxy background wraps everything to provide context -->
     <GalaxyBackgroundWebGL>
         <div class="app-layout">
-            <!-- Sidebar Container -->
-            <div class="sidebar-container">
-                <AppSidebar />
-                <ChatSidebar />
-            </div>
+            <!-- Sidebar -->
+            <AppSidebar />
 
             <!-- Main Content -->
             <div class="app-container">
@@ -213,12 +208,6 @@
         z-index: 1;
     }
 
-    .sidebar-container {
-        display: flex;
-        flex-shrink: 0;
-        height: 100%;
-    }
-
     .app-container {
         display: flex;
         flex-direction: column;
@@ -228,7 +217,6 @@
         margin: 0 auto;
         width: 100%;
     }
-
     .messages-container {
         flex: 1;
         overflow-y: auto;
