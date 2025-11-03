@@ -303,6 +303,7 @@
         height: 100vh;
         transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         border-right: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0 !important;
     }
 
     .app-sidebar.expanded {
