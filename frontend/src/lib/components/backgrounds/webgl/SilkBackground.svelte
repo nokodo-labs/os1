@@ -177,6 +177,8 @@ void main() {
         resize()
 
         const elapsed = (performance.now() - startTime) / 1000
+        // Match the original React implementation's time scale (0.1x)
+        const scaledTime = elapsed * 0.1
 
         gl.clearColor(0, 0, 0, 1)
         gl.clear(gl.COLOR_BUFFER_BIT)
@@ -191,7 +193,7 @@ void main() {
         const uNoiseIntensity = gl.getUniformLocation(program, 'uNoiseIntensity')
         const uColor = gl.getUniformLocation(program, 'uColor')
 
-        gl.uniform1f(uTime, elapsed)
+        gl.uniform1f(uTime, scaledTime)
         gl.uniform1f(uSpeed, speed)
         gl.uniform1f(uScale, scale)
         gl.uniform1f(uRotation, rotation)

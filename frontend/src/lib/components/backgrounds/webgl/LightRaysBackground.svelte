@@ -27,6 +27,7 @@
         mouseInfluence?: number
         noiseAmount?: number
         distortion?: number
+        transparent?: boolean
     }
 
     let {
@@ -34,15 +35,16 @@
         raysOrigin = 'top-center',
         raysColor = '#ffffff',
         raysSpeed = 1,
-        lightSpread = 1,
-        rayLength = 2,
+        lightSpread = 0.5,
+        rayLength = 1.0,
         pulsating = false,
         fadeDistance = 1.0,
         saturation = 1.0,
-        followMouse = true,
-        mouseInfluence = 0.1,
+        followMouse = false,
+        mouseInfluence = 0.5,
         noiseAmount = 0.0,
         distortion = 0.0,
+        transparent = false,
     }: Props = $props()
 
     let containerRef: HTMLDivElement
@@ -51,10 +53,12 @@
     let program: WebGLProgram | null = null
     let animationId: number | null = null
     let resizeObserver: ResizeObserver | null = null
+    let intersectionObserver: IntersectionObserver | null = null
     let startTime = 0
     let subscribers: Array<() => void> = []
     let mouseRef = { x: 0.5, y: 0.5 }
     let smoothMouseRef = { x: 0.5, y: 0.5 }
+    let isVisible = $state(false)
 
     // Expose canvas to children via context
     setBackgroundContext({
@@ -254,7 +258,7 @@ void main() {
     }
 
     function resize() {
-        if (!canvasRef || !containerRef || !gl || !program) return
+        if (!canvasRef || !containerRef || !gl || !program || !isVisible) return
 
         const dpr = Math.min(window.devicePixelRatio, 2)
         const rect = containerRef.getBoundingClientRect()
@@ -269,8 +273,9 @@ void main() {
             subscribers.forEach((cb) => cb())
         }
     }
+
     function animate() {
-        if (!gl || !program) return
+        if (!gl || !program || !isVisible) return
 
         resize()
 
@@ -281,7 +286,12 @@ void main() {
         smoothMouseRef.x = smoothMouseRef.x * smoothing + mouseRef.x * (1 - smoothing)
         smoothMouseRef.y = smoothMouseRef.y * smoothing + mouseRef.y * (1 - smoothing)
 
-        gl.clearColor(0, 0, 0, 0)
+        // Clear with black or transparent background
+        if (transparent) {
+            gl.clearColor(0, 0, 0, 0)
+        } else {
+            gl.clearColor(0, 0, 0, 1)
+        }
         gl.clear(gl.COLOR_BUFFER_BIT)
 
         gl.useProgram(program)
@@ -350,7 +360,34 @@ void main() {
     }
 
     onMount(() => {
-        const context = canvasRef.getContext('webgl2', { alpha: true, premultipliedAlpha: true })
+        // Setup intersection observer for performance
+        intersectionObserver = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0]
+                isVisible = entry.isIntersecting
+
+                if (isVisible && !animationId) {
+                    startTime = performance.now()
+                    animate()
+                } else if (!isVisible && animationId !== null) {
+                    cancelAnimationFrame(animationId)
+                    animationId = null
+                }
+            },
+            { threshold: 0.1 }
+        )
+
+        if (containerRef) {
+            intersectionObserver.observe(containerRef)
+        }
+
+        const context = canvasRef.getContext('webgl2', {
+            alpha: true,
+            premultipliedAlpha: false,
+            antialias: false,
+            depth: false,
+            stencil: false,
+        })
         if (!context) {
             console.error('WebGL2 not supported')
             return
@@ -375,7 +412,7 @@ void main() {
 
         // Enable blending for transparency
         gl.enable(gl.BLEND)
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
         // Create a fullscreen quad
         const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
@@ -397,17 +434,28 @@ void main() {
             window.addEventListener('mousemove', handleMouseMove)
         }
 
-        startTime = performance.now()
-        animate()
+        // Initial resize and start animation if visible
+        resize()
+        if (isVisible) {
+            startTime = performance.now()
+            animate()
+        }
     })
 
     onDestroy(() => {
         if (animationId !== null) {
             cancelAnimationFrame(animationId)
+            animationId = null
         }
 
         if (resizeObserver) {
             resizeObserver.disconnect()
+            resizeObserver = null
+        }
+
+        if (intersectionObserver) {
+            intersectionObserver.disconnect()
+            intersectionObserver = null
         }
 
         if (followMouse) {
@@ -416,12 +464,26 @@ void main() {
 
         if (gl && program) {
             gl.deleteProgram(program)
+            program = null
+        }
+
+        // Lose WebGL context for proper cleanup
+        if (gl) {
+            const loseContextExt = gl.getExtension('WEBGL_lose_context')
+            if (loseContextExt) {
+                loseContextExt.loseContext()
+            }
+            gl = null
         }
     })
 </script>
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-    <canvas class="absolute inset-0 block h-full w-full" bind:this={canvasRef}></canvas>
+    <canvas
+        class="absolute inset-0 block h-full w-full"
+        bind:this={canvasRef}
+        style="background-color: {transparent ? 'transparent' : '#000000'};"
+    ></canvas>
 
     <!-- Slotted content rendered on top of background -->
     <div class="relative z-1 h-full w-full">
