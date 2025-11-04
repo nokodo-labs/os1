@@ -1,8 +1,9 @@
 <script lang="ts">
+    import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
+    import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
     import AppSidebar from '$lib/components/sidebar/AppSidebar.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
-    import GalaxyBackgroundWebGL from './lib/components/backgrounds/webgl/GalaxyBackgroundWebGL.svelte'
     import Button from './lib/components/chat/Button.svelte'
     import ChatHeader from './lib/components/chat/ChatHeader.svelte'
     import ChatInputLiquidGlass from './lib/components/chat/ChatInput.svelte'
@@ -44,6 +45,20 @@
 
     let inputValue = $state('')
 
+    // DEV ONLY: Background switcher
+    let currentBackground = $state<BackgroundType>('darkveil')
+    let showBgDropdown = $state(false)
+
+    const backgrounds: { value: BackgroundType; label: string }[] = [
+        { value: 'galaxy', label: 'Galaxy' },
+        { value: 'darkveil', label: 'Dark Veil' },
+        { value: 'lightbends', label: 'Light Bends' },
+        { value: 'lightrays', label: 'Light Rays' },
+        { value: 'silk', label: 'Silk' },
+        { value: 'static', label: 'Static Color' },
+        { value: 'none', label: 'None' },
+    ]
+
     function handleSendMessage(content: string) {
         const userMessage: Message = {
             id: Date.now().toString(),
@@ -79,8 +94,42 @@
 </script>
 
 <Tooltip.Provider>
-    <!-- Galaxy background wraps everything to provide context -->
-    <GalaxyBackgroundWebGL>
+    <!-- Background Manager handles all backgrounds with smooth transitions -->
+    <BackgroundManager type={currentBackground} config={{ color: '#0a0a0a' }}>
+        <!-- DEV ONLY: Background switcher dropdown -->
+        <div class="fixed top-4 right-4 z-50">
+            <div class="relative">
+                <button
+                    onclick={() => (showBgDropdown = !showBgDropdown)}
+                    class="rounded-lg bg-black/50 px-3 py-2 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
+                >
+                    BG: {backgrounds.find((b) => b.value === currentBackground)?.label}
+                    <span class="ml-1">▼</span>
+                </button>
+
+                {#if showBgDropdown}
+                    <div
+                        class="absolute top-full right-0 mt-1 w-40 rounded-lg bg-black/90 p-1 shadow-xl backdrop-blur-sm"
+                    >
+                        {#each backgrounds as bg}
+                            <button
+                                onclick={() => {
+                                    currentBackground = bg.value
+                                    showBgDropdown = false
+                                }}
+                                class="block w-full rounded px-3 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10 hover:text-white {currentBackground ===
+                                bg.value
+                                    ? 'bg-white/10 font-medium text-white'
+                                    : ''}"
+                            >
+                                {bg.label}
+                            </button>
+                        {/each}
+                    </div>
+                {/if}
+            </div>
+        </div>
+
         <div class="relative z-1 flex h-screen">
             <!-- Sidebar -->
             <AppSidebar />
@@ -169,5 +218,5 @@
                 </div>
             </div>
         </div>
-    </GalaxyBackgroundWebGL>
+    </BackgroundManager>
 </Tooltip.Provider>
