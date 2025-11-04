@@ -1,0 +1,116 @@
+/* User Profile Panel Styles */
+/* Optimized for liquid glass background with white text for contrast */
+
+.user-profile-panel {
+    width: 280px;
+    padding: 0.75rem;
+}
+
+.user-profile-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+}
+
+.user-avatar,
+.user-avatar-initials {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+}
+
+.user-avatar {
+    object-fit: cover;
+}
+
+.user-avatar-initials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.user-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: white;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-email {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.menu-section,
+.logout-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.menu-item,
+.logout-button {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    color: white;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+}
+
+.menu-item:hover,
+.logout-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.menu-item:active,
+.logout-button:active {
+    transform: scale(0.98);
+}
+
+.menu-item-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.logout-button {
+    color: rgba(239, 68, 68, 1);
+}
+
+.logout-button:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .user-profile-panel {
+        width: 260px;
+    }
+}

@@ -13,6 +13,7 @@
         PanelLeft,
         Search,
     } from '@lucide/svelte'
+    import UserProfileTrigger from './UserProfileTrigger.svelte'
     const sidebar = useSidebar() as any
     // User profile data (would come from auth context in production)
     const user = {
@@ -20,18 +21,7 @@
         email: 's.pipitone@nokodo.io',
         avatar: null, // URL to avatar image, or null for initials
     }
-    function getUserInitials(name: string): string {
-        return name
-            .split(' ')
-            .map((n) => n[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2)
-    }
-    function handleProfileClick() {
-        // TODO: Open user profile modal/page
-        console.log('Open user profile')
-    }
+
     function handleSearchClick() {
         // TODO: Open global search overlay
         console.log('Open global search')
@@ -312,49 +302,7 @@
         <Separator.Root class="bg-white/10" />
 
         <!-- User Profile -->
-        <button
-            class="relative mt-auto flex items-center border border-transparent bg-transparent {sidebar.isChatSidebarOpen
-                ? 'w-full justify-start gap-3'
-                : 'h-12 w-12 justify-center p-2'} cursor-pointer rounded-xl text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
-            onclick={handleProfileClick}
-            aria-label="User Profile"
-        >
-            {#if user.avatar}
-                <img
-                    src={user.avatar}
-                    alt={user.name}
-                    class="{sidebar.isChatSidebarOpen
-                        ? 'h-9 w-9'
-                        : 'h-8 w-8'} shrink-0 rounded-full transition-all duration-200"
-                />
-            {:else}
-                <div
-                    class="{sidebar.isChatSidebarOpen
-                        ? 'h-9 w-9 text-[0.8rem]'
-                        : 'h-8 w-8 text-[0.7rem]'} flex shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#8b5cf6] to-[#6366f1] font-semibold text-white uppercase transition-all duration-200"
-                >
-                    {getUserInitials(user.name)}
-                </div>
-            {/if}
-            {#if sidebar.isChatSidebarOpen}
-                <div
-                    class="flex min-w-0 flex-col text-left opacity-0 transition-opacity delay-100 duration-300 {sidebar.isChatSidebarOpen
-                        ? 'opacity-100'
-                        : ''}"
-                >
-                    <p
-                        class="overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap text-white"
-                    >
-                        {user.name}
-                    </p>
-                    <p
-                        class="overflow-hidden text-xs text-ellipsis whitespace-nowrap text-white/60"
-                    >
-                        {user.email}
-                    </p>
-                </div>
-            {/if}
-        </button>
+        <UserProfileTrigger {user} isExpanded={sidebar.isChatSidebarOpen} />
     </div>
 </div>
 
