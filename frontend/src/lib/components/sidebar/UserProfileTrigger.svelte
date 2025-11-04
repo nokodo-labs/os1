@@ -59,8 +59,8 @@
     <button
         bind:this={buttonElement}
         class="relative flex items-center border border-transparent bg-transparent {isExpanded
-            ? 'w-full justify-start gap-3'
-            : 'h-12 w-12 justify-center p-2'} cursor-pointer rounded-xl text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+            ? 'w-full justify-start gap-3 p-3'
+            : 'h-14 w-14 justify-center p-3'} cursor-pointer rounded-xl text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
         onclick={togglePanel}
         aria-label="User Profile"
         aria-expanded={isOpen}
@@ -70,14 +70,14 @@
                 src={user.avatar}
                 alt={user.name}
                 class="{isExpanded
-                    ? 'h-9 w-9'
-                    : 'h-8 w-8'} shrink-0 rounded-full transition-all duration-200"
+                    ? 'h-10 w-10'
+                    : 'h-9 w-9'} shrink-0 rounded-full transition-all duration-200"
             />
         {:else}
             <div
                 class="{isExpanded
-                    ? 'h-9 w-9 text-[0.8rem]'
-                    : 'h-8 w-8 text-[0.7rem]'} flex shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#8b5cf6] to-[#6366f1] font-semibold text-white uppercase transition-all duration-200"
+                    ? 'h-10 w-10 text-[0.875rem]'
+                    : 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#8b5cf6] to-[#6366f1] font-semibold text-white uppercase transition-all duration-200"
             >
                 {getUserInitials(user.name)}
             </div>
