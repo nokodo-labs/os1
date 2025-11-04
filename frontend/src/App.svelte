@@ -18,6 +18,7 @@
         role: 'user' | 'assistant'
         content: string
         timestamp: Date
+        model?: string
     }
 
     interface Model {
@@ -41,6 +42,7 @@
             content:
                 "Welcome to nokodo AI! 🚀 I'm here to help you build the next generation of AI experiences. What would you like to create today?",
             timestamp: new Date(),
+            model: 'gpt-4',
         },
     ])
 
@@ -76,6 +78,7 @@
                 role: 'assistant',
                 content: `I received your message: "${content}". This is a demo response showcasing the liquid UI!`,
                 timestamp: new Date(),
+                model: selectedModel,
             }
             messages.push(aiMessage)
         }, 1000)
@@ -211,6 +214,7 @@
                                     <AssistantChatMessage
                                         content={message.content}
                                         timestamp={message.timestamp}
+                                        modelName={message.model}
                                         isLastMessage={index === messages.length - 1}
                                     >
                                         {#snippet actions()}
