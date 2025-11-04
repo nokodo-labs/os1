@@ -33,6 +33,7 @@
     class="flex max-w-[80%] animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col items-end gap-2 self-end"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
+    role="article"
 >
     <div
         class="liquid-glass relative rounded-3xl bg-linear-to-br from-[rgba(99,102,241,0.35)] to-[rgba(139,92,246,0.25)] px-5 py-4 shadow-[0_4px_16px_rgba(99,102,241,0.2)] backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-linear-to-br before:from-white/40 before:to-white/10 before:mask-exclude before:p-px before:content-[''] before:[-webkit-mask-composite:xor] before:[-webkit-mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] before:[mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(99,102,241,0.3)]"
