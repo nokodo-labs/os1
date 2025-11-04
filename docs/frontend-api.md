@@ -148,31 +148,6 @@ async getItems(): Promise<Item[]> {
 const items = await api.getItems(); // Fully typed!
 ```
 
-### Type Safety Benefits
-
-```typescript
-// ✅ Valid - compiles
-const user = await api.getUser(1);
-console.log(user.email); // TypeScript knows user.email exists
-
-// ❌ Invalid - won't compile
-const user = await api.getUser("invalid"); // Error: argument must be number
-console.log(user.invalidField); // Error: property doesn't exist
-
-// ✅ Create user with validation
-await api.createUser({
-	email: "test@example.com",
-	username: "test",
-	password: "pass123",
-}); // TypeScript enforces required fields
-
-// ❌ Missing field - won't compile
-await api.createUser({
-	email: "test@example.com",
-	// Error: username and password required
-});
-```
-
 ## Files
 
 -   `src/lib/api/client.ts` - Base fetch client with error handling
@@ -204,14 +179,5 @@ Check that:
 -   Backend is running on `http://localhost:8000`
 -   OpenAPI endpoint is accessible: `http://localhost:8000/v1/openapi.json`
 -   `openapi-typescript` is installed: `npm install`
-
-## Why Not Axios?
-
--   **Native fetch** is the web standard (2025)
--   **Zero dependencies** = future-proof
--   **Better streaming** support with fetch
--   **Smaller bundle** size
--   **Type safety** via OpenAPI generation > manual typing
--   **Auto-sync** backend/frontend types
 
 Modern approach: Let OpenAPI handle types, let fetch handle requests.
