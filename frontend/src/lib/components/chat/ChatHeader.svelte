@@ -50,7 +50,7 @@
 </script>
 
 <header
-    class="liquid-glass mx-8 mt-5 mb-0 rounded-[2.25rem] px-7 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+    class="liquid-glass mx-8 mt-5 mb-0 rounded-full px-7 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 >
     <span class="liquid-glass__highlight" aria-hidden="true"></span>
 

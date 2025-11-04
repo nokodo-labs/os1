@@ -58,11 +58,11 @@
 
 <form class="w-full" onsubmit={handleFormSubmit}>
     <div
-        class="liquid-glass relative w-full rounded-3xl bg-[rgba(10,12,20,0.65)] shadow-lg transition-all duration-300 ease-in-out focus-within:shadow-[0px_6px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.15)]"
+        class="liquid-glass relative w-full rounded-full bg-[rgba(10,12,20,0.65)] shadow-lg transition-all duration-300 ease-in-out focus-within:shadow-[0px_6px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.15)]"
     >
         <div class="liquid-glass__highlight"></div>
         <div class="liquid-glass__content px-1 py-1">
-            <div class="flex items-end gap-2 px-2.5 py-2.5">
+            <div class="flex items-center gap-2 px-2.5 py-2.5">
                 <div class="ml-1 flex shrink-0 items-center">
                     <Tooltip.Root>
                         <Tooltip.Trigger>
