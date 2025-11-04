@@ -1,4 +1,5 @@
 <script lang="ts">
+    import Tooltip from '$lib/components/common/Tooltip.svelte'
     import type { Snippet } from 'svelte'
 
     interface Props {
@@ -82,14 +83,15 @@
         <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-white/90">{modelName}</span>
             {#if timestamp}
-                <span
-                    class="text-xs text-white/40 transition-opacity duration-200 {isHovered
-                        ? 'opacity-100'
-                        : 'opacity-0'}"
-                    title={formatFullDate(timestamp)}
-                >
-                    {formatRelativeTime(timestamp)}
-                </span>
+                <Tooltip content={formatFullDate(timestamp)} placement="top">
+                    <span
+                        class="text-xs text-white/40 transition-opacity duration-200 {isHovered
+                            ? 'opacity-100'
+                            : 'opacity-0'}"
+                    >
+                        {formatRelativeTime(timestamp)}
+                    </span>
+                </Tooltip>
             {/if}
         </div>
 

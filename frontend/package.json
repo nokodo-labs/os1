@@ -59,6 +59,7 @@
     },
     "dependencies": {
         "lucide-svelte": "^0.552.0",
-        "three": "^0.171.0"
+        "three": "^0.171.0",
+        "tippy.js": "^6.3.7"
     }
 }
