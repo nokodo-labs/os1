@@ -4,10 +4,11 @@
     import AppSidebar from '$lib/components/sidebar/AppSidebar.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
+    import AssistantChatMessage from './lib/components/chat/AssistantChatMessage.svelte'
     import Button from './lib/components/chat/Button.svelte'
     import ChatHeader from './lib/components/chat/ChatHeader.svelte'
     import ChatInputLiquidGlass from './lib/components/chat/ChatInput.svelte'
-    import ChatMessageWebGL from './lib/components/chat/webgl/ChatMessageWebGL.svelte'
+    import UserChatMessage from './lib/components/chat/UserChatMessage.svelte'
     import './lib/styles/liquid-glass.css'
     // Initialize sidebar context
     const sidebar = createSidebarContext()
@@ -91,6 +92,10 @@
     function handleRegenerateMessage() {
         console.log('Regenerate message')
     }
+
+    function handleEditMessage(messageId: string) {
+        console.log('Edit message:', messageId)
+    }
 </script>
 
 <Tooltip.Provider>
@@ -144,14 +149,71 @@
                         ></ChatHeader>
 
                         <div class="flex flex-1 flex-col gap-6 overflow-y-auto p-8">
-                            {#each messages as message (message.id)}
-                                <ChatMessageWebGL
-                                    role={message.role}
-                                    content={message.content}
-                                    timestamp={message.timestamp}
-                                >
-                                    {#snippet actions()}
-                                        {#if message.role === 'assistant'}
+                            {#each messages as message, index (message.id)}
+                                {#if message.role === 'user'}
+                                    <UserChatMessage
+                                        content={message.content}
+                                        timestamp={message.timestamp}
+                                    >
+                                        {#snippet actions()}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onclick={() => handleCopyMessage(message.content)}
+                                            >
+                                                <svg
+                                                    width="14"
+                                                    height="14"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <rect
+                                                        width="14"
+                                                        height="14"
+                                                        x="8"
+                                                        y="8"
+                                                        rx="2"
+                                                        ry="2"
+                                                    />
+                                                    <path
+                                                        d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+                                                    />
+                                                </svg>
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onclick={() => handleEditMessage(message.id)}
+                                            >
+                                                <svg
+                                                    width="14"
+                                                    height="14"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <path
+                                                        d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
+                                                    />
+                                                    <path d="m15 5 4 4" />
+                                                </svg>
+                                            </Button>
+                                        {/snippet}
+                                    </UserChatMessage>
+                                {:else}
+                                    <AssistantChatMessage
+                                        content={message.content}
+                                        timestamp={message.timestamp}
+                                        isLastMessage={index === messages.length - 1}
+                                    >
+                                        {#snippet actions()}
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -201,9 +263,9 @@
                                                     <path d="M21 3v5h-5" />
                                                 </svg>
                                             </Button>
-                                        {/if}
-                                    {/snippet}
-                                </ChatMessageWebGL>
+                                        {/snippet}
+                                    </AssistantChatMessage>
+                                {/if}
                             {/each}
                         </div>
 
