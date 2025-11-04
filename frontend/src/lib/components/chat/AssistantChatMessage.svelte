@@ -25,6 +25,7 @@
     class="flex w-full animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col items-start gap-3 self-start"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
+    role="article"
 >
     <div class="relative w-full px-2 py-1">
         <div
