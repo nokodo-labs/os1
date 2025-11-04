@@ -23,7 +23,7 @@
         rotation = 45,
         speed = 0.2,
         colors = [],
-        transparent = true,
+        transparent = false,
         autoRotate = 0,
         scale = 1,
         frequency = 1,
@@ -343,9 +343,9 @@ void main() {
             return
         }
 
-        // Enable blending for transparency
+        // Enable blending for transparency with premultiplied alpha
         gl.enable(gl.BLEND)
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
         // Create a fullscreen quad
         const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
@@ -389,7 +389,11 @@ void main() {
 </script>
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-    <canvas class="absolute inset-0 block h-full w-full" bind:this={canvasRef}></canvas>
+    <canvas
+        class="absolute inset-0 block h-full w-full"
+        style="background: {transparent ? 'transparent' : '#000000'};"
+        bind:this={canvasRef}
+    ></canvas>
 
     <!-- Slotted content rendered on top of background -->
     <div class="relative z-1 h-full w-full">
