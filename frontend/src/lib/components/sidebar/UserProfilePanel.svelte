@@ -1,7 +1,6 @@
 <script lang="ts">
     import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
     import * as Separator from '$lib/components/ui/separator'
-    import '$lib/styles/user-profile.css'
 
     interface UserProfilePanelProps {
         user: {
@@ -76,31 +75,48 @@
     ]
 </script>
 
-<div class="user-profile-panel">
+<div class="w-80 p-4">
     <!-- User Info Section -->
-    <div class="user-profile-header">
+    <div class="flex items-center gap-3 p-3">
         {#if user.avatar}
-            <img src={user.avatar} alt={user.name} class="user-avatar" />
+            <img
+                src={user.avatar}
+                alt={user.name}
+                class="h-10 w-10 shrink-0 rounded-full object-cover"
+            />
         {:else}
-            <div class="user-avatar-initials">
+            <div
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#8b5cf6] to-[#6366f1] text-sm font-semibold text-white uppercase"
+            >
                 {getUserInitials(user.name)}
             </div>
         {/if}
-        <div class="user-info">
-            <p class="user-name">{user.name}</p>
-            <p class="user-email">{user.email}</p>
+        <div class="flex min-w-0 flex-1 flex-col">
+            <p
+                class="overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap text-white"
+            >
+                {user.name}
+            </p>
+            <p
+                class="overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap text-white/60"
+            >
+                {user.email}
+            </p>
         </div>
     </div>
 
     <Separator.Root class="my-2 bg-white/10" />
 
     <!-- Menu Items -->
-    <div class="menu-section">
+    <div class="flex flex-col gap-1">
         {#each menuItems as item (item.id)}
             {@const Icon = item.icon}
-            <button class="menu-item" onclick={item.action}>
+            <button
+                class="flex w-full items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
+                onclick={item.action}
+            >
                 <Icon className="h-4.5 w-4.5 shrink-0" />
-                <span class="menu-item-label">{item.label}</span>
+                <span>{item.label}</span>
             </button>
         {/each}
     </div>
@@ -108,10 +124,11 @@
     <Separator.Root class="my-2 bg-white/10" />
 
     <!-- Logout Button -->
-    <div class="logout-section">
-        <button class="logout-button" onclick={handleLogout}>
-            <SignOut className="h-4.5 w-4.5 shrink-0" />
-            <span class="menu-item-label">Log out</span>
-        </button>
-    </div>
+    <button
+        class="flex w-full items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
+        onclick={handleLogout}
+    >
+        <SignOut className="h-4.5 w-4.5 shrink-0" />
+        <span>Log out</span>
+    </button>
 </div>
