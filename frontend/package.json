@@ -26,6 +26,7 @@
         "@testing-library/svelte": "^5.2.5",
         "@tsconfig/svelte": "^5.0.4",
         "@types/node": "^24.9.2",
+        "@types/three": "^0.181.0",
         "@vitest/coverage-v8": "^4.0.4",
         "@vitest/ui": "^4.0.3",
         "autoprefixer": "^10.4.20",
@@ -57,6 +58,7 @@
         "npm": ">=10.0.0"
     },
     "dependencies": {
-        "lucide-svelte": "^0.552.0"
+        "lucide-svelte": "^0.552.0",
+        "three": "^0.171.0"
     }
 }
