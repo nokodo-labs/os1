@@ -140,7 +140,7 @@
             >
                 <div class="relative flex shrink-0 items-center gap-3">
                     <div
-                        class="relative flex h-8 w-8 shrink-0 animate-[float_3s_ease-in-out_infinite] items-center justify-center rounded-full bg-linear-to-br from-[#667eea] to-[#764ba2] shadow-[0_4px_12px_rgba(102,126,234,0.4),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-all duration-300 group-hover:bg-linear-to-br group-hover:from-[#7c8ef6] group-hover:to-[#8b5cf6] group-hover:shadow-[0_6px_16px_rgba(102,126,234,0.6),inset_0_2px_8px_rgba(255,255,255,0.4)]"
+                        class="relative flex h-8 w-8 shrink-0 animate-[bounce_2s_ease-in-out_infinite] items-center justify-center rounded-full bg-linear-to-br from-[#667eea] to-[#764ba2] shadow-[0_4px_12px_rgba(102,126,234,0.4),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:bg-linear-to-br group-hover:from-[#7c8ef6] group-hover:to-[#8b5cf6] group-hover:shadow-[0_6px_16px_rgba(102,126,234,0.6),inset_0_2px_8px_rgba(255,255,255,0.4)]"
                     >
                         {#if !sidebar.isChatSidebarOpen}
                             <div
@@ -313,7 +313,7 @@
             transform: translateY(0px);
         }
         50% {
-            transform: translateY(-4px);
+            transform: translateY(-10px);
         }
     }
 </style>
