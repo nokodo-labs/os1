@@ -8,6 +8,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Ensure SQLAlchemy models are registered with Base metadata for DDL operations
+import api.models  # noqa: F401  # pylint: disable=unused-import
 from api.core.config import settings
 from api.core.database import Base
 

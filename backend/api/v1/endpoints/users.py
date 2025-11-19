@@ -10,10 +10,10 @@ from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
 
 
-router = APIRouter()
+router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/", response_model=list[UserSchema])
+@router.get("", response_model=list[UserSchema])
 async def read_users(
 	skip: int = 0,
 	limit: int = 100,
@@ -42,7 +42,7 @@ async def read_user(
 	return user
 
 
-@router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 async def create_user(
 	user_in: UserCreate,
 	db: AsyncSession = Depends(get_db),

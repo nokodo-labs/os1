@@ -1,0 +1,60 @@
+"""Model configuration."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+from sqlalchemy import JSON, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from api.core.database import Base
+from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+if TYPE_CHECKING:
+	from api.models.agent import Agent
+	from api.models.provider import Provider
+
+
+class ModelType(StrEnum):
+	"""Supported model categories."""
+
+	LLM = "llm"
+	EMBEDDING = "embedding"
+	IMAGE = "image_generation"
+	AUDIO = "audio"
+	VIDEO = "video"
+
+
+class Model(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+	"""Model entry tied to an upstream provider."""
+
+	__tablename__ = "models"
+
+	provider_id: Mapped[str] = mapped_column(
+		ForeignKey("providers.id", ondelete="CASCADE"),
+		index=True,
+	)
+	name: Mapped[str] = mapped_column(String(150))
+	display_name: Mapped[str | None] = mapped_column(String(150))
+	model_type: Mapped[ModelType] = mapped_column(
+		Enum(ModelType, name="model_type"),
+		default=ModelType.LLM,
+	)
+	endpoint: Mapped[str | None] = mapped_column(String(255))
+	capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+	context_window: Mapped[int | None] = mapped_column(Integer())
+	input_cost: Mapped[float | None] = mapped_column(Float())
+	output_cost: Mapped[float | None] = mapped_column(Float())
+	enabled: Mapped[bool] = mapped_column(default=True)
+
+	provider: Mapped[Provider] = relationship(
+		"Provider",
+		back_populates="models",
+		innerjoin=True,
+	)
+	agents: Mapped[list[Agent]] = relationship(
+		"Agent",
+		back_populates="model",
+	)

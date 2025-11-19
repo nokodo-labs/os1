@@ -1,11 +1,21 @@
 """User model."""
 
-from datetime import datetime
+from __future__ import annotations
 
-from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import JSON, DateTime, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
+
+
+if TYPE_CHECKING:
+	from api.models.memory import Memory
+	from api.models.notification import Notification
+	from api.models.task import Task
+	from api.models.thread import Thread
 
 
 class User(Base):
@@ -16,12 +26,38 @@ class User(Base):
 	id: Mapped[int] = mapped_column(primary_key=True, index=True)
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
 	username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+	display_name: Mapped[str | None] = mapped_column(String(150))
+	avatar_url: Mapped[str | None] = mapped_column(String(512))
 	hashed_password: Mapped[str] = mapped_column(String(255))
 	is_active: Mapped[bool] = mapped_column(default=True)
 	is_superuser: Mapped[bool] = mapped_column(default=False)
+	preferences: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	integration_tokens: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	usage_quotas: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now()
 	)
 	updated_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+	)
+
+	threads: Mapped[list[Thread]] = relationship(
+		"Thread",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	tasks: Mapped[list[Task]] = relationship(
+		"Task",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	notifications: Mapped[list[Notification]] = relationship(
+		"Notification",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	memories: Mapped[list[Memory]] = relationship(
+		"Memory",
+		back_populates="owner",
+		cascade="all, delete-orphan",
 	)
