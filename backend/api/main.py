@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.core.config import settings
 from api.core.database import init_db
-from api.v1.router import api_router
+from api.v1.app import v1_app
 
 
 @asynccontextmanager
@@ -27,9 +27,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(
 	title=settings.PROJECT_NAME,
 	version=settings.VERSION,
-	openapi_url=f"{settings.V1_PREFIX}/openapi.json",
-	docs_url=f"{settings.V1_PREFIX}/docs",
-	redoc_url=f"{settings.V1_PREFIX}/redoc",
 	lifespan=lifespan,
 )
 
@@ -51,8 +48,8 @@ async def root() -> dict[str, str]:
 		"name": settings.PROJECT_NAME,
 		"version": settings.VERSION,
 		"api_version": "v1",
-		"docs": f"{settings.V1_PREFIX}/docs",
-		"openapi": f"{settings.V1_PREFIX}/openapi.json",
+		"docs": "/v1/docs",
+		"openapi": "/v1/openapi.json",
 		"health": "/health",
 	}
 
@@ -63,5 +60,5 @@ async def health_check() -> dict[str, str]:
 	return {"status": "healthy"}
 
 
-# Include API router
-app.include_router(api_router, prefix=settings.V1_PREFIX)
+# Mount API v1
+app.mount("/v1", v1_app)
