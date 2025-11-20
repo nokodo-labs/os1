@@ -1,6 +1,9 @@
 <script lang="ts">
     import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
     import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
+    import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
+    import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
+    import Pencil from '$lib/components/icons/Pencil.svelte'
     import AppSidebar from '$lib/components/sidebar/AppSidebar.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
@@ -48,6 +51,8 @@
     })
 
     let inputValue = $state('')
+    let isGenerating = $state(false)
+    let generationTimeout: number | null = null
 
     // DEV ONLY: Background switcher
     let currentBackground = $state<BackgroundType>('darkveil')
@@ -75,17 +80,37 @@
         }
         messages.push(userMessage)
 
-        // Simulate AI response
-        setTimeout(() => {
-            const aiMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: `I received your message: "${content}". This is a demo response showcasing the liquid UI!`,
-                timestamp: new Date(),
-                model: selectedModel,
+        // Immediate AI placeholder
+        const aiMessageId = (Date.now() + 1).toString()
+        const aiMessage: Message = {
+            id: aiMessageId,
+            role: 'assistant',
+            content: '', // Start empty
+            timestamp: new Date(),
+            model: selectedModel,
+        }
+        messages.push(aiMessage)
+        isGenerating = true
+
+        // Simulate AI response streaming
+        generationTimeout = setTimeout(() => {
+            const response = `I received your message: "${content}". This is a demo response showcasing the liquid UI!`
+            // Update the last message (which is the AI placeholder)
+            const lastMsg = messages[messages.length - 1]
+            if (lastMsg && lastMsg.id === aiMessageId) {
+                lastMsg.content = response
             }
-            messages.push(aiMessage)
-        }, 1000)
+            isGenerating = false
+            generationTimeout = null
+        }, 1000) as unknown as number
+    }
+
+    function handleStopGeneration() {
+        if (generationTimeout) {
+            clearTimeout(generationTimeout)
+            generationTimeout = null
+        }
+        isGenerating = false
     }
 
     function handleModelSelect(modelId: string) {
@@ -147,15 +172,16 @@
             <AppSidebar />
 
             <!-- Main Content -->
-            <div class="flex min-w-0 flex-1 flex-col">
-                <div class="flex min-h-0 flex-1 flex-col">
-                    <div class="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col">
+            <div class="relative flex min-w-0 flex-1 flex-col">
+                <!-- Scrollable Area -->
+                <div class="flex-1 overflow-y-auto">
+                    <div class="mx-auto flex min-h-full w-full max-w-4xl flex-col px-8 pt-8 pb-32">
                         <ChatHeader
                             selectedAgent={selectedModel}
                             onAgentChange={(agentId: string) => (selectedModel = agentId)}
                         ></ChatHeader>
 
-                        <div class="flex flex-1 flex-col gap-6 overflow-y-auto p-8">
+                        <div class="flex flex-1 flex-col gap-6 py-8">
                             {#each messages as message, index (message.id)}
                                 <div transition:fade={{ duration: 200 }}>
                                     {#if message.role === 'user'}
@@ -170,49 +196,20 @@
                                                     onclick={() =>
                                                         handleCopyMessage(message.content)}
                                                 >
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        stroke-width="2"
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                    >
-                                                        <rect
-                                                            width="14"
-                                                            height="14"
-                                                            x="8"
-                                                            y="8"
-                                                            rx="2"
-                                                            ry="2"
-                                                        />
-                                                        <path
-                                                            d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                                                        />
-                                                    </svg>
+                                                    <DocumentDuplicate
+                                                        className="w-3.5 h-3.5"
+                                                        strokeWidth="2"
+                                                    />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onclick={() => handleEditMessage(message.id)}
                                                 >
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        stroke-width="2"
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                    >
-                                                        <path
-                                                            d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
-                                                        />
-                                                        <path d="m15 5 4 4" />
-                                                    </svg>
+                                                    <Pencil
+                                                        className="w-3.5 h-3.5"
+                                                        strokeWidth="2"
+                                                    />
                                                 </Button>
                                             {/snippet}
                                         </UserChatMessage>
@@ -230,49 +227,20 @@
                                                     onclick={() =>
                                                         handleCopyMessage(message.content)}
                                                 >
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        stroke-width="2"
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                    >
-                                                        <rect
-                                                            width="14"
-                                                            height="14"
-                                                            x="8"
-                                                            y="8"
-                                                            rx="2"
-                                                            ry="2"
-                                                        />
-                                                        <path
-                                                            d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
-                                                        />
-                                                    </svg>
+                                                    <DocumentDuplicate
+                                                        className="w-3.5 h-3.5"
+                                                        strokeWidth="2"
+                                                    />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onclick={handleRegenerateMessage}
                                                 >
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        stroke-width="2"
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                    >
-                                                        <path
-                                                            d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"
-                                                        />
-                                                        <path d="M21 3v5h-5" />
-                                                    </svg>
+                                                    <ArrowPath
+                                                        className="w-3.5 h-3.5"
+                                                        strokeWidth="2"
+                                                    />
                                                 </Button>
                                             {/snippet}
                                         </AssistantChatMessage>
@@ -280,9 +248,14 @@
                                 </div>
                             {/each}
                         </div>
+                    </div>
+                </div>
 
+                <!-- Input Area (Fixed Bottom) -->
+                <div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
+                    <div class="mx-auto w-full max-w-4xl px-8">
                         <div
-                            class="px-8 py-6 pb-8 transition-all duration-500 ease-in-out"
+                            class="transition-all duration-500 ease-in-out"
                             class:-translate-y-[40vh]={!hasStartedChatting}
                         >
                             {#if !hasStartedChatting}
@@ -297,7 +270,9 @@
                             <ChatInputLiquidGlass
                                 bind:value={inputValue}
                                 onSubmit={handleSendMessage}
-                                placeholder="Ask me anything..."
+                                onStop={handleStopGeneration}
+                                {isGenerating}
+                                placeholder="send a message"
                             />
                         </div>
                     </div>

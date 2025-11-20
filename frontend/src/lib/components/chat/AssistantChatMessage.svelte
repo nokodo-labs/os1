@@ -15,7 +15,7 @@
         timestamp,
         actions,
         isLastMessage = false,
-        modelName = 'Assistant',
+        modelName = 'assistant',
     }: Props = $props()
 
     let showActions = $state(false)
@@ -38,31 +38,37 @@
         yesterday.setDate(yesterday.getDate() - 1)
         const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
 
-        const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        const timeStr = date
+            .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            .toLowerCase()
 
         if (messageDate.getTime() === today.getTime()) {
             return `today, ${timeStr}`
         } else if (messageDate.getTime() === yesterday.getTime()) {
             return `yesterday, ${timeStr}`
         } else {
-            return date.toLocaleDateString([], {
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-            })
+            return date
+                .toLocaleDateString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                })
+                .toLowerCase()
         }
     }
 
     function formatFullDate(date: Date): string {
-        return date.toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-        })
+        return date
+            .toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+            })
+            .toLowerCase()
     }
 </script>
 

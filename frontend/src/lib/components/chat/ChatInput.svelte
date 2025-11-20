@@ -1,19 +1,25 @@
 <script lang="ts">
+    import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
     import Plus from '$lib/components/icons/Plus.svelte'
+    import Stop from '$lib/components/icons/Stop.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
 
     interface ChatInputProps {
         value?: string
         placeholder?: string
         disabled?: boolean
+        isGenerating?: boolean
         onSubmit?: (message: string) => void
+        onStop?: () => void
     }
 
     let {
         value = $bindable(''),
-        placeholder = 'Message nokodo AI...',
+        placeholder = 'send a message',
         disabled = false,
+        isGenerating = false,
         onSubmit,
+        onStop,
     }: ChatInputProps = $props()
 
     let textarea: HTMLTextAreaElement
@@ -76,12 +82,12 @@
                             </button>
                         </Tooltip.Trigger>
                         <Tooltip.Content>
-                            <p>Add attachment</p>
+                            <p>add attachment</p>
                         </Tooltip.Content>
                     </Tooltip.Root>
                 </div>
 
-                <div class="flex-1 px-1.5">
+                <div class="flex flex-1 items-center px-1.5">
                     <textarea
                         bind:this={textarea}
                         bind:value
@@ -92,39 +98,39 @@
                         oncompositionstart={handleCompositionStart}
                         oncompositionend={handleCompositionEnd}
                         rows="1"
-                        class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20 hover:scrollbar-thumb-white/30 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 font-[inherit] text-[0.9375rem] leading-6 text-white/96 outline-none placeholder:text-white/40"
+                        class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20 hover:scrollbar-thumb-white/30 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 text-white/96 outline-none placeholder:text-white/40"
                     ></textarea>
                 </div>
 
                 <div class="mr-1 flex shrink-0 items-center space-x-1">
                     <Tooltip.Root>
                         <Tooltip.Trigger>
-                            <button
-                                type="submit"
-                                aria-label="Send message"
-                                class="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
-                                    value.trim() === '' || disabled
-                                )
-                                    ? 'bg-white text-black hover:bg-gray-100'
-                                    : 'bg-gray-200 text-gray-900'}"
-                                disabled={value.trim() === '' || disabled}
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 16 16"
-                                    fill="currentColor"
-                                    class="h-5 w-5"
+                            {#if isGenerating}
+                                <button
+                                    type="button"
+                                    aria-label="stop generating"
+                                    class="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black transition-all duration-200 hover:bg-gray-100 active:scale-95"
+                                    onclick={onStop}
                                 >
-                                    <path
-                                        fill-rule="evenodd"
-                                        d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
-                                        clip-rule="evenodd"
-                                    />
-                                </svg>
-                            </button>
+                                    <Stop className="h-3.5 w-3.5" />
+                                </button>
+                            {:else}
+                                <button
+                                    type="submit"
+                                    aria-label="send message"
+                                    class="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+                                        value.trim() === '' || disabled
+                                    )
+                                        ? 'bg-white text-black hover:bg-gray-100'
+                                        : 'bg-gray-200 text-gray-900'}"
+                                    disabled={value.trim() === '' || disabled}
+                                >
+                                    <ArrowUp className="h-5 w-5" strokeWidth="2" />
+                                </button>
+                            {/if}
                         </Tooltip.Trigger>
                         <Tooltip.Content>
-                            <p>Send message</p>
+                            <p>{isGenerating ? 'stop generating' : 'send message'}</p>
                         </Tooltip.Content>
                     </Tooltip.Root>
                 </div>

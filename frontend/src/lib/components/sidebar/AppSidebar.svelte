@@ -1,18 +1,16 @@
 <script lang="ts">
+    import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
+    import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
+    import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
+    import Document from '$lib/components/icons/Document.svelte'
+    import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
+    import Home from '$lib/components/icons/Home.svelte'
+    import Search from '$lib/components/icons/Search.svelte'
+    import Sidebar from '$lib/components/icons/Sidebar.svelte'
     import * as ScrollArea from '$lib/components/ui/scroll-area'
     import * as Separator from '$lib/components/ui/separator'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
-    import {
-        ChevronLeft,
-        FileText,
-        Home,
-        MessageSquare,
-        MessageSquarePlus,
-        MoreHorizontal,
-        PanelLeft,
-        Search,
-    } from '@lucide/svelte'
     import UserProfileTrigger from './UserProfileTrigger.svelte'
     const sidebar = useSidebar() as any
     // User profile data (would come from auth context in production)
@@ -36,15 +34,15 @@
         {
             id: 'home',
             icon: Home,
-            label: 'Home',
+            label: 'home',
             action: () => {
                 sidebar.selectChat(null)
             },
         },
         {
             id: 'new-chat',
-            icon: MessageSquarePlus,
-            label: 'New Chat',
+            icon: ChatPlus,
+            label: 'new chat',
             action: () => {
                 sidebar.selectChat(null)
                 // TODO: Create new chat logic
@@ -52,8 +50,8 @@
         },
         {
             id: 'notes',
-            icon: FileText,
-            label: 'Notes',
+            icon: Document,
+            label: 'notes',
             action: () => {
                 // TODO: Open notes view
                 console.log('Open notes')
@@ -91,7 +89,7 @@
         const now = new Date()
         const diff = now.getTime() - date.getTime()
         const hours = Math.floor(diff / 3600000)
-        if (hours < 1) return 'Just now'
+        if (hours < 1) return 'just now'
         if (hours < 24) return `${hours}h ago`
         return date.toLocaleDateString()
     }
@@ -146,7 +144,7 @@
                             <div
                                 class="absolute flex scale-75 items-center justify-center text-white opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100"
                             >
-                                <PanelLeft class="h-4 w-4" />
+                                <Sidebar className="h-4 w-4" />
                             </div>
                         {/if}
                     </div>
@@ -167,7 +165,7 @@
                     onclick={() => sidebar.toggleChatSidebar()}
                     aria-label="Close sidebar"
                 >
-                    <ChevronLeft class="h-5 w-5" />
+                    <ChevronLeft className="h-5 w-5" />
                 </button>
             {/if}
         </div>
@@ -186,12 +184,12 @@
                         onclick={handleSearchClick}
                         aria-label="Search"
                     >
-                        <Search class="h-5 w-5" />
+                        <Search className="h-5 w-5" />
                         {#if sidebar.isChatSidebarOpen}
                             <span
                                 class="text-sm font-medium whitespace-nowrap opacity-0 transition-opacity delay-100 duration-300 {sidebar.isChatSidebarOpen
                                     ? 'opacity-100'
-                                    : ''}">Search</span
+                                    : ''}">search</span
                             >
                         {/if}
                     </button>
@@ -202,7 +200,7 @@
                     side="right"
                     class="rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-sm text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
                 >
-                    <p>Search</p>
+                    <p>search</p>
                 </Tooltip.Content>
             {/if}
         </Tooltip.Root>
@@ -221,7 +219,7 @@
                             onclick={item.action}
                             aria-label={item.label}
                         >
-                            <Icon class="h-5 w-5" />
+                            <Icon className="h-5 w-5" />
                             {#if sidebar.isChatSidebarOpen}
                                 <span
                                     class="text-sm font-medium whitespace-nowrap opacity-0 transition-opacity delay-100 duration-300 {sidebar.isChatSidebarOpen
@@ -251,7 +249,7 @@
                     ? 'opacity-100'
                     : ''}"
             >
-                <h3 class="mb-1 px-3 text-xs font-semibold text-white/50 uppercase">Chats</h3>
+                <h3 class="mb-1 px-3 text-xs font-semibold text-white/50 uppercase">chats</h3>
                 <ScrollArea.Root class="h-full">
                     <div class="space-y-1">
                         {#each chats as chat (chat.id)}
@@ -272,7 +270,7 @@
                                 >
                                     <div class="min-w-0 flex-1">
                                         <div class="mb-1 flex items-center gap-2">
-                                            <MessageSquare class="h-4 w-4 shrink-0" />
+                                            <ChatBubble className="h-4 w-4 shrink-0" />
                                             <span
                                                 class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap"
                                                 >{chat.title}</span
@@ -290,7 +288,7 @@
                                         console.log('Chat actions for', chat.id)
                                     }}
                                 >
-                                    <MoreHorizontal class="h-4 w-4" />
+                                    <EllipsisHorizontal className="h-4 w-4" />
                                 </button>
                             </div>
                         {/each}

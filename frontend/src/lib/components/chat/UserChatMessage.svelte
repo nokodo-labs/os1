@@ -30,7 +30,7 @@
 </script>
 
 <div
-    class="flex max-w-[80%] animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col items-end gap-2 self-end"
+    class="ml-auto flex max-w-[80%] animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col items-end gap-2 self-end"
     onmouseenter={handleMouseEnter}
     onmouseleave={handleMouseLeave}
     role="article"
@@ -43,7 +43,9 @@
         </div>
         {#if timestamp}
             <div class="mt-2 text-xs text-white/50">
-                {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {timestamp
+                    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    .toLowerCase()}
             </div>
         {/if}
     </div>

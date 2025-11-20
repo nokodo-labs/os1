@@ -1,4 +1,6 @@
 <script lang="ts">
+    import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+
     interface Agent {
         id: string
         name: string
@@ -14,12 +16,12 @@
 
     // Mock agent data
     const agents: Agent[] = [
-        { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model' },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Faster, optimized' },
-        { id: 'claude-3-opus', name: 'Claude 3 Opus', description: "Anthropic's flagship" },
-        { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', description: 'Balanced performance' },
-        { id: 'gemini-pro', name: 'Gemini Pro', description: "Google's advanced model" },
-        { id: 'llama-3', name: 'Llama 3', description: 'Open source powerhouse' },
+        { id: 'gpt-4', name: 'GPT-4', description: 'most capable model' },
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'faster, optimized' },
+        { id: 'claude-3-opus', name: 'Claude 3 Opus', description: "anthropic's flagship" },
+        { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', description: 'balanced performance' },
+        { id: 'gemini-pro', name: 'Gemini Pro', description: "google's advanced model" },
+        { id: 'llama-3', name: 'Llama 3', description: 'open source powerhouse' },
     ]
 
     let isDropdownOpen = $state(false)
@@ -50,7 +52,7 @@
 </script>
 
 <header
-    class="liquid-glass mx-8 mt-5 mb-0 rounded-full px-7 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+    class="liquid-glass mt-5 mb-0 rounded-full px-7 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 >
     <span class="liquid-glass__highlight" aria-hidden="true"></span>
 
@@ -66,22 +68,12 @@
                     class="bg-linear-to-br from-[#cdbdff] to-[#7c83ff] bg-clip-text text-xl font-semibold text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
                     >{currentAgent.name}</span
                 >
-                <svg
-                    class="text-[rgba(205,189,255,0.7)] transition-transform duration-200"
-                    class:rotate-180={isDropdownOpen}
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                >
-                    <path
-                        d="M4 6L8 10L12 6"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    />
-                </svg>
+                <ChevronDown
+                    className="text-[rgba(205,189,255,0.7)] transition-transform duration-200 w-4 h-4 {isDropdownOpen
+                        ? 'rotate-180'
+                        : ''}"
+                    strokeWidth="2"
+                />
             </button>
 
             {#if isDropdownOpen}
