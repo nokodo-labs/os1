@@ -1,8 +1,9 @@
 """User schemas."""
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserBase(BaseModel):
@@ -10,8 +11,13 @@ class UserBase(BaseModel):
 
 	email: EmailStr
 	username: str
+	display_name: str | None = None
+	avatar_url: str | None = None
 	is_active: bool = True
 	is_superuser: bool = False
+	preferences: dict[str, Any] = Field(default_factory=dict)
+	integration_tokens: dict[str, Any] = Field(default_factory=dict)
+	usage_quotas: dict[str, Any] = Field(default_factory=dict)
 
 
 class UserCreate(UserBase):
@@ -27,6 +33,11 @@ class UserUpdate(BaseModel):
 	username: str | None = None
 	password: str | None = None
 	is_active: bool | None = None
+	display_name: str | None = None
+	avatar_url: str | None = None
+	preferences: dict[str, Any] | None = None
+	integration_tokens: dict[str, Any] | None = None
+	usage_quotas: dict[str, Any] | None = None
 
 
 class User(UserBase):

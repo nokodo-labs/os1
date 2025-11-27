@@ -16,7 +16,3 @@
 /.docker/ @nokodo-dev
 /.github/ @nokodo-dev
 /tools/ @nokodo-dev
-
-# Documentation
-/docs/ @your-github-org/docs-team
-*.md @your-github-org/docs-team

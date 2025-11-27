@@ -36,6 +36,11 @@
 
 -   **heavy AI agentic coding support** baked directly into the platform
 -   seamless developer experience with intelligent code assistance
+-   **asynchronous autonomous coding agent** - unique killer feature
+    -   full sandbox environment with terminal access
+    -   iterative code changes, testing, and refinement
+    -   automatic PR creation when complete
+    -   see "copilot coding sessions" under async task system for details
 
 ### UI/UX design philosophy
 
@@ -152,8 +157,19 @@
 
 **session types:**
 
+-   **copilot coding sessions** - autonomous code development (🔥 KILLER FEATURE)
+    -   user provides task/feature request
+    -   spawns isolated sandbox environment (Docker/Coder integration)
+    -   clones repository into sandbox
+    -   full capabilities: terminal access, code changes, tool usage, web access
+    -   iterative workflow: read code → make changes → run tests → refine
+    -   continues until goal achieved
+    -   pushes to GitHub as new branch + creates PR
+    -   GitHub SSO for authorization
+    -   leverage GitHub Copilot Chat open source codebase
+    -   multi-model support with extensive customization
+    -   **unique selling point** - no competitor offers this level of autonomy in OSS
 -   deep research - multi-turn web search → comprehensive document
--   copilot agent sessions - iterative problem-solving with tools
 -   creative projects - multi-step generation with refinement
 -   data analysis - fetch → process → visualize workflows
 
@@ -185,14 +201,22 @@
 ### "everything app" vision
 
 -   **productivity features**
--   notes
--   reminders
--   calendar integrations
+    -   notes
+    -   reminders
+    -   calendar integrations
 -   **external integrations**
--   smart home links
--   Spotify integration
--   homelab setup connections
--   movie requests (e.g., Plex/Jellyfin)
+    -   smart home links
+    -   Spotify integration
+    -   homelab setup connections
+    -   movie requests (e.g., Plex/Jellyfin)
+-   **universal access point**
+    -   become the main point of access to your computer and phone
+    -   phone launcher - type app names, AI-suggested apps to open
+    -   calendar, alarms, reminders integration
+    -   music control and recommendations
+    -   phone contacts and communications
+    -   email management and triage
+    -   **infinite extensibility** - integrate with anything via plugins
 
 ---
 

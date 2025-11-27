@@ -23,7 +23,6 @@ class Settings(BaseSettings):
 	DEBUG: bool = True
 
 	# API
-	V1_PREFIX: str = "/v1"
 	SECRET_KEY: str = "changeme"
 
 	# Database

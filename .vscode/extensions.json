@@ -32,7 +32,6 @@
 		"anthropic.claude-code",
 
 		// Utilities
-		"visualstudioexptteam.vscodeintellicode",
 		"gruntfuggly.todo-tree"
 	]
 }

@@ -2,9 +2,27 @@
 
 from fastapi import APIRouter
 
-from api.v1.endpoints import users
+from api.v1.endpoints import (
+	agents,
+	events,
+	memories,
+	models,
+	notifications,
+	providers,
+	tasks,
+	threads,
+	users,
+)
 
 
 api_router = APIRouter()
 
-api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(users.router)
+api_router.include_router(threads.router)
+api_router.include_router(tasks.router)
+api_router.include_router(events.router)
+api_router.include_router(notifications.router)
+api_router.include_router(memories.router)
+api_router.include_router(providers.router)
+api_router.include_router(models.router)
+api_router.include_router(agents.router)

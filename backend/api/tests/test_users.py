@@ -15,7 +15,7 @@ async def test_create_user(client: AsyncClient) -> None:
 		"is_superuser": False,
 	}
 
-	response = await client.post("/v1/users/", json=user_data)
+	response = await client.post("/v1/users", json=user_data)
 	assert response.status_code == 201
 
 	data = response.json()
@@ -28,7 +28,7 @@ async def test_create_user(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_users(client: AsyncClient) -> None:
 	"""Test retrieving list of users."""
-	response = await client.get("/v1/users/")
+	response = await client.get("/v1/users")
 	assert response.status_code == 200
 	assert isinstance(response.json(), list)
 
@@ -42,7 +42,7 @@ async def test_get_user_by_id(client: AsyncClient) -> None:
 		"username": "testuser2",
 		"password": "testpassword123",
 	}
-	create_response = await client.post("/v1/users/", json=user_data)
+	create_response = await client.post("/v1/users", json=user_data)
 	assert create_response.status_code == 201
 	user_id = create_response.json()["id"]
 

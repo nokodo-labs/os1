@@ -8,6 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Ensure SQLAlchemy models are registered with Base metadata for DDL operations
 from api.core.config import settings
 from api.core.database import Base
 
@@ -64,11 +65,13 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 	# Import after TESTING flag is set to avoid startup DB init
 	from api.core.database import get_db
 	from api.main import app
+	from api.v1.app import v1_app
 
 	async def override_get_db() -> AsyncGenerator[AsyncSession]:
 		yield db_session
 
 	app.dependency_overrides[get_db] = override_get_db
+	v1_app.dependency_overrides[get_db] = override_get_db
 
 	async with AsyncClient(
 		transport=ASGITransport(app=app), base_url="http://test"
@@ -76,3 +79,4 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 		yield test_client
 
 	app.dependency_overrides.clear()
+	v1_app.dependency_overrides.clear()
