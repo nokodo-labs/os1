@@ -25,6 +25,8 @@
         "@testing-library/jest-dom": "^6.6.3",
         "@testing-library/svelte": "^5.2.5",
         "@tsconfig/svelte": "^5.0.4",
+        "@types/dompurify": "^3.0.5",
+        "@types/marked": "^5.0.2",
         "@types/node": "^24.9.2",
         "@types/three": "^0.181.0",
         "@vitest/coverage-v8": "^4.0.4",
@@ -58,7 +60,9 @@
         "npm": ">=10.0.0"
     },
     "dependencies": {
+        "dompurify": "^3.3.0",
         "lucide-svelte": "^0.552.0",
+        "marked": "^17.0.1",
         "three": "^0.171.0",
         "tippy.js": "^6.3.7"
     }

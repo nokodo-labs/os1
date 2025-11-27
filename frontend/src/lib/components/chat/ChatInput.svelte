@@ -1,4 +1,5 @@
 <script lang="ts">
+    // import LiquidMetal from '$lib/components/effects/LiquidMetal.svelte'
     import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
     import Plus from '$lib/components/icons/Plus.svelte'
     import Stop from '$lib/components/icons/Stop.svelte'
@@ -24,6 +25,7 @@
 
     let textarea: HTMLTextAreaElement
     let isComposing = $state(false)
+    let isFocused = $state(false)
 
     function handleInput() {
         if (!textarea) return
@@ -64,10 +66,20 @@
 
 <form class="w-full" onsubmit={handleFormSubmit}>
     <div
-        class="liquid-glass relative w-full rounded-full bg-[rgba(10,12,20,0.65)] shadow-lg transition-all duration-300 ease-in-out focus-within:shadow-[0px_6px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.15)]"
+        class="liquid-glass relative w-full rounded-full shadow-lg transition-all duration-500 ease-in-out"
+        class:liquid-glass--frosted={isFocused}
     >
+        <!-- LiquidMetal component removed as requested, using CSS styles instead -->
+        <!-- <div
+            class="absolute inset-0 overflow-hidden rounded-full transition-opacity duration-500"
+            class:opacity-100={true}
+        >
+            <LiquidMetal speed={0.05} />
+        </div> -->
+
         <div class="liquid-glass__highlight"></div>
-        <div class="liquid-glass__content px-1 py-1">
+
+        <div class="liquid-glass__content relative z-10 px-1 py-1">
             <div class="flex items-center gap-2 px-2.5 py-2.5">
                 <div class="ml-1 flex shrink-0 items-center">
                     <Tooltip.Root>
@@ -75,7 +87,7 @@
                             <button
                                 type="button"
                                 aria-label="Add attachment"
-                                class="flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-white/65 transition-all duration-200 hover:bg-white/5 hover:text-white/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                                class="flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-black/65 transition-all duration-200 hover:bg-black/5 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white/65 dark:hover:bg-white/5 dark:hover:text-white/95"
                                 {disabled}
                             >
                                 <Plus className="h-5.5 w-5.5" strokeWidth="2" />
@@ -97,8 +109,10 @@
                         onkeydown={handleKeyDown}
                         oncompositionstart={handleCompositionStart}
                         oncompositionend={handleCompositionEnd}
+                        onfocus={() => (isFocused = true)}
+                        onblur={() => (isFocused = false)}
                         rows="1"
-                        class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20 hover:scrollbar-thumb-white/30 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 text-white/96 outline-none placeholder:text-white/40"
+                        class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/20 hover:scrollbar-thumb-black/30 dark:scrollbar-thumb-white/20 dark:hover:scrollbar-thumb-white/30 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 text-black/96 outline-none placeholder:text-black/40 dark:text-white/96 dark:placeholder:text-white/40"
                     ></textarea>
                 </div>
 
@@ -109,7 +123,7 @@
                                 <button
                                     type="button"
                                     aria-label="stop generating"
-                                    class="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black transition-all duration-200 hover:bg-gray-100 active:scale-95"
+                                    class="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
                                     onclick={onStop}
                                 >
                                     <Stop className="h-3.5 w-3.5" />
@@ -118,11 +132,11 @@
                                 <button
                                     type="submit"
                                     aria-label="send message"
-                                    class="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+                                    class="send-btn flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
                                         value.trim() === '' || disabled
                                     )
-                                        ? 'bg-white text-black hover:bg-gray-100'
-                                        : 'bg-gray-200 text-gray-900'}"
+                                        ? 'hover:brightness-110'
+                                        : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
                                     disabled={value.trim() === '' || disabled}
                                 >
                                     <ArrowUp className="h-5 w-5" strokeWidth="2" />
@@ -138,3 +152,28 @@
         </div>
     </div>
 </form>
+
+<style>
+    .send-btn {
+        /* Default (Light Mode): Dark Accent BG, White Text */
+        background-color: var(--accent-primary);
+        color: white;
+    }
+
+    :global(.dark) .send-btn {
+        /* Dark Mode: White BG, Dark Accent Text */
+        background-color: white;
+        color: var(--accent-primary);
+    }
+
+    /* Disabled state overrides */
+    .send-btn:disabled {
+        background-color: rgb(229 231 235); /* gray-200 */
+        color: rgb(107 114 128); /* gray-500 */
+    }
+
+    :global(.dark) .send-btn:disabled {
+        background-color: rgb(55 65 81); /* gray-700 */
+        color: rgb(156 163 175); /* gray-400 */
+    }
+</style>

@@ -65,15 +65,18 @@
                 aria-haspopup="listbox"
             >
                 <span
-                    class="bg-linear-to-br from-[#cdbdff] to-[#7c83ff] bg-clip-text text-xl font-semibold text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
+                    class="bg-clip-text text-xl font-semibold text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
+                    style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
                     >{currentAgent.name}</span
                 >
-                <ChevronDown
-                    className="text-[rgba(205,189,255,0.7)] transition-transform duration-200 w-4 h-4 {isDropdownOpen
-                        ? 'rotate-180'
-                        : ''}"
-                    strokeWidth="2"
-                />
+                <span style="color: var(--accent-secondary);">
+                    <ChevronDown
+                        className="transition-transform duration-200 w-4 h-4 {isDropdownOpen
+                            ? 'rotate-180'
+                            : ''}"
+                        strokeWidth="2"
+                    />
+                </span>
             </button>
 
             {#if isDropdownOpen}
@@ -86,9 +89,9 @@
                             <li role="option" aria-selected={agent.id === selectedAgent}>
                                 <button
                                     class="flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-2xl border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-white/8"
-                                    class:!bg-[rgba(124,131,255,0.15)]={agent.id === selectedAgent}
-                                    class:hover:!bg-[rgba(124,131,255,0.2)]={agent.id ===
-                                        selectedAgent}
+                                    style={agent.id === selectedAgent
+                                        ? 'background-color: var(--accent-bg);'
+                                        : ''}
                                     onclick={() => selectAgent(agent.id)}
                                 >
                                     <span class="text-[0.9375rem] font-semibold text-white/95"

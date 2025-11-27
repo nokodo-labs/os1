@@ -1,0 +1,62 @@
+.liquid-metal {
+    position: relative;
+    isolation: isolate;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 9999px; /* rounded-full */
+
+    /* Dark Chrome Gradient */
+    background: linear-gradient(
+        120deg,
+        #1a1a1a 0%,
+        #2d2d2d 10%,
+        #202020 20%,
+        #3d3d3d 35%,
+        #1f1f1f 50%,
+        #353535 65%,
+        #1a1a1a 80%,
+        #2d2d2d 100%
+    );
+    background-size: 200% 200%;
+    animation: liquidMetalMove 4s linear infinite;
+
+    /* Metallic Glow */
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.1),
+        0 4px 16px rgba(0, 0, 0, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.15);
+}
+
+@keyframes liquidMetalMove {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 100% 50%;
+    }
+}
+
+/* Optional: Add a highlight element similar to liquid-glass if needed, 
+   but the gradient itself provides the highlight. */
+.liquid-metal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+        120deg,
+        rgba(255, 255, 255, 0.1),
+        rgba(255, 255, 255, 0.3),
+        rgba(255, 255, 255, 0.1)
+    );
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.5;
+}

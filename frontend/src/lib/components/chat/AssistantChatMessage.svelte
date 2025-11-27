@@ -80,7 +80,8 @@
 >
     <!-- Avatar on the left -->
     <div
-        class="mt-1 h-10 w-10 shrink-0 rounded-full bg-purple-500 shadow-lg shadow-purple-500/50"
+        class="mt-1 h-10 w-10 shrink-0 rounded-full shadow-lg"
+        style="background-color: var(--accent-primary); box-shadow: 0 10px 15px -3px var(--accent-shadow), 0 4px 6px -2px var(--accent-shadow);"
     ></div>
 
     <!-- Content container -->

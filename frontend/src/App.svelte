@@ -1,21 +1,26 @@
 <script lang="ts">
     import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
     import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
+    import DebugMenu from '$lib/components/debug/DebugMenu.svelte'
     import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
     import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
     import Pencil from '$lib/components/icons/Pencil.svelte'
     import AppSidebar from '$lib/components/sidebar/AppSidebar.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
+    import { createThemeContext } from '$lib/contexts/themeContext.svelte'
     import { fade } from 'svelte/transition'
     import AssistantChatMessage from './lib/components/chat/AssistantChatMessage.svelte'
     import Button from './lib/components/chat/Button.svelte'
     import ChatHeader from './lib/components/chat/ChatHeader.svelte'
     import ChatInputLiquidGlass from './lib/components/chat/ChatInput.svelte'
+    import FloatingButtons from './lib/components/chat/FloatingButtons.svelte'
     import UserChatMessage from './lib/components/chat/UserChatMessage.svelte'
     import './lib/styles/liquid-glass.css'
     // Initialize sidebar context
     const sidebar = createSidebarContext()
+    // Initialize theme context
+    const theme = createThemeContext()
 
     interface Message {
         id: string
@@ -56,17 +61,6 @@
 
     // DEV ONLY: Background switcher
     let currentBackground = $state<BackgroundType>('darkveil')
-    let showBgDropdown = $state(false)
-
-    const backgrounds: { value: BackgroundType; label: string }[] = [
-        { value: 'galaxy', label: 'Galaxy' },
-        { value: 'darkveil', label: 'Dark Veil' },
-        { value: 'lightbends', label: 'Light Bends' },
-        { value: 'lightrays', label: 'Light Rays' },
-        { value: 'silk', label: 'Silk' },
-        { value: 'static', label: 'Static Color' },
-        { value: 'none', label: 'None' },
-    ]
 
     function handleSendMessage(content: string) {
         if (messages.length === 0) {
@@ -128,44 +122,30 @@
     function handleEditMessage(messageId: string) {
         console.log('Edit message:', messageId)
     }
+
+    function handleFloatingAdd(newMessages: { role: 'user' | 'assistant'; content: string }[]) {
+        if (messages.length === 0) {
+            sidebar.selectChat(Date.now().toString())
+        }
+
+        newMessages.forEach((msg) => {
+            messages.push({
+                id: Date.now().toString() + Math.random().toString(),
+                role: msg.role,
+                content: msg.content,
+                timestamp: new Date(),
+                model: msg.role === 'assistant' ? selectedModel : undefined,
+            })
+        })
+    }
 </script>
 
 <Tooltip.Provider>
     <!-- Background Manager handles all backgrounds with smooth transitions -->
     <BackgroundManager type={currentBackground} config={{ color: '#0a0a0a' }}>
-        <!-- DEV ONLY: Background switcher dropdown -->
-        <div class="fixed top-4 right-4 z-50">
-            <div class="relative">
-                <button
-                    onclick={() => (showBgDropdown = !showBgDropdown)}
-                    class="rounded-lg bg-black/50 px-3 py-2 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
-                >
-                    BG: {backgrounds.find((b) => b.value === currentBackground)?.label}
-                    <span class="ml-1">▼</span>
-                </button>
-
-                {#if showBgDropdown}
-                    <div
-                        class="absolute top-full right-0 mt-1 w-40 rounded-lg bg-black/90 p-1 shadow-xl backdrop-blur-sm"
-                    >
-                        {#each backgrounds as bg}
-                            <button
-                                onclick={() => {
-                                    currentBackground = bg.value
-                                    showBgDropdown = false
-                                }}
-                                class="block w-full rounded px-3 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10 hover:text-white {currentBackground ===
-                                bg.value
-                                    ? 'bg-white/10 font-medium text-white'
-                                    : ''}"
-                            >
-                                {bg.label}
-                            </button>
-                        {/each}
-                    </div>
-                {/if}
-            </div>
-        </div>
+        <FloatingButtons onAdd={handleFloatingAdd} />
+        <!-- DEV ONLY: Debug Menu -->
+        <DebugMenu {theme} bind:currentBackground />
 
         <div class="relative z-1 flex h-screen">
             <!-- Sidebar -->
@@ -263,7 +243,13 @@
                                     class="mb-8 flex flex-col items-center justify-center gap-2 text-center"
                                     transition:fade={{ duration: 200 }}
                                 >
-                                    <h1 class="text-4xl font-medium text-white">hi simone</h1>
+                                    <h1 class="text-4xl font-medium text-white">
+                                        hi <span
+                                            class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
+                                            style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
+                                            >simone</span
+                                        >
+                                    </h1>
                                     <p class="text-xl text-white/60">good afternoon</p>
                                 </div>
                             {/if}

@@ -96,9 +96,10 @@
 </script>
 
 <div
-    class="relative bg-black/30 backdrop-blur-[20px] backdrop-saturate-180 {sidebar.isChatSidebarOpen
+    class="relative backdrop-blur-[20px] backdrop-saturate-180 {sidebar.isChatSidebarOpen
         ? 'w-72'
         : 'w-18'} h-screen rounded-none border-r border-white/10 transition-[width] duration-300 ease-in-out"
+    style="background-color: var(--accent-bg);"
 >
     <!-- Gradient overlay (replaces ::before pseudo-element) -->
     <div
@@ -138,7 +139,8 @@
             >
                 <div class="relative flex shrink-0 items-center gap-3">
                     <div
-                        class="relative flex h-8 w-8 shrink-0 animate-[bounce_2s_ease-in-out_infinite] items-center justify-center rounded-full bg-linear-to-br from-[#667eea] to-[#764ba2] shadow-[0_4px_12px_rgba(102,126,234,0.4),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:bg-linear-to-br group-hover:from-[#7c8ef6] group-hover:to-[#8b5cf6] group-hover:shadow-[0_6px_16px_rgba(102,126,234,0.6),inset_0_2px_8px_rgba(255,255,255,0.4)]"
+                        class="relative flex h-8 w-8 shrink-0 animate-[bounce_2s_ease-in-out_infinite] items-center justify-center rounded-full shadow-[0_4px_12px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:shadow-[0_6px_16px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.4)]"
+                        style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
                     >
                         {#if !sidebar.isChatSidebarOpen}
                             <div
@@ -257,8 +259,11 @@
                                 <div
                                     class="flex flex-1 cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent bg-transparent p-3 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
                                     chat.id
-                                        ? 'border-white/15 bg-white/10 shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
+                                        ? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
                                         : ''}"
+                                    style={sidebar.selectedChatId === chat.id
+                                        ? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
+                                        : ''}
                                     onclick={() => sidebar.selectChat(chat.id)}
                                     role="button"
                                     tabindex="0"
