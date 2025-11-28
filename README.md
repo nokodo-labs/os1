@@ -50,8 +50,8 @@ docker compose up -d
 
 **Your services:**
 
--   Frontend: http://localhost
--   Admin Console: http://localhost:4175 (local only; keep behind VPN/ACLs in prod)
+-   Frontend: http://localhost:888
+-   Admin Console: http://localhost:8383 (local only; keep behind VPN/ACLs in prod)
 -   Backend API: http://localhost:8000
 -   API Docs: http://localhost:8000/v1/docs
 

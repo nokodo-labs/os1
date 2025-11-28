@@ -50,6 +50,13 @@
 			"include-component-in-tag": true,
 			"extra-label": "bot,frontend,release",
 			"skip-changelog": true
+		},
+		"console": {
+			"package-name": "console",
+			"release-type": "node",
+			"include-component-in-tag": true,
+			"extra-label": "bot,console,release",
+			"skip-changelog": true
 		}
 	}
 }

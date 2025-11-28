@@ -60,8 +60,36 @@
 			"name": "Frontend: Chrome",
 			"type": "chrome",
 			"request": "launch",
-			"url": "http://localhost:5173",
+			"url": "http://localhost:888",
 			"webRoot": "${workspaceFolder}/frontend/src",
+			"sourceMapPathOverrides": {
+				"webpack:///src/*": "${webRoot}/*"
+			}
+		},
+		{
+			"name": "Console: Vite Dev Server",
+			"type": "node",
+			"request": "launch",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": [
+				"run",
+				"dev",
+				"--",
+				"--host",
+				"0.0.0.0",
+				"--port",
+				"8383"
+			],
+			"cwd": "${workspaceFolder}/console",
+			"console": "integratedTerminal",
+			"skipFiles": ["<node_internals>/**"]
+		},
+		{
+			"name": "Console: Chrome",
+			"type": "chrome",
+			"request": "launch",
+			"url": "http://localhost:8383",
+			"webRoot": "${workspaceFolder}/console/src",
 			"sourceMapPathOverrides": {
 				"webpack:///src/*": "${webRoot}/*"
 			}
@@ -88,13 +116,43 @@
 			"configurations": [
 				"Python: FastAPI",
 				"Frontend: Vite Dev Server",
-				"Frontend: Chrome"
+				"Frontend: Chrome",
+				"Console: Vite Dev Server",
+				"Console: Chrome"
 			],
 			"stopAll": true,
 			"presentation": {
 				"hidden": false,
 				"group": "fullstack",
 				"order": 1
+			}
+		},
+		{
+			"name": "API + Frontend",
+			"configurations": [
+				"Python: FastAPI",
+				"Frontend: Vite Dev Server",
+				"Frontend: Chrome"
+			],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "fullstack",
+				"order": 2
+			}
+		},
+		{
+			"name": "API + Console",
+			"configurations": [
+				"Python: FastAPI",
+				"Console: Vite Dev Server",
+				"Console: Chrome"
+			],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "fullstack",
+				"order": 2
 			}
 		}
 	]

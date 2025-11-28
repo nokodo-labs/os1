@@ -66,8 +66,19 @@ services:
     container_name: monorepo-frontend
     restart: unless-stopped
     ports:
-      # Frontend port - typically 80 or 443
-      - "80:80"
+      - "888:80"
+    depends_on:
+      - backend
+
+  # Admin Console (Nginx)
+  console:
+    build:
+      context: ../console
+      dockerfile: ../.docker/Dockerfile.console
+    container_name: monorepo-console
+    restart: unless-stopped
+    ports:
+      - "8383:80"
     depends_on:
       - backend
 

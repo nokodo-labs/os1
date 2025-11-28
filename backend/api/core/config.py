@@ -33,7 +33,11 @@ class Settings(BaseSettings):
 	TESTING: bool = False
 
 	# CORS
-	CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+	CORS_ORIGINS: list[str] = [
+		"http://localhost:888",
+		"http://localhost:8383",
+		"http://localhost:3000",
+	]
 
 	@field_validator("CORS_ORIGINS", mode="before")
 	@classmethod

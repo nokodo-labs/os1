@@ -18,10 +18,22 @@ services:
     image: node:24-alpine
     working_dir: /app
     ports:
-      - "5173:5173"
+      - "888:888"
     environment:
       VITE_API_URL: http://localhost:8000/v1
     volumes:
       - ../frontend:/app
       - /app/node_modules
-    command: sh -c "npm install && npm run dev -- --host"
+    command: sh -c "npm install && npm run dev -- --host --port 888"
+
+  console-dev:
+    image: node:24-alpine
+    working_dir: /app
+    ports:
+      - "8383:8383"
+    environment:
+      VITE_API_URL: http://localhost:8000/v1
+    volumes:
+      - ../console:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host --port 8383"

@@ -4,7 +4,7 @@
 
 -   dedicated admin-only surface for operators; never exposed publicly
 -   utilitarian UX focused on clarity and velocity, not polish
--   ships as its own Vite app on port 4175 so it can live behind VPN/ACLs or separate auth flows
+-   ships as its own Vite app on port 8383 so it can live behind VPN/ACLs or separate auth flows
 
 ## tech stack
 
@@ -31,7 +31,7 @@
 
 -   work inside `/console`; keep configs independent from `/frontend`
 -   share code only through an intentional shared package if duplication becomes painful
--   run `npm install`, then `npm run dev -- --port 4175` for local work (don’t start servers unless user asks)
+-   run `npm install`, then `npm run dev -- --port 8383` for local work (don’t start servers unless user asks)
 -   run `npm run check` before commits; add lint/test scripts later as features appear
 
 ## testing
