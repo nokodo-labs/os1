@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from authlib.jose import JoseError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,7 +52,7 @@ async def get_current_user(
 		if user_id is None:
 			raise credentials_exception
 		token_data = TokenPayload(sub=int(user_id))
-	except JWTError:
+	except JoseError:
 		raise credentials_exception
 
 	result = await session.execute(select(User).where(User.id == token_data.sub))

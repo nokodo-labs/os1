@@ -5,6 +5,7 @@ import sys
 from collections.abc import AsyncGenerator, Generator
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -32,7 +33,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop]:
 	loop.close()
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession]:
 	"""Create a test database session."""
 	# Create test engine
@@ -59,7 +60,7 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 	await engine.dispose()
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 	"""Create a test client with overridden database dependency."""
 
@@ -81,3 +82,26 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 	app.dependency_overrides.clear()
 	v1_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user(db_session: AsyncSession) -> dict:
+	"""Create a test user."""
+	from api.models.user import User
+
+	user = User(
+		email="test@example.com",
+		username="testuser",
+		hashed_password="hashed_password",
+		is_active=True,
+		is_superuser=False,
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+
+	return {
+		"id": user.id,
+		"email": user.email,
+		"username": user.username,
+	}

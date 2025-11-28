@@ -60,3 +60,21 @@ async def test_get_nonexistent_user(client: AsyncClient) -> None:
 	"""Test retrieving a user that doesn't exist."""
 	response = await client.get("/v1/users/99999")
 	assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_user(client: AsyncClient) -> None:
+	"""Test creating a user with an existing email."""
+	user_data = {
+		"email": "duplicate@example.com",
+		"username": "duplicate",
+		"password": "password",
+	}
+	# Create first user
+	resp1 = await client.post("/v1/users", json=user_data)
+	assert resp1.status_code == 201
+
+	# Try to create duplicate
+	resp2 = await client.post("/v1/users", json=user_data)
+	assert resp2.status_code == 400
+	assert resp2.json()["detail"] == "Email already registered"

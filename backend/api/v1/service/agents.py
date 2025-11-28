@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.agent import Agent
 from api.models.model import Model
-from api.schemas.agent import AgentCreate
+from api.schemas.agent import AgentCreate, AgentUpdate
 
 
 async def _ensure_model(model_id: str | None, session: AsyncSession) -> None:
@@ -55,3 +55,25 @@ async def list_agents(session: AsyncSession) -> list[Agent]:
 
 async def get_agent(agent_id: str, session: AsyncSession) -> Agent:
 	return await _get_agent(agent_id, session)
+
+
+async def update_agent(
+	agent_id: str, agent_in: AgentUpdate, session: AsyncSession
+) -> Agent:
+	agent = await _get_agent(agent_id, session)
+	if agent_in.model_id is not None:
+		await _ensure_model(agent_in.model_id, session)
+
+	update_data = agent_in.model_dump(exclude_unset=True)
+	for field, value in update_data.items():
+		setattr(agent, field, value)
+
+	session.add(agent)
+	await session.commit()
+	return await _get_agent(agent.id, session)
+
+
+async def delete_agent(agent_id: str, session: AsyncSession) -> None:
+	agent = await _get_agent(agent_id, session)
+	await session.delete(agent)
+	await session.commit()

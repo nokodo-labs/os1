@@ -18,9 +18,8 @@ api = [
     "alembic>=1.13.3",
     "psycopg[binary]>=3.2.3",
     "python-multipart>=0.0.12",
-    "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=4.0.1,<4.1",
+    "authlib>=1.3.2",
+    "argon2-cffi>=23.1.0",
     "python-dotenv>=1.0.1",
 ]
 
@@ -68,6 +67,15 @@ line-ending = "lf"
 [tool.ruff.lint.isort]
 force-single-line = false
 lines-after-imports = 2
+
+[tool.coverage.run]
+source = ["api"]
+branch = true
+omit = [
+    "*/tests/*",
+    "tests/*",
+    "api/tests/*",
+]
 
 [tool.mypy]
 python_version = "3.13"

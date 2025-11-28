@@ -6,21 +6,32 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jose import jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHash, VerifyMismatchError
+from authlib.jose import JoseError, jwt
 
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_PASSWORD_HASHER = PasswordHasher(
+	time_cost=3,
+	memory_cost=2**16,
+	parallelism=2,
+	hash_len=32,
+	salt_len=16,
+)
 
 
 def hash_password(password: str) -> str:
-	"""Hash a plain-text password using bcrypt."""
-	return _pwd_context.hash(password)
+	"""Hash a plain-text password using Argon2id."""
+	return _PASSWORD_HASHER.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-	"""Validate a plain-text password against a hashed value."""
-	return _pwd_context.verify(plain_password, hashed_password)
+	"""Validate a plain-text password against an Argon2id hash."""
+	try:
+		_PASSWORD_HASHER.verify(hashed_password, plain_password)
+	except (VerifyMismatchError, InvalidHash):
+		return False
+	return True
 
 
 def create_jwt_token(
@@ -33,10 +44,12 @@ def create_jwt_token(
 ) -> str:
 	"""Create a signed JWT for the given subject."""
 	expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=15))
-	payload: dict[str, Any] = {"sub": str(subject), "exp": expire}
+	payload: dict[str, Any] = {"sub": str(subject), "exp": int(expire.timestamp())}
 	if additional_claims:
 		payload.update(additional_claims)
-	return jwt.encode(payload, secret_key, algorithm=algorithm)
+	headers = {"alg": algorithm, "typ": "JWT"}
+	token = jwt.encode(headers, payload, secret_key)
+	return token.decode("utf-8") if isinstance(token, bytes) else token
 
 
 def decode_jwt_token(
@@ -46,4 +59,14 @@ def decode_jwt_token(
 	algorithms: Sequence[str],
 ) -> dict[str, Any]:
 	"""Decode a JWT token and return its payload."""
-	return jwt.decode(token, secret_key, algorithms=list(algorithms))
+	claims = jwt.decode(
+		token,
+		secret_key,
+		claims_options={"exp": {"essential": True}},
+	)
+	claims.validate(now=int(datetime.now(UTC).timestamp()))
+	allowed_algs = {alg.upper() for alg in algorithms}
+	token_alg = (claims.header.get("alg") or "").upper()
+	if allowed_algs and token_alg not in allowed_algs:
+		raise JoseError("unexpected_alg")
+	return dict(claims)

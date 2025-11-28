@@ -15,6 +15,7 @@ def test_hash_and_verify_password_roundtrip() -> None:
 	plain = "super-secret-password"
 	hashed = hash_password(plain)
 	assert hashed != plain
+	assert hashed.startswith("$argon2id$")
 	assert verify_password(plain, hashed)
 	assert verify_password("wrong-password", hashed) is False
 

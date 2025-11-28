@@ -30,6 +30,18 @@ class AgentCreate(AgentBase):
 	pass
 
 
+class AgentUpdate(MetadataModel):
+	"""Payload for agent update."""
+
+	name: str | None = None
+	description: str | None = None
+	system_prompt: str | None = None
+	visibility: AgentVisibility | None = None
+	tool_ids: list[str] | None = None
+	config: dict[str, Any] | None = None
+	model_id: str | None = None
+
+
 class Agent(AgentBase):
 	"""Response schema."""
 
