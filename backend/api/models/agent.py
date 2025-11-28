@@ -13,6 +13,7 @@ from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyM
 
 
 if TYPE_CHECKING:
+	from api.models.acl import AccessControlEntry
 	from api.models.message import Message
 	from api.models.model import Model
 
@@ -47,7 +48,12 @@ class Agent(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		"Model",
 		back_populates="agents",
 	)
+	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
+		"AccessControlEntry",
+		back_populates="agent",
+		cascade="all, delete-orphan",
+	)
 	messages: Mapped[list[Message]] = relationship(
 		"Message",
-		back_populates="agent",
+		back_populates="sender_agent",
 	)

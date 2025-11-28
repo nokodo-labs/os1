@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, func
+from sqlalchemy import (
+	JSON,
+	DateTime,
+	ForeignKey,
+	String,
+	func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -13,9 +19,11 @@ from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyM
 
 
 if TYPE_CHECKING:
+	from api.models.acl import AccessControlEntry
 	from api.models.event import Event
 	from api.models.memory import Memory
 	from api.models.message import Message
+	from api.models.project import Project
 	from api.models.task import Task
 	from api.models.user import User
 
@@ -25,7 +33,6 @@ class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	__tablename__ = "threads"
 
-	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 	title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 	folder: Mapped[str | None] = mapped_column(String(255), nullable=True)
 	tags: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -36,10 +43,19 @@ class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		onupdate=func.now(),
 	)
 
+	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+	project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id"))
+
 	owner: Mapped[User] = relationship(
 		"User",
 		back_populates="threads",
 		innerjoin=True,
+	)
+	project: Mapped[Project | None] = relationship("Project", back_populates="threads")
+	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
+		"AccessControlEntry",
+		back_populates="thread",
+		cascade="all, delete-orphan",
 	)
 	messages: Mapped[list[Message]] = relationship(
 		"Message",

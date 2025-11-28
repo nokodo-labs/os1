@@ -5,15 +5,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, String, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 
 
 if TYPE_CHECKING:
+	from api.models.acl import AccessControlEntry
+	from api.models.group import Group, GroupMembership
 	from api.models.memory import Memory
 	from api.models.notification import Notification
+	from api.models.project import Project
+	from api.models.reminder import Reminder
+	from api.models.role import Role
 	from api.models.task import Task
 	from api.models.thread import Thread
 
@@ -39,6 +44,19 @@ class User(Base):
 	)
 	updated_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+	)
+
+	role_id: Mapped[str | None] = mapped_column(ForeignKey("roles.id"))
+
+	role: Mapped[Role | None] = relationship("Role", back_populates="users")
+	projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
+	owned_groups: Mapped[list[Group]] = relationship("Group", back_populates="owner")
+	group_memberships: Mapped[list[GroupMembership]] = relationship(
+		"GroupMembership", back_populates="user", cascade="all, delete-orphan"
+	)
+	reminders: Mapped[list[Reminder]] = relationship("Reminder", back_populates="owner")
+	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
+		"AccessControlEntry", back_populates="user", cascade="all, delete-orphan"
 	)
 
 	threads: Mapped[list[Thread]] = relationship(

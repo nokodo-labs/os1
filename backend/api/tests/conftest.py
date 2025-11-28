@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Ensure SQLAlchemy models are registered with Base metadata for DDL operations
+from api import models  # noqa: F401
 from api.core.config import settings
 from api.core.database import Base
 

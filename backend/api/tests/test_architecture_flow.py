@@ -70,7 +70,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 	message_resp = await client.post(
 		f"/v1/threads/{thread['id']}/messages",
 		json={
-			"role": "user",
+			"type": "user",
 			"content": "Let's start",
 		},
 	)

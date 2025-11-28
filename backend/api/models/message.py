@@ -17,10 +17,11 @@ if TYPE_CHECKING:
 	from api.models.event import Event
 	from api.models.task import Task
 	from api.models.thread import Thread
+	from api.models.user import User
 
 
-class MessageRole(StrEnum):
-	"""Available message roles."""
+class MessageType(StrEnum):
+	"""Available message types."""
 
 	USER = "user"
 	ASSISTANT = "assistant"
@@ -41,18 +42,28 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		ForeignKey("tasks.id", ondelete="SET NULL"),
 		index=True,
 	)
-	agent_id: Mapped[str | None] = mapped_column(
+	sender_agent_id: Mapped[str | None] = mapped_column(
 		ForeignKey("agents.id", ondelete="SET NULL"),
 		index=True,
 	)
-	role: Mapped[MessageRole] = mapped_column(
-		Enum(MessageRole, name="message_role"),
-		default=MessageRole.USER,
+	sender_user_id: Mapped[int | None] = mapped_column(
+		ForeignKey("users.id", ondelete="SET NULL"),
+		index=True,
+	)
+	type: Mapped[MessageType] = mapped_column(
+		Enum(MessageType, name="message_type"),
+		default=MessageType.USER,
 	)
 	content: Mapped[str] = mapped_column(Text())
 	attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 	token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+	read_by: Mapped[list[int]] = mapped_column(JSON, default=list)
+
+	__mapper_args__ = {
+		"polymorphic_on": type,
+		"polymorphic_identity": "message",
+	}
 
 	thread: Mapped[Thread] = relationship(
 		"Thread",
@@ -65,9 +76,14 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		foreign_keys=[task_id],
 		primaryjoin="Message.task_id == Task.id",
 	)
-	agent: Mapped[Agent | None] = relationship(
+	sender_agent: Mapped[Agent | None] = relationship(
 		"Agent",
 		back_populates="messages",
+		foreign_keys=[sender_agent_id],
+	)
+	sender_user: Mapped[User | None] = relationship(
+		"User",
+		foreign_keys=[sender_user_id],
 	)
 	events: Mapped[list[Event]] = relationship(
 		"Event",
@@ -75,3 +91,27 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		cascade="all, delete-orphan",
 		passive_deletes=True,
 	)
+
+
+class UserMessage(Message):
+	"""User message subclass."""
+
+	__mapper_args__ = {"polymorphic_identity": MessageType.USER}
+
+
+class AssistantMessage(Message):
+	"""Assistant message subclass."""
+
+	__mapper_args__ = {"polymorphic_identity": MessageType.ASSISTANT}
+
+
+class ToolMessage(Message):
+	"""Tool message subclass."""
+
+	__mapper_args__ = {"polymorphic_identity": MessageType.TOOL}
+
+
+class SystemMessage(Message):
+	"""System message subclass."""
+
+	__mapper_args__ = {"polymorphic_identity": MessageType.SYSTEM}

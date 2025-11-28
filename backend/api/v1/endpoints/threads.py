@@ -10,7 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.database import get_db
-from api.models.message import Message
+from api.models.agent import Agent
+from api.models.message import (
+	AssistantMessage,
+	Message,
+	MessageType,
+	SystemMessage,
+	ToolMessage,
+	UserMessage,
+)
 from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import Message as MessageSchema
@@ -31,6 +39,8 @@ async def _load_thread(
 		.options(
 			selectinload(Thread.messages),
 			selectinload(Thread.owner),
+			selectinload(Thread.user_participants),
+			selectinload(Thread.agent_participants).selectinload(Agent.model),
 		)
 		.where(Thread.id == thread_id)
 	)
@@ -81,6 +91,8 @@ async def list_threads(
 		.options(
 			selectinload(Thread.messages),
 			selectinload(Thread.owner),
+			selectinload(Thread.user_participants),
+			selectinload(Thread.agent_participants).selectinload(Agent.model),
 		)
 		.order_by(Thread.last_activity_at.desc())
 	)
@@ -152,10 +164,22 @@ async def create_message(
 ) -> Message:
 	"""Append a message to a thread."""
 	thread = await _load_thread(thread_id, db)
-	message = Message(
-		thread_id=thread_id,
-		**message_in.model_dump(by_alias=True),
-	)
+
+	data = message_in.model_dump(by_alias=True)
+	msg_type = data.pop("type", MessageType.USER)
+
+	if msg_type == MessageType.USER:
+		message = UserMessage(thread_id=thread_id, **data)
+	elif msg_type == MessageType.ASSISTANT:
+		message = AssistantMessage(thread_id=thread_id, **data)
+	elif msg_type == MessageType.TOOL:
+		message = ToolMessage(thread_id=thread_id, **data)
+	elif msg_type == MessageType.SYSTEM:
+		message = SystemMessage(thread_id=thread_id, **data)
+	else:
+		# Fallback to UserMessage if unknown, or raise error
+		message = UserMessage(thread_id=thread_id, **data)
+
 	thread.last_activity_at = datetime.now(tz=UTC)
 	db.add(message)
 	await db.commit()

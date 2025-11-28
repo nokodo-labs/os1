@@ -25,13 +25,23 @@
 
 ```
 backend/
-├── api/                    # FastAPI app (routes, ORM, DB)
-│   ├── v1/endpoints/       # Route handlers
+├── api/                    # FastAPI app
+│   ├── v1/                 # API version 1
+│   │   ├── routers/        # Route handlers
+│   │   ├── service/	    # v1 service layer
+│   │   ├── router.py       # v1 router
+│   │   └── schemas/        # DTOs for v1-specific routes
 │   ├── core/               # Config, database
-│   ├── models/             # SQLAlchemy models
-│   ├── schemas/            # Pydantic schemas
+│   ├── clients/            # External API clients
+│   │   ├── redis.py        # Redis client
+│   │   ├── smtp.py         # SMTP email client
+│   │   └── taskiq.py	    # Taskiq client
+│   ├── tasks/              # Background tasks
+│   ├── models/             # SQLAlchemy models. These are ORM as well as Domain Models.
+│   ├── schemas/            # Common Pydantic schema DTOs across API versions
+│   ├── migrations/         # Alembic setup & migrations
 │   └── tests/              # API & ORM tests
-├── nokodo_ai/              # SDK/service layer
+├── nokodo_ai/              # SDK - fully independent service layer
 │   └── tests/              # SDK unit tests
 └── tests/                  # E2E integration tests
 ```

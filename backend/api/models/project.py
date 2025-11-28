@@ -1,0 +1,41 @@
+"""Project model."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from api.core.database import Base
+from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+
+
+if TYPE_CHECKING:
+	from api.models.acl import AccessControlEntry
+	from api.models.event import Event
+	from api.models.thread import Thread
+	from api.models.user import User
+
+
+class Project(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+	"""Project model for organizing resources."""
+
+	__tablename__ = "projects"
+
+	name: Mapped[str] = mapped_column(String(100))
+	description: Mapped[str | None] = mapped_column(String(500))
+	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+	owner: Mapped[User] = relationship("User", back_populates="projects")
+	threads: Mapped[list[Thread]] = relationship("Thread", back_populates="project")
+	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
+		"AccessControlEntry",
+		back_populates="project",
+		cascade="all, delete-orphan",
+	)
+	events: Mapped[list[Event]] = relationship(
+		"Event",
+		back_populates="project",
+		cascade="all, delete-orphan",
+	)

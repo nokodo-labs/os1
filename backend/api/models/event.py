@@ -16,6 +16,7 @@ from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyM
 if TYPE_CHECKING:
 	from api.models.message import Message
 	from api.models.notification import Notification
+	from api.models.project import Project
 	from api.models.task import Task
 	from api.models.thread import Thread
 	from api.models.user import User
@@ -29,6 +30,7 @@ class EventScope(StrEnum):
 	THREAD = "thread"
 	MESSAGE = "message"
 	TASK = "task"
+	PROJECT = "project"
 
 
 class Event(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
@@ -59,6 +61,9 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	task_id: Mapped[str | None] = mapped_column(
 		ForeignKey("tasks.id", ondelete="SET NULL"),
 	)
+	project_id: Mapped[str | None] = mapped_column(
+		ForeignKey("projects.id", ondelete="SET NULL"),
+	)
 
 	user: Mapped[User | None] = relationship("User")
 	thread: Mapped[Thread | None] = relationship(
@@ -71,6 +76,10 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	task: Mapped[Task | None] = relationship(
 		"Task",
+		back_populates="events",
+	)
+	project: Mapped[Project | None] = relationship(
+		"Project",
 		back_populates="events",
 	)
 	notifications: Mapped[list[Notification]] = relationship(
