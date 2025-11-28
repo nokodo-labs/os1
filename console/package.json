@@ -7,13 +7,15 @@
 		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
-		"check": "svelte-check --tsconfig ./tsconfig.json"
+		"check": "svelte-check --tsconfig ./tsconfig.json",
+		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts"
 	},
 	"devDependencies": {
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@tailwindcss/postcss": "^4.1.16",
 		"@tsconfig/svelte": "^5.0.4",
 		"autoprefixer": "^10.4.20",
+		"openapi-typescript": "^7.10.1",
 		"postcss": "^8.4.47",
 		"svelte": "^5.43.1",
 		"svelte-check": "^4.0.5",
@@ -24,5 +26,13 @@
 	"engines": {
 		"node": ">=24.0.0",
 		"npm": ">=10.0.0"
+	},
+	"dependencies": {
+		"bits-ui": "^2.14.4",
+		"clsx": "^2.1.1",
+		"lucide-svelte": "^0.555.0",
+		"tailwind-merge": "^3.4.0",
+		"tailwind-variants": "^3.2.2",
+		"tailwindcss-animate": "^1.0.7"
 	}
 }

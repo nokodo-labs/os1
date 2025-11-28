@@ -1,0 +1,1 @@
+API_V1_MOUNT_PATH = "/v1"

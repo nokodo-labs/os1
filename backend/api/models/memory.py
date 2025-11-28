@@ -14,7 +14,6 @@ from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyM
 
 if TYPE_CHECKING:
 	from api.models.message import Message
-	from api.models.thread import Thread
 	from api.models.user import User
 
 
@@ -25,9 +24,6 @@ class Memory(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 	content: Mapped[str] = mapped_column(Text())
-	source_thread_id: Mapped[str | None] = mapped_column(
-		ForeignKey("threads.id", ondelete="SET NULL"),
-	)
 	source_message_id: Mapped[str | None] = mapped_column(
 		ForeignKey("messages.id", ondelete="SET NULL"),
 	)
@@ -41,12 +37,7 @@ class Memory(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="memories",
 		lazy="selectin",
 	)
-	thread: Mapped[Thread | None] = relationship(
-		"Thread",
-		back_populates="memories",
-		lazy="selectin",
-	)
-	message: Mapped[Message | None] = relationship(
+	source_message: Mapped[Message | None] = relationship(
 		"Message",
 		lazy="selectin",
 	)

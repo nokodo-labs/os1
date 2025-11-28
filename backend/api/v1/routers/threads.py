@@ -1,0 +1,92 @@
+"""Thread and message routers."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.database import get_db
+from api.models.message import Message
+from api.models.thread import Thread
+from api.schemas.message import Message as MessageSchema
+from api.schemas.message import MessageCreate
+from api.schemas.thread import Thread as ThreadSchema
+from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.v1.service import threads as thread_service
+
+
+router = APIRouter(prefix="/threads", tags=["threads"])
+
+
+@router.post("", response_model=ThreadSchema, status_code=status.HTTP_201_CREATED)
+async def create_thread(
+	thread_in: ThreadCreate,
+	db: AsyncSession = Depends(get_db),
+) -> Thread:
+	"""Create a new thread."""
+	return await thread_service.create_thread(thread_in, db)
+
+
+@router.get("", response_model=list[ThreadSchema])
+async def list_threads(
+	owner_id: int | None = None,
+	skip: int = 0,
+	limit: int = 20,
+	db: AsyncSession = Depends(get_db),
+) -> list[Thread]:
+	"""List threads optionally filtered by owner."""
+	return await thread_service.list_threads(
+		db,
+		owner_id=owner_id,
+		skip=skip,
+		limit=limit,
+	)
+
+
+@router.get("/{thread_id}", response_model=ThreadSchema)
+async def get_thread(
+	thread_id: str,
+	db: AsyncSession = Depends(get_db),
+) -> Thread:
+	"""Fetch a single thread with messages."""
+	return await thread_service.get_thread(thread_id, db)
+
+
+@router.patch("/{thread_id}", response_model=ThreadSchema)
+async def update_thread(
+	thread_id: str,
+	thread_in: ThreadUpdate,
+	db: AsyncSession = Depends(get_db),
+) -> Thread:
+	"""Update thread metadata."""
+	return await thread_service.update_thread(thread_id, thread_in, db)
+
+
+@router.get("/{thread_id}/messages", response_model=list[MessageSchema])
+async def list_messages(
+	thread_id: str,
+	skip: int = 0,
+	limit: int = 100,
+	db: AsyncSession = Depends(get_db),
+) -> list[Message]:
+	"""List messages within a thread."""
+	return await thread_service.list_messages(
+		thread_id,
+		db,
+		skip=skip,
+		limit=limit,
+	)
+
+
+@router.post(
+	"/{thread_id}/messages",
+	response_model=MessageSchema,
+	status_code=status.HTTP_201_CREATED,
+)
+async def create_message(
+	thread_id: str,
+	message_in: MessageCreate,
+	db: AsyncSession = Depends(get_db),
+) -> Message:
+	"""Append a message to a thread."""
+	return await thread_service.create_message(thread_id, message_in, db)

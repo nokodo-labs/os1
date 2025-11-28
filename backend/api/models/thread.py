@@ -16,12 +16,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.many_to_many import thread_project_association
 
 
 if TYPE_CHECKING:
 	from api.models.acl import AccessControlEntry
 	from api.models.event import Event
-	from api.models.memory import Memory
 	from api.models.message import Message
 	from api.models.project import Project
 	from api.models.task import Task
@@ -43,14 +43,17 @@ class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 
 	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-	project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id"))
 
 	owner: Mapped[User] = relationship(
 		"User",
 		back_populates="threads",
 		innerjoin=True,
 	)
-	project: Mapped[Project | None] = relationship("Project", back_populates="threads")
+	projects: Mapped[list[Project]] = relationship(
+		"Project",
+		secondary=thread_project_association,
+		back_populates="threads",
+	)
 	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
 		"AccessControlEntry",
 		back_populates="thread",
@@ -71,8 +74,4 @@ class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	tasks: Mapped[list[Task]] = relationship(
 		"Task",
 		back_populates="spawned_thread",
-	)
-	memories: Mapped[list[Memory]] = relationship(
-		"Memory",
-		back_populates="thread",
 	)

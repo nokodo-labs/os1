@@ -2,8 +2,9 @@
 
 from fastapi import APIRouter
 
-from api.v1.endpoints import (
+from api.v1.routers import (
 	agents,
+	auth,
 	events,
 	memories,
 	models,
@@ -17,6 +18,7 @@ from api.v1.endpoints import (
 
 api_router = APIRouter()
 
+api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(threads.router)
 api_router.include_router(tasks.router)

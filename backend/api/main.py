@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.constants import API_V1_MOUNT_PATH
 from api.core.config import settings
 from api.core.database import init_db
 from api.v1.app import v1_app
@@ -61,4 +62,4 @@ async def health_check() -> dict[str, str]:
 
 
 # Mount API v1
-app.mount("/v1", v1_app)
+app.mount(API_V1_MOUNT_PATH, v1_app)

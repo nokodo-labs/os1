@@ -1,5 +1,6 @@
 """Database models."""
 
+from api.models.acl import AccessControlEntry
 from api.models.agent import Agent
 from api.models.event import Event
 from api.models.group import Group
@@ -17,6 +18,7 @@ from api.models.user import User
 
 
 __all__ = [
+	"AccessControlEntry",
 	"Agent",
 	"Event",
 	"Group",

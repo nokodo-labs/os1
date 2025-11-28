@@ -6,7 +6,7 @@ AI platform with agentic coding support, beautiful UI, and comprehensive tooling
 
 -   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17
 -   **Frontend**: Svelte 5, TypeScript, Vite, Vercel AI SDK, shadcn-svelte, TailwindCSS
--   **Admin Console**: TBD
+-   **Console**: Svelte 5, TypeScript, Vite, shadcn-svelte, TailwindCSS
 -   **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, Release Please
 
 ## AI Agent Behavior
@@ -18,13 +18,16 @@ When interacting with the user and working, always **keep comms efficient** and 
 As an AI, your context is limited, thus overly verbose responses will directly affect how your performance degrades over time.
 **Less is more** - focus on addressing the user's needs never create extra files or documentation to report changes unless explicitly asked.
 
+Never attempt to run dev servers. Always assume a dev server with hot reload is running and monitored live by the user.
+To test changes, use dedicated check commands or run proper tests instead.
+
 ### Component-Specific Guidelines
 
 You can find additional AGENTS.md files in each of the 3 main components. Refer to those for component-specific instructions, information, and guidelines:
 
 -   backend/AGENTS.md - Backend
 -   frontend/AGENTS.md - Frontend
--   admin-console/AGENTS.md - Admin Console
+-   console/AGENTS.md - Console
 
 ### Plan and Reflect
 

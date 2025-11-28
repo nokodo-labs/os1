@@ -59,7 +59,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={
-			"user_id": user["id"],
+			"owner_id": user["id"],
 			"title": "Kickoff",
 			"metadata": {"topic": "architecture"},
 		},
@@ -75,8 +75,9 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 		},
 	)
 	assert message_resp.status_code == 201
+	message = message_resp.json()
 
-	list_threads = await client.get(f"/v1/threads?user_id={user['id']}")
+	list_threads = await client.get(f"/v1/threads?owner_id={user['id']}")
 	assert list_threads.status_code == 200
 	assert any(item["id"] == thread["id"] for item in list_threads.json())
 
@@ -134,7 +135,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 		json={
 			"user_id": user["id"],
 			"content": "Prefers detailed summaries",
-			"source_thread_id": thread["id"],
+			"source_message_id": message["id"],
 		},
 	)
 	assert memory_resp.status_code == 201

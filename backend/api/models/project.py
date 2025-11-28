@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.many_to_many import thread_project_association
 
 
 if TYPE_CHECKING:
@@ -28,7 +29,11 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
 	owner: Mapped[User] = relationship("User", back_populates="projects")
-	threads: Mapped[list[Thread]] = relationship("Thread", back_populates="project")
+	threads: Mapped[list[Thread]] = relationship(
+		"Thread",
+		secondary=thread_project_association,
+		back_populates="projects",
+	)
 	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
 		"AccessControlEntry",
 		back_populates="project",

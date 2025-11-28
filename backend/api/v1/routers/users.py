@@ -1,16 +1,25 @@
-"""User endpoints."""
+"""User routers."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.user import User
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
+from api.v1.service import users as user_service
+from api.v1.service.auth import get_current_active_user
 
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("/me", response_model=UserSchema)
+async def read_user_me(
+	current_user: User = Depends(get_current_active_user),
+) -> User:
+	"""Get current user."""
+	return current_user
 
 
 @router.get("", response_model=list[UserSchema])
@@ -20,8 +29,7 @@ async def read_users(
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
 	"""Retrieve users."""
-	result = await db.execute(select(User).offset(skip).limit(limit))
-	return list(result.scalars().all())
+	return await user_service.list_users(db, skip=skip, limit=limit)
 
 
 @router.get("/{user_id}", response_model=UserSchema)
@@ -30,16 +38,7 @@ async def read_user(
 	db: AsyncSession = Depends(get_db),
 ) -> User:
 	"""Get user by ID."""
-	result = await db.execute(select(User).where(User.id == user_id))
-	user = result.scalar_one_or_none()
-
-	if not user:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="User not found",
-		)
-
-	return user
+	return await user_service.get_user(user_id, db)
 
 
 @router.post("", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
@@ -48,17 +47,4 @@ async def create_user(
 	db: AsyncSession = Depends(get_db),
 ) -> User:
 	"""Create new user."""
-	# TODO: Hash password before storing
-	user = User(
-		email=user_in.email,
-		username=user_in.username,
-		hashed_password=user_in.password,  # TODO: Hash this
-		is_active=user_in.is_active,
-		is_superuser=user_in.is_superuser,
-	)
-
-	db.add(user)
-	await db.commit()
-	await db.refresh(user)
-
-	return user
+	return await user_service.create_user(user_in, db)

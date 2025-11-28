@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
 	# API
 	SECRET_KEY: str = "changeme"
+	ALGORITHM: str = "HS256"
+	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
 	# Database
 	# Provide a safe default for dev/CI; env can override to Postgres in real deployment
