@@ -21,10 +21,10 @@
 ## 🛠️ Stack
 
 -   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17, Alembic
--   **Frontend**: Svelte 5, Vite 6, Vercel AI SDK, shadcn-svelte, Tailwind 4, TypeScript
--   **Type Safety**: OpenAPI TypeScript generator (auto-sync backend → frontend types)
+-   **Frontend**: Svelte 5, Vite 6, Vercel AI SDK, shadcn-svelte, Tailwind 4, PostCSS, TypeScript
+-   **Admin Console**: TBD
 -   **Dev**: VS Code (tasks, debugger, extensions), Ruff, pytest, AI instructions
--   **Deploy**: Docker Compose with production configs
+-   **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, Release Please
 
 ## ✨ Features
 
@@ -51,6 +51,7 @@ docker compose up -d
 **Your services:**
 
 -   Frontend: http://localhost
+-   Admin Console: http://localhost:4175 (local only; keep behind VPN/ACLs in prod)
 -   Backend API: http://localhost:8000
 -   API Docs: http://localhost:8000/v1/docs
 
@@ -78,23 +79,52 @@ docker compose up -d
 
 ```
 backend/
-├── api/                   # FastAPI application
-│   ├── api/v1/endpoints/  # Route handlers
-│   ├── core/              # Config, database
-│   ├── models/            # SQLAlchemy ORM
-│   ├── schemas/           # Pydantic validation
-│   ├── tests/             # API & ORM tests
-│   └── alembic/           # Database migrations
-├── nokodo_ai/            # SDK/service layer
-│   └── tests/             # SDK unit tests
-├── tests/                 # E2E integration tests
-└── data/                  # Data storage (volume mounted)
+├── api/                    # FastAPI app
+│   ├── v1/                 # API version 1
+│   │   ├── routers/        # Route handlers
+│   │   ├── service/	    # v1 service layer
+│   │   ├── router.py       # v1 router
+│   │   └── schemas/        # DTOs for v1-specific routes
+│   ├── core/               # Config, database
+│   ├── clients/            # External API clients
+│   │   ├── redis.py        # Redis client
+│   │   ├── smtp.py         # SMTP email client
+│   │   └── taskiq.py	    # Taskiq client
+│   ├── tasks/              # Background tasks
+│   ├── models/             # SQLAlchemy models. These are ORM as well as Domain Models.
+│   ├── schemas/            # Common Pydantic schema DTOs across API versions
+│   ├── migrations/         # Alembic setup & migrations
+│   └── tests/              # API & ORM tests
+├── nokodo_ai/              # SDK - fully independent service layer
+│   └── tests/              # SDK unit tests
+└── tests/                  # E2E integration tests
 
 frontend/
 ├── src/
-│   ├── lib/               # Components
+│   ├── lib/
+│   │   ├── api/                # type-safe API client
+│   │   ├── contexts/           # Svelte contexts
+│   │   ├── styles/             # TailwindCSS styles
+│   │   └── components/         # Svelte components
+│   │       ├── backgrounds/	# background components
+│   │       │   └── webgl/      # WebGL background components
+│   │       ├── chats/          # chat UI components
+│   │       ├── common/         # common reusable components
+│   │       ├── debug/          # debugging components
+│   │       ├── icons/          # icon components
+│   │       ├── sidebar/        # sidebar components
+│   │       └── primitives/     # shadcn-svelte / Bits UI primitives
+│   ├── tests/                  # frontend vitest tests
+│   ├── main.ts                 # entrypoint
+│   ├── App.svelte              # main Svelte app
+│   └── app.css                 # global styles (TailwindCSS)
+└── nginx.conf                  # Production server
+
+admin-console/
+├── src/
+│   ├── lib/               # Admin-only components & utilities
 │   └── main.ts            # Entry point
-└── nginx.conf             # Production server
+└── tailwind.config.js     # Minimal styling configuration
 
 .docker/                   # Docker configs
 ├── Dockerfile.backend     # Backend build

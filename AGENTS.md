@@ -6,8 +6,8 @@ AI platform with agentic coding support, beautiful UI, and comprehensive tooling
 
 -   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17
 -   **Frontend**: Svelte 5, TypeScript, Vite, Vercel AI SDK, shadcn-svelte, TailwindCSS
--   **Type Safety**: OpenAPI TypeScript generator (auto-sync backend → frontend)
--   **Infra**: Docker Compose, Nginx for static builds
+-   **Admin Console**: TBD
+-   **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, Release Please
 
 ## AI Agent Behavior
 
@@ -17,6 +17,14 @@ When interacting with the user and working, always **keep comms efficient** and 
 
 As an AI, your context is limited, thus overly verbose responses will directly affect how your performance degrades over time.
 **Less is more** - focus on addressing the user's needs never create extra files or documentation to report changes unless explicitly asked.
+
+### Component-Specific Guidelines
+
+You can find additional AGENTS.md files in each of the 3 main components. Refer to those for component-specific instructions, information, and guidelines:
+
+-   backend/AGENTS.md - Backend
+-   frontend/AGENTS.md - Frontend
+-   admin-console/AGENTS.md - Admin Console
 
 ### Plan and Reflect
 
@@ -28,7 +36,14 @@ Before executing any tasks, follow this process:
 
 Skipping any of these steps will lead to increased costs and suboptimal results.
 
-## PR instructions
+## Contribution Guidelines
+
+### Commit instructions
+
+-   commit messages: use conventional commit style, e.g., feat(frontend): add new chat component
+-   ensure breaking changes are properly marked with `!`, e.g., feat!: change API response format
+
+### PR instructions
 
 -   branch naming: use conventional commit style, e.g., feat/frontend/add-chat-component
 -   title format: use conventional commit style, e.g., feat(frontend): add new chat component

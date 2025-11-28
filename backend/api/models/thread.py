@@ -34,7 +34,6 @@ class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	__tablename__ = "threads"
 
 	title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-	folder: Mapped[str | None] = mapped_column(String(255), nullable=True)
 	tags: Mapped[list[str]] = mapped_column(JSON, default=list)
 	is_archived: Mapped[bool] = mapped_column(default=False)
 	last_activity_at: Mapped[datetime] = mapped_column(
