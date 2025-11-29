@@ -19,8 +19,8 @@ class Settings(BaseSettings):
 	# Application
 	PROJECT_NAME: str = "nokodo AI"
 	VERSION: str = "0.1.0"
-	APP_ENV: Literal["development", "staging", "production"] = "development"
-	DEBUG: bool = True
+	APP_ENV: Literal["dev", "staging", "production"] = "dev"
+	DEBUG: bool = False
 
 	# API
 	SECRET_KEY: str = "changeme"

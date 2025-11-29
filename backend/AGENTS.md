@@ -57,15 +57,20 @@ backend/
 
 ## Running backend code
 
-**About dev servers**:
+### **About dev servers**:
 
 -   Always assume the user is already running a dev server with hot reload.
 -   Always assume the user is monitoring changes live.
 -   Never manually run dev servers like `uvicorn` or `npm run dev` yourself - unless explicitly asked.
--   If you want feedback on changes, simply ask the user what they see!
 
-When you _do_ want to run code, always:
+### To run backend:
 
--   Always remember to cd into `backend/`. Always enable the virtual environment, otherwise your code won't run.
+-   Always remember to cd into `backend/`
+-   Always enable the virtual environment with `source .venv/bin/activate` (Linux/Mac) or `.venv\Scripts\activate` (Windows).
 -   Check the current working directory if unsure where you are.
--   Check terminal output if unsure whether the venv is activated.
+-   Check terminal output if unsure whether the venv is activated. It should be prefixed with `(.venv)`.
+
+### To run tests:
+
+1.  Follow the steps in "To run backend" above.
+2.  Run `pytest` from within the `backend/` directory.

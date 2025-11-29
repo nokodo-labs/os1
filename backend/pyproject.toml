@@ -71,6 +71,7 @@ lines-after-imports = 2
 [tool.coverage.run]
 source = ["api"]
 branch = true
+concurrency = ["greenlet"]
 omit = [
     "*/tests/*",
     "tests/*",

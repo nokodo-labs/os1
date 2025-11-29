@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
+from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +94,30 @@ async def test_list_events(db_session: AsyncSession) -> None:
 		db_session,
 	)
 
+	# Emit event with thread_id
+	event3 = await event_service.emit_event(
+		EventCreate(
+			scope=EventScope.THREAD,
+			scope_id="thread-1",
+			type="test.event.3",
+			data={},
+			thread_id="thread-1",
+		),
+		db_session,
+	)
+
+	# Emit event with task_id
+	event4 = await event_service.emit_event(
+		EventCreate(
+			scope=EventScope.TASK,
+			scope_id="task-1",
+			type="test.event.4",
+			data={},
+			task_id="task-1",
+		),
+		db_session,
+	)
+
 	# List all
 	events = await event_service.list_events(db_session)
 	assert len(events) >= 2
@@ -115,3 +140,30 @@ async def test_list_events(db_session: AsyncSession) -> None:
 		db_session, since=datetime.now() + timedelta(hours=1)
 	)
 	assert len(future_events) == 0
+
+	# Filter by thread_id
+	thread_events = await event_service.list_events(db_session, thread_id="thread-1")
+	assert len(thread_events) == 1
+	assert thread_events[0].id == event3.id
+
+	# Filter by task_id
+	task_events = await event_service.list_events(db_session, task_id="task-1")
+	assert len(task_events) == 1
+	assert task_events[0].id == event4.id
+
+
+@pytest.mark.asyncio
+async def test_events_router_endpoints(client: AsyncClient) -> None:
+	"""Ensure the events router surfaces emitted events via HTTP."""
+	event_payload = {
+		"scope": "system",
+		"type": "router.test",
+		"data": {"ok": True},
+	}
+	create_resp = await client.post("/v1/events", json=event_payload)
+	assert create_resp.status_code == 201
+	event_id = create_resp.json()["id"]
+
+	list_resp = await client.get("/v1/events")
+	assert list_resp.status_code == 200
+	assert any(item["id"] == event_id for item in list_resp.json())

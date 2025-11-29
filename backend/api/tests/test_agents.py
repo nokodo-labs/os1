@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.agent import AgentVisibility
-from api.schemas.agent import AgentCreate
+from api.models.model import ModelType
+from api.schemas.agent import AgentCreate, AgentUpdate
+from api.schemas.model import ModelCreate
+from api.schemas.provider import ProviderCreate
 from api.v1.service import agents as agent_service
+from api.v1.service import models as model_service
+from api.v1.service import providers as provider_service
 
 
 @pytest.mark.asyncio
@@ -116,3 +123,94 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException) as exc:
 		await agent_service.get_agent(agent.id, db_session)
 	assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
+	"""Test creating an agent with invalid model."""
+	agent_in = AgentCreate(
+		name="agent-invalid-model",
+		visibility=AgentVisibility.PUBLIC,
+		tool_ids=[],
+		config={},
+		model_id="nonexistent",
+	)
+	with pytest.raises(HTTPException) as exc:
+		await agent_service.create_agent(agent_in, db_session)
+	assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None:
+	"""Test updating an agent with invalid model."""
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name="agent-update-model",
+			visibility=AgentVisibility.PUBLIC,
+			tool_ids=[],
+			config={},
+		),
+		db_session,
+	)
+
+	update_in = AgentUpdate(model_id="nonexistent")
+	with pytest.raises(HTTPException) as exc:
+		await agent_service.update_agent(agent.id, update_in, db_session)
+	assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_agent_no_model(db_session: AsyncSession) -> None:
+	"""Test creating an agent explicitly without a model."""
+	agent_in = AgentCreate(
+		name="agent-no-model",
+		visibility=AgentVisibility.PUBLIC,
+		tool_ids=[],
+		config={},
+		model_id=None,
+	)
+	agent = await agent_service.create_agent(agent_in, db_session)
+	assert agent.model_id is None
+
+
+@pytest.mark.asyncio
+async def test_create_agent_with_model(db_session: AsyncSession) -> None:
+	"""Test creating an agent with a valid model."""
+	# Create provider
+	provider = await provider_service.create_provider(
+		ProviderCreate(name="P_Agent_Test", adapter_type="openai"), db_session
+	)
+	# Create model
+	model = await model_service.create_model(
+		ModelCreate(
+			name="gpt-4-agent-test",
+			provider_id=provider.id,
+			model_type=ModelType.LLM,
+		),
+		db_session,
+	)
+
+	agent_in = AgentCreate(
+		name="agent-with-model",
+		visibility=AgentVisibility.PUBLIC,
+		tool_ids=[],
+		config={},
+		model_id=model.id,
+	)
+	agent = await agent_service.create_agent(agent_in, db_session)
+	assert agent.model_id == model.id
+
+
+@pytest.mark.asyncio
+async def test_get_agent_endpoint(client: AsyncClient) -> None:
+	"""Ensure the GET /v1/agents/{id} route returns the created agent."""
+	create_resp = await client.post(
+		"/v1/agents",
+		json={"name": "router-agent", "tool_ids": [], "config": {}},
+	)
+	assert create_resp.status_code == 201
+	agent_id = create_resp.json()["id"]
+
+	detail_resp = await client.get(f"/v1/agents/{agent_id}")
+	assert detail_resp.status_code == 200
+	assert detail_resp.json()["id"] == agent_id

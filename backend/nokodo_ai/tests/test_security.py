@@ -2,6 +2,9 @@
 
 from datetime import timedelta
 
+import pytest
+from authlib.jose import JoseError
+
 from nokodo_ai.utils.security import (
 	create_jwt_token,
 	decode_jwt_token,
@@ -36,3 +39,18 @@ def test_jwt_encode_decode_with_additional_claims() -> None:
 	assert payload["roles"] == ["reader"]
 	assert "exp" in payload
 	assert payload["exp"] > 0
+
+
+def test_jwt_decode_invalid_algorithm() -> None:
+	"""Decoding with an unexpected algorithm should raise an error."""
+	secret = "unit-test-secret"
+	# Create a token with HS256
+	token = create_jwt_token(
+		subject=1,
+		secret_key=secret,
+		algorithm="HS256",
+	)
+
+	# Try to decode allowing only HS512
+	with pytest.raises(JoseError, match="unexpected_alg"):
+		decode_jwt_token(token, secret_key=secret, algorithms=["HS512"])
