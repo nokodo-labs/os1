@@ -1,5 +1,6 @@
 """Database configuration and session management."""
 
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -10,6 +11,9 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from api.core.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -50,6 +54,7 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
 
 async def init_db() -> None:
 	"""Initialize database tables."""
+	logger.info("initializing database at %s", settings.DATABASE_URL)
 	async with engine.begin() as conn:
-		# Create all tables
 		await conn.run_sync(Base.metadata.create_all)
+	logger.info("database initialized successfully")

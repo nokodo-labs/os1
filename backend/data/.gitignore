@@ -1,0 +1,6 @@
+# ignore all runtime data
+*
+
+# except this file and readme
+!.gitignore
+!README.md

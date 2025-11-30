@@ -73,11 +73,15 @@ lines-after-imports = 2
 source = ["api"]
 branch = true
 concurrency = ["greenlet"]
+data_file = "data/.coverage"
 omit = [
     "*/tests/*",
     "tests/*",
     "api/tests/*",
 ]
+
+[tool.coverage.html]
+directory = "data/htmlcov"
 
 [tool.mypy]
 python_version = "3.13"

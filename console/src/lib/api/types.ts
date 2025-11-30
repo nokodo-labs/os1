@@ -15,29 +15,9 @@ export interface paths {
         put?: never;
         /**
          * Login Access Token
-         * @description OAuth2 compatible token login, get an access token for future requests
+         * @description OAuth2 compatible token login, get an access token for future requests.
          */
         post: operations["login_access_token_auth_login_access_token_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/users/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read User Me
-         * @description Get current user.
-         */
-        get: operations["read_user_me_users_me_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -77,7 +57,7 @@ export interface paths {
         };
         /**
          * Read User
-         * @description Get user by ID.
+         * @description Get user by ID (future permissions will restrict visibility).
          */
         get: operations["read_user_users__user_id__get"];
         put?: never;
@@ -677,8 +657,6 @@ export interface components {
             };
             /** Content */
             content: string;
-            /** Source Thread Id */
-            source_thread_id?: string | null;
             /** Source Message Id */
             source_message_id?: string | null;
             /** Confidence */
@@ -704,7 +682,6 @@ export interface components {
              */
             updated_at: string;
             owner?: components["schemas"]["User"] | null;
-            thread?: components["schemas"]["Thread"] | null;
         };
         /**
          * MemoryCreate
@@ -717,8 +694,6 @@ export interface components {
             };
             /** Content */
             content: string;
-            /** Source Thread Id */
-            source_thread_id?: string | null;
             /** Source Message Id */
             source_message_id?: string | null;
             /** Confidence */
@@ -931,6 +906,36 @@ export interface components {
             event?: components["schemas"]["Event"] | null;
         };
         /**
+         * Project
+         * @description Project schema.
+         */
+        Project: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Metadata */
+            metadata_?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Owner Id */
+            owner_id: number;
+            /** Thread Ids */
+            thread_ids?: string[];
+        };
+        /**
          * Provider
          * @description Response schema.
          */
@@ -1136,8 +1141,6 @@ export interface components {
             };
             /** Title */
             title?: string | null;
-            /** Folder */
-            folder?: string | null;
             /** Tags */
             tags?: string[];
             /**
@@ -1145,16 +1148,12 @@ export interface components {
              * @default false
              */
             is_archived: boolean;
-            /** Project Id */
-            project_id?: string | null;
-            /** Group Id */
-            group_id?: string | null;
-            /** @default ai_assistant */
-            thread_type: components["schemas"]["ThreadType"];
+            /** Project Ids */
+            project_ids?: string[];
             /** Id */
             id: string;
-            /** User Id */
-            user_id: number;
+            /** Owner Id */
+            owner_id: number;
             /**
              * Last Activity At
              * Format: date-time
@@ -1170,11 +1169,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** User Participants */
-            user_participants?: components["schemas"]["User"][];
             owner?: components["schemas"]["User"] | null;
             /** Messages */
             messages?: components["schemas"]["Message"][];
+            /** Projects */
+            projects?: components["schemas"]["Project"][];
         };
         /**
          * ThreadCreate
@@ -1187,8 +1186,6 @@ export interface components {
             };
             /** Title */
             title?: string | null;
-            /** Folder */
-            folder?: string | null;
             /** Tags */
             tags?: string[];
             /**
@@ -1196,20 +1193,11 @@ export interface components {
              * @default false
              */
             is_archived: boolean;
-            /** Project Id */
-            project_id?: string | null;
-            /** Group Id */
-            group_id?: string | null;
-            /** @default ai_assistant */
-            thread_type: components["schemas"]["ThreadType"];
-            /** User Id */
-            user_id: number;
+            /** Project Ids */
+            project_ids?: string[];
+            /** Owner Id */
+            owner_id: number;
         };
-        /**
-         * ThreadType
-         * @enum {string}
-         */
-        ThreadType: "ai_assistant";
         /**
          * ThreadUpdate
          * @description Payload for updating a thread.
@@ -1221,23 +1209,14 @@ export interface components {
             };
             /** Title */
             title?: string | null;
-            /** Folder */
-            folder?: string | null;
             /** Tags */
-            tags?: string[];
-            /**
-             * Is Archived
-             * @default false
-             */
-            is_archived: boolean;
-            /** Project Id */
-            project_id?: string | null;
-            /** Group Id */
-            group_id?: string | null;
-            /** @default ai_assistant */
-            thread_type: components["schemas"]["ThreadType"];
-            /** User Id */
-            user_id?: number | null;
+            tags?: string[] | null;
+            /** Is Archived */
+            is_archived?: boolean | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
+            /** Owner Id */
+            owner_id?: number | null;
         };
         /** Token */
         Token: {
@@ -1391,26 +1370,6 @@ export interface operations {
             };
         };
     };
-    read_user_me_users_me_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["User"];
-                };
-            };
-        };
-    };
     read_users_users_get: {
         parameters: {
             query?: {
@@ -1510,7 +1469,7 @@ export interface operations {
     list_threads_threads_get: {
         parameters: {
             query?: {
-                user_id?: number | null;
+                owner_id?: number | null;
                 skip?: number;
                 limit?: number;
             };

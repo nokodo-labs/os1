@@ -112,6 +112,48 @@
 			}
 		},
 		{
+			"label": "Frontend: Check",
+			"type": "shell",
+			"command": "npm run check",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Frontend: Test",
+			"type": "shell",
+			"command": "npm run test",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Frontend: Generate API Types",
+			"type": "shell",
+			"command": "npm run generate:api-types",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
 			"label": "Console: Install Dependencies",
 			"type": "shell",
 			"command": "npm install",
@@ -156,6 +198,34 @@
 			"label": "Console: Build",
 			"type": "shell",
 			"command": "npm run build",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Console: Check",
+			"type": "shell",
+			"command": "npm run check",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Console: Generate API Types",
+			"type": "shell",
+			"command": "npm run generate:api-types",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},

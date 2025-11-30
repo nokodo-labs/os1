@@ -1,27 +1,26 @@
 <script lang="ts">
+	import { auth } from "$lib/auth.svelte";
 	import Login from "./Login.svelte";
-
-	let isAuthenticated = $state(false);
 
 	const shortcuts = [
 		{
-			label: "Users",
-			description: "Manage members, invitations, and roles",
+			label: "users",
+			description: "manage members, invitations, and roles",
 		},
-		{ label: "Projects", description: "Review project status and quotas" },
+		{ label: "projects", description: "review project status and quotas" },
 		{
-			label: "Providers",
-			description: "Configure runtime providers and credentials",
+			label: "providers",
+			description: "configure runtime providers and credentials",
 		},
 		{
-			label: "Activity",
-			description: "Inspect audit logs and recent actions",
+			label: "activity",
+			description: "inspect audit logs and recent actions",
 		},
 	];
 </script>
 
-{#if !isAuthenticated}
-	<Login onLogin={() => (isAuthenticated = true)} />
+{#if !auth.isAuthenticated}
+	<Login onLogin={() => {}} />
 {:else}
 	<main class="min-h-screen bg-slate-950 text-slate-100">
 		<section class="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-16">
@@ -33,17 +32,17 @@
 						>
 							nokodo
 						</p>
-						<h1 class="text-4xl font-semibold">Console</h1>
+						<h1 class="text-4xl font-semibold">console</h1>
 					</div>
 					<button
 						class="text-sm text-slate-400 hover:text-slate-100"
-						onclick={() => (isAuthenticated = false)}
+						onclick={() => auth.logout()}
 					>
-						Sign out
+						sign out
 					</button>
 				</div>
 				<p class="max-w-2xl text-base text-slate-400">
-					High-leverage administrative tooling for operators. This
+					high-leverage administrative tooling for operators. this
 					scaffold intentionally keeps styles minimal so we can snap
 					stock shadcn components in place without customization.
 				</p>
@@ -54,7 +53,7 @@
 					<article
 						class="rounded-lg border border-slate-800 bg-slate-900/80 p-5 shadow-lg shadow-black/30"
 					>
-						<p class="text-sm text-slate-500">Shortcut</p>
+						<p class="text-sm text-slate-500">shortcut</p>
 						<p class="text-xl font-medium text-slate-100">
 							{shortcut.label}
 						</p>
@@ -66,7 +65,7 @@
 			</div>
 
 			<footer class="text-xs text-slate-500">
-				Authentication, API clients, and shadcn integration arrive next.
+				authentication, api clients, and shadcn integration arrive next.
 			</footer>
 		</section>
 	</main>

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
 	# Database
 	# Provide a safe default for dev/CI; env can override to Postgres in real deployment
-	DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
+	DATABASE_URL: str = "sqlite+aiosqlite:///./data/app.db"
 
 	# Testing
 	TESTING: bool = False

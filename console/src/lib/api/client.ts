@@ -42,7 +42,12 @@ class APIClient {
 		}
 
 		const headers = new Headers(fetchOptions.headers);
-		if (!headers.has("Content-Type") && fetchOptions.body) {
+		if (
+			!headers.has("Content-Type") &&
+			fetchOptions.body &&
+			!(fetchOptions.body instanceof FormData) &&
+			!(fetchOptions.body instanceof URLSearchParams)
+		) {
 			headers.set("Content-Type", "application/json");
 		}
 
@@ -116,6 +121,18 @@ class APIClient {
 
 	async delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
 		return this.request<T>(endpoint, { ...options, method: "DELETE" });
+	}
+
+	async postForm<T>(
+		endpoint: string,
+		data: URLSearchParams | FormData,
+		options?: FetchOptions
+	): Promise<T> {
+		return this.request<T>(endpoint, {
+			...options,
+			method: "POST",
+			body: data,
+		});
 	}
 }
 

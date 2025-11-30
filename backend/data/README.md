@@ -1,20 +1,26 @@
-# Data Directory
+# data directory
 
-This directory is for application data storage.
+this directory is for application data storage.
 
-## Usage
+## contents
 
-Store and read files from `/app/data` in your backend code:
+-   `app.db` - sqlite database (dev only)
+-   `htmlcov/` - test coverage reports
+-   `.coverage` - coverage data file
+
+## usage
+
+store and read files from `/app/data` in your backend code:
 
 ```python
 from pathlib import Path
 
 DATA_DIR = Path("/app/data")
 
-# Write
+# write
 (DATA_DIR / "output.txt").write_text("data")
 
-# Read
+# read
 content = (DATA_DIR / "input.txt").read_text()
 ```
 
