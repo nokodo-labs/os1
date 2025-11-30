@@ -19,7 +19,8 @@
 > **Reminder** - CLEAN code means:
 >
 > -   NO type ignore comments. If you NEED to use it, you are probably typing something wrong.
-> -   NO over use of comments everywhere. Comments are good, but only to explain key, complex or crucial blocks.
+> -   NO overuse of comments everywhere. Comments are good, but only to explain complex or crucial blocks.
+> -   NO pragma nocs to skip tests. If you need to skip a test, update the test to cover the case, or remove unreachable code instead.
 
 ## Backend codebase map
 
@@ -72,5 +73,9 @@ backend/
 
 ### To run tests:
 
-1.  Follow the steps in "To run backend" above.
+The simplest way to run all tests is by using the VSCode Task `Backend: Run all tests`.
+
+To run backend tests manually instead:
+
+1.  Follow the steps in `To run backend` above to ensure correct environment setup.
 2.  Run `pytest` from within the `backend/` directory.

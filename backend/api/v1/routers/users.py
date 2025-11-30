@@ -8,18 +8,9 @@ from api.models.user import User
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
 from api.v1.service import users as user_service
-from api.v1.service.auth import get_current_active_user
 
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-
-@router.get("/me", response_model=UserSchema)
-async def read_user_me(
-	current_user: User = Depends(get_current_active_user),
-) -> User:
-	"""Get current user."""
-	return current_user
 
 
 @router.get("", response_model=list[UserSchema])
@@ -37,7 +28,7 @@ async def read_user(
 	user_id: int,
 	db: AsyncSession = Depends(get_db),
 ) -> User:
-	"""Get user by ID."""
+	"""Get user by ID (future permissions will restrict visibility)."""
 	return await user_service.get_user(user_id, db)
 
 

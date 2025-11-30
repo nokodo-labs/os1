@@ -6,10 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.database import get_db
-from api.models.user import User as UserModel
-from api.schemas.user import User as UserSchema
 from api.v1.schemas.token import Token
-from api.v1.service.auth import authenticate_user, get_current_active_user
+from api.v1.service.auth import authenticate_user
 from nokodo_ai.utils.security import create_jwt_token
 
 
@@ -42,9 +40,6 @@ async def login_access_token(
 	return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me", response_model=UserSchema)
-async def read_users_me(
-	current_user: UserModel = Depends(get_current_active_user),
-) -> UserModel:
-	"""Get current user."""
-	return current_user
+# note: clients decode the JWT `sub` claim after login/refresh and call
+# `/v1/users/{sub}` for profile data; we intentionally avoid a `/me` helper
+# here to keep `/auth` scoped to access-token lifecycle concerns only.

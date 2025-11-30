@@ -18,8 +18,8 @@ from api.core.database import Base
 # Configure settings for tests before importing the app
 settings.TESTING = True
 
-# Test database URL (use a separate sqlite database for CI)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+# Test database URL (in-memory for parallel test support)
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(scope="session")

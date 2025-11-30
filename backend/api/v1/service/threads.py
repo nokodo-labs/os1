@@ -157,19 +157,19 @@ async def create_message(
 	session: AsyncSession,
 ) -> Message:
 	thread = await _load_thread(thread_id, session)
-	data = message_in.model_dump(by_alias=True)
-	msg_type = data.pop("type", MessageType.USER)
+	data = message_in.model_dump(by_alias=True, exclude={"type"})
 
-	if msg_type == MessageType.USER:
-		message = UserMessage(thread_id=thread_id, **data)
-	elif msg_type == MessageType.ASSISTANT:
-		message = AssistantMessage(thread_id=thread_id, **data)
-	elif msg_type == MessageType.TOOL:
-		message = ToolMessage(thread_id=thread_id, **data)
-	elif msg_type == MessageType.SYSTEM:
-		message = SystemMessage(thread_id=thread_id, **data)
-	else:
-		message = UserMessage(thread_id=thread_id, **data)
+	match message_in.type:
+		case MessageType.USER:
+			message = UserMessage(thread_id=thread_id, **data)
+		case MessageType.ASSISTANT:
+			message = AssistantMessage(thread_id=thread_id, **data)
+		case MessageType.TOOL:
+			message = ToolMessage(thread_id=thread_id, **data)
+		case MessageType.SYSTEM:
+			message = SystemMessage(thread_id=thread_id, **data)
+		case _:
+			message = UserMessage(thread_id=thread_id, **data)
 
 	thread.last_activity_at = datetime.now(tz=UTC)
 	session.add(message)
