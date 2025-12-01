@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 	VERSION: str = "0.1.0"
 	APP_ENV: Literal["dev", "staging", "production"] = "dev"
 	DEBUG: bool = False
+	JSON_LOGS: bool = False
 
 	# API
 	SECRET_KEY: str = "changeme"

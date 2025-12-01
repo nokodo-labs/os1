@@ -1,4 +1,4 @@
-"""Main FastAPI application entry point."""
+"""main fastapi application entry point."""
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -9,20 +9,40 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.constants import API_V1_MOUNT_PATH
 from api.core.config import settings
 from api.core.database import init_db
+from api.core.logging import configure_logging, get_logger
+from api.middleware import (
+	ExceptionHandlingMiddleware,
+	RequestIDMiddleware,
+	RequestLoggingMiddleware,
+	SecurityHeadersMiddleware,
+)
 from api.v1.app import v1_app
+
+
+# configure logging early, before anything else logs
+configure_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-	"""Application lifespan events."""
-	# Startup: skip DB init during tests
-	from api.core.config import settings
+	"""application lifespan events."""
+	logger.info(
+		"starting %s v%s [%s]",
+		settings.PROJECT_NAME,
+		settings.VERSION,
+		settings.APP_ENV,
+	)
 
+	# startup: skip db init during tests
 	if not settings.TESTING:
 		await init_db()
+
+	logger.info("startup complete")
 	yield
-	# Shutdown
-	# Add cleanup logic here if needed
+
+	# shutdown
+	logger.info("shutting down")
 
 
 app = FastAPI(
@@ -31,8 +51,20 @@ app = FastAPI(
 	lifespan=lifespan,
 )
 
+# middleware stack (executed in reverse order of addition)
+# 5. request id (outermost - runs first)
+app.add_middleware(RequestIDMiddleware)
 
-# Set up CORS
+# 4. security headers
+app.add_middleware(SecurityHeadersMiddleware)
+
+# 3. request logging
+app.add_middleware(RequestLoggingMiddleware)
+
+# 2. exception handling
+app.add_middleware(ExceptionHandlingMiddleware)
+
+# 1. cors (closest to app)
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=settings.CORS_ORIGINS,

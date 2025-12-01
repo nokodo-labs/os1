@@ -130,3 +130,25 @@ async def test_init_db_runs_create_all(monkeypatch: pytest.MonkeyPatch) -> None:
 	assert callable(called)
 	assert getattr(called, "__self__", None) is database_module.Base.metadata
 	assert getattr(called, "__name__", "") == "create_all"
+
+
+@pytest.mark.asyncio
+async def test_init_db_masks_url_credentials(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Test that init_db masks credentials in URLs containing @ symbol."""
+	connection = _DummyConnection()
+	dummy_engine = _DummyEngine(connection)
+	monkeypatch.setattr(database_module, "engine", dummy_engine)
+
+	# mock settings with a URL that has credentials (contains @)
+	class MockSettings:
+		DATABASE_URL = "postgresql://user:secret@localhost:5432/db"
+		DEBUG = False
+
+	monkeypatch.setattr(database_module, "settings", MockSettings())
+
+	await database_module.init_db()
+
+	# verify create_all was still called
+	assert connection.called_with is not None

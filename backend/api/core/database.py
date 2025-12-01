@@ -1,6 +1,5 @@
 """Database configuration and session management."""
 
-import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -11,9 +10,10 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from api.core.config import settings
+from api.core.logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -53,8 +53,17 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
 
 
 async def init_db() -> None:
-	"""Initialize database tables."""
-	logger.info("initializing database at %s", settings.DATABASE_URL)
+	"""initialize database tables."""
+	# mask credentials in url for logging
+	db_url = str(settings.DATABASE_URL)
+	if "@" in db_url:
+		scheme_and_creds, host_and_db = db_url.rsplit("@", 1)
+		scheme = scheme_and_creds.split("://")[0]
+		safe_url = f"{scheme}://***@{host_and_db}"
+	else:
+		safe_url = db_url
+
+	logger.info("initializing database", extra={"url": safe_url})
 	async with engine.begin() as conn:
 		await conn.run_sync(Base.metadata.create_all)
-	logger.info("database initialized successfully")
+	logger.info("database initialized")

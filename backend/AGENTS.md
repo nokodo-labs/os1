@@ -15,12 +15,14 @@
 -   Tabs, unix line endings
 -   Ruff for linting/formatting/imports
 -   pytest for testing with fixtures and coverage
+-   adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
 
 > **Reminder** - CLEAN code means:
 >
 > -   NO type ignore comments. If you NEED to use it, you are probably typing something wrong.
 > -   NO overuse of comments everywhere. Comments are good, but only to explain complex or crucial blocks.
 > -   NO pragma nocs to skip tests. If you need to skip a test, update the test to cover the case, or remove unreachable code instead.
+> -   NO use of getattr/setattr/delattr unless it's the only way. It defeats type checkers and is ugly.
 
 ## Backend codebase map
 

@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from api.middleware import APIVersionHeaderMiddleware
 from api.v1.router import api_router
 
 
@@ -15,3 +16,4 @@ v1_app = FastAPI(
 )
 
 v1_app.include_router(api_router)
+v1_app.add_middleware(APIVersionHeaderMiddleware, version="v1")
