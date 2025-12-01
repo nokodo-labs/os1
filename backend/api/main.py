@@ -4,14 +4,18 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.constants import API_V1_MOUNT_PATH
 from api.core.config import settings
 from api.core.database import init_db
+from api.core.exceptions import (
+	unhandled_exception_handler,
+	validation_exception_handler,
+)
 from api.core.logging import configure_logging, get_logger
 from api.middleware import (
-	ExceptionHandlingMiddleware,
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
@@ -61,9 +65,6 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 3. request logging
 app.add_middleware(RequestLoggingMiddleware)
 
-# 2. exception handling
-app.add_middleware(ExceptionHandlingMiddleware)
-
 # 1. cors (closest to app)
 app.add_middleware(
 	CORSMiddleware,
@@ -72,6 +73,10 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
+
+# exception handlers
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
 @app.get("/", tags=["root"])

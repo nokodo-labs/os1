@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -16,10 +17,13 @@ from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
 from api.core.config import settings
+from api.core.exceptions import (
+	unhandled_exception_handler,
+	validation_exception_handler,
+)
 from api.core.logging import request_id_ctx
 from api.middleware import (
 	APIVersionHeaderMiddleware,
-	ExceptionHandlingMiddleware,
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
@@ -277,23 +281,25 @@ async def test_exception_middleware_allows_http_exception() -> None:
 	async def app(scope, receive, send):  # type: ignore[override]
 		raise HTTPException(status_code=418)
 
-	middleware = ExceptionHandlingMiddleware(app)
+	req = Request(
+		{
+			"type": "http",
+			"path": "/",
+			"method": "GET",
+			"headers": [],
+		}
+	)
 
 	with pytest.raises(HTTPException):
-		await middleware(
-			{"type": "http", "path": "/", "method": "GET"},
-			empty_receive,
-			empty_send,
-		)
+		await unhandled_exception_handler(req, HTTPException(status_code=418))
 
 
 @pytest.mark.asyncio
 async def test_exception_middleware_passthrough_non_http() -> None:
 	"""non-http scope should bypass handling."""
 	dummy_app = DummyApp()
-	middleware = ExceptionHandlingMiddleware(dummy_app)
 
-	await middleware({"type": "lifespan"}, empty_receive, empty_send)
+	await dummy_app({"type": "lifespan"}, empty_receive, empty_send)
 	assert dummy_app.calls == 1
 
 
@@ -301,28 +307,54 @@ async def test_exception_middleware_passthrough_non_http() -> None:
 async def test_exception_middleware_converts_errors_including_request_id() -> None:
 	"""unexpected errors return JSON with request_id."""
 
-	async def app(scope, receive, send):  # type: ignore[override]
-		raise RuntimeError("boom")
-
-	middleware = ExceptionHandlingMiddleware(app)
-	messages: list[dict] = []
-
-	async def send_collector(message):  # type: ignore[override]
-		messages.append(message)
-
-	scope = {"type": "http", "path": "/", "method": "POST"}
+	req = Request(
+		{
+			"type": "http",
+			"path": "/",
+			"method": "POST",
+			"headers": [],
+		}
+	)
 	token = request_id_ctx.set("req-123")
 	try:
-		await middleware(scope, empty_receive, send_collector)
+		response = await unhandled_exception_handler(req, RuntimeError("boom"))
 	finally:
 		request_id_ctx.reset(token)
 
-	# second message contains the response body
-	body = next(msg for msg in messages if msg["type"] == "http.response.body")
-	assert json.loads(body["body"].decode()) == {
+	assert response.status_code == 500
+	body = bytes(response.body)
+	assert json.loads(body.decode()) == {
 		"detail": "Internal server error",
 		"request_id": "req-123",
 	}
+
+
+@pytest.mark.asyncio
+async def test_validation_exception_handler_returns_422_payload() -> None:
+	"""validation errors should surface as 422 responses."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/items",
+			"method": "POST",
+			"headers": [],
+		}
+	)
+	exc = RequestValidationError(
+		[
+			{
+				"loc": ("body", "name"),
+				"msg": "field required",
+				"type": "value_error.missing",
+			}
+		]
+	)
+	response = await validation_exception_handler(req, exc)
+
+	assert response.status_code == 422
+	body = bytes(response.body)
+	expected = json.loads(json.dumps(exc.errors()))
+	assert json.loads(body.decode()) == {"detail": expected}
 
 
 @pytest.mark.asyncio
