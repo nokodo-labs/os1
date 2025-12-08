@@ -6,11 +6,16 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -39,7 +44,7 @@ class Event(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	__tablename__ = "events"
 
 	scope: Mapped[EventScope] = mapped_column(
-		Enum(EventScope, name="event_scope"),
+		StringEnum(EventScope),
 		default=EventScope.SYSTEM,
 	)
 	scope_id: Mapped[str | None] = mapped_column(String(64))

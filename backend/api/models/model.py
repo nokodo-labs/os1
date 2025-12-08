@@ -5,11 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -39,7 +44,7 @@ class Model(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	name: Mapped[str] = mapped_column(String(150))
 	display_name: Mapped[str | None] = mapped_column(String(150))
 	model_type: Mapped[ModelType] = mapped_column(
-		Enum(ModelType, name="model_type"),
+		StringEnum(ModelType),
 		default=ModelType.LLM,
 	)
 	endpoint: Mapped[str | None] = mapped_column(String(255))

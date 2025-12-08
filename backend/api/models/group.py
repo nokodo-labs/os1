@@ -5,11 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -36,7 +41,8 @@ class GroupMembership(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	group: Mapped[Group] = relationship("Group", back_populates="memberships")
 	user: Mapped[User] = relationship("User", back_populates="group_memberships")
 	role: Mapped[GroupMemberRole] = mapped_column(
-		Enum(GroupMemberRole), default=GroupMemberRole.MEMBER
+		StringEnum(GroupMemberRole),
+		default=GroupMemberRole.MEMBER,
 	)
 
 

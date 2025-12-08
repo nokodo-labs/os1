@@ -5,11 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -53,7 +58,8 @@ class AccessControlEntry(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin,
 	)
 
 	role: Mapped[AccessRole] = mapped_column(
-		Enum(AccessRole, name="access_role"), default=AccessRole.VIEWER
+		StringEnum(AccessRole),
+		default=AccessRole.VIEWER,
 	)
 
 	# Relationships

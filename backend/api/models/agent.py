@@ -5,11 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -35,7 +40,7 @@ class Agent(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	description: Mapped[str | None] = mapped_column(Text())
 	system_prompt: Mapped[str | None] = mapped_column(Text())
 	visibility: Mapped[AgentVisibility] = mapped_column(
-		Enum(AgentVisibility, name="agent_visibility"),
+		StringEnum(AgentVisibility),
 		default=AgentVisibility.PUBLIC,
 	)
 	tool_ids: Mapped[list[str]] = mapped_column(JSON, default=list)

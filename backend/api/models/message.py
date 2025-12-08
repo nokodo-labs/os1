@@ -5,11 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Enum, ForeignKey, Text
+from sqlalchemy import JSON, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -51,7 +56,7 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		index=True,
 	)
 	type: Mapped[MessageType] = mapped_column(
-		Enum(MessageType, name="message_type"),
+		StringEnum(MessageType),
 		default=MessageType.USER,
 	)
 	content: Mapped[str] = mapped_column(Text())

@@ -6,11 +6,16 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -46,11 +51,11 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 	task_type: Mapped[TaskType] = mapped_column(
-		Enum(TaskType, name="task_type"),
+		StringEnum(TaskType),
 		default=TaskType.CUSTOM,
 	)
 	status: Mapped[TaskStatus] = mapped_column(
-		Enum(TaskStatus, name="task_status"),
+		StringEnum(TaskStatus),
 		default=TaskStatus.PENDING,
 	)
 	progress: Mapped[int | None] = mapped_column(Integer())

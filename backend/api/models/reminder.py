@@ -6,11 +6,11 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, UUIDPrimaryKeyMixin
+from api.models.common import MetadataJSONMixin, StringEnum, UUIDPrimaryKeyMixin
 
 
 if TYPE_CHECKING:
@@ -37,7 +37,8 @@ class Reminder(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 	recurrence: Mapped[str | None] = mapped_column(String(50))
 	status: Mapped[ReminderStatus] = mapped_column(
-		Enum(ReminderStatus), default=ReminderStatus.PENDING
+		StringEnum(ReminderStatus),
+		default=ReminderStatus.PENDING,
 	)
 	notification_channels: Mapped[list[str]] = mapped_column(JSON, default=list)
 	source_thread_id: Mapped[str | None] = mapped_column(ForeignKey("threads.id"))

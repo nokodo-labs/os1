@@ -6,11 +6,16 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, Enum, String
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	MetadataJSONMixin,
+	StringEnum,
+	TimestampMixin,
+	UUIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -46,7 +51,7 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	adapter_type: Mapped[str] = mapped_column(String(100))
 	provider_type: Mapped[ProviderType] = mapped_column(
-		Enum(ProviderType, name="provider_type_enum"),
+		StringEnum(ProviderType),
 		default=ProviderType.EXTERNAL,
 	)
 	base_url: Mapped[str | None] = mapped_column(String(255))
@@ -54,11 +59,11 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	model_prefix: Mapped[str | None] = mapped_column(String(50))
 	additional_headers: Mapped[dict | None] = mapped_column(JSON)
 	status: Mapped[ProviderStatus] = mapped_column(
-		Enum(ProviderStatus, name="provider_status"),
+		StringEnum(ProviderStatus),
 		default=ProviderStatus.ENABLED,
 	)
 	exposure_strategy: Mapped[ExposureStrategy] = mapped_column(
-		Enum(ExposureStrategy, name="provider_exposure_strategy"),
+		StringEnum(ExposureStrategy),
 		default=ExposureStrategy.AUTOFETCH,
 	)
 	manual_model_ids: Mapped[list[str]] = mapped_column(JSON, default=list)

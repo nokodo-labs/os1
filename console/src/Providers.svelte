@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, type Provider, type ProviderCreate } from "$lib/api";
+	import NokodoLoader from "$lib/components/NokodoLoader.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import {
 		Card,
@@ -28,6 +29,7 @@
 	let modalMode = $state<"create" | "edit">("create");
 	let modalStep = $state<"select" | "configure">("select");
 	let isLoading = $state(false);
+	let isFetching = $state(true);
 	let editingId = $state<string | null>(null);
 
 	// Form state
@@ -102,6 +104,8 @@
 			providers = await api.getProviders();
 		} catch (e) {
 			console.error("Failed to load providers", e);
+		} finally {
+			isFetching = false;
 		}
 	}
 
@@ -211,78 +215,85 @@
 		</Button>
 	</div>
 
-	<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-		{#each providers as provider}
-			<Card
-				class="border-zinc-800 bg-zinc-900 text-zinc-100 rounded-2xl overflow-hidden"
-			>
-				<CardHeader>
-					<div class="flex justify-between items-start">
-						<div>
-							<CardTitle>{provider.name}</CardTitle>
-							<CardDescription
-								>{provider.adapter_type}</CardDescription
+	{#if isFetching}
+		<div class="flex flex-col items-center justify-center py-16 gap-4">
+			<NokodoLoader expanded={true} />
+		</div>
+	{:else}
+		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+			{#each providers as provider}
+				<Card
+					class="border-zinc-800 bg-zinc-900 text-zinc-100 rounded-2xl overflow-hidden"
+				>
+					<CardHeader>
+						<div class="flex justify-between items-start">
+							<div>
+								<CardTitle>{provider.name}</CardTitle>
+								<CardDescription
+									>{provider.adapter_type}</CardDescription
+								>
+							</div>
+							<Button
+								variant="ghost"
+								size="icon"
+								class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
+								onclick={() => openEditModal(provider)}
 							>
+								<Pencil class="h-4 w-4" />
+							</Button>
 						</div>
-						<Button
-							variant="ghost"
-							size="icon"
-							class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
-							onclick={() => openEditModal(provider)}
-						>
-							<Pencil class="h-4 w-4" />
-						</Button>
-					</div>
-				</CardHeader>
-				<CardContent>
-					<div class="text-sm text-zinc-400 space-y-1">
-						<div class="flex justify-between">
-							<span>status:</span>
-							<span
-								class={provider.status === "enabled"
-									? "text-green-400"
-									: "text-zinc-500"}>{provider.status}</span
-							>
-						</div>
-						<div class="flex justify-between">
-							<span>type:</span>
-							<span>{provider.provider_type}</span>
-						</div>
-						<div class="flex justify-between">
-							<span>strategy:</span>
-							<span>{provider.exposure_strategy}</span>
-						</div>
-						{#if provider.model_prefix}
+					</CardHeader>
+					<CardContent>
+						<div class="text-sm text-zinc-400 space-y-1">
 							<div class="flex justify-between">
-								<span>prefix:</span>
+								<span>status:</span>
 								<span
-									class="font-mono text-xs bg-zinc-800 px-1.5 py-0.5 rounded"
-									>{provider.model_prefix}</span
+									class={provider.status === "enabled"
+										? "text-green-400"
+										: "text-zinc-500"}
+									>{provider.status}</span
 								>
 							</div>
-						{/if}
-						{#if provider.base_url}
-							<div class="pt-2 border-t border-zinc-800 mt-2">
-								<p
-									class="truncate text-xs font-mono opacity-70"
-								>
-									{provider.base_url}
-								</p>
+							<div class="flex justify-between">
+								<span>type:</span>
+								<span>{provider.provider_type}</span>
 							</div>
-						{/if}
-					</div>
-				</CardContent>
-			</Card>
-		{/each}
+							<div class="flex justify-between">
+								<span>strategy:</span>
+								<span>{provider.exposure_strategy}</span>
+							</div>
+							{#if provider.model_prefix}
+								<div class="flex justify-between">
+									<span>prefix:</span>
+									<span
+										class="font-mono text-xs bg-zinc-800 px-1.5 py-0.5 rounded"
+										>{provider.model_prefix}</span
+									>
+								</div>
+							{/if}
+							{#if provider.base_url}
+								<div class="pt-2 border-t border-zinc-800 mt-2">
+									<p
+										class="truncate text-xs font-mono opacity-70"
+									>
+										{provider.base_url}
+									</p>
+								</div>
+							{/if}
+						</div>
+					</CardContent>
+				</Card>
+			{/each}
 
-		{#if providers.length === 0}
-			<div
-				class="col-span-full rounded-2xl border border-dashed border-zinc-800 py-12 text-center text-zinc-500"
-			>
-				no providers configured yet.
-			</div>
-		{/if}
-	</div>
+			{#if providers.length === 0}
+				<div
+					class="col-span-full rounded-2xl border border-dashed border-zinc-800 py-12 text-center text-zinc-500"
+				>
+					no providers configured yet.
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 {#if showModal}
