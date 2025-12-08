@@ -7,9 +7,11 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.models.provider import ProviderStatus
 from api.schemas.provider import ProviderCreate, ProviderUpdate
 from api.v1.service import providers as provider_service
+from nokodo_ai.utils.security import decrypt_string
 
 
 @pytest.mark.asyncio
@@ -99,3 +101,39 @@ async def test_provider_router_endpoints(client: AsyncClient) -> None:
 	)
 	assert update_resp.status_code == 200
 	assert update_resp.json()["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_create_provider_with_api_key(db_session: AsyncSession) -> None:
+	"""Test creating a provider with an API key."""
+	api_key = "sk-test-123"
+	provider_in = ProviderCreate(
+		name="Encrypted Provider",
+		adapter_type="openai",
+		api_key=api_key,
+	)
+	provider = await provider_service.create_provider(provider_in, db_session)
+
+	assert provider.encrypted_api_key is not None
+	assert provider.encrypted_api_key != api_key
+	assert decrypt_string(provider.encrypted_api_key, settings.SECRET_KEY) == api_key
+
+
+@pytest.mark.asyncio
+async def test_update_provider_api_key(db_session: AsyncSession) -> None:
+	"""Test updating a provider's API key."""
+	# Create without key
+	provider_in = ProviderCreate(
+		name="Update Provider",
+		adapter_type="openai",
+	)
+	provider = await provider_service.create_provider(provider_in, db_session)
+	assert provider.encrypted_api_key is None
+
+	# Update with key
+	api_key = "sk-new-key"
+	update_in = ProviderUpdate(api_key=api_key)
+	updated = await provider_service.update_provider(provider.id, update_in, db_session)
+
+	assert updated.encrypted_api_key is not None
+	assert decrypt_string(updated.encrypted_api_key, settings.SECRET_KEY) == api_key
