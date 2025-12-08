@@ -22,6 +22,7 @@ class ModelBase(MetadataModel):
 	input_cost: float | None = None
 	output_cost: float | None = None
 	enabled: bool = True
+	is_autofetched: bool = False
 
 
 class ModelCreate(ModelBase):

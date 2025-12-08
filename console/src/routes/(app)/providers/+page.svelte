@@ -12,6 +12,7 @@
 	} from "$lib/components/ui/card";
 	import { Input } from "$lib/components/ui/input";
 	import { Label } from "$lib/components/ui/label";
+	import { Switch } from "$lib/components/ui/switch";
 	import {
 		Bot,
 		Cpu,
@@ -31,6 +32,8 @@
 	let isLoading = $state(false);
 	let isFetching = $state(true);
 	let editingId = $state<string | null>(null);
+	let error = $state<string | null>(null);
+	let submitError = $state<string | null>(null);
 
 	// Form state
 	let formState = $state<ProviderCreate>({
@@ -41,7 +44,7 @@
 		api_key: "",
 		model_prefix: "",
 		additional_headers: {},
-		exposure_strategy: "autofetch_all",
+		is_autofetch_enabled: true,
 	});
 
 	// Temporary state for headers editing
@@ -100,10 +103,13 @@
 	});
 
 	async function loadProviders() {
+		error = null;
 		try {
 			providers = await api.getProviders();
 		} catch (e) {
 			console.error("Failed to load providers", e);
+			error =
+				"Failed to load providers. Please check if the backend is running.";
 		} finally {
 			isFetching = false;
 		}
@@ -114,6 +120,7 @@
 		modalStep = "select";
 		showModal = true;
 		editingId = null;
+		submitError = null;
 		resetForm();
 	}
 
@@ -121,6 +128,7 @@
 		modalMode = "edit";
 		modalStep = "configure";
 		editingId = provider.id;
+		submitError = null;
 		formState = {
 			name: provider.name,
 			adapter_type: provider.adapter_type,
@@ -128,7 +136,7 @@
 			base_url: provider.base_url,
 			model_prefix: provider.model_prefix,
 			additional_headers: provider.additional_headers,
-			exposure_strategy: provider.exposure_strategy,
+			is_autofetch_enabled: provider.is_autofetch_enabled,
 			api_key: "", // Don't show existing key
 		};
 		// Convert headers object to array for editing
@@ -158,7 +166,7 @@
 			api_key: "",
 			model_prefix: "",
 			additional_headers: {},
-			exposure_strategy: "autofetch_all",
+			is_autofetch_enabled: true,
 		};
 		headerEntries = [];
 	}
@@ -185,6 +193,7 @@
 		);
 
 		formState.additional_headers = headers;
+		submitError = null;
 
 		try {
 			if (modalMode === "create") {
@@ -197,6 +206,9 @@
 			resetForm();
 		} catch (e) {
 			console.error("Failed to save provider", e);
+			submitError =
+				"Failed to save provider. " +
+				(e instanceof Error ? e.message : "Unknown error");
 		} finally {
 			isLoading = false;
 		}
@@ -218,6 +230,15 @@
 	{#if isFetching}
 		<div class="flex flex-col items-center justify-center py-16 gap-4">
 			<NokodoLoader expanded={true} />
+		</div>
+	{:else if error}
+		<div
+			class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
+		>
+			<p>{error}</p>
+			<Button variant="outline" class="mt-4" onclick={loadProviders}
+				>Retry</Button
+			>
 		</div>
 	{:else}
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -259,8 +280,15 @@
 								<span>{provider.provider_type}</span>
 							</div>
 							<div class="flex justify-between">
-								<span>strategy:</span>
-								<span>{provider.exposure_strategy}</span>
+								<span>autofetch:</span>
+								<span
+									class={provider.is_autofetch_enabled
+										? "text-blue-400"
+										: "text-zinc-500"}
+									>{provider.is_autofetch_enabled
+										? "enabled"
+										: "disabled"}</span
+								>
 							</div>
 							{#if provider.model_prefix}
 								<div class="flex justify-between">
@@ -397,6 +425,22 @@
 							</p>
 						</div>
 
+						<div class="flex items-center justify-between">
+							<div class="space-y-0.5">
+								<Label for="autofetch">model autofetch</Label>
+								<p class="text-xs text-zinc-500">
+									automatically sync available models from
+									API.
+								</p>
+							</div>
+							<Switch
+								id="autofetch"
+								checked={formState.is_autofetch_enabled}
+								onCheckedChange={(v: boolean) =>
+									(formState.is_autofetch_enabled = v)}
+							/>
+						</div>
+
 						<div class="space-y-2">
 							<Label for="url">base URL (optional)</Label>
 							<Input
@@ -465,6 +509,14 @@
 								</div>
 							{/if}
 						</div>
+
+						{#if submitError}
+							<div
+								class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400"
+							>
+								{submitError}
+							</div>
+						{/if}
 					</CardContent>
 					<CardFooter class="flex justify-between gap-2">
 						{#if modalMode === "create"}

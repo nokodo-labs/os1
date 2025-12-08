@@ -29,13 +29,6 @@ class ProviderStatus(StrEnum):
 	DISABLED = "disabled"
 
 
-class ExposureStrategy(StrEnum):
-	"""How models are synchronized from providers."""
-
-	AUTOFETCH = "autofetch_all"
-	MANUAL = "manual"
-
-
 class ProviderType(StrEnum):
 	"""Type of provider deployment."""
 
@@ -62,11 +55,7 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		StringEnum(ProviderStatus),
 		default=ProviderStatus.ENABLED,
 	)
-	exposure_strategy: Mapped[ExposureStrategy] = mapped_column(
-		StringEnum(ExposureStrategy),
-		default=ExposureStrategy.AUTOFETCH,
-	)
-	manual_model_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+	is_autofetch_enabled: Mapped[bool] = mapped_column(default=True)
 	last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 	models: Mapped[list[Model]] = relationship(
@@ -74,3 +63,13 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="provider",
 		cascade="all, delete-orphan",
 	)
+
+	@property
+	def manual_models(self) -> list[Model]:
+		"""Return models that were manually created."""
+		return [m for m in self.models if not m.is_autofetched]
+
+	@property
+	def autofetched_models(self) -> list[Model]:
+		"""Return models that were automatically fetched."""
+		return [m for m in self.models if m.is_autofetched]

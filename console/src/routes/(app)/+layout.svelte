@@ -1,9 +1,9 @@
 <script lang="ts">
+	import { page } from "$app/state";
 	import { auth } from "$lib/auth.svelte";
 	import { LayoutDashboard, Server } from "@lucide/svelte";
-	import Providers from "./Providers.svelte";
 
-	let activeTab = $state("dashboard");
+	let { children } = $props();
 </script>
 
 <div class="flex min-h-screen bg-zinc-950 text-zinc-100">
@@ -17,26 +17,27 @@
 		</div>
 
 		<nav class="flex-1 space-y-2">
-			<button
-				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {activeTab ===
-				'dashboard'
+			<a
+				href="/dashboard"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page
+					.url.pathname === '/dashboard'
 					? 'bg-zinc-800 text-white'
 					: 'text-zinc-400 hover:text-zinc-200'}"
-				onclick={() => (activeTab = "dashboard")}
 			>
 				<LayoutDashboard class="h-4 w-4" />
 				dashboard
-			</button>
-			<button
-				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {activeTab ===
-				'providers'
+			</a>
+			<a
+				href="/providers"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/providers',
+				)
 					? 'bg-zinc-800 text-white'
 					: 'text-zinc-400 hover:text-zinc-200'}"
-				onclick={() => (activeTab = "providers")}
 			>
 				<Server class="h-4 w-4" />
 				providers
-			</button>
+			</a>
 		</nav>
 
 		<button
@@ -49,20 +50,6 @@
 
 	<!-- Main Content -->
 	<main class="flex-1 p-8">
-		{#if activeTab === "dashboard"}
-			<div class="space-y-6">
-				<div>
-					<h2 class="text-2xl font-bold tracking-tight">dashboard</h2>
-					<p class="text-zinc-400">overview of your system.</p>
-				</div>
-				<div
-					class="rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
-				>
-					dashboard content coming soon
-				</div>
-			</div>
-		{:else if activeTab === "providers"}
-			<Providers />
-		{/if}
+		{@render children()}
 	</main>
 </div>

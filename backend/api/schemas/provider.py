@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
-
-from api.models.provider import ExposureStrategy, ProviderStatus, ProviderType
+from api.models.provider import ProviderStatus, ProviderType
 from api.schemas.common import MetadataModel
 
 
@@ -21,8 +19,7 @@ class ProviderBase(MetadataModel):
 	model_prefix: str | None = None
 	additional_headers: dict[str, str] | None = None
 	status: ProviderStatus = ProviderStatus.ENABLED
-	exposure_strategy: ExposureStrategy = ExposureStrategy.AUTOFETCH
-	manual_model_ids: list[str] = Field(default_factory=list)
+	is_autofetch_enabled: bool = True
 	last_synced_at: datetime | None = None
 
 
@@ -43,8 +40,7 @@ class ProviderUpdate(MetadataModel):
 	model_prefix: str | None = None
 	additional_headers: dict[str, str] | None = None
 	status: ProviderStatus | None = None
-	exposure_strategy: ExposureStrategy | None = None
-	manual_model_ids: list[str] | None = None
+	is_autofetch_enabled: bool | None = None
 	last_synced_at: datetime | None = None
 
 

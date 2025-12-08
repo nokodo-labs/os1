@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.svelte-kit/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Auto-generated (regenerate with npm run generate:api-types)
+# Temporarily committed until we have a static OpenAPI schema
+# src/lib/api/types.ts

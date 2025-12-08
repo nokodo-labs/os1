@@ -1,3 +1,4 @@
+import { browser } from "$app/environment";
 import { api, type User } from "$lib/api";
 
 function parseJwt(token: string) {
@@ -9,7 +10,9 @@ function parseJwt(token: string) {
 }
 
 class AuthState {
-	token = $state<string | null>(localStorage.getItem("access_token"));
+	token = $state<string | null>(
+		browser ? localStorage.getItem("access_token") : null
+	);
 	user = $state<User | null>(null);
 	isAuthenticated = $derived(!!this.token);
 
@@ -59,12 +62,16 @@ class AuthState {
 	logout() {
 		this.token = null;
 		this.user = null;
-		localStorage.removeItem("access_token");
+		if (browser) {
+			localStorage.removeItem("access_token");
+		}
 	}
 
 	private setToken(token: string) {
 		this.token = token;
-		localStorage.setItem("access_token", token);
+		if (browser) {
+			localStorage.setItem("access_token", token);
+		}
 	}
 }
 

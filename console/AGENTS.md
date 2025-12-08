@@ -10,6 +10,7 @@
 
 -   Svelte 5 (runes) + TypeScript strict mode
 -   Vite 7 + PostCSS + TailwindCSS 4 baseline
+-   SvelteKit + static adapter
 -   shadcn-svelte components kept stock (no heavy theming) for speed and consistency
 -   only foundational deps (svelte, tailwind, vite, svelte-check, etc.). do **not** add extra libraries without explicit approval
 
@@ -31,11 +32,15 @@
 ## dev workflow
 
 -   work inside `/console`; keep configs independent from `/frontend`
--   share code only through an intentional shared package if duplication becomes painful
--   run `npm install`, then `npm run dev -- --port 8383` for local work (don’t start servers unless user asks)
--   run `npm run check` before commits; add lint/test scripts later as features appear
+-   share code with the frontend only through an intentional shared package if duplication becomes painful
+-   run `npm install, then `npm run dev -- --port 8383` for local work (don’t start servers unless user asks)
+-   refer to `testing` section to know how to validate formatting and quality of your code
 
 ## testing
 
+there are several available layers of checks and tests:
+
 -   smoke test with `npm run check` (svelte-check)
--   future vitest/shadcn stories can live here once we add logic-heavy components
+-   formatting with `npm run format` (prettier)
+-   linting with `npm run lint` (eslint)
+-   check for file Problems with the built-in VSCode tool

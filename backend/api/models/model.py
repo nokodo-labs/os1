@@ -53,6 +53,7 @@ class Model(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	input_cost: Mapped[float | None] = mapped_column(Float())
 	output_cost: Mapped[float | None] = mapped_column(Float())
 	enabled: Mapped[bool] = mapped_column(default=True)
+	is_autofetched: Mapped[bool] = mapped_column(default=False)
 
 	provider: Mapped[Provider] = relationship(
 		"Provider",

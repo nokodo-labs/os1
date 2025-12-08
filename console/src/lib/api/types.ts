@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Status
+         * @description Check system initialization status.
+         */
+        get: operations["get_system_status_system_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login/access-token": {
         parameters: {
             query?: never;
@@ -635,12 +655,6 @@ export interface components {
          * @enum {string}
          */
         EventScope: "system" | "user" | "thread" | "message" | "task" | "project";
-        /**
-         * ExposureStrategy
-         * @description How models are synchronized from providers.
-         * @enum {string}
-         */
-        ExposureStrategy: "autofetch_all" | "manual";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -821,6 +835,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Is Autofetched
+             * @default false
+             */
+            is_autofetched: boolean;
             /** Id */
             id: string;
             /** Provider Id */
@@ -866,6 +885,11 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /**
+             * Is Autofetched
+             * @default false
+             */
+            is_autofetched: boolean;
             /** Provider Id */
             provider_id: string;
         };
@@ -948,16 +972,25 @@ export interface components {
             name: string;
             /** Adapter Type */
             adapter_type: string;
+            /** @default external */
+            provider_type: components["schemas"]["ProviderType"];
             /** Base Url */
             base_url?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
+            /** Model Prefix */
+            model_prefix?: string | null;
+            /** Additional Headers */
+            additional_headers?: {
+                [key: string]: string;
+            } | null;
             /** @default enabled */
             status: components["schemas"]["ProviderStatus"];
-            /** @default autofetch_all */
-            exposure_strategy: components["schemas"]["ExposureStrategy"];
-            /** Manual Model Ids */
-            manual_model_ids?: string[];
+            /**
+             * Is Autofetch Enabled
+             * @default true
+             */
+            is_autofetch_enabled: boolean;
             /** Last Synced At */
             last_synced_at?: string | null;
             /** Id */
@@ -986,18 +1019,29 @@ export interface components {
             name: string;
             /** Adapter Type */
             adapter_type: string;
+            /** @default external */
+            provider_type: components["schemas"]["ProviderType"];
             /** Base Url */
             base_url?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
+            /** Model Prefix */
+            model_prefix?: string | null;
+            /** Additional Headers */
+            additional_headers?: {
+                [key: string]: string;
+            } | null;
             /** @default enabled */
             status: components["schemas"]["ProviderStatus"];
-            /** @default autofetch_all */
-            exposure_strategy: components["schemas"]["ExposureStrategy"];
-            /** Manual Model Ids */
-            manual_model_ids?: string[];
+            /**
+             * Is Autofetch Enabled
+             * @default true
+             */
+            is_autofetch_enabled: boolean;
             /** Last Synced At */
             last_synced_at?: string | null;
+            /** Api Key */
+            api_key?: string | null;
         };
         /**
          * ProviderStatus
@@ -1005,6 +1049,12 @@ export interface components {
          * @enum {string}
          */
         ProviderStatus: "enabled" | "disabled";
+        /**
+         * ProviderType
+         * @description Type of provider deployment.
+         * @enum {string}
+         */
+        ProviderType: "local" | "external";
         /**
          * ProviderUpdate
          * @description Partial provider update payload.
@@ -1016,14 +1066,22 @@ export interface components {
             };
             /** Adapter Type */
             adapter_type?: string | null;
+            provider_type?: components["schemas"]["ProviderType"] | null;
             /** Base Url */
             base_url?: string | null;
+            /** Api Key */
+            api_key?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
+            /** Model Prefix */
+            model_prefix?: string | null;
+            /** Additional Headers */
+            additional_headers?: {
+                [key: string]: string;
+            } | null;
             status?: components["schemas"]["ProviderStatus"] | null;
-            exposure_strategy?: components["schemas"]["ExposureStrategy"] | null;
-            /** Manual Model Ids */
-            manual_model_ids?: string[] | null;
+            /** Is Autofetch Enabled */
+            is_autofetch_enabled?: boolean | null;
             /** Last Synced At */
             last_synced_at?: string | null;
         };
@@ -1337,6 +1395,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_system_status_system_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
     login_access_token_auth_login_access_token_post: {
         parameters: {
             query?: never;

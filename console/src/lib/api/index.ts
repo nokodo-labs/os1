@@ -17,7 +17,7 @@ export interface Provider {
 	model_prefix?: string;
 	additional_headers?: Record<string, string>;
 	status: "enabled" | "disabled";
-	exposure_strategy: "autofetch_all" | "manual";
+	is_autofetch_enabled: boolean;
 	created_at: string;
 	updated_at: string;
 }
@@ -31,7 +31,7 @@ export interface ProviderCreate {
 	encrypted_api_key?: string;
 	model_prefix?: string;
 	additional_headers?: Record<string, string>;
-	exposure_strategy?: "autofetch_all" | "manual";
+	is_autofetch_enabled?: boolean;
 }
 
 export const api = {
