@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -9,6 +11,7 @@ from typing import Any
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from authlib.jose import JoseError, jwt
+from cryptography.fernet import Fernet
 
 
 _PASSWORD_HASHER = PasswordHasher(
@@ -70,3 +73,21 @@ def decode_jwt_token(
 	if allowed_algs and token_alg not in allowed_algs:
 		raise JoseError("unexpected_alg")
 	return dict(claims)
+
+
+def get_fernet_key(secret_key: str) -> bytes:
+	"""Derive a 32-byte key from a secret string."""
+	key = hashlib.sha256(secret_key.encode()).digest()
+	return base64.urlsafe_b64encode(key)
+
+
+def encrypt_string(plain_text: str, secret_key: str) -> str:
+	"""Encrypt a string."""
+	f = Fernet(get_fernet_key(secret_key))
+	return f.encrypt(plain_text.encode()).decode()
+
+
+def decrypt_string(cipher_text: str, secret_key: str) -> str:
+	"""Decrypt a string."""
+	f = Fernet(get_fernet_key(secret_key))
+	return f.decrypt(cipher_text.encode()).decode()

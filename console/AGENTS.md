@@ -19,6 +19,7 @@
 -   use Tailwind tokens sparingly; readability > aesthetics
 -   keep layouts responsive but focus on data density and administrative clarity
 -   lowercase typography is optional here—legibility first
+-   use rounded corners (rounded-xl or rounded-2xl) for a softer, modern feel
 
 ## security & access
 

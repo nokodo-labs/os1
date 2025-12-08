@@ -8,6 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from api import models  # noqa: F401
 from api.core.config import settings
 from api.core.database import Base
 
@@ -46,6 +47,7 @@ def run_migrations_offline() -> None:
 		target_metadata=target_metadata,
 		literal_binds=True,
 		dialect_opts={"paramstyle": "named"},
+		render_as_batch=True,
 	)
 
 	with context.begin_transaction():
@@ -54,7 +56,11 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
 	"""Run migrations with the given connection."""
-	context.configure(connection=connection, target_metadata=target_metadata)
+	context.configure(
+		connection=connection,
+		target_metadata=target_metadata,
+		render_as_batch=True,
+	)
 
 	with context.begin_transaction():
 		context.run_migrations()

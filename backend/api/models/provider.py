@@ -31,6 +31,13 @@ class ExposureStrategy(StrEnum):
 	MANUAL = "manual"
 
 
+class ProviderType(StrEnum):
+	"""Type of provider deployment."""
+
+	LOCAL = "local"
+	EXTERNAL = "external"
+
+
 class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Configuration for external model providers."""
 
@@ -38,8 +45,14 @@ class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	adapter_type: Mapped[str] = mapped_column(String(100))
+	provider_type: Mapped[ProviderType] = mapped_column(
+		Enum(ProviderType, name="provider_type_enum"),
+		default=ProviderType.EXTERNAL,
+	)
 	base_url: Mapped[str | None] = mapped_column(String(255))
 	encrypted_api_key: Mapped[str | None] = mapped_column(String(1024))
+	model_prefix: Mapped[str | None] = mapped_column(String(50))
+	additional_headers: Mapped[dict | None] = mapped_column(JSON)
 	status: Mapped[ProviderStatus] = mapped_column(
 		Enum(ProviderStatus, name="provider_status"),
 		default=ProviderStatus.ENABLED,

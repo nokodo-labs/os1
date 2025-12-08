@@ -12,13 +12,16 @@
 	import { Input } from "$lib/components/ui/input";
 	import { Label } from "$lib/components/ui/label";
 
-	let { onLogin }: { onLogin: () => void } = $props();
+	let {
+		onLogin,
+		isRegister: initialIsRegister = false,
+	}: { onLogin: () => void; isRegister?: boolean } = $props();
 
 	let email = $state("");
 	let username = $state("");
 	let password = $state("");
 	let isLoading = $state(false);
-	let isRegister = $state(false);
+	let isRegister = $state(initialIsRegister);
 	let error = $state<string | null>(null);
 
 	async function handleSubmit(e: Event) {
@@ -42,82 +45,101 @@
 	}
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-slate-950 p-4">
-	<Card class="w-full max-w-sm border-slate-800 bg-slate-900 text-slate-100">
+<div class="flex min-h-screen items-center justify-center bg-zinc-950 p-4">
+	<Card class="w-full max-w-sm border-zinc-800 bg-zinc-900 text-zinc-100">
 		<CardHeader>
 			<CardTitle class="text-2xl">
 				{isRegister ? "create account" : "admin console"}
 			</CardTitle>
-			<CardDescription class="text-slate-400">
+			<CardDescription>
 				{isRegister
-					? "create a new admin account."
-					: "enter your credentials to access the dashboard."}
+					? "enter your details to create an account"
+					: "enter your credentials to access the console"}
 			</CardDescription>
 		</CardHeader>
-		<CardContent class="grid gap-4">
-			{#if error}
-				<div class="text-red-500 text-sm">{error}</div>
-			{/if}
-			<form onsubmit={handleSubmit} class="grid gap-4">
-				<div class="grid gap-2">
-					<Label for="email" class="text-slate-200">email</Label>
-					<Input
-						id="email"
-						type="email"
-						placeholder="admin@nokodo.ai"
-						required
-						bind:value={email}
-						class="border-slate-800 bg-slate-950 text-slate-100 placeholder:text-slate-500 focus-visible:ring-slate-700"
-					/>
-				</div>
+		<form onsubmit={handleSubmit}>
+			<CardContent class="space-y-4">
+				{#if error}
+					<div
+						class="rounded-md bg-red-500/10 p-3 text-sm text-red-500"
+					>
+						{error}
+					</div>
+				{/if}
 				{#if isRegister}
-					<div class="grid gap-2">
-						<Label for="username" class="text-slate-200"
-							>username</Label
-						>
+					<div class="space-y-2">
+						<Label for="email">email</Label>
+						<Input
+							id="email"
+							type="email"
+							placeholder="m@example.com"
+							required
+							bind:value={email}
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="username">username</Label>
 						<Input
 							id="username"
 							type="text"
-							placeholder="admin"
+							placeholder="jdoe"
 							required
 							bind:value={username}
-							class="border-slate-800 bg-slate-950 text-slate-100 placeholder:text-slate-500 focus-visible:ring-slate-700"
 						/>
 					</div>
 				{/if}
-				<div class="grid gap-2">
-					<Label for="password" class="text-slate-200">password</Label
-					>
+				{#if !isRegister}
+					<div class="space-y-2">
+						<Label for="email">email or username</Label>
+						<Input
+							id="email"
+							type="text"
+							placeholder="m@example.com"
+							required
+							bind:value={email}
+						/>
+					</div>
+				{/if}
+				<div class="space-y-2">
+					<Label for="password">password</Label>
 					<Input
 						id="password"
 						type="password"
 						required
 						bind:value={password}
-						class="border-slate-800 bg-slate-950 text-slate-100 placeholder:text-slate-500 focus-visible:ring-slate-700"
 					/>
 				</div>
-				<Button type="submit" class="w-full" disabled={isLoading}>
-					{#if isLoading}
-						{isRegister ? "creating account..." : "signing in..."}
-					{:else}
-						{isRegister ? "create account" : "sign in"}
-					{/if}
+			</CardContent>
+			<CardFooter class="flex flex-col gap-4">
+				<Button class="w-full" type="submit" disabled={isLoading}>
+					{isLoading
+						? "loading..."
+						: isRegister
+							? "create account"
+							: "sign in"}
 				</Button>
-			</form>
-		</CardContent>
-		<CardFooter class="flex flex-col gap-2">
-			<Button
-				variant="link"
-				class="text-slate-400 hover:text-slate-100"
-				onclick={() => (isRegister = !isRegister)}
-			>
-				{isRegister
-					? "already have an account? sign in"
-					: "need an account? create one"}
-			</Button>
-			<p class="text-xs text-slate-500 text-center w-full">
-				restricted access. authorized personnel only.
-			</p>
-		</CardFooter>
+				<div class="text-center text-sm text-zinc-400">
+					{#if isRegister}
+						already have an account?
+						<button
+							type="button"
+							class="underline hover:text-zinc-100"
+							onclick={() => (isRegister = false)}
+						>
+							sign in
+						</button>
+					{:else}
+						don't have an account?
+						<button
+							type="button"
+							class="underline hover:text-zinc-100"
+							onclick={() => (isRegister = true)}
+						>
+							create one
+						</button>
+					{/if}
+				</div>
+			</CardFooter>
+		</form>
 	</Card>
 </div>

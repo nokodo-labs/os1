@@ -7,6 +7,33 @@ type Token = components["schemas"]["Token"];
 type Body_login_access_token_auth_login_access_token_post =
 	components["schemas"]["Body_login_access_token_auth_login_access_token_post"];
 
+// Temporary types until regeneration
+export interface Provider {
+	id: string;
+	name: string;
+	adapter_type: string;
+	provider_type: "local" | "external";
+	base_url?: string;
+	model_prefix?: string;
+	additional_headers?: Record<string, string>;
+	status: "enabled" | "disabled";
+	exposure_strategy: "autofetch_all" | "manual";
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ProviderCreate {
+	name: string;
+	adapter_type: string;
+	provider_type?: "local" | "external";
+	base_url?: string;
+	api_key?: string;
+	encrypted_api_key?: string;
+	model_prefix?: string;
+	additional_headers?: Record<string, string>;
+	exposure_strategy?: "autofetch_all" | "manual";
+}
+
 export const api = {
 	async login(
 		data: Body_login_access_token_auth_login_access_token_post
@@ -29,6 +56,25 @@ export const api = {
 
 	async getUser(userId: number): Promise<User> {
 		return apiClient.get<User>(`/users/${userId}`);
+	},
+
+	async getSystemStatus(): Promise<{ initialized: boolean }> {
+		return apiClient.get<{ initialized: boolean }>("/system/status");
+	},
+
+	async getProviders(): Promise<Provider[]> {
+		return apiClient.get<Provider[]>("/providers");
+	},
+
+	async createProvider(data: ProviderCreate): Promise<Provider> {
+		return apiClient.post<Provider>("/providers", data);
+	},
+
+	async updateProvider(
+		id: string,
+		data: Partial<ProviderCreate>
+	): Promise<Provider> {
+		return apiClient.patch<Provider>(`/providers/${id}`, data);
 	},
 };
 
