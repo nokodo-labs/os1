@@ -161,9 +161,15 @@ docker compose up -d --build
 
 ```bash
 cd backend
-alembic -c api/alembic.ini revision --autogenerate -m "Description"
-alembic -c api/alembic.ini upgrade head
-alembic -c api/alembic.ini downgrade -1
+alembic -c api/migrations/alembic.ini upgrade head                     # Apply every pending migration
+alembic -c api/migrations/alembic.ini revision --autogenerate -m "Description"  # Create a new revision from models
+alembic -c api/migrations/alembic.ini downgrade -1                     # Roll back the last revision
+alembic -c api/migrations/alembic.ini downgrade base                   # Roll back everything to an empty DB
+alembic -c api/migrations/alembic.ini history                          # Show the chronological migration log
+alembic -c api/migrations/alembic.ini current                          # Display the revision currently applied
+alembic -c api/migrations/alembic.ini heads                            # List all branch heads
+alembic -c api/migrations/alembic.ini show <revision>                  # Inspect a specific revision
+alembic -c api/migrations/alembic.ini stamp head                       # Mark the DB as up-to-date without running migrations
 ```
 
 ## Production Build
@@ -233,7 +239,7 @@ Update the following in `.docker/docker-compose.yml`:
 1. **Configure environment** - Update `.env` files and `docker-compose.yml`
 2. **Pull images** - `docker compose pull` (or build locally)
 3. **Start services** - `docker compose up -d`
-4. **Run migrations** - `docker compose exec backend alembic -c api/alembic.ini upgrade head`
+4. **Run migrations** - `docker compose exec backend alembic -c api/migrations/alembic.ini upgrade head`
 5. **Verify** - Check logs with `docker compose logs -f`
 
 ### Container Registry Access
@@ -258,7 +264,7 @@ docker compose pull
 docker compose up -d
 
 # Run any new migrations
-docker compose exec backend alembic -c api/alembic.ini upgrade head
+docker compose exec backend alembic -c api/migrations/alembic.ini upgrade head
 ```
 
 ### Optional: GitHub Pages (Frontend Only)
@@ -311,9 +317,9 @@ ruff format .                     # Format code
 ruff check . --fix                # Lint + autofix
 
 # Database migrations
-alembic -c api/alembic.ini revision --autogenerate -m "Description"  # Create migration
-alembic -c api/alembic.ini upgrade head                              # Apply migrations
-alembic -c api/alembic.ini downgrade -1                              # Rollback one
+alembic -c api/migrations/alembic.ini revision --autogenerate -m "Description"  # Create migration
+alembic -c api/migrations/alembic.ini upgrade head                              # Apply migrations
+alembic -c api/migrations/alembic.ini downgrade -1                              # Rollback one
 
 # Development
 uvicorn api.main:app --reload     # Start dev server

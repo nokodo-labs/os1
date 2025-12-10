@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from api.core import database as database_module
@@ -119,27 +121,28 @@ async def test_get_db_rolls_back_on_error(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.asyncio
-async def test_init_db_runs_create_all(monkeypatch: pytest.MonkeyPatch) -> None:
-	connection = _DummyConnection()
-	dummy_engine = _DummyEngine(connection)
-	monkeypatch.setattr(database_module, "engine", dummy_engine)
+async def test_init_db_runs_alembic_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""Test that init_db runs alembic upgrade head."""
+	mock_upgrade = MagicMock()
+	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
 
 	await database_module.init_db()
 
-	called = connection.called_with
-	assert callable(called)
-	assert getattr(called, "__self__", None) is database_module.Base.metadata
-	assert getattr(called, "__name__", "") == "create_all"
+	mock_upgrade.assert_called_once()
+	args, _ = mock_upgrade.call_args
+	assert isinstance(args[0], database_module.Config)
+	assert args[1] == "head"
 
 
 @pytest.mark.asyncio
 async def test_init_db_masks_url_credentials(
 	monkeypatch: pytest.MonkeyPatch,
+	caplog: pytest.LogCaptureFixture,
 ) -> None:
 	"""Test that init_db masks credentials in URLs containing @ symbol."""
-	connection = _DummyConnection()
-	dummy_engine = _DummyEngine(connection)
-	monkeypatch.setattr(database_module, "engine", dummy_engine)
+	# Mock alembic command to avoid actual DB operations
+	mock_upgrade = MagicMock()
+	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
 
 	# mock settings with a URL that has credentials (contains @)
 	class MockSettings:
@@ -150,5 +153,61 @@ async def test_init_db_masks_url_credentials(
 
 	await database_module.init_db()
 
-	# verify create_all was still called
-	assert connection.called_with is not None
+	# Verify the log message contains the masked URL
+	assert "initializing database" in caplog.text
+	# The extra dict is not directly in caplog.text usually,
+	# but the formatter might put it there.
+	# However, we can check the records.
+	assert len(caplog.records) > 0
+	record = caplog.records[0]
+	assert record.message == "initializing database"
+	assert getattr(record, "url", None) == "postgresql://***@localhost:5432/db"
+
+
+@pytest.mark.asyncio
+async def test_init_db_handles_migration_error(
+	monkeypatch: pytest.MonkeyPatch,
+	caplog: pytest.LogCaptureFixture,
+) -> None:
+	"""Test that init_db logs and re-raises errors during migration."""
+	mock_upgrade = MagicMock(side_effect=RuntimeError("migration failed"))
+	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
+	monkeypatch.setattr(database_module, "_build_alembic_config", lambda: MagicMock())
+
+	with pytest.raises(RuntimeError, match="migration failed"):
+		await database_module.init_db()
+
+	assert "error running migrations: migration failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_db_rolls_back_on_commit_error(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Test that get_db rolls back if commit fails."""
+	session = _DummySession()
+
+	# Make commit raise an error
+	async def mock_commit() -> None:
+		raise RuntimeError("commit failed")
+
+	session.commit = mock_commit  # type: ignore
+
+	monkeypatch.setattr(
+		database_module,
+		"AsyncSessionLocal",
+		lambda: _DummySessionContext(session),
+	)
+
+	generator = database_module.get_db()
+	await generator.__anext__()
+
+	# Finish the generator normally, which triggers commit()
+	with pytest.raises(RuntimeError, match="commit failed"):
+		try:
+			await generator.__anext__()
+		except StopAsyncIteration:
+			pass
+
+	assert session.rolled_back is True
+	assert session.closed is True

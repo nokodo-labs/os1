@@ -1,7 +1,12 @@
 """Database configuration and session management."""
 
+import asyncio
 from collections.abc import AsyncGenerator
+from functools import partial
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import (
 	AsyncSession,
 	async_sessionmaker,
@@ -52,8 +57,17 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
 			await session.close()
 
 
+def _build_alembic_config() -> Config:
+	"""return alembic config without relying on a .ini lookup."""
+	script_location = Path(__file__).parent.parent / "migrations"
+	config = Config()
+	config.set_main_option("script_location", str(script_location))
+	config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
+	return config
+
+
 async def init_db() -> None:
-	"""initialize database tables."""
+	"""initialize database tables via alembic."""
 	# mask credentials in url for logging
 	db_url = str(settings.DATABASE_URL)
 	if "@" in db_url:
@@ -64,6 +78,16 @@ async def init_db() -> None:
 		safe_url = db_url
 
 	logger.info("initializing database", extra={"url": safe_url})
-	async with engine.begin() as conn:
-		await conn.run_sync(Base.metadata.create_all)
+
+	try:
+		alembic_cfg = _build_alembic_config()
+		loop = asyncio.get_running_loop()
+		await loop.run_in_executor(
+			None,
+			partial(command.upgrade, alembic_cfg, "head"),
+		)
+	except Exception as exc:
+		logger.error(f"error running migrations: {exc}")
+		raise
+
 	logger.info("database initialized")

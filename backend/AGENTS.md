@@ -84,3 +84,14 @@ To run backend tests manually instead:
 
 1.  Follow the steps in `To run backend` above to ensure correct environment setup.
 2.  Run `pytest` from within the `backend/` directory.
+
+## Database Migrations
+
+Migrations are handled by Alembic and are located in `backend/api/migrations`.
+The backend is configured to **automatically run `alembic upgrade head` on startup** using the same configuration the CLI uses.
+
+-   **Manual**: You can still run Alembic manually if needed:
+    ```bash
+    cd backend
+    alembic -c api/migrations/alembic.ini upgrade head
+    ```
