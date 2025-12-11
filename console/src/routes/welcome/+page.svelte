@@ -13,7 +13,6 @@
 
 	let step = $state<"welcome" | "register">("welcome");
 	let email = $state("");
-	let username = $state("");
 	let password = $state("");
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
@@ -24,7 +23,7 @@
 		error = null;
 
 		try {
-			await auth.register(email, username, password);
+			await auth.register(email, password);
 			await auth.login(email, password);
 			// Force a reload or re-check of initialization status if needed,
 			// but navigation to / should trigger the layout logic which might need a refresh.
@@ -83,16 +82,6 @@
 							placeholder="m@example.com"
 							required
 							bind:value={email}
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="username">username</Label>
-						<Input
-							id="username"
-							type="text"
-							placeholder="jdoe"
-							required
-							bind:value={username}
 						/>
 					</div>
 					<div class="space-y-2">

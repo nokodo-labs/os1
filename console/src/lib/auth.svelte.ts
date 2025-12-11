@@ -47,10 +47,9 @@ class AuthState {
 		}
 	}
 
-	async register(email: string, username: string, password: string) {
+	async register(email: string, password: string) {
 		await api.register({
 			email,
-			username,
 			password,
 			is_active: true,
 			is_superuser: true, // First user should be superuser? Or let backend handle it?

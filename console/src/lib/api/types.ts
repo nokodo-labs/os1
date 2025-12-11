@@ -418,10 +418,18 @@ export interface paths {
         get: operations["get_model_models__model_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Model
+         * @description Delete a model.
+         */
+        delete: operations["delete_model_models__model_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Model
+         * @description Update a model.
+         */
+        patch: operations["update_model_models__model_id__patch"];
         trace?: never;
     };
     "/agents": {
@@ -900,6 +908,35 @@ export interface components {
          */
         ModelType: "llm" | "embedding" | "image_generation" | "audio" | "video";
         /**
+         * ModelUpdate
+         * @description Payload to update a model.
+         */
+        ModelUpdate: {
+            /** Metadata */
+            metadata_?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            model_type?: components["schemas"]["ModelType"] | null;
+            /** Endpoint */
+            endpoint?: string | null;
+            /** Capabilities */
+            capabilities?: string[] | null;
+            /** Context Window */
+            context_window?: number | null;
+            /** Input Cost */
+            input_cost?: number | null;
+            /** Output Cost */
+            output_cost?: number | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Is Autofetched */
+            is_autofetched?: boolean | null;
+        };
+        /**
          * Notification
          * @description Response schema.
          */
@@ -1293,8 +1330,6 @@ export interface components {
              * Format: email
              */
             email: string;
-            /** Username */
-            username: string;
             /** Display Name */
             display_name?: string | null;
             /** Avatar Url */
@@ -1346,8 +1381,6 @@ export interface components {
              * Format: email
              */
             email: string;
-            /** Username */
-            username: string;
             /** Display Name */
             display_name?: string | null;
             /** Avatar Url */
@@ -2302,6 +2335,70 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Model"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_model_models__model_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_model_models__model_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

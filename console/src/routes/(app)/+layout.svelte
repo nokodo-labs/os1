@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { auth } from "$lib/auth.svelte";
-	import { LayoutDashboard, Server } from "@lucide/svelte";
+	import { Box, LayoutDashboard, Server } from "@lucide/svelte";
 
 	let { children } = $props();
 </script>
@@ -37,6 +37,17 @@
 			>
 				<Server class="h-4 w-4" />
 				providers
+			</a>
+			<a
+				href="/models"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/models',
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Box class="h-4 w-4" />
+				models
 			</a>
 		</nav>
 

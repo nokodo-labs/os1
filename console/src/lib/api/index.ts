@@ -4,6 +4,9 @@ import type { components } from "./types";
 type User = components["schemas"]["User"];
 type UserCreate = components["schemas"]["UserCreate"];
 type Token = components["schemas"]["Token"];
+type Model = components["schemas"]["Model"];
+type ModelCreate = components["schemas"]["ModelCreate"];
+type ModelUpdate = components["schemas"]["ModelUpdate"];
 type Body_login_access_token_auth_login_access_token_post =
 	components["schemas"]["Body_login_access_token_auth_login_access_token_post"];
 
@@ -76,7 +79,23 @@ export const api = {
 	): Promise<Provider> {
 		return apiClient.patch<Provider>(`/providers/${id}`, data);
 	},
+
+	async getModels(): Promise<Model[]> {
+		return apiClient.get<Model[]>("/models");
+	},
+
+	async createModel(data: ModelCreate): Promise<Model> {
+		return apiClient.post<Model>("/models", data);
+	},
+
+	async updateModel(id: string, data: ModelUpdate): Promise<Model> {
+		return apiClient.patch<Model>(`/models/${id}`, data);
+	},
+
+	async deleteModel(id: string): Promise<void> {
+		return apiClient.delete(`/models/${id}`);
+	},
 };
 
 export { apiClient, APIError };
-export type { Token, User, UserCreate };
+export type { Model, ModelCreate, ModelUpdate, Token, User, UserCreate };
