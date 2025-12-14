@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { goto } from '$app/navigation'
+    import { resolve } from '$app/paths'
     import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
     import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
     import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
@@ -15,8 +17,8 @@
     const sidebar = useSidebar() as any
     // User profile data (would come from auth context in production)
     const user = {
-        name: 'Simone',
-        email: 's.pipitone@nokodo.io',
+        name: 'admin',
+        email: 'admin@nokodo.net',
         avatar: null, // URL to avatar image, or null for initials
     }
 
@@ -37,6 +39,20 @@
             label: 'home',
             action: () => {
                 sidebar.selectChat(null)
+
+                const start = (
+                    document as unknown as {
+                        startViewTransition?: (cb: () => Promise<void> | void) => void
+                    }
+                ).startViewTransition
+
+                if (start) {
+                    start.call(document, async () => {
+                        await goto(resolve('/'), { keepFocus: true, noScroll: true })
+                    })
+                } else {
+                    goto(resolve('/'), { keepFocus: true, noScroll: true })
+                }
             },
         },
         {
@@ -45,7 +61,20 @@
             label: 'new chat',
             action: () => {
                 sidebar.selectChat(null)
-                // TODO: Create new chat logic
+
+                const start = (
+                    document as unknown as {
+                        startViewTransition?: (cb: () => Promise<void> | void) => void
+                    }
+                ).startViewTransition
+
+                if (start) {
+                    start.call(document, async () => {
+                        await goto(resolve('/'), { keepFocus: true, noScroll: true })
+                    })
+                } else {
+                    goto(resolve('/'), { keepFocus: true, noScroll: true })
+                }
             },
         },
         {
@@ -177,7 +206,7 @@
         <!-- Search -->
         <Tooltip.Root delayDuration={300} disabled={sidebar.isChatSidebarOpen}>
             <Tooltip.Trigger>
-                {#snippet child({ props }: { props: Record<string, any> })}
+                {#snippet child({ props }: { props: Record })}
                     <button
                         {...props}
                         class="relative flex items-center {sidebar.isChatSidebarOpen
@@ -212,7 +241,7 @@
             {@const Icon = item.icon}
             <Tooltip.Root delayDuration={300} disabled={sidebar.isChatSidebarOpen}>
                 <Tooltip.Trigger>
-                    {#snippet child({ props }: { props: Record<string, any> })}
+                    {#snippet child({ props }: { props: Record })}
                         <button
                             {...props}
                             class="relative flex items-center {sidebar.isChatSidebarOpen

@@ -139,3 +139,34 @@
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* View Transitions (assume supported) */
+@keyframes nokodo-vt-fade-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes nokodo-vt-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+::view-transition-group(chat-input),
+::view-transition-group(chat-header) {
+    animation-duration: 360ms;
+    /* Clean, non-overshooting ease-out */
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Landing greeting disappears when going to /chats/[id] */
+::view-transition-old(landing-greeting) {
+    animation: 200ms ease both nokodo-vt-fade-out;
+}
