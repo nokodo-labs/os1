@@ -28,6 +28,11 @@ class Settings(BaseSettings):
 	ALGORITHM: str = "HS256"
 	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+	# Public origins (runtime config for static frontends)
+	# These are intentionally "public" (safe to expose to clients).
+	PUBLIC_FRONTEND_ORIGIN: str | None = None
+	PUBLIC_CDN_ORIGIN: str | None = None
+
 	# Database (Postgres everywhere: dev, tests, prod)
 	DATABASE_URL: str = (
 		"postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev"

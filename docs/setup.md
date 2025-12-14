@@ -28,7 +28,7 @@ Search and replace throughout the codebase:
 
 -   **`.github/CODEOWNERS`**: Add your GitHub handles
 -   **`backend/.env`**: Create from `.env.example` and set `SECRET_KEY`, `DATABASE_URL`
--   **`frontend/.env`**: Create from `.env.example` and set `VITE_API_URL`
+-   **`frontend/.env`**: Create from `.env.example` (optional fallbacks only)
 
 ### 4. Customize AI Instructions (Optional)
 
@@ -72,6 +72,9 @@ uvicorn api.main:app --reload
 cd frontend
 npm install
 cp .env.example .env
+
+The frontend uses stable paths (e.g. `/v1`) and loads runtime config from the backend at `/v1/system/config`.
+Configure `PUBLIC_API_URL` / `PUBLIC_CDN_URL` in `backend/.env` when needed.
 
 # Generate API types (requires backend running)
 npm run generate:api-types

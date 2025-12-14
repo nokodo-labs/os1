@@ -16,8 +16,10 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
+from api.core import exceptions as exceptions_module
 from api.core.config import settings
 from api.core.exceptions import (
+	http_exception_handler,
 	unhandled_exception_handler,
 	validation_exception_handler,
 )
@@ -324,7 +326,11 @@ async def test_exception_middleware_converts_errors_including_request_id() -> No
 	assert response.status_code == 500
 	body = bytes(response.body)
 	assert json.loads(body.decode()) == {
-		"detail": "Internal server error",
+		"type": "urn:nokodo:internal-error",
+		"title": "internal server error",
+		"status": 500,
+		"detail": "internal server error",
+		"instance": "/",
 		"request_id": "req-123",
 	}
 
@@ -353,8 +359,174 @@ async def test_validation_exception_handler_returns_422_payload() -> None:
 
 	assert response.status_code == 422
 	body = bytes(response.body)
-	expected = json.loads(json.dumps(exc.errors()))
-	assert json.loads(body.decode()) == {"detail": expected}
+	assert json.loads(body.decode()) == {
+		"type": "urn:nokodo:validation-error",
+		"title": "validation error",
+		"status": 422,
+		"detail": "request validation failed",
+		"instance": "/items",
+		"errors": [
+			{
+				"type": "value_error.missing",
+				"loc": ["body", "name"],
+				"message": "field required",
+			}
+		],
+	}
+
+
+@pytest.mark.asyncio
+async def test_http_exception_handler_emits_problem_details() -> None:
+	"""http exceptions should serialize as problem details."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/x",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	exc = HTTPException(status_code=400, detail="nope")
+	response = await http_exception_handler(req, exc)
+
+	assert response.status_code == 400
+	assert response.headers["content-type"].startswith("application/problem+json")
+	body = bytes(response.body)
+	assert json.loads(body.decode()) == {
+		"type": "about:blank",
+		"title": "bad request",
+		"status": 400,
+		"detail": "nope",
+		"instance": "/x",
+	}
+
+
+@pytest.mark.asyncio
+async def test_http_exception_handler_puts_structured_detail_in_data() -> None:
+	"""non-string HTTPException detail should be preserved via an extension."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/x",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	exc = HTTPException(status_code=400, detail={"reason": "nope"})
+	response = await http_exception_handler(req, exc)
+
+	assert response.status_code == 400
+	body = bytes(response.body)
+	assert json.loads(body.decode()) == {
+		"type": "about:blank",
+		"title": "bad request",
+		"status": 400,
+		"instance": "/x",
+		"data": {"reason": "nope"},
+	}
+
+
+@pytest.mark.asyncio
+async def test_http_exception_handler_handles_unknown_status_code() -> None:
+	"""unknown/invalid HTTP status codes should fall back to a generic title."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/x",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	exc = HTTPException(status_code=599, detail="nope")
+	response = await http_exception_handler(req, exc)
+
+	assert response.status_code == 599
+	body = bytes(response.body)
+	assert json.loads(body.decode()) == {
+		"type": "about:blank",
+		"title": "error",
+		"status": 599,
+		"detail": "nope",
+		"instance": "/x",
+	}
+
+
+@pytest.mark.asyncio
+async def test_http_exception_handler_omits_detail_when_none() -> None:
+	"""None details should omit both detail and data."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/x",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	exc = HTTPException(status_code=400, detail=None)
+	response = await http_exception_handler(req, exc)
+
+	assert response.status_code == 400
+	body = bytes(response.body)
+	assert json.loads(body.decode()) == {
+		"type": "about:blank",
+		"title": "bad request",
+		"status": 400,
+		"instance": "/x",
+	}
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception_handler_reraises_http_exception() -> None:
+	"""http exceptions should not be swallowed by the catch-all handler."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	with pytest.raises(HTTPException):
+		await unhandled_exception_handler(
+			req, HTTPException(status_code=418, detail="x")
+		)
+
+
+@pytest.mark.asyncio
+async def test_http_exception_handler_reraises_non_http_exception() -> None:
+	"""non-http exceptions should bubble up from the http handler."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	with pytest.raises(RuntimeError):
+		await http_exception_handler(req, RuntimeError("boom"))
+
+
+@pytest.mark.asyncio
+async def test_validation_exception_handler_reraises_non_validation_error() -> None:
+	"""non-validation exceptions should bubble up from the validation handler."""
+	req = Request(
+		{
+			"type": "http",
+			"path": "/",
+			"method": "GET",
+			"headers": [],
+		}
+	)
+	with pytest.raises(HTTPException):
+		await validation_exception_handler(
+			req,
+			HTTPException(status_code=400, detail="nope"),
+		)
+
+
+def test_coerce_detail_handles_none() -> None:
+	assert exceptions_module._coerce_detail(None) == (None, None)
 
 
 @pytest.mark.asyncio

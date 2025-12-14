@@ -73,3 +73,12 @@ async def test_system_status_endpoint(client):
 	data = response.json()
 	assert "initialized" in data
 	assert isinstance(data["initialized"], bool)
+
+
+@pytest.mark.asyncio
+async def test_system_config_endpoint(client):
+	response = await client.get("/v1/system/config")
+	assert response.status_code == 200
+	data = response.json()
+	assert "frontend_origin" in data
+	assert "cdn_origin" in data

@@ -112,6 +112,33 @@
 			}
 		},
 		{
+			"label": "Frontend: Lint",
+			"type": "shell",
+			"command": "npm run lint",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Frontend: Format",
+			"type": "shell",
+			"command": "npm run format",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
 			"label": "Frontend: Check",
 			"type": "shell",
 			"command": "npm run check",
@@ -129,6 +156,20 @@
 			"label": "Frontend: Test",
 			"type": "shell",
 			"command": "npm run test",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Frontend: Test Coverage",
+			"type": "shell",
+			"command": "npm run test:coverage",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},

@@ -1,7 +1,14 @@
 """API v1 application."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 
+from api.core.exceptions import (
+	http_exception_handler,
+	unhandled_exception_handler,
+	validation_exception_handler,
+)
+from api.core.openapi import DEFAULT_RESPONSES
 from api.middleware import APIVersionHeaderMiddleware
 from api.v1.router import api_router
 
@@ -15,5 +22,9 @@ v1_app = FastAPI(
 	openapi_url="/openapi.json",
 )
 
-v1_app.include_router(api_router)
+v1_app.add_exception_handler(RequestValidationError, validation_exception_handler)
+v1_app.add_exception_handler(HTTPException, http_exception_handler)
+v1_app.add_exception_handler(Exception, unhandled_exception_handler)
+
+v1_app.include_router(api_router, responses=DEFAULT_RESPONSES)
 v1_app.add_middleware(APIVersionHeaderMiddleware, version="v1")
