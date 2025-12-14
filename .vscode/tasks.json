@@ -43,9 +43,26 @@
 			}
 		},
 		{
-			"label": "Backend: Run Tests",
+			"label": "Backend: Quick Tests",
 			"type": "shell",
-			"command": "pytest -v",
+			"command": "uv run pytest -q --tb=short --cov-report=term-missing:skip-covered",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Backend: Full Tests",
+			"type": "shell",
+			"command": "uv run pytest -vv",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},

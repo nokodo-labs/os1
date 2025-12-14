@@ -67,28 +67,27 @@ backend/
 
 -   Always assume the user is already running a dev server with hot reload.
 -   Always assume the user is monitoring changes live.
--   Never manually run dev servers like `uvicorn` or `npm run dev` yourself - unless explicitly asked.
+-   Never manually run dev servers like `uv run uvicorn` or `npm run dev` yourself - unless explicitly asked.
 
 ### To run backend:
 
 -   Always remember to cd into `backend/`
 -   Always enable the virtual environment with `source .venv/bin/activate` (Linux/Mac) or `.venv\Scripts\activate` (Windows).
 -   Check the current working directory if unsure where you are.
--   Check terminal output if unsure whether the venv is activated. It should be prefixed with `(.venv)`.
 
 ### To run tests:
 
-The simplest way to run all tests is by using the VSCode Task `Backend: Run all tests`.
+The best way to run all tests is by using the VSCode Task `Backend: Quick Tests`. This will show you coverage gaps and any warnings and errors.
 
 To run backend tests manually instead:
 
 1.  Follow the steps in `To run backend` above to ensure correct environment setup.
-2.  Run `pytest` from within the `backend/` directory.
+2.  Run `uv run pytest` from within the `backend/` directory.
 
 ## Database Migrations
 
 Migrations are handled by Alembic and are located in `backend/api/migrations`.
-The backend is configured to **automatically run `alembic upgrade head` on startup** using the same configuration the CLI uses.
+The backend is configured to **automatically run `uv run alembic upgrade head` on startup** using the same configuration the CLI uses.
 
 -   **Manual**: You can still run Alembic manually if needed:
     ```bash
