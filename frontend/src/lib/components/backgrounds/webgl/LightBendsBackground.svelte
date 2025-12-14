@@ -1,7 +1,6 @@
 <script lang="ts">
     import { setBackgroundContext } from '$lib/contexts/backgroundContext'
-    import type { Snippet } from 'svelte'
-    import { onDestroy, onMount } from 'svelte'
+    import { onDestroy, onMount, untrack, type Snippet } from 'svelte'
     import * as THREE from 'three'
 
     interface Props {
@@ -53,8 +52,8 @@
 
     const pointerTarget = new THREE.Vector2(0, 0)
     const pointerCurrent = new THREE.Vector2(0, 0)
-    const rotationRef = { value: rotation }
-    const autoRotateRef = { value: autoRotate }
+    const rotationRef = { value: untrack(() => rotation) }
+    const autoRotateRef = { value: untrack(() => autoRotate) }
     const rotationVector = new THREE.Vector2(1, 0)
     const rotationOrigin = new THREE.Vector2(0, 0)
     const subscribers: Array<() => void> = []

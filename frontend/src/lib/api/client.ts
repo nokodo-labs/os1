@@ -1,101 +1,108 @@
 type FetchOptions = RequestInit & {
-	params?: Record<string, string | number>
+    params?: Record<string, string | number>
+}
+
+export const API_BASE_PATH = '/v1'
+
+function normalizeOrigin(origin?: string | null): string {
+    if (!origin) return ''
+    return origin.replace(/\/+$/, '')
+}
+
+export function buildApiBaseURL(origin?: string | null): string {
+    return `${normalizeOrigin(origin)}${API_BASE_PATH}`
 }
 
 class APIError extends Error {
-	constructor(
-		message: string,
-		public status: number,
-		public response?: unknown,
-	) {
-		super(message)
-		this.name = 'APIError'
-	}
+    constructor(
+        message: string,
+        public status: number,
+        public response?: unknown
+    ) {
+        super(message)
+        this.name = 'APIError'
+    }
 }
 
 class APIClient {
-	private baseURL: string
+    private baseURL: string
 
-	constructor(baseURL: string = import.meta.env.VITE_API_URL || '/v1') {
-		this.baseURL = baseURL
-	}
+    constructor(baseURL: string = buildApiBaseURL(import.meta.env.VITE_API_ORIGIN)) {
+        this.baseURL = baseURL
+    }
 
-	private async request<T>(
-		endpoint: string,
-		options: FetchOptions = {},
-	): Promise<T> {
-		const { params, ...fetchOptions } = options
+    setBaseURL(baseURL: string): void {
+        this.baseURL = baseURL
+    }
 
-		let url = `${this.baseURL}${endpoint}`
-		
-		if (params) {
-			const searchParams = new URLSearchParams(
-				Object.entries(params).map(([key, value]) => [key, String(value)]),
-			)
-			url += `?${searchParams}`
-		}
+    private async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+        const { params, ...fetchOptions } = options
 
-		const headers = new Headers(fetchOptions.headers)
-		if (!headers.has('Content-Type') && fetchOptions.body) {
-			headers.set('Content-Type', 'application/json')
-		}
+        let url = `${this.baseURL}${endpoint}`
 
-		const response = await fetch(url, {
-			...fetchOptions,
-			headers,
-		})
+        if (params) {
+            const searchParams = new URLSearchParams(
+                Object.entries(params).map(([key, value]) => [key, String(value)])
+            )
+            url += `?${searchParams}`
+        }
 
-		if (!response.ok) {
-			const errorData = await response.json().catch(() => null)
-			throw new APIError(
-				errorData?.detail || response.statusText,
-				response.status,
-				errorData,
-			)
-		}
+        const headers = new Headers(fetchOptions.headers)
+        if (!headers.has('Content-Type') && fetchOptions.body) {
+            headers.set('Content-Type', 'application/json')
+        }
 
-		const contentType = response.headers.get('Content-Type')
-		if (!contentType?.includes('application/json')) {
-			return null as T
-		}
+        const response = await fetch(url, {
+            ...fetchOptions,
+            headers,
+        })
 
-		return response.json()
-	}
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null)
+            throw new APIError(errorData?.detail || response.statusText, response.status, errorData)
+        }
 
-	async get<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, { ...options, method: 'GET' })
-	}
+        const contentType = response.headers.get('Content-Type')
+        if (!contentType?.includes('application/json')) {
+            return null as T
+        }
 
-	async post<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'POST',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
+        return response.json()
+    }
 
-	async put<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'PUT',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
+    async get<T>(endpoint: string, options?: FetchOptions): Promise<T> {
+        return this.request<T>(endpoint, { ...options, method: 'GET' })
+    }
 
-	async patch<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'PATCH',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
+    async post<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
+        return this.request<T>(endpoint, {
+            ...options,
+            method: 'POST',
+            body: data ? JSON.stringify(data) : undefined,
+        })
+    }
 
-	async delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, { ...options, method: 'DELETE' })
-	}
+    async put<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
+        return this.request<T>(endpoint, {
+            ...options,
+            method: 'PUT',
+            body: data ? JSON.stringify(data) : undefined,
+        })
+    }
+
+    async patch<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
+        return this.request<T>(endpoint, {
+            ...options,
+            method: 'PATCH',
+            body: data ? JSON.stringify(data) : undefined,
+        })
+    }
+
+    async delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
+        return this.request<T>(endpoint, { ...options, method: 'DELETE' })
+    }
 }
 
 export const apiClient = new APIClient()
 export { APIError }
 export type { FetchOptions }
-

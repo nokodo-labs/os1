@@ -1,28 +1,20 @@
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import path from 'node:path'
+import { sveltekit } from '@sveltejs/kit/vite'
 import { defineConfig } from 'vite'
 
-// https://vite.dev/config/
 export default defineConfig({
-    plugins: [svelte()],
-    base: './',
-    resolve: {
-        alias: {
-            $lib: path.resolve(__dirname, 'src/lib'),
-        },
-    },
+    plugins: [sveltekit()],
     server: {
         port: 888,
         host: true,
         proxy: {
-            '/api': {
+            '/v1': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+            },
+            '/health': {
                 target: 'http://localhost:8000',
                 changeOrigin: true,
             },
         },
-    },
-    build: {
-        outDir: 'dist',
-        sourcemap: true,
     },
 })

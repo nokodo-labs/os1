@@ -29,25 +29,31 @@
 
 ```
 frontend/src/
+├── app.html                # SvelteKit template shell
+├── app.d.ts                # SvelteKit types
+├── routes/                 # SvelteKit routes
+│   ├── +layout.svelte      # global layout (backgrounds, sidebar)
+│   ├── +layout.ts          # SPA mode (ssr=false)
+│   ├── +page.svelte        # landing experience
+│   └── chats/[id]/+page.svelte # chat threads
 ├── lib/
-│   ├── api/                # type-safe API client
+│   ├── api/                # type-safe API client (generated types live here)
 │   ├── contexts/           # Svelte contexts
 │   ├── styles/             # TailwindCSS styles
 │   └── components/         # Svelte components
-│       ├── backgrounds/	# background components
-│       │   └── webgl/      # WebGL background components
-│       ├── chats/          # chat UI components
+│       ├── backgrounds/    # background components (webgl, etc.)
+│       ├── chat/           # chat UI components
 │       ├── common/         # common reusable components
 │       ├── debug/          # debugging components
 │       ├── icons/          # icon components
 │       ├── sidebar/        # sidebar components
 │       └── primitives/     # shadcn-svelte / Bits UI primitives
-├── tests/                  # frontend vitest tests
-├── main.ts                 # entrypoint
-├── App.svelte              # main Svelte app
+├── static/                 # static assets (served at root)
 └── app.css                 # global styles (TailwindCSS)
 ```
 
 ## testing instructions
 
-- to run frontend tests, cd into `frontend/` and run `npm run test`.
+- unit/component tests: `npm run test` (Vitest + @testing-library/svelte, happy-dom)
+- coverage: `npm run test:coverage`
+- type/lint: `npm run check`, `npm run lint`

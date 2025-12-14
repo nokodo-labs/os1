@@ -41,19 +41,34 @@
 
 ## 🚀 Quick Start
 
-### 1️⃣ Start Development
+### 1️⃣ Start Dependencies (Postgres only)
 
 ```bash
 cd .docker
-docker compose up -d
+docker compose --profile deps up -d
 ```
 
-**Your services:**
+This brings up Postgres (and any other infra-only services) on `localhost:5432` while leaving the app code on your host for instant reloads and debugger support.
 
--   Frontend: http://localhost:888
--   Admin Console: http://localhost:8383 (local only; keep behind VPN/ACLs in prod)
--   Backend API: http://localhost:8000
--   API Docs: http://localhost:8000/v1/docs
+### 2️⃣ Run the backend from your IDE
+
+```bash
+cd backend
+python -m venv .venv
+.venv\\Scripts\\Activate.ps1  # or source .venv/bin/activate
+pip install -e .[api,dev]
+cp .env.example .env
+uvicorn api.main:app --reload
+```
+
+### 3️⃣ Run the frontends
+
+```bash
+cd frontend && npm install && npm run dev
+cd console && npm install && npm run dev -- --host --port 8383
+```
+
+> 💡 **Need full containers?** `docker compose --profile local up -d` from `.docker/` builds and runs backend + frontends entirely inside Docker for parity checks.
 
 > 💡 **VS Code users**: Open the workspace to get tasks, debugger configs, and recommended extensions automatically.
 
@@ -69,8 +84,9 @@ CI/CD automatically builds and pushes Docker images to **GitHub Container Regist
 
 ```bash
 # Pull pre-built images and deploy
-docker compose pull
-docker compose up -d
+cd .docker
+docker compose -f docker-compose.production.yml pull
+docker compose -f docker-compose.production.yml up -d
 ```
 
 > 💡 **Tip**: See [docs/setup.md](docs/setup.md#production-deployment) for full deployment instructions and environment configuration.
@@ -129,8 +145,8 @@ admin-console/
 .docker/                   # Docker configs
 ├── Dockerfile.backend     # Backend build
 ├── Dockerfile.frontend    # Frontend build
-├── docker-compose.yml     # Production
-└── docker-compose.dev.yml # Development
+├── docker-compose.yml     # DX profiles (deps/local)
+└── docker-compose.production.yml # Production / registry images
 
 .github/                   # CI/CD, Dependabot, CODEOWNERS
 .vscode/                   # Editor config, tasks, debugger

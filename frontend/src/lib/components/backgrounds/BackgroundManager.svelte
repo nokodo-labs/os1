@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte'
+    import { untrack, type Snippet } from 'svelte'
     import StaticBackground from './StaticBackground.svelte'
     import DarkVeilBackground from './webgl/DarkVeilBackground.svelte'
     import GalaxyBackgroundWebGL from './webgl/GalaxyBackgroundWebGL.svelte'
@@ -55,7 +55,8 @@
     let { type = 'galaxy', config = {}, children }: Props = $props()
 
     // Transition state for smooth swapping
-    let currentBg = $state(type)
+    let currentBg = $state<BackgroundType>('galaxy')
+    currentBg = untrack(() => type)
     let previousBg = $state<BackgroundType | null>(null)
     let isTransitioning = $state(false)
 
