@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, type Provider, type ProviderCreate } from "$lib/api";
+	import EmptyState from "$lib/components/EmptyState.svelte";
 	import NokodoLoader from "$lib/components/NokodoLoader.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import {
@@ -213,6 +214,30 @@
 			isLoading = false;
 		}
 	}
+
+	async function handleDeleteProvider() {
+		if (!editingId) return;
+		if (!confirm("Are you sure you want to delete this provider?")) return;
+		isLoading = true;
+		submitError = null;
+		try {
+			await api.deleteProvider(editingId);
+			await loadProviders();
+			showModal = false;
+			resetForm();
+		} catch (e) {
+			console.error("Failed to delete provider", e);
+			submitError =
+				"Failed to delete provider. " +
+				(e instanceof Error ? e.message : "Unknown error");
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function handleTestConnection() {
+		// TODO: implement provider connection test
+	}
 </script>
 
 <div class="space-y-6">
@@ -314,11 +339,7 @@
 			{/each}
 
 			{#if providers.length === 0}
-				<div
-					class="col-span-full rounded-2xl border border-dashed border-zinc-800 py-12 text-center text-zinc-500"
-				>
-					no providers configured yet.
-				</div>
+				<EmptyState message="no providers configured yet." />
 			{/if}
 		</div>
 	{/if}
@@ -525,9 +546,26 @@
 								back
 							</Button>
 						{:else}
-							<div></div>
+							<Button
+								type="button"
+								variant="destructive"
+								class="rounded-xl"
+								disabled={isLoading}
+								onclick={handleDeleteProvider}
+							>
+								delete
+							</Button>
 						{/if}
 						<div class="flex gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								class="rounded-xl"
+								disabled={isLoading}
+								onclick={handleTestConnection}
+							>
+								test
+							</Button>
 							<Button
 								variant="outline"
 								type="button"

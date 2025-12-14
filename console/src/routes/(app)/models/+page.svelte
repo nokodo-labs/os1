@@ -6,6 +6,7 @@
 		type ModelUpdate,
 		type Provider,
 	} from "$lib/api";
+	import EmptyState from "$lib/components/EmptyState.svelte";
 	import NokodoLoader from "$lib/components/NokodoLoader.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import {
@@ -38,6 +39,12 @@
 	let error = $state<string | null>(null);
 	let submitError = $state<string | null>(null);
 
+	const hasProviders = $derived(providers.length > 0);
+	const addModelDisabledReason = "add a provider to enable model creation.";
+	const emptyStateNoProvidersMessage = "no providers configured yet.";
+	const emptyStateNoProvidersHint = "add a provider first to create models.";
+	const emptyStateNoModelsMessage = "no models configured yet.";
+
 	// Form state
 	let formState = $state<ModelCreate>({
 		name: "",
@@ -46,10 +53,12 @@
 		provider_id: "",
 		enabled: true,
 		is_autofetched: false,
-		context_window: 0,
-		input_cost: 0,
-		output_cost: 0,
 	});
+
+	// Optional numeric fields are modeled as strings so they can be blank.
+	let contextWindowInput = $state<string>("");
+	let inputCostInput = $state<string>("");
+	let outputCostInput = $state<string>("");
 
 	async function fetchData() {
 		isFetching = true;
@@ -73,6 +82,7 @@
 	});
 
 	function openCreateModal() {
+		if (!hasProviders) return;
 		modalMode = "create";
 		formState = {
 			name: "",
@@ -81,10 +91,10 @@
 			provider_id: providers.length > 0 ? providers[0].id : "",
 			enabled: true,
 			is_autofetched: false,
-			context_window: 0,
-			input_cost: 0,
-			output_cost: 0,
 		};
+		contextWindowInput = "";
+		inputCostInput = "";
+		outputCostInput = "";
 		showModal = true;
 		submitError = null;
 	}
@@ -99,12 +109,28 @@
 			provider_id: model.provider_id,
 			enabled: model.enabled,
 			is_autofetched: model.is_autofetched,
-			context_window: model.context_window || 0,
-			input_cost: model.input_cost || 0,
-			output_cost: model.output_cost || 0,
 		};
+		contextWindowInput =
+			model.context_window === null || model.context_window === undefined
+				? ""
+				: String(model.context_window);
+		inputCostInput =
+			model.input_cost === null || model.input_cost === undefined
+				? ""
+				: String(model.input_cost);
+		outputCostInput =
+			model.output_cost === null || model.output_cost === undefined
+				? ""
+				: String(model.output_cost);
 		showModal = true;
 		submitError = null;
+	}
+
+	function parseOptionalNumber(value: string): number | null {
+		const trimmed = value.trim();
+		if (!trimmed) return null;
+		const parsed = Number(trimmed);
+		return Number.isFinite(parsed) ? parsed : null;
 	}
 
 	async function handleSubmit(e: Event) {
@@ -112,13 +138,34 @@
 		isLoading = true;
 		submitError = null;
 
+		if (modalMode === "create" && !formState.provider_id) {
+			submitError = "a provider is required to create a model.";
+			isLoading = false;
+			return;
+		}
+
 		try {
 			if (modalMode === "create") {
-				await api.createModel(formState);
+				const createPayload: ModelCreate = {
+					...formState,
+				};
+				const contextWindow = parseOptionalNumber(contextWindowInput);
+				const inputCost = parseOptionalNumber(inputCostInput);
+				const outputCost = parseOptionalNumber(outputCostInput);
+				if (contextWindow !== null)
+					createPayload.context_window = contextWindow;
+				if (inputCost !== null) createPayload.input_cost = inputCost;
+				if (outputCost !== null) createPayload.output_cost = outputCost;
+				await api.createModel(createPayload);
 			} else if (editingId) {
 				// Exclude provider_id from update
 				const { provider_id, ...rest } = formState;
-				const updatePayload: ModelUpdate = { ...rest };
+				const updatePayload: ModelUpdate = {
+					...rest,
+					context_window: parseOptionalNumber(contextWindowInput),
+					input_cost: parseOptionalNumber(inputCostInput),
+					output_cost: parseOptionalNumber(outputCostInput),
+				};
 				await api.updateModel(editingId, updatePayload);
 			}
 			showModal = false;
@@ -126,6 +173,22 @@
 		} catch (e: any) {
 			console.error("Failed to save model", e);
 			submitError = e.message || "Failed to save model";
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function handleDeleteFromModal() {
+		if (!editingId) return;
+		if (!confirm("Are you sure you want to delete this model?")) return;
+		isLoading = true;
+		try {
+			await api.deleteModel(editingId);
+			showModal = false;
+			await fetchData();
+		} catch (e) {
+			console.error("Failed to delete model", e);
+			submitError = "Failed to delete model";
 		} finally {
 			isLoading = false;
 		}
@@ -154,10 +217,27 @@
 			<h2 class="text-2xl font-bold tracking-tight">models</h2>
 			<p class="text-zinc-400">manage your AI models.</p>
 		</div>
-		<Button onclick={openCreateModal}>
-			<Plus class="mr-2 h-4 w-4" />
-			add model
-		</Button>
+		{#if hasProviders}
+			<Button onclick={openCreateModal}>
+				<Plus class="mr-2 h-4 w-4" />
+				add model
+			</Button>
+		{:else}
+			<div class="flex flex-col items-end gap-1">
+				<span title={addModelDisabledReason}>
+					<Button onclick={openCreateModal} disabled>
+						<Plus class="mr-2 h-4 w-4" />
+						add model
+					</Button>
+				</span>
+				<a
+					href="/providers"
+					class="text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+				>
+					{addModelDisabledReason}
+				</a>
+			</div>
+		{/if}
 	</div>
 
 	{#if isFetching}
@@ -221,6 +301,17 @@
 					</CardContent>
 				</Card>
 			{/each}
+
+			{#if models.length === 0}
+				{#if !hasProviders}
+					<EmptyState
+						message={emptyStateNoProvidersMessage}
+						hint={emptyStateNoProvidersHint}
+					/>
+				{:else}
+					<EmptyState message={emptyStateNoModelsMessage} />
+				{/if}
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -239,7 +330,9 @@
 				<CardDescription>configure model details</CardDescription>
 			</CardHeader>
 			<form onsubmit={handleSubmit}>
-				<CardContent class="space-y-4">
+				<CardContent
+					class="space-y-4 max-h-[60vh] overflow-y-auto pr-2"
+				>
 					{#if submitError}
 						<div
 							class="rounded-md bg-red-500/10 p-3 text-sm text-red-500"
@@ -255,7 +348,7 @@
 							onValueChange={(value: string) =>
 								(formState.provider_id = value)}
 						>
-							<SelectTrigger>
+							<SelectTrigger class="rounded-xl">
 								<span class="truncate text-left">
 									{formState.provider_id
 										? getProviderName(formState.provider_id)
@@ -280,6 +373,7 @@
 							bind:value={formState.name}
 							disabled={modalMode === "edit" &&
 								formState.is_autofetched}
+							class="rounded-xl"
 						/>
 						<p class="text-xs text-zinc-500">
 							the exact model identifier used by the provider API.
@@ -292,6 +386,7 @@
 							id="display_name"
 							placeholder="GPT-4 Turbo"
 							bind:value={formState.display_name}
+							class="rounded-xl"
 						/>
 					</div>
 
@@ -302,7 +397,7 @@
 							onValueChange={(value: Model["model_type"]) =>
 								(formState.model_type = value)}
 						>
-							<SelectTrigger>
+							<SelectTrigger class="rounded-xl">
 								<span class="truncate text-left">
 									{formState.model_type}
 								</span>
@@ -321,28 +416,52 @@
 						</Select>
 					</div>
 
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid gap-4 sm:grid-cols-2">
 						<div class="space-y-2">
-							<Label for="context">context window</Label>
+							<Label for="context"
+								>context window (optional)</Label
+							>
 							<Input
 								id="context"
 								type="number"
-								bind:value={formState.context_window}
+								placeholder="optional"
+								bind:value={contextWindowInput}
+								class="rounded-xl"
 							/>
+							<p class="text-xs text-zinc-500">optional</p>
 						</div>
 						<div class="space-y-2">
-							<Label for="input_cost">input cost ($/1M)</Label>
+							<Label for="input_cost"
+								>input cost ($ / 1M tokens) (optional)</Label
+							>
 							<Input
 								id="input_cost"
 								type="number"
-								step="0.01"
-								bind:value={formState.input_cost}
+								step="0.0001"
+								placeholder="optional"
+								bind:value={inputCostInput}
+								class="rounded-xl"
 							/>
+							<p class="text-xs text-zinc-500">optional</p>
+						</div>
+						<div class="space-y-2">
+							<Label for="output_cost"
+								>output cost ($ / 1M tokens) (optional)</Label
+							>
+							<Input
+								id="output_cost"
+								type="number"
+								step="0.0001"
+								placeholder="optional"
+								bind:value={outputCostInput}
+								class="rounded-xl"
+							/>
+							<p class="text-xs text-zinc-500">optional</p>
 						</div>
 					</div>
 
 					<div
-						class="flex items-center justify-between rounded-lg border border-zinc-800 p-4"
+						class="flex items-center justify-between rounded-xl border border-zinc-800 p-4"
 					>
 						<div class="space-y-0.5">
 							<Label>enabled</Label>
@@ -353,17 +472,41 @@
 						<Switch bind:checked={formState.enabled} />
 					</div>
 				</CardContent>
-				<CardFooter class="flex justify-end gap-2">
-					<Button
-						type="button"
-						variant="ghost"
-						onclick={() => (showModal = false)}
-					>
-						cancel
-					</Button>
-					<Button type="submit" disabled={isLoading}>
-						{isLoading ? "saving..." : "save"}
-					</Button>
+				<CardFooter class="flex justify-between gap-2">
+					{#if modalMode === "edit"}
+						<Button
+							type="button"
+							variant="destructive"
+							class="rounded-xl"
+							disabled={isLoading}
+							onclick={handleDeleteFromModal}
+						>
+							delete
+						</Button>
+					{:else}
+						<div></div>
+					{/if}
+					<div class="flex justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							class="rounded-xl"
+							onclick={() => (showModal = false)}
+						>
+							cancel
+						</Button>
+						<Button
+							type="submit"
+							disabled={isLoading}
+							class="rounded-xl"
+						>
+							{isLoading
+								? "saving..."
+								: modalMode === "create"
+									? "add model"
+									: "save changes"}
+						</Button>
+					</div>
 				</CardFooter>
 			</form>
 		</Card>

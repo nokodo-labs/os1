@@ -80,6 +80,10 @@ export const api = {
 		return apiClient.patch<Provider>(`/providers/${id}`, data);
 	},
 
+	async deleteProvider(id: string): Promise<void> {
+		return apiClient.delete(`/providers/${id}`);
+	},
+
 	async getModels(): Promise<Model[]> {
 		return apiClient.get<Model[]>("/models");
 	},
