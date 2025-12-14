@@ -14,7 +14,6 @@ async def test_create_user(client: AsyncClient) -> None:
 	"""Test creating a new user."""
 	user_data = {
 		"email": "test@example.com",
-		"username": "testuser",
 		"password": "testpassword123",
 		"is_active": True,
 		"is_superuser": False,
@@ -25,7 +24,6 @@ async def test_create_user(client: AsyncClient) -> None:
 
 	data = response.json()
 	assert data["email"] == user_data["email"]
-	assert data["username"] == user_data["username"]
 	assert "id" in data
 	assert "created_at" in data
 
@@ -44,7 +42,6 @@ async def test_get_user_by_id(client: AsyncClient) -> None:
 	# First create a user
 	user_data = {
 		"email": "test2@example.com",
-		"username": "testuser2",
 		"password": "testpassword123",
 	}
 	create_response = await client.post("/v1/users", json=user_data)
@@ -72,7 +69,6 @@ async def test_create_duplicate_user(client: AsyncClient) -> None:
 	"""Test creating a user with an existing email."""
 	user_data = {
 		"email": "duplicate@example.com",
-		"username": "duplicate",
 		"password": "password",
 	}
 	# Create first user
@@ -90,14 +86,12 @@ async def test_service_create_user(db_session: AsyncSession) -> None:
 	"""Test creating a user directly via service."""
 	user_in = UserCreate(
 		email="service_test@example.com",
-		username="service_test",
 		password="password123",
 		is_active=True,
 		is_superuser=False,
 	)
 	user = await user_service.create_user(user_in, db_session)
 	assert user.email == user_in.email
-	assert user.username == user_in.username
 	assert user.id is not None
 
 
@@ -107,7 +101,6 @@ async def test_service_get_user(db_session: AsyncSession) -> None:
 	# Create user first
 	user_in = UserCreate(
 		email="service_get@example.com",
-		username="service_get",
 		password="password123",
 	)
 	created_user = await user_service.create_user(user_in, db_session)
@@ -125,7 +118,6 @@ async def test_service_list_users(db_session: AsyncSession) -> None:
 	for i in range(3):
 		user_in = UserCreate(
 			email=f"list_{i}@example.com",
-			username=f"list_{i}",
 			password="password123",
 		)
 		await user_service.create_user(user_in, db_session)
@@ -147,7 +139,6 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 	"""Test creating a duplicate user directly via service."""
 	user_in = UserCreate(
 		email="duplicate_service@example.com",
-		username="duplicate_service",
 		password="password123",
 	)
 	await user_service.create_user(user_in, db_session)

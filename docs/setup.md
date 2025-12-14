@@ -39,15 +39,21 @@ Search and replace throughout the codebase:
 
 ```bash
 cd .docker
-docker compose up -d
+docker compose --profile deps up -d
 ```
 
-Access:
+This boots Postgres locally so you can run the backend/frontend straight from your IDE with instant reloads and debuggers.
 
--   Frontend: http://localhost (Nginx)
--   Backend: http://localhost:8000
+Need to preview the full containerized stack? `docker compose --profile local up -d` is available in this folder.
 
 ## Local Development
+
+> Start Postgres before running any app processes:
+>
+> ```bash
+> cd .docker
+> docker compose --profile deps up -d
+> ```
 
 ### Backend
 
@@ -124,21 +130,26 @@ The template includes comprehensive VS Code integration that works automatically
 
 ```bash
 cd .docker
-docker compose up db -d
+docker compose --profile deps up -d
 ```
 
 ## Testing
+
+> Tests require a running Postgres instance. Start the dependency compose file (see above) or ensure `DATABASE_URL` points at a reachable Postgres database.
 
 ```bash
 # Backend
 cd backend
 pytest -v
-pytest --cov=app tests/
+pytest --cov=api --cov=nokodo_ai
 
 # Frontend
 cd frontend
 npm run test
 ```
+
+-   Set `TEST_DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db_name` to override the template used for per-test disposable databases.
+-   Set `TEST_DATABASE_ADMIN_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres` only if `TEST_DATABASE_URL` does not have permission to create/drop databases.
 
 ## Docker Commands
 
@@ -146,15 +157,18 @@ npm run test
 cd .docker
 
 # Start/stop
-docker compose up -d
-docker compose down
-docker compose down -v  # Delete volumes
+docker compose --profile deps up -d        # Dependencies only
+docker compose --profile local up -d       # Full local stack
+docker compose down                        # Stop whatever is running
+docker compose down -v                     # Stop and delete volumes
+docker compose -f docker-compose.production.yml up -d     # Production-style run
+docker compose -f docker-compose.production.yml down
 
 # Logs
 docker compose logs -f [service]
 
-# Rebuild
-docker compose up -d --build
+# Rebuild local stack
+docker compose --profile local up -d --build
 ```
 
 ## Database Migrations
@@ -188,23 +202,16 @@ CI/CD automatically builds and publishes Docker images to GitHub Container Regis
 **Deploy with pre-built images:**
 
 ```bash
-# Create production compose file
 cd .docker
-
-# Update docker-compose.yml to use GHCR images:
-# Change build: context to: image: ghcr.io/your-org/your-repo:latest
-
-# Pull and start
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.production.yml pull
+docker compose -f docker-compose.production.yml up -d
 ```
 
 ### Building Locally
 
 ```bash
 cd .docker
-docker compose build
-docker compose up -d
+docker compose --profile local up -d --build
 ```
 
 Frontend served via Nginx on http://localhost
@@ -218,29 +225,28 @@ Frontend served via Nginx on http://localhost
 #### backend/.env
 
 ```
-DATABASE_URL=postgresql+psycopg://user:password@db:5432/app_db
+DATABASE_URL=postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-production
 SECRET_KEY=generate-secure-random-key-here
 DEBUG=False
 APP_ENV=production
 CORS_ORIGINS='["https://yourdomain.com"]'
 ```
 
-#### docker-compose.yml
+#### docker-compose.production.yml
 
-Update the following in `.docker/docker-compose.yml`:
+Update the following in `.docker/docker-compose.production.yml`:
 
 1. **Database credentials**: Change `POSTGRES_PASSWORD`
 2. **Backend SECRET_KEY**: Use a secure random key
 3. **CORS_ORIGINS**: Add your production domain(s)
-4. **Image sources**: Switch from `build:` to `image: ghcr.io/your-org/your-repo:latest`
 
 ### Deployment Steps
 
-1. **Configure environment** - Update `.env` files and `docker-compose.yml`
-2. **Pull images** - `docker compose pull` (or build locally)
-3. **Start services** - `docker compose up -d`
-4. **Run migrations** - `docker compose exec backend alembic -c api/migrations/alembic.ini upgrade head`
-5. **Verify** - Check logs with `docker compose logs -f`
+1. **Configure environment** - Update `.env` files and `.docker/docker-compose.production.yml`
+2. **Pull images** - `docker compose -f docker-compose.production.yml pull` (or build locally)
+3. **Start services** - `docker compose -f docker-compose.production.yml up -d`
+4. **Run migrations** - `docker compose -f docker-compose.production.yml exec backend alembic -c api/migrations/alembic.ini upgrade head`
+5. **Verify** - Check logs with `docker compose -f docker-compose.production.yml logs -f`
 
 ### Container Registry Access
 
@@ -251,20 +257,20 @@ Images are public by default. For private images:
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Pull images
-docker compose pull
+docker compose -f docker-compose.production.yml pull
 ```
 
 ### Updating Production
 
 ```bash
 # Pull latest images
-docker compose pull
+docker compose -f docker-compose.production.yml pull
 
 # Restart with new images
-docker compose up -d
+docker compose -f docker-compose.production.yml up -d
 
 # Run any new migrations
-docker compose exec backend alembic -c api/migrations/alembic.ini upgrade head
+docker compose -f docker-compose.production.yml exec backend alembic -c api/migrations/alembic.ini upgrade head
 ```
 
 ### Optional: GitHub Pages (Frontend Only)
@@ -278,10 +284,14 @@ Configure in repository settings: Settings → Pages → Source: GitHub Actions
 ### backend/.env
 
 ```
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/app_db
+DATABASE_URL=postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev
+TEST_DATABASE_URL=postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev
+TEST_DATABASE_ADMIN_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres
 DEBUG=True
 SECRET_KEY=change-in-production
 ```
+
+Optional: override `TEST_DATABASE_URL` when you want pytest to create databases from a different template, and set `TEST_DATABASE_ADMIN_URL` when the Postgres superuser credentials differ from your application credentials. The test harness now creates and drops a unique Postgres database for every test case using these values.
 
 ### frontend/.env
 
@@ -295,12 +305,14 @@ VITE_PAGES=false
 ### Docker (from .docker/)
 
 ```bash
-docker compose up -d              # Start all services
-docker compose down               # Stop services
-docker compose down -v            # Stop and remove volumes
-docker compose logs -f [service]  # View logs
-docker compose up -d --build      # Rebuild and start
-docker compose --profile dev up   # Dev mode (hot reload)
+docker compose --profile deps up -d        # Start shared services only
+docker compose --profile local up -d       # Full stack (backend + frontend)
+docker compose down                        # Stop services
+docker compose down -v                     # Stop and remove volumes
+docker compose logs -f [service]           # View logs
+docker compose --profile local up -d --build   # Rebuild and start
+docker compose -f docker-compose.production.yml up -d   # Production stack
+docker compose -f docker-compose.production.yml down
 ```
 
 ### Backend (from backend/)

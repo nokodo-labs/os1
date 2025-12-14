@@ -237,6 +237,20 @@
 			}
 		},
 		{
+			"label": "Docker: Dev Dependencies",
+			"type": "shell",
+			"command": "docker compose --profile deps up -d",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "never",
+				"panel": "dedicated"
+			}
+		},
+		{
 			"label": "Docker: Build All",
 			"type": "shell",
 			"command": "docker compose build",
@@ -253,7 +267,7 @@
 		{
 			"label": "Docker: Up",
 			"type": "shell",
-			"command": "docker compose up -d",
+			"command": "docker compose --profile local up -d",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
@@ -280,7 +294,7 @@
 		{
 			"label": "Docker: Dev Mode",
 			"type": "shell",
-			"command": "docker compose --profile dev up -d",
+			"command": "docker compose --profile local up -d --build",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},

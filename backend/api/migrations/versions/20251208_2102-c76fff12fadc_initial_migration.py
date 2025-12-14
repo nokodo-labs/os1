@@ -33,7 +33,6 @@ def upgrade() -> None:
 		"users",
 		sa.Column("id", sa.Integer(), nullable=False),
 		sa.Column("email", sa.String(length=255), nullable=False),
-		sa.Column("username", sa.String(length=100), nullable=False),
 		sa.Column("display_name", sa.String(length=150), nullable=True),
 		sa.Column("avatar_url", sa.String(length=512), nullable=True),
 		sa.Column("hashed_password", sa.String(length=255), nullable=False),
@@ -58,7 +57,6 @@ def upgrade() -> None:
 		sa.ForeignKeyConstraint(["role_id"], ["roles.id"]),
 		sa.PrimaryKeyConstraint("id"),
 	)
-	op.create_index("ix_users_username", "users", ["username"], unique=True)
 	op.create_index("ix_users_id", "users", ["id"], unique=False)
 	op.create_index("ix_users_email", "users", ["email"], unique=True)
 

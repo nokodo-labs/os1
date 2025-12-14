@@ -270,7 +270,7 @@ def configure_logging(
 	sa.setLevel(logging.INFO if settings.DEBUG else logging.WARNING)
 
 	# suppress noisy third-party loggers
-	for name in ("httpcore", "httpx", "watchfiles", "aiosqlite"):
+	for name in ("httpcore", "httpx", "watchfiles"):
 		logging.getLogger(name).setLevel(logging.WARNING)
 
 

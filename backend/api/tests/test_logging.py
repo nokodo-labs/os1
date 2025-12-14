@@ -434,7 +434,7 @@ class TestConfigureLogging:
 			mock_settings.APP_ENV = "dev"
 			configure_logging(json_logs=False)
 
-		for name in ("httpcore", "httpx", "watchfiles", "aiosqlite"):
+		for name in ("httpcore", "httpx", "watchfiles"):
 			logger = logging.getLogger(name)
 			assert logger.level == logging.WARNING
 

@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: nokodo-ai-prod-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nokodo-ai-admin
+      POSTGRES_PASSWORD: nokodo-ai
+      POSTGRES_DB: nokodo-ai-production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ghcr.io/nokodo-labs/nokodo-ai-backend:latest
+    container_name: nokodo-ai-prod-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-production
+      APP_ENV: production
+      DEBUG: "False"
+      SECRET_KEY: change-this-in-production
+      CORS_ORIGINS: '["https://app.yourdomain.com"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../backend/data:/app/data
+
+  frontend:
+    image: ghcr.io/nokodo-labs/nokodo-ai-frontend:latest
+    container_name: nokodo-ai-prod-frontend
+    restart: unless-stopped
+    ports:
+      - "888:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+  console:
+    image: ghcr.io/nokodo-labs/nokodo-ai-console:latest
+    container_name: nokodo-ai-prod-console
+    restart: unless-stopped
+    ports:
+      - "8383:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: nokodo-network

@@ -38,3 +38,18 @@ class Model(ModelBase):
 	provider_id: str
 	created_at: datetime
 	updated_at: datetime
+
+
+class ModelUpdate(MetadataModel):
+	"""Payload to update a model."""
+
+	name: str | None = None
+	display_name: str | None = None
+	model_type: ModelType | None = None
+	endpoint: str | None = None
+	capabilities: list[str] | None = None
+	context_window: int | None = None
+	input_cost: float | None = None
+	output_cost: float | None = None
+	enabled: bool | None = None
+	is_autofetched: bool | None = None

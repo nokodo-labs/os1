@@ -17,7 +17,6 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	"""User can obtain a token and fetch their user resource via /users/{id}."""
 	user_payload = {
 		"email": "auth-flow@example.com",
-		"username": "auth-flow",
 		"password": "passw0rd!",
 	}
 	create_resp = await client.post("/v1/users", json=user_payload)
@@ -38,7 +37,6 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	assert me_resp.status_code == 200
 	me_data = me_resp.json()
 	assert me_data["email"] == user_payload["email"]
-	assert me_data["username"] == user_payload["username"]
 
 
 @pytest.mark.asyncio
@@ -46,7 +44,6 @@ async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 	"""Incorrect password should produce HTTP 400."""
 	user_payload = {
 		"email": "auth-fail@example.com",
-		"username": "auth-fail",
 		"password": "correct-password",
 	}
 	create_resp = await client.post("/v1/users", json=user_payload)
@@ -65,7 +62,6 @@ async def test_login_inactive_user_rejected(client: AsyncClient) -> None:
 	"""Inactive users should not receive tokens."""
 	user_payload = {
 		"email": "inactive@example.com",
-		"username": "inactive-user",
 		"password": "correct-password",
 		"is_active": False,
 	}
@@ -96,7 +92,6 @@ async def test_service_authenticate_user(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="auth_service@example.com",
-		username="auth_service",
 		password="password123",
 	)
 	await user_service.create_user(user_in, db_session)

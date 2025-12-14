@@ -4,7 +4,6 @@ this directory is for application data storage.
 
 ## contents
 
--   `app.db` - sqlite database (dev only)
 -   `htmlcov/` - test coverage reports
 -   `.coverage` - coverage data file
 

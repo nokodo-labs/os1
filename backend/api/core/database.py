@@ -1,6 +1,7 @@
 """Database configuration and session management."""
 
 import asyncio
+import sys
 from collections.abc import AsyncGenerator
 from functools import partial
 from pathlib import Path
@@ -19,6 +20,16 @@ from api.core.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def _configure_psycopg_asyncio_event_loop_policy() -> None:
+	"""Ensure psycopg runs on a selector event loop on Windows."""
+	# psycopg async mode is not compatible with Windows' default Proactor event loop.
+	if sys.platform == "win32":
+		asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
+_configure_psycopg_asyncio_event_loop_policy()
 
 
 class Base(DeclarativeBase):

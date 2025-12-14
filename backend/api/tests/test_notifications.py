@@ -18,7 +18,6 @@ async def notification_fixture(db_session: AsyncSession):
 	# Create user
 	user_in = UserCreate(
 		email="notif_test@example.com",
-		username="notif_test",
 		password="password123",
 	)
 	user = await user_service.create_user(user_in, db_session)

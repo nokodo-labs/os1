@@ -132,7 +132,6 @@ async def test_service_create_task(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="task_service@example.com",
-		username="task_service",
 		password="password123",
 	)
 	user = await user_service.create_user(user_in, db_session)
@@ -154,7 +153,6 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="task_list@example.com",
-		username="task_list",
 		password="password123",
 	)
 	user = await user_service.create_user(user_in, db_session)
@@ -184,7 +182,6 @@ async def test_service_update_task(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="task_update@example.com",
-		username="task_update",
 		password="password123",
 	)
 	user = await user_service.create_user(user_in, db_session)
@@ -218,7 +215,6 @@ async def test_service_update_task_no_changes(db_session: AsyncSession) -> None:
 	# Create user and task
 	user_in = UserCreate(
 		email="task_no_change@example.com",
-		username="task_no_change",
 		password="password123",
 	)
 	user = await user_service.create_user(user_in, db_session)

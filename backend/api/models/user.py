@@ -30,7 +30,6 @@ class User(Base):
 
 	id: Mapped[int] = mapped_column(primary_key=True, index=True)
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-	username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
 	display_name: Mapped[str | None] = mapped_column(String(150))
 	avatar_url: Mapped[str | None] = mapped_column(String(512))
 	hashed_password: Mapped[str] = mapped_column(String(255))

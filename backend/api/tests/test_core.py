@@ -18,13 +18,13 @@ class _DummySession:
 		self.rolled_back = False
 		self.closed = False
 
-	async def commit(self) -> None:  # pragma: no cover - exercised via get_db
+	async def commit(self) -> None:
 		self.committed = True
 
-	async def rollback(self) -> None:  # pragma: no cover - exercised via get_db
+	async def rollback(self) -> None:
 		self.rolled_back = True
 
-	async def close(self) -> None:  # pragma: no cover - exercised via get_db
+	async def close(self) -> None:
 		self.closed = True
 
 
@@ -38,7 +38,7 @@ class _DummySessionContext:
 	async def __aenter__(self) -> _DummySession:
 		return self._session
 
-	async def __aexit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - trivial
+	async def __aexit__(self, exc_type, exc, tb) -> None:
 		self.exited = True
 
 
@@ -68,7 +68,7 @@ class _DummyEngine:
 
 
 def test_settings_parse_cors_origins_from_string() -> None:
-	settings = Settings(CORS_ORIGINS="https://a.com, https://b.com")
+	settings = Settings.model_validate({"CORS_ORIGINS": "https://a.com, https://b.com"})
 	assert settings.CORS_ORIGINS == ["https://a.com", "https://b.com"]
 
 
@@ -80,6 +80,23 @@ def test_settings_validate_database_url_scheme() -> None:
 def test_settings_accepts_supported_database_url() -> None:
 	settings = Settings(DATABASE_URL="postgresql://user@localhost/db")
 	assert settings.DATABASE_URL.startswith("postgresql://")
+
+
+def test_psycopg_event_loop_policy_noop_off_windows(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Policy helper should be a no-op when not on Windows."""
+	called = False
+
+	def _mark_called(_policy) -> None:
+		nonlocal called
+		called = True
+
+	monkeypatch.setattr(database_module.sys, "platform", "linux")
+	monkeypatch.setattr(database_module.asyncio, "set_event_loop_policy", _mark_called)
+	# Call helper again under a non-windows platform
+	database_module._configure_psycopg_asyncio_event_loop_policy()
+	assert called is False
 
 
 @pytest.mark.asyncio
@@ -162,6 +179,29 @@ async def test_init_db_masks_url_credentials(
 	record = caplog.records[0]
 	assert record.message == "initializing database"
 	assert getattr(record, "url", None) == "postgresql://***@localhost:5432/db"
+
+
+@pytest.mark.asyncio
+async def test_init_db_logs_plain_url_when_no_credentials(
+	monkeypatch: pytest.MonkeyPatch,
+	caplog: pytest.LogCaptureFixture,
+) -> None:
+	"""init_db should log the URL unchanged when it contains no credentials."""
+	mock_upgrade = MagicMock()
+	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
+
+	class MockSettings:
+		DATABASE_URL = "postgresql://localhost:5432/db"
+		DEBUG = False
+
+	monkeypatch.setattr(database_module, "settings", MockSettings())
+
+	await database_module.init_db()
+
+	assert "initializing database" in caplog.text
+	record = caplog.records[0]
+	assert record.message == "initializing database"
+	assert getattr(record, "url", None) == "postgresql://localhost:5432/db"
 
 
 @pytest.mark.asyncio

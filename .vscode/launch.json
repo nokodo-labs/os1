@@ -6,6 +6,7 @@
 			"type": "debugpy",
 			"request": "launch",
 			"module": "uvicorn",
+			"preLaunchTask": "Docker: Dev Dependencies",
 			"args": [
 				"api.main:app",
 				"--reload",

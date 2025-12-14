@@ -16,7 +16,6 @@ async def memory_user(db_session: AsyncSession):
 	"""Create a user for memory tests."""
 	user_in = UserCreate(
 		email="memory_test@example.com",
-		username="memory_test",
 		password="password123",
 	)
 	return await user_service.create_user(user_in, db_session)

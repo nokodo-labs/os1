@@ -1,86 +1,72 @@
 services:
-  # PostgreSQL Database
   db:
     image: postgres:17-alpine
-    container_name: monorepo-db
+    container_name: nokodo-ai-db
     restart: unless-stopped
     environment:
-      # Database credentials - change for production
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres # TODO: Change in production
-      POSTGRES_DB: app_db
+      POSTGRES_USER: nokodo-ai-admin
+      POSTGRES_PASSWORD: nokodo-ai
+      POSTGRES_DB: nokodo-ai-dev
     ports:
-      # Change host port if 5432 is already in use
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
       interval: 10s
       timeout: 5s
       retries: 5
+    profiles: ["deps", "local"]
 
-  # FastAPI Backend
   backend:
     build:
       context: ../backend
       dockerfile: ../.docker/Dockerfile.backend
-    container_name: monorepo-backend
+    container_name: nokodo-ai-backend
     restart: unless-stopped
     ports:
-      # Backend API port - change if needed
       - "8000:8000"
     environment:
-      # Database connection (must match db service credentials)
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/app_db
-
-      # Application settings
-      APP_ENV: production # Options: development, staging, production
-      DEBUG: "False" # Set to "True" only for development
-
-      # Security - MUST change in production
-      SECRET_KEY: CHANGE-THIS-SECRET-KEY-IN-PRODUCTION
-
-      # CORS origins - add your frontend domains
-      CORS_ORIGINS: '["http://localhost", "https://yourdomain.com"]'
-
-      # API prefix
-      V1_PREFIX: /v1
+      DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-dev
+      APP_ENV: dev
+      DEBUG: "True"
+      SECRET_KEY: dev-secret-key-change-in-production
+      CORS_ORIGINS: '["http://localhost:888", "http://localhost:8383", "http://localhost:3000"]'
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      # Mount data directory for file storage
-      - ../backend/data:/app/data
-      # Hot reload for development (remove in production)
       - ../backend:/app
+      - ../backend/data:/app/data
       - /app/__pycache__
-    # Development command (replace with production command)
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    profiles: ["local"]
 
-  # Svelte Frontend (Nginx)
   frontend:
     build:
       context: ../frontend
       dockerfile: ../.docker/Dockerfile.frontend
-    container_name: monorepo-frontend
+    container_name: nokodo-ai-frontend
     restart: unless-stopped
     ports:
       - "888:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+    profiles: ["local"]
 
-  # Admin Console (Nginx)
   console:
     build:
       context: ../console
       dockerfile: ../.docker/Dockerfile.console
-    container_name: monorepo-console
+    container_name: nokodo-ai-console
     restart: unless-stopped
     ports:
       - "8383:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+    profiles: ["local"]
 
 volumes:
   postgres_data:
@@ -88,4 +74,4 @@ volumes:
 
 networks:
   default:
-    name: monorepo-network
+    name: nokodo-network

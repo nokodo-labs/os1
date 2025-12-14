@@ -28,9 +28,10 @@ class Settings(BaseSettings):
 	ALGORITHM: str = "HS256"
 	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-	# Database
-	# Provide a safe default for dev/CI; env can override to Postgres in real deployment
-	DATABASE_URL: str = "sqlite+aiosqlite:///./data/app.db"
+	# Database (Postgres everywhere: dev, tests, prod)
+	DATABASE_URL: str = (
+		"postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev"
+	)
 
 	# Testing
 	TESTING: bool = False
@@ -54,7 +55,7 @@ class Settings(BaseSettings):
 	@classmethod
 	def validate_database_url(cls, v: str) -> str:
 		"""Ensure supported DB URL schemes only."""
-		allowed = {"postgresql", "postgresql+psycopg", "sqlite+aiosqlite"}
+		allowed = {"postgresql", "postgresql+psycopg"}
 		scheme = v.split(":", 1)[0]
 		if scheme not in allowed:
 			raise ValueError(f"Unsupported DATABASE_URL scheme: {scheme}")

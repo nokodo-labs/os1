@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import EventScope
 from api.models.notification import Notification
+from api.models.task import Task, TaskType
+from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.event import EventCreate
 from api.v1.service import events as event_service
@@ -22,7 +24,6 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 	# Create user
 	user = User(
 		email="event@example.com",
-		username="event",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -61,7 +62,6 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Create user
 	user = User(
 		email="list_event@example.com",
-		username="list_event",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -95,25 +95,35 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	)
 
 	# Emit event with thread_id
+	thread = Thread(owner_id=user.id, title="test thread")
+	db_session.add(thread)
+	await db_session.commit()
+	await db_session.refresh(thread)
+
 	event3 = await event_service.emit_event(
 		EventCreate(
 			scope=EventScope.THREAD,
-			scope_id="thread-1",
+			scope_id=str(thread.id),
 			type="test.event.3",
 			data={},
-			thread_id="thread-1",
+			thread_id=str(thread.id),
 		),
 		db_session,
 	)
 
 	# Emit event with task_id
+	task = Task(user_id=user.id, task_type=TaskType.CUSTOM)
+	db_session.add(task)
+	await db_session.commit()
+	await db_session.refresh(task)
+
 	event4 = await event_service.emit_event(
 		EventCreate(
 			scope=EventScope.TASK,
-			scope_id="task-1",
+			scope_id=str(task.id),
 			type="test.event.4",
 			data={},
-			task_id="task-1",
+			task_id=str(task.id),
 		),
 		db_session,
 	)
@@ -142,12 +152,14 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	assert len(future_events) == 0
 
 	# Filter by thread_id
-	thread_events = await event_service.list_events(db_session, thread_id="thread-1")
+	thread_events = await event_service.list_events(
+		db_session, thread_id=str(thread.id)
+	)
 	assert len(thread_events) == 1
 	assert thread_events[0].id == event3.id
 
 	# Filter by task_id
-	task_events = await event_service.list_events(db_session, task_id="task-1")
+	task_events = await event_service.list_events(db_session, task_id=str(task.id))
 	assert len(task_events) == 1
 	assert task_events[0].id == event4.id
 

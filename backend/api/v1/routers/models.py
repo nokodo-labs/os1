@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.models.model import Model
 from api.schemas.model import Model as ModelSchema
-from api.schemas.model import ModelCreate
+from api.schemas.model import ModelCreate, ModelUpdate
 from api.v1.service import models as model_service
 
 
@@ -40,3 +40,22 @@ async def get_model(
 ) -> Model:
 	"""Fetch a single model."""
 	return await model_service.get_model(model_id, db)
+
+
+@router.patch("/{model_id}", response_model=ModelSchema)
+async def update_model(
+	model_id: str,
+	model_in: ModelUpdate,
+	db: AsyncSession = Depends(get_db),
+) -> Model:
+	"""Update a model."""
+	return await model_service.update_model(model_id, model_in, db)
+
+
+@router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_model(
+	model_id: str,
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""Delete a model."""
+	await model_service.delete_model(model_id, db)

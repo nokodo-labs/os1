@@ -10,7 +10,6 @@ class UserBase(BaseModel):
 	"""Base user schema."""
 
 	email: EmailStr
-	username: str
 	display_name: str | None = None
 	avatar_url: str | None = None
 	is_active: bool = True
@@ -30,7 +29,6 @@ class UserUpdate(BaseModel):
 	"""Schema for updating a user."""
 
 	email: EmailStr | None = None
-	username: str | None = None
 	password: str | None = None
 	is_active: bool | None = None
 	display_name: str | None = None

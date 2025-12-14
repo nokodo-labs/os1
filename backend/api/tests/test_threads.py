@@ -24,7 +24,6 @@ async def test_thread_project_association(
 	"""Threads can belong to multiple projects and be reassigned."""
 	user_payload = {
 		"email": "owner@example.com",
-		"username": "owner",
 		"password": "supersecret",
 		"display_name": "Thread Owner",
 	}
@@ -64,7 +63,6 @@ async def test_create_thread_basic(client: AsyncClient) -> None:
 	"""Test creating a thread without projects."""
 	user_payload = {
 		"email": "basic@example.com",
-		"username": "basic",
 		"password": "password",
 	}
 	user_resp = await client.post("/v1/users", json=user_payload)
@@ -88,7 +86,6 @@ async def test_list_threads(client: AsyncClient) -> None:
 	"""Test listing threads."""
 	user_payload = {
 		"email": "list@example.com",
-		"username": "list",
 		"password": "password",
 	}
 	user_resp = await client.post("/v1/users", json=user_payload)
@@ -111,7 +108,6 @@ async def test_thread_messages(client: AsyncClient) -> None:
 	"""Test creating and listing messages in a thread."""
 	user_payload = {
 		"email": "msg@example.com",
-		"username": "msg",
 		"password": "password",
 	}
 	user_resp = await client.post("/v1/users", json=user_payload)
@@ -159,7 +155,6 @@ async def test_create_thread_invalid_project(client: AsyncClient) -> None:
 	"""Test creating a thread with non-existent project."""
 	user_payload = {
 		"email": "proj@example.com",
-		"username": "proj",
 		"password": "password",
 	}
 	user_resp = await client.post("/v1/users", json=user_payload)
@@ -183,7 +178,6 @@ async def test_service_create_thread(db_session: AsyncSession) -> None:
 
 	user = User(
 		email="service@example.com",
-		username="service",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -222,7 +216,6 @@ async def test_update_thread_owner(
 		"/v1/users",
 		json={
 			"email": "u1@example.com",
-			"username": "u1",
 			"password": "password",
 		},
 	)
@@ -232,7 +225,6 @@ async def test_update_thread_owner(
 		"/v1/users",
 		json={
 			"email": "u2@example.com",
-			"username": "u2",
 			"password": "password",
 		},
 	)

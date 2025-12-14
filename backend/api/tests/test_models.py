@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.model import ModelType
-from api.schemas.model import ModelCreate
+from api.schemas.model import ModelCreate, ModelUpdate
 from api.schemas.provider import ProviderCreate
 from api.v1.service import models as model_service
 from api.v1.service import providers as provider_service
@@ -128,3 +128,68 @@ async def test_models_router_endpoints(client: AsyncClient) -> None:
 	detail_resp = await client.get(f"/v1/models/{model_id}")
 	assert detail_resp.status_code == 200
 	assert detail_resp.json()["id"] == model_id
+
+	filtered_list_resp = await client.get(f"/v1/models?provider_id={provider_id}")
+	assert filtered_list_resp.status_code == 200
+	assert any(item["id"] == model_id for item in filtered_list_resp.json())
+
+	update_resp = await client.patch(
+		f"/v1/models/{model_id}",
+		json={"name": "models-router-updated"},
+	)
+	assert update_resp.status_code == 200
+	assert update_resp.json()["name"] == "models-router-updated"
+
+	delete_resp = await client.delete(f"/v1/models/{model_id}")
+	assert delete_resp.status_code == 204
+
+	not_found_resp = await client.get(f"/v1/models/{model_id}")
+	assert not_found_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_model_service(db_session: AsyncSession) -> None:
+	provider = await provider_service.create_provider(
+		ProviderCreate(name="P_Update", adapter_type="openai"), db_session
+	)
+	model = await model_service.create_model(
+		ModelCreate(
+			provider_id=provider.id,
+			name="m_update",
+			model_type=ModelType.LLM,
+			capabilities=[],
+			enabled=True,
+		),
+		db_session,
+	)
+
+	updated = await model_service.update_model(
+		model.id,
+		ModelUpdate(name="m_updated", enabled=False),
+		db_session,
+	)
+	assert updated.id == model.id
+	assert updated.name == "m_updated"
+	assert updated.enabled is False
+
+
+@pytest.mark.asyncio
+async def test_delete_model_service(db_session: AsyncSession) -> None:
+	provider = await provider_service.create_provider(
+		ProviderCreate(name="P_Delete", adapter_type="openai"), db_session
+	)
+	model = await model_service.create_model(
+		ModelCreate(
+			provider_id=provider.id,
+			name="m_delete",
+			model_type=ModelType.LLM,
+			capabilities=[],
+			enabled=True,
+		),
+		db_session,
+	)
+
+	await model_service.delete_model(model.id, db_session)
+	with pytest.raises(HTTPException) as exc:
+		await model_service.get_model(model.id, db_session)
+	assert exc.value.status_code == 404

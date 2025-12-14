@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.model import Model
 from api.models.provider import Provider
-from api.schemas.model import ModelCreate
+from api.schemas.model import ModelCreate, ModelUpdate
 
 
 async def _ensure_provider(provider_id: str, session: AsyncSession) -> None:
@@ -62,3 +62,22 @@ async def list_models(
 
 async def get_model(model_id: str, session: AsyncSession) -> Model:
 	return await _get_model(model_id, session)
+
+
+async def update_model(
+	model_id: str, model_in: ModelUpdate, session: AsyncSession
+) -> Model:
+	model = await _get_model(model_id, session)
+
+	update_data = model_in.model_dump(exclude_unset=True)
+	for field, value in update_data.items():
+		setattr(model, field, value)
+
+	await session.commit()
+	return await _get_model(model_id, session)
+
+
+async def delete_model(model_id: str, session: AsyncSession) -> None:
+	model = await _get_model(model_id, session)
+	await session.delete(model)
+	await session.commit()
