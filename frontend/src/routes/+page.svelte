@@ -3,6 +3,7 @@
     import { resolve } from '$app/paths'
     import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
     import AppsGrid from '$lib/components/home/AppsGrid.svelte'
+    import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
     import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
     import { fade } from 'svelte/transition'
 
@@ -11,6 +12,7 @@
     let selectedModel = $state('gpt-4')
 
     const chrome = useSystemChrome()
+    const debugUi = useDebugUi()
 
     $effect(() => {
         chrome.setAgentSelector({
@@ -93,7 +95,7 @@
                 class="absolute top-full right-0 left-0 mt-14"
                 style="view-transition-name: apps-grid;"
             >
-                <AppsGrid />
+                <AppsGrid iconShape={debugUi.appsGridIconShape} />
             </div>
         </div>
     </div>

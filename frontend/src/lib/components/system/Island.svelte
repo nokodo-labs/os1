@@ -1,6 +1,7 @@
 <script lang="ts">
     import { goto } from '$app/navigation'
     import { resolve } from '$app/paths'
+    import { page } from '$app/state'
     import AppNotification from '$lib/components/icons/AppNotification.svelte'
     import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
     import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
@@ -8,6 +9,7 @@
     import UserProfileTrigger from '$lib/components/sidebar/UserProfileTrigger.svelte'
     import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
     import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+    import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
 
     interface Agent {
         id: string
@@ -89,6 +91,16 @@
         sidebar?.selectChat?.(null)
         const tempId = `temp-${Date.now()}`
         navigateWithTransition(`/chats/${tempId}`)
+    }
+
+    const isTemporaryChatActive = $derived((page.params as { id?: string }).id?.startsWith('temp-'))
+
+    function handleTemporaryChatToggle() {
+        if (isTemporaryChatActive) {
+            handleHome()
+            return
+        }
+        handleTemporaryChat()
     }
 
     $effect(() => {
@@ -178,10 +190,14 @@
 
                     <button
                         class="flex h-12 w-12 items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-                        onclick={handleTemporaryChat}
+                        onclick={handleTemporaryChatToggle}
                         aria-label="temporary chat"
                     >
-                        <ChatBubbleDotted className="h-6 w-6" />
+                        {#if isTemporaryChatActive}
+                            <ChatBubbleDottedChecked className="h-6 w-6" />
+                        {:else}
+                            <ChatBubbleDotted className="h-6 w-6" />
+                        {/if}
                     </button>
                 {/if}
             </div>

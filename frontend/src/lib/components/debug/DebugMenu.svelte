@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
+    import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
     import type { createThemeContext } from '$lib/contexts/themeContext.svelte'
     import {
         accentColors,
@@ -17,6 +18,8 @@
     let { theme, currentBackground = $bindable() }: Props = $props()
 
     let showDebugMenu = $state(false)
+
+    const debugUi = useDebugUi()
 
     const backgrounds: { value: BackgroundType; label: string }[] = [
         { value: 'galaxy', label: 'Galaxy' },
@@ -100,6 +103,18 @@
                         </button>
                     {/each}
                 </div>
+
+                <!-- Apps Grid -->
+                <div class="mt-4 mb-2 text-[10px] font-bold text-white/40 uppercase">Apps Grid</div>
+                <button
+                    type="button"
+                    onclick={() => debugUi.toggleAppsGridIconShape()}
+                    class="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                    aria-label="toggle apps grid icon shape"
+                >
+                    <span>toggle icon shape</span>
+                    <span class="text-white/50">{debugUi.appsGridIconShape}</span>
+                </button>
             </div>
         {/if}
     </div>

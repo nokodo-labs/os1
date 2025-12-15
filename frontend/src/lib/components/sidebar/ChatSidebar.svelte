@@ -1,6 +1,7 @@
 <script lang="ts">
     import { goto } from '$app/navigation'
     import { resolve } from '$app/paths'
+    import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
     import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
     import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
     import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
@@ -60,6 +61,14 @@
                 } else {
                     goto(resolve('/'), { keepFocus: true, noScroll: true })
                 }
+            },
+        },
+        {
+            id: 'archived-chats',
+            icon: ArchiveBox,
+            label: 'archived chats',
+            action: () => {
+                console.log('Open archived chats')
             },
         },
     ]
@@ -259,7 +268,10 @@
                     ? 'opacity-100'
                     : ''}"
             >
-                <h3 class="mb-1 px-3 text-xs font-semibold text-white/50 uppercase">chats</h3>
+                <div class="mb-1 flex items-center gap-2 px-3">
+                    <ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
+                    <h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
+                </div>
                 <ScrollArea.Root class="h-full">
                     <div class="space-y-1">
                         {#each chats as chat (chat.id)}
@@ -283,7 +295,6 @@
                                 >
                                     <div class="min-w-0 flex-1">
                                         <div class="mb-1 flex items-center gap-2">
-                                            <ChatBubble className="h-4 w-4 shrink-0" />
                                             <span
                                                 class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap"
                                                 >{chat.title}</span

@@ -26,6 +26,54 @@
     let textarea: HTMLTextAreaElement
     let isComposing = $state(false)
     let isFocused = $state(false)
+    let isAddMenuOpen = $state(false)
+
+    let fileInput: HTMLInputElement
+    let imageInput: HTMLInputElement
+
+    function closeAddMenu() {
+        isAddMenuOpen = false
+    }
+
+    function toggleAddMenu() {
+        isAddMenuOpen = !isAddMenuOpen
+    }
+
+    function handleAddMenuKeyDown(event: KeyboardEvent) {
+        if (event.key === 'Escape') {
+            event.stopPropagation()
+            closeAddMenu()
+        }
+    }
+
+    function handleClickOutside(event: MouseEvent) {
+        const target = event.target as HTMLElement
+        if (!target.closest('[data-chat-add-menu-root]')) {
+            closeAddMenu()
+        }
+    }
+
+    $effect(() => {
+        if (!isAddMenuOpen) return
+        document.addEventListener('click', handleClickOutside)
+        document.addEventListener('keydown', handleAddMenuKeyDown)
+        return () => {
+            document.removeEventListener('click', handleClickOutside)
+            document.removeEventListener('keydown', handleAddMenuKeyDown)
+        }
+    })
+
+    function handleFileSelected(event: Event) {
+        const input = event.currentTarget as HTMLInputElement
+        const files = Array.from(input.files ?? [])
+        if (files.length === 0) return
+        console.log(
+            'Selected files:',
+            files.map((f) => f.name)
+        )
+        input.value = ''
+        closeAddMenu()
+    }
 
     function handleInput() {
         if (!textarea) return
@@ -81,14 +129,17 @@
 
         <div class="liquid-glass__content relative z-10 px-1 py-1">
             <div class="flex items-center gap-2 px-2.5 py-2.5">
-                <div class="ml-1 flex shrink-0 items-center">
+                <div class="ml-1 flex shrink-0 items-center" data-chat-add-menu-root>
                     <Tooltip.Root>
                         <Tooltip.Trigger>
                             <button
                                 type="button"
                                 aria-label="Add attachment"
+                                aria-haspopup="menu"
+                                aria-expanded={isAddMenuOpen}
                                 class="flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-black/65 transition-all duration-200 hover:bg-black/5 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white/65 dark:hover:bg-white/5 dark:hover:text-white/95"
                                 {disabled}
+                                onclick={toggleAddMenu}
                             >
                                 <Plus className="h-5.5 w-5.5" strokeWidth="2" />
                             </button>
@@ -97,6 +148,44 @@
                             <p>add attachment</p>
                         </Tooltip.Content>
                     </Tooltip.Root>
+
+                    <input
+                        bind:this={fileInput}
+                        type="file"
+                        class="hidden"
+                        onchange={handleFileSelected}
+                    />
+                    <input
+                        bind:this={imageInput}
+                        type="file"
+                        accept="image/*"
+                        class="hidden"
+                        onchange={handleFileSelected}
+                    />
+
+                    {#if isAddMenuOpen}
+                        <div
+                            class="absolute bottom-full left-0 mb-3 w-56 overflow-hidden rounded-2xl border border-white/10 bg-black/85 p-1 text-white/85 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
+                            role="menu"
+                        >
+                            <button
+                                type="button"
+                                class="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+                                role="menuitem"
+                                onclick={() => fileInput?.click()}
+                            >
+                                upload file
+                            </button>
+                            <button
+                                type="button"
+                                class="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+                                role="menuitem"
+                                onclick={() => imageInput?.click()}
+                            >
+                                upload image
+                            </button>
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="flex flex-1 items-center px-1.5">

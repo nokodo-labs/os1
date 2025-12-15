@@ -6,6 +6,7 @@
     import Dock from '$lib/components/system/Dock.svelte'
     import Island from '$lib/components/system/Island.svelte'
     import * as Tooltip from '$lib/components/ui/tooltip'
+    import { createDebugUiContext } from '$lib/contexts/debugUiContext.svelte'
     import { createSidebarContext } from '$lib/contexts/sidebarContext.svelte'
     import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
     import { createThemeContext } from '$lib/contexts/themeContext.svelte'
@@ -16,6 +17,8 @@
     createSidebarContext()
     // Initialize system chrome context
     createSystemChromeContext()
+    // DEV ONLY: Debug UI state (persisted locally)
+    createDebugUiContext()
     // Initialize theme context
     const theme = createThemeContext()
 

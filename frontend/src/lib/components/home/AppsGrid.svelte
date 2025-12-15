@@ -26,6 +26,14 @@
         icon: IconComponent
     }
 
+    type IconShape = 'default' | 'circle'
+
+    interface Props {
+        iconShape?: IconShape
+    }
+
+    let { iconShape = 'default' }: Props = $props()
+
     const apps: AppDefinition[] = [
         { id: 'notes', title: 'notes', icon: Document },
         { id: 'reminders', title: 'reminders', icon: CheckBox },
@@ -49,8 +57,8 @@
     const TILE_PX = 76
     const LABEL_PX = 18
     const TILE_TO_LABEL_GAP_PX = 8
-    const GRID_GAP_X_PX = 18
-    const GRID_GAP_Y_PX = 22
+    const GRID_GAP_X_PX = 30
+    const GRID_GAP_Y_PX = 35
     const INDICATOR_SPACE_PX = 28
     const BOTTOM_PADDING_PX = 12
 
@@ -139,7 +147,10 @@
                                 aria-label={app.title}
                             >
                                 <div
-                                    class="liquid-glass flex items-center justify-center rounded-3xl shadow-[0_24px_48px_rgba(12,10,30,0.35)] transition-transform duration-150 group-hover:scale-[1.03] group-active:scale-[0.99]"
+                                    class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] transition-transform duration-150 group-hover:scale-[1.03] group-active:scale-[0.99] {iconShape ===
+                                    'circle'
+                                        ? 'rounded-full'
+                                        : 'rounded-3xl'}"
                                     style="width: {TILE_PX}px; height: {TILE_PX}px; background-color: var(--accent-bg);"
                                 >
                                     <span class="liquid-glass__highlight" aria-hidden="true"></span>
