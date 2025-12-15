@@ -1,6 +1,6 @@
 <script lang="ts">
-	const { className = 'size-3', strokeWidth = '1.5' } = $props();
-	</script>
+	const { className = 'size-3', strokeWidth = '1.5' } = $props()
+</script>
 
 <svg
 	xmlns="http://www.w3.org/2000/svg"

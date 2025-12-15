@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"format": "prettier --write .",
 		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts"
 	},
 	"devDependencies": {
@@ -20,6 +21,9 @@
 		"autoprefixer": "^10.4.20",
 		"openapi-typescript": "^7.10.1",
 		"postcss": "^8.4.47",
+		"prettier": "^3.7.4",
+		"prettier-plugin-svelte": "^3.4.0",
+		"prettier-plugin-tailwindcss": "^0.7.2",
 		"svelte": "^5.43.1",
 		"svelte-check": "^4.0.5",
 		"tailwind-variants": "^3.2.2",

@@ -1,6 +1,6 @@
 <script lang="ts">
-	const { className = 'w-4 h-4', strokeWidth = '0' } = $props();
-	</script>
+	const { className = 'w-4 h-4', strokeWidth = '0' } = $props()
+</script>
 
 <svg
 	aria-hidden="true"

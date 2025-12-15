@@ -1,51 +1,51 @@
 <script lang="ts">
-    import { setBackgroundContext } from '$lib/contexts/backgroundContext'
-    import type { Snippet } from 'svelte'
-    import { onDestroy, onMount } from 'svelte'
+	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import type { Snippet } from 'svelte'
+	import { onDestroy, onMount } from 'svelte'
 
-    interface Props {
-        children?: Snippet
-        speed?: number
-        scale?: number
-        color?: string
-        noiseIntensity?: number
-        rotation?: number
-    }
+	interface Props {
+		children?: Snippet
+		speed?: number
+		scale?: number
+		color?: string
+		noiseIntensity?: number
+		rotation?: number
+	}
 
-    let {
-        children,
-        speed = 5,
-        scale = 1,
-        color = '#7B7481',
-        noiseIntensity = 1.5,
-        rotation = 0,
-    }: Props = $props()
+	let {
+		children,
+		speed = 5,
+		scale = 1,
+		color = '#7B7481',
+		noiseIntensity = 1.5,
+		rotation = 0,
+	}: Props = $props()
 
-    let containerRef: HTMLDivElement
-    let canvasRef: HTMLCanvasElement
-    let gl: WebGL2RenderingContext | null = null
-    let program: WebGLProgram | null = null
-    let animationId: number | null = null
-    let resizeObserver: ResizeObserver | null = null
-    let startTime = 0
-    let subscribers: Array<() => void> = []
+	let containerRef: HTMLDivElement
+	let canvasRef: HTMLCanvasElement
+	let gl: WebGL2RenderingContext | null = null
+	let program: WebGLProgram | null = null
+	let animationId: number | null = null
+	let resizeObserver: ResizeObserver | null = null
+	let startTime = 0
+	let subscribers: Array<() => void> = []
 
-    // Expose canvas to children via context
-    setBackgroundContext({
-        getCanvas: () => canvasRef,
-        getCanvasDimensions: () => ({
-            width: canvasRef?.width || 0,
-            height: canvasRef?.height || 0,
-        }),
-        subscribe: (callback) => {
-            subscribers.push(callback)
-            return () => {
-                subscribers = subscribers.filter((cb) => cb !== callback)
-            }
-        },
-    })
+	// Expose canvas to children via context
+	setBackgroundContext({
+		getCanvas: () => canvasRef,
+		getCanvasDimensions: () => ({
+			width: canvasRef?.width || 0,
+			height: canvasRef?.height || 0,
+		}),
+		subscribe: (callback) => {
+			subscribers.push(callback)
+			return () => {
+				subscribers = subscribers.filter((cb) => cb !== callback)
+			}
+		},
+	})
 
-    const vertexShaderSource = `#version 300 es
+	const vertexShaderSource = `#version 300 es
 in vec2 a_position;
 out vec2 vUv;
 out vec3 vPosition;
@@ -56,7 +56,7 @@ void main() {
 	gl_Position = vec4(a_position, 0.0, 1.0);
 }`
 
-    const fragmentShaderSource = `#version 300 es
+	const fragmentShaderSource = `#version 300 es
 precision highp float;
 
 in vec2 vUv;
@@ -105,171 +105,171 @@ void main() {
 	fragColor = col;
 }`
 
-    function createShader(
-        gl: WebGL2RenderingContext,
-        type: number,
-        source: string
-    ): WebGLShader | null {
-        const shader = gl.createShader(type)
-        if (!shader) return null
+	function createShader(
+		gl: WebGL2RenderingContext,
+		type: number,
+		source: string
+	): WebGLShader | null {
+		const shader = gl.createShader(type)
+		if (!shader) return null
 
-        gl.shaderSource(shader, source)
-        gl.compileShader(shader)
+		gl.shaderSource(shader, source)
+		gl.compileShader(shader)
 
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error('Shader compile error:', gl.getShaderInfoLog(shader))
-            gl.deleteShader(shader)
-            return null
-        }
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+			console.error('Shader compile error:', gl.getShaderInfoLog(shader))
+			gl.deleteShader(shader)
+			return null
+		}
 
-        return shader
-    }
+		return shader
+	}
 
-    function createProgram(
-        gl: WebGL2RenderingContext,
-        vertexShader: WebGLShader,
-        fragmentShader: WebGLShader
-    ): WebGLProgram | null {
-        const prog = gl.createProgram()
-        if (!prog) return null
+	function createProgram(
+		gl: WebGL2RenderingContext,
+		vertexShader: WebGLShader,
+		fragmentShader: WebGLShader
+	): WebGLProgram | null {
+		const prog = gl.createProgram()
+		if (!prog) return null
 
-        gl.attachShader(prog, vertexShader)
-        gl.attachShader(prog, fragmentShader)
-        gl.linkProgram(prog)
+		gl.attachShader(prog, vertexShader)
+		gl.attachShader(prog, fragmentShader)
+		gl.linkProgram(prog)
 
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error('Program link error:', gl.getProgramInfoLog(prog))
-            gl.deleteProgram(prog)
-            return null
-        }
+		if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+			console.error('Program link error:', gl.getProgramInfoLog(prog))
+			gl.deleteProgram(prog)
+			return null
+		}
 
-        return prog
-    }
+		return prog
+	}
 
-    function hexToRgb(hex: string): { r: number; g: number; b: number } {
-        const clean = hex.replace('#', '')
-        const r = parseInt(clean.slice(0, 2), 16) / 255
-        const g = parseInt(clean.slice(2, 4), 16) / 255
-        const b = parseInt(clean.slice(4, 6), 16) / 255
-        return { r, g, b }
-    }
+	function hexToRgb(hex: string): { r: number; g: number; b: number } {
+		const clean = hex.replace('#', '')
+		const r = parseInt(clean.slice(0, 2), 16) / 255
+		const g = parseInt(clean.slice(2, 4), 16) / 255
+		const b = parseInt(clean.slice(4, 6), 16) / 255
+		return { r, g, b }
+	}
 
-    function resize() {
-        if (!canvasRef || !containerRef || !gl) return
+	function resize() {
+		if (!canvasRef || !containerRef || !gl) return
 
-        const dpr = Math.min(window.devicePixelRatio, 2)
-        const rect = containerRef.getBoundingClientRect()
-        const width = Math.floor(rect.width * dpr)
-        const height = Math.floor(rect.height * dpr)
+		const dpr = Math.min(window.devicePixelRatio, 2)
+		const rect = containerRef.getBoundingClientRect()
+		const width = Math.floor(rect.width * dpr)
+		const height = Math.floor(rect.height * dpr)
 
-        if (canvasRef.width !== width || canvasRef.height !== height) {
-            canvasRef.width = width
-            canvasRef.height = height
-            gl.viewport(0, 0, width, height)
+		if (canvasRef.width !== width || canvasRef.height !== height) {
+			canvasRef.width = width
+			canvasRef.height = height
+			gl.viewport(0, 0, width, height)
 
-            subscribers.forEach((cb) => cb())
-        }
-    }
+			subscribers.forEach((cb) => cb())
+		}
+	}
 
-    function animate() {
-        if (!gl || !program) return
+	function animate() {
+		if (!gl || !program) return
 
-        resize()
+		resize()
 
-        const elapsed = (performance.now() - startTime) / 1000
-        // Match the original React implementation's time scale (0.1x)
-        const scaledTime = elapsed * 0.1
+		const elapsed = (performance.now() - startTime) / 1000
+		// Match the original React implementation's time scale (0.1x)
+		const scaledTime = elapsed * 0.1
 
-        gl.clearColor(0, 0, 0, 1)
-        gl.clear(gl.COLOR_BUFFER_BIT)
+		gl.clearColor(0, 0, 0, 1)
+		gl.clear(gl.COLOR_BUFFER_BIT)
 
-        gl.useProgram(program)
+		gl.useProgram(program)
 
-        // Set uniforms
-        const uTime = gl.getUniformLocation(program, 'uTime')
-        const uSpeed = gl.getUniformLocation(program, 'uSpeed')
-        const uScale = gl.getUniformLocation(program, 'uScale')
-        const uRotation = gl.getUniformLocation(program, 'uRotation')
-        const uNoiseIntensity = gl.getUniformLocation(program, 'uNoiseIntensity')
-        const uColor = gl.getUniformLocation(program, 'uColor')
+		// Set uniforms
+		const uTime = gl.getUniformLocation(program, 'uTime')
+		const uSpeed = gl.getUniformLocation(program, 'uSpeed')
+		const uScale = gl.getUniformLocation(program, 'uScale')
+		const uRotation = gl.getUniformLocation(program, 'uRotation')
+		const uNoiseIntensity = gl.getUniformLocation(program, 'uNoiseIntensity')
+		const uColor = gl.getUniformLocation(program, 'uColor')
 
-        gl.uniform1f(uTime, scaledTime)
-        gl.uniform1f(uSpeed, speed)
-        gl.uniform1f(uScale, scale)
-        gl.uniform1f(uRotation, rotation)
-        gl.uniform1f(uNoiseIntensity, noiseIntensity)
+		gl.uniform1f(uTime, scaledTime)
+		gl.uniform1f(uSpeed, speed)
+		gl.uniform1f(uScale, scale)
+		gl.uniform1f(uRotation, rotation)
+		gl.uniform1f(uNoiseIntensity, noiseIntensity)
 
-        const rgb = hexToRgb(color)
-        gl.uniform3f(uColor, rgb.r, rgb.g, rgb.b)
+		const rgb = hexToRgb(color)
+		gl.uniform3f(uColor, rgb.r, rgb.g, rgb.b)
 
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
+		gl.drawArrays(gl.TRIANGLES, 0, 6)
 
-        animationId = requestAnimationFrame(animate)
-    }
+		animationId = requestAnimationFrame(animate)
+	}
 
-    onMount(() => {
-        const context = canvasRef.getContext('webgl2')
-        if (!context) {
-            console.error('WebGL2 not supported')
-            return
-        }
+	onMount(() => {
+		const context = canvasRef.getContext('webgl2')
+		if (!context) {
+			console.error('WebGL2 not supported')
+			return
+		}
 
-        gl = context
+		gl = context
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
+		const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
+		const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
 
-        if (!vertexShader || !fragmentShader) {
-            console.error('Failed to create shaders')
-            return
-        }
+		if (!vertexShader || !fragmentShader) {
+			console.error('Failed to create shaders')
+			return
+		}
 
-        program = createProgram(gl, vertexShader, fragmentShader)
+		program = createProgram(gl, vertexShader, fragmentShader)
 
-        if (!program) {
-            console.error('Failed to create program')
-            return
-        }
+		if (!program) {
+			console.error('Failed to create program')
+			return
+		}
 
-        // Create a fullscreen quad
-        const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+		// Create a fullscreen quad
+		const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
 
-        const positionBuffer = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
+		const positionBuffer = gl.createBuffer()
+		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
 
-        const positionLoc = gl.getAttribLocation(program, 'a_position')
-        gl.enableVertexAttribArray(positionLoc)
-        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
+		const positionLoc = gl.getAttribLocation(program, 'a_position')
+		gl.enableVertexAttribArray(positionLoc)
+		gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
 
-        // Setup resize observer
-        resizeObserver = new ResizeObserver(() => resize())
-        resizeObserver.observe(containerRef)
+		// Setup resize observer
+		resizeObserver = new ResizeObserver(() => resize())
+		resizeObserver.observe(containerRef)
 
-        startTime = performance.now()
-        animate()
-    })
+		startTime = performance.now()
+		animate()
+	})
 
-    onDestroy(() => {
-        if (animationId !== null) {
-            cancelAnimationFrame(animationId)
-        }
+	onDestroy(() => {
+		if (animationId !== null) {
+			cancelAnimationFrame(animationId)
+		}
 
-        if (resizeObserver) {
-            resizeObserver.disconnect()
-        }
+		if (resizeObserver) {
+			resizeObserver.disconnect()
+		}
 
-        if (gl && program) {
-            gl.deleteProgram(program)
-        }
-    })
+		if (gl && program) {
+			gl.deleteProgram(program)
+		}
+	})
 </script>
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-    <canvas class="absolute inset-0 block h-full w-full" bind:this={canvasRef}></canvas>
+	<canvas class="absolute inset-0 block h-full w-full" bind:this={canvasRef}></canvas>
 
-    <!-- Slotted content rendered on top of background -->
-    <div class="relative z-1 h-full w-full">
-        {@render children?.()}
-    </div>
+	<!-- Slotted content rendered on top of background -->
+	<div class="relative z-1 h-full w-full">
+		{@render children?.()}
+	</div>
 </div>

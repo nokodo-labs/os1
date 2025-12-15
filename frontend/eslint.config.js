@@ -6,28 +6,28 @@ import ts from 'typescript-eslint'
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-    js.configs.recommended,
-    ...ts.configs.recommended,
-    ...svelte.configs['flat/recommended'],
-    prettier,
-    ...svelte.configs['flat/prettier'],
-    {
-        languageOptions: {
-            globals: {
-                ...globals.browser,
-                ...globals.node,
-            },
-        },
-    },
-    {
-        files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
-        languageOptions: {
-            parserOptions: {
-                parser: ts.parser,
-            },
-        },
-    },
-    {
-        ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/'],
-    },
+	js.configs.recommended,
+	...ts.configs.recommended,
+	...svelte.configs['flat/recommended'],
+	prettier,
+	...svelte.configs['flat/prettier'],
+	{
+		languageOptions: {
+			globals: {
+				...globals.browser,
+				...globals.node,
+			},
+		},
+	},
+	{
+		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
+		languageOptions: {
+			parserOptions: {
+				parser: ts.parser,
+			},
+		},
+	},
+	{
+		ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/'],
+	},
 ]

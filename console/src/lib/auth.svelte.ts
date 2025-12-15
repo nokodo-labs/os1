@@ -1,24 +1,22 @@
-import { browser } from "$app/environment";
-import { api, type User } from "$lib/api";
+import { browser } from '$app/environment'
+import { api, type User } from '$lib/api'
 
 function parseJwt(token: string) {
 	try {
-		return JSON.parse(atob(token.split(".")[1]));
+		return JSON.parse(atob(token.split('.')[1]))
 	} catch (e) {
-		return null;
+		return null
 	}
 }
 
 class AuthState {
-	token = $state<string | null>(
-		browser ? localStorage.getItem("access_token") : null
-	);
-	user = $state<User | null>(null);
-	isAuthenticated = $derived(!!this.token);
+	token = $state<string | null>(browser ? localStorage.getItem('access_token') : null)
+	user = $state<User | null>(null)
+	isAuthenticated = $derived(!!this.token)
 
 	constructor() {
 		if (this.token) {
-			this.fetchUser();
+			this.fetchUser()
 		}
 	}
 
@@ -26,24 +24,24 @@ class AuthState {
 		const data = await api.login({
 			username: email,
 			password: password,
-			scope: "",
-		});
+			scope: '',
+		})
 
-		this.setToken(data.access_token);
-		await this.fetchUser();
+		this.setToken(data.access_token)
+		await this.fetchUser()
 	}
 
 	async fetchUser() {
-		if (!this.token) return;
-		const decoded = parseJwt(this.token);
-		if (!decoded || !decoded.sub) return;
+		if (!this.token) return
+		const decoded = parseJwt(this.token)
+		if (!decoded || !decoded.sub) return
 
-		const userId = parseInt(decoded.sub);
+		const userId = parseInt(decoded.sub)
 		try {
-			this.user = await api.getUser(userId);
+			this.user = await api.getUser(userId)
 		} catch (e) {
-			console.error("Failed to fetch user", e);
-			this.logout();
+			console.error('Failed to fetch user', e)
+			this.logout()
 		}
 	}
 
@@ -55,23 +53,23 @@ class AuthState {
 			is_superuser: true, // First user should be superuser? Or let backend handle it?
 			// The user said "CREATE a brand new user, since that will be the first thing to do when you first spin up the project!"
 			// So making them superuser seems appropriate for the console.
-		});
+		})
 	}
 
 	logout() {
-		this.token = null;
-		this.user = null;
+		this.token = null
+		this.user = null
 		if (browser) {
-			localStorage.removeItem("access_token");
+			localStorage.removeItem('access_token')
 		}
 	}
 
 	private setToken(token: string) {
-		this.token = token;
+		this.token = token
 		if (browser) {
-			localStorage.setItem("access_token", token);
+			localStorage.setItem('access_token', token)
 		}
 	}
 }
 
-export const auth = new AuthState();
+export const auth = new AuthState()

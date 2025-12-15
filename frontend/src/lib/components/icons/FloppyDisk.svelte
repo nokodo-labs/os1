@@ -1,6 +1,6 @@
 <script lang="ts">
-	const { className = 'size-4', strokeWidth = '1.5' } = $props();
-	</script>
+	const { className = 'size-4', strokeWidth = '1.5' } = $props()
+</script>
 
 <svg
 	stroke="currentColor"

@@ -1,5 +1,8 @@
 <script lang="ts">
-	const { className = 'w-5 h-5', strokeWidth = '1.5' }: { className?: string; strokeWidth?: string } = $props();
+	const {
+		className = 'w-5 h-5',
+		strokeWidth = '1.5',
+	}: { className?: string; strokeWidth?: string } = $props()
 </script>
 
 <svg

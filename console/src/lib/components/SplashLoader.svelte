@@ -1,135 +1,106 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import NokodoLoader from "./NokodoLoader.svelte";
+	import { onMount } from 'svelte'
+	import NokodoLoader from './NokodoLoader.svelte'
 
-	let { ready = false } = $props();
+	let { ready = false } = $props()
 
-	let container = $state<HTMLElement>();
-	let splashScreen = $state<HTMLElement>();
-	let isVisible = $state(true);
+	let container = $state<HTMLElement>()
+	let splashScreen = $state<HTMLElement>()
+	let isVisible = $state(true)
 
 	// Loader state
-	let expanded = $state(false);
-	let shimmer = $state(false);
+	let expanded = $state(false)
+	let shimmer = $state(false)
 
 	onMount(() => {
 		// Theme logic from the original script
-		const metaThemeColorTag = document.querySelector(
-			'meta[name="theme-color"]',
-		);
-		const prefersDarkTheme = window.matchMedia(
-			"(prefers-color-scheme: dark)",
-		).matches;
+		const metaThemeColorTag = document.querySelector('meta[name="theme-color"]')
+		const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
 
 		if (!localStorage?.theme) {
-			localStorage.theme = "system";
+			localStorage.theme = 'system'
 		}
 
-		if (localStorage.theme === "system") {
-			document.documentElement.classList.add(
-				prefersDarkTheme ? "dark" : "light",
-			);
+		if (localStorage.theme === 'system') {
+			document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light')
 			if (metaThemeColorTag)
-				metaThemeColorTag.setAttribute(
-					"content",
-					prefersDarkTheme ? "#171717" : "#ffffff",
-				);
-		} else if (localStorage.theme === "oled-dark") {
-			document.documentElement.style.setProperty(
-				"--color-gray-800",
-				"#101010",
-			);
-			document.documentElement.style.setProperty(
-				"--color-gray-850",
-				"#050505",
-			);
-			document.documentElement.style.setProperty(
-				"--color-gray-900",
-				"#000000",
-			);
-			document.documentElement.style.setProperty(
-				"--color-gray-950",
-				"#000000",
-			);
-			document.documentElement.classList.add("dark");
-			if (metaThemeColorTag)
-				metaThemeColorTag.setAttribute("content", "#000000");
-		} else if (localStorage.theme === "light") {
-			document.documentElement.classList.add("light");
-			if (metaThemeColorTag)
-				metaThemeColorTag.setAttribute("content", "#ffffff");
-		} else if (localStorage.theme === "her") {
-			document.documentElement.classList.add("her");
-			if (metaThemeColorTag)
-				metaThemeColorTag.setAttribute("content", "#983724");
+				metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#171717' : '#ffffff')
+		} else if (localStorage.theme === 'oled-dark') {
+			document.documentElement.style.setProperty('--color-gray-800', '#101010')
+			document.documentElement.style.setProperty('--color-gray-850', '#050505')
+			document.documentElement.style.setProperty('--color-gray-900', '#000000')
+			document.documentElement.style.setProperty('--color-gray-950', '#000000')
+			document.documentElement.classList.add('dark')
+			if (metaThemeColorTag) metaThemeColorTag.setAttribute('content', '#000000')
+		} else if (localStorage.theme === 'light') {
+			document.documentElement.classList.add('light')
+			if (metaThemeColorTag) metaThemeColorTag.setAttribute('content', '#ffffff')
+		} else if (localStorage.theme === 'her') {
+			document.documentElement.classList.add('her')
+			if (metaThemeColorTag) metaThemeColorTag.setAttribute('content', '#983724')
 		} else {
-			document.documentElement.classList.add("dark");
-			if (metaThemeColorTag)
-				metaThemeColorTag.setAttribute("content", "#171717");
+			document.documentElement.classList.add('dark')
+			if (metaThemeColorTag) metaThemeColorTag.setAttribute('content', '#171717')
 		}
 
-		window.matchMedia("(prefers-color-scheme: dark)").addListener((e) => {
-			if (localStorage.theme === "system") {
+		window.matchMedia('(prefers-color-scheme: dark)').addListener((e) => {
+			if (localStorage.theme === 'system') {
 				if (e.matches) {
-					document.documentElement.classList.add("dark");
-					document.documentElement.classList.remove("light");
-					if (metaThemeColorTag)
-						metaThemeColorTag.setAttribute("content", "#171717");
+					document.documentElement.classList.add('dark')
+					document.documentElement.classList.remove('light')
+					if (metaThemeColorTag) metaThemeColorTag.setAttribute('content', '#171717')
 				} else {
-					document.documentElement.classList.add("light");
-					document.documentElement.classList.remove("dark");
-					if (metaThemeColorTag)
-						metaThemeColorTag.setAttribute("content", "#ffffff");
+					document.documentElement.classList.add('light')
+					document.documentElement.classList.remove('dark')
+					if (metaThemeColorTag) metaThemeColorTag.setAttribute('content', '#ffffff')
 				}
 			}
-		});
+		})
 
-		initNokodoSplash();
-	});
+		initNokodoSplash()
+	})
 
 	function initNokodoSplash() {
-		if (document.documentElement.classList.contains("her")) return;
-		const prefersReducedMotion = window.matchMedia(
-			"(prefers-reduced-motion: reduce)",
-		).matches;
+		if (document.documentElement.classList.contains('her')) return
+		const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 		const timing = {
 			okHold: 500,
 			expansion: 800,
 			pause: 200,
 			fadeOut: 300,
-		};
+		}
 		if (prefersReducedMotion) {
-			timing.okHold = 100;
-			timing.expansion = 300;
-			timing.pause = 50;
+			timing.okHold = 100
+			timing.expansion = 300
+			timing.pause = 50
 		}
 
 		if (container) {
-			container.style.display = "block";
+			container.style.display = 'block'
 		}
 		setTimeout(() => {
-			startSplashSequence(timing);
-		}, timing.okHold);
+			startSplashSequence(timing)
+		}, timing.okHold)
 	}
 
 	async function startSplashSequence(timing: any) {
 		try {
-			await expandBrand(timing.expansion);
-			await new Promise((resolve) => setTimeout(resolve, 200));
+			await expandBrand(timing.expansion)
+			await new Promise((resolve) => setTimeout(resolve, 200))
 
-			shimmer = true;
+			shimmer = true
 
 			// Wait for ready prop to be true
 			if (!ready) {
-				await waitForAppReady();
+				await waitForAppReady()
 			}
 
-			shimmer = false;
-			await fadeOutSplash(timing.fadeOut);
+			shimmer = false
+			await fadeOutSplash(timing.fadeOut)
 		} catch (error) {
-			console.error("Splash animation error:", error);
+			console.error('Splash animation error:', error)
 			// Fallback: immediately remove splash
-			isVisible = false;
+			isVisible = false
 		}
 	}
 
@@ -137,38 +108,38 @@
 		return new Promise<void>((resolve) => {
 			const checkInterval = setInterval(() => {
 				if (ready) {
-					clearInterval(checkInterval);
-					resolve();
+					clearInterval(checkInterval)
+					resolve()
 				}
-			}, 100);
-		});
+			}, 100)
+		})
 	}
 
 	function expandBrand(duration: number) {
 		return new Promise<void>((resolve) => {
-			expanded = true;
-			setTimeout(resolve, duration);
-		});
+			expanded = true
+			setTimeout(resolve, duration)
+		})
 	}
 
 	function fadeOutSplash(duration: number) {
 		return new Promise<void>((resolve) => {
-			if (document.documentElement.classList.contains("her")) {
-				return;
+			if (document.documentElement.classList.contains('her')) {
+				return
 			}
 
 			if (splashScreen) {
-				splashScreen.style.transition = `opacity ${duration}ms ease-out`;
-				splashScreen.style.opacity = "0";
+				splashScreen.style.transition = `opacity ${duration}ms ease-out`
+				splashScreen.style.opacity = '0'
 
 				setTimeout(() => {
-					isVisible = false;
-					resolve();
-				}, duration);
+					isVisible = false
+					resolve()
+				}, duration)
 			} else {
-				resolve();
+				resolve()
 			}
-		});
+		})
 	}
 </script>
 

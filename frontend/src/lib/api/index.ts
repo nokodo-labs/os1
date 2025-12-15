@@ -10,43 +10,43 @@ type RuntimeConfig = components['schemas']['RuntimeConfigOut']
 type HealthCheck = { status: string }
 
 export const api = {
-    async healthCheck(): Promise<HealthCheck> {
-        const response = await fetch('/health')
-        if (!response.ok) {
-            throw new APIError(response.statusText, response.status)
-        }
-        return response.json()
-    },
+	async healthCheck(): Promise<HealthCheck> {
+		const response = await fetch('/health')
+		if (!response.ok) {
+			throw new APIError(response.statusText, response.status)
+		}
+		return response.json()
+	},
 
-    async getUsers(params?: { skip?: number; limit?: number }): Promise<User[]> {
-        const { data, error, response } = await v1Client().GET('/users', {
-            params: params ? { query: params } : undefined,
-        })
-        if (error) throw new APIError(response.statusText, response.status, error)
-        return data ?? []
-    },
+	async getUsers(params?: { skip?: number; limit?: number }): Promise<User[]> {
+		const { data, error, response } = await v1Client().GET('/users', {
+			params: params ? { query: params } : undefined,
+		})
+		if (error) throw new APIError(response.statusText, response.status, error)
+		return data ?? []
+	},
 
-    async getUser(id: number): Promise<User> {
-        const { data, error, response } = await v1Client().GET('/users/{user_id}', {
-            params: { path: { user_id: id } },
-        })
-        if (error || !data) throw new APIError(response.statusText, response.status, error)
-        return data
-    },
+	async getUser(id: number): Promise<User> {
+		const { data, error, response } = await v1Client().GET('/users/{user_id}', {
+			params: { path: { user_id: id } },
+		})
+		if (error || !data) throw new APIError(response.statusText, response.status, error)
+		return data
+	},
 
-    async createUser(userData: UserCreate): Promise<User> {
-        const { data, error, response } = await v1Client().POST('/users', {
-            body: userData,
-        })
-        if (error || !data) throw new APIError(response.statusText, response.status, error)
-        return data
-    },
+	async createUser(userData: UserCreate): Promise<User> {
+		const { data, error, response } = await v1Client().POST('/users', {
+			body: userData,
+		})
+		if (error || !data) throw new APIError(response.statusText, response.status, error)
+		return data
+	},
 
-    async getRuntimeConfig(): Promise<RuntimeConfig> {
-        const { data, error } = await v1Client().GET('/system/config')
-        if (error) throw new APIError('failed to load runtime config', 0, error)
-        return data
-    },
+	async getRuntimeConfig(): Promise<RuntimeConfig> {
+		const { data, error } = await v1Client().GET('/system/config')
+		if (error) throw new APIError('failed to load runtime config', 0, error)
+		return data
+	},
 }
 
 export { APIError }

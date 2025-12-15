@@ -2,45 +2,46 @@
 
 ## purpose
 
--   dedicated admin-only surface for operators; never exposed publicly
--   utilitarian UX focused on clarity and velocity, not polish
--   ships as its own Vite app on port 8383 so it can live behind VPN/ACLs or separate auth flows
+- dedicated admin-only surface for operators; never exposed publicly
+- utilitarian UX focused on clarity and velocity, not polish
+- ships as its own Vite app on port 8383 so it can live behind VPN/ACLs or separate auth flows
 
 ## tech stack
 
--   Svelte 5 (runes) + TypeScript strict mode
--   Vite 7 + PostCSS + TailwindCSS 4 baseline
--   SvelteKit + static adapter
--   shadcn-svelte components kept stock (no heavy theming) for speed and consistency
--   only foundational deps (svelte, tailwind, vite, svelte-check, etc.). do **not** add extra libraries without explicit approval
+- Svelte 5 (runes) + TypeScript strict mode
+- Vite 7 + PostCSS + TailwindCSS 4 baseline
+- SvelteKit + static adapter
+- shadcn-svelte components kept stock (no heavy theming) for speed and consistency
+- only foundational deps (svelte, tailwind, vite, svelte-check, etc.). do **not** add extra libraries without explicit approval
+- prettier with tabs (useTabs=true, tabWidth=4); single quotes, no semicolons; run `npm run format`
 
 ## ui/ux directives
 
--   prefer default shadcn-svelte/Bits primitives for low-friction dev
--   use Tailwind tokens sparingly; readability > aesthetics
--   keep layouts responsive but focus on data density and administrative clarity
--   lowercase typography is optional here—legibility first
--   use rounded corners (rounded-xl or rounded-2xl) for a softer, modern feel
+- prefer default shadcn-svelte/Bits primitives for low-friction dev
+- use Tailwind tokens sparingly; readability > aesthetics
+- keep layouts responsive but focus on data density and administrative clarity
+- lowercase typography is optional here—legibility first
+- use rounded corners (rounded-xl or rounded-2xl) for a softer, modern feel
 
 ## security & access
 
--   console consumes the same backend API but must authenticate with admin-only scopes/clients
--   assume it is deployed behind SSO + MFA; never rely on “secret URL” access
--   self-hosted installs should firewall the console separately from the public frontend
--   destructive actions require confirmations and should leave audit hooks ready
+- console consumes the same backend API but must authenticate with admin-only scopes/clients
+- assume it is deployed behind SSO + MFA; never rely on “secret URL” access
+- self-hosted installs should firewall the console separately from the public frontend
+- destructive actions require confirmations and should leave audit hooks ready
 
 ## dev workflow
 
--   work inside `/console`; keep configs independent from `/frontend`
--   share code with the frontend only through an intentional shared package if duplication becomes painful
--   run `npm install, then `npm run dev -- --port 8383` for local work (don’t start servers unless user asks)
--   refer to `testing` section to know how to validate formatting and quality of your code
+- work inside `/console`; keep configs independent from `/frontend`
+- share code with the frontend only through an intentional shared package if duplication becomes painful
+- run `npm install, then `npm run dev -- --port 8383` for local work (don’t start servers unless user asks)
+- refer to `testing` section to know how to validate formatting and quality of your code
 
 ## testing
 
 there are several available layers of checks and tests:
 
--   smoke test with `npm run check` (svelte-check)
--   formatting with `npm run format` (prettier)
--   linting with `npm run lint` (eslint)
--   check for file Problems with the built-in VSCode tool
+- smoke test with `npm run check` (svelte-check)
+- formatting with `npm run format` (prettier)
+- linting with `npm run lint` (eslint)
+- check for file Problems with the built-in VSCode tool

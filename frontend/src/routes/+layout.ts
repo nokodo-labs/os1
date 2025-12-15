@@ -4,6 +4,6 @@ import { initRuntimeConfig } from '$lib/config/runtime'
 export const ssr = false
 
 export const load = async () => {
-    const config = await initRuntimeConfig()
-    return { config }
+	const config = await initRuntimeConfig()
+	return { config }
 }

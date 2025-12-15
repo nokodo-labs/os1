@@ -1,87 +1,87 @@
 .liquid-glass {
-    position: relative;
-    isolation: isolate;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0px 6px 24px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-    border: 1px solid rgba(255, 255, 255, 0.062);
+	position: relative;
+	isolation: isolate;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	box-shadow: 0px 6px 24px rgba(0, 0, 0, 0.2);
+	backdrop-filter: blur(3px);
+	-webkit-backdrop-filter: blur(3px);
+	border: 1px solid rgba(255, 255, 255, 0.062);
 }
 
 .liquid-glass::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    box-shadow: inset 0 0 20px -5px rgba(255, 255, 255, 0);
-    background: rgba(0, 0, 0, 0);
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	border-radius: inherit;
+	box-shadow: inset 0 0 20px -5px rgba(255, 255, 255, 0);
+	background: rgba(0, 0, 0, 0);
 }
 
 .liquid-glass::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    backdrop-filter: blur(3px);
-    background: rgba(255, 255, 255, 0.034);
-    -webkit-backdrop-filter: blur(3px);
-    isolation: isolate;
-    filter: blur(1px) drop-shadow(10px 4px 6px black) brightness(115%);
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	border-radius: inherit;
+	backdrop-filter: blur(3px);
+	background: rgba(255, 255, 255, 0.034);
+	-webkit-backdrop-filter: blur(3px);
+	isolation: isolate;
+	filter: blur(1px) drop-shadow(10px 4px 6px black) brightness(115%);
 }
 
 @supports not (backdrop-filter: blur(0)) {
-    .liquid-glass {
-        background: rgba(22, 18, 36, 0.88);
-    }
+	.liquid-glass {
+		background: rgba(22, 18, 36, 0.88);
+	}
 }
 
 .liquid-glass__highlight {
-    position: absolute;
-    inset: 6% 16% 58% 16%;
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 80%);
-    filter: blur(18px);
-    opacity: 0.55;
-    mix-blend-mode: screen;
-    pointer-events: none;
-    z-index: 2;
+	position: absolute;
+	inset: 6% 16% 58% 16%;
+	border-radius: 999px;
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 80%);
+	filter: blur(18px);
+	opacity: 0.55;
+	mix-blend-mode: screen;
+	pointer-events: none;
+	z-index: 2;
 }
 
 .liquid-glass__content {
-    position: relative;
-    z-index: 3;
+	position: relative;
+	z-index: 3;
 }
 
 .liquid-glass--frosted {
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    /* Light mode defaults - Increased opacity for better contrast */
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow:
-        0px 8px 32px rgba(0, 0, 0, 0.1),
-        inset 0 0 30px rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #000;
+	backdrop-filter: blur(24px);
+	-webkit-backdrop-filter: blur(24px);
+	/* Light mode defaults - Increased opacity for better contrast */
+	background: rgba(255, 255, 255, 0.85);
+	box-shadow:
+		0px 8px 32px rgba(0, 0, 0, 0.1),
+		inset 0 0 30px rgba(255, 255, 255, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	color: #000;
 }
 
 @media (prefers-color-scheme: dark) {
-    .liquid-glass--frosted {
-        background: rgba(10, 12, 16, 0.75);
-        box-shadow:
-            0px 8px 32px rgba(0, 0, 0, 0.4),
-            inset 0 0 30px rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.062);
-        color: #fff;
-    }
+	.liquid-glass--frosted {
+		background: rgba(10, 12, 16, 0.75);
+		box-shadow:
+			0px 8px 32px rgba(0, 0, 0, 0.4),
+			inset 0 0 30px rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.062);
+		color: #fff;
+	}
 }
 
 :is(.dark) .liquid-glass--frosted {
-    background: rgba(10, 12, 16, 0.75);
-    box-shadow:
-        0px 8px 32px rgba(0, 0, 0, 0.4),
-        inset 0 0 30px rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.062);
-    color: #fff;
+	background: rgba(10, 12, 16, 0.75);
+	box-shadow:
+		0px 8px 32px rgba(0, 0, 0, 0.4),
+		inset 0 0 30px rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.062);
+	color: #fff;
 }

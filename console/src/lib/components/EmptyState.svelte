@@ -1,5 +1,5 @@
 <script lang="ts">
-	let { message, hint = undefined, className = "" } = $props();
+	let { message, hint = undefined, className = '' } = $props()
 </script>
 
 <div

@@ -29,13 +29,13 @@ nokodo AI's chrome consists of two elements:
 
 a floating, semi-transparent header bar with **liquid glass** styling.
 
-**structure:**
+**layout (roughly):**
 
-| zone                          | behavior                               |
-| ----------------------------- | -------------------------------------- |
-| 🏠 **home** (left)            | static — always returns to home screen |
-| 📡 **activity area** (center) | dynamic — shows ongoing system events  |
-| 👤 **user** (right)           | static — account, settings, profile    |
+| zone                          | behavior                                                                |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| **activity actions** (left)   | contextual controls for the current activity (if any)                   |
+| 📡 **activity area** (center) | contextual — shows what’s going on in the system (music, uploads, etc.) |
+| **stable controls** (right)   | mostly fixed controls like home, show dock, and user                    |
 
 **activity area examples:**
 
@@ -45,7 +45,7 @@ a floating, semi-transparent header bar with **liquid glass** styling.
 -   ⏳ deep research session running
 
 **dynamic adaptation:**
-the island's contents adapt based on current context — additional buttons or controls appear depending on which app or page is active (similar to how macOS menu bar changes per-app).
+the island adapts based on what’s happening (system activity), not what screen you’re on. the activity area reflects ongoing events, and the left-side actions expose relevant controls for that activity.
 
 ---
 

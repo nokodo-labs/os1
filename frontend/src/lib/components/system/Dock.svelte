@@ -1,129 +1,129 @@
 <script lang="ts">
-    import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
-    import Bolt from '$lib/components/icons/Bolt.svelte'
-    import Calendar from '$lib/components/icons/Calendar.svelte'
-    import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-    import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
+	import Bolt from '$lib/components/icons/Bolt.svelte'
+	import Calendar from '$lib/components/icons/Calendar.svelte'
+	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
+	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 
-    const chrome = useSystemChrome()
+	const chrome = useSystemChrome()
 
-    type IconComponent = typeof Calendar
+	type IconComponent = typeof Calendar
 
-    interface NotificationItem {
-        id: string
-        title: string
-        body: string
-        icon: IconComponent
-    }
+	interface NotificationItem {
+		id: string
+		title: string
+		body: string
+		icon: IconComponent
+	}
 
-    const notifications: NotificationItem[] = [
-        {
-            id: 'upload',
-            title: 'upload',
-            body: '3 files added to workspace',
-            icon: ArrowUpTray,
-        },
-        {
-            id: 'reminder',
-            title: 'reminder',
-            body: 'standup in 12 minutes',
-            icon: Calendar,
-        },
-        {
-            id: 'messages',
-            title: 'messages',
-            body: 'new thread: product ideas',
-            icon: ChatBubbles,
-        },
-        {
-            id: 'automation',
-            title: 'automation',
-            body: 'night mode scheduled',
-            icon: Bolt,
-        },
-    ]
+	const notifications: NotificationItem[] = [
+		{
+			id: 'upload',
+			title: 'upload',
+			body: '3 files added to workspace',
+			icon: ArrowUpTray,
+		},
+		{
+			id: 'reminder',
+			title: 'reminder',
+			body: 'standup in 12 minutes',
+			icon: Calendar,
+		},
+		{
+			id: 'messages',
+			title: 'messages',
+			body: 'new thread: product ideas',
+			icon: ChatBubbles,
+		},
+		{
+			id: 'automation',
+			title: 'automation',
+			body: 'night mode scheduled',
+			icon: Bolt,
+		},
+	]
 </script>
 
 <aside
-    class="h-full transition-all duration-300 ease-out {chrome.isDockOpen
-        ? 'pointer-events-auto translate-x-0 opacity-100'
-        : 'pointer-events-none translate-x-full opacity-0'}"
-    aria-hidden={!chrome.isDockOpen}
+	class="h-full transition-all duration-300 ease-out {chrome.isDockOpen
+		? 'pointer-events-auto translate-x-0 opacity-100'
+		: 'pointer-events-none translate-x-full opacity-0'}"
+	aria-hidden={!chrome.isDockOpen}
 >
-    <div class="flex h-full flex-col gap-4">
-        <section
-            class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
-            aria-label="notifications"
-        >
-            <span class="liquid-glass__highlight" aria-hidden="true"></span>
-            <div class="liquid-glass__content">
-                <div class="mb-2 text-xs font-semibold tracking-wide text-white/60">
-                    notifications
-                </div>
-                <div class="flex flex-col gap-2">
-                    {#each notifications as item (item.id)}
-                        {@const Icon = item.icon}
-                        <div
-                            class="flex items-start gap-3 rounded-2xl bg-white/5 px-3 py-3 text-left transition-all duration-150 hover:bg-white/8"
-                        >
-                            <div
-                                class="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/8 text-white/85"
-                            >
-                                <Icon className="h-5 w-5" />
-                            </div>
-                            <div class="min-w-0">
-                                <div class="text-[0.8125rem] font-semibold text-white/85">
-                                    {item.title}
-                                </div>
-                                <div class="truncate text-[0.8125rem] text-white/55">
-                                    {item.body}
-                                </div>
-                            </div>
-                        </div>
-                    {/each}
-                </div>
-            </div>
-        </section>
+	<div class="flex h-full flex-col gap-4">
+		<section
+			class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
+			aria-label="notifications"
+		>
+			<span class="liquid-glass__highlight" aria-hidden="true"></span>
+			<div class="liquid-glass__content">
+				<div class="mb-2 text-xs font-semibold tracking-wide text-white/60">
+					notifications
+				</div>
+				<div class="flex flex-col gap-2">
+					{#each notifications as item (item.id)}
+						{@const Icon = item.icon}
+						<div
+							class="flex items-start gap-3 rounded-2xl bg-white/5 px-3 py-3 text-left transition-all duration-150 hover:bg-white/8"
+						>
+							<div
+								class="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/8 text-white/85"
+							>
+								<Icon className="h-5 w-5" />
+							</div>
+							<div class="min-w-0">
+								<div class="text-[0.8125rem] font-semibold text-white/85">
+									{item.title}
+								</div>
+								<div class="truncate text-[0.8125rem] text-white/55">
+									{item.body}
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		</section>
 
-        <div class="flex-1"></div>
+		<div class="flex-1"></div>
 
-        <section
-            class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
-            aria-label="control center"
-        >
-            <span class="liquid-glass__highlight" aria-hidden="true"></span>
-            <div class="liquid-glass__content">
-                <div class="mb-3 text-xs font-semibold tracking-wide text-white/60">
-                    control center
-                </div>
+		<section
+			class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
+			aria-label="control center"
+		>
+			<span class="liquid-glass__highlight" aria-hidden="true"></span>
+			<div class="liquid-glass__content">
+				<div class="mb-3 text-xs font-semibold tracking-wide text-white/60">
+					control center
+				</div>
 
-                <div class="grid grid-cols-2 gap-2">
-                    <button
-                        class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-                        type="button"
-                    >
-                        wifi
-                    </button>
-                    <button
-                        class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-                        type="button"
-                    >
-                        bluetooth
-                    </button>
-                    <button
-                        class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-                        type="button"
-                    >
-                        focus
-                    </button>
-                    <button
-                        class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-                        type="button"
-                    >
-                        dark mode
-                    </button>
-                </div>
-            </div>
-        </section>
-    </div>
+				<div class="grid grid-cols-2 gap-2">
+					<button
+						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+						type="button"
+					>
+						wifi
+					</button>
+					<button
+						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+						type="button"
+					>
+						bluetooth
+					</button>
+					<button
+						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+						type="button"
+					>
+						focus
+					</button>
+					<button
+						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+						type="button"
+					>
+						dark mode
+					</button>
+				</div>
+			</div>
+		</section>
+	</div>
 </aside>

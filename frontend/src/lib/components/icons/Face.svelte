@@ -1,6 +1,6 @@
 <script lang="ts">
-	const { className = 'w-4 h-4', strokeWidth = '1.5' } = $props();
-	</script>
+	const { className = 'w-4 h-4', strokeWidth = '1.5' } = $props()
+</script>
 
 <svg
 	class={className}
@@ -20,7 +20,10 @@
 
 	<path d="M8 8L8 10" stroke-linecap="round" stroke-linejoin="round"></path>
 
-	<path d="M9 16C9 16 10 17 12 17C14 17 15 16 15 16" stroke-linecap="round" stroke-linejoin="round"
+	<path
+		d="M9 16C9 16 10 17 12 17C14 17 15 16 15 16"
+		stroke-linecap="round"
+		stroke-linejoin="round"
 	></path>
 
 	<path d="M12 8L12 13L11 13" stroke-linecap="round" stroke-linejoin="round"></path>

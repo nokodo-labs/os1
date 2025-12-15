@@ -1,23 +1,23 @@
 <script lang="ts">
-    import { onMount } from 'svelte'
-    import * as THREE from 'three'
+	import { onMount } from 'svelte'
+	import * as THREE from 'three'
 
-    interface Props {
-        speed?: number
-    }
+	interface Props {
+		speed?: number
+	}
 
-    let { speed = 0.2 }: Props = $props()
+	let { speed = 0.2 }: Props = $props()
 
-    let container: HTMLDivElement
-    let canvasEl: HTMLCanvasElement
-    let renderer: THREE.WebGLRenderer
-    let scene: THREE.Scene
-    let camera: THREE.OrthographicCamera
-    let material: THREE.ShaderMaterial
-    let animationId: number
-    let startTime = 0
+	let container: HTMLDivElement
+	let canvasEl: HTMLCanvasElement
+	let renderer: THREE.WebGLRenderer
+	let scene: THREE.Scene
+	let camera: THREE.OrthographicCamera
+	let material: THREE.ShaderMaterial
+	let animationId: number
+	let startTime = 0
 
-    const vertexShader = `
+	const vertexShader = `
         varying vec2 vUv;
         void main() {
             vUv = uv;
@@ -25,7 +25,7 @@
         }
     `
 
-    const fragmentShader = `
+	const fragmentShader = `
         uniform float uTime;
         uniform vec2 uResolution;
         uniform float uSpeed;
@@ -110,77 +110,77 @@
         }
     `
 
-    function init() {
-        if (!container) return
+	function init() {
+		if (!container) return
 
-        // Scene setup
-        scene = new THREE.Scene()
-        camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+		// Scene setup
+		scene = new THREE.Scene()
+		camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
 
-        renderer = new THREE.WebGLRenderer({
-            canvas: canvasEl,
-            alpha: true,
-            antialias: true,
-            powerPreference: 'high-performance',
-        })
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+		renderer = new THREE.WebGLRenderer({
+			canvas: canvasEl,
+			alpha: true,
+			antialias: true,
+			powerPreference: 'high-performance',
+		})
+		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-        // Geometry
-        const geometry = new THREE.PlaneGeometry(2, 2)
+		// Geometry
+		const geometry = new THREE.PlaneGeometry(2, 2)
 
-        // Material
-        material = new THREE.ShaderMaterial({
-            vertexShader,
-            fragmentShader,
-            uniforms: {
-                uTime: { value: 0 },
-                uResolution: { value: new THREE.Vector2(1, 1) },
-                uSpeed: { value: speed },
-            },
-        })
+		// Material
+		material = new THREE.ShaderMaterial({
+			vertexShader,
+			fragmentShader,
+			uniforms: {
+				uTime: { value: 0 },
+				uResolution: { value: new THREE.Vector2(1, 1) },
+				uSpeed: { value: speed },
+			},
+		})
 
-        const mesh = new THREE.Mesh(geometry, material)
-        scene.add(mesh)
+		const mesh = new THREE.Mesh(geometry, material)
+		scene.add(mesh)
 
-        handleResize()
-        animate()
-    }
+		handleResize()
+		animate()
+	}
 
-    function handleResize() {
-        if (!container || !renderer || !material) return
-        const width = container.clientWidth
-        const height = container.clientHeight
-        renderer.setSize(width, height)
-        material.uniforms.uResolution.value.set(width, height)
-    }
+	function handleResize() {
+		if (!container || !renderer || !material) return
+		const width = container.clientWidth
+		const height = container.clientHeight
+		renderer.setSize(width, height)
+		material.uniforms.uResolution.value.set(width, height)
+	}
 
-    function animate() {
-        animationId = requestAnimationFrame(animate)
-        const time = (performance.now() - startTime) * 0.001
-        if (material) {
-            material.uniforms.uTime.value = time
-        }
-        renderer.render(scene, camera)
-    }
+	function animate() {
+		animationId = requestAnimationFrame(animate)
+		const time = (performance.now() - startTime) * 0.001
+		if (material) {
+			material.uniforms.uTime.value = time
+		}
+		renderer.render(scene, camera)
+	}
 
-    onMount(() => {
-        startTime = performance.now()
-        init()
+	onMount(() => {
+		startTime = performance.now()
+		init()
 
-        const resizeObserver = new ResizeObserver(() => handleResize())
-        resizeObserver.observe(container)
+		const resizeObserver = new ResizeObserver(() => handleResize())
+		resizeObserver.observe(container)
 
-        return () => {
-            cancelAnimationFrame(animationId)
-            resizeObserver.disconnect()
-            if (renderer) {
-                renderer.dispose()
-            }
-            if (material) material.dispose()
-        }
-    })
+		return () => {
+			cancelAnimationFrame(animationId)
+			resizeObserver.disconnect()
+			if (renderer) {
+				renderer.dispose()
+			}
+			if (material) material.dispose()
+		}
+	})
 </script>
 
 <div bind:this={container} class="h-full w-full overflow-hidden rounded-full">
-    <canvas bind:this={canvasEl} class="h-full w-full"></canvas>
+	<canvas bind:this={canvasEl} class="h-full w-full"></canvas>
 </div>

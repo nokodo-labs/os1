@@ -1,17 +1,17 @@
 <script lang="ts">
-	let { expanded = true, shimmer = true } = $props();
+	let { expanded = true, shimmer = true } = $props()
 </script>
 
 <div class="brand-text" class:expanded class:splash-shimmer={shimmer}>
-	<span class="brand-hidden">n</span><span class="brand-visible">ok</span
-	><span class="brand-hidden">odo</span>
+	<span class="brand-hidden">n</span><span class="brand-visible">ok</span><span
+		class="brand-hidden">odo</span
+	>
 </div>
 
 <style>
 	@font-face {
-		font-family: "nokodoFont";
-		src: url("https://nokodo.net/static/fonts/researcher-regular.woff2")
-			format("woff2");
+		font-family: 'nokodoFont';
+		src: url('https://nokodo.net/static/fonts/researcher-regular.woff2') format('woff2');
 		font-weight: 600;
 		font-style: normal;
 		font-display: swap;
@@ -19,12 +19,12 @@
 
 	.brand-text {
 		font-family:
-			"nokodoFont",
+			'nokodoFont',
 			-apple-system,
 			BlinkMacSystemFont,
-			"Segoe UI",
+			'Segoe UI',
 			Roboto,
-			"Helvetica Neue",
+			'Helvetica Neue',
 			Arial,
 			sans-serif;
 		font-size: clamp(3rem, 8vw, 5rem);
@@ -95,7 +95,7 @@
 	}
 
 	.splash-shimmer::after {
-		content: "";
+		content: '';
 		position: absolute;
 		inset: 0;
 		pointer-events: none;

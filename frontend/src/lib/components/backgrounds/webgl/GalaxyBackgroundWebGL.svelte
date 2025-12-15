@@ -1,42 +1,42 @@
 <script lang="ts">
-    import { setBackgroundContext } from '$lib/contexts/backgroundContext'
-    import type { Snippet } from 'svelte'
-    import { onDestroy, onMount } from 'svelte'
+	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import type { Snippet } from 'svelte'
+	import { onDestroy, onMount } from 'svelte'
 
-    interface Props {
-        children?: Snippet
-    }
+	interface Props {
+		children?: Snippet
+	}
 
-    let { children }: Props = $props()
+	let { children }: Props = $props()
 
-    type GLShaderType =
-        | WebGL2RenderingContext['VERTEX_SHADER']
-        | WebGL2RenderingContext['FRAGMENT_SHADER']
+	type GLShaderType =
+		| WebGL2RenderingContext['VERTEX_SHADER']
+		| WebGL2RenderingContext['FRAGMENT_SHADER']
 
-    let containerRef: HTMLDivElement
-    let canvasRef: HTMLCanvasElement
-    let gl: WebGL2RenderingContext | null = null
-    let program: WebGLProgram | null = null
-    let animationId: number | null = null
-    let resizeObserver: ResizeObserver | null = null
-    let subscribers: Array<() => void> = []
+	let containerRef: HTMLDivElement
+	let canvasRef: HTMLCanvasElement
+	let gl: WebGL2RenderingContext | null = null
+	let program: WebGLProgram | null = null
+	let animationId: number | null = null
+	let resizeObserver: ResizeObserver | null = null
+	let subscribers: Array<() => void> = []
 
-    // Expose canvas to children via context
-    setBackgroundContext({
-        getCanvas: () => canvasRef,
-        getCanvasDimensions: () => ({
-            width: canvasRef?.width || 0,
-            height: canvasRef?.height || 0,
-        }),
-        subscribe: (callback) => {
-            subscribers.push(callback)
-            return () => {
-                subscribers = subscribers.filter((cb) => cb !== callback)
-            }
-        },
-    })
+	// Expose canvas to children via context
+	setBackgroundContext({
+		getCanvas: () => canvasRef,
+		getCanvasDimensions: () => ({
+			width: canvasRef?.width || 0,
+			height: canvasRef?.height || 0,
+		}),
+		subscribe: (callback) => {
+			subscribers.push(callback)
+			return () => {
+				subscribers = subscribers.filter((cb) => cb !== callback)
+			}
+		},
+	})
 
-    const vertexShaderSource = `#version 300 es
+	const vertexShaderSource = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
 
@@ -45,7 +45,7 @@ void main() {
 	gl_Position = vec4(a_position, 0.0, 1.0);
 }`
 
-    const fragmentShaderSource = `#version 300 es
+	const fragmentShaderSource = `#version 300 es
 precision highp float;
 
 in vec2 v_uv;
@@ -159,180 +159,180 @@ void main() {
 	fragColor = vec4(col, 1.0);
 }`
 
-    function createShader(context: WebGL2RenderingContext, type: GLShaderType, source: string) {
-        const shader = context.createShader(type)
-        if (!shader) {
-            throw new Error('Failed to create shader')
-        }
-        context.shaderSource(shader, source)
-        context.compileShader(shader)
-        if (!context.getShaderParameter(shader, context.COMPILE_STATUS)) {
-            const info = context.getShaderInfoLog(shader)
-            context.deleteShader(shader)
-            throw new Error(`Shader compile error: ${info ?? 'unknown'}`)
-        }
-        return shader
-    }
+	function createShader(context: WebGL2RenderingContext, type: GLShaderType, source: string) {
+		const shader = context.createShader(type)
+		if (!shader) {
+			throw new Error('Failed to create shader')
+		}
+		context.shaderSource(shader, source)
+		context.compileShader(shader)
+		if (!context.getShaderParameter(shader, context.COMPILE_STATUS)) {
+			const info = context.getShaderInfoLog(shader)
+			context.deleteShader(shader)
+			throw new Error(`Shader compile error: ${info ?? 'unknown'}`)
+		}
+		return shader
+	}
 
-    function initWebGL() {
-        gl = canvasRef.getContext('webgl2', {
-            alpha: true,
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: true,
-        })
+	function initWebGL() {
+		gl = canvasRef.getContext('webgl2', {
+			alpha: true,
+			premultipliedAlpha: false,
+			preserveDrawingBuffer: true,
+		})
 
-        if (!gl) {
-            throw new Error('WebGL2 context not available; cannot render galaxy background')
-        }
+		if (!gl) {
+			throw new Error('WebGL2 context not available; cannot render galaxy background')
+		}
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
+		const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
+		const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
 
-        program = gl.createProgram()
-        if (!program) {
-            throw new Error('Failed to create WebGL program')
-        }
-        gl.attachShader(program, vertexShader)
-        gl.attachShader(program, fragmentShader)
-        gl.linkProgram(program)
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            const info = gl.getProgramInfoLog(program) ?? 'unknown'
-            throw new Error(`Program link error: ${info}`)
-        }
+		program = gl.createProgram()
+		if (!program) {
+			throw new Error('Failed to create WebGL program')
+		}
+		gl.attachShader(program, vertexShader)
+		gl.attachShader(program, fragmentShader)
+		gl.linkProgram(program)
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+			const info = gl.getProgramInfoLog(program) ?? 'unknown'
+			throw new Error(`Program link error: ${info}`)
+		}
 
-        const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
-        const buffer = gl.createBuffer()
-        if (!buffer) {
-            throw new Error('Failed to create vertex buffer')
-        }
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
+		const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+		const buffer = gl.createBuffer()
+		if (!buffer) {
+			throw new Error('Failed to create vertex buffer')
+		}
+		gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+		gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
 
-        const positionLoc = gl.getAttribLocation(program, 'a_position')
-        gl.enableVertexAttribArray(positionLoc)
-        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
+		const positionLoc = gl.getAttribLocation(program, 'a_position')
+		gl.enableVertexAttribArray(positionLoc)
+		gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
 
-        gl.clearColor(0, 0, 0, 1)
-    }
+		gl.clearColor(0, 0, 0, 1)
+	}
 
-    function resize(width: number, height: number) {
-        if (!gl || !canvasRef) return
-        const dpr = window.devicePixelRatio || 1
-        const displayWidth = Math.max(1, Math.floor(width * dpr))
-        const displayHeight = Math.max(1, Math.floor(height * dpr))
+	function resize(width: number, height: number) {
+		if (!gl || !canvasRef) return
+		const dpr = window.devicePixelRatio || 1
+		const displayWidth = Math.max(1, Math.floor(width * dpr))
+		const displayHeight = Math.max(1, Math.floor(height * dpr))
 
-        if (canvasRef.width !== displayWidth || canvasRef.height !== displayHeight) {
-            canvasRef.width = displayWidth
-            canvasRef.height = displayHeight
-            canvasRef.style.width = `${width}px`
-            canvasRef.style.height = `${height}px`
-            gl.viewport(0, 0, displayWidth, displayHeight)
-        }
-    }
+		if (canvasRef.width !== displayWidth || canvasRef.height !== displayHeight) {
+			canvasRef.width = displayWidth
+			canvasRef.height = displayHeight
+			canvasRef.style.width = `${width}px`
+			canvasRef.style.height = `${height}px`
+			gl.viewport(0, 0, displayWidth, displayHeight)
+		}
+	}
 
-    function animate(time: number) {
-        if (!gl || !program) return
+	function animate(time: number) {
+		if (!gl || !program) return
 
-        gl.useProgram(program)
+		gl.useProgram(program)
 
-        const seconds = time * 0.001
+		const seconds = time * 0.001
 
-        // Configuration matching the inspiration
-        const focal = [0.5, 0.5]
-        const rotation = [1.0, 0.0]
-        const starSpeed = 0.5
-        const density = 1.0
-        const speed = 1.0
-        const glowIntensity = 0.3
-        const twinkleIntensity = 0.3
-        const rotationSpeed = 0.1
+		// Configuration matching the inspiration
+		const focal = [0.5, 0.5]
+		const rotation = [1.0, 0.0]
+		const starSpeed = 0.5
+		const density = 1.0
+		const speed = 1.0
+		const glowIntensity = 0.3
+		const twinkleIntensity = 0.3
+		const rotationSpeed = 0.1
 
-        gl.uniform1f(gl.getUniformLocation(program, 'u_time'), seconds)
-        gl.uniform2f(
-            gl.getUniformLocation(program, 'u_resolution'),
-            canvasRef.width,
-            canvasRef.height
-        )
-        gl.uniform1f(gl.getUniformLocation(program, 'u_focal_x'), focal[0])
-        gl.uniform1f(gl.getUniformLocation(program, 'u_focal_y'), focal[1])
-        gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_x'), rotation[0])
-        gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_y'), rotation[1])
-        gl.uniform1f(gl.getUniformLocation(program, 'u_star_speed'), (seconds * starSpeed) / 10.0)
-        gl.uniform1f(gl.getUniformLocation(program, 'u_density'), density)
-        gl.uniform1f(gl.getUniformLocation(program, 'u_speed'), speed)
-        gl.uniform1f(gl.getUniformLocation(program, 'u_glow_intensity'), glowIntensity)
-        gl.uniform1f(gl.getUniformLocation(program, 'u_twinkle_intensity'), twinkleIntensity)
-        gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_speed'), rotationSpeed)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_time'), seconds)
+		gl.uniform2f(
+			gl.getUniformLocation(program, 'u_resolution'),
+			canvasRef.width,
+			canvasRef.height
+		)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_focal_x'), focal[0])
+		gl.uniform1f(gl.getUniformLocation(program, 'u_focal_y'), focal[1])
+		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_x'), rotation[0])
+		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_y'), rotation[1])
+		gl.uniform1f(gl.getUniformLocation(program, 'u_star_speed'), (seconds * starSpeed) / 10.0)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_density'), density)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_speed'), speed)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_glow_intensity'), glowIntensity)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_twinkle_intensity'), twinkleIntensity)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_speed'), rotationSpeed)
 
-        gl.clear(gl.COLOR_BUFFER_BIT)
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
-        gl.flush()
+		gl.clear(gl.COLOR_BUFFER_BIT)
+		gl.drawArrays(gl.TRIANGLES, 0, 6)
+		gl.flush()
 
-        animationId = requestAnimationFrame(animate)
-    }
+		animationId = requestAnimationFrame(animate)
+	}
 
-    onMount(() => {
-        try {
-            initWebGL()
+	onMount(() => {
+		try {
+			initWebGL()
 
-            resizeObserver = new ResizeObserver((entries) => {
-                for (const entry of entries) {
-                    const box = entry.contentRect
-                    resize(box.width, box.height)
-                }
-            })
+			resizeObserver = new ResizeObserver((entries) => {
+				for (const entry of entries) {
+					const box = entry.contentRect
+					resize(box.width, box.height)
+				}
+			})
 
-            if (containerRef) {
-                resizeObserver.observe(containerRef)
-            }
+			if (containerRef) {
+				resizeObserver.observe(containerRef)
+			}
 
-            const rect = containerRef.getBoundingClientRect()
-            resize(rect.width, rect.height)
-            animationId = requestAnimationFrame(animate)
-        } catch (error) {
-            console.error('Failed to initialize WebGL galaxy background:', error)
-        }
-    })
+			const rect = containerRef.getBoundingClientRect()
+			resize(rect.width, rect.height)
+			animationId = requestAnimationFrame(animate)
+		} catch (error) {
+			console.error('Failed to initialize WebGL galaxy background:', error)
+		}
+	})
 
-    onDestroy(() => {
-        if (animationId !== null) {
-            cancelAnimationFrame(animationId)
-        }
-        resizeObserver?.disconnect()
-        if (gl) {
-            gl.getExtension('WEBGL_lose_context')?.loseContext()
-        }
-    })
+	onDestroy(() => {
+		if (animationId !== null) {
+			cancelAnimationFrame(animationId)
+		}
+		resizeObserver?.disconnect()
+		if (gl) {
+			gl.getExtension('WEBGL_lose_context')?.loseContext()
+		}
+	})
 </script>
 
 <div class="webgl-galaxy" bind:this={containerRef}>
-    <canvas bind:this={canvasRef}></canvas>
+	<canvas bind:this={canvasRef}></canvas>
 
-    <!-- Slotted content rendered on top of galaxy -->
-    <div class="content-layer">
-        {@render children?.()}
-    </div>
+	<!-- Slotted content rendered on top of galaxy -->
+	<div class="content-layer">
+		{@render children?.()}
+	</div>
 </div>
 
 <style>
-    .webgl-galaxy {
-        position: absolute;
-        inset: 0;
-        overflow: hidden;
-    }
+	.webgl-galaxy {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+	}
 
-    canvas {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-    }
+	canvas {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		display: block;
+	}
 
-    .content-layer {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        z-index: 1;
-    }
+	.content-layer {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		z-index: 1;
+	}
 </style>

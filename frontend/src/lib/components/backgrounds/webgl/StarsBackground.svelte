@@ -1,20 +1,20 @@
 <script lang="ts">
-    import { onDestroy, onMount } from 'svelte'
+	import { onDestroy, onMount } from 'svelte'
 
-    type GLShaderType =
-        | WebGL2RenderingContext['VERTEX_SHADER']
-        | WebGL2RenderingContext['FRAGMENT_SHADER']
+	type GLShaderType =
+		| WebGL2RenderingContext['VERTEX_SHADER']
+		| WebGL2RenderingContext['FRAGMENT_SHADER']
 
-    let containerRef: HTMLDivElement
-    let canvasRef: HTMLCanvasElement
-    let gl: WebGL2RenderingContext | null = null
-    let program: WebGLProgram | null = null
-    let animationId: number | null = null
-    let resizeObserver: ResizeObserver | null = null
-    let pointerTarget = { x: 0.5, y: 0.5 }
-    let pointerSmooth = { x: 0.5, y: 0.5 }
+	let containerRef: HTMLDivElement
+	let canvasRef: HTMLCanvasElement
+	let gl: WebGL2RenderingContext | null = null
+	let program: WebGLProgram | null = null
+	let animationId: number | null = null
+	let resizeObserver: ResizeObserver | null = null
+	let pointerTarget = { x: 0.5, y: 0.5 }
+	let pointerSmooth = { x: 0.5, y: 0.5 }
 
-    const vertexShaderSource = `#version 300 es
+	const vertexShaderSource = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
 
@@ -23,7 +23,7 @@ void main() {
 	gl_Position = vec4(a_position, 0.0, 1.0);
 }`
 
-    const fragmentShaderSource = `#version 300 es
+	const fragmentShaderSource = `#version 300 es
 precision highp float;
 
 
@@ -139,177 +139,177 @@ void main() {
 	fragColor = vec4(accum, 1.0);
 }`
 
-    function createShader(context: WebGL2RenderingContext, type: GLShaderType, source: string) {
-        const shader = context.createShader(type)
-        if (!shader) {
-            throw new Error('Failed to create shader')
-        }
-        context.shaderSource(shader, source)
-        context.compileShader(shader)
-        if (!context.getShaderParameter(shader, context.COMPILE_STATUS)) {
-            const info = context.getShaderInfoLog(shader)
-            context.deleteShader(shader)
-            throw new Error(`Shader compile error: ${info ?? 'unknown'}`)
-        }
-        return shader
-    }
+	function createShader(context: WebGL2RenderingContext, type: GLShaderType, source: string) {
+		const shader = context.createShader(type)
+		if (!shader) {
+			throw new Error('Failed to create shader')
+		}
+		context.shaderSource(shader, source)
+		context.compileShader(shader)
+		if (!context.getShaderParameter(shader, context.COMPILE_STATUS)) {
+			const info = context.getShaderInfoLog(shader)
+			context.deleteShader(shader)
+			throw new Error(`Shader compile error: ${info ?? 'unknown'}`)
+		}
+		return shader
+	}
 
-    function initWebGL() {
-        gl = canvasRef.getContext('webgl2', {
-            alpha: true,
-            premultipliedAlpha: false,
-        })
+	function initWebGL() {
+		gl = canvasRef.getContext('webgl2', {
+			alpha: true,
+			premultipliedAlpha: false,
+		})
 
-        if (!gl) {
-            throw new Error('WebGL2 context not available; cannot render galaxy background')
-        }
+		if (!gl) {
+			throw new Error('WebGL2 context not available; cannot render galaxy background')
+		}
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
+		const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
+		const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
 
-        program = gl.createProgram()
-        if (!program) {
-            throw new Error('Failed to create WebGL program')
-        }
-        gl.attachShader(program, vertexShader)
-        gl.attachShader(program, fragmentShader)
-        gl.linkProgram(program)
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            const info = gl.getProgramInfoLog(program) ?? 'unknown'
-            throw new Error(`Program link error: ${info}`)
-        }
+		program = gl.createProgram()
+		if (!program) {
+			throw new Error('Failed to create WebGL program')
+		}
+		gl.attachShader(program, vertexShader)
+		gl.attachShader(program, fragmentShader)
+		gl.linkProgram(program)
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+			const info = gl.getProgramInfoLog(program) ?? 'unknown'
+			throw new Error(`Program link error: ${info}`)
+		}
 
-        const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
-        const buffer = gl.createBuffer()
-        if (!buffer) {
-            throw new Error('Failed to create vertex buffer')
-        }
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
+		const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+		const buffer = gl.createBuffer()
+		if (!buffer) {
+			throw new Error('Failed to create vertex buffer')
+		}
+		gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+		gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
 
-        const positionLoc = gl.getAttribLocation(program, 'a_position')
-        gl.enableVertexAttribArray(positionLoc)
-        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
+		const positionLoc = gl.getAttribLocation(program, 'a_position')
+		gl.enableVertexAttribArray(positionLoc)
+		gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
 
-        gl.clearColor(0, 0, 0, 1)
-    }
+		gl.clearColor(0, 0, 0, 1)
+	}
 
-    function resize(width: number, height: number) {
-        if (!gl || !canvasRef) return
-        const dpr = window.devicePixelRatio || 1
-        const displayWidth = Math.max(1, Math.floor(width * dpr))
-        const displayHeight = Math.max(1, Math.floor(height * dpr))
+	function resize(width: number, height: number) {
+		if (!gl || !canvasRef) return
+		const dpr = window.devicePixelRatio || 1
+		const displayWidth = Math.max(1, Math.floor(width * dpr))
+		const displayHeight = Math.max(1, Math.floor(height * dpr))
 
-        if (canvasRef.width !== displayWidth || canvasRef.height !== displayHeight) {
-            canvasRef.width = displayWidth
-            canvasRef.height = displayHeight
-            canvasRef.style.width = `${width}px`
-            canvasRef.style.height = `${height}px`
-            gl.viewport(0, 0, displayWidth, displayHeight)
-        }
-    }
+		if (canvasRef.width !== displayWidth || canvasRef.height !== displayHeight) {
+			canvasRef.width = displayWidth
+			canvasRef.height = displayHeight
+			canvasRef.style.width = `${width}px`
+			canvasRef.style.height = `${height}px`
+			gl.viewport(0, 0, displayWidth, displayHeight)
+		}
+	}
 
-    function animate(time: number) {
-        if (!gl || !program) return
+	function animate(time: number) {
+		if (!gl || !program) return
 
-        gl.useProgram(program)
+		gl.useProgram(program)
 
-        pointerSmooth.x += (pointerTarget.x - pointerSmooth.x) * 0.045
-        pointerSmooth.y += (pointerTarget.y - pointerSmooth.y) * 0.045
+		pointerSmooth.x += (pointerTarget.x - pointerSmooth.x) * 0.045
+		pointerSmooth.y += (pointerTarget.y - pointerSmooth.y) * 0.045
 
-        const seconds = time * 0.001
-        const width = canvasRef.width
-        const height = canvasRef.height
+		const seconds = time * 0.001
+		const width = canvasRef.width
+		const height = canvasRef.height
 
-        const timeLoc = gl.getUniformLocation(program, 'u_time')
-        const resolutionLoc = gl.getUniformLocation(program, 'u_resolution')
-        const pointerLoc = gl.getUniformLocation(program, 'u_pointer')
-        const densityLoc = gl.getUniformLocation(program, 'u_density')
-        const glowLoc = gl.getUniformLocation(program, 'u_glow')
-        const saturationLoc = gl.getUniformLocation(program, 'u_saturation')
-        const twinkleLoc = gl.getUniformLocation(program, 'u_twinkle')
-        const rotationLoc = gl.getUniformLocation(program, 'u_rotation')
-        const hueShiftLoc = gl.getUniformLocation(program, 'u_hue_shift')
+		const timeLoc = gl.getUniformLocation(program, 'u_time')
+		const resolutionLoc = gl.getUniformLocation(program, 'u_resolution')
+		const pointerLoc = gl.getUniformLocation(program, 'u_pointer')
+		const densityLoc = gl.getUniformLocation(program, 'u_density')
+		const glowLoc = gl.getUniformLocation(program, 'u_glow')
+		const saturationLoc = gl.getUniformLocation(program, 'u_saturation')
+		const twinkleLoc = gl.getUniformLocation(program, 'u_twinkle')
+		const rotationLoc = gl.getUniformLocation(program, 'u_rotation')
+		const hueShiftLoc = gl.getUniformLocation(program, 'u_hue_shift')
 
-        gl.uniform1f(timeLoc, seconds)
-        gl.uniform2f(resolutionLoc, width, height)
-        gl.uniform2f(pointerLoc, pointerSmooth.x, pointerSmooth.y)
-        gl.uniform1f(densityLoc, 1.0)
-        gl.uniform1f(glowLoc, 1.0)
-        gl.uniform1f(saturationLoc, 1.0)
-        gl.uniform1f(twinkleLoc, 0.7)
-        gl.uniform1f(rotationLoc, seconds * 0.04)
-        gl.uniform1f(hueShiftLoc, 0.58)
+		gl.uniform1f(timeLoc, seconds)
+		gl.uniform2f(resolutionLoc, width, height)
+		gl.uniform2f(pointerLoc, pointerSmooth.x, pointerSmooth.y)
+		gl.uniform1f(densityLoc, 1.0)
+		gl.uniform1f(glowLoc, 1.0)
+		gl.uniform1f(saturationLoc, 1.0)
+		gl.uniform1f(twinkleLoc, 0.7)
+		gl.uniform1f(rotationLoc, seconds * 0.04)
+		gl.uniform1f(hueShiftLoc, 0.58)
 
-        gl.clear(gl.COLOR_BUFFER_BIT)
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
+		gl.clear(gl.COLOR_BUFFER_BIT)
+		gl.drawArrays(gl.TRIANGLES, 0, 6)
 
-        animationId = requestAnimationFrame(animate)
-    }
+		animationId = requestAnimationFrame(animate)
+	}
 
-    function handlePointerMove(event: PointerEvent) {
-        if (!containerRef) return
-        const rect = containerRef.getBoundingClientRect()
-        pointerTarget = {
-            x: (event.clientX - rect.left) / rect.width,
-            y: 1 - (event.clientY - rect.top) / rect.height,
-        }
-    }
+	function handlePointerMove(event: PointerEvent) {
+		if (!containerRef) return
+		const rect = containerRef.getBoundingClientRect()
+		pointerTarget = {
+			x: (event.clientX - rect.left) / rect.width,
+			y: 1 - (event.clientY - rect.top) / rect.height,
+		}
+	}
 
-    function handlePointerLeave() {
-        pointerTarget = { x: 0.5, y: 0.5 }
-    }
+	function handlePointerLeave() {
+		pointerTarget = { x: 0.5, y: 0.5 }
+	}
 
-    onMount(() => {
-        initWebGL()
+	onMount(() => {
+		initWebGL()
 
-        resizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const box = entry.contentRect
-                resize(box.width, box.height)
-            }
-        })
+		resizeObserver = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				const box = entry.contentRect
+				resize(box.width, box.height)
+			}
+		})
 
-        if (containerRef) {
-            resizeObserver.observe(containerRef)
-            containerRef.addEventListener('pointermove', handlePointerMove)
-            containerRef.addEventListener('pointerleave', handlePointerLeave)
-        }
+		if (containerRef) {
+			resizeObserver.observe(containerRef)
+			containerRef.addEventListener('pointermove', handlePointerMove)
+			containerRef.addEventListener('pointerleave', handlePointerLeave)
+		}
 
-        const rect = containerRef.getBoundingClientRect()
-        resize(rect.width, rect.height)
-        animationId = requestAnimationFrame(animate)
-    })
+		const rect = containerRef.getBoundingClientRect()
+		resize(rect.width, rect.height)
+		animationId = requestAnimationFrame(animate)
+	})
 
-    onDestroy(() => {
-        if (animationId !== null) {
-            cancelAnimationFrame(animationId)
-        }
-        resizeObserver?.disconnect()
-        containerRef?.removeEventListener('pointermove', handlePointerMove)
-        containerRef?.removeEventListener('pointerleave', handlePointerLeave)
-        if (gl) {
-            gl.getExtension('WEBGL_lose_context')?.loseContext()
-        }
-    })
+	onDestroy(() => {
+		if (animationId !== null) {
+			cancelAnimationFrame(animationId)
+		}
+		resizeObserver?.disconnect()
+		containerRef?.removeEventListener('pointermove', handlePointerMove)
+		containerRef?.removeEventListener('pointerleave', handlePointerLeave)
+		if (gl) {
+			gl.getExtension('WEBGL_lose_context')?.loseContext()
+		}
+	})
 </script>
 
 <div class="stars-background" bind:this={containerRef}>
-    <canvas bind:this={canvasRef}></canvas>
+	<canvas bind:this={canvasRef}></canvas>
 </div>
 
 <style>
-    .stars-background {
-        position: absolute;
-        inset: 0;
-        overflow: hidden;
-    }
+	.stars-background {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+	}
 
-    canvas {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-    }
+	canvas {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		display: block;
+	}
 </style>

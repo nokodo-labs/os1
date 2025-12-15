@@ -1,18 +1,16 @@
 <script lang="ts">
-	import { page } from "$app/state";
-	import { auth } from "$lib/auth.svelte";
-	import { Box, LayoutDashboard, Server } from "@lucide/svelte";
+	import { page } from '$app/state'
+	import { auth } from '$lib/auth.svelte'
+	import { Box, LayoutDashboard, Server } from '@lucide/svelte'
 
-	let { children } = $props();
+	let { children } = $props()
 </script>
 
 <div class="flex min-h-screen bg-zinc-950 text-zinc-100">
 	<!-- Sidebar -->
 	<aside class="flex w-64 flex-col border-r border-zinc-800 p-6">
 		<div class="mb-8">
-			<p class="text-sm uppercase tracking-[0.3em] text-zinc-400">
-				nokodo
-			</p>
+			<p class="text-sm tracking-[0.3em] text-zinc-400 uppercase">nokodo</p>
 			<h1 class="text-xl font-semibold">console</h1>
 		</div>
 
@@ -30,7 +28,7 @@
 			<a
 				href="/providers"
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
-					'/providers',
+					'/providers'
 				)
 					? 'bg-zinc-800 text-white'
 					: 'text-zinc-400 hover:text-zinc-200'}"
@@ -41,7 +39,7 @@
 			<a
 				href="/models"
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
-					'/models',
+					'/models'
 				)
 					? 'bg-zinc-800 text-white'
 					: 'text-zinc-400 hover:text-zinc-200'}"

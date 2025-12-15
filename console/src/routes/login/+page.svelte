@@ -1,34 +1,34 @@
 <script lang="ts">
-	import { goto } from "$app/navigation";
-	import { auth } from "$lib/auth.svelte";
-	import { Button } from "$lib/components/ui/button";
+	import { goto } from '$app/navigation'
+	import { auth } from '$lib/auth.svelte'
+	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
 		CardContent,
 		CardDescription,
 		CardHeader,
 		CardTitle,
-	} from "$lib/components/ui/card";
-	import { Input } from "$lib/components/ui/input";
-	import { Label } from "$lib/components/ui/label";
+	} from '$lib/components/ui/card'
+	import { Input } from '$lib/components/ui/input'
+	import { Label } from '$lib/components/ui/label'
 
-	let email = $state("");
-	let password = $state("");
-	let isLoading = $state(false);
-	let error = $state<string | null>(null);
+	let email = $state('')
+	let password = $state('')
+	let isLoading = $state(false)
+	let error = $state<string | null>(null)
 
 	async function handleSubmit(e: Event) {
-		e.preventDefault();
-		isLoading = true;
-		error = null;
+		e.preventDefault()
+		isLoading = true
+		error = null
 
 		try {
-			await auth.login(email, password);
-			goto("/dashboard");
+			await auth.login(email, password)
+			goto('/dashboard')
 		} catch (e: any) {
-			error = e.message;
+			error = e.message
 		} finally {
-			isLoading = false;
+			isLoading = false
 		}
 	}
 </script>
@@ -37,16 +37,12 @@
 	<Card class="w-full max-w-sm border-zinc-800 bg-zinc-900 text-zinc-100">
 		<CardHeader>
 			<CardTitle class="text-2xl">admin console</CardTitle>
-			<CardDescription>
-				enter your credentials to access the console
-			</CardDescription>
+			<CardDescription>enter your credentials to access the console</CardDescription>
 		</CardHeader>
 		<form onsubmit={handleSubmit}>
 			<CardContent class="space-y-4">
 				{#if error}
-					<div
-						class="rounded-md bg-red-500/10 p-3 text-sm text-red-500"
-					>
+					<div class="rounded-md bg-red-500/10 p-3 text-sm text-red-500">
 						{error}
 					</div>
 				{/if}
@@ -62,17 +58,12 @@
 				</div>
 				<div class="space-y-2">
 					<Label for="password">password</Label>
-					<Input
-						id="password"
-						type="password"
-						required
-						bind:value={password}
-					/>
+					<Input id="password" type="password" required bind:value={password} />
 				</div>
 			</CardContent>
 			<div class="p-6 pt-0">
 				<Button type="submit" class="w-full" disabled={isLoading}>
-					{isLoading ? "signing in..." : "sign in"}
+					{isLoading ? 'signing in...' : 'sign in'}
 				</Button>
 			</div>
 		</form>

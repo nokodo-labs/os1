@@ -1,81 +1,81 @@
 <script lang="ts">
-    import { setBackgroundContext } from '$lib/contexts/backgroundContext'
-    import type { Snippet } from 'svelte'
-    import { onDestroy, onMount } from 'svelte'
+	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import type { Snippet } from 'svelte'
+	import { onDestroy, onMount } from 'svelte'
 
-    export type RaysOrigin =
-        | 'top-center'
-        | 'top-left'
-        | 'top-right'
-        | 'right'
-        | 'left'
-        | 'bottom-center'
-        | 'bottom-right'
-        | 'bottom-left'
+	export type RaysOrigin =
+		| 'top-center'
+		| 'top-left'
+		| 'top-right'
+		| 'right'
+		| 'left'
+		| 'bottom-center'
+		| 'bottom-right'
+		| 'bottom-left'
 
-    interface Props {
-        children?: Snippet
-        raysOrigin?: RaysOrigin
-        raysColor?: string
-        raysSpeed?: number
-        lightSpread?: number
-        rayLength?: number
-        pulsating?: boolean
-        fadeDistance?: number
-        saturation?: number
-        followMouse?: boolean
-        mouseInfluence?: number
-        noiseAmount?: number
-        distortion?: number
-        transparent?: boolean
-    }
+	interface Props {
+		children?: Snippet
+		raysOrigin?: RaysOrigin
+		raysColor?: string
+		raysSpeed?: number
+		lightSpread?: number
+		rayLength?: number
+		pulsating?: boolean
+		fadeDistance?: number
+		saturation?: number
+		followMouse?: boolean
+		mouseInfluence?: number
+		noiseAmount?: number
+		distortion?: number
+		transparent?: boolean
+	}
 
-    let {
-        children,
-        raysOrigin = 'top-center',
-        raysColor = '#ffffff',
-        raysSpeed = 1,
-        lightSpread = 0.5,
-        rayLength = 1.0,
-        pulsating = false,
-        fadeDistance = 1.0,
-        saturation = 1.0,
-        followMouse = false,
-        mouseInfluence = 0.5,
-        noiseAmount = 0.0,
-        distortion = 0.0,
-        transparent = false,
-    }: Props = $props()
+	let {
+		children,
+		raysOrigin = 'top-center',
+		raysColor = '#ffffff',
+		raysSpeed = 1,
+		lightSpread = 0.5,
+		rayLength = 1.0,
+		pulsating = false,
+		fadeDistance = 1.0,
+		saturation = 1.0,
+		followMouse = false,
+		mouseInfluence = 0.5,
+		noiseAmount = 0.0,
+		distortion = 0.0,
+		transparent = false,
+	}: Props = $props()
 
-    let containerRef: HTMLDivElement
-    let canvasRef: HTMLCanvasElement
-    let gl: WebGL2RenderingContext | null = null
-    let program: WebGLProgram | null = null
-    let animationId: number | null = null
-    let resizeObserver: ResizeObserver | null = null
-    let intersectionObserver: IntersectionObserver | null = null
-    let startTime = 0
-    let subscribers: Array<() => void> = []
-    let mouseRef = { x: 0.5, y: 0.5 }
-    let smoothMouseRef = { x: 0.5, y: 0.5 }
-    let isVisible = $state(false)
+	let containerRef: HTMLDivElement
+	let canvasRef: HTMLCanvasElement
+	let gl: WebGL2RenderingContext | null = null
+	let program: WebGLProgram | null = null
+	let animationId: number | null = null
+	let resizeObserver: ResizeObserver | null = null
+	let intersectionObserver: IntersectionObserver | null = null
+	let startTime = 0
+	let subscribers: Array<() => void> = []
+	let mouseRef = { x: 0.5, y: 0.5 }
+	let smoothMouseRef = { x: 0.5, y: 0.5 }
+	let isVisible = $state(false)
 
-    // Expose canvas to children via context
-    setBackgroundContext({
-        getCanvas: () => canvasRef,
-        getCanvasDimensions: () => ({
-            width: canvasRef?.width || 0,
-            height: canvasRef?.height || 0,
-        }),
-        subscribe: (callback) => {
-            subscribers.push(callback)
-            return () => {
-                subscribers = subscribers.filter((cb) => cb !== callback)
-            }
-        },
-    })
+	// Expose canvas to children via context
+	setBackgroundContext({
+		getCanvas: () => canvasRef,
+		getCanvasDimensions: () => ({
+			width: canvasRef?.width || 0,
+			height: canvasRef?.height || 0,
+		}),
+		subscribe: (callback) => {
+			subscribers.push(callback)
+			return () => {
+				subscribers = subscribers.filter((cb) => cb !== callback)
+			}
+		},
+	})
 
-    const vertexShaderSource = `#version 300 es
+	const vertexShaderSource = `#version 300 es
 in vec2 a_position;
 out vec2 vUv;
 
@@ -84,7 +84,7 @@ void main() {
 	gl_Position = vec4(a_position, 0.0, 1.0);
 }`
 
-    const fragmentShaderSource = `#version 300 es
+	const fragmentShaderSource = `#version 300 es
 precision highp float;
 
 uniform float iTime;
@@ -179,314 +179,314 @@ void main() {
 	fragColor = color;
 }`
 
-    function createShader(
-        gl: WebGL2RenderingContext,
-        type: number,
-        source: string
-    ): WebGLShader | null {
-        const shader = gl.createShader(type)
-        if (!shader) return null
+	function createShader(
+		gl: WebGL2RenderingContext,
+		type: number,
+		source: string
+	): WebGLShader | null {
+		const shader = gl.createShader(type)
+		if (!shader) return null
 
-        gl.shaderSource(shader, source)
-        gl.compileShader(shader)
+		gl.shaderSource(shader, source)
+		gl.compileShader(shader)
 
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error('Shader compile error:', gl.getShaderInfoLog(shader))
-            gl.deleteShader(shader)
-            return null
-        }
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+			console.error('Shader compile error:', gl.getShaderInfoLog(shader))
+			gl.deleteShader(shader)
+			return null
+		}
 
-        return shader
-    }
+		return shader
+	}
 
-    function createProgram(
-        gl: WebGL2RenderingContext,
-        vertexShader: WebGLShader,
-        fragmentShader: WebGLShader
-    ): WebGLProgram | null {
-        const prog = gl.createProgram()
-        if (!prog) return null
+	function createProgram(
+		gl: WebGL2RenderingContext,
+		vertexShader: WebGLShader,
+		fragmentShader: WebGLShader
+	): WebGLProgram | null {
+		const prog = gl.createProgram()
+		if (!prog) return null
 
-        gl.attachShader(prog, vertexShader)
-        gl.attachShader(prog, fragmentShader)
-        gl.linkProgram(prog)
+		gl.attachShader(prog, vertexShader)
+		gl.attachShader(prog, fragmentShader)
+		gl.linkProgram(prog)
 
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error('Program link error:', gl.getProgramInfoLog(prog))
-            gl.deleteProgram(prog)
-            return null
-        }
+		if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+			console.error('Program link error:', gl.getProgramInfoLog(prog))
+			gl.deleteProgram(prog)
+			return null
+		}
 
-        return prog
-    }
+		return prog
+	}
 
-    function hexToRgb(hex: string): { r: number; g: number; b: number } {
-        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-        return m
-            ? {
-                  r: parseInt(m[1], 16) / 255,
-                  g: parseInt(m[2], 16) / 255,
-                  b: parseInt(m[3], 16) / 255,
-              }
-            : { r: 1, g: 1, b: 1 }
-    }
+	function hexToRgb(hex: string): { r: number; g: number; b: number } {
+		const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+		return m
+			? {
+					r: parseInt(m[1], 16) / 255,
+					g: parseInt(m[2], 16) / 255,
+					b: parseInt(m[3], 16) / 255,
+				}
+			: { r: 1, g: 1, b: 1 }
+	}
 
-    function getAnchorAndDir(
-        origin: RaysOrigin,
-        w: number,
-        h: number
-    ): { anchor: [number, number]; dir: [number, number] } {
-        const outside = 0.2
-        switch (origin) {
-            case 'top-left':
-                return { anchor: [0, -outside * h], dir: [0, 1] }
-            case 'top-right':
-                return { anchor: [w, -outside * h], dir: [0, 1] }
-            case 'left':
-                return { anchor: [-outside * w, 0.5 * h], dir: [1, 0] }
-            case 'right':
-                return { anchor: [(1 + outside) * w, 0.5 * h], dir: [-1, 0] }
-            case 'bottom-left':
-                return { anchor: [0, (1 + outside) * h], dir: [0, -1] }
-            case 'bottom-center':
-                return { anchor: [0.5 * w, (1 + outside) * h], dir: [0, -1] }
-            case 'bottom-right':
-                return { anchor: [w, (1 + outside) * h], dir: [0, -1] }
-            default: // "top-center"
-                return { anchor: [0.5 * w, -outside * h], dir: [0, 1] }
-        }
-    }
+	function getAnchorAndDir(
+		origin: RaysOrigin,
+		w: number,
+		h: number
+	): { anchor: [number, number]; dir: [number, number] } {
+		const outside = 0.2
+		switch (origin) {
+			case 'top-left':
+				return { anchor: [0, -outside * h], dir: [0, 1] }
+			case 'top-right':
+				return { anchor: [w, -outside * h], dir: [0, 1] }
+			case 'left':
+				return { anchor: [-outside * w, 0.5 * h], dir: [1, 0] }
+			case 'right':
+				return { anchor: [(1 + outside) * w, 0.5 * h], dir: [-1, 0] }
+			case 'bottom-left':
+				return { anchor: [0, (1 + outside) * h], dir: [0, -1] }
+			case 'bottom-center':
+				return { anchor: [0.5 * w, (1 + outside) * h], dir: [0, -1] }
+			case 'bottom-right':
+				return { anchor: [w, (1 + outside) * h], dir: [0, -1] }
+			default: // "top-center"
+				return { anchor: [0.5 * w, -outside * h], dir: [0, 1] }
+		}
+	}
 
-    function resize() {
-        if (!canvasRef || !containerRef || !gl || !program || !isVisible) return
+	function resize() {
+		if (!canvasRef || !containerRef || !gl || !program || !isVisible) return
 
-        const dpr = Math.min(window.devicePixelRatio, 2)
-        const rect = containerRef.getBoundingClientRect()
-        const width = Math.floor(rect.width * dpr)
-        const height = Math.floor(rect.height * dpr)
+		const dpr = Math.min(window.devicePixelRatio, 2)
+		const rect = containerRef.getBoundingClientRect()
+		const width = Math.floor(rect.width * dpr)
+		const height = Math.floor(rect.height * dpr)
 
-        if (canvasRef.width !== width || canvasRef.height !== height) {
-            canvasRef.width = width
-            canvasRef.height = height
-            gl.viewport(0, 0, width, height)
+		if (canvasRef.width !== width || canvasRef.height !== height) {
+			canvasRef.width = width
+			canvasRef.height = height
+			gl.viewport(0, 0, width, height)
 
-            subscribers.forEach((cb) => cb())
-        }
-    }
+			subscribers.forEach((cb) => cb())
+		}
+	}
 
-    function animate() {
-        if (!gl || !program || !isVisible) return
+	function animate() {
+		if (!gl || !program || !isVisible) return
 
-        resize()
+		resize()
 
-        const elapsed = (performance.now() - startTime) / 1000
+		const elapsed = (performance.now() - startTime) / 1000
 
-        // Smooth mouse lerp
-        const smoothing = 0.92
-        smoothMouseRef.x = smoothMouseRef.x * smoothing + mouseRef.x * (1 - smoothing)
-        smoothMouseRef.y = smoothMouseRef.y * smoothing + mouseRef.y * (1 - smoothing)
+		// Smooth mouse lerp
+		const smoothing = 0.92
+		smoothMouseRef.x = smoothMouseRef.x * smoothing + mouseRef.x * (1 - smoothing)
+		smoothMouseRef.y = smoothMouseRef.y * smoothing + mouseRef.y * (1 - smoothing)
 
-        // Clear with black or transparent background
-        if (transparent) {
-            gl.clearColor(0, 0, 0, 0)
-        } else {
-            gl.clearColor(0, 0, 0, 1)
-        }
-        gl.clear(gl.COLOR_BUFFER_BIT)
+		// Clear with black or transparent background
+		if (transparent) {
+			gl.clearColor(0, 0, 0, 0)
+		} else {
+			gl.clearColor(0, 0, 0, 1)
+		}
+		gl.clear(gl.COLOR_BUFFER_BIT)
 
-        gl.useProgram(program)
+		gl.useProgram(program)
 
-        // Update resolution and ray uniforms
-        const dpr = Math.min(window.devicePixelRatio, 2)
-        const rect = containerRef.getBoundingClientRect()
-        const width = Math.floor(rect.width * dpr)
-        const height = Math.floor(rect.height * dpr)
+		// Update resolution and ray uniforms
+		const dpr = Math.min(window.devicePixelRatio, 2)
+		const rect = containerRef.getBoundingClientRect()
+		const width = Math.floor(rect.width * dpr)
+		const height = Math.floor(rect.height * dpr)
 
-        const iResolution = gl.getUniformLocation(program, 'iResolution')
-        gl.uniform2f(iResolution, width, height)
+		const iResolution = gl.getUniformLocation(program, 'iResolution')
+		gl.uniform2f(iResolution, width, height)
 
-        const { anchor, dir } = getAnchorAndDir(raysOrigin, width, height)
-        const rayPos = gl.getUniformLocation(program, 'rayPos')
-        const rayDir = gl.getUniformLocation(program, 'rayDir')
-        gl.uniform2f(rayPos, anchor[0], anchor[1])
-        gl.uniform2f(rayDir, dir[0], dir[1])
+		const { anchor, dir } = getAnchorAndDir(raysOrigin, width, height)
+		const rayPos = gl.getUniformLocation(program, 'rayPos')
+		const rayDir = gl.getUniformLocation(program, 'rayDir')
+		gl.uniform2f(rayPos, anchor[0], anchor[1])
+		gl.uniform2f(rayDir, dir[0], dir[1])
 
-        // Set uniforms
-        const iTime = gl.getUniformLocation(program, 'iTime')
-        const raysColorLoc = gl.getUniformLocation(program, 'raysColor')
-        const raysSpeedLoc = gl.getUniformLocation(program, 'raysSpeed')
-        const lightSpreadLoc = gl.getUniformLocation(program, 'lightSpread')
-        const rayLengthLoc = gl.getUniformLocation(program, 'rayLength')
-        const pulsatingLoc = gl.getUniformLocation(program, 'pulsating')
-        const fadeDistanceLoc = gl.getUniformLocation(program, 'fadeDistance')
-        const saturationLoc = gl.getUniformLocation(program, 'saturation')
-        const mousePosLoc = gl.getUniformLocation(program, 'mousePos')
-        const mouseInfluenceLoc = gl.getUniformLocation(program, 'mouseInfluence')
-        const noiseAmountLoc = gl.getUniformLocation(program, 'noiseAmount')
-        const distortionLoc = gl.getUniformLocation(program, 'distortion')
+		// Set uniforms
+		const iTime = gl.getUniformLocation(program, 'iTime')
+		const raysColorLoc = gl.getUniformLocation(program, 'raysColor')
+		const raysSpeedLoc = gl.getUniformLocation(program, 'raysSpeed')
+		const lightSpreadLoc = gl.getUniformLocation(program, 'lightSpread')
+		const rayLengthLoc = gl.getUniformLocation(program, 'rayLength')
+		const pulsatingLoc = gl.getUniformLocation(program, 'pulsating')
+		const fadeDistanceLoc = gl.getUniformLocation(program, 'fadeDistance')
+		const saturationLoc = gl.getUniformLocation(program, 'saturation')
+		const mousePosLoc = gl.getUniformLocation(program, 'mousePos')
+		const mouseInfluenceLoc = gl.getUniformLocation(program, 'mouseInfluence')
+		const noiseAmountLoc = gl.getUniformLocation(program, 'noiseAmount')
+		const distortionLoc = gl.getUniformLocation(program, 'distortion')
 
-        gl.uniform1f(iTime, elapsed)
-        gl.uniform1f(raysSpeedLoc, raysSpeed)
-        gl.uniform1f(lightSpreadLoc, lightSpread)
-        gl.uniform1f(rayLengthLoc, rayLength)
-        gl.uniform1f(pulsatingLoc, pulsating ? 1.0 : 0.0)
-        gl.uniform1f(fadeDistanceLoc, fadeDistance)
-        gl.uniform1f(saturationLoc, saturation)
-        gl.uniform1f(mouseInfluenceLoc, mouseInfluence)
-        gl.uniform1f(noiseAmountLoc, noiseAmount)
-        gl.uniform1f(distortionLoc, distortion)
+		gl.uniform1f(iTime, elapsed)
+		gl.uniform1f(raysSpeedLoc, raysSpeed)
+		gl.uniform1f(lightSpreadLoc, lightSpread)
+		gl.uniform1f(rayLengthLoc, rayLength)
+		gl.uniform1f(pulsatingLoc, pulsating ? 1.0 : 0.0)
+		gl.uniform1f(fadeDistanceLoc, fadeDistance)
+		gl.uniform1f(saturationLoc, saturation)
+		gl.uniform1f(mouseInfluenceLoc, mouseInfluence)
+		gl.uniform1f(noiseAmountLoc, noiseAmount)
+		gl.uniform1f(distortionLoc, distortion)
 
-        const rgb = hexToRgb(raysColor)
-        gl.uniform3f(raysColorLoc, rgb.r, rgb.g, rgb.b)
+		const rgb = hexToRgb(raysColor)
+		gl.uniform3f(raysColorLoc, rgb.r, rgb.g, rgb.b)
 
-        if (followMouse && mouseInfluence > 0.0) {
-            gl.uniform2f(mousePosLoc, smoothMouseRef.x, smoothMouseRef.y)
-        } else {
-            gl.uniform2f(mousePosLoc, 0.5, 0.5)
-        }
+		if (followMouse && mouseInfluence > 0.0) {
+			gl.uniform2f(mousePosLoc, smoothMouseRef.x, smoothMouseRef.y)
+		} else {
+			gl.uniform2f(mousePosLoc, 0.5, 0.5)
+		}
 
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
+		gl.drawArrays(gl.TRIANGLES, 0, 6)
 
-        animationId = requestAnimationFrame(animate)
-    }
+		animationId = requestAnimationFrame(animate)
+	}
 
-    function handleMouseMove(e: MouseEvent) {
-        if (!containerRef) return
-        const rect = containerRef.getBoundingClientRect()
-        const x = (e.clientX - rect.left) / rect.width
-        const y = (e.clientY - rect.top) / rect.height
-        mouseRef.x = x
-        mouseRef.y = y
-    }
+	function handleMouseMove(e: MouseEvent) {
+		if (!containerRef) return
+		const rect = containerRef.getBoundingClientRect()
+		const x = (e.clientX - rect.left) / rect.width
+		const y = (e.clientY - rect.top) / rect.height
+		mouseRef.x = x
+		mouseRef.y = y
+	}
 
-    onMount(() => {
-        // Setup intersection observer for performance
-        intersectionObserver = new IntersectionObserver(
-            (entries) => {
-                const entry = entries[0]
-                isVisible = entry.isIntersecting
+	onMount(() => {
+		// Setup intersection observer for performance
+		intersectionObserver = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0]
+				isVisible = entry.isIntersecting
 
-                if (isVisible && !animationId) {
-                    startTime = performance.now()
-                    animate()
-                } else if (!isVisible && animationId !== null) {
-                    cancelAnimationFrame(animationId)
-                    animationId = null
-                }
-            },
-            { threshold: 0.1 }
-        )
+				if (isVisible && !animationId) {
+					startTime = performance.now()
+					animate()
+				} else if (!isVisible && animationId !== null) {
+					cancelAnimationFrame(animationId)
+					animationId = null
+				}
+			},
+			{ threshold: 0.1 }
+		)
 
-        if (containerRef) {
-            intersectionObserver.observe(containerRef)
-        }
+		if (containerRef) {
+			intersectionObserver.observe(containerRef)
+		}
 
-        const context = canvasRef.getContext('webgl2', {
-            alpha: true,
-            premultipliedAlpha: false,
-            antialias: false,
-            depth: false,
-            stencil: false,
-        })
-        if (!context) {
-            console.error('WebGL2 not supported')
-            return
-        }
+		const context = canvasRef.getContext('webgl2', {
+			alpha: true,
+			premultipliedAlpha: false,
+			antialias: false,
+			depth: false,
+			stencil: false,
+		})
+		if (!context) {
+			console.error('WebGL2 not supported')
+			return
+		}
 
-        gl = context
+		gl = context
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
+		const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
+		const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
 
-        if (!vertexShader || !fragmentShader) {
-            console.error('Failed to create shaders')
-            return
-        }
+		if (!vertexShader || !fragmentShader) {
+			console.error('Failed to create shaders')
+			return
+		}
 
-        program = createProgram(gl, vertexShader, fragmentShader)
+		program = createProgram(gl, vertexShader, fragmentShader)
 
-        if (!program) {
-            console.error('Failed to create program')
-            return
-        }
+		if (!program) {
+			console.error('Failed to create program')
+			return
+		}
 
-        // Enable blending for transparency
-        gl.enable(gl.BLEND)
-        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+		// Enable blending for transparency
+		gl.enable(gl.BLEND)
+		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
-        // Create a fullscreen quad
-        const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+		// Create a fullscreen quad
+		const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
 
-        const positionBuffer = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
+		const positionBuffer = gl.createBuffer()
+		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
 
-        const positionLoc = gl.getAttribLocation(program, 'a_position')
-        gl.enableVertexAttribArray(positionLoc)
-        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
+		const positionLoc = gl.getAttribLocation(program, 'a_position')
+		gl.enableVertexAttribArray(positionLoc)
+		gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
 
-        // Setup resize observer
-        resizeObserver = new ResizeObserver(() => resize())
-        resizeObserver.observe(containerRef)
+		// Setup resize observer
+		resizeObserver = new ResizeObserver(() => resize())
+		resizeObserver.observe(containerRef)
 
-        // Add mouse event listener
-        if (followMouse) {
-            window.addEventListener('mousemove', handleMouseMove)
-        }
+		// Add mouse event listener
+		if (followMouse) {
+			window.addEventListener('mousemove', handleMouseMove)
+		}
 
-        // Initial resize and start animation if visible
-        resize()
-        if (isVisible) {
-            startTime = performance.now()
-            animate()
-        }
-    })
+		// Initial resize and start animation if visible
+		resize()
+		if (isVisible) {
+			startTime = performance.now()
+			animate()
+		}
+	})
 
-    onDestroy(() => {
-        if (animationId !== null) {
-            cancelAnimationFrame(animationId)
-            animationId = null
-        }
+	onDestroy(() => {
+		if (animationId !== null) {
+			cancelAnimationFrame(animationId)
+			animationId = null
+		}
 
-        if (resizeObserver) {
-            resizeObserver.disconnect()
-            resizeObserver = null
-        }
+		if (resizeObserver) {
+			resizeObserver.disconnect()
+			resizeObserver = null
+		}
 
-        if (intersectionObserver) {
-            intersectionObserver.disconnect()
-            intersectionObserver = null
-        }
+		if (intersectionObserver) {
+			intersectionObserver.disconnect()
+			intersectionObserver = null
+		}
 
-        if (followMouse) {
-            window.removeEventListener('mousemove', handleMouseMove)
-        }
+		if (followMouse) {
+			window.removeEventListener('mousemove', handleMouseMove)
+		}
 
-        if (gl && program) {
-            gl.deleteProgram(program)
-            program = null
-        }
+		if (gl && program) {
+			gl.deleteProgram(program)
+			program = null
+		}
 
-        // Lose WebGL context for proper cleanup
-        if (gl) {
-            const loseContextExt = gl.getExtension('WEBGL_lose_context')
-            if (loseContextExt) {
-                loseContextExt.loseContext()
-            }
-            gl = null
-        }
-    })
+		// Lose WebGL context for proper cleanup
+		if (gl) {
+			const loseContextExt = gl.getExtension('WEBGL_lose_context')
+			if (loseContextExt) {
+				loseContextExt.loseContext()
+			}
+			gl = null
+		}
+	})
 </script>
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-    <canvas
-        class="absolute inset-0 block h-full w-full"
-        bind:this={canvasRef}
-        style="background-color: {transparent ? 'transparent' : '#000000'};"
-    ></canvas>
+	<canvas
+		class="absolute inset-0 block h-full w-full"
+		bind:this={canvasRef}
+		style="background-color: {transparent ? 'transparent' : '#000000'};"
+	></canvas>
 
-    <!-- Slotted content rendered on top of background -->
-    <div class="relative z-1 h-full w-full">
-        {@render children?.()}
-    </div>
+	<!-- Slotted content rendered on top of background -->
+	<div class="relative z-1 h-full w-full">
+		{@render children?.()}
+	</div>
 </div>
