@@ -1,13 +1,27 @@
 <script lang="ts">
     import { goto } from '$app/navigation'
     import { resolve } from '$app/paths'
-    import ChatHeader from '$lib/components/chat/ChatHeader.svelte'
     import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
+    import AppsGrid from '$lib/components/home/AppsGrid.svelte'
+    import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
     import { fade } from 'svelte/transition'
 
     let inputValue = $state('')
     let isGenerating = $state(false)
     let selectedModel = $state('gpt-4')
+
+    const chrome = useSystemChrome()
+
+    $effect(() => {
+        chrome.setAgentSelector({
+            selectedAgent: selectedModel,
+            onAgentChange: (agentId: string) => (selectedModel = agentId),
+        })
+    })
+
+    $effect(() => {
+        return () => chrome.setAgentSelector(null)
+    })
 
     async function navigateToChat(threadId: string, content: string) {
         const target = `/chats/${threadId}?q=${encodeURIComponent(content)}`
@@ -43,14 +57,7 @@
 
 <!-- Scrollable Area (kept for layout parity with /chats/[id]) -->
 <div class="flex-1 overflow-y-auto">
-    <div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
-        <div style="view-transition-name: chat-header;">
-            <ChatHeader
-                selectedAgent={selectedModel}
-                onAgentChange={(agentId: string) => (selectedModel = agentId)}
-            ></ChatHeader>
-        </div>
-    </div>
+    <div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32"></div>
 </div>
 
 <!-- Input Area (Fixed Bottom) -->
@@ -58,7 +65,7 @@
     <div class="mx-auto w-full max-w-7xl px-8">
         <div
             style="view-transition-name: chat-input;"
-            class="-translate-y-[40vh] transition-all duration-500 ease-in-out"
+            class="relative -translate-y-[40vh] transition-all duration-500 ease-in-out"
         >
             <div
                 style="view-transition-name: landing-greeting;"
@@ -81,6 +88,13 @@
                 {isGenerating}
                 placeholder="send a message"
             />
+
+            <div
+                class="absolute top-full right-0 left-0 mt-10"
+                style="view-transition-name: apps-grid;"
+            >
+                <AppsGrid />
+            </div>
         </div>
     </div>
 </div>

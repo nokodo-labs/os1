@@ -2,11 +2,9 @@
     import Tooltip from '$lib/components/common/Tooltip.svelte'
     import type { Snippet } from 'svelte'
 
-    class SvelteDate extends Date {}
-
     interface Props {
         content: string
-        timestamp?: Date | SvelteDate
+        timestamp?: Date
         actions?: Snippet
         isLastMessage?: boolean
         modelName?: string
@@ -33,13 +31,13 @@
         isHovered = false
     }
 
-    function formatRelativeTime(date: Date | SvelteDate): string {
-        const base = new SvelteDate(date)
-        const now = new SvelteDate()
-        const today = new SvelteDate(now.getFullYear(), now.getMonth(), now.getDate())
-        const yesterday = new SvelteDate(today)
-        yesterday.setDate(yesterday.getDate() - 1)
-        const messageDate = new SvelteDate(base.getFullYear(), base.getMonth(), base.getDate())
+    function formatRelativeTime(date: Date): string {
+        const base = new Date(date)
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const yesterday = new Date(today)
+        yesterday.setDate(today.getDate() - 1)
+        const messageDate = new Date(base.getFullYear(), base.getMonth(), base.getDate())
 
         const timeStr = base
             .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -61,8 +59,8 @@
             .toLowerCase()
     }
 
-    function formatFullDate(date: Date | SvelteDate): string {
-        const base = new SvelteDate(date)
+    function formatFullDate(date: Date): string {
+        const base = new Date(date)
 
         return base
             .toLocaleDateString('en-US', {

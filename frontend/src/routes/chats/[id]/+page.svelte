@@ -2,12 +2,12 @@
     import { page } from '$app/state'
     import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
     import Button from '$lib/components/chat/Button.svelte'
-    import ChatHeader from '$lib/components/chat/ChatHeader.svelte'
     import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
     import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
     import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
     import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
     import Pencil from '$lib/components/icons/Pencil.svelte'
+    import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
     import { fade } from 'svelte/transition'
 
     interface Message {
@@ -23,6 +23,19 @@
     let inputValue = $state('')
     let isGenerating = $state(false)
     let generationTimeout: number | null = null
+
+    const chrome = useSystemChrome()
+
+    $effect(() => {
+        chrome.setAgentSelector({
+            selectedAgent: selectedModel,
+            onAgentChange: (agentId: string) => (selectedModel = agentId),
+        })
+    })
+
+    $effect(() => {
+        return () => chrome.setAgentSelector(null)
+    })
 
     // Handle initial message from URL
     $effect(() => {
@@ -93,13 +106,6 @@
 <!-- Scrollable Area -->
 <div class="flex-1 overflow-y-auto">
     <div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
-        <div style="view-transition-name: chat-header;">
-            <ChatHeader
-                selectedAgent={selectedModel}
-                onAgentChange={(agentId: string) => (selectedModel = agentId)}
-            ></ChatHeader>
-        </div>
-
         <div class="flex flex-1 flex-col gap-6 py-8">
             {#each messages as message, index (message.id)}
                 <div in:fade={{ duration: 200 }}>

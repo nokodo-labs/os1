@@ -159,8 +159,27 @@
     }
 }
 
+@keyframes nokodo-vt-slide-out-down {
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(60vh);
+    }
+}
+
+@keyframes nokodo-vt-slide-in-up {
+    from {
+        transform: translateY(60vh);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
 ::view-transition-group(chat-input),
-::view-transition-group(chat-header) {
+::view-transition-group(chat-header),
+::view-transition-group(apps-grid) {
     animation-duration: 360ms;
     /* Clean, non-overshooting ease-out */
     animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -169,4 +188,13 @@
 /* Landing greeting disappears when going to /chats/[id] */
 ::view-transition-old(landing-greeting) {
     animation: 200ms ease both nokodo-vt-fade-out;
+}
+
+/* Apps grid slides out when going to /chats/[id], and slides in on return */
+::view-transition-old(apps-grid) {
+    animation: 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both nokodo-vt-slide-out-down;
+}
+
+::view-transition-new(apps-grid) {
+    animation: 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both nokodo-vt-slide-in-up;
 }
