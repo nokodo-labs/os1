@@ -1,18 +1,18 @@
-# API Type Safety
+# API Types & Client
 
-Modern type-safe API architecture using OpenAPI TypeScript generation.
+Modern type-safe API architecture with OpenAPI-generated types and a typed client.
 
 ## Architecture
 
 ```
-FastAPI OpenAPI Schema → openapi-typescript → TypeScript Types → Type-safe API Calls
+FastAPI OpenAPI Schema → openapi-typescript → TypeScript Types → openapi-typescript-codegen → Typed Client
 ```
 
 ## Benefits
 
 -   **Zero Dependencies**: Native fetch, no axios or HTTP libraries
 -   **Full Type Safety**: Compile-time errors for invalid API calls
--   **Auto-sync**: Backend changes automatically reflected in frontend types
+-   **Auto-sync**: Backend changes automatically reflected in frontend types and client
 -   **Modern**: Built on web standards (fetch, async/await)
 -   **Future-proof**: No external HTTP library to become outdated
 
@@ -27,14 +27,14 @@ uvicorn api.main:app --reload
 
 Backend serves OpenAPI schema at: `http://localhost:8000/v1/openapi.json`
 
-### 2. Generate Types
+### 2. Generate Types & Client
 
 ```bash
 cd frontend
-npm run generate:api-types
+npm run generate:api
 ```
 
-This generates `src/lib/api/types.ts` from the OpenAPI schema.
+This generates `src/lib/api/types.ts` and `src/lib/api/generated/` from the OpenAPI schema.
 
 ## Usage
 
@@ -128,10 +128,10 @@ async def get_items() -> list[Item]:
     return items
 ```
 
-2. **Regenerate types**:
+2. **Regenerate types + client**:
 
 ```bash
-npm run generate:api-types
+npm run generate:api
 ```
 
 3. **Add typed function** in `frontend/src/lib/api/index.ts`:
@@ -152,6 +152,7 @@ const items = await api.getItems(); // Fully typed!
 
 -   `src/lib/api/client.ts` - Base fetch client with error handling
 -   `src/lib/api/types.ts` - **Auto-generated** (DO NOT EDIT MANUALLY)
+-   `src/lib/api/generated/` - **Auto-generated client** (DO NOT EDIT MANUALLY)
 -   `src/lib/api/index.ts` - Typed API functions for all endpoints
 
 ## Troubleshooting
@@ -164,13 +165,13 @@ Error: fetch failed
 
 Start backend: `cd backend && uvicorn api.main:app --reload`
 
-### Types out of sync
+### Types/client out of sync
 
 ```typescript
 // Type error after backend changes
 ```
 
-Regenerate: `npm run generate:api-types`
+Regenerate: `npm run generate:api`
 
 ### Type generation fails
 

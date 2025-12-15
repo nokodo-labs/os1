@@ -192,5 +192,6 @@
 		"eval": false,
 		"Invoke-Expression": false,
 		"iex": false
-	}
+	},
+	"python.testing.pytestArgs": ["backend"]
 }

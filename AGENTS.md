@@ -43,6 +43,10 @@ before executing any tasks, follow this process:
 
 skipping any of these steps will lead to increased costs and suboptimal results.
 
+## tooling
+
+-   use the vscode tasks to generate both api types and the full client for frontend/console apps directly from the running backend openapi schema.
+
 ## contribution guidelines
 
 ### commit instructions

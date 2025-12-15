@@ -43,7 +43,7 @@
 			}
 		},
 		{
-			"label": "Backend: Quick Tests",
+			"label": "Backend: Run Tests",
 			"type": "shell",
 			"command": "uv run pytest -q --tb=short --cov-report=term-missing:skip-covered",
 			"options": {
@@ -60,7 +60,7 @@
 			}
 		},
 		{
-			"label": "Backend: Full Tests",
+			"label": "Backend: Run Tests (verbose)",
 			"type": "shell",
 			"command": "uv run pytest -vv",
 			"options": {
@@ -198,9 +198,9 @@
 			}
 		},
 		{
-			"label": "Frontend: Generate API Types",
+			"label": "Frontend: Generate API (types + client)",
 			"type": "shell",
-			"command": "npm run generate:api-types",
+			"command": "npm run generate:api",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -281,9 +281,9 @@
 			}
 		},
 		{
-			"label": "Console: Generate API Types",
+			"label": "Console: Generate API (types + client)",
 			"type": "shell",
-			"command": "npm run generate:api-types",
+			"command": "npm run generate:api",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},

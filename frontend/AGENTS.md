@@ -74,3 +74,4 @@ frontend/src/
 - coverage: `npm run test:coverage`
 - type/lint: `npm run check`, `npm run lint`
 - formatting: `npm run format` (prettier)
+- api codegen: ensure backend is running, then use the single task `Frontend: Generate API (types + client)` (runs `npm run generate:api`).

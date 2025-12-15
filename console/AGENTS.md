@@ -45,3 +45,4 @@ there are several available layers of checks and tests:
 - formatting with `npm run format` (prettier)
 - linting with `npm run lint` (eslint)
 - check for file Problems with the built-in VSCode tool
+- api codegen: keep backend running, then use the single task `Console: Generate API (types + client)` (runs `npm run generate:api`).

@@ -61,6 +61,10 @@ backend/
 -   Three-tier testing: API tests, SDK tests, E2E tests
 -   API changes: Update backend → run `npm run generate:api-types` → types sync
 
+## openapi + codegen
+
+-   keep the backend running at `http://localhost:8000`; use VS Code tasks `Frontend: Generate API (types + client)` and `Console: Generate API (types + client)` to sync consumers directly from the live schema.
+
 ## Running backend code
 
 ### **About dev servers**:

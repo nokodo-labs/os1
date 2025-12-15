@@ -10,34 +10,34 @@ from api.schemas.errors import ProblemDetails, ValidationProblemDetails
 DEFAULT_RESPONSES: dict[int | str, dict[str, object]] = {
 	400: {
 		"description": "bad request",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 	401: {
 		"description": "unauthorized",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 	403: {
 		"description": "forbidden",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 	404: {
 		"description": "not found",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 	409: {
 		"description": "conflict",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 	422: {
 		"description": "validation error",
-		"content": {"application/problem+json": {"model": ValidationProblemDetails}},
+		"model": ValidationProblemDetails,
 	},
 	429: {
 		"description": "too many requests",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 	500: {
 		"description": "internal server error",
-		"content": {"application/problem+json": {"model": ProblemDetails}},
+		"model": ProblemDetails,
 	},
 }

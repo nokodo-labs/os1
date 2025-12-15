@@ -76,13 +76,13 @@ cp .env.example .env
 The frontend uses stable paths (e.g. `/v1`) and loads runtime config from the backend at `/v1/system/config`.
 Configure `PUBLIC_API_URL` / `PUBLIC_CDN_URL` in `backend/.env` when needed.
 
-# Generate API types (requires backend running)
-npm run generate:api-types
+# Generate API types and client (requires backend running)
+npm run generate:api
 
 npm run dev
 ```
 
-**Type Generation**: Run `npm run generate:api-types` whenever backend API changes to sync TypeScript types.
+**API Codegen**: Run `npm run generate:api` whenever backend API changes to sync both TypeScript types and the generated client.
 
 ## VS Code Setup
 
@@ -101,7 +101,8 @@ The template includes comprehensive VS Code integration that works automatically
 **Tasks** (`Ctrl+Shift+P` → "Tasks: Run Task"):
 
 -   **Backend**: Install Dependencies, Run Server, Run Tests
--   **Frontend**: Install Dependencies, Dev Server, Build
+-   **Frontend**: Install Dependencies, Dev Server, Build, Generate API (types + client)
+-   **Console**: Install Dependencies, Dev Server, Build, Generate API (types + client)
 -   **Docker**: Build All, Up, Down, Dev Mode
 
 **Debug Configurations** (Press `F5`):
@@ -347,7 +348,7 @@ npm run dev                       # Start dev server
 npm run build                     # Production build
 npm run preview                   # Preview production build
 npm run lint                      # Lint code
-npm run generate:api-types        # Generate TypeScript types from OpenAPI
+npm run generate:api              # Generate TypeScript types and client from OpenAPI
 ```
 
 ## Troubleshooting
@@ -368,4 +369,4 @@ npm run generate:api-types        # Generate TypeScript types from OpenAPI
 4. Push your changes - CI/CD will automatically build and publish Docker images to GHCR
 5. Deploy using pre-built images (see [Production Deployment](#production-deployment))
 
-**Types out of sync**: Run `npm run generate:api-types` after backend changes
+**Types/client out of sync**: Run `npm run generate:api` after backend changes

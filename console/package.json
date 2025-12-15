@@ -9,7 +9,9 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"format": "prettier --write .",
-		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts"
+		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts",
+		"generate:api-client": "openapi --client fetch --useUnionTypes --input http://localhost:8000/v1/openapi.json --output src/lib/api/generated",
+		"generate:api": "npm run generate:api-types && npm run generate:api-client"
 	},
 	"devDependencies": {
 		"@internationalized/date": "^3.10.0",
@@ -20,6 +22,7 @@
 		"@tsconfig/svelte": "^5.0.4",
 		"autoprefixer": "^10.4.20",
 		"openapi-typescript": "^7.10.1",
+		"openapi-typescript-codegen": "^0.29.0",
 		"postcss": "^8.4.47",
 		"prettier": "^3.7.4",
 		"prettier-plugin-svelte": "^3.4.0",

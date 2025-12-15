@@ -16,13 +16,16 @@
 		"test:watch": "vitest",
 		"test:ui": "vitest --ui",
 		"test:coverage": "vitest run --coverage",
-		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts"
+		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts",
+		"generate:api-client": "openapi --client fetch --useUnionTypes --input http://localhost:8000/v1/openapi.json --output src/lib/api/generated",
+		"generate:api": "npm run generate:api-types && npm run generate:api-client"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.48.5",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"openapi-typescript-codegen": "^0.29.0",
 		"svelte": "^5.43.8",
 		"svelte-check": "^4.3.4",
 		"typescript": "^5.9.3",
@@ -50,8 +53,8 @@
 		"happy-dom": "^20.0.11",
 		"lucide-svelte": "^0.559.0",
 		"marked": "^17.0.1",
-		"openapi-typescript": "^7.10.1",
 		"openapi-fetch": "^0.15.0",
+		"openapi-typescript": "^7.10.1",
 		"postcss": "^8.5.6",
 		"prettier": "^3.7.4",
 		"prettier-plugin-svelte": "^3.4.0",
