@@ -18,19 +18,6 @@
         model?: string
     }
 
-    interface Model {
-        id: string
-        name: string
-        provider: string
-    }
-
-    // Demo data
-    const models: Model[] = [
-        { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
-        { id: 'claude-3', name: 'Claude 3 Opus', provider: 'Anthropic' },
-        { id: 'gemini-pro', name: 'Gemini Pro', provider: 'Google' },
-    ]
-
     let selectedModel = $state('gpt-4')
     let messages = $state<Message[]>([])
     let inputValue = $state('')
@@ -105,7 +92,7 @@
 
 <!-- Scrollable Area -->
 <div class="flex-1 overflow-y-auto">
-    <div class="mx-auto flex min-h-full w-full max-w-4xl flex-col px-8 pt-8 pb-32">
+    <div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
         <div style="view-transition-name: chat-header;">
             <ChatHeader
                 selectedAgent={selectedModel}
@@ -164,7 +151,7 @@
 
 <!-- Input Area (Fixed Bottom) -->
 <div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
-    <div class="mx-auto w-full max-w-4xl px-8">
+    <div class="mx-auto w-full max-w-7xl px-8">
         <div
             style="view-transition-name: chat-input;"
             class="transition-all duration-500 ease-in-out"

@@ -10,9 +10,10 @@
             avatar?: string | null
         }
         isExpanded?: boolean
+        placement?: 'sidebar' | 'header'
     }
 
-    let { user, isExpanded = false }: UserProfileTriggerProps = $props()
+    let { user, isExpanded = false, placement = 'sidebar' }: UserProfileTriggerProps = $props()
 
     let isOpen = $state(false)
     let buttonElement: HTMLButtonElement | undefined = $state()
@@ -53,14 +54,17 @@
             document.removeEventListener('click', handleClickOutside)
         }
     })
+    const isHeaderPlacement = $derived(placement === 'header')
 </script>
 
-<div class="user-profile-trigger-container mt-auto">
+<div class="user-profile-trigger-container {isHeaderPlacement ? '' : 'mt-auto'}">
     <button
         bind:this={buttonElement}
-        class="relative flex items-center border border-transparent bg-transparent {isExpanded
-            ? 'w-full justify-start gap-3 p-3'
-            : 'h-14 w-14 justify-center p-3'} cursor-pointer rounded-xl text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+        class="relative flex cursor-pointer items-center border border-transparent bg-transparent text-white transition-all duration-200 {isHeaderPlacement
+            ? 'h-12 w-12 justify-center p-0 hover:scale-[1.05] active:scale-[0.97]'
+            : isExpanded
+              ? 'w-full justify-start gap-3 rounded-xl p-3 hover:border-white/10 hover:bg-white/5'
+              : 'h-14 w-14 justify-center rounded-xl p-3 hover:border-white/10 hover:bg-white/5'}"
         onclick={togglePanel}
         aria-label="User Profile"
         aria-expanded={isOpen}
@@ -75,9 +79,11 @@
             />
         {:else}
             <div
-                class="{isExpanded
+                class="{isHeaderPlacement
                     ? 'h-10 w-10 text-[0.875rem]'
-                    : 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
+                    : isExpanded
+                      ? 'h-10 w-10 text-[0.875rem]'
+                      : 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
                 style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
             >
                 {getUserInitials(user.name)}
@@ -102,7 +108,10 @@
     </button>
 
     {#if isOpen}
-        <div bind:this={panelElement} class="profile-panel-wrapper liquid-glass">
+        <div
+            bind:this={panelElement}
+            class="profile-panel-wrapper liquid-glass {isHeaderPlacement ? 'header' : ''}"
+        >
             <div class="liquid-glass__highlight"></div>
             <div class="liquid-glass__content">
                 <UserProfilePanel {user} onClose={closePanel} />
@@ -123,6 +132,13 @@
         z-index: 50;
         border-radius: 0.75rem;
         animation: fadeIn 0.15s ease-out;
+    }
+
+    .profile-panel-wrapper.header {
+        top: calc(100% + 0.5rem);
+        right: 0;
+        bottom: auto;
+        left: auto;
     }
 
     :global(.dark) .profile-panel-wrapper {

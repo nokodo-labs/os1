@@ -123,8 +123,7 @@
         responseContent = ''
 
         // Mock streaming response
-        const mockResponse =
-            'This is a simulated response. In a real implementation, this would call the backend API to stream the LLM response based on the selected text and your prompt.'
+        const mockResponse = `This is a simulated response based on your prompt:\n\n${prompt}\n\nIn a real implementation, this would call the backend API to stream the LLM response based on the selected text and your prompt.`
         const words = mockResponse.split(' ')
 
         for (const word of words) {

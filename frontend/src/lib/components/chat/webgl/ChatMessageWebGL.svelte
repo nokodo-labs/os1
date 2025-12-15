@@ -13,6 +13,10 @@
     let { role, content, timestamp, actions }: Props = $props()
     const isUser = $derived(role === 'user')
 
+    type GLShaderType =
+        | WebGL2RenderingContext['VERTEX_SHADER']
+        | WebGL2RenderingContext['FRAGMENT_SHADER']
+
     let canvasRef: HTMLCanvasElement
     let containerRef: HTMLDivElement
     let gl: WebGL2RenderingContext | null = null
@@ -163,7 +167,7 @@ void main() {
     fragColor = vec4(color, 1.0);
 }`
 
-    function compileShader(type: GLenum, source: string) {
+    function compileShader(type: GLShaderType, source: string) {
         if (!gl) throw new Error('WebGL context missing during shader compile')
         const shader = gl.createShader(type)
         if (!shader) throw new Error('Unable to allocate shader')

@@ -1,6 +1,10 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte'
 
+    type GLShaderType =
+        | WebGL2RenderingContext['VERTEX_SHADER']
+        | WebGL2RenderingContext['FRAGMENT_SHADER']
+
     let containerRef: HTMLDivElement
     let canvasRef: HTMLCanvasElement
     let gl: WebGL2RenderingContext | null = null
@@ -135,7 +139,7 @@ void main() {
 	fragColor = vec4(accum, 1.0);
 }`
 
-    function createShader(context: WebGL2RenderingContext, type: GLenum, source: string) {
+    function createShader(context: WebGL2RenderingContext, type: GLShaderType, source: string) {
         const shader = context.createShader(type)
         if (!shader) {
             throw new Error('Failed to create shader')

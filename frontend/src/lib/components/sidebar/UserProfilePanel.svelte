@@ -46,9 +46,11 @@
             .slice(0, 2)
     }
 
+    type IconComponent = typeof Cog6
+
     interface MenuItem {
         id: string
-        icon: any
+        icon: IconComponent
         label: string
         action: () => void
     }

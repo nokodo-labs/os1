@@ -17,6 +17,10 @@
         onSubmit,
     }: LiquidMetalInputProps = $props()
 
+    type GLShaderType =
+        | WebGL2RenderingContext['VERTEX_SHADER']
+        | WebGL2RenderingContext['FRAGMENT_SHADER']
+
     let canvasRef: HTMLCanvasElement
     let textareaRef: HTMLTextAreaElement
     let containerRef: HTMLDivElement
@@ -173,7 +177,7 @@ void main() {
     fragColor = vec4(color, alpha);
 }`
 
-    function compileShader(type: GLenum, source: string) {
+    function compileShader(type: GLShaderType, source: string) {
         if (!gl) throw new Error('WebGL context missing during shader compile')
         const shader = gl.createShader(type)
         if (!shader) throw new Error('Unable to allocate shader')

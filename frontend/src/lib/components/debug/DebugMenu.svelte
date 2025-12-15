@@ -1,13 +1,16 @@
 <script lang="ts">
     import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
+    import type { createThemeContext } from '$lib/contexts/themeContext.svelte'
     import {
         accentColors,
         type AccentColor,
         type ThemeMode,
     } from '$lib/contexts/themeContext.svelte'
 
+    type ThemeContext = ReturnType<typeof createThemeContext>
+
     interface Props {
-        theme: any
+        theme: ThemeContext
         currentBackground: BackgroundType
     }
 
@@ -43,7 +46,7 @@
                 <!-- Theme Mode -->
                 <div class="mb-2 text-[10px] font-bold text-white/40 uppercase">Theme Mode</div>
                 <div class="mb-4 flex gap-1">
-                    {#each ['light', 'dark', 'system'] as m}
+                    {#each ['light', 'dark', 'system'] as m (m)}
                         <button
                             onclick={() => theme.setMode(m as ThemeMode)}
                             class="flex-1 rounded px-2 py-1.5 text-xs transition-colors {theme.mode ===
@@ -59,7 +62,7 @@
                 <!-- Accent Color -->
                 <div class="mb-2 text-[10px] font-bold text-white/40 uppercase">Accent Color</div>
                 <div class="mb-4 grid grid-cols-3 gap-1">
-                    {#each Object.keys(accentColors) as color}
+                    {#each Object.keys(accentColors) as color (color)}
                         <button
                             onclick={() => theme.setAccent(color as AccentColor)}
                             class="flex items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors {theme.accent ===
@@ -80,7 +83,7 @@
                 <!-- Background -->
                 <div class="mb-2 text-[10px] font-bold text-white/40 uppercase">Background</div>
                 <div class="flex flex-col gap-1">
-                    {#each backgrounds as bg}
+                    {#each backgrounds as bg (bg.value)}
                         <button
                             onclick={() => {
                                 currentBackground = bg.value

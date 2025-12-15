@@ -56,7 +56,7 @@
         <div
             class="liquid-glass absolute top-[calc(100%+0.5rem)] right-0 z-100 min-w-[220px] animate-[dropdownSlide_0.2s_cubic-bezier(0.34,1.56,0.64,1)] rounded-xl border border-white/10 bg-linear-to-br from-[rgba(30,30,40,0.95)] to-[rgba(20,20,30,0.95)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-[20px] [backdrop-saturate:180%]"
         >
-            {#each models as model}
+            {#each models as model (model.id)}
                 <button
                     class="flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-3 text-left transition-all duration-200 hover:bg-white/10"
                     class:!bg-linear-to-br={model.id === selected}

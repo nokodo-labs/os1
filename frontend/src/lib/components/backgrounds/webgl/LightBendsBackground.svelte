@@ -246,7 +246,7 @@ void main() {
             powerPreference: 'high-performance',
             alpha: true,
         })
-        ;(renderer as any).outputColorSpace = (THREE as any).SRGBColorSpace
+        renderer.outputColorSpace = THREE.SRGBColorSpace
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
         renderer.setClearColor(0x000000, transparent ? 0 : 1)
         Object.assign(renderer.domElement.style, {

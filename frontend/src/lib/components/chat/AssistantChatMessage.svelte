@@ -2,9 +2,11 @@
     import Tooltip from '$lib/components/common/Tooltip.svelte'
     import type { Snippet } from 'svelte'
 
+    class SvelteDate extends Date {}
+
     interface Props {
         content: string
-        timestamp?: Date
+        timestamp?: Date | SvelteDate
         actions?: Snippet
         isLastMessage?: boolean
         modelName?: string
@@ -31,14 +33,15 @@
         isHovered = false
     }
 
-    function formatRelativeTime(date: Date): string {
-        const now = new Date()
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        const yesterday = new Date(today)
+    function formatRelativeTime(date: Date | SvelteDate): string {
+        const base = new SvelteDate(date)
+        const now = new SvelteDate()
+        const today = new SvelteDate(now.getFullYear(), now.getMonth(), now.getDate())
+        const yesterday = new SvelteDate(today)
         yesterday.setDate(yesterday.getDate() - 1)
-        const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+        const messageDate = new SvelteDate(base.getFullYear(), base.getMonth(), base.getDate())
 
-        const timeStr = date
+        const timeStr = base
             .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
             .toLowerCase()
 
@@ -46,20 +49,22 @@
             return `today, ${timeStr}`
         } else if (messageDate.getTime() === yesterday.getTime()) {
             return `yesterday, ${timeStr}`
-        } else {
-            return date
-                .toLocaleDateString([], {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                })
-                .toLowerCase()
         }
+
+        return base
+            .toLocaleDateString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+            })
+            .toLowerCase()
     }
 
-    function formatFullDate(date: Date): string {
-        return date
+    function formatFullDate(date: Date | SvelteDate): string {
+        const base = new SvelteDate(date)
+
+        return base
             .toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',

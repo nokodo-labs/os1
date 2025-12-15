@@ -6,55 +6,38 @@
     import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
     import Document from '$lib/components/icons/Document.svelte'
     import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
-    import Home from '$lib/components/icons/Home.svelte'
     import Search from '$lib/components/icons/Search.svelte'
     import Sidebar from '$lib/components/icons/Sidebar.svelte'
     import * as ScrollArea from '$lib/components/ui/scroll-area'
     import * as Separator from '$lib/components/ui/separator'
     import * as Tooltip from '$lib/components/ui/tooltip'
     import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
-    import UserProfileTrigger from './UserProfileTrigger.svelte'
-    const sidebar = useSidebar() as any
-    // User profile data (would come from auth context in production)
-    const user = {
-        name: 'admin',
-        email: 'admin@nokodo.net',
-        avatar: null, // URL to avatar image, or null for initials
+
+    type SidebarContext = {
+        readonly isOpen: boolean
+        readonly isChatSidebarOpen: boolean
+        readonly selectedChatId: string | null
+        toggleSidebar: () => void
+        toggleChatSidebar: () => void
+        selectChat: (id: string | null) => void
+        openSidebar: () => void
+        closeSidebar: () => void
+        openChatSidebar: () => void
+        closeChatSidebar: () => void
     }
 
+    const sidebar = useSidebar() as SidebarContext
     function handleSearchClick() {
         // TODO: Open global search overlay
         console.log('Open global search')
     }
     interface SidebarItem {
         id: string
-        icon: typeof Home
+        icon: typeof Search
         label: string
         action: () => void
     }
     const items: SidebarItem[] = [
-        {
-            id: 'home',
-            icon: Home,
-            label: 'home',
-            action: () => {
-                sidebar.selectChat(null)
-
-                const start = (
-                    document as unknown as {
-                        startViewTransition?: (cb: () => Promise<void> | void) => void
-                    }
-                ).startViewTransition
-
-                if (start) {
-                    start.call(document, async () => {
-                        await goto(resolve('/'), { keepFocus: true, noScroll: true })
-                    })
-                } else {
-                    goto(resolve('/'), { keepFocus: true, noScroll: true })
-                }
-            },
-        },
         {
             id: 'new-chat',
             icon: ChatPlus,
@@ -330,11 +313,6 @@
                 </ScrollArea.Root>
             </div>
         {/if}
-
-        <Separator.Root class="bg-white/10" />
-
-        <!-- User Profile -->
-        <UserProfileTrigger {user} isExpanded={sidebar.isChatSidebarOpen} />
     </div>
 </div>
 

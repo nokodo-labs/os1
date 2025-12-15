@@ -4,13 +4,12 @@
 
     interface Props {
         speed?: number
-        color1?: string
-        color2?: string
     }
 
-    let { speed = 0.2, color1 = '#ffffff', color2 = '#000000' }: Props = $props()
+    let { speed = 0.2 }: Props = $props()
 
     let container: HTMLDivElement
+    let canvasEl: HTMLCanvasElement
     let renderer: THREE.WebGLRenderer
     let scene: THREE.Scene
     let camera: THREE.OrthographicCamera
@@ -119,12 +118,12 @@
         camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
 
         renderer = new THREE.WebGLRenderer({
+            canvas: canvasEl,
             alpha: true,
             antialias: true,
             powerPreference: 'high-performance',
         })
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-        container.appendChild(renderer.domElement)
 
         // Geometry
         const geometry = new THREE.PlaneGeometry(2, 2)
@@ -176,11 +175,12 @@
             resizeObserver.disconnect()
             if (renderer) {
                 renderer.dispose()
-                container?.removeChild(renderer.domElement)
             }
             if (material) material.dispose()
         }
     })
 </script>
 
-<div bind:this={container} class="h-full w-full overflow-hidden rounded-full"></div>
+<div bind:this={container} class="h-full w-full overflow-hidden rounded-full">
+    <canvas bind:this={canvasEl} class="h-full w-full"></canvas>
+</div>

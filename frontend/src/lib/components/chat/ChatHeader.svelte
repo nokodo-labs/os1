@@ -1,5 +1,11 @@
 <script lang="ts">
+    import { goto } from '$app/navigation'
+    import { resolve } from '$app/paths'
+    import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
     import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+    import Home from '$lib/components/icons/Home.svelte'
+    import UserProfileTrigger from '$lib/components/sidebar/UserProfileTrigger.svelte'
+    import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 
     interface Agent {
         id: string
@@ -12,7 +18,28 @@
         onAgentChange?: (agentId: string) => void
     }
 
+    type SidebarContext = {
+        selectChat?: (id: string | null) => void
+    }
+
+    type IconComponent = typeof Home
+
+    interface QuickAction {
+        id: string
+        label: string
+        icon: IconComponent
+        onClick: () => void
+    }
+
     let { selectedAgent = 'gpt-4', onAgentChange }: Props = $props()
+
+    const sidebar = useSidebar() as SidebarContext | null
+
+    const user = {
+        name: 'admin',
+        email: 'admin@nokodo.net',
+        avatar: null,
+    }
 
     // Mock agent data
     const agents: Agent[] = [
@@ -43,6 +70,47 @@
         }
     }
 
+    function navigateWithTransition(target: string) {
+        const start = (
+            document as unknown as {
+                startViewTransition?: (cb: () => Promise<void> | void) => void
+            }
+        ).startViewTransition
+
+        const go = async () => {
+            // @ts-expect-error resolve typing is narrower than our constructed URL
+            await goto(resolve(target as never), { keepFocus: true, noScroll: true })
+        }
+
+        if (start) {
+            start.call(document, go)
+            return
+        }
+
+        void go()
+    }
+
+    function handleHome() {
+        sidebar?.selectChat?.(null)
+        navigateWithTransition('/')
+    }
+
+    function handleTemporaryChat() {
+        sidebar?.selectChat?.(null)
+        const tempId = `temp-${Date.now()}`
+        navigateWithTransition(`/chats/${tempId}`)
+    }
+
+    const quickActions: QuickAction[] = [
+        { id: 'home', label: 'home', icon: Home, onClick: handleHome },
+        {
+            id: 'temporary-chat',
+            label: 'temporary chat',
+            icon: ChatBubbleDotted,
+            onClick: handleTemporaryChat,
+        },
+    ]
+
     $effect(() => {
         if (isDropdownOpen) {
             document.addEventListener('click', handleClickOutside)
@@ -56,8 +124,8 @@
 >
     <span class="liquid-glass__highlight" aria-hidden="true"></span>
 
-    <div class="liquid-glass__content relative flex items-center justify-start">
-        <div class="relative">
+    <div class="liquid-glass__content relative flex items-center justify-between gap-4">
+        <div class="agent-selector relative">
             <button
                 class="flex cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-4 py-2 transition-all duration-200 hover:bg-white/5 active:scale-[0.98]"
                 onclick={toggleDropdown}
@@ -81,7 +149,8 @@
 
             {#if isDropdownOpen}
                 <div
-                    class="liquid-glass absolute top-[calc(100%+0.5rem)] left-1/2 z-1000 min-w-64 -translate-x-1/2 animate-[dropdown-appear_0.2s_ease] rounded-3xl p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
+                    class="liquid-glass z-1000 min-w-64 animate-[dropdown-appear_0.2s_ease] rounded-3xl p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
+                    style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
                 >
                     <span class="liquid-glass__highlight" aria-hidden="true"></span>
                     <ul class="liquid-glass__content m-0 list-none p-0" role="listbox">
@@ -108,6 +177,20 @@
                     </ul>
                 </div>
             {/if}
+        </div>
+
+        <div class="flex items-center gap-2">
+            {#each quickActions as action (action.id)}
+                {@const Icon = action.icon}
+                <button
+                    class="flex h-12 w-12 items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+                    onclick={action.onClick}
+                    aria-label={action.label}
+                >
+                    <Icon className="h-6 w-6" />
+                </button>
+            {/each}
+            <UserProfileTrigger {user} placement="header" isExpanded={false} />
         </div>
     </div>
 </header>
