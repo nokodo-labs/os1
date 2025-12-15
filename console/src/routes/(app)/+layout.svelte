@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state'
 	import { auth } from '$lib/auth.svelte'
-	import { Box, LayoutDashboard, Server } from '@lucide/svelte'
+	import { Bot, Box, FlaskConical, LayoutDashboard, ScrollText, Server } from '@lucide/svelte'
 
 	let { children } = $props()
 </script>
@@ -46,6 +46,39 @@
 			>
 				<Box class="h-4 w-4" />
 				models
+			</a>
+			<a
+				href="/agents"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/agents'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Bot class="h-4 w-4" />
+				agents
+			</a>
+			<a
+				href="/playground"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/playground'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<FlaskConical class="h-4 w-4" />
+				playground
+			</a>
+			<a
+				href="/prompts"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/prompts'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<ScrollText class="h-4 w-4" />
+				prompts
 			</a>
 		</nav>
 

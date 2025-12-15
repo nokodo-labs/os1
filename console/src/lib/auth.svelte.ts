@@ -1,5 +1,5 @@
 import { browser } from '$app/environment'
-import { api, type User } from '$lib/api'
+import { AuthService, UsersService, type User } from '$lib/api'
 
 function parseJwt(token: string) {
 	try {
@@ -21,7 +21,7 @@ class AuthState {
 	}
 
 	async login(email: string, password: string) {
-		const data = await api.login({
+		const data = await AuthService.loginAccessTokenAuthLoginAccessTokenPost({
 			username: email,
 			password: password,
 			scope: '',
@@ -38,7 +38,7 @@ class AuthState {
 
 		const userId = parseInt(decoded.sub)
 		try {
-			this.user = await api.getUser(userId)
+			this.user = await UsersService.readUserUsersUserIdGet(userId)
 		} catch (e) {
 			console.error('Failed to fetch user', e)
 			this.logout()
@@ -46,7 +46,7 @@ class AuthState {
 	}
 
 	async register(email: string, password: string) {
-		await api.register({
+		await UsersService.createUserUsersPost({
 			email,
 			password,
 			is_active: true,

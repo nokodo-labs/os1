@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { api, type Model, type ModelCreate, type ModelUpdate, type Provider } from '$lib/api'
+	import {
+		ModelsService,
+		ProvidersService,
+		type Model,
+		type ModelCreate,
+		type ModelUpdate,
+		type Provider,
+	} from '$lib/api'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -53,8 +60,8 @@
 		isFetching = true
 		try {
 			const [modelsData, providersData] = await Promise.all([
-				api.getModels(),
-				api.getProviders(),
+				ModelsService.listModelsModelsGet(),
+				ProvidersService.listProvidersProvidersGet(),
 			])
 			models = modelsData
 			providers = providersData
@@ -144,7 +151,7 @@
 				if (contextWindow !== null) createPayload.context_window = contextWindow
 				if (inputCost !== null) createPayload.input_cost = inputCost
 				if (outputCost !== null) createPayload.output_cost = outputCost
-				await api.createModel(createPayload)
+				await ModelsService.createModelModelsPost(createPayload)
 			} else if (editingId) {
 				// Exclude provider_id from update
 				const { provider_id, ...rest } = formState
@@ -154,7 +161,7 @@
 					input_cost: parseOptionalNumber(inputCostInput),
 					output_cost: parseOptionalNumber(outputCostInput),
 				}
-				await api.updateModel(editingId, updatePayload)
+				await ModelsService.updateModelModelsModelIdPatch(editingId, updatePayload)
 			}
 			showModal = false
 			await fetchData()
@@ -171,7 +178,7 @@
 		if (!confirm('Are you sure you want to delete this model?')) return
 		isLoading = true
 		try {
-			await api.deleteModel(editingId)
+			await ModelsService.deleteModelModelsModelIdDelete(editingId)
 			showModal = false
 			await fetchData()
 		} catch (e) {
@@ -185,7 +192,7 @@
 	async function handleDelete(id: string) {
 		if (!confirm('Are you sure you want to delete this model?')) return
 		try {
-			await api.deleteModel(id)
+			await ModelsService.deleteModelModelsModelIdDelete(id)
 			await fetchData()
 		} catch (e) {
 			console.error('Failed to delete model', e)

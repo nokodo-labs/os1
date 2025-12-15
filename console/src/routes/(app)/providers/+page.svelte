@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { api, type Provider, type ProviderCreate } from '$lib/api'
+	import {
+		ProvidersService,
+		type Provider,
+		type ProviderCreate,
+		type ProviderType,
+		type ProviderUpdate,
+	} from '$lib/api'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -27,15 +33,24 @@
 	let error = $state<string | null>(null)
 	let submitError = $state<string | null>(null)
 
-	// Form state
-	let formState = $state<ProviderCreate>({
+	type ProviderFormState = {
+		name: string
+		adapter_type: string
+		provider_type: ProviderType
+		base_url: string
+		api_key: string
+		model_prefix: string
+		is_autofetch_enabled: boolean
+	}
+
+	// Form state (UI-friendly)
+	let formState = $state<ProviderFormState>({
 		name: '',
 		adapter_type: 'openai',
 		provider_type: 'external',
 		base_url: '',
 		api_key: '',
 		model_prefix: '',
-		additional_headers: {},
 		is_autofetch_enabled: true,
 	})
 
@@ -97,7 +112,7 @@
 	async function loadProviders() {
 		error = null
 		try {
-			providers = await api.getProviders()
+			providers = await ProvidersService.listProvidersProvidersGet()
 		} catch (e) {
 			console.error('Failed to load providers', e)
 			error = 'Failed to load providers. Please check if the backend is running.'
@@ -123,11 +138,10 @@
 		formState = {
 			name: provider.name,
 			adapter_type: provider.adapter_type,
-			provider_type: provider.provider_type,
-			base_url: provider.base_url,
-			model_prefix: provider.model_prefix,
-			additional_headers: provider.additional_headers,
-			is_autofetch_enabled: provider.is_autofetch_enabled,
+			provider_type: provider.provider_type || 'external',
+			base_url: provider.base_url || '',
+			model_prefix: provider.model_prefix || '',
+			is_autofetch_enabled: provider.is_autofetch_enabled ?? true,
 			api_key: '', // Don't show existing key
 		}
 		// Convert headers object to array for editing
@@ -140,7 +154,7 @@
 
 	function selectPreset(preset: (typeof presets)[0]) {
 		formState.adapter_type = preset.type
-		formState.provider_type = preset.provider_type as 'local' | 'external'
+		formState.provider_type = preset.provider_type as ProviderType
 		formState.base_url = preset.url
 		formState.model_prefix = preset.prefix
 		if (preset.id !== 'custom') {
@@ -157,7 +171,6 @@
 			base_url: '',
 			api_key: '',
 			model_prefix: '',
-			additional_headers: {},
 			is_autofetch_enabled: true,
 		}
 		headerEntries = []
@@ -184,14 +197,36 @@
 			{} as Record<string, string>
 		)
 
-		formState.additional_headers = headers
 		submitError = null
 
 		try {
 			if (modalMode === 'create') {
-				await api.createProvider(formState)
+				const payload: ProviderCreate = {
+					name: formState.name,
+					adapter_type: formState.adapter_type,
+					provider_type: formState.provider_type,
+					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
+					model_prefix: formState.model_prefix.trim()
+						? formState.model_prefix.trim()
+						: null,
+					api_key: formState.api_key.trim() ? formState.api_key.trim() : null,
+					additional_headers: Object.keys(headers).length > 0 ? headers : null,
+					is_autofetch_enabled: formState.is_autofetch_enabled,
+				}
+				await ProvidersService.createProviderProvidersPost(payload)
 			} else if (editingId) {
-				await api.updateProvider(editingId, formState)
+				const payload: ProviderUpdate = {
+					adapter_type: formState.adapter_type,
+					provider_type: formState.provider_type,
+					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
+					model_prefix: formState.model_prefix.trim()
+						? formState.model_prefix.trim()
+						: null,
+					additional_headers: Object.keys(headers).length > 0 ? headers : null,
+					is_autofetch_enabled: formState.is_autofetch_enabled,
+				}
+				if (formState.api_key.trim()) payload.api_key = formState.api_key.trim()
+				await ProvidersService.updateProviderProvidersProviderIdPatch(editingId, payload)
 			}
 			await loadProviders()
 			showModal = false
@@ -200,25 +235,6 @@
 			console.error('Failed to save provider', e)
 			submitError =
 				'Failed to save provider. ' + (e instanceof Error ? e.message : 'Unknown error')
-		} finally {
-			isLoading = false
-		}
-	}
-
-	async function handleDeleteProvider() {
-		if (!editingId) return
-		if (!confirm('Are you sure you want to delete this provider?')) return
-		isLoading = true
-		submitError = null
-		try {
-			await api.deleteProvider(editingId)
-			await loadProviders()
-			showModal = false
-			resetForm()
-		} catch (e) {
-			console.error('Failed to delete provider', e)
-			submitError =
-				'Failed to delete provider. ' + (e instanceof Error ? e.message : 'Unknown error')
 		} finally {
 			isLoading = false
 		}
@@ -363,16 +379,6 @@
 					<CardContent class="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
 						<div class="space-y-2">
 							<Label for="name">name</Label>
-							<Input
-								id="name"
-								bind:value={formState.name}
-								required
-								placeholder="e.g. OpenAI Production"
-								class="rounded-xl"
-							/>
-						</div>
-
-						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-2">
 								<Label for="api_type">API type</Label>
 								<select
@@ -509,15 +515,7 @@
 								back
 							</Button>
 						{:else}
-							<Button
-								type="button"
-								variant="destructive"
-								class="rounded-xl"
-								disabled={isLoading}
-								onclick={handleDeleteProvider}
-							>
-								delete
-							</Button>
+							<span></span>
 						{/if}
 						<div class="flex gap-2">
 							<Button

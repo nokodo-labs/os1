@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { page } from '$app/state'
-	import { api } from '$lib/api'
+	import { SystemService } from '$lib/api'
 	import { auth } from '$lib/auth.svelte'
 	import SplashLoader from '$lib/components/SplashLoader.svelte'
 	import { onMount } from 'svelte'
@@ -13,7 +13,7 @@
 
 	onMount(async () => {
 		try {
-			const status = await api.getSystemStatus()
+			const status = await SystemService.getSystemStatusSystemStatusGet()
 			isInitialized = status.initialized
 		} catch (e) {
 			console.error('Failed to check system status', e)
