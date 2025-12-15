@@ -9,6 +9,7 @@ from api.v1.routers import (
 	memories,
 	models,
 	notifications,
+	projects,
 	providers,
 	system,
 	tasks,
@@ -27,6 +28,7 @@ api_router.include_router(tasks.router)
 api_router.include_router(events.router)
 api_router.include_router(notifications.router)
 api_router.include_router(memories.router)
+api_router.include_router(projects.router)
 api_router.include_router(providers.router)
 api_router.include_router(models.router)
 api_router.include_router(agents.router)

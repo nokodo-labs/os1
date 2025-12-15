@@ -7,6 +7,9 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
+export type { AccessControlEntry } from './models/AccessControlEntry';
+export type { AccessControlEntryCreate } from './models/AccessControlEntryCreate';
+export type { AccessRole } from './models/AccessRole';
 export type { Agent } from './models/Agent';
 export type { AgentCreate } from './models/AgentCreate';
 export type { AgentVisibility } from './models/AgentVisibility';
@@ -52,6 +55,7 @@ export { EventsService } from './services/EventsService';
 export { MemoriesService } from './services/MemoriesService';
 export { ModelsService } from './services/ModelsService';
 export { NotificationsService } from './services/NotificationsService';
+export { ProjectsService } from './services/ProjectsService';
 export { ProvidersService } from './services/ProvidersService';
 export { SystemService } from './services/SystemService';
 export { TasksService } from './services/TasksService';

@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AccessControlEntry } from '../models/AccessControlEntry';
+import type { AccessControlEntryCreate } from '../models/AccessControlEntryCreate';
 import type { Message } from '../models/Message';
 import type { MessageCreate } from '../models/MessageCreate';
 import type { Thread } from '../models/Thread';
@@ -183,6 +185,66 @@ export class ThreadsService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/threads/{thread_id}/messages',
+            path: {
+                'thread_id': threadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * List Thread Acl
+     * List acl entries for a thread.
+     * @param threadId
+     * @returns AccessControlEntry Successful Response
+     * @throws ApiError
+     */
+    public static listThreadAclThreadsThreadIdAclGet(
+        threadId: string,
+    ): CancelablePromise<Array<AccessControlEntry>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/threads/{thread_id}/acl',
+            path: {
+                'thread_id': threadId,
+            },
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Set Thread Acl
+     * Replace acl entries for a thread.
+     * @param threadId
+     * @param requestBody
+     * @returns AccessControlEntry Successful Response
+     * @throws ApiError
+     */
+    public static setThreadAclThreadsThreadIdAclPut(
+        threadId: string,
+        requestBody: Array<AccessControlEntryCreate>,
+    ): CancelablePromise<Array<AccessControlEntry>> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/threads/{thread_id}/acl',
             path: {
                 'thread_id': threadId,
             },

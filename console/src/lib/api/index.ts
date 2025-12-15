@@ -3,6 +3,7 @@ import {
 	AuthService,
 	ModelsService,
 	OpenAPI,
+	ProjectsService,
 	ProvidersService,
 	SystemService,
 	ThreadsService,
@@ -22,6 +23,7 @@ export {
 	AgentsService,
 	AuthService,
 	ModelsService,
+	ProjectsService,
 	ProvidersService,
 	SystemService,
 	ThreadsService,
@@ -29,6 +31,9 @@ export {
 }
 
 export type {
+	AccessControlEntry,
+	AccessControlEntryCreate,
+	AccessRole,
 	Agent,
 	AgentCreate,
 	AgentVisibility,
@@ -38,6 +43,7 @@ export type {
 	ModelCreate,
 	ModelType,
 	ModelUpdate,
+	Project,
 	Provider,
 	ProviderCreate,
 	ProviderStatus,

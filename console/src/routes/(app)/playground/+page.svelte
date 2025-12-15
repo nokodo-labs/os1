@@ -11,6 +11,7 @@
 		type ThreadCreate,
 	} from '$lib/api'
 	import { auth } from '$lib/auth.svelte'
+	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -36,6 +37,7 @@
 	let messages = $state<Message[]>([])
 	let isWorking = $state(false)
 	let actionError = $state<string | null>(null)
+	let isAclOpen = $state(false)
 
 	let threadTitle = $state('')
 	let messageContent = $state('')
@@ -147,6 +149,7 @@
 		selectedAgentId = ''
 		selectedModelId = ''
 		actionError = null
+		isAclOpen = false
 	}
 </script>
 
@@ -212,6 +215,11 @@
 							<div class="flex justify-between">
 								<span>thread id:</span>
 								<span class="font-mono text-xs">{thread.id}</span>
+							</div>
+							<div class="mt-3 flex justify-end">
+								<Button variant="outline" class="rounded-xl" onclick={() => (isAclOpen = true)}>
+									permissions
+								</Button>
 							</div>
 						</div>
 					{/if}
@@ -328,3 +336,7 @@
 		</div>
 	{/if}
 </div>
+
+{#if thread}
+	<AclModal bind:open={isAclOpen} resourceType="thread" resourceId={thread.id} title="thread permissions" />
+{/if}

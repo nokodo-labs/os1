@@ -6,12 +6,16 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.models.acl import AccessControlEntry
 from api.models.message import Message
 from api.models.thread import Thread
+from api.schemas.acl import AccessControlEntry as AccessControlEntrySchema
+from api.schemas.acl import AccessControlEntryCreate
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 
 
@@ -90,3 +94,22 @@ async def create_message(
 ) -> Message:
 	"""Append a message to a thread."""
 	return await thread_service.create_message(thread_id, message_in, db)
+
+
+@router.get("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])
+async def list_thread_acl(
+	thread_id: str,
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessControlEntry]:
+	"""List acl entries for a thread."""
+	return await acl_service.list_thread_acl(thread_id, db)
+
+
+@router.put("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])
+async def set_thread_acl(
+	thread_id: str,
+	entries: list[AccessControlEntryCreate],
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessControlEntry]:
+	"""Replace acl entries for a thread."""
+	return await acl_service.set_thread_acl(thread_id, entries, db)
