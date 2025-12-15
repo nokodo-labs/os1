@@ -69,7 +69,7 @@
         >
             <div
                 style="view-transition-name: landing-greeting;"
-                class="mb-8 flex flex-col items-center justify-center gap-2 text-center"
+                class="mb-12 flex flex-col items-center justify-center gap-2 text-center"
                 in:fade={{ duration: 200 }}
             >
                 <h1 class="text-4xl font-medium text-white">
@@ -90,7 +90,7 @@
             />
 
             <div
-                class="absolute top-full right-0 left-0 mt-10"
+                class="absolute top-full right-0 left-0 mt-14"
                 style="view-transition-name: apps-grid;"
             >
                 <AppsGrid />
