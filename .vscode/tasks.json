@@ -267,6 +267,19 @@
 			}
 		},
 		{
+			"label": "Console: Format",
+			"type": "shell",
+			"command": "npm run format",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "new"
+			}
+		},
+		{
 			"label": "Console: Check",
 			"type": "shell",
 			"command": "npm run check",
