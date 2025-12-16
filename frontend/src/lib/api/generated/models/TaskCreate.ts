@@ -14,7 +14,7 @@ export type TaskCreate = {
     progress?: (number | null);
     stage?: (string | null);
     result?: (Record<string, any> | null);
-    user_id: number;
+    user_id: string;
     spawned_thread_id?: (string | null);
 };
 

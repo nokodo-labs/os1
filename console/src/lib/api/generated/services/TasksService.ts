@@ -48,7 +48,7 @@ export class TasksService {
      * @throws ApiError
      */
     public static listTasksTasksGet(
-        userId?: (number | null),
+        userId?: (string | null),
         statusFilter?: (TaskStatus | null),
         skip?: number,
         limit: number = 50,

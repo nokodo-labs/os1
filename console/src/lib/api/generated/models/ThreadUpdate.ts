@@ -11,6 +11,6 @@ export type ThreadUpdate = {
     tags?: (Array<string> | null);
     is_archived?: (boolean | null);
     project_ids?: (Array<string> | null);
-    owner_id?: (number | null);
+    owner_id?: (string | null);
 };
 

@@ -11,6 +11,6 @@ export type ThreadCreate = {
     tags?: Array<string>;
     is_archived?: boolean;
     project_ids?: Array<string>;
-    owner_id: number;
+    owner_id: string;
 };
 

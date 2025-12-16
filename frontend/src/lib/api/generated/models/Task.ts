@@ -15,7 +15,7 @@ export type Task = {
     stage?: (string | null);
     result?: (Record<string, any> | null);
     id: string;
-    user_id: number;
+    user_id: string;
     spawned_thread_id?: (string | null);
     started_at?: (string | null);
     completed_at?: (string | null);

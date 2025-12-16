@@ -13,7 +13,7 @@ export type AccessControlEntry = {
     id: string;
     thread_id?: (string | null);
     project_id?: (string | null);
-    user_id?: (number | null);
+    user_id?: (string | null);
     group_id?: (string | null);
     agent_id?: (string | null);
     role: AccessRole;

@@ -45,7 +45,7 @@ export class MemoriesService {
      * @throws ApiError
      */
     public static listMemoriesMemoriesGet(
-        userId: number,
+        userId: string,
         skip?: number,
         limit: number = 50,
     ): CancelablePromise<Array<Memory>> {

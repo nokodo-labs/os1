@@ -13,12 +13,12 @@ export type Message = {
     attachments?: Array<Record<string, any>>;
     tool_calls?: Array<Record<string, any>>;
     token_usage?: (Record<string, any> | null);
-    read_by?: Array<number>;
+    read_by?: Array<string>;
     id: string;
     thread_id: string;
     task_id?: (string | null);
     sender_agent_id?: (string | null);
-    sender_user_id?: (number | null);
+    sender_user_id?: (string | null);
     created_at: string;
     updated_at: string;
 };

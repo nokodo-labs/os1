@@ -65,7 +65,7 @@ async def _ensure_principal_exists(
 		return
 
 	raise HTTPException(
-		status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+		status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 		detail="principal not set",
 	)
 
@@ -144,7 +144,7 @@ async def set_thread_acl(
 		principal_key = _principal_key(entry)
 		if principal_key in desired_keys:
 			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="Duplicate principal entries are not allowed",
 			)
 		desired_keys.add(principal_key)
@@ -187,7 +187,7 @@ async def set_project_acl(
 		principal_key = _principal_key(entry)
 		if principal_key in desired_keys:
 			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="Duplicate principal entries are not allowed",
 			)
 		desired_keys.add(principal_key)

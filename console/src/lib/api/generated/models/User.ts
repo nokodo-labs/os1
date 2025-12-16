@@ -14,7 +14,7 @@ export type User = {
     preferences?: Record<string, any>;
     integration_tokens?: Record<string, any>;
     usage_quotas?: Record<string, any>;
-    id: number;
+    id: string;
     role_id?: (string | null);
     created_at: string;
     updated_at: string;

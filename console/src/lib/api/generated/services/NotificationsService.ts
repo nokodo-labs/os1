@@ -16,7 +16,7 @@ export class NotificationsService {
      * @throws ApiError
      */
     public static listUserNotificationsNotificationsUsersUserIdGet(
-        userId: number,
+        userId: string,
         onlyUnread: boolean = false,
     ): CancelablePromise<Array<Notification>> {
         return __request(OpenAPI, {

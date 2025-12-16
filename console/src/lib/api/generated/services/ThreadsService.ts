@@ -50,7 +50,7 @@ export class ThreadsService {
      * @throws ApiError
      */
     public static listThreadsThreadsGet(
-        ownerId?: (number | null),
+        ownerId?: (string | null),
         skip?: number,
         limit: number = 20,
     ): CancelablePromise<Array<Thread>> {

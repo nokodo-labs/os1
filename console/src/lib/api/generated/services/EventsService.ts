@@ -51,7 +51,7 @@ export class EventsService {
         scope?: (EventScope | null),
         threadId?: (string | null),
         taskId?: (string | null),
-        userId?: (number | null),
+        userId?: (string | null),
         since?: (string | null),
     ): CancelablePromise<Array<Event>> {
         return __request(OpenAPI, {

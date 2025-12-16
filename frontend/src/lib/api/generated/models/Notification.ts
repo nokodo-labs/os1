@@ -7,7 +7,7 @@ import type { Event } from './Event';
  * Response schema.
  */
 export type Notification = {
-    user_id: number;
+    user_id: string;
     event_id: string;
     dismissed?: boolean;
     id: string;

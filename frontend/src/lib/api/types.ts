@@ -567,14 +567,17 @@ export interface components {
             metadata_?: {
                 [key: string]: unknown;
             };
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
             /** Thread Id */
             thread_id?: string | null;
             /** Project Id */
             project_id?: string | null;
             /** User Id */
-            user_id?: number | null;
+            user_id?: string | null;
             /** Group Id */
             group_id?: string | null;
             /** Agent Id */
@@ -591,7 +594,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /** User Id */
-            user_id?: number | null;
+            user_id?: string | null;
             /** Group Id */
             group_id?: string | null;
             /** Agent Id */
@@ -727,14 +730,17 @@ export interface components {
              */
             version: number;
             /** User Id */
-            user_id?: number | null;
+            user_id?: string | null;
             /** Thread Id */
             thread_id?: string | null;
             /** Message Id */
             message_id?: string | null;
             /** Task Id */
             task_id?: string | null;
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
             /**
              * Created At
@@ -774,7 +780,7 @@ export interface components {
              */
             version: number;
             /** User Id */
-            user_id?: number | null;
+            user_id?: string | null;
             /** Thread Id */
             thread_id?: string | null;
             /** Message Id */
@@ -805,10 +811,16 @@ export interface components {
             confidence?: number | null;
             /** Category */
             category?: string | null;
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
-            /** User Id */
-            user_id: number;
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
             /** Embedding */
             embedding?: string | null;
             /** Last Accessed At */
@@ -842,8 +854,11 @@ export interface components {
             confidence?: number | null;
             /** Category */
             category?: string | null;
-            /** User Id */
-            user_id: number;
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
         };
         /**
          * Message
@@ -871,17 +886,23 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Read By */
-            read_by?: number[];
-            /** Id */
+            read_by?: string[];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
-            /** Thread Id */
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             thread_id: string;
             /** Task Id */
             task_id?: string | null;
             /** Sender Agent Id */
             sender_agent_id?: string | null;
             /** Sender User Id */
-            sender_user_id?: number | null;
+            sender_user_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -919,13 +940,13 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Read By */
-            read_by?: number[];
+            read_by?: string[];
             /** Task Id */
             task_id?: string | null;
             /** Sender Agent Id */
             sender_agent_id?: string | null;
             /** Sender User Id */
-            sender_user_id?: number | null;
+            sender_user_id?: string | null;
         };
         /**
          * MessageType
@@ -1061,16 +1082,25 @@ export interface components {
          * @description Response schema.
          */
         Notification: {
-            /** User Id */
-            user_id: number;
-            /** Event Id */
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
+            /**
+             * Event Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             event_id: string;
             /**
              * Dismissed
              * @default false
              */
             dismissed: boolean;
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
             /** Read At */
             read_at?: string | null;
@@ -1147,10 +1177,16 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
-            /** Owner Id */
-            owner_id: number;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
             /** Thread Ids */
             thread_ids?: string[];
         };
@@ -1311,10 +1347,16 @@ export interface components {
             result?: {
                 [key: string]: unknown;
             } | null;
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
-            /** User Id */
-            user_id: number;
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
             /** Spawned Thread Id */
             spawned_thread_id?: string | null;
             /** Started At */
@@ -1357,8 +1399,11 @@ export interface components {
             result?: {
                 [key: string]: unknown;
             } | null;
-            /** User Id */
-            user_id: number;
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
             /** Spawned Thread Id */
             spawned_thread_id?: string | null;
         };
@@ -1413,10 +1458,16 @@ export interface components {
             is_archived: boolean;
             /** Project Ids */
             project_ids?: string[];
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
-            /** Owner Id */
-            owner_id: number;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
             /**
              * Last Activity At
              * Format: date-time
@@ -1458,8 +1509,11 @@ export interface components {
             is_archived: boolean;
             /** Project Ids */
             project_ids?: string[];
-            /** Owner Id */
-            owner_id: number;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
         };
         /**
          * ThreadUpdate
@@ -1479,7 +1533,7 @@ export interface components {
             /** Project Ids */
             project_ids?: string[] | null;
             /** Owner Id */
-            owner_id?: number | null;
+            owner_id?: string | null;
         };
         /** Token */
         Token: {
@@ -1524,8 +1578,11 @@ export interface components {
             usage_quotas?: {
                 [key: string]: unknown;
             };
-            /** Id */
-            id: number;
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
             /** Role Id */
             role_id?: string | null;
             /**
@@ -2128,7 +2185,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                user_id: string;
             };
             cookie?: never;
         };
@@ -2220,7 +2277,7 @@ export interface operations {
     list_threads_threads_get: {
         parameters: {
             query?: {
-                owner_id?: number | null;
+                owner_id?: string | null;
                 skip?: number;
                 limit?: number;
             };
@@ -2991,7 +3048,7 @@ export interface operations {
     list_tasks_tasks_get: {
         parameters: {
             query?: {
-                user_id?: number | null;
+                user_id?: string | null;
                 status_filter?: components["schemas"]["TaskStatus"] | null;
                 skip?: number;
                 limit?: number;
@@ -3285,7 +3342,7 @@ export interface operations {
                 scope?: components["schemas"]["EventScope"] | null;
                 thread_id?: string | null;
                 task_id?: string | null;
-                user_id?: number | null;
+                user_id?: string | null;
                 since?: string | null;
             };
             header?: never;
@@ -3480,7 +3537,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                user_id: number;
+                user_id: string;
             };
             cookie?: never;
         };
@@ -3760,7 +3817,7 @@ export interface operations {
     list_memories_memories_get: {
         parameters: {
             query: {
-                user_id: number;
+                user_id: string;
                 skip?: number;
                 limit?: number;
             };

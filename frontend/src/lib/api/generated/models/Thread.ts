@@ -15,7 +15,7 @@ export type Thread = {
     is_archived?: boolean;
     project_ids?: Array<string>;
     id: string;
-    owner_id: number;
+    owner_id: string;
     last_activity_at: string;
     created_at: string;
     updated_at: string;

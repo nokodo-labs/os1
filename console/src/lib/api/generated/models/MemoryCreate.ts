@@ -11,6 +11,6 @@ export type MemoryCreate = {
     source_message_id?: (string | null);
     confidence?: (number | null);
     category?: (string | null);
-    user_id: number;
+    user_id: string;
 };
 

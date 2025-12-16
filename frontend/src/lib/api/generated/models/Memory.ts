@@ -13,7 +13,7 @@ export type Memory = {
     confidence?: (number | null);
     category?: (string | null);
     id: string;
-    user_id: number;
+    user_id: string;
     embedding?: (Blob | null);
     last_accessed_at?: (string | null);
     created_at: string;

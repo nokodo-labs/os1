@@ -74,7 +74,7 @@ export class UsersService {
      * @throws ApiError
      */
     public static readUserUsersUserIdGet(
-        userId: number,
+        userId: string,
     ): CancelablePromise<User> {
         return __request(OpenAPI, {
             method: 'GET',

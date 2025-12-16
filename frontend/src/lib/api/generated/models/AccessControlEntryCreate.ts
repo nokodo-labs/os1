@@ -8,7 +8,7 @@ import type { AccessRole } from './AccessRole';
  */
 export type AccessControlEntryCreate = {
     metadata_?: Record<string, any>;
-    user_id?: (number | null);
+    user_id?: (string | null);
     group_id?: (string | null);
     agent_id?: (string | null);
     role?: AccessRole;

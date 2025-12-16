@@ -13,9 +13,9 @@ export type MessageCreate = {
     attachments?: Array<Record<string, any>>;
     tool_calls?: Array<Record<string, any>>;
     token_usage?: (Record<string, any> | null);
-    read_by?: Array<number>;
+    read_by?: Array<string>;
     task_id?: (string | null);
     sender_agent_id?: (string | null);
-    sender_user_id?: (number | null);
+    sender_user_id?: (string | null);
 };
 

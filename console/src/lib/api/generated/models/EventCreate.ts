@@ -14,7 +14,7 @@ export type EventCreate = {
     data?: Record<string, any>;
     expires_at?: (string | null);
     version?: number;
-    user_id?: (number | null);
+    user_id?: (string | null);
     thread_id?: (string | null);
     message_id?: (string | null);
     task_id?: (string | null);

@@ -12,7 +12,7 @@ export type Project = {
     name: string;
     description?: (string | null);
     id: string;
-    owner_id: number;
+    owner_id: string;
     thread_ids?: Array<string>;
 };
 
