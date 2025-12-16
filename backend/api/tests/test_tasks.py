@@ -8,6 +8,7 @@ from api.schemas.task import TaskCreate, TaskUpdate
 from api.schemas.user import UserCreate
 from api.v1.service import tasks as task_service
 from api.v1.service import users as user_service
+from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
@@ -120,7 +121,7 @@ async def test_update_task_not_found(
 ) -> None:
 	"""Test updating a non-existent task."""
 	response = await client.patch(
-		"/v1/tasks/00000000-0000-0000-0000-000000000000",
+		f"/v1/tasks/{new_typeid('task')}",
 		json={"status": "complete"},
 	)
 	assert response.status_code == 404

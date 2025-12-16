@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from api.schemas.typeid import TypeID
+
 
 class Token(BaseModel):
 	access_token: str
@@ -7,4 +9,4 @@ class Token(BaseModel):
 
 
 class TokenPayload(BaseModel):
-	sub: int | None = None
+	sub: TypeID | None = None

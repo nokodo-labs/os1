@@ -15,6 +15,18 @@ from api.schemas.errors import ProblemDetails, ValidationIssue, ValidationProble
 logger = get_logger(__name__)
 
 
+def _make_json_safe(value: object) -> object:
+	if value is None or isinstance(value, str | int | float | bool):
+		return value
+	if isinstance(value, Exception):
+		return str(value)
+	if isinstance(value, dict):
+		return {str(key): _make_json_safe(inner) for key, inner in value.items()}
+	if isinstance(value, list | tuple):
+		return [_make_json_safe(inner) for inner in value]
+	return str(value)
+
+
 def _get_request_id() -> str | None:
 	request_id = request_id_ctx.get()
 	return request_id or None
@@ -41,13 +53,19 @@ def _parse_validation_issues(exc: RequestValidationError) -> list[ValidationIssu
 	issues: list[ValidationIssue] = []
 	for err in exc.errors():
 		loc = [part for part in err.get("loc", [])]
+		ctx = err.get("ctx")
+		safe_ctx: dict[str, object] | None
+		if isinstance(ctx, dict):
+			safe_ctx = {str(key): _make_json_safe(value) for key, value in ctx.items()}
+		else:
+			safe_ctx = None
 		issues.append(
 			ValidationIssue(
 				type=str(err.get("type", "validation_error")),
 				loc=loc,
 				message=str(err.get("msg", "invalid request")),
 				input=err.get("input"),
-				context=err.get("ctx"),
+				context=safe_ctx,
 			)
 		)
 	return issues

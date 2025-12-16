@@ -9,6 +9,7 @@ from api.models.thread import Thread as ThreadModel
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
+from nokodo_ai.utils.typeid import new_typeid
 
 
 def _stamp_project(project: ProjectModel, *, project_id: str) -> ProjectModel:
@@ -31,21 +32,25 @@ def _stamp_thread(thread: ThreadModel, *, thread_id: str) -> ThreadModel:
 
 
 def test_project_schema_populates_thread_ids() -> None:
+	owner_id = new_typeid("user")
+	project_id = new_typeid("proj")
+	thread_id = new_typeid("thread")
 	project = _stamp_project(
-		ProjectModel(name="Schema", description="Test", owner_id=1),
-		project_id="project-schema",
+		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
+		project_id=project_id,
 	)
-	thread = _stamp_thread(ThreadModel(owner_id=1), thread_id="thread-schema")
+	thread = _stamp_thread(ThreadModel(owner_id=owner_id), thread_id=thread_id)
 	project.threads = [thread]
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == ["thread-schema"]
+	assert serialized.thread_ids == [thread_id]
 
 
 def test_project_schema_handles_empty_threads() -> None:
+	owner_id = new_typeid("user")
 	project = _stamp_project(
-		ProjectModel(name="Schema", description="Test", owner_id=1),
-		project_id="project-empty",
+		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
+		project_id=new_typeid("proj"),
 	)
 	project.threads = []
 
@@ -54,27 +59,32 @@ def test_project_schema_handles_empty_threads() -> None:
 
 
 def test_project_schema_respects_existing_thread_ids() -> None:
+	owner_id = new_typeid("user")
+	preloaded_thread_id = new_typeid("thread")
 	project = _stamp_project(
-		ProjectModel(name="Schema", description="Test", owner_id=1),
-		project_id="project-existing",
+		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
+		project_id=new_typeid("proj"),
 	)
-	project.thread_ids = ["preloaded"]
+	project.thread_ids = [preloaded_thread_id]
 	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == ["preloaded"]
+	assert serialized.thread_ids == [preloaded_thread_id]
 
 
 def test_thread_schema_populates_project_ids() -> None:
-	thread = _stamp_thread(ThreadModel(owner_id=1), thread_id="thread-schema")
+	owner_id = new_typeid("user")
+	thread_id = new_typeid("thread")
+	project_id = new_typeid("proj")
+	thread = _stamp_thread(ThreadModel(owner_id=owner_id), thread_id=thread_id)
 	project = _stamp_project(
-		ProjectModel(name="Schema", description="Test", owner_id=1),
-		project_id="project-schema",
+		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
+		project_id=project_id,
 	)
 	thread.projects = [project]
 
 	detailed = ThreadSchema.model_validate(thread)
 	summary = ThreadSummary.model_validate(thread)
 
-	assert detailed.project_ids == ["project-schema"]
-	assert summary.project_ids == ["project-schema"]
+	assert detailed.project_ids == [project_id]
+	assert summary.project_ids == [project_id]

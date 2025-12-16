@@ -14,6 +14,7 @@ from api.models.project import Project
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.v1.service import threads as thread_service
+from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
@@ -142,7 +143,7 @@ async def test_thread_messages(client: AsyncClient) -> None:
 async def test_create_thread_invalid_user(client: AsyncClient) -> None:
 	"""Test creating a thread with non-existent user."""
 	thread_payload = {
-		"owner_id": 99999,
+		"owner_id": new_typeid("user"),
 		"title": "Invalid User Thread",
 	}
 	resp = await client.post("/v1/threads", json=thread_payload)
@@ -163,7 +164,7 @@ async def test_create_thread_invalid_project(client: AsyncClient) -> None:
 	thread_payload = {
 		"owner_id": user["id"],
 		"title": "Invalid Project Thread",
-		"project_ids": ["non-existent-id"],
+		"project_ids": [new_typeid("proj")],
 	}
 	resp = await client.post("/v1/threads", json=thread_payload)
 	assert resp.status_code == 404
@@ -201,7 +202,7 @@ async def test_service_create_thread(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_get_thread_not_found(client: AsyncClient) -> None:
 	"""Test getting a non-existent thread."""
-	resp = await client.get("/v1/threads/00000000-0000-0000-0000-000000000000")
+	resp = await client.get(f"/v1/threads/{new_typeid('thread')}")
 	assert resp.status_code == 404
 
 
@@ -308,7 +309,7 @@ async def test_get_thread_not_found_service(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_create_thread_invalid_user_service(db_session: AsyncSession) -> None:
-	thread_in = ThreadCreate(owner_id=99999, title="Test")
+	thread_in = ThreadCreate(owner_id=new_typeid("user"), title="Test")
 	with pytest.raises(HTTPException) as exc:
 		await thread_service.create_thread(thread_in, db_session)
 	assert exc.value.status_code == 404
@@ -323,7 +324,11 @@ async def test_create_thread_invalid_project_service(
 	user_resp = await client.post("/v1/users", json=user_payload)
 	user_id = user_resp.json()["id"]
 
-	thread_in = ThreadCreate(owner_id=user_id, title="Test", project_ids=["bad-id"])
+	thread_in = ThreadCreate(
+		owner_id=user_id,
+		title="Test",
+		project_ids=[new_typeid("proj")],
+	)
 	with pytest.raises(HTTPException) as exc:
 		await thread_service.create_thread(thread_in, db_session)
 	assert exc.value.status_code == 404
@@ -345,7 +350,10 @@ async def test_list_threads_filter_owner(
 	assert len(threads) == 1
 	assert threads[0].owner_id == user_id
 
-	threads_empty = await thread_service.list_threads(db_session, owner_id=99999)
+	threads_empty = await thread_service.list_threads(
+		db_session,
+		owner_id=new_typeid("user"),
+	)
 	assert len(threads_empty) == 0
 
 

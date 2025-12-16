@@ -9,6 +9,7 @@ from api.core.database import get_db
 from api.models.memory import Memory
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import MemoryCreate
+from api.schemas.typeid import TypeID
 from api.v1.service import memories as memory_service
 
 
@@ -26,7 +27,7 @@ async def create_memory(
 
 @router.get("", response_model=list[MemorySchema])
 async def list_memories(
-	user_id: int,
+	user_id: TypeID,
 	skip: int = 0,
 	limit: int = 50,
 	db: AsyncSession = Depends(get_db),
@@ -42,7 +43,7 @@ async def list_memories(
 
 @router.get("/{memory_id}", response_model=MemorySchema)
 async def get_memory(
-	memory_id: str,
+	memory_id: TypeID,
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
 	"""Fetch a single memory."""

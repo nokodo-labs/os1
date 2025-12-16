@@ -33,7 +33,7 @@ async def _get_notification(
 
 async def list_user_notifications(
 	session: AsyncSession,
-	user_id: int,
+	user_id: str,
 	only_unread: bool = False,
 ) -> list[Notification]:
 	stmt = (

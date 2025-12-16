@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.models.notification import Notification
 from api.schemas.notification import Notification as NotificationSchema
+from api.schemas.typeid import TypeID
 from api.v1.service import notifications as notification_service
 
 
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @router.get("/users/{user_id}", response_model=list[NotificationSchema])
 async def list_user_notifications(
-	user_id: int,
+	user_id: TypeID,
 	only_unread: bool = False,
 	db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
@@ -30,7 +31,7 @@ async def list_user_notifications(
 
 @router.post("/{notification_id}/read", response_model=NotificationSchema)
 async def mark_notification_read(
-	notification_id: str,
+	notification_id: TypeID,
 	db: AsyncSession = Depends(get_db),
 ) -> Notification:
 	"""Mark a notification as read."""
@@ -39,7 +40,7 @@ async def mark_notification_read(
 
 @router.post("/{notification_id}/dismiss", response_model=NotificationSchema)
 async def dismiss_notification(
-	notification_id: str,
+	notification_id: TypeID,
 	db: AsyncSession = Depends(get_db),
 ) -> Notification:
 	"""Dismiss a notification without marking it read."""

@@ -9,6 +9,7 @@ from api.core.database import get_db
 from api.models.task import Task, TaskStatus
 from api.schemas.task import Task as TaskSchema
 from api.schemas.task import TaskCreate, TaskUpdate
+from api.schemas.typeid import TypeID
 from api.v1.service import tasks as task_service
 
 
@@ -26,7 +27,7 @@ async def create_task(
 
 @router.get("", response_model=list[TaskSchema])
 async def list_tasks(
-	user_id: int | None = None,
+	user_id: TypeID | None = None,
 	status_filter: TaskStatus | None = None,
 	skip: int = 0,
 	limit: int = 50,
@@ -44,7 +45,7 @@ async def list_tasks(
 
 @router.patch("/{task_id}", response_model=TaskSchema)
 async def update_task(
-	task_id: str,
+	task_id: TypeID,
 	task_in: TaskUpdate,
 	db: AsyncSession = Depends(get_db),
 ) -> Task:

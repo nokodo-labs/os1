@@ -6,6 +6,8 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nokodo_ai.utils.typeid import new_typeid
+
 
 @pytest.mark.asyncio
 async def test_acl_list_set_update_remove(client: AsyncClient) -> None:
@@ -75,7 +77,13 @@ async def test_acl_validation_requires_one_principal(client: AsyncClient) -> Non
 
 	resp = await client.put(
 		f"/v1/threads/{thread['id']}/acl",
-		json=[{"user_id": user["id"], "group_id": "group-id", "role": "viewer"}],
+		json=[
+			{
+				"user_id": user["id"],
+				"group_id": new_typeid("group"),
+				"role": "viewer",
+			}
+		],
 	)
 	assert resp.status_code == 422
 
@@ -95,7 +103,7 @@ async def test_acl_rejects_unknown_principal(client: AsyncClient) -> None:
 
 	resp = await client.put(
 		f"/v1/threads/{thread['id']}/acl",
-		json=[{"user_id": 999999, "role": "viewer"}],
+		json=[{"user_id": new_typeid("user"), "role": "viewer"}],
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "User not found"
@@ -127,7 +135,7 @@ async def test_acl_rejects_duplicate_principals(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_thread_acl_not_found_returns_404(client: AsyncClient) -> None:
-	resp = await client.get("/v1/threads/00000000-0000-0000-0000-000000000000/acl")
+	resp = await client.get(f"/v1/threads/{new_typeid('thread')}/acl")
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Thread not found"
 
@@ -216,7 +224,7 @@ async def test_project_acl_rejects_unknown_group(
 
 	resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
-		json=[{"group_id": "00000000-0000-0000-0000-000000000000", "role": "viewer"}],
+		json=[{"group_id": new_typeid("group"), "role": "viewer"}],
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Group not found"
@@ -246,7 +254,7 @@ async def test_project_acl_rejects_unknown_agent(
 
 	resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
-		json=[{"agent_id": "00000000-0000-0000-0000-000000000000", "role": "viewer"}],
+		json=[{"agent_id": new_typeid("agent"), "role": "viewer"}],
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Agent not found"
@@ -357,6 +365,6 @@ async def test_acl_service_rejects_missing_principal(db_session: AsyncSession) -
 
 @pytest.mark.asyncio
 async def test_project_acl_not_found_returns_404(client: AsyncClient) -> None:
-	resp = await client.get("/v1/projects/00000000-0000-0000-0000-000000000000/acl")
+	resp = await client.get(f"/v1/projects/{new_typeid('proj')}/acl")
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Project not found"

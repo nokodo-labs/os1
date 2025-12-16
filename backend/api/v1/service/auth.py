@@ -51,7 +51,7 @@ async def get_current_user(
 		user_id = payload.get("sub")
 		if user_id is None:
 			raise credentials_exception
-		token_data = TokenPayload(sub=int(user_id))
+		token_data = TokenPayload(sub=str(user_id))
 	except JoseError:
 		raise credentials_exception
 

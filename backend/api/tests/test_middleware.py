@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 
 import pytest
 from fastapi import HTTPException
@@ -31,6 +30,7 @@ from api.middleware import (
 	SecurityHeadersMiddleware,
 )
 from api.middleware._utils import append_header, get_client_ip, get_header
+from nokodo_ai.utils.typeid import is_typeid
 
 
 class DummyApp:
@@ -94,8 +94,8 @@ async def test_middleware_generates_request_id(test_app: Starlette) -> None:
 
 	# should have generated a request_id
 	assert data["context_request_id"] is not None
-	# should be a valid uuid
-	uuid.UUID(data["context_request_id"])
+	# should be a valid typeid
+	assert is_typeid(data["context_request_id"], prefix="req")
 
 	# should be in response headers
 	assert "X-Request-ID" in response.headers

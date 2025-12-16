@@ -30,7 +30,7 @@ async def list_events(
 	scope: EventScope | None = None,
 	thread_id: str | None = None,
 	task_id: str | None = None,
-	user_id: int | None = None,
+	user_id: str | None = None,
 	since: datetime | None = None,
 ) -> list[Event]:
 	stmt = select(Event).order_by(Event.created_at.desc())

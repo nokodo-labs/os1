@@ -28,6 +28,9 @@ from sqlalchemy.ext.asyncio import (
 	create_async_engine,
 )
 
+# Ensure all model tables are registered in Base.metadata before create_all.
+import api.models  # noqa: F401
+
 # Ensure SQLAlchemy models are registered with Base metadata for DDL operations
 from api.core.config import settings
 from api.core.database import Base

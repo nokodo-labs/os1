@@ -87,7 +87,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	event2 = await event_service.emit_event(
 		EventCreate(
 			scope=EventScope.SYSTEM,
-			scope_id="system",
+			scope_id=None,
 			type="test.event.2",
 			data={},
 		),

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas.user import UserCreate
 from api.v1.service import users as user_service
+from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
@@ -60,7 +61,7 @@ async def test_get_user_by_id(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_nonexistent_user(client: AsyncClient) -> None:
 	"""Test retrieving a user that doesn't exist."""
-	response = await client.get("/v1/users/99999")
+	response = await client.get(f"/v1/users/{new_typeid('user')}")
 	assert response.status_code == 404
 
 
@@ -130,7 +131,7 @@ async def test_service_list_users(db_session: AsyncSession) -> None:
 async def test_service_get_user_not_found(db_session: AsyncSession) -> None:
 	"""Test getting a non-existent user directly via service."""
 	with pytest.raises(HTTPException) as exc:
-		await user_service.get_user(99999, db_session)
+		await user_service.get_user(new_typeid("user"), db_session)
 	assert exc.value.status_code == 404
 
 

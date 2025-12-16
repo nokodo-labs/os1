@@ -13,6 +13,10 @@ TYPEID_MAX_LENGTH: Final[int] = 90
 
 _BASE32_ALPHABET: Final[str] = "0123456789abcdefghjkmnpqrstvwxyz"
 
+_BASE32_DECODE_TABLE: Final[dict[str, int]] = {
+	char: index for index, char in enumerate(_BASE32_ALPHABET)
+}
+
 # spec v0.3.0: ^([a-z]([a-z_]{0,61}[a-z])?)?$
 _PREFIX_RE: Final[re.Pattern[str]] = re.compile(r"^([a-z]([a-z_]{0,61}[a-z])?)?$")
 _SUFFIX_RE: Final[re.Pattern[str]] = re.compile(
@@ -56,6 +60,42 @@ def _encode_base32_uuid_suffix(uuid_bytes: bytes) -> str:
 		value = (uuid_int >> shift) & 0x1F
 		chars.append(_BASE32_ALPHABET[value])
 	return "".join(chars)
+
+
+def decode_uuid_bytes_from_typeid(value: str) -> bytes:
+	"""Decode a TypeID string into raw UUID bytes.
+
+	This accepts either:
+	- <prefix>_<suffix>
+	- <suffix> (empty prefix)
+
+	Raises ValueError if the input is not a valid TypeID.
+	"""
+	if not is_typeid(value):
+		raise ValueError("invalid typeid")
+
+	if TYPEID_SEPARATOR not in value:
+		suffix = value
+	else:
+		suffix = value[value.rfind(TYPEID_SEPARATOR) + 1 :]
+	return _decode_base32_uuid_suffix(suffix)
+
+
+def _decode_base32_uuid_suffix(suffix: str) -> bytes:
+	if len(suffix) != TYPEID_SUFFIX_LENGTH:
+		raise ValueError("invalid typeid suffix length")
+	if not _SUFFIX_RE.fullmatch(suffix):
+		raise ValueError("invalid typeid suffix")
+	if suffix[0] not in "01234567":
+		raise ValueError("invalid typeid suffix: overflow")
+
+	value_130 = 0
+	for char in suffix:
+		value_130 = (value_130 << 5) | _BASE32_DECODE_TABLE[char]
+
+	# drop the leading two zero bits
+	uuid_int = value_130 & ((1 << 128) - 1)
+	return uuid_int.to_bytes(16, byteorder="big", signed=False)
 
 
 def new_typeid(prefix: str) -> str:

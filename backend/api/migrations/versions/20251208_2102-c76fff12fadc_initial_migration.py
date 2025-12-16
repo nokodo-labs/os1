@@ -16,10 +16,13 @@ branch_labels = None
 depends_on = None
 
 
+TYPEID_LENGTH = 90
+
+
 def upgrade() -> None:
 	op.create_table(
 		"roles",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("name", sa.String(length=50), nullable=False),
 		sa.Column("permissions", sa.JSON(), nullable=False),
 		sa.Column("quotas", sa.JSON(), nullable=False),
@@ -31,7 +34,7 @@ def upgrade() -> None:
 
 	op.create_table(
 		"users",
-		sa.Column("id", sa.Integer(), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("email", sa.String(length=255), nullable=False),
 		sa.Column("display_name", sa.String(length=150), nullable=True),
 		sa.Column("avatar_url", sa.String(length=512), nullable=True),
@@ -53,7 +56,7 @@ def upgrade() -> None:
 			server_default=sa.text("now()"),
 			nullable=False,
 		),
-		sa.Column("role_id", sa.String(length=36), nullable=True),
+		sa.Column("role_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.ForeignKeyConstraint(["role_id"], ["roles.id"]),
 		sa.PrimaryKeyConstraint("id"),
 	)
@@ -62,7 +65,7 @@ def upgrade() -> None:
 
 	op.create_table(
 		"providers",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("name", sa.String(length=100), nullable=False),
 		sa.Column("adapter_type", sa.String(length=100), nullable=False),
 		sa.Column("provider_type", sa.String(), nullable=False),
@@ -92,8 +95,8 @@ def upgrade() -> None:
 
 	op.create_table(
 		"models",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("provider_id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("provider_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("name", sa.String(length=150), nullable=False),
 		sa.Column("display_name", sa.String(length=150), nullable=True),
 		sa.Column("model_type", sa.String(), nullable=False),
@@ -128,14 +131,14 @@ def upgrade() -> None:
 
 	op.create_table(
 		"agents",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("name", sa.String(length=100), nullable=False),
 		sa.Column("description", sa.Text(), nullable=True),
 		sa.Column("system_prompt", sa.Text(), nullable=True),
 		sa.Column("visibility", sa.String(), nullable=False),
 		sa.Column("tool_ids", sa.JSON(), nullable=False),
 		sa.Column("config", sa.JSON(), nullable=False),
-		sa.Column("model_id", sa.String(length=36), nullable=True),
+		sa.Column("model_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column(
 			"created_at",
 			sa.DateTime(timezone=True),
@@ -160,7 +163,7 @@ def upgrade() -> None:
 
 	op.create_table(
 		"threads",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("title", sa.String(length=255), nullable=True),
 		sa.Column("tags", sa.JSON(), nullable=False),
 		sa.Column("is_archived", sa.Boolean(), nullable=False),
@@ -170,7 +173,7 @@ def upgrade() -> None:
 			server_default=sa.text("now()"),
 			nullable=False,
 		),
-		sa.Column("owner_id", sa.Integer(), nullable=False),
+		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column(
 			"created_at",
 			sa.DateTime(timezone=True),
@@ -190,10 +193,10 @@ def upgrade() -> None:
 
 	op.create_table(
 		"projects",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("name", sa.String(length=100), nullable=False),
 		sa.Column("description", sa.String(length=500), nullable=True),
-		sa.Column("owner_id", sa.Integer(), nullable=False),
+		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column(
 			"created_at",
 			sa.DateTime(timezone=True),
@@ -213,8 +216,8 @@ def upgrade() -> None:
 
 	op.create_table(
 		"thread_projects",
-		sa.Column("thread_id", sa.String(length=36), nullable=False),
-		sa.Column("project_id", sa.String(length=36), nullable=False),
+		sa.Column("thread_id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("project_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
 		sa.ForeignKeyConstraint(["thread_id"], ["threads.id"], ondelete="CASCADE"),
 		sa.PrimaryKeyConstraint("thread_id", "project_id"),
@@ -222,10 +225,10 @@ def upgrade() -> None:
 
 	op.create_table(
 		"groups",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("name", sa.String(length=100), nullable=False),
 		sa.Column("description", sa.String(length=500), nullable=True),
-		sa.Column("owner_id", sa.Integer(), nullable=False),
+		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column(
 			"created_at",
 			sa.DateTime(timezone=True),
@@ -245,9 +248,9 @@ def upgrade() -> None:
 
 	op.create_table(
 		"group_memberships",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("group_id", sa.String(length=36), nullable=False),
-		sa.Column("user_id", sa.Integer(), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("group_id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("role", sa.String(), nullable=False),
 		sa.Column("metadata", sa.JSON(), nullable=False),
 		sa.ForeignKeyConstraint(["group_id"], ["groups.id"], ondelete="CASCADE"),
@@ -257,14 +260,14 @@ def upgrade() -> None:
 
 	op.create_table(
 		"tasks",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("user_id", sa.Integer(), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("task_type", sa.String(), nullable=False),
 		sa.Column("status", sa.String(), nullable=False),
 		sa.Column("progress", sa.Integer(), nullable=True),
 		sa.Column("stage", sa.String(length=100), nullable=True),
 		sa.Column("result", sa.JSON(), nullable=True),
-		sa.Column("spawned_thread_id", sa.String(length=36), nullable=True),
+		sa.Column("spawned_thread_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
@@ -292,11 +295,11 @@ def upgrade() -> None:
 
 	op.create_table(
 		"messages",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("thread_id", sa.String(length=36), nullable=False),
-		sa.Column("task_id", sa.String(length=36), nullable=True),
-		sa.Column("sender_agent_id", sa.String(length=36), nullable=True),
-		sa.Column("sender_user_id", sa.Integer(), nullable=True),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("thread_id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("task_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("sender_agent_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("sender_user_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("type", sa.String(), nullable=False),
 		sa.Column("content", sa.Text(), nullable=False),
 		sa.Column("attachments", sa.JSON(), nullable=False),
@@ -349,12 +352,12 @@ def upgrade() -> None:
 
 	op.create_table(
 		"access_control_entries",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("thread_id", sa.String(length=36), nullable=True),
-		sa.Column("project_id", sa.String(length=36), nullable=True),
-		sa.Column("user_id", sa.Integer(), nullable=True),
-		sa.Column("group_id", sa.String(length=36), nullable=True),
-		sa.Column("agent_id", sa.String(length=36), nullable=True),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("thread_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("project_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("group_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("agent_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("role", sa.String(), nullable=False),
 		sa.Column(
 			"created_at",
@@ -409,10 +412,10 @@ def upgrade() -> None:
 
 	op.create_table(
 		"memories",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("user_id", sa.Integer(), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("content", sa.Text(), nullable=False),
-		sa.Column("source_message_id", sa.String(length=36), nullable=True),
+		sa.Column("source_message_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("embedding", sa.LargeBinary(), nullable=True),
 		sa.Column("last_accessed_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column("confidence", sa.Float(), nullable=True),
@@ -440,18 +443,18 @@ def upgrade() -> None:
 
 	op.create_table(
 		"events",
-		sa.Column("id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("scope", sa.String(), nullable=False),
-		sa.Column("scope_id", sa.String(length=64), nullable=True),
+		sa.Column("scope_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("type", sa.String(length=100), nullable=False),
 		sa.Column("data", sa.JSON(), nullable=False),
 		sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column("version", sa.Integer(), nullable=False),
-		sa.Column("user_id", sa.Integer(), nullable=True),
-		sa.Column("thread_id", sa.String(length=36), nullable=True),
-		sa.Column("message_id", sa.String(length=36), nullable=True),
-		sa.Column("task_id", sa.String(length=36), nullable=True),
-		sa.Column("project_id", sa.String(length=36), nullable=True),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("thread_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("message_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("task_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("project_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column(
 			"created_at",
 			sa.DateTime(timezone=True),
@@ -477,9 +480,9 @@ def upgrade() -> None:
 
 	op.create_table(
 		"notifications",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("user_id", sa.Integer(), nullable=False),
-		sa.Column("event_id", sa.String(length=36), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("event_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("read_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column("dismissed", sa.Boolean(), nullable=False),
 		sa.Column(
@@ -507,14 +510,14 @@ def upgrade() -> None:
 
 	op.create_table(
 		"reminders",
-		sa.Column("id", sa.String(length=36), nullable=False),
-		sa.Column("owner_id", sa.Integer(), nullable=False),
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("content", sa.String(length=500), nullable=False),
 		sa.Column("due_at", sa.DateTime(timezone=True), nullable=False),
 		sa.Column("recurrence", sa.String(length=50), nullable=True),
 		sa.Column("status", sa.String(), nullable=False),
 		sa.Column("notification_channels", sa.JSON(), nullable=False),
-		sa.Column("source_thread_id", sa.String(length=36), nullable=True),
+		sa.Column("source_thread_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("external_sync", sa.JSON(), nullable=True),
 		sa.Column("metadata", sa.JSON(), nullable=False),
 		sa.ForeignKeyConstraint(["owner_id"], ["users.id"]),

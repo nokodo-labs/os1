@@ -10,6 +10,7 @@ from api.schemas.user import UserCreate
 from api.v1.service import auth as auth_service
 from api.v1.service import users as user_service
 from nokodo_ai.utils.security import create_jwt_token
+from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
@@ -143,8 +144,11 @@ async def test_service_get_current_user(db_session: AsyncSession) -> None:
 		await auth_service.get_current_user("invalid_token", db_session)
 
 	# User not found (deleted)
+	missing_user_id = new_typeid("user")
+	while missing_user_id == user.id:
+		missing_user_id = new_typeid("user")
 	token_deleted = create_jwt_token(
-		subject=99999,
+		subject=missing_user_id,
 		secret_key=settings.SECRET_KEY,
 		algorithm=settings.ALGORITHM,
 	)

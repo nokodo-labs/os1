@@ -37,7 +37,7 @@ async def create_task(task_in: TaskCreate, session: AsyncSession) -> Task:
 
 async def list_tasks(
 	session: AsyncSession,
-	user_id: int | None = None,
+	user_id: str | None = None,
 	status_filter: TaskStatus | None = None,
 	skip: int = 0,
 	limit: int = 50,
