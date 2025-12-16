@@ -7,6 +7,7 @@ from typing import Any
 
 from api.models.task import TaskStatus, TaskType
 from api.schemas.common import MetadataModel
+from api.schemas.typeid import TypeID
 
 
 class TaskBase(MetadataModel):
@@ -22,8 +23,8 @@ class TaskBase(MetadataModel):
 class TaskCreate(TaskBase):
 	"""Payload to start a task."""
 
-	user_id: int
-	spawned_thread_id: str | None = None
+	user_id: TypeID
+	spawned_thread_id: TypeID | None = None
 
 
 class TaskUpdate(MetadataModel):
@@ -38,9 +39,9 @@ class TaskUpdate(MetadataModel):
 class Task(TaskBase):
 	"""Response model."""
 
-	id: str
-	user_id: int
-	spawned_thread_id: str | None = None
+	id: TypeID
+	user_id: TypeID
+	spawned_thread_id: TypeID | None = None
 	started_at: datetime | None = None
 	completed_at: datetime | None = None
 	cancelled_at: datetime | None = None

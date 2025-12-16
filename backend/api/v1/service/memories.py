@@ -34,7 +34,7 @@ async def create_memory(memory_in: MemoryCreate, session: AsyncSession) -> Memor
 
 async def list_memories(
 	session: AsyncSession,
-	user_id: int,
+	user_id: str,
 	skip: int = 0,
 	limit: int = 50,
 ) -> list[Memory]:

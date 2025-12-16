@@ -7,14 +7,15 @@ from pydantic_core import PydanticCustomError
 
 from api.models.acl import AccessRole
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.typeid import TypeID
 
 
 class AccessControlEntryCreate(MetadataModel):
 	"""payload for setting acl entries on a resource."""
 
-	user_id: int | None = None
-	group_id: str | None = None
-	agent_id: str | None = None
+	user_id: TypeID | None = None
+	group_id: TypeID | None = None
+	agent_id: TypeID | None = None
 
 	role: AccessRole = Field(default=AccessRole.VIEWER)
 
@@ -40,12 +41,12 @@ class AccessControlEntryCreate(MetadataModel):
 class AccessControlEntry(MetadataModel, TimestampedModel, ORMModel):
 	"""response schema for an ace."""
 
-	id: str
-	thread_id: str | None = None
-	project_id: str | None = None
+	id: TypeID
+	thread_id: TypeID | None = None
+	project_id: TypeID | None = None
 
-	user_id: int | None = None
-	group_id: str | None = None
-	agent_id: str | None = None
+	user_id: TypeID | None = None
+	group_id: TypeID | None = None
+	agent_id: TypeID | None = None
 
 	role: AccessRole

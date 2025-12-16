@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.user import User
+from api.schemas.typeid import TypeID
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
 from api.v1.service import users as user_service
@@ -25,7 +26,7 @@ async def read_users(
 
 @router.get("/{user_id}", response_model=UserSchema)
 async def read_user(
-	user_id: int,
+	user_id: TypeID,
 	db: AsyncSession = Depends(get_db),
 ) -> User:
 	"""Get user by ID (future permissions will restrict visibility)."""

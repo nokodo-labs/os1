@@ -5,15 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, ForeignKey, Text
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -34,24 +35,29 @@ class MessageType(StrEnum):
 	SYSTEM = "system"
 
 
-class Message(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Stores timeline entries for a thread."""
 
 	__tablename__ = "messages"
+	__typeid_prefix__ = "msg"
 
 	thread_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="CASCADE"),
 		index=True,
 	)
 	task_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("tasks.id", ondelete="SET NULL"),
 		index=True,
 	)
 	sender_agent_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("agents.id", ondelete="SET NULL"),
 		index=True,
 	)
-	sender_user_id: Mapped[int | None] = mapped_column(
+	sender_user_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="SET NULL"),
 		index=True,
 	)
@@ -63,7 +69,7 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 	token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-	read_by: Mapped[list[int]] = mapped_column(JSON, default=list)
+	read_by: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 	__mapper_args__ = {
 		"polymorphic_on": type,

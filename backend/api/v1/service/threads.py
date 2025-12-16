@@ -46,7 +46,7 @@ async def _load_thread(thread_id: str, session: AsyncSession) -> Thread:
 	return thread
 
 
-async def _ensure_user(user_id: int, session: AsyncSession) -> None:
+async def _ensure_user(user_id: str, session: AsyncSession) -> None:
 	user = await session.get(User, user_id)
 	if not user:
 		raise HTTPException(
@@ -86,7 +86,7 @@ async def create_thread(thread_in: ThreadCreate, session: AsyncSession) -> Threa
 
 async def list_threads(
 	session: AsyncSession,
-	owner_id: int | None = None,
+	owner_id: str | None = None,
 	skip: int = 0,
 	limit: int = 20,
 ) -> list[Thread]:

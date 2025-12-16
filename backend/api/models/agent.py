@@ -10,10 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -31,10 +32,11 @@ class AgentVisibility(StrEnum):
 	ADMIN = "admin-only"
 
 
-class Agent(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""User-facing AI persona with configuration."""
 
 	__tablename__ = "agents"
+	__typeid_prefix__ = "agent"
 
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	description: Mapped[str | None] = mapped_column(Text())
@@ -46,6 +48,7 @@ class Agent(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	tool_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
 	config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 	model_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("models.id", ondelete="SET NULL"),
 	)
 

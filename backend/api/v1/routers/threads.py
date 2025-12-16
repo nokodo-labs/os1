@@ -15,6 +15,7 @@ from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.schemas.typeid import TypeID
 from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 
@@ -33,7 +34,7 @@ async def create_thread(
 
 @router.get("", response_model=list[ThreadSchema])
 async def list_threads(
-	owner_id: int | None = None,
+	owner_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 20,
 	db: AsyncSession = Depends(get_db),
@@ -49,7 +50,7 @@ async def list_threads(
 
 @router.get("/{thread_id}", response_model=ThreadSchema)
 async def get_thread(
-	thread_id: str,
+	thread_id: TypeID,
 	db: AsyncSession = Depends(get_db),
 ) -> Thread:
 	"""Fetch a single thread with messages."""
@@ -58,7 +59,7 @@ async def get_thread(
 
 @router.patch("/{thread_id}", response_model=ThreadSchema)
 async def update_thread(
-	thread_id: str,
+	thread_id: TypeID,
 	thread_in: ThreadUpdate,
 	db: AsyncSession = Depends(get_db),
 ) -> Thread:
@@ -68,7 +69,7 @@ async def update_thread(
 
 @router.get("/{thread_id}/messages", response_model=list[MessageSchema])
 async def list_messages(
-	thread_id: str,
+	thread_id: TypeID,
 	skip: int = 0,
 	limit: int = 100,
 	db: AsyncSession = Depends(get_db),
@@ -88,7 +89,7 @@ async def list_messages(
 	status_code=status.HTTP_201_CREATED,
 )
 async def create_message(
-	thread_id: str,
+	thread_id: TypeID,
 	message_in: MessageCreate,
 	db: AsyncSession = Depends(get_db),
 ) -> Message:
@@ -98,7 +99,7 @@ async def create_message(
 
 @router.get("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])
 async def list_thread_acl(
-	thread_id: str,
+	thread_id: TypeID,
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessControlEntry]:
 	"""List acl entries for a thread."""
@@ -107,7 +108,7 @@ async def list_thread_acl(
 
 @router.put("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])
 async def set_thread_acl(
-	thread_id: str,
+	thread_id: TypeID,
 	entries: list[AccessControlEntryCreate],
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessControlEntry]:

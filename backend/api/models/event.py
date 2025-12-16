@@ -11,10 +11,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -38,35 +39,41 @@ class EventScope(StrEnum):
 	PROJECT = "project"
 
 
-class Event(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Universal event record powering live updates and replay."""
 
 	__tablename__ = "events"
+	__typeid_prefix__ = "event"
 
 	scope: Mapped[EventScope] = mapped_column(
 		StringEnum(EventScope),
 		default=EventScope.SYSTEM,
 	)
-	scope_id: Mapped[str | None] = mapped_column(String(64))
+	scope_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH))
 	type: Mapped[str] = mapped_column(String(100))
 	data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 	expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	version: Mapped[int] = mapped_column(Integer(), default=1)
-	user_id: Mapped[int | None] = mapped_column(
+	user_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="SET NULL"),
 		index=True,
 	)
 	thread_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="SET NULL"),
 		index=True,
 	)
 	message_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="SET NULL"),
 	)
 	task_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("tasks.id", ondelete="SET NULL"),
 	)
 	project_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("projects.id", ondelete="SET NULL"),
 	)
 

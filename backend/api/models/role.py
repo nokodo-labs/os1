@@ -8,17 +8,18 @@ from sqlalchemy import JSON, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, UUIDPrimaryKeyMixin
+from api.models.common import MetadataJSONMixin, TypeIDPrimaryKeyMixin
 
 
 if TYPE_CHECKING:
 	from api.models.user import User
 
 
-class Role(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
+class Role(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	"""Role model for permissions and access control."""
 
 	__tablename__ = "roles"
+	__typeid_prefix__ = "role"
 
 	name: Mapped[str] = mapped_column(String(50), unique=True, index=True)
 	permissions: Mapped[list[str]] = mapped_column(JSON, default=list)

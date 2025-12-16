@@ -5,15 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -33,28 +34,41 @@ class AccessRole(StrEnum):
 	ADMIN = "admin"
 
 
-class AccessControlEntry(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class AccessControlEntry(
+	TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base
+):
 	"""Generic sharing primitive that grants principals access to resources."""
 
 	__tablename__ = "access_control_entries"
+	__typeid_prefix__ = "acl"
 
 	# Resources (one nullable FK per resource type)
 	thread_id: Mapped[str | None] = mapped_column(
-		ForeignKey("threads.id", ondelete="CASCADE"), index=True
+		String(TYPEID_LENGTH),
+		ForeignKey("threads.id", ondelete="CASCADE"),
+		index=True,
 	)
 	project_id: Mapped[str | None] = mapped_column(
-		ForeignKey("projects.id", ondelete="CASCADE"), index=True
+		String(TYPEID_LENGTH),
+		ForeignKey("projects.id", ondelete="CASCADE"),
+		index=True,
 	)
 
 	# Principals (one nullable FK per principal type)
-	user_id: Mapped[int | None] = mapped_column(
-		ForeignKey("users.id", ondelete="CASCADE"), index=True
+	user_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id", ondelete="CASCADE"),
+		index=True,
 	)
 	group_id: Mapped[str | None] = mapped_column(
-		ForeignKey("groups.id", ondelete="CASCADE"), index=True
+		String(TYPEID_LENGTH),
+		ForeignKey("groups.id", ondelete="CASCADE"),
+		index=True,
 	)
 	agent_id: Mapped[str | None] = mapped_column(
-		ForeignKey("agents.id", ondelete="CASCADE"), index=True
+		String(TYPEID_LENGTH),
+		ForeignKey("agents.id", ondelete="CASCADE"),
+		index=True,
 	)
 
 	role: Mapped[AccessRole] = mapped_column(

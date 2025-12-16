@@ -9,6 +9,7 @@ from pydantic import Field
 
 from api.models.reminder import ReminderStatus
 from api.schemas.common import MetadataModel, ORMModel
+from api.schemas.typeid import TypeID
 
 
 class ReminderBase(MetadataModel):
@@ -19,7 +20,7 @@ class ReminderBase(MetadataModel):
 	recurrence: str | None = None
 	status: ReminderStatus = ReminderStatus.PENDING
 	notification_channels: list[str] = Field(default_factory=list)
-	source_thread_id: str | None = None
+	source_thread_id: TypeID | None = None
 	external_sync: dict[str, Any] | None = None
 
 
@@ -40,5 +41,5 @@ class ReminderUpdate(ReminderBase):
 class Reminder(ReminderBase, ORMModel):
 	"""Reminder schema."""
 
-	id: str
-	owner_id: int
+	id: TypeID
+	owner_id: TypeID

@@ -14,7 +14,7 @@ from api.models.common import (
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -36,10 +36,11 @@ class ProviderType(StrEnum):
 	EXTERNAL = "external"
 
 
-class Provider(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Configuration for external model providers."""
 
 	__tablename__ = "providers"
+	__typeid_prefix__ = "prov"
 
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	adapter_type: Mapped[str] = mapped_column(String(100))

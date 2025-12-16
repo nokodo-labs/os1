@@ -15,7 +15,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	TYPEID_LENGTH,
+	MetadataJSONMixin,
+	TimestampMixin,
+	TypeIDPrimaryKeyMixin,
+)
 from api.models.many_to_many import thread_project_association
 
 
@@ -28,10 +33,11 @@ if TYPE_CHECKING:
 	from api.models.user import User
 
 
-class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Thread(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Conversation container tying together messages, events, and tasks."""
 
 	__tablename__ = "threads"
+	__typeid_prefix__ = "thread"
 
 	title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 	tags: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -42,7 +48,10 @@ class Thread(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		onupdate=func.now(),
 	)
 
-	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+	owner_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+	)
 
 	owner: Mapped[User] = relationship(
 		"User",

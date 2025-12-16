@@ -20,7 +20,7 @@ async def list_users(
 	return list(result.scalars().all())
 
 
-async def get_user(user_id: int, session: AsyncSession) -> User:
+async def get_user(user_id: str, session: AsyncSession) -> User:
 	result = await session.execute(select(User).where(User.id == user_id))
 	user = result.scalar_one_or_none()
 

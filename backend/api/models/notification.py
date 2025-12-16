@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import TYPEID_LENGTH, TimestampMixin, TypeIDPrimaryKeyMixin
 
 
 if TYPE_CHECKING:
@@ -17,13 +17,19 @@ if TYPE_CHECKING:
 	from api.models.user import User
 
 
-class Notification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class Notification(TypeIDPrimaryKeyMixin, TimestampMixin, Base):
 	"""Persistent delivery guarantee for important events."""
 
 	__tablename__ = "notifications"
+	__typeid_prefix__ = "notif"
 
-	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+	user_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+		index=True,
+	)
 	event_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("events.id", ondelete="CASCADE"),
 		index=True,
 	)

@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 from api.schemas.common import MetadataModel, ORMModel
 from api.schemas.message import Message
 from api.schemas.project import Project as ProjectSchema
+from api.schemas.typeid import TypeID
 from api.schemas.user import User
 
 
@@ -36,13 +37,13 @@ class ThreadBase(MetadataModel):
 	title: str | None = None
 	tags: list[str] = Field(default_factory=list)
 	is_archived: bool = False
-	project_ids: list[str] = Field(default_factory=list)
+	project_ids: list[TypeID] = Field(default_factory=list)
 
 
 class ThreadCreate(ThreadBase):
 	"""Payload for creating a thread."""
 
-	owner_id: int
+	owner_id: TypeID
 
 
 class ThreadUpdate(MetadataModel):
@@ -51,17 +52,17 @@ class ThreadUpdate(MetadataModel):
 	title: str | None = None
 	tags: list[str] | None = None
 	is_archived: bool | None = None
-	project_ids: list[str] | None = None
-	owner_id: int | None = None
+	project_ids: list[TypeID] | None = None
+	owner_id: TypeID | None = None
 
 
 class ThreadSummary(ORMModel):
 	"""Compact representation for listings."""
 
-	id: str
+	id: TypeID
 	title: str | None = None
 	last_activity_at: datetime
-	project_ids: list[str] = Field(default_factory=list)
+	project_ids: list[TypeID] = Field(default_factory=list)
 
 	@model_validator(mode="before")
 	@classmethod
@@ -72,8 +73,8 @@ class ThreadSummary(ORMModel):
 class Thread(ThreadBase, ORMModel):
 	"""Detailed response schema."""
 
-	id: str
-	owner_id: int
+	id: TypeID
+	owner_id: TypeID
 	last_activity_at: datetime
 	created_at: datetime
 	updated_at: datetime

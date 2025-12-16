@@ -9,21 +9,22 @@ from pydantic import Field
 
 from api.models.event import EventScope
 from api.schemas.common import MetadataModel
+from api.schemas.typeid import TypeID
 
 
 class EventBase(MetadataModel):
 	"""Shared event attributes."""
 
 	scope: EventScope = EventScope.SYSTEM
-	scope_id: str | None = None
+	scope_id: TypeID | None = None
 	type: str
 	data: dict[str, Any] = Field(default_factory=dict)
 	expires_at: datetime | None = None
 	version: int = 1
-	user_id: int | None = None
-	thread_id: str | None = None
-	message_id: str | None = None
-	task_id: str | None = None
+	user_id: TypeID | None = None
+	thread_id: TypeID | None = None
+	message_id: TypeID | None = None
+	task_id: TypeID | None = None
 
 
 class EventCreate(EventBase):
@@ -35,6 +36,6 @@ class EventCreate(EventBase):
 class Event(EventBase):
 	"""Event response."""
 
-	id: str
+	id: TypeID
 	created_at: datetime
 	updated_at: datetime

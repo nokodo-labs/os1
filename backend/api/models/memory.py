@@ -9,7 +9,12 @@ from sqlalchemy import DateTime, Float, ForeignKey, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from api.models.common import (
+	TYPEID_LENGTH,
+	MetadataJSONMixin,
+	TimestampMixin,
+	TypeIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -17,14 +22,20 @@ if TYPE_CHECKING:
 	from api.models.user import User
 
 
-class Memory(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Persistent user knowledge entries."""
 
 	__tablename__ = "memories"
+	__typeid_prefix__ = "mem"
 
-	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+	user_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+		index=True,
+	)
 	content: Mapped[str] = mapped_column(Text())
 	source_message_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="SET NULL"),
 	)
 	embedding: Mapped[bytes | None] = mapped_column(LargeBinary())

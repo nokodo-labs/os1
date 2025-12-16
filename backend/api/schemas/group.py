@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.typeid import TypeID
 
 
 class GroupBase(MetadataModel):
@@ -28,5 +29,5 @@ class GroupUpdate(GroupBase):
 class Group(GroupBase, TimestampedModel, ORMModel):
 	"""Group schema."""
 
-	id: str
-	owner_id: int
+	id: TypeID
+	owner_id: TypeID

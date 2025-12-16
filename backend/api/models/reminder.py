@@ -10,7 +10,12 @@ from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
-from api.models.common import MetadataJSONMixin, StringEnum, UUIDPrimaryKeyMixin
+from api.models.common import (
+	TYPEID_LENGTH,
+	MetadataJSONMixin,
+	StringEnum,
+	TypeIDPrimaryKeyMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -27,12 +32,16 @@ class ReminderStatus(StrEnum):
 	SNOOZED = "snoozed"
 
 
-class Reminder(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
+class Reminder(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	"""Reminder model."""
 
 	__tablename__ = "reminders"
+	__typeid_prefix__ = "rem"
 
-	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+	owner_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+	)
 	content: Mapped[str] = mapped_column(String(500))
 	due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 	recurrence: Mapped[str | None] = mapped_column(String(50))
@@ -41,7 +50,10 @@ class Reminder(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 		default=ReminderStatus.PENDING,
 	)
 	notification_channels: Mapped[list[str]] = mapped_column(JSON, default=list)
-	source_thread_id: Mapped[str | None] = mapped_column(ForeignKey("threads.id"))
+	source_thread_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("threads.id"),
+	)
 	external_sync: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
 	owner: Mapped[User] = relationship("User", back_populates="reminders")

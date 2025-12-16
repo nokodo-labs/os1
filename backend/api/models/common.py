@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
-from uuid import uuid4
+from typing import Any, ClassVar, Final
 
 from sqlalchemy import JSON, DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 from sqlalchemy.types import TypeDecorator
+
+from nokodo_ai.utils.typeid import new_typeid, typeid_max_length
+
+
+TYPEID_LENGTH: Final[int] = typeid_max_length()
 
 
 class StringEnum(TypeDecorator):
@@ -36,14 +40,18 @@ class StringEnum(TypeDecorator):
 		return self.enum_class(value)
 
 
-class UUIDPrimaryKeyMixin:
-	"""Provides a string-based UUID primary key."""
+class TypeIDPrimaryKeyMixin:
+	"""Provides a TypeID string primary key."""
 
-	id: Mapped[str] = mapped_column(
-		String(36),
-		primary_key=True,
-		default=lambda: str(uuid4()),
-	)
+	__typeid_prefix__: ClassVar[str]
+
+	@declared_attr.directive
+	def id(self) -> Mapped[str]:
+		return mapped_column(
+			String(TYPEID_LENGTH),
+			primary_key=True,
+			default=lambda: new_typeid(self.__typeid_prefix__),
+		)
 
 
 class TimestampMixin:

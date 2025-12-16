@@ -10,10 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -32,12 +33,14 @@ class ModelType(StrEnum):
 	VIDEO = "video"
 
 
-class Model(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Model entry tied to an upstream provider."""
 
 	__tablename__ = "models"
+	__typeid_prefix__ = "model"
 
 	provider_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("providers.id", ondelete="CASCADE"),
 		index=True,
 	)

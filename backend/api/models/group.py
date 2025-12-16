@@ -10,10 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -30,13 +31,20 @@ class GroupMemberRole(StrEnum):
 	MEMBER = "member"
 
 
-class GroupMembership(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
+class GroupMembership(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	"""Association model for users participating in groups."""
 
 	__tablename__ = "group_memberships"
+	__typeid_prefix__ = "gmem"
 
-	group_id: Mapped[str] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
-	user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+	group_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("groups.id", ondelete="CASCADE"),
+	)
+	user_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id", ondelete="CASCADE"),
+	)
 
 	group: Mapped[Group] = relationship("Group", back_populates="memberships")
 	user: Mapped[User] = relationship("User", back_populates="group_memberships")
@@ -46,14 +54,18 @@ class GroupMembership(UUIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	)
 
 
-class Group(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Group(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Group model for user collaboration."""
 
 	__tablename__ = "groups"
+	__typeid_prefix__ = "group"
 
 	name: Mapped[str] = mapped_column(String(100))
 	description: Mapped[str | None] = mapped_column(String(500))
-	owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+	owner_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+	)
 
 	owner: Mapped[User] = relationship("User", back_populates="owned_groups")
 	memberships: Mapped[list[GroupMembership]] = relationship(

@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.typeid import TypeID
 
 
 class ProjectBase(MetadataModel):
@@ -32,9 +33,9 @@ class ProjectUpdate(ProjectBase):
 class Project(ProjectBase, TimestampedModel, ORMModel):
 	"""Project schema."""
 
-	id: str
-	owner_id: int
-	thread_ids: list[str] = Field(default_factory=list)
+	id: TypeID
+	owner_id: TypeID
+	thread_ids: list[TypeID] = Field(default_factory=list)
 
 	@model_validator(mode="before")
 	@classmethod

@@ -11,10 +11,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.common import (
+	TYPEID_LENGTH,
 	MetadataJSONMixin,
 	StringEnum,
 	TimestampMixin,
-	UUIDPrimaryKeyMixin,
+	TypeIDPrimaryKeyMixin,
 )
 
 
@@ -44,12 +45,17 @@ class TaskType(StrEnum):
 	CUSTOM = "custom"
 
 
-class Task(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Task(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Represents independent work that can outlive threads."""
 
 	__tablename__ = "tasks"
+	__typeid_prefix__ = "task"
 
-	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+	user_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+		index=True,
+	)
 	task_type: Mapped[TaskType] = mapped_column(
 		StringEnum(TaskType),
 		default=TaskType.CUSTOM,
@@ -62,6 +68,7 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	stage: Mapped[str | None] = mapped_column(String(100))
 	result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 	spawned_thread_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="SET NULL"),
 	)
 	started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
