@@ -65,7 +65,8 @@ a chat is what users SEE (back and forth dialogue). a Thread is what actually EX
 
 -   unique identifier
 -   owner (User reference - thread creator)
--   participants (array - User IDs and/or Agent IDs)
+-   participants (ThreadParticipant array - users and/or agents in this thread)
+-   spawned from message (nullable - the message that caused this thread to be created)
 -   title (user-defined or auto-generated)
 -   created timestamp
 -   last activity timestamp
@@ -96,6 +97,35 @@ a chat is what users SEE (back and forth dialogue). a Thread is what actually EX
 -   threads can belong to a **Project** for organization
 -   threads can be shared with **Groups** for collaboration
 -   ACLs determine who else (users, groups, agents) can view or edit the thread
+
+---
+
+### ThreadParticipant
+
+normalized participant modeling
+
+**properties:**
+
+-   unique identifier
+-   thread (Thread reference)
+-   user (nullable User reference)
+-   agent (nullable Agent reference)
+-   membership role (optional - owner / participant / moderator / etc.)
+-   joined timestamp
+-   left timestamp (nullable)
+-   last read message id (nullable)
+-   metadata
+
+**relationships:**
+
+-   belongs to one **Thread**
+-   references one **User** OR one **Agent**
+
+**notes:**
+
+-   enforce exactly one of `user_id` or `agent_id` per row
+-   this table makes read receipts and multi-party UX much simpler
+-   ACL is the source of truth for resource access (viewer/editor/admin); `membership role` is for conversational UX and moderation semantics, and can be derived from ACL if you want a single authority
 
 ---
 
@@ -163,6 +193,45 @@ a single turn in the conversation - can be from user, assistant, tool, or system
 
 ---
 
+### File
+
+a first-class record for anything a user uploads or the system generates (including “artifacts”)
+
+**why this exists:**
+the vision calls for native file retrieval + creation/editing, and “download links for user-created files”. storing files as only message metadata makes access control, retention, and reuse across projects/threads harder.
+
+**properties:**
+
+-   unique identifier
+-   owner (User reference)
+-   created timestamp
+-   source (upload / generated / import)
+-   storage backend (local / s3 / r2 / etc.)
+-   storage key / object path
+-   filename (nullable)
+-   content type (mime)
+-   size bytes
+-   checksum (sha256)
+-   status (pending / available / deleted)
+-   metadata (purpose/kind for UX rendering, image width/height, duration, etc.)
+
+**relationships:**
+
+-   belongs to one **User**
+-   may belong to one **Project** (optional)
+-   may be referenced by one **Thread** (optional)
+-   may be referenced by one **Message** (optional)
+-   may be referenced by one **Task** (optional)
+-   may have many **Events** (file_created, file_deleted, file_attached, ...)
+-   shares access via **Access Control Entries (ACLs)** (optional; see ambiguity notes)
+
+**notes:**
+
+-   keep the “pointer” to storage in DB; store bytes in object storage
+-   message “attachments/uploads” should reference `file_id`s, not embed large payloads
+
+---
+
 ### Task
 
 an independent, long-running operation with lifecycle, progress tracking, and results
@@ -192,6 +261,7 @@ an independent, long-running operation with lifecycle, progress tracking, and re
 -   belongs to one **User**
 -   may be referenced by **Messages** (but not owned by them)
 -   has many **Events** scoped to it
+-   may produce many **Files**
 
 **notes:**
 
