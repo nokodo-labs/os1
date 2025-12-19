@@ -27,26 +27,57 @@
 
 ### design system
 
--   **liquid glass aesthetic** — custom implementations
-    -   CSS `backdrop-filter` + gradients
-    -   SVG filters for metallic paint effects
-    -   Motion One for physics-based animations
--   **design inspiration** — reactbits.dev patterns adapted for svelte
+-   **liquid UI** — a next-gen aesthetic with liquid elements, made of two styles:
+    -   **liquid glass** — glassmorphism with refractions, distortions, etc.
+    -   **liquid mercury** — shiny, reflective fluid metal look
+-   **motion & transitions** — physics-based motion with View Transitions API
+-   **all lowercase** — following nokodo branding style
 
 ---
 
 ## 🎨 UI/UX philosophy
 
--   **super modern aesthetic** — apple-inspired liquid glass elements
--   **dynamic & interactive** — physics-based animations
--   **reactive UX** — real-time state updates and smooth transitions
--   emphasis on fluidity and premium feel
--   **never expose internal workings** on frontend — keep UI clean
--   **never expose model details** to end users
+see separate [UX spec](ux-spec.md) for full details
+
+---
+
+## 💬 threads
+
+> the universal container for all conversations on the platform
+
+### core concept
+
+a **thread** is the fundamental unit of interaction. displayed as "chats" to users, threads are a unified abstraction that handles:
+
+-   user ↔ agent conversations (the typical "AI chat")
+-   user ↔ user direct messages
+-   multi-party rooms (multiple users and/or agents)
+-   agent ↔ agent delegation (isolated sub-threads)
+
+there is no separate "DM system" or "chat system" — everything is a thread.
+
+### thread properties
+
+| property         | description                                          |
+| ---------------- | ---------------------------------------------------- |
+| **participants** | any combination of users and agents                  |
+| **persistence**  | threads persist with full message history            |
+| **visibility**   | controlled by participants and permissions           |
+| **nesting**      | threads can spawn sub-threads (see agent delegation) |
+
+### participant management
+
+-   **users** can add/remove other users or agents
+-   **agents** can spawn isolated sub-threads for delegation
+-   **agents** adding permanent participants: architecturally supported, not yet implemented
+
+this unified model means features built for threads (search, memory, sharing, etc.) automatically work across all conversation types.
 
 ---
 
 ## 🤖 AI agents
+
+### core concepts
 
 -   **curated selection** — only a few high-quality agents
 -   **zero setup required** — works out of the box
@@ -56,6 +87,33 @@
 
 > models fetch directly from APIs containing foundation models;  
 > agents are user-facing abstractions with tools and prompting
+
+### agent delegation
+
+agents can delegate tasks to specialized agents via isolated sub-threads (see [threads](#-threads)).
+
+**how it works:**
+
+1.  agent A receives task requiring specialized capability
+2.  agent A invokes delegation tool with message to agent B
+3.  system spawns **isolated sub-thread** containing only A → B
+4.  agent B executes (can use tools, delegate further, take multiple turns)
+5.  agent B's final response returns as tool result to agent A
+6.  agent A continues in main thread with the result
+
+**key properties:**
+| aspect | behavior |
+|--------|----------|
+| **isolation** | sub-thread is separate — nested chaos stays contained |
+| **recursion** | delegated agents can delegate further (each spawns new sub-thread) |
+| **visibility** | user sees one tool result bubble in main thread |
+| **persistence** | ephemeral — delegated agent leaves after task completion |
+
+**UX feedback during delegation:**
+
+-   user sees execution trace of delegated agent (depth = 1 only)
+-   nested delegations collapse to single line: `delegated to @X → ✓`
+-   keeps users informed and entertained without overwhelming verbosity
 
 ---
 
@@ -251,11 +309,11 @@
 
 ### user messaging
 
--   [ ] **direct messaging / chat** — AI-enhanced communication
-    -   WhatsApp/iMessage-style user-to-user messaging
-    -   add people AND AIs to the same conversation
+-   [ ] **user ↔ user threads** — leverages existing thread infrastructure
+    -   WhatsApp/iMessage-style direct messaging
+    -   group threads with mixed human/AI participants
     -   AI can assist, summarize, translate in real-time
-    -   group chats with mixed human/AI participants
+    -   no separate system — just threads with only-user participants
 
 ### reminders
 
