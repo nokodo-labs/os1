@@ -8,11 +8,9 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import (
-	TYPEID_LENGTH,
+from api.models.base import TYPEID_LENGTH, Base, StringEnum
+from api.models.mixins import (
 	MetadataJSONMixin,
-	StringEnum,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
@@ -22,6 +20,7 @@ if TYPE_CHECKING:
 	from api.models.acl import AccessControlEntry
 	from api.models.message import Message
 	from api.models.model import Model
+	from api.models.thread_participant import ThreadParticipant
 
 
 class AgentVisibility(StrEnum):
@@ -64,4 +63,9 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	messages: Mapped[list[Message]] = relationship(
 		"Message",
 		back_populates="sender_agent",
+	)
+	thread_participants: Mapped[list[ThreadParticipant]] = relationship(
+		"ThreadParticipant",
+		back_populates="agent",
+		cascade="all, delete-orphan",
 	)

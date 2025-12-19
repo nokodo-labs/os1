@@ -3,6 +3,7 @@
 from api.models.acl import AccessControlEntry
 from api.models.agent import Agent
 from api.models.event import Event
+from api.models.file import File
 from api.models.group import Group
 from api.models.memory import Memory
 from api.models.message import Message
@@ -14,6 +15,7 @@ from api.models.reminder import Reminder
 from api.models.role import Role
 from api.models.task import Task
 from api.models.thread import Thread
+from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 
 
@@ -21,6 +23,7 @@ __all__ = [
 	"AccessControlEntry",
 	"Agent",
 	"Event",
+	"File",
 	"Group",
 	"Memory",
 	"Message",
@@ -32,5 +35,6 @@ __all__ = [
 	"Role",
 	"Task",
 	"Thread",
+	"ThreadParticipant",
 	"User",
 ]

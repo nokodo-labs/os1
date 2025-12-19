@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import TYPEID_LENGTH
+from api.models.base import TYPEID_LENGTH, Base
 from nokodo_ai.utils.typeid import new_typeid
 
 
 if TYPE_CHECKING:
 	from api.models.acl import AccessControlEntry
+	from api.models.file import File
 	from api.models.group import Group, GroupMembership
 	from api.models.memory import Memory
 	from api.models.notification import Notification
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 	from api.models.role import Role
 	from api.models.task import Task
 	from api.models.thread import Thread
+	from api.models.thread_participant import ThreadParticipant
 
 
 class User(Base):
@@ -86,5 +87,15 @@ class User(Base):
 	memories: Mapped[list[Memory]] = relationship(
 		"Memory",
 		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	files: Mapped[list[File]] = relationship(
+		"File",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	thread_participants: Mapped[list[ThreadParticipant]] = relationship(
+		"ThreadParticipant",
+		back_populates="user",
 		cascade="all, delete-orphan",
 	)

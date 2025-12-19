@@ -33,7 +33,7 @@ import api.models  # noqa: F401
 
 # Ensure SQLAlchemy models are registered with Base metadata for DDL operations
 from api.core.config import settings
-from api.core.database import Base
+from api.models.base import Base
 
 
 # Configure settings for tests before importing the app

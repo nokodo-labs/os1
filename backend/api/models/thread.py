@@ -14,14 +14,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import (
-	TYPEID_LENGTH,
+from api.models.base import TYPEID_LENGTH, Base
+from api.models.many_to_many import thread_project_association
+from api.models.mixins import (
 	MetadataJSONMixin,
+	SoftDeleteMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
-from api.models.many_to_many import thread_project_association
 
 
 if TYPE_CHECKING:
@@ -30,10 +30,17 @@ if TYPE_CHECKING:
 	from api.models.message import Message
 	from api.models.project import Project
 	from api.models.task import Task
+	from api.models.thread_participant import ThreadParticipant
 	from api.models.user import User
 
 
-class Thread(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Thread(
+	TypeIDPrimaryKeyMixin,
+	TimestampMixin,
+	MetadataJSONMixin,
+	SoftDeleteMixin,
+	Base,
+):
 	"""Conversation container tying together messages, events, and tasks."""
 
 	__tablename__ = "threads"
@@ -52,11 +59,26 @@ class Thread(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)
+	spawned_from_message_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("messages.id", ondelete="SET NULL"),
+		index=True,
+	)
 
 	owner: Mapped[User] = relationship(
 		"User",
 		back_populates="threads",
 		innerjoin=True,
+	)
+	spawned_from_message: Mapped[Message | None] = relationship(
+		"Message",
+		foreign_keys=[spawned_from_message_id],
+	)
+	participants: Mapped[list[ThreadParticipant]] = relationship(
+		"ThreadParticipant",
+		back_populates="thread",
+		cascade="all, delete-orphan",
+		passive_deletes=True,
 	)
 	projects: Mapped[list[Project]] = relationship(
 		"Project",
@@ -73,6 +95,7 @@ class Thread(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="thread",
 		cascade="all, delete-orphan",
 		passive_deletes=True,
+		foreign_keys="Message.thread_id",
 	)
 	events: Mapped[list[Event]] = relationship(
 		"Event",

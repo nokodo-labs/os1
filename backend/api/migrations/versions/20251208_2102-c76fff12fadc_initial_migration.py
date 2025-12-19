@@ -167,11 +167,17 @@ def upgrade() -> None:
 		sa.Column("title", sa.String(length=255), nullable=True),
 		sa.Column("tags", sa.JSON(), nullable=False),
 		sa.Column("is_archived", sa.Boolean(), nullable=False),
+		sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column(
 			"last_activity_at",
 			sa.DateTime(timezone=True),
 			server_default=sa.text("now()"),
 			nullable=False,
+		),
+		sa.Column(
+			"spawned_from_message_id",
+			sa.String(length=TYPEID_LENGTH),
+			nullable=True,
 		),
 		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column(
@@ -189,6 +195,12 @@ def upgrade() -> None:
 		sa.Column("metadata", sa.JSON(), nullable=False),
 		sa.ForeignKeyConstraint(["owner_id"], ["users.id"]),
 		sa.PrimaryKeyConstraint("id"),
+	)
+	op.create_index(
+		"ix_threads_spawned_from_message_id",
+		"threads",
+		["spawned_from_message_id"],
+		unique=False,
 	)
 
 	op.create_table(
@@ -349,6 +361,109 @@ def upgrade() -> None:
 	)
 	op.create_index("ix_messages_task_id", "messages", ["task_id"], unique=False)
 	op.create_index("ix_messages_thread_id", "messages", ["thread_id"], unique=False)
+
+	op.create_foreign_key(
+		"fk_threads_spawned_from_message_id_messages",
+		"threads",
+		"messages",
+		["spawned_from_message_id"],
+		["id"],
+		ondelete="SET NULL",
+	)
+
+	op.create_table(
+		"thread_participants",
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("thread_id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("user_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("agent_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("membership_role", sa.String(length=50), nullable=True),
+		sa.Column(
+			"joined_at",
+			sa.DateTime(timezone=True),
+			server_default=sa.text("now()"),
+			nullable=False,
+		),
+		sa.Column("left_at", sa.DateTime(timezone=True), nullable=True),
+		sa.Column(
+			"last_read_message_id",
+			sa.String(length=TYPEID_LENGTH),
+			nullable=True,
+		),
+		sa.Column("metadata", sa.JSON(), nullable=False),
+		sa.CheckConstraint(
+			"(user_id IS NULL) <> (agent_id IS NULL)",
+			name="ck_thread_participants_exactly_one_principal",
+		),
+		sa.ForeignKeyConstraint(["agent_id"], ["agents.id"], ondelete="CASCADE"),
+		sa.ForeignKeyConstraint(
+			["last_read_message_id"],
+			["messages.id"],
+			ondelete="SET NULL",
+		),
+		sa.ForeignKeyConstraint(
+			["thread_id"],
+			["threads.id"],
+			ondelete="CASCADE",
+		),
+		sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+		sa.PrimaryKeyConstraint("id"),
+	)
+	op.create_index(
+		"ix_thread_participants_agent_id",
+		"thread_participants",
+		["agent_id"],
+		unique=False,
+	)
+	op.create_index(
+		"ix_thread_participants_thread_id",
+		"thread_participants",
+		["thread_id"],
+		unique=False,
+	)
+	op.create_index(
+		"ix_thread_participants_user_id",
+		"thread_participants",
+		["user_id"],
+		unique=False,
+	)
+
+	op.create_table(
+		"files",
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("source", sa.String(length=50), nullable=False),
+		sa.Column("storage_backend", sa.String(length=50), nullable=False),
+		sa.Column("storage_key", sa.String(length=1024), nullable=False),
+		sa.Column("filename", sa.String(length=255), nullable=True),
+		sa.Column("mime_type", sa.String(length=255), nullable=True),
+		sa.Column("size_bytes", sa.BigInteger(), nullable=True),
+		sa.Column("checksum_sha256", sa.String(length=64), nullable=True),
+		sa.Column("status", sa.String(length=50), nullable=False),
+		sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+		sa.Column("project_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column("message_id", sa.String(length=TYPEID_LENGTH), nullable=True),
+		sa.Column(
+			"created_at",
+			sa.DateTime(timezone=True),
+			server_default=sa.text("now()"),
+			nullable=False,
+		),
+		sa.Column(
+			"updated_at",
+			sa.DateTime(timezone=True),
+			server_default=sa.text("now()"),
+			nullable=False,
+		),
+		sa.Column("metadata", sa.JSON(), nullable=False),
+		sa.ForeignKeyConstraint(["message_id"], ["messages.id"], ondelete="SET NULL"),
+		sa.ForeignKeyConstraint(["owner_id"], ["users.id"]),
+		sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="SET NULL"),
+		sa.PrimaryKeyConstraint("id"),
+	)
+	op.create_index("ix_files_owner_id", "files", ["owner_id"], unique=False)
+	op.create_index("ix_files_project_id", "files", ["project_id"], unique=False)
+	op.create_index("ix_files_message_id", "files", ["message_id"], unique=False)
 
 	op.create_table(
 		"access_control_entries",
@@ -557,6 +672,20 @@ def downgrade() -> None:
 	op.drop_index("ix_messages_sender_user_id", table_name="messages")
 	op.drop_index("ix_messages_sender_agent_id", table_name="messages")
 	op.drop_table("messages")
+	op.drop_index("ix_files_message_id", table_name="files")
+	op.drop_index("ix_files_project_id", table_name="files")
+	op.drop_index("ix_files_owner_id", table_name="files")
+	op.drop_table("files")
+	op.drop_index("ix_thread_participants_user_id", table_name="thread_participants")
+	op.drop_index("ix_thread_participants_thread_id", table_name="thread_participants")
+	op.drop_index("ix_thread_participants_agent_id", table_name="thread_participants")
+	op.drop_table("thread_participants")
+	op.drop_constraint(
+		"fk_threads_spawned_from_message_id_messages",
+		"threads",
+		type_="foreignkey",
+	)
+	op.drop_index("ix_threads_spawned_from_message_id", table_name="threads")
 	op.drop_index("ix_tasks_user_id", table_name="tasks")
 	op.drop_table("tasks")
 	op.drop_table("group_memberships")

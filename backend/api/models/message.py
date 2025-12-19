@@ -8,11 +8,9 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import (
-	TYPEID_LENGTH,
+from api.models.base import TYPEID_LENGTH, Base, StringEnum
+from api.models.mixins import (
 	MetadataJSONMixin,
-	StringEnum,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
@@ -21,6 +19,7 @@ from api.models.common import (
 if TYPE_CHECKING:
 	from api.models.agent import Agent
 	from api.models.event import Event
+	from api.models.file import File
 	from api.models.task import Task
 	from api.models.thread import Thread
 	from api.models.user import User
@@ -80,6 +79,7 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		"Thread",
 		back_populates="messages",
 		innerjoin=True,
+		foreign_keys=[thread_id],
 	)
 	task: Mapped[Task | None] = relationship(
 		"Task",
@@ -101,6 +101,10 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="message",
 		cascade="all, delete-orphan",
 		passive_deletes=True,
+	)
+	files: Mapped[list[File]] = relationship(
+		"File",
+		back_populates="message",
 	)
 
 

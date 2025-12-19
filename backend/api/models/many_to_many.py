@@ -2,8 +2,7 @@
 
 from sqlalchemy import Column, ForeignKey, String, Table
 
-from api.core.database import Base
-from api.models.common import TYPEID_LENGTH
+from api.models.base import TYPEID_LENGTH, Base
 
 
 thread_project_association = Table(

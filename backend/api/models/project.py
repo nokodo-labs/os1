@@ -7,19 +7,19 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import (
-	TYPEID_LENGTH,
+from api.models.base import TYPEID_LENGTH, Base
+from api.models.many_to_many import thread_project_association
+from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
-from api.models.many_to_many import thread_project_association
 
 
 if TYPE_CHECKING:
 	from api.models.acl import AccessControlEntry
 	from api.models.event import Event
+	from api.models.file import File
 	from api.models.thread import Thread
 	from api.models.user import User
 
@@ -52,4 +52,8 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		"Event",
 		back_populates="project",
 		cascade="all, delete-orphan",
+	)
+	files: Mapped[list[File]] = relationship(
+		"File",
+		back_populates="project",
 	)

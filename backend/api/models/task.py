@@ -9,11 +9,9 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import (
-	TYPEID_LENGTH,
+from api.models.base import TYPEID_LENGTH, Base, StringEnum
+from api.models.mixins import (
 	MetadataJSONMixin,
-	StringEnum,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )

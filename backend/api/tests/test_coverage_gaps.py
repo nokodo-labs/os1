@@ -2,7 +2,7 @@ from enum import Enum
 
 import pytest
 
-from api.models.common import StringEnum
+from api.models.base import StringEnum
 from api.models.model import Model
 from api.models.provider import Provider, ProviderStatus, ProviderType
 
@@ -22,6 +22,17 @@ def test_string_enum_none_handling():
 	# Test process_result_value
 	assert string_enum.process_result_value(None, None) is None
 	assert string_enum.process_result_value("a", None) == EnumForTest.A
+
+
+def test_common_module_reexports():
+	from api.models import base, common, mixins
+
+	assert common.TYPEID_LENGTH == base.TYPEID_LENGTH
+	assert common.StringEnum is base.StringEnum
+	assert common.TypeIDPrimaryKeyMixin is mixins.TypeIDPrimaryKeyMixin
+	assert common.TimestampMixin is mixins.TimestampMixin
+	assert common.MetadataJSONMixin is mixins.MetadataJSONMixin
+	assert common.SoftDeleteMixin is mixins.SoftDeleteMixin
 
 
 @pytest.mark.asyncio

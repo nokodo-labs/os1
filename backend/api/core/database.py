@@ -5,18 +5,21 @@ import sys
 from collections.abc import AsyncGenerator
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
 	AsyncSession,
 	async_sessionmaker,
 	create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import Session, with_loader_criteria
 
 from api.core.config import settings
 from api.core.logging import get_logger
+from api.models.mixins import SoftDeleteMixin
 
 
 logger = get_logger(__name__)
@@ -30,12 +33,6 @@ def _configure_psycopg_asyncio_event_loop_policy() -> None:
 
 
 _configure_psycopg_asyncio_event_loop_policy()
-
-
-class Base(DeclarativeBase):
-	"""Base class for SQLAlchemy models."""
-
-	pass
 
 
 # Create async engine
@@ -53,6 +50,27 @@ AsyncSessionLocal = async_sessionmaker(
 	autocommit=False,
 	autoflush=False,
 )
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _soft_delete_default_criteria(execute_state: Any) -> None:
+	"""Exclude soft-deleted rows by default for all SELECTs.
+
+	To include them, use execution option include_deleted=True.
+	"""
+	if not execute_state.is_select:
+		return
+	if execute_state.execution_options.get("include_deleted"):
+		return
+
+	execute_state.statement = execute_state.statement.options(
+		with_loader_criteria(
+			SoftDeleteMixin,
+			lambda cls: cls.deleted_at.is_(None),
+			include_aliases=True,
+			track_closure_variables=False,
+		),
+	)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:

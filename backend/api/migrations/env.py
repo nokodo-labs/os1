@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from api import models  # noqa: F401
 from api.core.config import settings
-from api.core.database import Base
+from api.models.base import Base
 
 
 # this is the Alembic Config object, which provides

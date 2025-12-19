@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import DateTime, Float, ForeignKey, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import (
-	TYPEID_LENGTH,
+from api.models.base import TYPEID_LENGTH, Base
+from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,

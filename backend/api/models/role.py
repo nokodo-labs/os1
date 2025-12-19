@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
-from api.models.common import MetadataJSONMixin, TypeIDPrimaryKeyMixin
+from api.models.base import Base
+from api.models.mixins import MetadataJSONMixin, TypeIDPrimaryKeyMixin
 
 
 if TYPE_CHECKING:
