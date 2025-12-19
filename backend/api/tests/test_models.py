@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from enum import Enum
+
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models import base, common, mixins
+from api.models.base import StringEnum
 from api.models.model import ModelType
 from api.schemas.model import ModelCreate, ModelUpdate
 from api.schemas.provider import ProviderCreate
@@ -193,3 +197,29 @@ async def test_delete_model_service(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException) as exc:
 		await model_service.get_model(model.id, db_session)
 	assert exc.value.status_code == 404
+
+
+class EnumForTest(Enum):
+	A = "a"
+	B = "b"
+
+
+def test_string_enum_none_handling():
+	string_enum = StringEnum(EnumForTest)
+
+	# Test process_bind_param
+	assert string_enum.process_bind_param(None, None) is None
+	assert string_enum.process_bind_param(EnumForTest.A, None) == "a"
+
+	# Test process_result_value
+	assert string_enum.process_result_value(None, None) is None
+	assert string_enum.process_result_value("a", None) == EnumForTest.A
+
+
+def test_common_module_reexports():
+	assert common.TYPEID_LENGTH == base.TYPEID_LENGTH
+	assert common.StringEnum is base.StringEnum
+	assert common.TypeIDPrimaryKeyMixin is mixins.TypeIDPrimaryKeyMixin
+	assert common.TimestampMixin is mixins.TimestampMixin
+	assert common.MetadataJSONMixin is mixins.MetadataJSONMixin
+	assert common.SoftDeleteMixin is mixins.SoftDeleteMixin

@@ -8,7 +8,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
-from api.models.provider import ProviderStatus
+from api.models.model import Model
+from api.models.provider import Provider, ProviderStatus, ProviderType
 from api.schemas.provider import ProviderCreate, ProviderUpdate
 from api.v1.service import providers as provider_service
 from nokodo_ai.utils.security import decrypt_string
@@ -137,3 +138,45 @@ async def test_update_provider_api_key(db_session: AsyncSession) -> None:
 
 	assert updated.encrypted_api_key is not None
 	assert decrypt_string(updated.encrypted_api_key, settings.SECRET_KEY) == api_key
+
+
+@pytest.mark.asyncio
+async def test_provider_model_properties(db_session):
+	provider = Provider(
+		name="test-provider-props",
+		adapter_type="openai",
+		provider_type=ProviderType.EXTERNAL,
+		status=ProviderStatus.ENABLED,
+		is_autofetch_enabled=True,
+	)
+	db_session.add(provider)
+	await db_session.commit()
+	await db_session.refresh(provider)
+
+	model1 = Model(
+		provider_id=provider.id,
+		name="model-manual",
+		model_type="llm",
+		capabilities={},
+		enabled=True,
+		is_autofetched=False,
+	)
+	model2 = Model(
+		provider_id=provider.id,
+		name="model-auto",
+		model_type="llm",
+		capabilities={},
+		enabled=True,
+		is_autofetched=True,
+	)
+	db_session.add_all([model1, model2])
+	await db_session.commit()
+
+	# Need to refresh provider to load relationship
+	await db_session.refresh(provider, attribute_names=["models"])
+
+	assert len(provider.manual_models) == 1
+	assert provider.manual_models[0].name == "model-manual"
+
+	assert len(provider.autofetched_models) == 1
+	assert provider.autofetched_models[0].name == "model-auto"
