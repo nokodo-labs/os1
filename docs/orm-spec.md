@@ -137,6 +137,7 @@ a single turn in the conversation - can be from user, assistant, tool, or system
 
 -   unique identifier
 -   thread (Thread reference)
+-   parent (Message reference, nullable - enables branching message trees)
 -   sender (User reference OR Agent reference - who sent this)
 -   type (user / assistant / tool / system)
 -   content (text, can be markdown)
@@ -182,6 +183,7 @@ a single turn in the conversation - can be from user, assistant, tool, or system
 **notes:**
 
 -   messages follow openai message format loosely
+-   branching chats are represented as a tree via `message.parent_id`; the active conversation is the root→leaf path ending at `thread.current_message_id`
 -   varying structures based on type enable rich functionality
 -   SQLAlchemy polymorphic inheritance maps `type` as the discriminator, enabling native subclasses per message kind
 -   assistant and user can both include attachments/media
