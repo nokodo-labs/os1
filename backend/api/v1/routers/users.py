@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.user import User
-from api.schemas.typeid import TypeID
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
+from api.typeid import TypeID
 from api.v1.service import users as user_service
 
 

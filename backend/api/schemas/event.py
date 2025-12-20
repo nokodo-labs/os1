@@ -9,7 +9,7 @@ from pydantic import Field
 
 from api.models.event import EventScope
 from api.schemas.common import MetadataModel
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 
 
 class EventBase(MetadataModel):

@@ -9,6 +9,7 @@ from sqlalchemy import JSON, DateTime, String, func
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from api.models.base import TYPEID_LENGTH
+from api.typeid import TypeID
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -18,11 +19,11 @@ class TypeIDPrimaryKeyMixin:
 	__typeid_prefix__: ClassVar[str]
 
 	@declared_attr.directive
-	def id(self) -> Mapped[str]:
+	def id(self) -> Mapped[TypeID]:
 		return mapped_column(
 			String(TYPEID_LENGTH),
 			primary_key=True,
-			default=lambda: new_typeid(self.__typeid_prefix__),
+			default=lambda: TypeID(new_typeid(self.__typeid_prefix__)),
 		)
 
 

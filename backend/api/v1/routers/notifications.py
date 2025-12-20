@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.models.notification import Notification
 from api.schemas.notification import Notification as NotificationSchema
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 from api.v1.service import notifications as notification_service
 
 

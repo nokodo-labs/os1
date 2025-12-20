@@ -9,7 +9,7 @@ from pydantic import Field
 
 from api.models.reminder import ReminderStatus
 from api.schemas.common import MetadataModel, ORMModel
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 
 
 class ReminderBase(MetadataModel):

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 
 
 class Token(BaseModel):

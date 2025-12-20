@@ -14,6 +14,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from api.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -40,22 +41,27 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	__tablename__ = "messages"
 	__typeid_prefix__ = "msg"
 
-	thread_id: Mapped[str] = mapped_column(
+	thread_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="CASCADE"),
 		index=True,
 	)
-	task_id: Mapped[str | None] = mapped_column(
+	parent_id: Mapped[TypeID | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("messages.id", ondelete="CASCADE"),
+		index=True,
+	)
+	task_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("tasks.id", ondelete="SET NULL"),
 		index=True,
 	)
-	sender_agent_id: Mapped[str | None] = mapped_column(
+	sender_agent_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("agents.id", ondelete="SET NULL"),
 		index=True,
 	)
-	sender_user_id: Mapped[str | None] = mapped_column(
+	sender_user_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="SET NULL"),
 		index=True,
@@ -80,6 +86,18 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="messages",
 		innerjoin=True,
 		foreign_keys=[thread_id],
+	)
+	parent: Mapped[Message | None] = relationship(
+		"Message",
+		remote_side="Message.id",
+		foreign_keys=[parent_id],
+		back_populates="children",
+	)
+	children: Mapped[list[Message]] = relationship(
+		"Message",
+		back_populates="parent",
+		passive_deletes=True,
+		foreign_keys="Message.parent_id",
 	)
 	task: Mapped[Task | None] = relationship(
 		"Task",

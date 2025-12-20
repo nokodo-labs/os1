@@ -10,8 +10,8 @@ from pydantic import Field, model_validator
 from api.schemas.common import MetadataModel, ORMModel
 from api.schemas.message import Message
 from api.schemas.project import Project as ProjectSchema
-from api.schemas.typeid import TypeID
 from api.schemas.user import User
+from api.typeid import TypeID
 
 
 def _populate_project_ids(data: Any) -> Any:
@@ -75,6 +75,7 @@ class Thread(ThreadBase, ORMModel):
 
 	id: TypeID
 	owner_id: TypeID
+	current_message_id: TypeID | None = None
 	last_activity_at: datetime
 	created_at: datetime
 	updated_at: datetime

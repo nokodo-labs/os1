@@ -11,7 +11,7 @@ from api.core.database import get_db
 from api.models.event import Event, EventScope
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventCreate
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 from api.v1.service import events as event_service
 
 

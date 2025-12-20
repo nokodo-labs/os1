@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 
 
 class UserBase(BaseModel):

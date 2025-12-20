@@ -9,7 +9,7 @@ from api.core.database import get_db
 from api.models.memory import Memory
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import MemoryCreate
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 from api.v1.service import memories as memory_service
 
 

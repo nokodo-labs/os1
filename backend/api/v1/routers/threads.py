@@ -15,7 +15,7 @@ from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 

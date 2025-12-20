@@ -22,6 +22,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from api.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -55,11 +56,16 @@ class Thread(
 		onupdate=func.now(),
 	)
 
-	owner_id: Mapped[str] = mapped_column(
+	owner_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)
-	spawned_from_message_id: Mapped[str | None] = mapped_column(
+	spawned_from_message_id: Mapped[TypeID | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("messages.id", ondelete="SET NULL"),
+		index=True,
+	)
+	current_message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="SET NULL"),
 		index=True,
@@ -73,6 +79,11 @@ class Thread(
 	spawned_from_message: Mapped[Message | None] = relationship(
 		"Message",
 		foreign_keys=[spawned_from_message_id],
+	)
+	current_message: Mapped[Message | None] = relationship(
+		"Message",
+		foreign_keys=[current_message_id],
+		post_update=True,
 	)
 	participants: Mapped[list[ThreadParticipant]] = relationship(
 		"ThreadParticipant",

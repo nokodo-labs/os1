@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 
 from api.schemas.common import MetadataModel
-from api.schemas.typeid import TypeID
 from api.schemas.user import User
+from api.typeid import TypeID
 
 
 class MemoryBase(MetadataModel):

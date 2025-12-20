@@ -9,7 +9,8 @@ from sqlalchemy import JSON, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
-from nokodo_ai.utils.typeid import new_typeid
+from api.models.mixins import TypeIDPrimaryKeyMixin
+from api.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -26,17 +27,12 @@ if TYPE_CHECKING:
 	from api.models.thread_participant import ThreadParticipant
 
 
-class User(Base):
+class User(TypeIDPrimaryKeyMixin, Base):
 	"""User model."""
 
 	__tablename__ = "users"
+	__typeid_prefix__ = "user"
 
-	id: Mapped[str] = mapped_column(
-		String(TYPEID_LENGTH),
-		primary_key=True,
-		index=True,
-		default=lambda: new_typeid("user"),
-	)
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
 	display_name: Mapped[str | None] = mapped_column(String(150))
 	avatar_url: Mapped[str | None] = mapped_column(String(512))
@@ -53,7 +49,7 @@ class User(Base):
 		DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
 	)
 
-	role_id: Mapped[str | None] = mapped_column(
+	role_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("roles.id"),
 	)

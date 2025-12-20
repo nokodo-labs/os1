@@ -19,7 +19,7 @@
 
 > **Reminder** - CLEAN code means:
 >
-> 1.  NO type ignore comments. If you NEED to use it, you are probably typing something wrong.
+> 1.  NO type ignore / noqa comments. If you NEED to use it, you are probably typing something wrong.
 > 2.  NO overuse of comments everywhere. Comments are good, but only to explain complex or crucial blocks.
 > 3.  NO pragma nocs to skip tests. If you need to skip a test, update the test to cover the case, or remove unreachable code instead.
 > 4.  NO use of getattr/setattr/delattr unless it's the only way. It defeats type checkers and is ugly.

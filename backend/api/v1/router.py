@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from api.v1.routers import (
 	agents,
 	auth,
+	chats,
 	events,
 	memories,
 	models,
@@ -24,6 +25,7 @@ api_router.include_router(system.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(threads.router)
+api_router.include_router(chats.router)
 api_router.include_router(tasks.router)
 api_router.include_router(events.router)
 api_router.include_router(notifications.router)

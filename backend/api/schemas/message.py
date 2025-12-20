@@ -9,7 +9,7 @@ from pydantic import Field
 
 from api.models.message import MessageType
 from api.schemas.common import MetadataModel
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 
 
 class MessageBase(MetadataModel):
@@ -26,6 +26,7 @@ class MessageBase(MetadataModel):
 class MessageCreate(MessageBase):
 	"""Payload for creating a message within a thread."""
 
+	parent_id: TypeID | None = None
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
 	sender_user_id: TypeID | None = None
@@ -36,6 +37,7 @@ class Message(MessageBase):
 
 	id: TypeID
 	thread_id: TypeID
+	parent_id: TypeID | None = None
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
 	sender_user_id: TypeID | None = None

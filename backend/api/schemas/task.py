@@ -7,7 +7,7 @@ from typing import Any
 
 from api.models.task import TaskStatus, TaskType
 from api.schemas.common import MetadataModel
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 
 
 class TaskBase(MetadataModel):

@@ -9,7 +9,7 @@ from api.core.database import get_db
 from api.models.task import Task, TaskStatus
 from api.schemas.task import Task as TaskSchema
 from api.schemas.task import TaskCreate, TaskUpdate
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 from api.v1.service import tasks as task_service
 
 
