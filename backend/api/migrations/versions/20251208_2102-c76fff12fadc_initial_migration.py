@@ -179,6 +179,11 @@ def upgrade() -> None:
 			sa.String(length=TYPEID_LENGTH),
 			nullable=True,
 		),
+		sa.Column(
+			"current_message_id",
+			sa.String(length=TYPEID_LENGTH),
+			nullable=True,
+		),
 		sa.Column("owner_id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column(
 			"created_at",
@@ -314,6 +319,7 @@ def upgrade() -> None:
 		sa.Column("sender_user_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("type", sa.String(), nullable=False),
 		sa.Column("content", sa.Text(), nullable=False),
+		sa.Column("parent_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("attachments", sa.JSON(), nullable=False),
 		sa.Column("tool_calls", sa.JSON(), nullable=False),
 		sa.Column("token_usage", sa.JSON(), nullable=True),
@@ -335,6 +341,11 @@ def upgrade() -> None:
 			["sender_agent_id"],
 			["agents.id"],
 			ondelete="SET NULL",
+		),
+		sa.ForeignKeyConstraint(
+			["parent_id"],
+			["messages.id"],
+			ondelete="CASCADE",
 		),
 		sa.ForeignKeyConstraint(
 			["sender_user_id"],
@@ -362,11 +373,28 @@ def upgrade() -> None:
 	op.create_index("ix_messages_task_id", "messages", ["task_id"], unique=False)
 	op.create_index("ix_messages_thread_id", "messages", ["thread_id"], unique=False)
 
+	op.create_index("ix_messages_parent_id", "messages", ["parent_id"], unique=False)
+
 	op.create_foreign_key(
 		"fk_threads_spawned_from_message_id_messages",
 		"threads",
 		"messages",
 		["spawned_from_message_id"],
+		["id"],
+		ondelete="SET NULL",
+	)
+
+	op.create_index(
+		"ix_threads_current_message_id",
+		"threads",
+		["current_message_id"],
+		unique=False,
+	)
+	op.create_foreign_key(
+		"fk_threads_current_message_id_messages",
+		"threads",
+		"messages",
+		["current_message_id"],
 		["id"],
 		ondelete="SET NULL",
 	)
@@ -642,6 +670,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+	op.drop_constraint(
+		"fk_threads_current_message_id_messages",
+		"threads",
+		type_="foreignkey",
+	)
+	op.drop_index("ix_threads_current_message_id", table_name="threads")
+	op.drop_column("threads", "current_message_id")
+
+	op.drop_constraint(
+		"fk_messages_parent_id_messages",
+		"messages",
+		type_="foreignkey",
+	)
+	op.drop_index("ix_messages_parent_id", table_name="messages")
+	op.drop_column("messages", "parent_id")
+
 	op.drop_table("reminders")
 	op.drop_index("ix_notifications_user_id", table_name="notifications")
 	op.drop_index("ix_notifications_event_id", table_name="notifications")
