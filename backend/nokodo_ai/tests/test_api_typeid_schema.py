@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from api.schemas.typeid import TypeID
+from api.typeid import TypeID
 from nokodo_ai.utils import typeid
 
 
@@ -12,7 +12,7 @@ class _Model(BaseModel):
 
 
 def test_typeid_validates_and_is_str() -> None:
-	tid = typeid.new_typeid("user")
+	tid = TypeID(typeid.new_typeid("user"))
 	m = _Model(id=tid)
 	assert isinstance(m.id, str)
 	assert m.id == tid
@@ -20,7 +20,7 @@ def test_typeid_validates_and_is_str() -> None:
 
 def test_typeid_rejects_invalid_value() -> None:
 	with pytest.raises(ValidationError):
-		_Model(id="not-a-typeid")
+		_Model(id=TypeID("not-a-typeid"))
 
 
 def test_typeid_json_schema_has_pattern_and_examples() -> None:

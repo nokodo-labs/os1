@@ -2,7 +2,7 @@
 
 ## Tech stack
 
--   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17
+-   **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, PostgreSQL 17
 -   **Frontend**: Svelte 5, TypeScript, Vite, Vercel AI SDK, shadcn-svelte, TailwindCSS
 -   **Type Safety**: OpenAPI TypeScript generator (auto-sync backend → frontend)
 -   **Infra**: Docker Compose, Nginx for static builds
@@ -47,7 +47,15 @@ backend/
 │   ├── schemas/            # Common Pydantic schema DTOs across API versions
 │   ├── migrations/         # Alembic setup & migrations
 │   └── tests/              # API & ORM tests
-├── nokodo_ai/              # SDK - fully independent service layer
+├── nokodo_ai/              # SDK - publishable, standalone execution library
+│   ├── adapters/           # provider adapters (openai/anthropic/ollama) + capability ABCs
+│   ├── agent.py            # Agent orchestrator (LLM + Tools)
+│   ├── llm.py              # LLM high-level interface
+│   ├── embedding.py        # EmbeddingModel high-level interface
+│   ├── vectorstore.py      # Vectorstore high-level interface
+│   ├── tool.py             # Tool decorator / Tool class
+│   ├── thread.py           # execution-focused Thread domain model
+│   ├── message.py          # execution-focused Message domain models
 │   └── tests/              # SDK unit tests
 └── tests/                  # E2E integration tests
 ```
@@ -59,7 +67,7 @@ backend/
 -   Validate inputs (Pydantic)
 -   Type everything
 -   Three-tier testing: API tests, SDK tests, E2E tests
--   API changes: Update backend → run `npm run generate:api-types` → types sync
+-   API changes: Update backend → run the VS Code tasks `Frontend: Generate API` / `Console: Generate API`
 
 ## openapi + codegen
 
@@ -81,7 +89,7 @@ backend/
 
 ### To run tests:
 
-The best way to run all tests is by using the VSCode Task `Backend: Quick Tests`. This will show you coverage gaps and any warnings and errors.
+The best way to run all tests is by using the VS Code Task `Backend: Run Tests`. This will show you coverage gaps and any warnings and errors.
 
 To run backend tests manually instead:
 

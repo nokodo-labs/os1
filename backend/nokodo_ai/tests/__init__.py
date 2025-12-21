@@ -1,1 +1,1 @@
-"""Tests for project_slug SDK/service layer."""
+"""tests for nokodo_ai SDK/library layer."""

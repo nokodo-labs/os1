@@ -1,26 +1,26 @@
-# SDK/Service Layer Tests
+# SDK/service layer tests
 
-Tests for the `project_slug` package business logic and services.
+tests for the `nokodo_ai` package business logic and services.
 
-## Purpose
+## purpose
 
-Test the SDK independently of the API layer:
+test the SDK independently of the API layer:
 
--   Unit tests for services
--   Tests for utility functions
--   Type checking and validation
--   No database or HTTP dependencies (use mocks)
+-   unit tests for services
+-   tests for utility functions
+-   type checking and validation
+-   no database or HTTP dependencies (use mocks)
 
-## Running
+## running
 
 ```bash
-# Run SDK tests only
-pytest project_slug/tests/
+# run SDK tests only
+pytest nokodo_ai/tests/
 
-# With coverage
-pytest project_slug/tests/ --cov=project_slug
+# with coverage
+pytest nokodo_ai/tests/ --cov=nokodo_ai
 ```
 
-## Structure
+## structure
 
-Keep tests focused on business logic without FastAPI/database dependencies. Use mocks for external dependencies.
+keep tests focused on business logic without FastAPI/database dependencies. use mocks for external dependencies.
