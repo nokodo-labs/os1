@@ -10,9 +10,16 @@ from sqlalchemy.orm import selectinload
 from api.models.model import Model
 from api.models.provider import Provider
 from api.schemas.model import ModelCreate, ModelUpdate
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission
 
 
-async def _ensure_provider(provider_id: str, session: AsyncSession) -> None:
+async def _ensure_provider(
+	provider_id: str,
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	require_permission(principal, "models:manage")
 	provider = await session.get(Provider, provider_id)
 	if not provider:
 		raise HTTPException(
@@ -21,7 +28,12 @@ async def _ensure_provider(provider_id: str, session: AsyncSession) -> None:
 		)
 
 
-async def _get_model(model_id: str, session: AsyncSession) -> Model:
+async def _get_model(
+	model_id: str,
+	session: AsyncSession,
+	principal: Principal,
+) -> Model:
+	require_permission(principal, "models:manage")
 	stmt = (
 		select(Model).options(selectinload(Model.provider)).where(Model.id == model_id)
 	)
@@ -35,18 +47,27 @@ async def _get_model(model_id: str, session: AsyncSession) -> Model:
 	return model
 
 
-async def create_model(model_in: ModelCreate, session: AsyncSession) -> Model:
-	await _ensure_provider(model_in.provider_id, session)
+async def create_model(
+	model_in: ModelCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Model:
+	require_permission(principal, "models:manage")
+	await _ensure_provider(model_in.provider_id, session, principal)
 	model = Model(**model_in.model_dump(by_alias=True))
 	session.add(model)
 	await session.commit()
-	return await _get_model(model.id, session)
+	return await _get_model(model.id, session, principal)
 
 
 async def list_models(
 	session: AsyncSession,
+	*,
+	principal: Principal,
 	provider_id: str | None = None,
 ) -> list[Model]:
+	require_permission(principal, "models:manage")
 	stmt = (
 		select(Model)
 		.options(selectinload(Model.provider))
@@ -60,24 +81,38 @@ async def list_models(
 	return list(result.scalars().all())
 
 
-async def get_model(model_id: str, session: AsyncSession) -> Model:
-	return await _get_model(model_id, session)
+async def get_model(
+	model_id: str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Model:
+	return await _get_model(model_id, session, principal)
 
 
 async def update_model(
-	model_id: str, model_in: ModelUpdate, session: AsyncSession
+	model_id: str,
+	model_in: ModelUpdate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Model:
-	model = await _get_model(model_id, session)
+	model = await _get_model(model_id, session, principal)
 
 	update_data = model_in.model_dump(exclude_unset=True)
 	for field, value in update_data.items():
 		setattr(model, field, value)
 
 	await session.commit()
-	return await _get_model(model_id, session)
+	return await _get_model(model_id, session, principal)
 
 
-async def delete_model(model_id: str, session: AsyncSession) -> None:
-	model = await _get_model(model_id, session)
+async def delete_model(
+	model_id: str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	model = await _get_model(model_id, session, principal)
 	await session.delete(model)
 	await session.commit()

@@ -10,17 +10,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.notification import Notification
+from api.v1.service.auth import Principal
 
 
 async def _get_notification(
 	notification_id: str,
 	session: AsyncSession,
+	principal: Principal,
 ) -> Notification:
 	stmt = (
 		select(Notification)
 		.options(selectinload(Notification.event))
 		.where(Notification.id == notification_id)
 	)
+	if not principal.is_admin:
+		stmt = stmt.where(Notification.user_id == principal.user.id)
 	result = await session.execute(stmt)
 	notification = result.scalars().one_or_none()
 	if not notification:
@@ -33,9 +37,14 @@ async def _get_notification(
 
 async def list_user_notifications(
 	session: AsyncSession,
+	*,
+	principal: Principal,
 	user_id: str,
 	only_unread: bool = False,
 ) -> list[Notification]:
+	if not principal.is_admin and str(user_id) != str(principal.user.id):
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
 	stmt = (
 		select(Notification)
 		.options(selectinload(Notification.event))
@@ -53,8 +62,10 @@ async def list_user_notifications(
 async def mark_notification_read(
 	notification_id: str,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Notification:
-	notification = await _get_notification(notification_id, session)
+	notification = await _get_notification(notification_id, session, principal)
 	notification.read_at = datetime.now(tz=UTC)
 	await session.commit()
 	await session.refresh(notification)
@@ -64,8 +75,10 @@ async def mark_notification_read(
 async def dismiss_notification(
 	notification_id: str,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Notification:
-	notification = await _get_notification(notification_id, session)
+	notification = await _get_notification(notification_id, session, principal)
 	notification.dismissed = True
 	notification.read_at = notification.read_at or datetime.now(tz=UTC)
 	await session.commit()

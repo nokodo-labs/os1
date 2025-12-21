@@ -6,9 +6,16 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
+from api.models.role import Role
+from api.models.user import User
 from api.schemas.user import UserCreate
 from api.v1.service import auth as auth_service
 from api.v1.service import users as user_service
+from api.v1.service.auth import (
+	Principal,
+	get_current_active_user,
+	get_current_principal,
+)
 from nokodo_ai.utils.security import create_jwt_token
 from nokodo_ai.utils.typeid import new_typeid
 
@@ -61,12 +68,30 @@ async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_login_inactive_user_rejected(client: AsyncClient) -> None:
 	"""Inactive users should not receive tokens."""
+	admin_payload = {"email": "admin-inactive@example.com", "password": "password"}
+	admin_resp = await client.post("/v1/users", json=admin_payload)
+	assert admin_resp.status_code == 201
+
+	admin_login = await client.post(
+		"/v1/auth/login/access-token",
+		data={
+			"username": admin_payload["email"],
+			"password": admin_payload["password"],
+		},
+	)
+	assert admin_login.status_code == 200
+	admin_token = admin_login.json()["access_token"]
+
 	user_payload = {
 		"email": "inactive@example.com",
 		"password": "correct-password",
 		"is_active": False,
 	}
-	create_resp = await client.post("/v1/users", json=user_payload)
+	create_resp = await client.post(
+		"/v1/users",
+		json=user_payload,
+		headers={"Authorization": f"Bearer {admin_token}"},
+	)
 	assert create_resp.status_code == 201
 
 	login_resp = await client.post(
@@ -170,3 +195,92 @@ async def test_service_get_current_user_no_sub(db_session: AsyncSession) -> None
 
 	with pytest.raises(HTTPException):
 		await auth_service.get_current_user(token_str, db_session)
+
+
+@pytest.mark.asyncio
+async def test_principal_permission_checks_and_active_guard(
+	db_session: AsyncSession,
+) -> None:
+	"""Ensure Principal permission wildcards and active guard behave."""
+	admin_seed = await user_service.create_user(
+		UserCreate(email="principal-admin@example.com", password="pw"),
+		db_session,
+	)
+	user = await user_service.create_user(
+		UserCreate(email="principal@example.com", password="pw"),
+		db_session,
+		actor=admin_seed,
+	)
+	principal = Principal(
+		user=user,
+		group_ids=(),
+		permissions=frozenset({"foo:read", "bar:*"}),
+	)
+	assert principal.has_permission("foo:read")
+	assert principal.has_permission("bar:write")
+	assert not principal.has_permission("baz:read")
+
+	admin = Principal(
+		user=User(
+			email="admin-perm@example.com",
+			hashed_password="x",
+			is_superuser=True,
+			is_active=True,
+		),
+		group_ids=(),
+		permissions=frozenset(),
+	)
+	assert admin.has_permission("anything")
+
+	inactive = User(
+		email="inactive@example.com",
+		hashed_password="x",
+		is_active=False,
+		is_superuser=False,
+	)
+	with pytest.raises(HTTPException):
+		await get_current_active_user(inactive)
+
+
+def test_principal_permission_star() -> None:
+	user = User(email="star@example.com", hashed_password="x", is_superuser=False)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset({"*"}))
+	assert principal.has_permission("any:permission")
+	admin = User(email="star-admin@example.com", hashed_password="x", is_superuser=True)
+	assert Principal(user=admin, group_ids=(), permissions=frozenset()).is_admin
+
+
+@pytest.mark.asyncio
+async def test_optional_user_and_require_admin(db_session: AsyncSession) -> None:
+	user = User(email="optional@example.com", hashed_password="x", is_active=True)
+	db_session.add(user)
+	await db_session.commit()
+
+	assert await auth_service.get_optional_user(None, db_session) is None
+
+	non_admin = Principal(user=user, group_ids=(), permissions=frozenset())
+	with pytest.raises(HTTPException):
+		await auth_service.require_admin(non_admin)
+
+
+@pytest.mark.asyncio
+async def test_get_current_active_user_allows_active_user(
+	db_session: AsyncSession,
+) -> None:
+	user = User(email="active@example.com", hashed_password="pw", is_active=True)
+	assert await get_current_active_user(user) is user
+
+
+@pytest.mark.asyncio
+async def test_get_current_principal_with_role(db_session: AsyncSession) -> None:
+	role = Role(name="tester", permissions=["perm:read"])
+	user = User(
+		email="principal-role@example.com", hashed_password="pw", is_active=True
+	)
+	user.role = role
+	db_session.add_all([role, user])
+	await db_session.commit()
+
+	principal = await get_current_principal(user, db_session)
+	assert "perm:read" in principal.permissions
+	assert principal.user_id == str(user.id)

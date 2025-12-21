@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.acl import AccessRole
 from api.models.message import (
 	AssistantMessage,
 	Message,
@@ -24,9 +24,47 @@ from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.typeid import TypeID
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import (
+	project_access_predicate,
+	require_thread_access,
+	thread_access_predicate,
+)
 
 
-async def _load_thread(thread_id: TypeID, session: AsyncSession) -> Thread:
+async def _load_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	*,
+	required_role: AccessRole = AccessRole.VIEWER,
+) -> Thread:
+	stmt = (
+		select(Thread)
+		.options(
+			selectinload(Thread.messages),
+			selectinload(Thread.owner),
+			selectinload(Thread.projects),
+		)
+		.where(Thread.id == thread_id)
+		.where(thread_access_predicate(principal, required_role=required_role))
+	)
+	result = await session.execute(stmt)
+	thread = result.scalars().unique().one_or_none()
+
+	if not thread:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="Thread not found",
+		)
+
+	return thread
+
+
+async def _load_thread_unrestricted(
+	thread_id: TypeID,
+	session: AsyncSession,
+) -> Thread:
 	stmt = (
 		select(Thread)
 		.options(
@@ -60,11 +98,16 @@ async def _ensure_user(user_id: TypeID, session: AsyncSession) -> None:
 async def _load_projects(
 	project_ids: list[TypeID],
 	session: AsyncSession,
+	principal: Principal,
+	*,
+	required_role: AccessRole = AccessRole.EDITOR,
 ) -> list[Project]:
 	if not project_ids:
 		return []
 
-	result = await session.scalars(select(Project).where(Project.id.in_(project_ids)))
+	stmt = select(Project).where(Project.id.in_(project_ids))
+	stmt = stmt.where(project_access_predicate(principal, required_role=required_role))
+	result = await session.scalars(stmt)
 	projects = list(result.all())
 	found = {project.id for project in projects}
 	missing = [project_id for project_id in project_ids if project_id not in found]
@@ -76,18 +119,37 @@ async def _load_projects(
 	return projects
 
 
-async def create_thread(thread_in: ThreadCreate, session: AsyncSession) -> Thread:
-	await _ensure_user(thread_in.owner_id, session)
-	projects = await _load_projects(thread_in.project_ids, session)
-	thread = Thread(**thread_in.model_dump(by_alias=True, exclude={"project_ids"}))
+async def create_thread(
+	thread_in: ThreadCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Thread:
+	owner_id = thread_in.owner_id
+	if not principal.is_admin:
+		owner_id = TypeID(principal.user.id)
+	else:
+		await _ensure_user(owner_id, session)
+
+	projects = await _load_projects(thread_in.project_ids, session, principal)
+	thread_data = thread_in.model_dump(by_alias=True, exclude={"project_ids"})
+	thread_data["owner_id"] = owner_id
+	thread = Thread(**thread_data)
 	thread.projects = projects
 	session.add(thread)
 	await session.commit()
-	return await _load_thread(cast(TypeID, thread.id), session)
+	return await _load_thread(
+		TypeID(thread.id),
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+	)
 
 
 async def list_threads(
 	session: AsyncSession,
+	*,
+	principal: Principal,
 	owner_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 20,
@@ -100,6 +162,7 @@ async def list_threads(
 			selectinload(Thread.projects),
 		)
 		.order_by(Thread.last_activity_at.desc())
+		.where(thread_access_predicate(principal, required_role=AccessRole.VIEWER))
 	)
 
 	if owner_id is not None:
@@ -109,39 +172,89 @@ async def list_threads(
 	return list(result.scalars().unique().all())
 
 
-async def get_thread(thread_id: TypeID, session: AsyncSession) -> Thread:
-	return await _load_thread(thread_id, session)
+async def get_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Thread:
+	return await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+	)
 
 
 async def update_thread(
 	thread_id: TypeID,
 	thread_in: ThreadUpdate,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Thread:
-	thread = await _load_thread(thread_id, session)
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.EDITOR,
+	)
 	update_data = thread_in.model_dump(exclude_unset=True, by_alias=True)
-	new_owner_id = update_data.get("owner_id")
-	if new_owner_id is not None:
-		await _ensure_user(new_owner_id, session)
+	new_owner_id = update_data.pop("owner_id", None)
+	owner_changed = False
+	if new_owner_id is not None and new_owner_id != thread.owner_id:
+		if not principal.is_admin and thread.owner_id != principal.user.id:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="forbidden",
+			)
+		new_owner = await session.get(User, new_owner_id)
+		if not new_owner:
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="User not found",
+			)
+		thread.owner_id = TypeID(new_owner_id)
+		thread.owner = new_owner
+		owner_changed = True
 
 	project_ids = update_data.pop("project_ids", None)
 	for field, value in update_data.items():
 		setattr(thread, field, value)
 
 	if project_ids is not None:
-		thread.projects = await _load_projects(project_ids, session)
+		thread.projects = await _load_projects(project_ids, session, principal)
 
 	await session.commit()
-	return await _load_thread(thread_id, session)
+	if (
+		owner_changed
+		and not principal.is_admin
+		and str(new_owner_id) != str(principal.user.id)
+	):
+		return await _load_thread_unrestricted(thread_id, session)
+
+	return await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+	)
 
 
 async def list_messages(
 	thread_id: TypeID,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
 ) -> list[Message]:
-	await _load_thread(thread_id, session)
+	await require_thread_access(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+	)
 	stmt = (
 		select(Message)
 		.where(Message.thread_id == thread_id)
@@ -153,14 +266,35 @@ async def list_messages(
 	return list(result.scalars().all())
 
 
-async def list_message_tree(thread_id: TypeID, session: AsyncSession) -> list[Message]:
+async def list_message_tree(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> list[Message]:
 	"""Return all messages in a thread as a flat list."""
-	return await list_messages(thread_id, session, skip=0, limit=10_000)
+	return await list_messages(
+		thread_id,
+		session,
+		principal=principal,
+		skip=0,
+		limit=10_000,
+	)
 
 
-async def get_current_branch(thread_id: TypeID, session: AsyncSession) -> list[Message]:
+async def get_current_branch(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> list[Message]:
 	"""Return the root→leaf path ending at thread.current_message_id."""
-	thread = await _load_thread(thread_id, session)
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+	)
 	if not thread.current_message_id:
 		return []
 
@@ -178,9 +312,16 @@ async def switch_branch(
 	thread_id: TypeID,
 	message_id: TypeID,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Thread:
 	"""Set current_message_id to the deepest leaf descending from message_id."""
-	thread = await _load_thread(thread_id, session)
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.EDITOR,
+	)
 	msg = await session.get(Message, message_id)
 	if not msg or msg.thread_id != thread_id:
 		raise HTTPException(
@@ -198,7 +339,7 @@ async def switch_branch(
 		children = list((await session.execute(children_stmt)).scalars().all())
 		if not children:
 			break
-		leaf_id = cast(TypeID, children[-1].id)
+		leaf_id = TypeID(children[-1].id)
 
 	thread.current_message_id = leaf_id
 	await session.commit()
@@ -209,9 +350,28 @@ async def create_message(
 	thread_id: TypeID,
 	message_in: MessageCreate,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Message:
-	thread = await _load_thread(thread_id, session)
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.EDITOR,
+	)
 	data = message_in.model_dump(by_alias=True, exclude={"type"})
+	sender_user_id = data.get("sender_user_id")
+	if (
+		sender_user_id is not None
+		and not principal.is_admin
+		and str(sender_user_id) != str(principal.user.id)
+	):
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	if message_in.type == MessageType.USER and sender_user_id is None:
+		data["sender_user_id"] = principal.user.id
 	parent_id = data.pop("parent_id", None)
 	if parent_id is None:
 		parent_id = thread.current_message_id

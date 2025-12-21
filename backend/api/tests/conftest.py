@@ -724,13 +724,76 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 
 @pytest_asyncio.fixture(scope="function")
+async def admin_auth(client: AsyncClient) -> dict[str, object]:
+	"""Create a bootstrap admin user and return auth context."""
+	email = f"admin-{uuid4().hex}@example.com"
+	password = "password"
+	user_resp = await client.post(
+		"/v1/users",
+		json={"email": email, "password": password},
+	)
+	assert user_resp.status_code == 201
+	user = user_resp.json()
+
+	login_resp = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": email, "password": password},
+	)
+	assert login_resp.status_code == 200
+	token = login_resp.json()["access_token"]
+
+	return {
+		"user": user,
+		"token": token,
+		"headers": {"Authorization": f"Bearer {token}"},
+		"email": email,
+		"password": password,
+	}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def user_auth(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> dict[str, object]:
+	"""Create a non-admin user and return auth context."""
+	email = f"user-{uuid4().hex}@example.com"
+	password = "password"
+	headers = admin_auth["headers"]
+	assert isinstance(headers, dict)
+	user_resp = await client.post(
+		"/v1/users",
+		headers=headers,
+		json={"email": email, "password": password, "is_superuser": False},
+	)
+	assert user_resp.status_code == 201
+	user = user_resp.json()
+
+	login_resp = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": email, "password": password},
+	)
+	assert login_resp.status_code == 200
+	token = login_resp.json()["access_token"]
+
+	return {
+		"user": user,
+		"token": token,
+		"headers": {"Authorization": f"Bearer {token}"},
+		"email": email,
+		"password": password,
+	}
+
+
+@pytest_asyncio.fixture(scope="function")
 async def test_user(db_session: AsyncSession) -> dict:
 	"""Create a test user."""
 	from api.models.user import User
+	from nokodo_ai.utils.security import hash_password
 
 	user = User(
 		email="test@example.com",
-		hashed_password="hashed_password",
+		hashed_password=hash_password("password"),
 		is_active=True,
 		is_superuser=False,
 	)

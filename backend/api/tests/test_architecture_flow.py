@@ -20,6 +20,14 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 	assert user_resp.status_code == 201
 	user = user_resp.json()
 
+	login_resp = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": user_payload["email"], "password": user_payload["password"]},
+	)
+	assert login_resp.status_code == 200
+	token = login_resp.json()["access_token"]
+	headers = {"Authorization": f"Bearer {token}"}
+
 	# Register a provider → model → agent pipeline
 	provider_resp = await client.post(
 		"/v1/providers",
@@ -28,6 +36,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"adapter_type": "openai_chat_completions",
 			"base_url": "https://api.openai.com/v1",
 		},
+		headers=headers,
 	)
 	assert provider_resp.status_code == 201
 	provider_id = provider_resp.json()["id"]
@@ -40,6 +49,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"display_name": "GPT-5.1 Codex",
 			"capabilities": ["text", "function_calling"],
 		},
+		headers=headers,
 	)
 	assert model_resp.status_code == 201
 	model_id = model_resp.json()["id"]
@@ -52,6 +62,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"model_id": model_id,
 			"tool_ids": ["web-search"],
 		},
+		headers=headers,
 	)
 	assert agent_resp.status_code == 201
 
@@ -63,6 +74,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"title": "Kickoff",
 			"metadata": {"topic": "architecture"},
 		},
+		headers=headers,
 	)
 	assert thread_resp.status_code == 201
 	thread = thread_resp.json()
@@ -73,15 +85,22 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"type": "user",
 			"content": "Let's start",
 		},
+		headers=headers,
 	)
 	assert message_resp.status_code == 201
 	message = message_resp.json()
 
-	list_threads = await client.get(f"/v1/threads?owner_id={user['id']}")
+	list_threads = await client.get(
+		f"/v1/threads?owner_id={user['id']}",
+		headers=headers,
+	)
 	assert list_threads.status_code == 200
 	assert any(item["id"] == thread["id"] for item in list_threads.json())
 
-	messages_list = await client.get(f"/v1/threads/{thread['id']}/messages")
+	messages_list = await client.get(
+		f"/v1/threads/{thread['id']}/messages",
+		headers=headers,
+	)
 	assert messages_list.status_code == 200
 	assert len(messages_list.json()) == 1
 
@@ -93,6 +112,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"task_type": "code_session",
 			"spawned_thread_id": thread["id"],
 		},
+		headers=headers,
 	)
 	assert task_resp.status_code == 201
 	task_id = task_resp.json()["id"]
@@ -100,6 +120,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 	task_update = await client.patch(
 		f"/v1/tasks/{task_id}",
 		json={"status": "running", "stage": "analysis"},
+		headers=headers,
 	)
 	assert task_update.status_code == 200
 	assert task_update.json()["status"] == "running"
@@ -116,16 +137,23 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"task_id": task_id,
 			"data": {"stage": "analysis"},
 		},
+		headers=headers,
 	)
 	assert event_resp.status_code == 201
 
-	notifications_resp = await client.get(f"/v1/notifications/users/{user['id']}")
+	notifications_resp = await client.get(
+		f"/v1/notifications/users/{user['id']}",
+		headers=headers,
+	)
 	assert notifications_resp.status_code == 200
 	notifications = notifications_resp.json()
 	assert len(notifications) == 1
 	notification_id = notifications[0]["id"]
 
-	mark_read = await client.post(f"/v1/notifications/{notification_id}/read")
+	mark_read = await client.post(
+		f"/v1/notifications/{notification_id}/read",
+		headers=headers,
+	)
 	assert mark_read.status_code == 200
 	assert mark_read.json()["read_at"] is not None
 
@@ -137,14 +165,15 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"content": "Prefers detailed summaries",
 			"source_message_id": message["id"],
 		},
+		headers=headers,
 	)
 	assert memory_resp.status_code == 201
 
-	memories = await client.get(f"/v1/memories?user_id={user['id']}")
+	memories = await client.get(f"/v1/memories?user_id={user['id']}", headers=headers)
 	assert memories.status_code == 200
 	assert len(memories.json()) == 1
 
 	# Catalog endpoints return the configured entities
-	agents_list = await client.get("/v1/agents")
+	agents_list = await client.get("/v1/agents", headers=headers)
 	assert agents_list.status_code == 200
 	assert len(agents_list.json()) == 1

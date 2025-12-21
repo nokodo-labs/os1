@@ -9,11 +9,15 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.acl import AccessControlEntry, AccessRole
 from api.models.message import MessageType
 from api.models.project import Project
+from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.typeid import TypeID
 from api.v1.service import threads as thread_service
+from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -21,16 +25,13 @@ from nokodo_ai.utils.typeid import new_typeid
 async def test_thread_project_association(
 	client: AsyncClient,
 	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	"""Threads can belong to multiple projects and be reassigned."""
-	user_payload = {
-		"email": "owner@example.com",
-		"password": "supersecret",
-		"display_name": "Thread Owner",
-	}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	assert user_resp.status_code == 201
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	project_a = Project(name="Project A", description="A", owner_id=user["id"])
 	project_b = Project(name="Project B", description="B", owner_id=user["id"])
@@ -44,7 +45,7 @@ async def test_thread_project_association(
 		"title": "Multi-project thread",
 		"project_ids": [project_a.id, project_b.id],
 	}
-	thread_resp = await client.post("/v1/threads", json=thread_payload)
+	thread_resp = await client.post("/v1/threads", json=thread_payload, headers=headers)
 	assert thread_resp.status_code == 201
 	thread = thread_resp.json()
 	assert set(thread["project_ids"]) == {project_a.id, project_b.id}
@@ -53,6 +54,7 @@ async def test_thread_project_association(
 	update_resp = await client.patch(
 		f"/v1/threads/{thread['id']}",
 		json={"project_ids": [project_b.id]},
+		headers=headers,
 	)
 	assert update_resp.status_code == 200
 	updated_thread = update_resp.json()
@@ -60,21 +62,21 @@ async def test_thread_project_association(
 
 
 @pytest.mark.asyncio
-async def test_create_thread_basic(client: AsyncClient) -> None:
+async def test_create_thread_basic(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
 	"""Test creating a thread without projects."""
-	user_payload = {
-		"email": "basic@example.com",
-		"password": "password",
-	}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	assert user_resp.status_code == 201
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_payload = {
 		"owner_id": user["id"],
 		"title": "Basic Thread",
 	}
-	thread_resp = await client.post("/v1/threads", json=thread_payload)
+	thread_resp = await client.post("/v1/threads", json=thread_payload, headers=headers)
 	assert thread_resp.status_code == 201
 	thread = thread_resp.json()
 	assert thread["title"] == "Basic Thread"
@@ -83,20 +85,26 @@ async def test_create_thread_basic(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_threads(client: AsyncClient) -> None:
+async def test_list_threads(client: AsyncClient, user_auth: dict[str, object]) -> None:
 	"""Test listing threads."""
-	user_payload = {
-		"email": "list@example.com",
-		"password": "password",
-	}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	# Create 2 threads
-	await client.post("/v1/threads", json={"owner_id": user["id"], "title": "T1"})
-	await client.post("/v1/threads", json={"owner_id": user["id"], "title": "T2"})
+	await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "T1"},
+		headers=headers,
+	)
+	await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "T2"},
+		headers=headers,
+	)
 
-	resp = await client.get(f"/v1/threads?owner_id={user['id']}")
+	resp = await client.get(f"/v1/threads?owner_id={user['id']}", headers=headers)
 	assert resp.status_code == 200
 	threads = resp.json()
 	assert len(threads) == 2
@@ -105,17 +113,20 @@ async def test_list_threads(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_thread_messages(client: AsyncClient) -> None:
+async def test_thread_messages(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
 	"""Test creating and listing messages in a thread."""
-	user_payload = {
-		"email": "msg@example.com",
-		"password": "password",
-	}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_resp = await client.post(
-		"/v1/threads", json={"owner_id": user["id"], "title": "Msg Thread"}
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "Msg Thread"},
+		headers=headers,
 	)
 	thread_id = thread_resp.json()["id"]
 
@@ -125,14 +136,18 @@ async def test_thread_messages(client: AsyncClient) -> None:
 		"type": "user",
 		"sender_user_id": user["id"],
 	}
-	msg_resp = await client.post(f"/v1/threads/{thread_id}/messages", json=msg_payload)
+	msg_resp = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json=msg_payload,
+		headers=headers,
+	)
 	assert msg_resp.status_code == 201
 	msg = msg_resp.json()
 	assert msg["content"] == "Hello AI"
 	assert msg["type"] == "user"
 
 	# List messages
-	list_resp = await client.get(f"/v1/threads/{thread_id}/messages")
+	list_resp = await client.get(f"/v1/threads/{thread_id}/messages", headers=headers)
 	assert list_resp.status_code == 200
 	messages = list_resp.json()
 	assert len(messages) == 1
@@ -140,33 +155,39 @@ async def test_thread_messages(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_thread_invalid_user(client: AsyncClient) -> None:
+async def test_create_thread_invalid_user(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
 	"""Test creating a thread with non-existent user."""
+	headers = admin_auth["headers"]
+	assert isinstance(headers, dict)
 	thread_payload = {
 		"owner_id": new_typeid("user"),
 		"title": "Invalid User Thread",
 	}
-	resp = await client.post("/v1/threads", json=thread_payload)
+	resp = await client.post("/v1/threads", json=thread_payload, headers=headers)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "User not found"
 
 
 @pytest.mark.asyncio
-async def test_create_thread_invalid_project(client: AsyncClient) -> None:
+async def test_create_thread_invalid_project(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
 	"""Test creating a thread with non-existent project."""
-	user_payload = {
-		"email": "proj@example.com",
-		"password": "password",
-	}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_payload = {
 		"owner_id": user["id"],
 		"title": "Invalid Project Thread",
 		"project_ids": [new_typeid("proj")],
 	}
-	resp = await client.post("/v1/threads", json=thread_payload)
+	resp = await client.post("/v1/threads", json=thread_payload, headers=headers)
 	assert resp.status_code == 404
 	assert "Projects not found" in resp.json()["detail"]
 
@@ -189,52 +210,63 @@ async def test_service_create_thread(db_session: AsyncSession) -> None:
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 
 	thread_in = ThreadCreate(
 		owner_id=user.id,
 		title="Service Thread",
 	)
-	thread = await thread_service.create_thread(thread_in, db_session)
+	thread = await thread_service.create_thread(
+		thread_in,
+		db_session,
+		principal=principal,
+	)
 	assert thread.title == "Service Thread"
 	assert thread.owner_id == user.id
 
 
 @pytest.mark.asyncio
-async def test_get_thread_not_found(client: AsyncClient) -> None:
+async def test_get_thread_not_found(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
 	"""Test getting a non-existent thread."""
-	resp = await client.get(f"/v1/threads/{new_typeid('thread')}")
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	resp = await client.get(f"/v1/threads/{new_typeid('thread')}", headers=headers)
 	assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_update_thread_owner(
 	client: AsyncClient,
-	db_session: AsyncSession,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
 ) -> None:
 	"""Test updating thread owner."""
-	# Create two users
-	user1_resp = await client.post(
-		"/v1/users",
-		json={
-			"email": "u1@example.com",
-			"password": "password",
-		},
-	)
-	user1 = user1_resp.json()
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+	user1 = user_auth["user"]
+	assert isinstance(user1, dict)
+	user1_headers = user_auth["headers"]
+	assert isinstance(user1_headers, dict)
 
 	user2_resp = await client.post(
 		"/v1/users",
+		headers=admin_headers,
 		json={
 			"email": "u2@example.com",
 			"password": "password",
 		},
 	)
+	assert user2_resp.status_code == 201
 	user2 = user2_resp.json()
 
 	# Create thread with user1
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user1["id"], "title": "Owner Update"},
+		headers=user1_headers,
 	)
 	thread_id = thread_resp.json()["id"]
 
@@ -242,6 +274,7 @@ async def test_update_thread_owner(
 	update_resp = await client.patch(
 		f"/v1/threads/{thread_id}",
 		json={"owner_id": user2["id"]},
+		headers=user1_headers,
 	)
 	assert update_resp.status_code == 200
 	updated = update_resp.json()
@@ -251,22 +284,17 @@ async def test_update_thread_owner(
 @pytest.mark.asyncio
 async def test_create_message_types(
 	client: AsyncClient,
-	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	"""Test creating different message types."""
-	# Create user and thread
-	user_resp = await client.post(
-		"/v1/users",
-		json={
-			"email": "msg@example.com",
-			"username": "msg",
-			"password": "password",
-		},
-	)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "Message Types"},
+		headers=headers,
 	)
 	thread_id = thread_resp.json()["id"]
 
@@ -276,7 +304,11 @@ async def test_create_message_types(
 		"content": "Hello",
 		"sender_agent_id": None,  # Optional
 	}
-	resp = await client.post(f"/v1/threads/{thread_id}/messages", json=asst_msg)
+	resp = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json=asst_msg,
+		headers=headers,
+	)
 	assert resp.status_code == 201
 	assert resp.json()["type"] == "assistant"
 
@@ -285,73 +317,289 @@ async def test_create_message_types(
 		"type": "system",
 		"content": "System Prompt",
 	}
-	resp = await client.post(f"/v1/threads/{thread_id}/messages", json=sys_msg)
+	resp = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json=sys_msg,
+		headers=headers,
+	)
 	assert resp.status_code == 201
 	assert resp.json()["type"] == "system"
 
-	# Tool Message
-	tool_msg = {
-		"type": "tool",
-		"content": "Tool Output",
-		"tool_calls": [],
-	}
-	resp = await client.post(f"/v1/threads/{thread_id}/messages", json=tool_msg)
-	assert resp.status_code == 201
-	assert resp.json()["type"] == "tool"
+
+@pytest.mark.asyncio
+async def test_service_create_thread_missing_owner(db_session: AsyncSession) -> None:
+	admin = User(
+		email="thread-admin@example.com",
+		hashed_password="pw",
+		is_active=True,
+		is_superuser=True,
+	)
+	db_session.add(admin)
+	await db_session.commit()
+	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+
+	with pytest.raises(HTTPException):
+		await thread_service.create_thread(
+			ThreadCreate(owner_id=new_typeid("user"), title="missing"),
+			db_session,
+			principal=principal,
+		)
+
+
+@pytest.mark.asyncio
+async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
+	owner = User(email="owner@example.com", hashed_password="pw", is_active=True)
+	editor = User(email="editor@example.com", hashed_password="pw", is_active=True)
+	db_session.add_all([owner, editor])
+	await db_session.commit()
+
+	owner_principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=owner.id, title="guard"),
+		db_session,
+		principal=owner_principal,
+	)
+	group_id = new_typeid("group")
+	ace = AccessControlEntry(
+		id=TypeID(new_typeid("acl")),
+		thread_id=thread.id,
+		user_id=editor.id,
+		role=AccessRole.EDITOR,
+	)
+	db_session.add(ace)
+	await db_session.commit()
+
+	editor_principal = Principal(user=editor, group_ids=(), permissions=frozenset())
+	with pytest.raises(HTTPException):
+		await thread_service.update_thread(
+			thread.id,
+			ThreadUpdate(owner_id=editor.id),
+			db_session,
+			principal=editor_principal,
+		)
+
+
+@pytest.mark.asyncio
+async def test_update_thread_new_owner_missing(db_session: AsyncSession) -> None:
+	admin = User(
+		email="owner-missing@example.com",
+		hashed_password="pw",
+		is_active=True,
+		is_superuser=True,
+	)
+	db_session.add(admin)
+	await db_session.commit()
+	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=admin.id, title="missing-owner"),
+		db_session,
+		principal=principal,
+	)
+
+	with pytest.raises(HTTPException):
+		await thread_service.update_thread(
+			thread.id,
+			ThreadUpdate(owner_id=new_typeid("user")),
+			db_session,
+			principal=principal,
+		)
+
+
+@pytest.mark.asyncio
+async def test_update_thread_owner_handoff_returns_unrestricted(
+	db_session: AsyncSession,
+) -> None:
+	owner = User(
+		email="handoff-owner@example.com", hashed_password="pw", is_active=True
+	)
+	new_owner = User(
+		email="handoff-new@example.com", hashed_password="pw", is_active=True
+	)
+	db_session.add_all([owner, new_owner])
+	await db_session.commit()
+
+	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=owner.id, title="handoff"),
+		db_session,
+		principal=principal,
+	)
+
+	orig = thread_service._load_thread_unrestricted
+	called = False
+
+	async def _tracking(
+		thread_id: TypeID, session: AsyncSession
+	) -> thread_service.Thread:
+		nonlocal called
+		called = True
+		return await orig(thread_id, session)
+
+	thread_service._load_thread_unrestricted = _tracking
+	try:
+		updated = await thread_service.update_thread(
+			thread.id,
+			ThreadUpdate(owner_id=new_owner.id),
+			db_session,
+			principal=principal,
+		)
+	finally:
+		thread_service._load_thread_unrestricted = orig
+	assert called
+	assert updated.owner_id == new_owner.id
+
+
+@pytest.mark.asyncio
+async def test_load_thread_unrestricted_missing(db_session: AsyncSession) -> None:
+	with pytest.raises(HTTPException):
+		await thread_service._load_thread_unrestricted(
+			TypeID(new_typeid("thread")),
+			db_session,
+		)
+
+
+@pytest.mark.asyncio
+async def test_create_message_sender_guard(db_session: AsyncSession) -> None:
+	owner = User(email="sender-owner@example.com", hashed_password="pw", is_active=True)
+	other = User(email="sender-other@example.com", hashed_password="pw", is_active=True)
+	db_session.add_all([owner, other])
+	await db_session.commit()
+
+	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=owner.id, title="sender-guard"),
+		db_session,
+		principal=principal,
+	)
+
+	with pytest.raises(HTTPException):
+		await thread_service.create_message(
+			thread.id,
+			MessageCreate(
+				content="forbidden",
+				type=MessageType.USER,
+				sender_user_id=other.id,
+			),
+			db_session,
+			principal=principal,
+		)
 
 
 @pytest.mark.asyncio
 async def test_get_thread_not_found_service(db_session: AsyncSession) -> None:
+	from api.models.user import User
+
+	user = User(
+		email="svc_not_found@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=True,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+
 	with pytest.raises(HTTPException) as exc:
-		await thread_service.get_thread("nonexistent", db_session)
+		await thread_service.get_thread("nonexistent", db_session, principal=principal)
 	assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_create_thread_invalid_user_service(db_session: AsyncSession) -> None:
+	from api.models.user import User
+
+	admin = User(
+		email="svc_invalid_owner@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=True,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(admin)
+	await db_session.commit()
+	await db_session.refresh(admin)
+	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+
 	thread_in = ThreadCreate(owner_id=new_typeid("user"), title="Test")
 	with pytest.raises(HTTPException) as exc:
-		await thread_service.create_thread(thread_in, db_session)
+		await thread_service.create_thread(
+			thread_in,
+			db_session,
+			principal=admin_principal,
+		)
 	assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_create_thread_invalid_project_service(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
-	# Create a user first
-	user_payload = {"email": "p@example.com", "username": "p", "password": "p"}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user_id = user_resp.json()["id"]
+	from api.models.user import User
+
+	user = User(
+		email="svc_invalid_project@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 
 	thread_in = ThreadCreate(
-		owner_id=user_id,
+		owner_id=user.id,
 		title="Test",
 		project_ids=[new_typeid("proj")],
 	)
 	with pytest.raises(HTTPException) as exc:
-		await thread_service.create_thread(thread_in, db_session)
+		await thread_service.create_thread(thread_in, db_session, principal=principal)
 	assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_list_threads_filter_owner(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
-	# Create user and thread
-	user_payload = {"email": "l@example.com", "username": "l", "password": "l"}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user_id = user_resp.json()["id"]
+	from api.models.user import User
 
-	thread_in = ThreadCreate(owner_id=user_id, title="Test")
-	await thread_service.create_thread(thread_in, db_session)
+	user = User(
+		email="svc_list_owner@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 
-	threads = await thread_service.list_threads(db_session, owner_id=user_id)
+	thread_in = ThreadCreate(owner_id=user.id, title="Test")
+	await thread_service.create_thread(thread_in, db_session, principal=principal)
+
+	threads = await thread_service.list_threads(
+		db_session,
+		principal=principal,
+		owner_id=user.id,
+	)
 	assert len(threads) == 1
-	assert threads[0].owner_id == user_id
+	assert threads[0].owner_id == user.id
 
 	threads_empty = await thread_service.list_threads(
 		db_session,
+		principal=principal,
 		owner_id=new_typeid("user"),
 	)
 	assert len(threads_empty) == 0
@@ -359,158 +607,362 @@ async def test_list_threads_filter_owner(
 
 @pytest.mark.asyncio
 async def test_update_thread_owner_service(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
-	# Create two users
-	u1_resp = await client.post(
-		"/v1/users", json={"email": "u1@e.com", "username": "u1", "password": "p"}
+	from api.models.user import User
+
+	u1 = User(
+		email="svc_u1@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
 	)
-	u1_id = u1_resp.json()["id"]
-	u2_resp = await client.post(
-		"/v1/users", json={"email": "u2@e.com", "username": "u2", "password": "p"}
+	u2 = User(
+		email="svc_u2@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
 	)
-	u2_id = u2_resp.json()["id"]
+	db_session.add_all([u1, u2])
+	await db_session.commit()
+	await db_session.refresh(u1)
+	await db_session.refresh(u2)
+	principal = Principal(user=u1, group_ids=(), permissions=frozenset())
 
 	thread = await thread_service.create_thread(
-		ThreadCreate(owner_id=u1_id, title="T"), db_session
+		ThreadCreate(owner_id=u1.id, title="T"),
+		db_session,
+		principal=principal,
 	)
 
 	updated = await thread_service.update_thread(
-		thread.id, ThreadUpdate(owner_id=u2_id), db_session
+		thread.id,
+		ThreadUpdate(owner_id=u2.id),
+		db_session,
+		principal=principal,
 	)
-	assert updated.owner_id == u2_id
+	assert updated.owner_id == u2.id
+
+
+@pytest.mark.asyncio
+async def test_update_thread_fields_service(
+	db_session: AsyncSession,
+) -> None:
+	from api.models.user import User
+
+	owner = User(
+		email="svc_update_fields@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(owner)
+	await db_session.commit()
+	await db_session.refresh(owner)
+	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=owner.id, title="initial", tags=["t1"]),
+		db_session,
+		principal=principal,
+	)
+
+	updated = await thread_service.update_thread(
+		thread.id,
+		ThreadUpdate(title="updated", tags=["t2"], is_archived=True),
+		db_session,
+		principal=principal,
+	)
+	assert updated.title == "updated"
+	assert updated.tags == ["t2"]
+	assert updated.is_archived is True
+
+
+@pytest.mark.asyncio
+async def test_admin_update_owner_and_create_message(
+	db_session: AsyncSession,
+) -> None:
+	"""Admin can reassign owner and post a message."""
+	from api.models.user import User
+
+	owner = User(
+		email="admin-thread-owner@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	new_owner = User(
+		email="admin-thread-new@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	admin = User(
+		email="admin-thread-admin@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=True,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add_all([owner, new_owner, admin])
+	await db_session.commit()
+	await db_session.refresh(owner)
+	await db_session.refresh(new_owner)
+	await db_session.refresh(admin)
+
+	owner_principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=owner.id, title="admin-transfer"),
+		db_session,
+		principal=owner_principal,
+	)
+
+	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	updated = await thread_service.update_thread(
+		thread.id,
+		ThreadUpdate(owner_id=new_owner.id),
+		db_session,
+		principal=admin_principal,
+	)
+	assert updated.owner_id == new_owner.id
+
+	msg = await thread_service.create_message(
+		thread.id,
+		MessageCreate(content="admin msg", type=MessageType.USER),
+		db_session,
+		principal=admin_principal,
+	)
+	assert msg.thread_id == thread.id
 
 
 @pytest.mark.asyncio
 async def test_create_message_types_service(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
-	u_resp = await client.post(
-		"/v1/users", json={"email": "m@e.com", "username": "m", "password": "p"}
+	from api.models.user import User
+
+	user = User(
+		email="svc_msgs@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
 	)
-	u_id = u_resp.json()["id"]
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 	thread = await thread_service.create_thread(
-		ThreadCreate(owner_id=u_id, title="T"), db_session
+		ThreadCreate(owner_id=user.id, title="T"),
+		db_session,
+		principal=principal,
 	)
 
 	# Assistant
 	msg_asst = await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="A", type=MessageType.ASSISTANT, sender_user_id=u_id),
+		MessageCreate(content="A", type=MessageType.ASSISTANT, sender_user_id=user.id),
 		db_session,
+		principal=principal,
 	)
 	assert msg_asst.type == MessageType.ASSISTANT
 
 	# Tool
 	msg_tool = await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="T", type=MessageType.TOOL, sender_user_id=u_id),
+		MessageCreate(content="T", type=MessageType.TOOL, sender_user_id=user.id),
 		db_session,
+		principal=principal,
 	)
 	assert msg_tool.type == MessageType.TOOL
 
 	# System
 	msg_sys = await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="S", type=MessageType.SYSTEM, sender_user_id=u_id),
+		MessageCreate(content="S", type=MessageType.SYSTEM, sender_user_id=user.id),
 		db_session,
+		principal=principal,
 	)
 	assert msg_sys.type == MessageType.SYSTEM
 
 
 @pytest.mark.asyncio
 async def test_create_message_unknown_type_service(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
 	"""Ensure unexpected message types fall back to user messages."""
-	u_resp = await client.post(
-		"/v1/users", json={"email": "unk@e.com", "username": "unk", "password": "p"}
+	from api.models.user import User
+
+	user = User(
+		email="svc_unknown_type@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
 	)
-	u_id = u_resp.json()["id"]
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 	thread = await thread_service.create_thread(
-		ThreadCreate(owner_id=u_id, title="Unknown"), db_session
+		ThreadCreate(owner_id=user.id, title="Unknown"),
+		db_session,
+		principal=principal,
 	)
 	message_in = MessageCreate.model_construct(
 		content="Fallback",
-		sender_user_id=u_id,
+		sender_user_id=user.id,
 		type=cast(Any, "custom"),
 	)
-	message = await thread_service.create_message(thread.id, message_in, db_session)
+	message = await thread_service.create_message(
+		thread.id,
+		message_in,
+		db_session,
+		principal=principal,
+	)
 	assert message.type == MessageType.USER
 
 
 @pytest.mark.asyncio
 async def test_list_messages_service(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
-	u_resp = await client.post(
-		"/v1/users", json={"email": "lm@e.com", "username": "lm", "password": "p"}
+	from api.models.user import User
+
+	user = User(
+		email="svc_list_msgs@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
 	)
-	u_id = u_resp.json()["id"]
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 	thread = await thread_service.create_thread(
-		ThreadCreate(owner_id=u_id, title="T"), db_session
+		ThreadCreate(owner_id=user.id, title="T"),
+		db_session,
+		principal=principal,
 	)
 
 	await thread_service.create_message(
-		thread.id, MessageCreate(content="1", sender_user_id=u_id), db_session
+		thread.id,
+		MessageCreate(content="1", sender_user_id=user.id),
+		db_session,
+		principal=principal,
 	)
 	await thread_service.create_message(
-		thread.id, MessageCreate(content="2", sender_user_id=u_id), db_session
+		thread.id,
+		MessageCreate(content="2", sender_user_id=user.id),
+		db_session,
+		principal=principal,
 	)
 
-	msgs = await thread_service.list_messages(thread.id, db_session)
+	msgs = await thread_service.list_messages(
+		thread.id,
+		db_session,
+		principal=principal,
+	)
 	assert len(msgs) == 2
 
 
 @pytest.mark.asyncio
 async def test_list_threads_no_filter(
-	client: AsyncClient, db_session: AsyncSession
+	client: AsyncClient,
+	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	"""Test listing threads without owner filter."""
-	# Create user and thread
-	user_payload = {"email": "nf@example.com", "username": "nf", "password": "p"}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user_id = user_resp.json()["id"]
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
-	thread_in = ThreadCreate(owner_id=user_id, title="Test")
-	await thread_service.create_thread(thread_in, db_session)
+	from api.models.user import User as UserORM
+
+	user_orm = await db_session.get(UserORM, user["id"])
+	assert user_orm is not None
+	principal = Principal(user=user_orm, group_ids=(), permissions=frozenset())
+
+	thread_in = ThreadCreate(owner_id=user_orm.id, title="Test")
+	await thread_service.create_thread(thread_in, db_session, principal=principal)
 
 	# Call service directly without owner_id
-	threads = await thread_service.list_threads(db_session)
+	threads = await thread_service.list_threads(db_session, principal=principal)
 	assert len(threads) >= 1
 
 	# Call via client without owner_id
-	resp = await client.get("/v1/threads")
+	resp = await client.get("/v1/threads", headers=headers)
 	assert resp.status_code == 200
 	assert len(resp.json()) >= 1
 
 
 @pytest.mark.asyncio
 async def test_update_thread_projects(
-	client: AsyncClient, db_session: AsyncSession
+	db_session: AsyncSession,
 ) -> None:
 	"""Test updating thread projects."""
-	# Create user
-	user_payload = {"email": "up@example.com", "username": "up", "password": "p"}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	user_id = user_resp.json()["id"]
+	from api.models.user import User
+
+	user = User(
+		email="svc_update_projects@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 
 	# Create project
 	from api.models.project import Project
 
-	project = Project(name="Test Project", description="Test", owner_id=user_id)
+	project = Project(name="Test Project", description="Test", owner_id=user.id)
 	db_session.add(project)
 	await db_session.commit()
 	await db_session.refresh(project)
 
 	# Create thread
 	thread = await thread_service.create_thread(
-		ThreadCreate(owner_id=user_id, title="Test"), db_session
+		ThreadCreate(owner_id=user.id, title="Test"),
+		db_session,
+		principal=principal,
 	)
 
 	# Update thread with project
 	updated = await thread_service.update_thread(
-		thread.id, ThreadUpdate(project_ids=[project.id]), db_session
+		thread.id,
+		ThreadUpdate(project_ids=[project.id]),
+		db_session,
+		principal=principal,
 	)
 	assert len(updated.projects) == 1
 	assert updated.projects[0].id == project.id

@@ -14,30 +14,30 @@ from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.typeid import TypeID
 from api.v1.service import threads as thread_service
+from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
-async def test_branching_chat_endpoints_support_forks(client: AsyncClient) -> None:
-	user_resp = await client.post(
-		"/v1/users",
-		json={
-			"email": "branch@example.com",
-			"password": "password",
-		},
-	)
-	assert user_resp.status_code == 201
-	user = user_resp.json()
+async def test_branching_chat_endpoints_support_forks(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "branch thread"},
+		headers=headers,
 	)
 	assert thread_resp.status_code == 201
 	chat_id = thread_resp.json()["id"]
 
 	# empty chats return an empty branch
-	empty_branch = await client.get(f"/v1/chats/{chat_id}/messages")
+	empty_branch = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
 	assert empty_branch.status_code == 200
 	assert empty_branch.json() == []
 
@@ -45,13 +45,14 @@ async def test_branching_chat_endpoints_support_forks(client: AsyncClient) -> No
 	m1_resp = await client.post(
 		f"/v1/chats/{chat_id}/messages",
 		json={"content": "hello", "type": "user", "sender_user_id": user["id"]},
+		headers=headers,
 	)
 	assert m1_resp.status_code == 201
 	m1 = m1_resp.json()
 	assert m1["parent_id"] is None
 
 	# single-node branch (current leaf is the root)
-	root_branch = await client.get(f"/v1/chats/{chat_id}/messages")
+	root_branch = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
 	assert root_branch.status_code == 200
 	assert [m["id"] for m in root_branch.json()] == [m1["id"]]
 
@@ -59,6 +60,7 @@ async def test_branching_chat_endpoints_support_forks(client: AsyncClient) -> No
 	m2_resp = await client.post(
 		f"/v1/chats/{chat_id}/messages",
 		json={"content": "hi there", "type": "assistant"},
+		headers=headers,
 	)
 	assert m2_resp.status_code == 201
 	m2 = m2_resp.json()
@@ -68,13 +70,14 @@ async def test_branching_chat_endpoints_support_forks(client: AsyncClient) -> No
 	m3_resp = await client.post(
 		f"/v1/chats/{chat_id}/messages",
 		json={"content": "alt reply", "type": "assistant", "parent_id": m1["id"]},
+		headers=headers,
 	)
 	assert m3_resp.status_code == 201
 	m3 = m3_resp.json()
 	assert m3["parent_id"] == m1["id"]
 
 	# current branch should follow the latest leaf (m3)
-	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages")
+	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
 	assert branch_resp.status_code == 200
 	branch = branch_resp.json()
 	assert [m["id"] for m in branch] == [m1["id"], m3["id"]]
@@ -83,17 +86,18 @@ async def test_branching_chat_endpoints_support_forks(client: AsyncClient) -> No
 	m4_resp = await client.post(
 		f"/v1/chats/{chat_id}/messages",
 		json={"content": "follow-up", "type": "user", "sender_user_id": user["id"]},
+		headers=headers,
 	)
 	assert m4_resp.status_code == 201
 	m4 = m4_resp.json()
 	assert m4["parent_id"] == m3["id"]
 
-	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages")
+	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
 	branch = branch_resp.json()
 	assert [m["id"] for m in branch] == [m1["id"], m3["id"], m4["id"]]
 
 	# tree should include all messages
-	tree_resp = await client.get(f"/v1/chats/{chat_id}/tree")
+	tree_resp = await client.get(f"/v1/chats/{chat_id}/tree", headers=headers)
 	assert tree_resp.status_code == 200
 	tree = tree_resp.json()
 	assert {m["id"] for m in tree} == {m1["id"], m2["id"], m3["id"], m4["id"]}
@@ -102,39 +106,40 @@ async def test_branching_chat_endpoints_support_forks(client: AsyncClient) -> No
 	switch_resp = await client.post(
 		f"/v1/chats/{chat_id}/switch",
 		json={"message_id": m2["id"]},
+		headers=headers,
 	)
 	assert switch_resp.status_code == 200
 	payload = switch_resp.json()
 	assert payload["ok"] is True
 	assert payload["current_message_id"] == m2["id"]
 
-	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages")
+	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
 	assert [m["id"] for m in branch_resp.json()] == [m1["id"], m2["id"]]
 
 	# switching to the root should pick the deepest leaf in its subtree
 	deep_switch = await client.post(
 		f"/v1/chats/{chat_id}/switch",
 		json={"message_id": m1["id"]},
+		headers=headers,
 	)
 	assert deep_switch.status_code == 200
 	assert deep_switch.json()["current_message_id"] == m4["id"]
 
 
 @pytest.mark.asyncio
-async def test_chat_switch_rejects_unknown_message(client: AsyncClient) -> None:
-	user_resp = await client.post(
-		"/v1/users",
-		json={
-			"email": "switch@example.com",
-			"password": "password",
-		},
-	)
-	assert user_resp.status_code == 201
-	user = user_resp.json()
+async def test_chat_switch_rejects_unknown_message(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "switch thread"},
+		headers=headers,
 	)
 	assert thread_resp.status_code == 201
 	chat_id = thread_resp.json()["id"]
@@ -142,6 +147,7 @@ async def test_chat_switch_rejects_unknown_message(client: AsyncClient) -> None:
 	resp = await client.post(
 		f"/v1/chats/{chat_id}/switch",
 		json={"message_id": new_typeid("msg")},
+		headers=headers,
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Message not found"
@@ -150,24 +156,22 @@ async def test_chat_switch_rejects_unknown_message(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 	client: AsyncClient,
+	user_auth: dict[str, object],
 ) -> None:
-	user_resp = await client.post(
-		"/v1/users",
-		json={
-			"email": "parent@example.com",
-			"password": "password",
-		},
-	)
-	assert user_resp.status_code == 201
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_a = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "a"},
+		headers=headers,
 	)
 	thread_b = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "b"},
+		headers=headers,
 	)
 	chat_a = thread_a.json()["id"]
 	chat_b = thread_b.json()["id"]
@@ -181,6 +185,7 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 			"sender_user_id": user["id"],
 			"parent_id": new_typeid("msg"),
 		},
+		headers=headers,
 	)
 	assert invalid_parent.status_code == 404
 	assert invalid_parent.json()["detail"] == "Parent message not found"
@@ -189,6 +194,7 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 	b_msg_resp = await client.post(
 		f"/v1/chats/{chat_b}/messages",
 		json={"content": "hello", "type": "user", "sender_user_id": user["id"]},
+		headers=headers,
 	)
 	assert b_msg_resp.status_code == 201
 	b_msg = b_msg_resp.json()
@@ -197,6 +203,7 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 	cross_switch = await client.post(
 		f"/v1/chats/{chat_a}/switch",
 		json={"message_id": b_msg["id"]},
+		headers=headers,
 	)
 	assert cross_switch.status_code == 404
 	assert cross_switch.json()["detail"] == "Message not found"
@@ -220,6 +227,7 @@ async def test_get_current_branch_handles_missing_current_message_gracefully(
 	await db_session.commit()
 	await db_session.refresh(user)
 	user_id = cast(TypeID, user.id)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 
 	thread = Thread(owner_id=user_id, title="branch miss")
 	db_session.add(thread)
@@ -235,6 +243,7 @@ async def test_get_current_branch_handles_missing_current_message_gracefully(
 			sender_user_id=user_id,
 		),
 		db_session,
+		principal=principal,
 	)
 	assert thread.current_message_id == msg.id
 
@@ -246,5 +255,9 @@ async def test_get_current_branch_handles_missing_current_message_gracefully(
 		return await original_get(entity, ident, **kwargs)
 
 	monkeypatch.setattr(db_session, "get", fake_get)
-	branch = await thread_service.get_current_branch(thread_id, db_session)
+	branch = await thread_service.get_current_branch(
+		thread_id,
+		db_session,
+		principal=principal,
+	)
 	assert branch == []

@@ -6,31 +6,16 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.acl import AccessControlEntry
+from api.models.acl import AccessControlEntry, AccessRole
 from api.models.agent import Agent
 from api.models.group import Group
-from api.models.project import Project
-from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.acl import AccessControlEntryCreate
-
-
-async def _ensure_thread_exists(thread_id: str, session: AsyncSession) -> None:
-	thread = await session.get(Thread, thread_id)
-	if thread is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Thread not found",
-		)
-
-
-async def _ensure_project_exists(project_id: str, session: AsyncSession) -> None:
-	project = await session.get(Project, project_id)
-	if project is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Project not found",
-		)
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import (
+	require_project_access,
+	require_thread_access,
+)
 
 
 async def _ensure_principal_exists(
@@ -115,16 +100,30 @@ async def _list_by_project(
 async def list_thread_acl(
 	thread_id: str,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> list[AccessControlEntry]:
-	await _ensure_thread_exists(thread_id, session)
+	await require_thread_access(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.ADMIN,
+	)
 	return await _list_by_thread(thread_id, session)
 
 
 async def list_project_acl(
 	project_id: str,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> list[AccessControlEntry]:
-	await _ensure_project_exists(project_id, session)
+	await require_project_access(
+		project_id,
+		session,
+		principal,
+		required_role=AccessRole.ADMIN,
+	)
 	return await _list_by_project(project_id, session)
 
 
@@ -132,8 +131,15 @@ async def set_thread_acl(
 	thread_id: str,
 	entries: list[AccessControlEntryCreate],
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> list[AccessControlEntry]:
-	await _ensure_thread_exists(thread_id, session)
+	await require_thread_access(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.ADMIN,
+	)
 	existing = await _list_by_thread(thread_id, session)
 
 	existing_by_key = {_ace_key(ace): ace for ace in existing}
@@ -175,8 +181,15 @@ async def set_project_acl(
 	project_id: str,
 	entries: list[AccessControlEntryCreate],
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> list[AccessControlEntry]:
-	await _ensure_project_exists(project_id, session)
+	await require_project_access(
+		project_id,
+		session,
+		principal,
+		required_role=AccessRole.ADMIN,
+	)
 	existing = await _list_by_project(project_id, session)
 
 	existing_by_key = {_ace_key(ace): ace for ace in existing}

@@ -10,30 +10,31 @@ from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
-async def test_acl_list_set_update_remove(client: AsyncClient) -> None:
-	user_payload = {
-		"email": "acl-user@example.com",
-		"password": "password",
-		"display_name": "acl user",
-	}
-	user_resp = await client.post("/v1/users", json=user_payload)
-	assert user_resp.status_code == 201
-	user = user_resp.json()
+async def test_acl_list_set_update_remove(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "acl thread"},
+		headers=headers,
 	)
 	assert thread_resp.status_code == 201
 	thread = thread_resp.json()
 
-	list_resp = await client.get(f"/v1/threads/{thread['id']}/acl")
+	list_resp = await client.get(f"/v1/threads/{thread['id']}/acl", headers=headers)
 	assert list_resp.status_code == 200
 	assert list_resp.json() == []
 
 	set_resp = await client.put(
 		f"/v1/threads/{thread['id']}/acl",
 		json=[{"user_id": user["id"], "role": "viewer"}],
+		headers=headers,
 	)
 	assert set_resp.status_code == 200
 	entries = set_resp.json()
@@ -45,33 +46,42 @@ async def test_acl_list_set_update_remove(client: AsyncClient) -> None:
 	update_resp = await client.put(
 		f"/v1/threads/{thread['id']}/acl",
 		json=[{"user_id": user["id"], "role": "editor"}],
+		headers=headers,
 	)
 	assert update_resp.status_code == 200
 	entries = update_resp.json()
 	assert len(entries) == 1
 	assert entries[0]["role"] == "editor"
 
-	remove_resp = await client.put(f"/v1/threads/{thread['id']}/acl", json=[])
+	remove_resp = await client.put(
+		f"/v1/threads/{thread['id']}/acl",
+		json=[],
+		headers=headers,
+	)
 	assert remove_resp.status_code == 200
 	assert remove_resp.json() == []
 
 
 @pytest.mark.asyncio
-async def test_acl_validation_requires_one_principal(client: AsyncClient) -> None:
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-validate@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+async def test_acl_validation_requires_one_principal(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "acl validate"},
+		headers=headers,
 	)
 	thread = thread_resp.json()
 
 	resp = await client.put(
 		f"/v1/threads/{thread['id']}/acl",
 		json=[{"role": "viewer"}],
+		headers=headers,
 	)
 	assert resp.status_code == 422
 
@@ -84,41 +94,49 @@ async def test_acl_validation_requires_one_principal(client: AsyncClient) -> Non
 				"role": "viewer",
 			}
 		],
+		headers=headers,
 	)
 	assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_acl_rejects_unknown_principal(client: AsyncClient) -> None:
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-unknown@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+async def test_acl_rejects_unknown_principal(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "acl unknown"},
+		headers=headers,
 	)
 	thread = thread_resp.json()
 
 	resp = await client.put(
 		f"/v1/threads/{thread['id']}/acl",
 		json=[{"user_id": new_typeid("user"), "role": "viewer"}],
+		headers=headers,
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "User not found"
 
 
 @pytest.mark.asyncio
-async def test_acl_rejects_duplicate_principals(client: AsyncClient) -> None:
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-dupe@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+async def test_acl_rejects_duplicate_principals(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "acl dupe"},
+		headers=headers,
 	)
 	thread = thread_resp.json()
 
@@ -128,14 +146,23 @@ async def test_acl_rejects_duplicate_principals(client: AsyncClient) -> None:
 			{"user_id": user["id"], "role": "viewer"},
 			{"user_id": user["id"], "role": "editor"},
 		],
+		headers=headers,
 	)
 	assert resp.status_code == 422
 	assert resp.json()["detail"] == "Duplicate principal entries are not allowed"
 
 
 @pytest.mark.asyncio
-async def test_thread_acl_not_found_returns_404(client: AsyncClient) -> None:
-	resp = await client.get(f"/v1/threads/{new_typeid('thread')}/acl")
+async def test_thread_acl_not_found_returns_404(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	resp = await client.get(
+		f"/v1/threads/{new_typeid('thread')}/acl",
+		headers=headers,
+	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Thread not found"
 
@@ -144,16 +171,16 @@ async def test_thread_acl_not_found_returns_404(client: AsyncClient) -> None:
 async def test_project_acl_list_set_with_group_and_agent(
 	client: AsyncClient,
 	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	from api.models.agent import Agent
 	from api.models.group import Group
 	from api.models.project import Project
 
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-proj@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	project = Project(name="acl project", description=None, owner_id=user["id"])
 	db_session.add(project)
@@ -170,7 +197,7 @@ async def test_project_acl_list_set_with_group_and_agent(
 	await db_session.refresh(group)
 	await db_session.refresh(agent)
 
-	list_resp = await client.get(f"/v1/projects/{project.id}/acl")
+	list_resp = await client.get(f"/v1/projects/{project.id}/acl", headers=headers)
 	assert list_resp.status_code == 200
 	assert list_resp.json() == []
 
@@ -180,6 +207,7 @@ async def test_project_acl_list_set_with_group_and_agent(
 			{"group_id": group.id, "role": "viewer"},
 			{"agent_id": agent.id, "role": "admin"},
 		],
+		headers=headers,
 	)
 	assert set_resp.status_code == 200
 	entries = set_resp.json()
@@ -193,6 +221,7 @@ async def test_project_acl_list_set_with_group_and_agent(
 			{"group_id": group.id, "role": "editor"},
 			{"agent_id": agent.id, "role": "viewer"},
 		],
+		headers=headers,
 	)
 	assert update_resp.status_code == 200
 	entries = update_resp.json()
@@ -204,14 +233,14 @@ async def test_project_acl_list_set_with_group_and_agent(
 async def test_project_acl_rejects_unknown_group(
 	client: AsyncClient,
 	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	from api.models.project import Project
 
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-proj-unknown@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	project = Project(
 		name="unknown group project",
@@ -225,6 +254,7 @@ async def test_project_acl_rejects_unknown_group(
 	resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
 		json=[{"group_id": new_typeid("group"), "role": "viewer"}],
+		headers=headers,
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Group not found"
@@ -234,14 +264,14 @@ async def test_project_acl_rejects_unknown_group(
 async def test_project_acl_rejects_unknown_agent(
 	client: AsyncClient,
 	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	from api.models.project import Project
 
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-proj-unknown-agent@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	project = Project(
 		name="unknown agent project",
@@ -255,6 +285,7 @@ async def test_project_acl_rejects_unknown_agent(
 	resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
 		json=[{"agent_id": new_typeid("agent"), "role": "viewer"}],
+		headers=headers,
 	)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Agent not found"
@@ -264,15 +295,15 @@ async def test_project_acl_rejects_unknown_agent(
 async def test_project_acl_set_update_remove(
 	client: AsyncClient,
 	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	from api.models.group import Group
 	from api.models.project import Project
 
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-proj-update@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	project = Project(name="acl update project", description=None, owner_id=user["id"])
 	group = Group(name="acl update group", description=None, owner_id=user["id"])
@@ -284,6 +315,7 @@ async def test_project_acl_set_update_remove(
 	set_resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
 		json=[{"group_id": group.id, "role": "viewer"}],
+		headers=headers,
 	)
 	assert set_resp.status_code == 200
 	entries = set_resp.json()
@@ -294,6 +326,7 @@ async def test_project_acl_set_update_remove(
 	update_resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
 		json=[{"group_id": group.id, "role": "editor"}],
+		headers=headers,
 	)
 	assert update_resp.status_code == 200
 	entries = update_resp.json()
@@ -303,6 +336,7 @@ async def test_project_acl_set_update_remove(
 	remove_resp = await client.put(
 		f"/v1/projects/{project.id}/acl",
 		json=[],
+		headers=headers,
 	)
 	assert remove_resp.status_code == 200
 	assert remove_resp.json() == []
@@ -312,15 +346,15 @@ async def test_project_acl_set_update_remove(
 async def test_project_acl_rejects_duplicate_principals(
 	client: AsyncClient,
 	db_session: AsyncSession,
+	user_auth: dict[str, object],
 ) -> None:
 	from api.models.group import Group
 	from api.models.project import Project
 
-	user_resp = await client.post(
-		"/v1/users",
-		json={"email": "acl-proj-dupe@example.com", "password": "password"},
-	)
-	user = user_resp.json()
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
 
 	project = Project(name="acl dupe project", description=None, owner_id=user["id"])
 	group = Group(name="acl dupe group", description=None, owner_id=user["id"])
@@ -335,6 +369,7 @@ async def test_project_acl_rejects_duplicate_principals(
 			{"group_id": group.id, "role": "viewer"},
 			{"group_id": group.id, "role": "admin"},
 		],
+		headers=headers,
 	)
 	assert resp.status_code == 422
 	assert resp.json()["detail"] == "Duplicate principal entries are not allowed"
@@ -364,7 +399,12 @@ async def test_acl_service_rejects_missing_principal(db_session: AsyncSession) -
 
 
 @pytest.mark.asyncio
-async def test_project_acl_not_found_returns_404(client: AsyncClient) -> None:
-	resp = await client.get(f"/v1/projects/{new_typeid('proj')}/acl")
+async def test_project_acl_not_found_returns_404(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	resp = await client.get(f"/v1/projects/{new_typeid('proj')}/acl", headers=headers)
 	assert resp.status_code == 404
 	assert resp.json()["detail"] == "Project not found"
