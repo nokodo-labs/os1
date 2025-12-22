@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING, Literal, overload
 
 
 if TYPE_CHECKING:
-	from nokodo_ai.message import Message
+	from nokodo_ai.message import AssistantMessage, Message
+	from nokodo_ai.tool import Tool
+
+from nokodo_ai.types.json import JSONObject
 
 
 class BaseChatAdapter(ABC):
@@ -27,7 +30,12 @@ class BaseChatAdapter(ABC):
 		messages: list[Message],
 		*,
 		stream: Literal[False] = False,
-	) -> Awaitable[Message]: ...
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> Awaitable[AssistantMessage]: ...
 
 	@overload
 	def generate(
@@ -35,7 +43,12 @@ class BaseChatAdapter(ABC):
 		messages: list[Message],
 		*,
 		stream: Literal[True],
-	) -> AsyncIterator[Message]: ...
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> AsyncIterator[AssistantMessage]: ...
 
 	@abstractmethod
 	def generate(
@@ -43,7 +56,12 @@ class BaseChatAdapter(ABC):
 		messages: list[Message],
 		*,
 		stream: bool = False,
-	) -> Awaitable[Message] | AsyncIterator[Message]:
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		"""generate a response.
 
 		usage:

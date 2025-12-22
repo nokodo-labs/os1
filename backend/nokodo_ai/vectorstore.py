@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from nokodo_ai.adapters.vectorstore import BaseVectorstoreAdapter, SearchResult
+from nokodo_ai.types.json import JSONObject
 
 
 class Vectorstore:
@@ -34,7 +35,7 @@ class Vectorstore:
 		ids: list[str],
 		embeddings: list[list[float]],
 		contents: list[str],
-		metadata: list[dict[str, object]] | None = None,
+		metadata: list[JSONObject] | None = None,
 	) -> None:
 		"""add documents with their embeddings to the store.
 

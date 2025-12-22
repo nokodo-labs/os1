@@ -2,17 +2,40 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Awaitable
 from typing import TYPE_CHECKING, Literal, overload
+
+import openai
 
 from nokodo_ai.adapters.chat import BaseChatAdapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.types import (
 	OpenAIEasyInputMessageParam,
+	OpenAIResponseFunctionCallOutput,
+	OpenAIResponseFunctionToolCall,
+	OpenAIResponseFunctionToolCallParam,
+	OpenAIResponseFunctionToolParam,
+	OpenAIResponseInputItemParam,
 	OpenAIResponseInputParam,
+	OpenAIResponseTextConfigParam,
 	OpenAIResponseTextDeltaEvent,
+	OpenAIResponseTextJSONSchemaConfigParam,
+	OpenAIResponseToolChoice,
 )
-from nokodo_ai.message import AssistantMessage, SystemMessage, ToolMessage, UserMessage
+from nokodo_ai.message import (
+	AssistantMessage,
+	ContentPart,
+	JsonContent,
+	SystemMessage,
+	TextContent,
+	ToolCall,
+	ToolMessage,
+	Usage,
+	UserMessage,
+)
+from nokodo_ai.tool import Tool
+from nokodo_ai.types.json import JSONObject
 
 
 if TYPE_CHECKING:
@@ -50,7 +73,12 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		*,
 		stream: Literal[False] = False,
-	) -> Awaitable[Message]: ...
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> Awaitable[AssistantMessage]: ...
 
 	@overload
 	def generate(
@@ -58,44 +86,162 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		*,
 		stream: Literal[True],
-	) -> AsyncIterator[Message]: ...
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> AsyncIterator[AssistantMessage]: ...
 
 	def generate(
 		self,
 		messages: list[Message],
 		*,
 		stream: bool = False,
-	) -> Awaitable[Message] | AsyncIterator[Message]:
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		if stream:
-			return self._stream(messages)
-		return self._complete(messages)
+			return self._generate_streaming(
+				messages,
+				tools=tools,
+				tool_choice=tool_choice,
+				response_model=response_model,
+				temperature=temperature,
+				max_tokens=max_tokens,
+			)
+		return self._generate_once(
+			messages,
+			tools=tools,
+			tool_choice=tool_choice,
+			response_model=response_model,
+			temperature=temperature,
+			max_tokens=max_tokens,
+		)
 
-	async def _complete(self, messages: list[Message]) -> Message:
+	async def _generate_once(
+		self,
+		messages: list[Message],
+		*,
+		tools: list[Tool] | None,
+		tool_choice: Literal["auto", "none", "required"] | str | None,
+		response_model: JSONObject | None,
+		temperature: float | None,
+		max_tokens: int | None,
+	) -> AssistantMessage:
 		"""generate a completion using /v1/responses."""
+		input_items = _messages_to_openai_responses_input(messages)
+
+		openai_tools = openai.omit
+		openai_tool_choice = openai.omit
+		if tools:
+			openai_tools = _tools_to_openai_responses(tools)
+			if tool_choice is not None:
+				openai_tool_choice = _tool_choice_to_openai_responses(tool_choice)
+
+		text = openai.omit
+		if response_model:
+			text = OpenAIResponseTextConfigParam(
+				format=OpenAIResponseTextJSONSchemaConfigParam(
+					type="json_schema",
+					name="response",
+					strict=True,
+					schema=dict[str, object](response_model),
+				)
+			)
+
+		openai_temperature = temperature if temperature is not None else openai.omit
+		openai_max_output_tokens = max_tokens if max_tokens is not None else openai.omit
+
 		response = await self.client.responses.create(
 			model=self.model,
-			input=_messages_to_openai_responses_input(messages),
+			input=input_items,
+			max_output_tokens=openai_max_output_tokens,
+			temperature=openai_temperature,
+			text=text,
+			tool_choice=openai_tool_choice,
+			tools=openai_tools,
 		)
-		return AssistantMessage(content=response.output_text or "")
 
-	async def _stream(self, messages: list[Message]) -> AsyncIterator[Message]:
+		tool_calls: list[ToolCall] = []
+		for item in response.output:
+			if not isinstance(item, OpenAIResponseFunctionToolCall):
+				continue
+			args, metadata = _try_parse_tool_arguments(item.arguments)
+			tool_calls.append(
+				ToolCall(
+					id=item.call_id,
+					name=item.name,
+					arguments=args,
+					metadata=metadata,
+				)
+			)
+
+		content: list[ContentPart] = []
+		if response_model and response.output_text:
+			try:
+				content.append(JsonContent(data=json.loads(response.output_text)))
+			except json.JSONDecodeError:
+				content.append(TextContent(text=response.output_text))
+		elif response.output_text:
+			content.append(TextContent(text=response.output_text))
+
+		usage: Usage | None = None
+		if response.usage:
+			usage = Usage(
+				input_tokens=response.usage.input_tokens,
+				output_tokens=response.usage.output_tokens,
+				total_tokens=response.usage.total_tokens,
+			)
+
+		return AssistantMessage(content=content, tool_calls=tool_calls, usage=usage)
+
+	async def _generate_streaming(
+		self,
+		messages: list[Message],
+		*,
+		tools: list[Tool] | None,
+		tool_choice: Literal["auto", "none", "required"] | str | None,
+		response_model: JSONObject | None,
+		temperature: float | None,
+		max_tokens: int | None,
+	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/responses."""
+		input_items = _messages_to_openai_responses_input(messages)
+
+		openai_tools = openai.omit
+		openai_tool_choice = openai.omit
+		if tools:
+			openai_tools = _tools_to_openai_responses(tools)
+			if tool_choice is not None:
+				openai_tool_choice = _tool_choice_to_openai_responses(tool_choice)
+
+		openai_temperature = temperature if temperature is not None else openai.omit
+		openai_max_output_tokens = max_tokens if max_tokens is not None else openai.omit
+
 		stream = await self.client.responses.create(
 			model=self.model,
-			input=_messages_to_openai_responses_input(messages),
+			input=input_items,
 			stream=True,
+			max_output_tokens=openai_max_output_tokens,
+			temperature=openai_temperature,
+			tool_choice=openai_tool_choice,
+			tools=openai_tools,
 		)
 		async for event in stream:
 			if isinstance(event, OpenAIResponseTextDeltaEvent):
 				if event.delta:
-					yield AssistantMessage(content=event.delta)
+					yield AssistantMessage(content=[TextContent(text=event.delta)])
 
 
 def _messages_to_openai_responses_input(
 	messages: list[Message],
 ) -> OpenAIResponseInputParam:
-	"""convert SDK messages into OpenAI Responses 'easy' message inputs."""
-	openai_messages: OpenAIResponseInputParam = []
+	"""convert SDK messages into OpenAI Responses input items."""
+	openai_messages: list[OpenAIResponseInputItemParam] = []
 	for message in messages:
 		match message:
 			case UserMessage():
@@ -103,7 +249,7 @@ def _messages_to_openai_responses_input(
 					OpenAIEasyInputMessageParam(
 						type="message",
 						role="user",
-						content=message.content,
+						content=message.text,
 					)
 				)
 			case SystemMessage():
@@ -111,30 +257,87 @@ def _messages_to_openai_responses_input(
 					OpenAIEasyInputMessageParam(
 						type="message",
 						role="system",
-						content=message.content,
+						content=message.text,
 					)
 				)
 			case AssistantMessage():
-				openai_messages.append(
-					OpenAIEasyInputMessageParam(
-						type="message",
-						role="assistant",
-						content=message.content,
-					)
-				)
-			case ToolMessage():
-				tool_text = "\n".join(
-					f"{tool_result.tool_call_id}: {tool_result.content}"
-					for tool_result in message.tool_results
-				)
-				if tool_text:
+				if message.text:
 					openai_messages.append(
 						OpenAIEasyInputMessageParam(
 							type="message",
 							role="assistant",
-							content=f"tool output:\n{tool_text}",
+							content=message.text,
 						)
 					)
+				if message.tool_calls:
+					for tool_call in message.tool_calls:
+						openai_messages.append(
+							OpenAIResponseFunctionToolCallParam(
+								type="function_call",
+								call_id=tool_call.id,
+								name=tool_call.name,
+								arguments=json.dumps(tool_call.arguments),
+							)
+						)
+			case ToolMessage():
+				openai_messages.append(
+					OpenAIResponseFunctionCallOutput(
+						type="function_call_output",
+						call_id=message.tool_result.tool_call_id,
+						output=message.tool_result.output,
+					)
+				)
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
 	return openai_messages
+
+
+def _try_parse_tool_arguments(raw: str) -> tuple[JSONObject, JSONObject | None]:
+	try:
+		parsed = json.loads(raw)
+	except json.JSONDecodeError as e:
+		return (
+			{},
+			{"arguments_parse_error": str(e), "raw_arguments": raw},
+		)
+
+	if not isinstance(parsed, dict):
+		return (
+			{},
+			{
+				"arguments_parse_error": "tool arguments were not a json object",
+				"raw_arguments": raw,
+			},
+		)
+
+	args: JSONObject = {}
+	for key, value in parsed.items():
+		if isinstance(key, str):
+			args[key] = value
+		else:
+			args[str(key)] = value
+
+	return (args, None)
+
+
+def _tools_to_openai_responses(
+	tools: list[Tool],
+) -> list[OpenAIResponseFunctionToolParam]:
+	result: list[OpenAIResponseFunctionToolParam] = []
+	for t in tools:
+		result.append(
+			{
+				"type": "function",
+				"name": t.name,
+				"description": t.description,
+				"strict": True,
+				"parameters": dict[str, object](t.parameters),
+			}
+		)
+	return result
+
+
+def _tool_choice_to_openai_responses(tool_choice: str) -> OpenAIResponseToolChoice:
+	if tool_choice in ("auto", "none", "required"):
+		return tool_choice
+	return {"type": "function", "name": tool_choice}

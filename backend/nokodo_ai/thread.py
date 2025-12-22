@@ -8,6 +8,7 @@ from pydantic import Field
 
 from nokodo_ai.base import Base
 from nokodo_ai.message import Message
+from nokodo_ai.types.json import JSONObject
 
 
 class Thread(Base):
@@ -17,8 +18,9 @@ class Thread(Base):
 	the API layer handles persistence and mapping to ORM.
 	"""
 
-	created_at: datetime = Field(default_factory=lambda: datetime.now(UTC)) 
+	created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 	messages: list[Message] = Field(default_factory=list)
+	metadata: JSONObject | None = None
 
 	def add(self, message: Message) -> None:
 		"""append a message to the thread."""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from anthropic import AsyncAnthropic
+
 from nokodo_ai.adapters.base import BaseAdapter
 
 
@@ -29,4 +31,20 @@ class BaseAnthropicAdapter(BaseAdapter):
 		self.api_key = api_key
 		self.timeout = timeout
 		# client will be lazily initialized when needed
-		self._client = None
+		self._client: AsyncAnthropic | None = None
+
+	def _get_client(self) -> AsyncAnthropic:
+		"""get (or create) an AsyncAnthropic client."""
+		if self._client is None:
+			if self.api_key is None:
+				self._client = AsyncAnthropic(timeout=self.timeout)
+			else:
+				self._client = AsyncAnthropic(
+					api_key=self.api_key, timeout=self.timeout
+				)
+		return self._client
+
+	@property
+	def client(self) -> AsyncAnthropic:
+		"""get the AsyncAnthropic client."""
+		return self._get_client()

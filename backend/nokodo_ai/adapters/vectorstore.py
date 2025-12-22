@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from nokodo_ai.types.json import JSONObject
+
 
 @dataclass
 class SearchResult:
@@ -13,7 +15,7 @@ class SearchResult:
 	id: str
 	content: str
 	score: float
-	metadata: dict[str, object] | None = None
+	metadata: JSONObject | None = None
 
 
 class BaseVectorstoreAdapter(ABC):
@@ -31,7 +33,7 @@ class BaseVectorstoreAdapter(ABC):
 		ids: list[str],
 		embeddings: list[list[float]],
 		contents: list[str],
-		metadata: list[dict[str, object]] | None = None,
+		metadata: list[JSONObject] | None = None,
 	) -> None:
 		"""add documents with their embeddings to the store.
 

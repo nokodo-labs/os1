@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable
-from typing import Literal, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from nokodo_ai.adapters.chat import BaseChatAdapter
 from nokodo_ai.message import AssistantMessage, Message
+from nokodo_ai.types.json import JSONObject
+
+
+if TYPE_CHECKING:
+	from nokodo_ai.thread import Thread
+	from nokodo_ai.tool import Tool
 
 
 DEFAULT_PROVIDER = "openai"
 
 
-class LLM:
+class ChatModel:
 	"""high-level unified interface for LLM chat models.
 
 	usage (defaults):
-		llm = LLM("gpt-4o")  # uses default provider and adapter
+		llm = ChatModel("gpt-4o")  # uses default provider and adapter
 		response = await llm.generate(messages)
 
 		async for chunk in llm.generate(messages, stream=True):
@@ -25,7 +31,36 @@ class LLM:
 	usage (explicit adapter):
 		from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 		adapter = OpenAIResponsesAdapter(api_key="...")
-		llm = LLM("openai:gpt-4o", adapter=adapter)
+		llm = ChatModel("openai:gpt-4o", adapter=adapter)
+
+	usage (with tools):
+		from nokodo_ai import tool
+
+		@tool(
+			description="get weather for a city",
+			parameters={
+				"type": "object",
+				"properties": {"city": {"type": "string"}},
+				"required": ["city"],
+			},
+		)
+		def get_weather(city: str) -> str:
+			return f"sunny in {city}"
+
+		response = await llm.generate(
+			thread,
+			tools=[get_weather],
+			tool_choice="auto",
+		)
+
+	usage (structured output):
+		schema = {
+			"type": "object",
+			"properties": {"name": {"type": "string"}},
+			"required": ["name"],
+		}
+		response = await llm.generate(messages, response_model=schema)
+		data = response.json  # parsed JSON data
 	"""
 
 	def __init__(
@@ -34,7 +69,7 @@ class LLM:
 		*,
 		adapter: BaseChatAdapter | None = None,
 	) -> None:
-		"""initialize LLM interface.
+		"""initialize ChatModel interface.
 
 		args:
 			model: model identifier with optional provider and adapter type
@@ -102,48 +137,83 @@ class LLM:
 	@overload
 	def generate(
 		self,
-		messages: list[Message],
+		input: list[Message] | Thread,
 		*,
 		stream: Literal[False] = False,
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
 	@overload
 	def generate(
 		self,
-		messages: list[Message],
+		input: list[Message] | Thread,
 		*,
 		stream: Literal[True],
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
 	def generate(
 		self,
-		messages: list[Message],
+		input: list[Message] | Thread,
 		*,
 		stream: bool = False,
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		"""generate an assistant response.
+
+		args:
+			input: list of messages or a Thread to generate from
+			stream: whether to stream the response
+			tools: list of tools the model can call
+			tool_choice: how to select tools - "auto", "none", "required",
+				or a specific tool name
+			response_model: JSON Schema for structured output
+			temperature: sampling temperature
+			max_tokens: maximum tokens to generate
 
 		usage:
 			response = await llm.generate(messages)
 			async for chunk in llm.generate(messages, stream=True):
 				...
 		"""
+		# convert Thread to list of messages
+		from nokodo_ai.thread import Thread
+
+		messages: list[Message]
+		if isinstance(input, Thread):
+			messages = input.messages
+		else:
+			messages = input
+
+		adapter_tool_choice = tool_choice if tools else None
 		if stream:
-			return self._generate_stream(messages)
-		return self._generate_single(messages)
-
-	async def _generate_single(self, messages: list[Message]) -> AssistantMessage:
-		result = await self._adapter.generate(messages)
-		if isinstance(result, AssistantMessage):
-			return result
-		return AssistantMessage(content=str(result))
-
-	async def _generate_stream(
-		self,
-		messages: list[Message],
-	) -> AsyncIterator[AssistantMessage]:
-		async for chunk in self._adapter.generate(messages, stream=True):
-			if isinstance(chunk, AssistantMessage):
-				yield chunk
-			else:
-				yield AssistantMessage(content=str(chunk))
+			return self._adapter.generate(
+				messages,
+				stream=True,
+				tools=tools,
+				tool_choice=adapter_tool_choice,
+				response_model=response_model,
+				temperature=temperature,
+				max_tokens=max_tokens,
+			)
+		return self._adapter.generate(
+			messages,
+			stream=False,
+			tools=tools,
+			tool_choice=adapter_tool_choice,
+			response_model=response_model,
+			temperature=temperature,
+			max_tokens=max_tokens,
+		)

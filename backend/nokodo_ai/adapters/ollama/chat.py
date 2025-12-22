@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING, Literal, overload
 
 from nokodo_ai.adapters.chat import BaseChatAdapter
 from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
+from nokodo_ai.types.json import JSONObject
 
 
 if TYPE_CHECKING:
-	from nokodo_ai.message import Message
+	from nokodo_ai.message import AssistantMessage, Message
+	from nokodo_ai.tool import Tool
 
 
 class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
@@ -39,7 +41,12 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 		messages: list[Message],
 		*,
 		stream: Literal[False] = False,
-	) -> Awaitable[Message]: ...
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> Awaitable[AssistantMessage]: ...
 
 	@overload
 	def generate(
@@ -47,22 +54,34 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 		messages: list[Message],
 		*,
 		stream: Literal[True],
-	) -> AsyncIterator[Message]: ...
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> AsyncIterator[AssistantMessage]: ...
 
 	def generate(
 		self,
 		messages: list[Message],
 		*,
 		stream: bool = False,
-	) -> Awaitable[Message] | AsyncIterator[Message]:
+		tools: list[Tool] | None = None,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		response_model: JSONObject | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		# options not yet implemented for ollama adapter
+		_ = (tools, tool_choice, response_model, temperature, max_tokens)
 		if stream:
 			return self._stream(messages)
 		return self._complete(messages)
 
-	async def _complete(self, messages: list[Message]) -> Message:
+	async def _complete(self, messages: list[Message]) -> AssistantMessage:
 		"""generate a completion using ollama chat API."""
 		raise NotImplementedError("ollama chat adapter not yet implemented")
 
-	async def _stream(self, messages: list[Message]) -> AsyncIterator[Message]:
+	async def _stream(self, messages: list[Message]) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using ollama chat API."""
 		raise NotImplementedError("ollama chat adapter not yet implemented")
