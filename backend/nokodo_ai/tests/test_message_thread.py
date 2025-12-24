@@ -1,7 +1,11 @@
 """tests for SDK message and thread models."""
 
+import pytest
+
 from nokodo_ai import (
 	AssistantMessage,
+	JsonContent,
+	RefusalContent,
 	SystemMessage,
 	TextContent,
 	Thread,
@@ -10,6 +14,7 @@ from nokodo_ai import (
 	ToolResult,
 	UserMessage,
 )
+from nokodo_ai.message import _HasTextContentHelpers
 
 
 def test_user_message_creation() -> None:
@@ -65,3 +70,32 @@ def test_thread_add_messages() -> None:
 	thread.add(UserMessage.from_text("hello"))
 	thread.add(AssistantMessage.from_text("hi"))
 	assert len(thread.messages) == 2
+
+
+def test_assistant_json_and_refusal_helpers() -> None:
+	msg = AssistantMessage(
+		content=[
+			JsonContent(data={"foo": "bar"}),
+			RefusalContent(reason="nope"),
+		],
+	)
+	assert msg.json == {"foo": "bar"}
+	assert msg.refusal == "nope"
+
+	plain = AssistantMessage.from_text("hi")
+	assert plain.json is None
+	assert plain.refusal is None
+
+
+def test_text_content_helpers_raise() -> None:
+	class Dummy(_HasTextContentHelpers):
+		"""dummy helper implementation"""
+
+		pass
+
+	dummy = Dummy()
+	with pytest.raises(NotImplementedError):
+		Dummy.from_text("x")
+
+	with pytest.raises(NotImplementedError):
+		_ = dummy.text

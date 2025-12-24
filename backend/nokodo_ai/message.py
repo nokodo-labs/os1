@@ -35,19 +35,27 @@ class JsonContent(BaseContentPart):
 	data: JSONObject | None = None
 
 
-class ImageContent(BaseContentPart):
-	"""image content part."""
+class FileContent(BaseContentPart):
+	"""file attachment content part.
 
-	type: Literal["image"] = "image"
+	the sdk uses url/base64 for execution. for api/orm persistence,
+	store file references in metadata["file_id"].
+	"""
+
+	type: Literal["file"] = "file"
 	url: str | None = None
 	base64: str | None = None
+	filename: str | None = None
 	media_type: str | None = None
 
 
-class FileContent(BaseContentPart):
-	"""file attachment content part."""
+class ImageContent(BaseContentPart):
+	"""image content part.
 
-	type: Literal["file"] = "file"
+	this mirrors FileContent fields but uses a distinct content type.
+	"""
+
+	type: Literal["image"] = "image"
 	url: str | None = None
 	base64: str | None = None
 	filename: str | None = None

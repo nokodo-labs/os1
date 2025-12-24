@@ -1,4 +1,4 @@
-"""LLM high-level interface - unified access to chat models."""
+"""llm high-level interface - unified access to chat models."""
 
 from __future__ import annotations
 
@@ -68,6 +68,8 @@ class ChatModel:
 		model: str = "",
 		*,
 		adapter: BaseChatAdapter | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
 	) -> None:
 		"""initialize ChatModel interface.
 
@@ -76,7 +78,12 @@ class ChatModel:
 				prefix: [provider[.api]:]model (e.g., "gpt-4o",
 				"openai:gpt-4o", "openai.responses:gpt-4o")
 			adapter: explicit adapter instance (overrides model string)
+			temperature: default sampling temperature for generations
+			max_tokens: default max tokens for generations
 		"""
+		self.temperature = temperature
+		self.max_tokens = max_tokens
+
 		if adapter is not None:
 			self.model = model
 			self._adapter = adapter
@@ -198,6 +205,10 @@ class ChatModel:
 			messages = input
 
 		adapter_tool_choice = tool_choice if tools else None
+		# per-call overrides instance defaults
+		effective_temp = temperature if temperature is not None else self.temperature
+		effective_max = max_tokens if max_tokens is not None else self.max_tokens
+
 		if stream:
 			return self._adapter.generate(
 				messages,
@@ -205,8 +216,8 @@ class ChatModel:
 				tools=tools,
 				tool_choice=adapter_tool_choice,
 				response_model=response_model,
-				temperature=temperature,
-				max_tokens=max_tokens,
+				temperature=effective_temp,
+				max_tokens=effective_max,
 			)
 		return self._adapter.generate(
 			messages,
@@ -214,6 +225,6 @@ class ChatModel:
 			tools=tools,
 			tool_choice=adapter_tool_choice,
 			response_model=response_model,
-			temperature=temperature,
-			max_tokens=max_tokens,
+			temperature=effective_temp,
+			max_tokens=effective_max,
 		)

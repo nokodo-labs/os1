@@ -8,6 +8,9 @@ from authlib.jose import JoseError
 from nokodo_ai.utils.security import (
 	create_jwt_token,
 	decode_jwt_token,
+	decrypt_string,
+	encrypt_string,
+	get_fernet_key,
 	hash_password,
 	verify_password,
 )
@@ -54,3 +57,23 @@ def test_jwt_decode_invalid_algorithm() -> None:
 	# Try to decode allowing only HS512
 	with pytest.raises(JoseError, match="unexpected_alg"):
 		decode_jwt_token(token, secret_key=secret, algorithms=["HS512"])
+
+
+def test_encrypt_and_decrypt_string_roundtrip() -> None:
+	"""Strings should round-trip through Fernet encryption."""
+	secret = "unit-test-fernet"
+	plain = "sensitive-data"
+	cipher = encrypt_string(plain, secret)
+	assert cipher != plain
+	assert decrypt_string(cipher, secret) == plain
+
+
+def test_get_fernet_key_is_stable_and_valid_length() -> None:
+	"""Derived keys should be deterministic and URL-safe length for Fernet."""
+	key1 = get_fernet_key("shared-secret")
+	key2 = get_fernet_key("shared-secret")
+	assert key1 == key2
+	assert len(key1) == 44
+	allowed = set(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=")
+	assert set(key1) <= allowed
+	assert key1.endswith(b"=")

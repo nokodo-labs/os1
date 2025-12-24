@@ -3,7 +3,11 @@ from __future__ import annotations
 import re
 import secrets
 import time
-from typing import Final
+from typing import Any, Final
+
+from pydantic import GetCoreSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import core_schema as pydantic_core_schema
 
 
 TYPEID_SEPARATOR: Final[str] = "_"
@@ -153,3 +157,42 @@ def assert_typeid(value: str, *, prefix: str | None = None) -> str:
 			raise ValueError("invalid typeid")
 		raise ValueError(f"invalid typeid: expected prefix '{prefix}'")
 	return value
+
+
+class TypeID(str):
+	"""Validated TypeID string with Pydantic integration."""
+
+	@classmethod
+	def __get_pydantic_core_schema__(
+		cls,
+		source_type: Any,
+		handler: GetCoreSchemaHandler,
+	) -> pydantic_core_schema.CoreSchema:
+		return pydantic_core_schema.no_info_after_validator_function(
+			cls._validate,
+			pydantic_core_schema.str_schema(max_length=typeid_max_length()),
+		)
+
+	@classmethod
+	def __get_pydantic_json_schema__(
+		cls,
+		_core_schema: pydantic_core_schema.CoreSchema,
+		handler: Any,
+	) -> JsonSchemaValue:
+		schema = handler(_core_schema)
+		schema.update(
+			{
+				"pattern": (
+					r"^(?:[a-z](?:[a-z_]{0,61}[a-z])?_)?"
+					r"[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$"
+				),
+				"examples": ["user_01h5fskfsk4fpeqwnsyz5hj55t"],
+			}
+		)
+		return schema
+
+	@classmethod
+	def _validate(cls, value: str) -> TypeID:
+		if not is_typeid(value):
+			raise ValueError("invalid typeid")
+		return cls(value)

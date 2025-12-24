@@ -1,8 +1,19 @@
 """tests for SDK high-level interfaces."""
 
+from collections.abc import AsyncIterator
+
 import pytest
 
-from nokodo_ai import ChatModel, EmbeddingModel
+from nokodo_ai import (
+	AssistantMessage,
+	ChatModel,
+	EmbeddingModel,
+	Thread,
+	UserMessage,
+	tool,
+)
+from nokodo_ai.adapters.chat import BaseChatAdapter
+from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
 
 
 def test_llm_requires_model() -> None:
@@ -74,3 +85,174 @@ def test_embedding_resolves_ollama() -> None:
 def test_embedding_unknown_provider_raises() -> None:
 	with pytest.raises(ValueError, match="unknown embedding provider"):
 		EmbeddingModel("unknownprovider:model")
+
+
+class _StubChatAdapter(BaseChatAdapter):
+	def __init__(
+		self,
+		response: AssistantMessage,
+		*,
+		stream_chunks: list[AssistantMessage] | None = None,
+	) -> None:
+		self.response = response
+		self.stream_chunks = stream_chunks or []
+		self.calls: list[dict[str, object]] = []
+
+	def generate(
+		self,
+		messages: list[UserMessage],
+		*,
+		stream: bool = False,
+		tools=None,
+		tool_choice="auto",
+		response_model=None,
+		temperature=None,
+		max_tokens=None,
+	) -> AssistantMessage | AsyncIterator[AssistantMessage]:
+		call = {
+			"messages": messages,
+			"stream": stream,
+			"tools": tools,
+			"tool_choice": tool_choice,
+			"response_model": response_model,
+			"temperature": temperature,
+			"max_tokens": max_tokens,
+		}
+		self.calls.append(call)
+		if stream:
+
+			async def _gen() -> AsyncIterator[AssistantMessage]:
+				for chunk in self.stream_chunks:
+					yield chunk
+
+			return _gen()
+
+		async def _resp() -> AssistantMessage:
+			return self.response
+
+		return _resp()
+
+
+class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
+	def __init__(self) -> None:
+		self.seen: list[list[str]] = []
+
+	async def embed(self, texts: list[str]) -> list[list[float]]:
+		self.seen.append(texts)
+		return [[float(len(t))] for t in texts]
+
+
+@pytest.mark.asyncio
+async def test_chat_model_generate_with_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
+	llm = ChatModel(model="stub", adapter=adapter)
+	thread = Thread()
+	thread.add(UserMessage.from_text("hi"))
+
+	result = await llm.generate(thread, tool_choice="auto")
+
+	assert result.text == "ok"
+	call = adapter.calls[-1]
+	assert call["messages"] == thread.messages
+	assert call["tool_choice"] is None
+	assert call["stream"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_model_streaming_with_tools() -> None:
+	adapter = _StubChatAdapter(
+		AssistantMessage.from_text("unused"),
+		stream_chunks=[
+			AssistantMessage.from_text("c1"),
+			AssistantMessage.from_text("c2"),
+		],
+	)
+	llm = ChatModel(model="stub", adapter=adapter)
+
+	@tool(description="noop")
+	def noop() -> str:
+		return "ok"
+
+	chunks = [
+		chunk
+		async for chunk in llm.generate(
+			[UserMessage.from_text("hi")],
+			stream=True,
+			tools=[noop],
+			tool_choice="auto",
+		)
+	]
+
+	assert [c.text for c in chunks] == ["c1", "c2"]
+	call = adapter.calls[-1]
+	assert call["stream"] is True
+	assert call["tool_choice"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_chat_model_resolves_default_provider(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	adapter = _StubChatAdapter(AssistantMessage.from_text("resolved"))
+
+	def fake_get_chat_adapter(variant: str | None, model: str):
+		assert variant is None
+		assert model == "gpt-4o"
+		return adapter
+
+	monkeypatch.setattr(
+		"nokodo_ai.adapters.openai.get_chat_adapter", fake_get_chat_adapter
+	)
+	llm = ChatModel("gpt-4o")
+
+	result = await llm.generate([UserMessage.from_text("hi")])
+	assert result.text == "resolved"
+
+
+@pytest.mark.asyncio
+async def test_embedding_uses_provided_adapter() -> None:
+	adapter = _StubEmbeddingAdapter()
+	embedder = EmbeddingModel(model="custom", adapter=adapter)
+	result = await embedder.embed(["a", "bc"])
+
+	assert result == [[1.0], [2.0]]
+	assert adapter.seen[-1] == ["a", "bc"]
+
+
+@pytest.mark.asyncio
+async def test_embedding_resolves_default_provider(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	adapter = _StubEmbeddingAdapter()
+
+	def fake_get_embedding_adapter(variant: str | None, model: str):
+		assert variant is None
+		assert model == "text-embedding-3-small"
+		return adapter
+
+	monkeypatch.setattr(
+		"nokodo_ai.adapters.openai.get_embedding_adapter", fake_get_embedding_adapter
+	)
+	embedder = EmbeddingModel("text-embedding-3-small")
+
+	result = await embedder.embed(["hi"])
+	assert result == [[2.0]]
+
+
+@pytest.mark.asyncio
+async def test_embedding_variant_is_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
+	adapter = _StubEmbeddingAdapter()
+	seen: list[tuple[str | None, str]] = []
+
+	def fake_get_embedding_adapter(variant: str | None, model: str):
+		seen.append((variant, model))
+		return adapter
+
+	monkeypatch.setattr(
+		"nokodo_ai.adapters.openai.get_embedding_adapter", fake_get_embedding_adapter
+	)
+	embedder = EmbeddingModel("openai.beta:text-embedding-3-large")
+
+	result = await embedder.embed(["hi"])
+	assert result == [[2.0]]
+	assert seen == [("beta", "text-embedding-3-large")]

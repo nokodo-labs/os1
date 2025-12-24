@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from api.typeid import TypeID
 from nokodo_ai.utils import typeid
+from nokodo_ai.utils.typeid import TypeID
 
 
 class _Model(BaseModel):
