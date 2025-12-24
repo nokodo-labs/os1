@@ -18,7 +18,6 @@ from api.schemas.agent import AgentCreate
 from api.schemas.message import MessageCreate
 from api.schemas.task import TaskUpdate
 from api.schemas.user import UserCreate
-from api.typeid import TypeID
 from api.v1.service import (
 	agents,
 	authorization,
@@ -30,7 +29,7 @@ from api.v1.service import (
 )
 from api.v1.service.auth import Principal, authenticate_user, get_current_active_user
 from nokodo_ai.utils.security import hash_password
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _user(is_admin: bool = False, *, active: bool = True) -> User:

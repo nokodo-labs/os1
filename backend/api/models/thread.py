@@ -22,7 +22,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:

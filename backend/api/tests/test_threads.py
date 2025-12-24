@@ -15,10 +15,9 @@ from api.models.project import Project
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.typeid import TypeID
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest.mark.asyncio
@@ -143,7 +142,8 @@ async def test_thread_messages(
 	)
 	assert msg_resp.status_code == 201
 	msg = msg_resp.json()
-	assert msg["content"] == "Hello AI"
+	# Content is now a list of content parts
+	assert msg["content"] == [{"type": "text", "text": "Hello AI", "metadata": None}]
 	assert msg["type"] == "user"
 
 	# List messages

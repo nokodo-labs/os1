@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
 from api.models.mixins import TypeIDPrimaryKeyMixin
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:

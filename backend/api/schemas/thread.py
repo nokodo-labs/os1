@@ -11,7 +11,7 @@ from api.schemas.common import MetadataModel, ORMModel
 from api.schemas.message import Message
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.user import User
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 def _populate_project_ids(data: Any) -> Any:
@@ -87,3 +87,16 @@ class Thread(ThreadBase, ORMModel):
 	@classmethod
 	def _ensure_project_ids(cls, data: Any) -> Any:
 		return _populate_project_ids(data)
+
+
+class ThreadSwitchRequest(ORMModel):
+	"""Payload to switch a thread's active branch."""
+
+	message_id: TypeID
+
+
+class ThreadSwitchResponse(ORMModel):
+	"""Response for a thread branch switch."""
+
+	ok: bool
+	current_message_id: TypeID | None = None

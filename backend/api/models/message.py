@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -14,7 +14,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -70,10 +70,12 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		StringEnum(MessageType),
 		default=MessageType.USER,
 	)
-	content: Mapped[str] = mapped_column(Text())
-	attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+	# Ordered list of content parts (TextContent, ImageContent, etc.)
+	# Each part is a dict with "type" discriminator matching api.schemas.content
+	content: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
-	token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+	# Token usage from LLM response (matches SDK Usage model)
+	usage: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 	read_by: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 	__mapper_args__ = {

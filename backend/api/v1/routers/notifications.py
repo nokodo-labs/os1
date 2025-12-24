@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.models.notification import Notification
 from api.schemas.notification import Notification as NotificationSchema
-from api.typeid import TypeID
 from api.v1.service import notifications as notification_service
 from api.v1.service.auth import Principal, get_current_principal
+from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])

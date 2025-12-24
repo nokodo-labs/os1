@@ -8,11 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.event import Event, EventScope
 from api.models.notification import Notification
 from api.schemas.user import UserCreate
-from api.typeid import TypeID
 from api.v1.service import notifications as notification_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest.fixture

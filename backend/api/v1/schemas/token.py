@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class Token(BaseModel):

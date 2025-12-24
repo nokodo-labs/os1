@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class ProjectBase(MetadataModel):

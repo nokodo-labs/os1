@@ -9,8 +9,7 @@ from sqlalchemy import JSON, DateTime, String, func
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from api.models.base import TYPEID_LENGTH
-from api.typeid import TypeID
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 class TypeIDPrimaryKeyMixin:

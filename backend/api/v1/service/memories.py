@@ -9,8 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate
-from api.typeid import TypeID
 from api.v1.service.auth import Principal
+from nokodo_ai.utils.typeid import TypeID
 
 
 async def _get_memory(

@@ -9,9 +9,9 @@ from api.core.database import get_db
 from api.models.memory import Memory
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import MemoryCreate
-from api.typeid import TypeID
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
+from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/memories", tags=["memories"])

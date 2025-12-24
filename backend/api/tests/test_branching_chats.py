@@ -12,10 +12,9 @@ from api.models.message import Message, MessageType
 from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
-from api.typeid import TypeID
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest.mark.asyncio
@@ -34,16 +33,16 @@ async def test_branching_chat_endpoints_support_forks(
 		headers=headers,
 	)
 	assert thread_resp.status_code == 201
-	chat_id = thread_resp.json()["id"]
+	thread_id = thread_resp.json()["id"]
 
 	# empty chats return an empty branch
-	empty_branch = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
+	empty_branch = await client.get(f"/v1/threads/{thread_id}/branch", headers=headers)
 	assert empty_branch.status_code == 200
 	assert empty_branch.json() == []
 
 	# root user message
 	m1_resp = await client.post(
-		f"/v1/chats/{chat_id}/messages",
+		f"/v1/threads/{thread_id}/messages",
 		json={"content": "hello", "type": "user", "sender_user_id": user["id"]},
 		headers=headers,
 	)
@@ -52,13 +51,13 @@ async def test_branching_chat_endpoints_support_forks(
 	assert m1["parent_id"] is None
 
 	# single-node branch (current leaf is the root)
-	root_branch = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
+	root_branch = await client.get(f"/v1/threads/{thread_id}/branch", headers=headers)
 	assert root_branch.status_code == 200
 	assert [m["id"] for m in root_branch.json()] == [m1["id"]]
 
 	# assistant reply (defaults to parent=current head)
 	m2_resp = await client.post(
-		f"/v1/chats/{chat_id}/messages",
+		f"/v1/threads/{thread_id}/messages",
 		json={"content": "hi there", "type": "assistant"},
 		headers=headers,
 	)
@@ -68,7 +67,7 @@ async def test_branching_chat_endpoints_support_forks(
 
 	# fork: alternate assistant reply from the same parent
 	m3_resp = await client.post(
-		f"/v1/chats/{chat_id}/messages",
+		f"/v1/threads/{thread_id}/messages",
 		json={"content": "alt reply", "type": "assistant", "parent_id": m1["id"]},
 		headers=headers,
 	)
@@ -77,14 +76,14 @@ async def test_branching_chat_endpoints_support_forks(
 	assert m3["parent_id"] == m1["id"]
 
 	# current branch should follow the latest leaf (m3)
-	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
+	branch_resp = await client.get(f"/v1/threads/{thread_id}/branch", headers=headers)
 	assert branch_resp.status_code == 200
 	branch = branch_resp.json()
 	assert [m["id"] for m in branch] == [m1["id"], m3["id"]]
 
 	# append to current leaf without specifying parent_id
 	m4_resp = await client.post(
-		f"/v1/chats/{chat_id}/messages",
+		f"/v1/threads/{thread_id}/messages",
 		json={"content": "follow-up", "type": "user", "sender_user_id": user["id"]},
 		headers=headers,
 	)
@@ -92,19 +91,19 @@ async def test_branching_chat_endpoints_support_forks(
 	m4 = m4_resp.json()
 	assert m4["parent_id"] == m3["id"]
 
-	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
+	branch_resp = await client.get(f"/v1/threads/{thread_id}/branch", headers=headers)
 	branch = branch_resp.json()
 	assert [m["id"] for m in branch] == [m1["id"], m3["id"], m4["id"]]
 
 	# tree should include all messages
-	tree_resp = await client.get(f"/v1/chats/{chat_id}/tree", headers=headers)
+	tree_resp = await client.get(f"/v1/threads/{thread_id}/tree", headers=headers)
 	assert tree_resp.status_code == 200
 	tree = tree_resp.json()
 	assert {m["id"] for m in tree} == {m1["id"], m2["id"], m3["id"], m4["id"]}
 
 	# switch to the other branch (m2)
 	switch_resp = await client.post(
-		f"/v1/chats/{chat_id}/switch",
+		f"/v1/threads/{thread_id}/switch",
 		json={"message_id": m2["id"]},
 		headers=headers,
 	)
@@ -113,12 +112,12 @@ async def test_branching_chat_endpoints_support_forks(
 	assert payload["ok"] is True
 	assert payload["current_message_id"] == m2["id"]
 
-	branch_resp = await client.get(f"/v1/chats/{chat_id}/messages", headers=headers)
+	branch_resp = await client.get(f"/v1/threads/{thread_id}/branch", headers=headers)
 	assert [m["id"] for m in branch_resp.json()] == [m1["id"], m2["id"]]
 
 	# switching to the root should pick the deepest leaf in its subtree
 	deep_switch = await client.post(
-		f"/v1/chats/{chat_id}/switch",
+		f"/v1/threads/{thread_id}/switch",
 		json={"message_id": m1["id"]},
 		headers=headers,
 	)
@@ -142,10 +141,10 @@ async def test_chat_switch_rejects_unknown_message(
 		headers=headers,
 	)
 	assert thread_resp.status_code == 201
-	chat_id = thread_resp.json()["id"]
+	thread_id = thread_resp.json()["id"]
 
 	resp = await client.post(
-		f"/v1/chats/{chat_id}/switch",
+		f"/v1/threads/{thread_id}/switch",
 		json={"message_id": new_typeid("msg")},
 		headers=headers,
 	)
@@ -173,12 +172,12 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 		json={"owner_id": user["id"], "title": "b"},
 		headers=headers,
 	)
-	chat_a = thread_a.json()["id"]
-	chat_b = thread_b.json()["id"]
+	thread_a_id = thread_a.json()["id"]
+	thread_b_id = thread_b.json()["id"]
 
 	# invalid parent id should 404
 	invalid_parent = await client.post(
-		f"/v1/chats/{chat_a}/messages",
+		f"/v1/threads/{thread_a_id}/messages",
 		json={
 			"content": "orphan",
 			"type": "user",
@@ -192,7 +191,7 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 
 	# create a message in chat_b
 	b_msg_resp = await client.post(
-		f"/v1/chats/{chat_b}/messages",
+		f"/v1/threads/{thread_b_id}/messages",
 		json={"content": "hello", "type": "user", "sender_user_id": user["id"]},
 		headers=headers,
 	)
@@ -201,7 +200,7 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 
 	# switching chat_a to a message from chat_b should 404
 	cross_switch = await client.post(
-		f"/v1/chats/{chat_a}/switch",
+		f"/v1/threads/{thread_a_id}/switch",
 		json={"message_id": b_msg["id"]},
 		headers=headers,
 	)

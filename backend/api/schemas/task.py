@@ -7,7 +7,7 @@ from typing import Any
 
 from api.models.task import TaskStatus, TaskType
 from api.schemas.common import MetadataModel
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class TaskBase(MetadataModel):

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from api.schemas.common import ORMModel
 from api.schemas.event import Event
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class NotificationBase(ORMModel):

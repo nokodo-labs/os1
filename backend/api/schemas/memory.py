@@ -6,7 +6,7 @@ from datetime import datetime
 
 from api.schemas.common import MetadataModel
 from api.schemas.user import User
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class MemoryBase(MetadataModel):

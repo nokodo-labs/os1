@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.acl import AccessRole
+from api.models.agent import Agent
 from api.models.message import (
 	AssistantMessage,
 	Message,
@@ -23,13 +24,17 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.typeid import TypeID
+from api.v1.service import llm_runtime
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	project_access_predicate,
 	require_thread_access,
 	thread_access_predicate,
 )
+from nokodo_ai.agent import Agent as SDKAgent
+from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.thread import Thread as SDKThread
+from nokodo_ai.utils.typeid import TypeID
 
 
 async def _load_thread(
@@ -402,3 +407,92 @@ async def create_message(
 	await session.commit()
 	await session.refresh(message)
 	return message
+
+
+async def run_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	agent_id: TypeID | None = None,
+	model_id: TypeID | None = None,
+	model: str | None = None,
+	input: str | None = None,
+	temperature: float | None = None,
+	max_tokens: int | None = None,
+) -> tuple[Message | None, list[Message]]:
+	"""run a thread and persist the messages produced by the sdk.
+
+	this is intentionally thin: model/provider selection and adapter selection are
+	delegated to the sdk via a model string.
+	"""
+	user_message: Message | None = None
+	if input is not None and input.strip() != "":
+		user_message = await create_message(
+			thread_id,
+			MessageCreate(content=input),
+			session,
+			principal=principal,
+		)
+
+	branch = await get_current_branch(thread_id, session, principal=principal)
+	sdk_messages = llm_runtime.build_sdk_messages_from_branch(branch)
+
+	model_string = await llm_runtime.resolve_model_string_for_run(
+		session,
+		agent_id=agent_id,
+		model_id=model_id,
+		model=model,
+	)
+
+	# llm config lives in the ChatModel
+	llm = ChatModel(model_string, temperature=temperature, max_tokens=max_tokens)
+
+	produced_sdk_messages: list[llm_runtime.SDKMessage] = []
+	if agent_id is not None:
+		agent = await session.get(Agent, agent_id)
+		if agent is None:
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="Agent not found",
+			)
+
+		# system prompt goes into the thread, not the agent
+		if agent.system_prompt:
+			sdk_messages.insert(
+				0, llm_runtime.system_prompt_message(agent.system_prompt)
+			)
+
+		max_iterations = 10
+		cfg = agent.config or {}
+		if isinstance(cfg.get("max_iterations"), int):
+			max_iterations = int(cfg["max_iterations"])
+
+		sdk_agent = SDKAgent(
+			llm=llm,
+			tools=None,
+			max_iterations=max_iterations,
+		)
+		sdk_thread = SDKThread(messages=sdk_messages)
+		result = await sdk_agent.run(sdk_thread, tool_choice="auto")
+		produced_sdk_messages = list(result)  # type: ignore[arg-type]
+	else:
+		assistant = await llm.generate(sdk_messages, stream=False)
+		produced_sdk_messages = [assistant]
+
+	created: list[Message] = []
+	for sdk_msg in produced_sdk_messages:
+		create_in = llm_runtime.sdk_message_to_orm_create(
+			sdk_msg,
+			sender_agent_id=agent_id,
+		)
+		created.append(
+			await create_message(
+				thread_id,
+				create_in,
+				session,
+				principal=principal,
+			)
+		)
+
+	return user_message, created

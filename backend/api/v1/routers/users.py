@@ -7,9 +7,9 @@ from api.core.database import get_db
 from api.models.user import User
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
-from api.typeid import TypeID
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal, get_current_principal, get_optional_user
+from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/users", tags=["users"])

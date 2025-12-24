@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class UserBase(BaseModel):

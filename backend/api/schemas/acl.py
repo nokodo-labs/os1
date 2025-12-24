@@ -7,7 +7,7 @@ from pydantic_core import PydanticCustomError
 
 from api.models.acl import AccessRole
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
-from api.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID
 
 
 class AccessControlEntryCreate(MetadataModel):

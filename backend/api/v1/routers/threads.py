@@ -13,12 +13,20 @@ from api.schemas.acl import AccessControlEntry as AccessControlEntrySchema
 from api.schemas.acl import AccessControlEntryCreate
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
-from api.schemas.thread import Thread as ThreadSchema
-from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.typeid import TypeID
+from api.schemas.runs import ThreadRunRequest, ThreadRunResponse
+from api.schemas.thread import (
+	Thread as ThreadSchema,
+)
+from api.schemas.thread import (
+	ThreadCreate,
+	ThreadSwitchRequest,
+	ThreadSwitchResponse,
+	ThreadUpdate,
+)
 from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
+from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/threads", tags=["threads"])
@@ -96,6 +104,26 @@ async def list_messages(
 	)
 
 
+@router.get("/{thread_id}/branch", response_model=list[MessageSchema])
+async def get_current_branch(
+	thread_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[Message]:
+	"""Return the current root→leaf branch for this thread."""
+	return await thread_service.get_current_branch(thread_id, db, principal=principal)
+
+
+@router.get("/{thread_id}/tree", response_model=list[MessageSchema])
+async def get_message_tree(
+	thread_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[Message]:
+	"""Return all messages for this thread as a flat list."""
+	return await thread_service.list_message_tree(thread_id, db, principal=principal)
+
+
 @router.post(
 	"/{thread_id}/messages",
 	response_model=MessageSchema,
@@ -114,6 +142,52 @@ async def create_message(
 		db,
 		principal=principal,
 	)
+
+
+@router.post("/{thread_id}/run", response_model=ThreadRunResponse)
+async def run_thread(
+	thread_id: TypeID,
+	req: ThreadRunRequest,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> ThreadRunResponse:
+	"""run a thread and persist all messages produced by the sdk."""
+	user_message, created = await thread_service.run_thread(
+		thread_id,
+		db,
+		principal=principal,
+		agent_id=req.agent_id,
+		model_id=req.model_id,
+		model=req.model,
+		input=req.input,
+		temperature=req.temperature,
+		max_tokens=req.max_tokens,
+	)
+
+	return ThreadRunResponse(
+		thread_id=thread_id,
+		user_message=MessageSchema.model_validate(user_message)
+		if user_message is not None
+		else None,
+		messages=[MessageSchema.model_validate(m) for m in created],
+	)
+
+
+@router.post("/{thread_id}/switch", response_model=ThreadSwitchResponse)
+async def switch_branch(
+	thread_id: TypeID,
+	req: ThreadSwitchRequest,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> ThreadSwitchResponse:
+	"""Switch the active branch to the subtree rooted at message_id."""
+	thread = await thread_service.switch_branch(
+		thread_id,
+		req.message_id,
+		db,
+		principal=principal,
+	)
+	return ThreadSwitchResponse(ok=True, current_message_id=thread.current_message_id)
 
 
 @router.get("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])

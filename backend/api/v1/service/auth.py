@@ -85,7 +85,7 @@ async def _user_from_token(token: str, session: AsyncSession) -> User:
 		user_id = payload.get("sub")
 		if user_id is None:
 			raise credentials_exception
-		token_data = TokenPayload(sub=str(user_id))
+		token_data = TokenPayload(sub=user_id)
 	except JoseError:
 		raise credentials_exception
 

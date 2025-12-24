@@ -318,11 +318,10 @@ def upgrade() -> None:
 		sa.Column("sender_agent_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("sender_user_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column("type", sa.String(), nullable=False),
-		sa.Column("content", sa.Text(), nullable=False),
+		sa.Column("content", sa.JSON(), nullable=False),
 		sa.Column("parent_id", sa.String(length=TYPEID_LENGTH), nullable=True),
-		sa.Column("attachments", sa.JSON(), nullable=False),
 		sa.Column("tool_calls", sa.JSON(), nullable=False),
-		sa.Column("token_usage", sa.JSON(), nullable=True),
+		sa.Column("usage", sa.JSON(), nullable=True),
 		sa.Column("read_by", sa.JSON(), nullable=False),
 		sa.Column(
 			"created_at",
