@@ -97,7 +97,7 @@ export interface paths {
         };
         /**
          * Read User
-         * @description Get user by ID (future permissions will restrict visibility).
+         * @description Get user by ID.
          */
         get: operations["read_user_users__user_id__get"];
         put?: never;
@@ -174,6 +174,86 @@ export interface paths {
          * @description Append a message to a thread.
          */
         post: operations["create_message_threads__thread_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/{thread_id}/branch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Current Branch
+         * @description Return the current root→leaf branch for this thread.
+         */
+        get: operations["get_current_branch_threads__thread_id__branch_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/{thread_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Message Tree
+         * @description Return all messages for this thread as a flat list.
+         */
+        get: operations["get_message_tree_threads__thread_id__tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/{thread_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Thread
+         * @description run a thread and persist all messages produced by the sdk.
+         */
+        post: operations["run_thread_threads__thread_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/{thread_id}/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch Branch
+         * @description Switch the active branch to the subtree rooted at message_id.
+         */
+        post: operations["switch_branch_threads__thread_id__switch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -544,6 +624,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/openai/chat/completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat Completions */
+        post: operations["chat_completions_openai_chat_completions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -793,7 +890,78 @@ export interface components {
          * @description Domain scopes for events.
          * @enum {string}
          */
-        EventScope: "system" | "user" | "thread" | "message" | "task" | "project";
+        EventScope: "system" | "user" | "thread" | "message" | "task" | "project" | "file";
+        /**
+         * FileContent
+         * @description file attachment content.
+         *
+         *     for ORM storage: metadata["file_id"] is set, url/base64 may be null
+         *     for SDK execution: url or base64 must be populated (resolved from file_id)
+         *     for external files: url is set, no file_id in metadata
+         */
+        FileContent: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "file";
+            /** Url */
+            url?: string | null;
+            /** Base64 */
+            base64?: string | null;
+            /** Filename */
+            filename?: string | null;
+            /** Media Type */
+            media_type?: string | null;
+        };
+        /**
+         * ImageContent
+         * @description image content part.
+         *
+         *     this mirrors FileContent fields but uses a distinct content type.
+         */
+        ImageContent: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "image";
+            /** Url */
+            url?: string | null;
+            /** Base64 */
+            base64?: string | null;
+            /** Filename */
+            filename?: string | null;
+            /** Media Type */
+            media_type?: string | null;
+        };
+        /**
+         * JsonContent
+         * @description structured JSON content (for structured outputs).
+         */
+        JsonContent: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "json";
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /**
          * Memory
          * @description Response schema.
@@ -872,17 +1040,13 @@ export interface components {
             /** @default user */
             type: components["schemas"]["MessageType"];
             /** Content */
-            content: string;
-            /** Attachments */
-            attachments?: {
-                [key: string]: unknown;
-            }[];
+            content?: (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
             /** Tool Calls */
             tool_calls?: {
                 [key: string]: unknown;
             }[];
-            /** Token Usage */
-            token_usage?: {
+            /** Usage */
+            usage?: {
                 [key: string]: unknown;
             } | null;
             /** Read By */
@@ -897,6 +1061,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             thread_id: string;
+            /** Parent Id */
+            parent_id?: string | null;
             /** Task Id */
             task_id?: string | null;
             /** Sender Agent Id */
@@ -917,6 +1083,10 @@ export interface components {
         /**
          * MessageCreate
          * @description Payload for creating a message within a thread.
+         *
+         *     Content can be provided as:
+         *     - A string (converted to [TextContent(text=...)])
+         *     - A list of content part dicts or ContentPart objects
          */
         MessageCreate: {
             /** Metadata */
@@ -925,22 +1095,25 @@ export interface components {
             };
             /** @default user */
             type: components["schemas"]["MessageType"];
-            /** Content */
-            content: string;
-            /** Attachments */
-            attachments?: {
+            /**
+             * Content
+             * @default
+             */
+            content: string | ({
                 [key: string]: unknown;
-            }[];
+            } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
             /** Tool Calls */
             tool_calls?: {
                 [key: string]: unknown;
             }[];
-            /** Token Usage */
-            token_usage?: {
+            /** Usage */
+            usage?: {
                 [key: string]: unknown;
             } | null;
             /** Read By */
             read_by?: string[];
+            /** Parent Id */
+            parent_id?: string | null;
             /** Task Id */
             task_id?: string | null;
             /** Sender Agent Id */
@@ -1115,6 +1288,86 @@ export interface components {
              */
             updated_at: string;
             event?: components["schemas"]["Event"] | null;
+        };
+        /** OpenAIChatCompletionChoice */
+        OpenAIChatCompletionChoice: {
+            /**
+             * Index
+             * @default 0
+             */
+            index: number;
+            message: components["schemas"]["OpenAIChatCompletionResponseMessage"];
+            /**
+             * Finish Reason
+             * @default stop
+             */
+            finish_reason: string | null;
+        };
+        /** OpenAIChatCompletionRequest */
+        OpenAIChatCompletionRequest: {
+            /** Model */
+            model: string;
+            /** Messages */
+            messages: components["schemas"]["OpenAIChatMessage"][];
+            /** Temperature */
+            temperature?: number | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
+        };
+        /** OpenAIChatCompletionResponse */
+        OpenAIChatCompletionResponse: {
+            /**
+             * Id
+             * @default chatcmpl
+             */
+            id: string;
+            /**
+             * Object
+             * @default chat.completion
+             */
+            object: string;
+            /** Created */
+            created?: number;
+            /** Model */
+            model: string;
+            /** Choices */
+            choices: components["schemas"]["OpenAIChatCompletionChoice"][];
+            usage?: components["schemas"]["OpenAIChatCompletionUsage"];
+        };
+        /** OpenAIChatCompletionResponseMessage */
+        OpenAIChatCompletionResponseMessage: {
+            /**
+             * Role
+             * @default assistant
+             */
+            role: string;
+            /** Content */
+            content: string;
+        };
+        /** OpenAIChatCompletionUsage */
+        OpenAIChatCompletionUsage: {
+            /**
+             * Prompt Tokens
+             * @default 0
+             */
+            prompt_tokens: number;
+            /**
+             * Completion Tokens
+             * @default 0
+             */
+            completion_tokens: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /** OpenAIChatMessage */
+        OpenAIChatMessage: {
+            /** Role */
+            role: string;
+            /** Content */
+            content: string;
         };
         /**
          * ProblemDetails
@@ -1317,6 +1570,26 @@ export interface components {
             last_synced_at?: string | null;
         };
         /**
+         * RefusalContent
+         * @description refusal content (when model refuses to respond).
+         */
+        RefusalContent: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "refusal";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /**
          * RuntimeConfigOut
          * @description Runtime configuration values safe for clients.
          */
@@ -1439,6 +1712,26 @@ export interface components {
             } | null;
         };
         /**
+         * TextContent
+         * @description plain text content.
+         */
+        TextContent: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "text";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
          * Thread
          * @description Detailed response schema.
          */
@@ -1468,6 +1761,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Current Message Id */
+            current_message_id?: string | null;
             /**
              * Last Activity At
              * Format: date-time
@@ -1514,6 +1809,67 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+        };
+        /**
+         * ThreadRunRequest
+         * @description Payload to run a thread, optionally appending a new user message.
+         */
+        ThreadRunRequest: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Input */
+            input?: string | null;
+            /** Temperature */
+            temperature?: number | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
+        };
+        /**
+         * ThreadRunResponse
+         * @description response containing all messages produced by a run.
+         *
+         *     an agent run can produce multiple messages:
+         *     - assistant message with tool calls
+         *     - tool result messages
+         *     - more assistant messages
+         *     - ... repeat until final assistant message
+         *
+         *     the messages list contains all new messages produced during the run.
+         */
+        ThreadRunResponse: {
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            user_message?: components["schemas"]["Message"] | null;
+            /** Messages */
+            messages: components["schemas"]["Message"][];
+        };
+        /**
+         * ThreadSwitchRequest
+         * @description Payload to switch a thread's active branch.
+         */
+        ThreadSwitchRequest: {
+            /**
+             * Message Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            message_id: string;
+        };
+        /**
+         * ThreadSwitchResponse
+         * @description Response for a thread branch switch.
+         */
+        ThreadSwitchResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Current Message Id */
+            current_message_id?: string | null;
         };
         /**
          * ThreadUpdate
@@ -2777,6 +3133,390 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_current_branch_threads__thread_id__branch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_message_tree_threads__thread_id__tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    run_thread_threads__thread_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadRunResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    switch_branch_threads__thread_id__switch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadSwitchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSwitchResponse"];
                 };
             };
             /** @description bad request */
@@ -5352,6 +6092,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Agent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    chat_completions_openai_chat_completions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenAIChatCompletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenAIChatCompletionResponse"];
                 };
             };
             /** @description bad request */

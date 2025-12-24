@@ -3,6 +3,11 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Domain scopes for events.
+ * plain text content.
  */
-export type EventScope = 'system' | 'user' | 'thread' | 'message' | 'task' | 'project' | 'file';
+export type TextContent = {
+    metadata?: (Record<string, any> | null);
+    type?: string;
+    text?: string;
+};
+

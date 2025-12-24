@@ -68,7 +68,7 @@ export class UsersService {
     }
     /**
      * Read User
-     * Get user by ID (future permissions will restrict visibility).
+     * Get user by ID.
      * @param userId
      * @returns User Successful Response
      * @throws ApiError

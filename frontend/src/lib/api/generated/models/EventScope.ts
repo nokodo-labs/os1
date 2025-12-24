@@ -5,4 +5,4 @@
 /**
  * Domain scopes for events.
  */
-export type EventScope = 'system' | 'user' | 'thread' | 'message' | 'task' | 'project';
+export type EventScope = 'system' | 'user' | 'thread' | 'message' | 'task' | 'project' | 'file';

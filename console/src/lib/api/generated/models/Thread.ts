@@ -16,6 +16,7 @@ export type Thread = {
     project_ids?: Array<string>;
     id: string;
     owner_id: string;
+    current_message_id?: (string | null);
     last_activity_at: string;
     created_at: string;
     updated_at: string;

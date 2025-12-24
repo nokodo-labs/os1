@@ -3,6 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Domain scopes for events.
+ * Response for a thread branch switch.
  */
-export type EventScope = 'system' | 'user' | 'thread' | 'message' | 'task' | 'project' | 'file';
+export type ThreadSwitchResponse = {
+    ok: boolean;
+    current_message_id?: (string | null);
+};
+

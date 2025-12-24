@@ -3,6 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Domain scopes for events.
+ * Payload to switch a thread's active branch.
  */
-export type EventScope = 'system' | 'user' | 'thread' | 'message' | 'task' | 'project' | 'file';
+export type ThreadSwitchRequest = {
+    message_id: string;
+};
+

@@ -5,15 +5,19 @@
 import type { MessageType } from './MessageType';
 /**
  * Payload for creating a message within a thread.
+ *
+ * Content can be provided as:
+ * - A string (converted to [TextContent(text=...)])
+ * - A list of content part dicts or ContentPart objects
  */
 export type MessageCreate = {
     metadata_?: Record<string, any>;
     type?: MessageType;
-    content: string;
-    attachments?: Array<Record<string, any>>;
+    content?: string;
     tool_calls?: Array<Record<string, any>>;
-    token_usage?: (Record<string, any> | null);
+    usage?: (Record<string, any> | null);
     read_by?: Array<string>;
+    parent_id?: (string | null);
     task_id?: (string | null);
     sender_agent_id?: (string | null);
     sender_user_id?: (string | null);

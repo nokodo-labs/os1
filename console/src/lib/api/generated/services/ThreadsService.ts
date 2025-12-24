@@ -8,6 +8,10 @@ import type { Message } from '../models/Message';
 import type { MessageCreate } from '../models/MessageCreate';
 import type { Thread } from '../models/Thread';
 import type { ThreadCreate } from '../models/ThreadCreate';
+import type { ThreadRunRequest } from '../models/ThreadRunRequest';
+import type { ThreadRunResponse } from '../models/ThreadRunResponse';
+import type { ThreadSwitchRequest } from '../models/ThreadSwitchRequest';
+import type { ThreadSwitchResponse } from '../models/ThreadSwitchResponse';
 import type { ThreadUpdate } from '../models/ThreadUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -185,6 +189,126 @@ export class ThreadsService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/threads/{thread_id}/messages',
+            path: {
+                'thread_id': threadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Get Current Branch
+     * Return the current root→leaf branch for this thread.
+     * @param threadId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static getCurrentBranchThreadsThreadIdBranchGet(
+        threadId: string,
+    ): CancelablePromise<Array<Message>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/threads/{thread_id}/branch',
+            path: {
+                'thread_id': threadId,
+            },
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Get Message Tree
+     * Return all messages for this thread as a flat list.
+     * @param threadId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static getMessageTreeThreadsThreadIdTreeGet(
+        threadId: string,
+    ): CancelablePromise<Array<Message>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/threads/{thread_id}/tree',
+            path: {
+                'thread_id': threadId,
+            },
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Run Thread
+     * run a thread and persist all messages produced by the sdk.
+     * @param threadId
+     * @param requestBody
+     * @returns ThreadRunResponse Successful Response
+     * @throws ApiError
+     */
+    public static runThreadThreadsThreadIdRunPost(
+        threadId: string,
+        requestBody: ThreadRunRequest,
+    ): CancelablePromise<ThreadRunResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/threads/{thread_id}/run',
+            path: {
+                'thread_id': threadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Switch Branch
+     * Switch the active branch to the subtree rooted at message_id.
+     * @param threadId
+     * @param requestBody
+     * @returns ThreadSwitchResponse Successful Response
+     * @throws ApiError
+     */
+    public static switchBranchThreadsThreadIdSwitchPost(
+        threadId: string,
+        requestBody: ThreadSwitchRequest,
+    ): CancelablePromise<ThreadSwitchResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/threads/{thread_id}/switch',
             path: {
                 'thread_id': threadId,
             },
