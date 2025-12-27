@@ -14,14 +14,14 @@ from nokodo_ai import (
 	UserMessage,
 	tool,
 )
-from nokodo_ai.adapters.chat import BaseChatAdapter
+from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.tool import ToolExecutionContext
 
 
 class _Call(TypedDict):
 	messages: list[object]
 	tools: object
-	tool_choice: object
+	params: ChatGenerationParams
 	stream: bool
 
 
@@ -36,16 +36,14 @@ class _StubChatAdapter(BaseChatAdapter):
 		*,
 		stream: bool = False,
 		tools=None,
-		tool_choice="auto",
-		response_model=None,
-		temperature=None,
-		max_tokens=None,
+		params: ChatGenerationParams | None = None,
 	) -> AssistantMessage | AsyncIterator[AssistantMessage]:
+		params = params or ChatGenerationParams()
 		self.calls.append(
 			{
 				"messages": list(messages),
 				"tools": tools,
-				"tool_choice": tool_choice,
+				"params": params,
 				"stream": stream,
 			}
 		)
@@ -74,7 +72,7 @@ async def test_agent_runs_without_tools_returns_messages() -> None:
 	assert isinstance(messages, list)
 	assert isinstance(messages[0], SystemMessage)
 	assert messages[0].text == "be-kind"
-	assert first_call["tool_choice"] is None
+	assert first_call["params"].tool_choice is None
 
 
 @pytest.mark.asyncio

@@ -10,12 +10,11 @@ from nokodo_ai.adapters.openai.embedding import OpenAIEmbeddingAdapter
 from nokodo_ai.adapters.openai.responses import OpenAIResponsesAdapter
 
 
-def get_chat_adapter(variant: str | None, model: str) -> BaseChatAdapter:
+def get_chat_adapter(variant: str | None) -> BaseChatAdapter:
 	"""get openai chat adapter by variant.
 
 	args:
 		variant: adapter variant name (e.g., 'responses'), or None for default
-		model: model identifier
 
 	returns:
 		the appropriate chat adapter instance
@@ -26,19 +25,18 @@ def get_chat_adapter(variant: str | None, model: str) -> BaseChatAdapter:
 	match variant:
 		case None:
 			# default chat adapter
-			return OpenAIChatCompletionsAdapter(model=model)
+			return OpenAIChatCompletionsAdapter()
 		case "responses":
-			return OpenAIResponsesAdapter(model=model)
+			return OpenAIResponsesAdapter()
 		case _:
 			raise ValueError(f"unknown openai chat adapter variant: {variant}")
 
 
-def get_embedding_adapter(variant: str | None, model: str) -> BaseEmbeddingAdapter:
+def get_embedding_adapter(variant: str | None) -> BaseEmbeddingAdapter:
 	"""get openai embedding adapter by variant.
 
 	args:
 		variant: adapter variant name, or None for default
-		model: model identifier
 
 	returns:
 		the appropriate embedding adapter instance
@@ -49,7 +47,7 @@ def get_embedding_adapter(variant: str | None, model: str) -> BaseEmbeddingAdapt
 	if variant is not None:
 		raise ValueError(f"unknown openai embedding adapter variant: {variant}")
 	# default embedding adapter
-	return OpenAIEmbeddingAdapter(model=model)
+	return OpenAIEmbeddingAdapter()
 
 
 __all__ = [

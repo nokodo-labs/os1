@@ -178,7 +178,7 @@ class Agent:
 				return
 
 			tool_messages = await self._execute_tools(thread, response)
-			for tool_message in tool_messages:  
+			for tool_message in tool_messages:
 				thread.add(tool_message)
 				yield tool_message
 

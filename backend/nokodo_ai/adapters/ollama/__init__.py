@@ -9,12 +9,11 @@ from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
 from nokodo_ai.adapters.ollama.embedding import OllamaEmbeddingAdapter
 
 
-def get_chat_adapter(variant: str | None, model: str) -> BaseChatAdapter:
+def get_chat_adapter(variant: str | None) -> BaseChatAdapter:
 	"""get ollama chat adapter by variant.
 
 	args:
 		variant: adapter variant name, or None for default
-		model: model identifier
 
 	returns:
 		the appropriate chat adapter instance
@@ -25,15 +24,14 @@ def get_chat_adapter(variant: str | None, model: str) -> BaseChatAdapter:
 	if variant is not None:
 		raise ValueError(f"unknown ollama chat adapter variant: {variant}")
 	# default chat adapter
-	return OllamaChatAdapter(model=model)
+	return OllamaChatAdapter()
 
 
-def get_embedding_adapter(variant: str | None, model: str) -> BaseEmbeddingAdapter:
+def get_embedding_adapter(variant: str | None) -> BaseEmbeddingAdapter:
 	"""get ollama embedding adapter by variant.
 
 	args:
 		variant: adapter variant name, or None for default
-		model: model identifier
 
 	returns:
 		the appropriate embedding adapter instance
@@ -44,7 +42,7 @@ def get_embedding_adapter(variant: str | None, model: str) -> BaseEmbeddingAdapt
 	if variant is not None:
 		raise ValueError(f"unknown ollama embedding adapter variant: {variant}")
 	# default embedding adapter
-	return OllamaEmbeddingAdapter(model=model)
+	return OllamaEmbeddingAdapter()
 
 
 __all__ = [

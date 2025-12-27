@@ -157,13 +157,24 @@ class UserMessage(BaseMessage, _HasTextContentHelpers):
 		)
 
 
+FinishReason = Literal["stop", "length", "tool_calls", "content_filter"]
+
+
 class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 	"""a message from the assistant."""
 
 	role: Literal["assistant"] = "assistant"
-	content: list[ContentPart] = Field(default_factory=list)
-	tool_calls: list[ToolCall] = Field(default_factory=list)
-	usage: Usage | None = None
+	content: list[ContentPart] = Field(
+		default_factory=list, description="list of content parts"
+	)
+	tool_calls: list[ToolCall] = Field(
+		default_factory=list,
+		description="list of tool calls requested by the assistant",
+	)
+	usage: Usage | None = Field(default=None, description="token usage information")
+	finish_reason: FinishReason | None = Field(
+		default=None, description="reason for message completion"
+	)
 
 	@classmethod
 	def from_text(cls, text: str) -> AssistantMessage:

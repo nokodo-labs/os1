@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, overload
 
 import openai
 
-from nokodo_ai.adapters.chat import BaseChatAdapter
+from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.types import (
 	OpenAIEasyInputMessageParam,
@@ -71,66 +71,38 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		stream: Literal[False] = False,
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
-		response_model: JSONObject | None = None,
-		temperature: float | None = None,
-		max_tokens: int | None = None,
+		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
 	@overload
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		stream: Literal[True],
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
-		response_model: JSONObject | None = None,
-		temperature: float | None = None,
-		max_tokens: int | None = None,
+		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		stream: bool = False,
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
-		response_model: JSONObject | None = None,
-		temperature: float | None = None,
-		max_tokens: int | None = None,
+		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		params = params or ChatGenerationParams()
 		if stream:
-			return self._generate_streaming(
-				messages,
-				tools=tools,
-				tool_choice=tool_choice,
-				response_model=response_model,
-				temperature=temperature,
-				max_tokens=max_tokens,
-			)
-		return self._generate_once(
-			messages,
-			tools=tools,
-			tool_choice=tool_choice,
-			response_model=response_model,
-			temperature=temperature,
-			max_tokens=max_tokens,
-		)
+			return self._generate_streaming(messages, tools=tools, params=params)
+		return self._generate_once(messages, tools=tools, params=params)
 
 	async def _generate_once(
 		self,
 		messages: list[Message],
 		*,
 		tools: list[Tool] | None,
-		tool_choice: Literal["auto", "none", "required"] | str | None,
-		response_model: JSONObject | None,
-		temperature: float | None,
-		max_tokens: int | None,
+		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		"""generate a completion using /v1/responses."""
 		input_items = _messages_to_openai_responses_input(messages)
@@ -139,32 +111,53 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		openai_tool_choice = openai.omit
 		if tools:
 			openai_tools = _tools_to_openai_responses(tools)
-			if tool_choice is not None:
-				openai_tool_choice = _tool_choice_to_openai_responses(tool_choice)
+			if params.tool_choice is not None:
+				openai_tool_choice = _tool_choice_to_openai_responses(
+					params.tool_choice
+				)
 
 		text = openai.omit
-		if response_model:
+		if params.response_model:
 			text = OpenAIResponseTextConfigParam(
 				format=OpenAIResponseTextJSONSchemaConfigParam(
 					type="json_schema",
 					name="response",
 					strict=True,
-					schema=dict[str, object](response_model),
+					schema=dict[str, object](params.response_model),
 				)
 			)
 
-		openai_temperature = temperature if temperature is not None else openai.omit
-		openai_max_output_tokens = max_tokens if max_tokens is not None else openai.omit
-
-		response = await self.client.responses.create(
-			model=self.model,
-			input=input_items,
-			max_output_tokens=openai_max_output_tokens,
-			temperature=openai_temperature,
-			text=text,
-			tool_choice=openai_tool_choice,
-			tools=openai_tools,
+		openai_temperature = (
+			params.temperature if params.temperature is not None else openai.omit
 		)
+		openai_max_output_tokens = (
+			params.max_tokens if params.max_tokens is not None else openai.omit
+		)
+
+		request_kwargs = {
+			"model": self.model,
+			"input": input_items,
+			"max_output_tokens": openai_max_output_tokens,
+			"temperature": openai_temperature,
+			"text": text,
+			"tool_choice": openai_tool_choice,
+			"tools": openai_tools,
+		}
+
+		if params.top_p is not None:
+			request_kwargs["top_p"] = params.top_p
+		if params.stop:
+			request_kwargs["stop"] = params.stop
+		if params.seed is not None:
+			request_kwargs["seed"] = params.seed
+		if params.logit_bias is not None:
+			request_kwargs["logit_bias"] = params.logit_bias
+		if params.presence_penalty is not None:
+			request_kwargs["presence_penalty"] = params.presence_penalty
+		if params.frequency_penalty is not None:
+			request_kwargs["frequency_penalty"] = params.frequency_penalty
+
+		response = await self._client.responses.create(**request_kwargs)
 
 		tool_calls: list[ToolCall] = []
 		for item in response.output:
@@ -181,7 +174,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			)
 
 		content: list[ContentPart] = []
-		if response_model and response.output_text:
+		if params.response_model and response.output_text:
 			try:
 				content.append(JsonContent(data=json.loads(response.output_text)))
 			except json.JSONDecodeError:
@@ -204,10 +197,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		*,
 		tools: list[Tool] | None,
-		tool_choice: Literal["auto", "none", "required"] | str | None,
-		response_model: JSONObject | None,
-		temperature: float | None,
-		max_tokens: int | None,
+		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/responses."""
 		input_items = _messages_to_openai_responses_input(messages)
@@ -216,21 +206,42 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		openai_tool_choice = openai.omit
 		if tools:
 			openai_tools = _tools_to_openai_responses(tools)
-			if tool_choice is not None:
-				openai_tool_choice = _tool_choice_to_openai_responses(tool_choice)
+			if params.tool_choice is not None:
+				openai_tool_choice = _tool_choice_to_openai_responses(
+					params.tool_choice
+				)
 
-		openai_temperature = temperature if temperature is not None else openai.omit
-		openai_max_output_tokens = max_tokens if max_tokens is not None else openai.omit
-
-		stream = await self.client.responses.create(
-			model=self.model,
-			input=input_items,
-			stream=True,
-			max_output_tokens=openai_max_output_tokens,
-			temperature=openai_temperature,
-			tool_choice=openai_tool_choice,
-			tools=openai_tools,
+		openai_temperature = (
+			params.temperature if params.temperature is not None else openai.omit
 		)
+		openai_max_output_tokens = (
+			params.max_tokens if params.max_tokens is not None else openai.omit
+		)
+
+		request_kwargs = {
+			"model": self.model,
+			"input": input_items,
+			"stream": True,
+			"max_output_tokens": openai_max_output_tokens,
+			"temperature": openai_temperature,
+			"tool_choice": openai_tool_choice,
+			"tools": openai_tools,
+		}
+
+		if params.top_p is not None:
+			request_kwargs["top_p"] = params.top_p
+		if params.stop:
+			request_kwargs["stop"] = params.stop
+		if params.seed is not None:
+			request_kwargs["seed"] = params.seed
+		if params.logit_bias is not None:
+			request_kwargs["logit_bias"] = params.logit_bias
+		if params.presence_penalty is not None:
+			request_kwargs["presence_penalty"] = params.presence_penalty
+		if params.frequency_penalty is not None:
+			request_kwargs["frequency_penalty"] = params.frequency_penalty
+
+		stream = await self._client.responses.create(**request_kwargs)
 		async for event in stream:
 			if isinstance(event, OpenAIResponseTextDeltaEvent):
 				if event.delta:

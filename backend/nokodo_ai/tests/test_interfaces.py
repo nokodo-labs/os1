@@ -1,6 +1,6 @@
 """tests for SDK high-level interfaces."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 
 import pytest
 
@@ -12,7 +12,7 @@ from nokodo_ai import (
 	UserMessage,
 	tool,
 )
-from nokodo_ai.adapters.chat import BaseChatAdapter
+from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
 
 
@@ -22,45 +22,45 @@ def test_llm_requires_model() -> None:
 
 
 def test_llm_resolves_openai_model() -> None:
-	llm = ChatModel("gpt-4o")
+	llm = ChatModel(model="gpt-4o")
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm._adapter, OpenAIChatCompletionsAdapter)
-	assert llm._adapter.model == "gpt-4o"
+	assert isinstance(llm._adapter_resolved, OpenAIChatCompletionsAdapter)
+	assert llm._adapter_resolved.model == "gpt-4o"
 
 
 def test_llm_resolves_openai_explicit() -> None:
-	llm = ChatModel("openai:gpt-4o-mini")
+	llm = ChatModel(model="openai:gpt-4o-mini")
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm._adapter, OpenAIChatCompletionsAdapter)
-	assert llm._adapter.model == "gpt-4o-mini"
+	assert isinstance(llm._adapter_resolved, OpenAIChatCompletionsAdapter)
+	assert llm._adapter_resolved.model == "gpt-4o-mini"
 
 
 def test_llm_resolves_openai_responses_api() -> None:
-	llm = ChatModel("openai.responses:gpt-4o")
+	llm = ChatModel(model="openai.responses:gpt-4o")
 	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
-	assert isinstance(llm._adapter, OpenAIResponsesAdapter)
+	assert isinstance(llm._adapter_resolved, OpenAIResponsesAdapter)
 
 
 def test_llm_resolves_anthropic() -> None:
-	llm = ChatModel("anthropic:claude-sonnet-4-20250514")
+	llm = ChatModel(model="anthropic:claude-sonnet-4-20250514")
 	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
-	assert isinstance(llm._adapter, AnthropicMessagesAdapter)
+	assert isinstance(llm._adapter_resolved, AnthropicMessagesAdapter)
 
 
 def test_llm_resolves_ollama() -> None:
-	llm = ChatModel("ollama:llama3.2")
+	llm = ChatModel(model="ollama:llama3.2")
 	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
-	assert isinstance(llm._adapter, OllamaChatAdapter)
+	assert isinstance(llm._adapter_resolved, OllamaChatAdapter)
 
 
 def test_llm_unknown_provider_raises() -> None:
 	with pytest.raises(ValueError, match="unknown provider"):
-		ChatModel("unknownprovider:model")
+		ChatModel(model="unknownprovider:model")
 
 
 def test_embedding_requires_model_or_adapter() -> None:
@@ -104,19 +104,14 @@ class _StubChatAdapter(BaseChatAdapter):
 		*,
 		stream: bool = False,
 		tools=None,
-		tool_choice="auto",
-		response_model=None,
-		temperature=None,
-		max_tokens=None,
-	) -> AssistantMessage | AsyncIterator[AssistantMessage]:
+		params: ChatGenerationParams | None = None,
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		params = params or ChatGenerationParams()
 		call = {
 			"messages": messages,
 			"stream": stream,
 			"tools": tools,
-			"tool_choice": tool_choice,
-			"response_model": response_model,
-			"temperature": temperature,
-			"max_tokens": max_tokens,
+			"params": params,
 		}
 		self.calls.append(call)
 		if stream:
@@ -149,12 +144,14 @@ async def test_chat_model_generate_with_thread(monkeypatch: pytest.MonkeyPatch) 
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
-	result = await llm.generate(thread, tool_choice="auto")
+	result = await llm.generate(thread)
 
 	assert result.text == "ok"
 	call = adapter.calls[-1]
 	assert call["messages"] == thread.messages
-	assert call["tool_choice"] is None
+	params = call["params"]
+	assert isinstance(params, ChatGenerationParams)
+	assert params.tool_choice is None
 	assert call["stream"] is False
 
 
@@ -179,14 +176,33 @@ async def test_chat_model_streaming_with_tools() -> None:
 			[UserMessage.from_text("hi")],
 			stream=True,
 			tools=[noop],
-			tool_choice="auto",
+			params=ChatGenerationParams(),
 		)
 	]
 
 	assert [c.text for c in chunks] == ["c1", "c2"]
 	call = adapter.calls[-1]
 	assert call["stream"] is True
-	assert call["tool_choice"] == "auto"
+	params = call["params"]
+	assert isinstance(params, ChatGenerationParams)
+	assert params.tool_choice == "auto"
+
+
+@pytest.mark.asyncio
+async def test_chat_model_parses_params_dict() -> None:
+	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
+	llm = ChatModel(model="stub", adapter=adapter)
+
+	result = await llm.generate(
+		[UserMessage.from_text("hi")],
+		params={"temperature": 0.123, "max_tokens": 7},
+	)
+	assert result.text == "ok"
+	call = adapter.calls[-1]
+	params = call["params"]
+	assert isinstance(params, ChatGenerationParams)
+	assert params.temperature == 0.123
+	assert params.max_tokens == 7
 
 
 @pytest.mark.asyncio
@@ -203,7 +219,7 @@ async def test_chat_model_resolves_default_provider(
 	monkeypatch.setattr(
 		"nokodo_ai.adapters.openai.get_chat_adapter", fake_get_chat_adapter
 	)
-	llm = ChatModel("gpt-4o")
+	llm = ChatModel(model="gpt-4o")
 
 	result = await llm.generate([UserMessage.from_text("hi")])
 	assert result.text == "resolved"

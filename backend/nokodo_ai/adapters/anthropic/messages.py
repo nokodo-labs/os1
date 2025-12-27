@@ -25,7 +25,7 @@ from anthropic.types.tool_use_block import ToolUseBlock
 from anthropic.types.tool_use_block_param import ToolUseBlockParam
 
 from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
-from nokodo_ai.adapters.chat import BaseChatAdapter
+from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.message import (
 	AssistantMessage,
 	ContentPart,
@@ -69,87 +69,69 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		stream: Literal[False] = False,
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
-		response_model: JSONObject | None = None,
-		temperature: float | None = None,
-		max_tokens: int | None = None,
+		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
 	@overload
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		stream: Literal[True],
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
-		response_model: JSONObject | None = None,
-		temperature: float | None = None,
-		max_tokens: int | None = None,
+		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		stream: bool = False,
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
-		response_model: JSONObject | None = None,
-		temperature: float | None = None,
-		max_tokens: int | None = None,
+		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		params = params or ChatGenerationParams()
 		if stream:
-			return self._generate_streaming(
-				messages,
-				tools=tools,
-				tool_choice=tool_choice,
-				response_model=response_model,
-				temperature=temperature,
-				max_tokens=max_tokens,
-			)
-		return self._generate_once(
-			messages,
-			tools=tools,
-			tool_choice=tool_choice,
-			response_model=response_model,
-			temperature=temperature,
-			max_tokens=max_tokens,
-		)
+			return self._generate_streaming(messages, tools=tools, params=params)
+		return self._generate_once(messages, tools=tools, params=params)
 
 	async def _generate_once(
 		self,
 		messages: list[Message],
 		*,
 		tools: list[Tool] | None,
-		tool_choice: Literal["auto", "none", "required"] | str | None,
-		response_model: JSONObject | None,
-		temperature: float | None,
-		max_tokens: int | None,
+		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		system_text, anthropic_messages = _messages_to_anthropic(messages)
-		system_text = _apply_response_model_to_system(system_text, response_model)
+		system_text = _apply_response_model_to_system(
+			system_text, params.response_model
+		)
 
 		anthropic_tools = _tools_to_anthropic(tools) if tools else anthropic.omit
 		anthropic_tool_choice = anthropic.omit
-		if tools and tool_choice is not None:
-			anthropic_tool_choice = _tool_choice_to_anthropic(tool_choice)
+		if tools and params.tool_choice is not None:
+			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
 
 		anthropic_system = system_text if system_text else anthropic.omit
 		anthropic_temperature = (
-			temperature if temperature is not None else anthropic.omit
+			params.temperature if params.temperature is not None else anthropic.omit
 		)
-		anthropic_max_tokens = max_tokens if max_tokens is not None else 1024
+		anthropic_max_tokens = (
+			params.max_tokens if params.max_tokens is not None else 1024
+		)
+		anthropic_stop = params.stop if params.stop else anthropic.omit
+		anthropic_top_p = params.top_p if params.top_p is not None else anthropic.omit
+		anthropic_top_k = params.top_k if params.top_k is not None else anthropic.omit
 
-		response = await self.client.messages.create(
+		response = await self._client.messages.create(
 			model=self.model,
 			max_tokens=anthropic_max_tokens,
 			messages=anthropic_messages,
 			system=anthropic_system,
 			temperature=anthropic_temperature,
+			top_p=anthropic_top_p,
+			top_k=anthropic_top_k,
+			stop_sequences=anthropic_stop,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
 		)
@@ -173,7 +155,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 				)
 				continue
 
-		if response_model:
+		if params.response_model:
 			combined_text = "".join(
 				part.text for part in content if isinstance(part, TextContent)
 			)
@@ -202,31 +184,38 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		messages: list[Message],
 		*,
 		tools: list[Tool] | None,
-		tool_choice: Literal["auto", "none", "required"] | str | None,
-		response_model: JSONObject | None,
-		temperature: float | None,
-		max_tokens: int | None,
+		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		system_text, anthropic_messages = _messages_to_anthropic(messages)
-		system_text = _apply_response_model_to_system(system_text, response_model)
+		system_text = _apply_response_model_to_system(
+			system_text, params.response_model
+		)
 
 		anthropic_tools = _tools_to_anthropic(tools) if tools else anthropic.omit
 		anthropic_tool_choice = anthropic.omit
-		if tools and tool_choice is not None:
-			anthropic_tool_choice = _tool_choice_to_anthropic(tool_choice)
+		if tools and params.tool_choice is not None:
+			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
 
 		anthropic_system = system_text if system_text else anthropic.omit
 		anthropic_temperature = (
-			temperature if temperature is not None else anthropic.omit
+			params.temperature if params.temperature is not None else anthropic.omit
 		)
-		anthropic_max_tokens = max_tokens if max_tokens is not None else 1024
+		anthropic_max_tokens = (
+			params.max_tokens if params.max_tokens is not None else 1024
+		)
+		anthropic_stop = params.stop if params.stop else anthropic.omit
+		anthropic_top_p = params.top_p if params.top_p is not None else anthropic.omit
+		anthropic_top_k = params.top_k if params.top_k is not None else anthropic.omit
 
-		stream = await self.client.messages.create(
+		stream = await self._client.messages.create(
 			model=self.model,
 			max_tokens=anthropic_max_tokens,
 			messages=anthropic_messages,
 			system=anthropic_system,
 			temperature=anthropic_temperature,
+			top_p=anthropic_top_p,
+			top_k=anthropic_top_k,
+			stop_sequences=anthropic_stop,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
 			stream=True,

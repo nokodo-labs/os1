@@ -30,7 +30,7 @@ class OpenAIEmbeddingAdapter(BaseOpenAIAdapter, BaseEmbeddingAdapter):
 
 	async def embed(self, texts: list[str]) -> list[list[float]]:
 		"""generate embeddings using openai's embedding API."""
-		response = await self.client.embeddings.create(
+		response = await self._client.embeddings.create(
 			model=self.model,
 			input=texts,
 		)

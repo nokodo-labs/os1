@@ -7,9 +7,10 @@ stay small and type check cleanly.
 from __future__ import annotations
 
 from openai._streaming import AsyncStream as OpenAIAsyncStream
-from openai.types.chat import (
-	ChatCompletion as OpenAIChatCompletion,
-)
+from openai.types import ChatModel as OpenAIChatModel
+from openai.types import CompletionUsage as OpenAICompletionUsage
+from openai.types import ResponseFormatJSONSchema as OpenAIResponseFormatJSONSchema
+from openai.types.chat import ChatCompletion as OpenAIChatCompletion
 from openai.types.chat import (
 	ChatCompletionAssistantMessageParam as OpenAIChatCompletionAssistantMessageParam,
 )
@@ -22,6 +23,9 @@ from openai.types.chat import (
 )
 from openai.types.chat import (
 	ChatCompletionMessageParam as OpenAIChatCompletionMessageParam,
+)
+from openai.types.chat import (
+	ChatCompletionMessageToolCallUnion as OpenAIChatCompletionMessageToolCallUnion,
 )
 from openai.types.chat import (
 	ChatCompletionSystemMessageParam as OpenAIChatCompletionSystemMessageParam,
@@ -86,8 +90,8 @@ from openai.types.responses.response_create_params import (
 from openai.types.responses.response_input_item_param import (
 	FunctionCallOutput as OpenAIResponseFunctionCallOutput,
 )
-from openai.types.shared_params import (
-	ResponseFormatJSONSchema as OpenAIChatCompletionResponseFormatJSONSchema,
+from openai.types.shared.response_format_json_schema import (
+	JSONSchema as OpenAIJSONSchema,
 )
 
 
@@ -95,9 +99,16 @@ OpenAIChatCompletionFunctionToolCall = ChatCompletionMessageFunctionToolCall
 OpenAIChatCompletionFunctionToolCallParam = ChatCompletionMessageFunctionToolCallParam
 
 __all__ = [
+	# shared
+	"OpenAIChatModel",
+	"OpenAIJSONSchema",
+	"OpenAIResponseFormatJSONSchema",
 	# streaming
 	"OpenAIAsyncStream",
 	# chat completions
+	"OpenAIChatCompletion",
+	"OpenAICompletionUsage",
+	"OpenAIChatCompletionMessageToolCallUnion",
 	"OpenAIChatCompletion",
 	"OpenAIChatCompletionChunk",
 	"OpenAIChatCompletionMessageParam",
@@ -106,7 +117,6 @@ __all__ = [
 	"OpenAIChatCompletionToolMessageParam",
 	"OpenAIChatCompletionUserMessageParam",
 	"OpenAIChatCompletionFunctionDefinition",
-	"OpenAIChatCompletionResponseFormatJSONSchema",
 	"OpenAIChatCompletionFunctionToolCall",
 	"OpenAIChatCompletionFunctionToolCallParam",
 	"OpenAIChatCompletionToolParam",
