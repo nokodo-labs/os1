@@ -63,9 +63,30 @@
 	const BOTTOM_PADDING_PX = 12
 
 	let rootEl: HTMLDivElement
+	let scrollerEl: HTMLDivElement
+	let trackEl: HTMLDivElement
 	let cols = $state(5)
 	let rows = $state(2)
 	let currentPage = $state(0)
+	let isDragging = $state(false)
+	let suppressClick = $state(false)
+	let dragPointerId: number | null = null
+	let dragStartX = 0
+	let dragStartScrollLeft = 0
+	let elasticOffsetPx = $state(0)
+	let hasPassedDragThreshold = $state(false)
+	const DRAG_THRESHOLD_PX = 6
+	const ELASTIC_CONSTANT = 0.55
+	const ELASTIC_MAX_PX = 96
+
+	function rubberband(distance: number) {
+		const abs = Math.abs(distance)
+		if (abs <= 0) return 0
+		// iOS-like rubberband: asymptotically approaches ELASTIC_MAX_PX.
+		const band =
+			(abs * ELASTIC_CONSTANT * ELASTIC_MAX_PX) / (ELASTIC_MAX_PX + ELASTIC_CONSTANT * abs)
+		return Math.sign(distance) * band
+	}
 
 	function clamp(value: number, min: number, max: number) {
 		return Math.max(min, Math.min(max, value))
@@ -92,6 +113,113 @@
 		const appsPerPage = Math.max(1, cols * rows)
 		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
 		currentPage = clamp(currentPage, 0, pageCount - 1)
+		scrollToPage(currentPage, 'auto')
+	}
+
+	function scrollToPage(pageIndex: number, behavior: ScrollBehavior = 'smooth') {
+		if (!scrollerEl) return
+		const width = scrollerEl.clientWidth
+		if (width <= 0) return
+		scrollerEl.scrollTo({ left: pageIndex * width, behavior })
+	}
+
+	function syncPageFromScroll() {
+		if (isDragging) return
+		if (!scrollerEl) return
+		const width = scrollerEl.clientWidth
+		if (width <= 0) return
+		const next = clamp(Math.round(scrollerEl.scrollLeft / width), 0, pages.length - 1)
+		if (next !== currentPage) currentPage = next
+	}
+
+	function applyDragScroll(desiredScrollLeft: number) {
+		if (!scrollerEl) return
+		const maxScroll = Math.max(0, scrollerEl.scrollWidth - scrollerEl.clientWidth)
+
+		if (desiredScrollLeft < 0) {
+			scrollerEl.scrollLeft = 0
+			const overshoot = -desiredScrollLeft
+			elasticOffsetPx = clamp(rubberband(overshoot), 0, ELASTIC_MAX_PX)
+			return
+		}
+
+		if (desiredScrollLeft > maxScroll) {
+			scrollerEl.scrollLeft = maxScroll
+			const overshoot = desiredScrollLeft - maxScroll
+			elasticOffsetPx = -clamp(rubberband(overshoot), 0, ELASTIC_MAX_PX)
+			return
+		}
+
+		elasticOffsetPx = 0
+		scrollerEl.scrollLeft = desiredScrollLeft
+	}
+
+	function handleClickCapture(event: MouseEvent) {
+		if (!suppressClick) return
+		event.preventDefault()
+		event.stopPropagation()
+		suppressClick = false
+	}
+
+	function handlePointerDown(event: PointerEvent) {
+		if (!scrollerEl) return
+		if (event.pointerType === 'mouse' && event.button !== 0) return
+		isDragging = false
+		hasPassedDragThreshold = false
+		suppressClick = false
+		dragPointerId = event.pointerId
+		dragStartX = event.clientX
+		dragStartScrollLeft = scrollerEl.scrollLeft
+	}
+
+	function handlePointerMove(event: PointerEvent) {
+		if (!scrollerEl) return
+		if (dragPointerId !== event.pointerId) return
+		const dx = event.clientX - dragStartX
+		if (!hasPassedDragThreshold) {
+			if (Math.abs(dx) < DRAG_THRESHOLD_PX) return
+			hasPassedDragThreshold = true
+			isDragging = true
+			suppressClick = true
+			scrollerEl.setPointerCapture(event.pointerId)
+		}
+
+		// From here on, we are dragging. Prevent text selection and keep it feeling native.
+		event.preventDefault()
+		applyDragScroll(dragStartScrollLeft - dx)
+	}
+
+	function handlePointerUp(event: PointerEvent) {
+		if (dragPointerId !== event.pointerId) return
+		const didDrag = hasPassedDragThreshold
+		isDragging = false
+		hasPassedDragThreshold = false
+		dragPointerId = null
+		if (!scrollerEl) return
+		const width = scrollerEl.clientWidth
+		if (width <= 0) return
+		requestAnimationFrame(() => {
+			elasticOffsetPx = 0
+		})
+		if (didDrag) {
+			currentPage = clamp(Math.round(scrollerEl.scrollLeft / width), 0, pages.length - 1)
+			scrollToPage(currentPage)
+			// If the browser doesn't emit a click after a drag (e.g. release outside), don't
+			// leave click suppression enabled.
+			setTimeout(() => {
+				suppressClick = false
+			}, 0)
+		}
+	}
+
+	function handlePointerCancel(event: PointerEvent) {
+		if (dragPointerId !== event.pointerId) return
+		isDragging = false
+		hasPassedDragThreshold = false
+		requestAnimationFrame(() => {
+			elasticOffsetPx = 0
+		})
+		dragPointerId = null
 	}
 
 	const resizeObserver =
@@ -127,13 +255,26 @@
 </script>
 
 <div bind:this={rootEl} class="w-full">
-	<div class="relative overflow-hidden">
+	<div
+		bind:this={scrollerEl}
+		class="no-scrollbar relative flex w-full overflow-x-scroll overscroll-x-contain select-none {isDragging
+			? 'cursor-grabbing snap-none'
+			: 'cursor-grab snap-x snap-mandatory'}"
+		style="touch-action: pan-x;"
+		onclickcapture={handleClickCapture}
+		onscroll={syncPageFromScroll}
+		onpointerdowncapture={handlePointerDown}
+		onpointermovecapture={handlePointerMove}
+		onpointerup={handlePointerUp}
+		onpointercancel={handlePointerCancel}
+	>
 		<div
-			class="flex transition-transform duration-300 ease-out"
-			style="transform: translateX(-{currentPage * 100}%);"
+			bind:this={trackEl}
+			class="flex w-full {isDragging ? '' : 'transition-transform duration-300 ease-out'}"
+			style="transform: translateX({elasticOffsetPx}px);"
 		>
 			{#each pages as pageApps, pageIndex (pageIndex)}
-				<div class="w-full shrink-0">
+				<div class="w-full shrink-0 snap-start">
 					<div
 						class="grid w-full justify-center"
 						style="grid-template-columns: repeat({cols}, {TILE_PX}px); column-gap: {GRID_GAP_X_PX}px; row-gap: {GRID_GAP_Y_PX}px;"
@@ -147,7 +288,7 @@
 								aria-label={app.title}
 							>
 								<div
-									class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] transition-transform duration-150 group-hover:scale-[1.03] group-active:scale-[0.99] {iconShape ===
+									class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[transform,box-shadow] duration-150 group-hover:scale-[1.03] group-hover:ring-white/10 group-active:scale-[0.99] group-active:ring-white/20 {iconShape ===
 									'circle'
 										? 'rounded-full'
 										: 'rounded-3xl'}"
@@ -181,7 +322,10 @@
 					: 'h-2 w-2 rounded-full bg-white/30 hover:bg-white/45'}"
 				aria-label={`page ${index + 1}`}
 				aria-current={index === currentPage ? 'page' : undefined}
-				onclick={() => (currentPage = index)}
+				onclick={() => {
+					currentPage = index
+					scrollToPage(index)
+				}}
 			></button>
 		{/each}
 	</div>

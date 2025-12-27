@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import { v1Client } from '$lib/api/v1/client'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import Button from '$lib/components/chat/Button.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
@@ -9,6 +10,7 @@
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { setActiveThread, type Thread } from '$lib/stores/session'
 	import { fade } from 'svelte/transition'
 
 	interface Message {
@@ -27,7 +29,33 @@
 
 	const chrome = useSystemChrome()
 
-	const isTemporaryChat = $derived(page.params.id?.startsWith('temp-') ?? false)
+	let thread = $state<Thread | null>(null)
+	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
+
+	$effect(() => {
+		const threadId = page.params.id
+		if (!threadId) {
+			thread = null
+			setActiveThread(null)
+			return
+		}
+
+		let cancelled = false
+		void (async () => {
+			const { data } = await v1Client().GET('/threads/{thread_id}', {
+				params: { path: { thread_id: threadId } },
+			})
+			if (cancelled) return
+			thread = data ?? null
+			setActiveThread(data ?? null)
+		})()
+
+		return () => {
+			cancelled = true
+			thread = null
+			setActiveThread(null)
+		}
+	})
 
 	$effect(() => {
 		chrome.setAgentSelector({
@@ -40,14 +68,10 @@
 		return () => chrome.setAgentSelector(null)
 	})
 
-	// Handle initial message from URL
 	$effect(() => {
 		const initialQuery = page.url.searchParams.get('q')
 		if (initialQuery && messages.length === 0) {
 			handleSendMessage(initialQuery)
-			// Clear the query param to avoid re-triggering on reload?
-			// Actually, keeping it might be fine for now, or we can replaceState.
-			// For now, just check length === 0
 		}
 	})
 
@@ -60,22 +84,19 @@
 		}
 		messages.push(userMessage)
 
-		// Immediate AI placeholder
 		const aiMessageId = (Date.now() + 1).toString()
 		const aiMessage: Message = {
 			id: aiMessageId,
 			role: 'assistant',
-			content: '', // Start empty
+			content: '',
 			timestamp: new Date(),
 			model: selectedModel,
 		}
 		messages.push(aiMessage)
 		isGenerating = true
 
-		// Simulate AI response streaming
 		generationTimeout = setTimeout(() => {
 			const response = `I received your message: "${content}". This is a demo response showcasing the liquid UI!`
-			// Update the last message (which is the AI placeholder)
 			const lastMsg = messages[messages.length - 1]
 			if (lastMsg && lastMsg.id === aiMessageId) {
 				lastMsg.content = response
@@ -106,7 +127,6 @@
 	}
 </script>
 
-<!-- Scrollable Area -->
 <div class="flex-1 overflow-y-auto">
 	<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
 		{#if isTemporaryChat && messages.length === 0}
@@ -121,6 +141,18 @@
 					<p class="mt-2 text-sm text-white/60">
 						send a message to start. messages here won’t be saved.
 					</p>
+				</div>
+			</div>
+		{:else if messages.length === 0}
+			<div class="flex flex-1 items-center justify-center py-16">
+				<div class="max-w-md text-center">
+					<div
+						class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
+					>
+						<EyeSlash className="h-7 w-7" />
+					</div>
+					<h2 class="text-2xl font-semibold text-white/90">no messages yet</h2>
+					<p class="mt-2 text-sm text-white/60">send a message to begin this thread.</p>
 				</div>
 			</div>
 		{:else}
@@ -187,7 +219,6 @@
 	</div>
 </div>
 
-<!-- Input Area (Fixed Bottom) -->
 <div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
 	<div class="mx-auto w-full max-w-7xl px-8">
 		<div

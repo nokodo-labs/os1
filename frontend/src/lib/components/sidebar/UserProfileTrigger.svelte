@@ -8,7 +8,7 @@
 			name: string
 			email: string
 			avatar?: string | null
-		}
+		} | null
 		isExpanded?: boolean
 		placement?: 'sidebar' | 'header'
 	}
@@ -55,6 +55,7 @@
 		}
 	})
 	const isHeaderPlacement = $derived(placement === 'header')
+	const safeUser = $derived(user ?? { name: 'not signed in', email: '', avatar: null })
 </script>
 
 <div class="user-profile-trigger-container {isHeaderPlacement ? '' : 'mt-auto'}">
@@ -69,10 +70,10 @@
 		aria-label="User Profile"
 		aria-expanded={isOpen}
 	>
-		{#if user.avatar}
+		{#if safeUser.avatar}
 			<img
-				src={user.avatar}
-				alt={user.name}
+				src={safeUser.avatar}
+				alt={safeUser.name}
 				class="{isExpanded
 					? 'h-10 w-10'
 					: 'h-9 w-9'} shrink-0 rounded-full transition-all duration-200"
@@ -86,7 +87,7 @@
 						: 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
 				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
 			>
-				{getUserInitials(user.name)}
+				{getUserInitials(safeUser.name)}
 			</div>
 		{/if}
 		{#if isExpanded}
@@ -98,10 +99,10 @@
 				<p
 					class="overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap text-white"
 				>
-					{user.name}
+					{safeUser.name}
 				</p>
 				<p class="overflow-hidden text-xs text-ellipsis whitespace-nowrap text-white/60">
-					{user.email}
+					{safeUser.email}
 				</p>
 			</div>
 		{/if}

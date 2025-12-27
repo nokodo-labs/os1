@@ -9,6 +9,7 @@
 	import UserProfileTrigger from '$lib/components/sidebar/UserProfileTrigger.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { activeThread, refreshSession, userDisplay } from '$lib/stores/session'
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
 
 	interface Agent {
@@ -24,11 +25,9 @@
 	const chrome = useSystemChrome()
 	const sidebar = useSidebar() as SidebarContext | null
 
-	const user = {
-		name: 'admin',
-		email: 'admin@nokodo.net',
-		avatar: null,
-	}
+	$effect(() => {
+		void refreshSession()
+	})
 
 	// Mock agent data (until backend-driven)
 	const agents: Agent[] = [
@@ -63,6 +62,19 @@
 	}
 
 	function navigateWithTransition(target: string) {
+		const targetUrl = new URL(target, page.url)
+		const isSamePath = targetUrl.pathname === page.url.pathname
+		const isSameSearch = targetUrl.search === page.url.search
+		if (isSamePath && isSameSearch) return
+
+		if (isSamePath) {
+			// Within the same route (e.g. / <-> /?chat=temp), avoid the ViewTransition
+			// overlay so controls stay interactive during the CSS transition.
+			// @ts-expect-error resolve typing is narrower than our constructed URL
+			void goto(resolve(target as never), { keepFocus: true, noScroll: true })
+			return
+		}
+
 		const start = (
 			document as unknown as {
 				startViewTransition?: (cb: () => Promise<void> | void) => void
@@ -89,11 +101,15 @@
 
 	function handleTemporaryChat() {
 		sidebar?.selectChat?.(null)
-		const tempId = `temp-${Date.now()}`
-		navigateWithTransition(`/chats/${tempId}`)
+		navigateWithTransition('/?chat=temp')
 	}
 
-	const isTemporaryChatActive = $derived((page.params as { id?: string }).id?.startsWith('temp-'))
+	const isTemporaryChatActive = $derived(
+		page.url.searchParams.get('chat') === 'temp' || ($activeThread?.is_temporary ?? false)
+	)
+	const isHomeLayout = $derived(
+		page.url.pathname === '/' && page.url.searchParams.get('chat') === null
+	)
 
 	function handleTemporaryChatToggle() {
 		if (isTemporaryChatActive) {
@@ -189,7 +205,7 @@
 					</div>
 
 					<button
-						class="flex h-12 w-12 items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 						onclick={handleTemporaryChatToggle}
 						aria-label="temporary chat"
 					>
@@ -213,8 +229,22 @@
 
 			<!-- right: controls + user -->
 			<div class="flex items-center justify-end gap-2">
+				<div
+					class="overflow-hidden transition-[max-width,opacity,transform] duration-200 ease-out {isHomeLayout
+						? 'pointer-events-none max-w-0 -translate-x-1 opacity-0'
+						: 'max-w-12 translate-x-0 opacity-100'}"
+				>
+					<button
+						class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						onclick={handleHome}
+						aria-label="home"
+					>
+						<Home className="h-6 w-6" />
+					</button>
+				</div>
+
 				<button
-					class="flex h-12 w-12 items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 					onclick={() => chrome.toggleDock()}
 					aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 					aria-expanded={chrome.isDockOpen}
@@ -222,15 +252,7 @@
 					<AppNotification className="h-6 w-6" />
 				</button>
 
-				<button
-					class="flex h-12 w-12 items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-					onclick={handleHome}
-					aria-label="home"
-				>
-					<Home className="h-6 w-6" />
-				</button>
-
-				<UserProfileTrigger {user} placement="header" isExpanded={false} />
+				<UserProfileTrigger user={$userDisplay} placement="header" isExpanded={false} />
 			</div>
 		</div>
 	</header>

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/stores'
+	import { configureApiAuth } from '$lib/api/auth'
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import DebugMenu from '$lib/components/debug/DebugMenu.svelte'
@@ -16,6 +18,8 @@
 	import '$lib/styles/liquid-glass.css'
 	import '../app.css'
 
+	configureApiAuth()
+
 	// Initialize sidebar context
 	createSidebarContext()
 	// Initialize system chrome context
@@ -28,6 +32,11 @@
 	// DEV ONLY: Background switcher
 	let currentBackground = $state<BackgroundType>('darkveil')
 	let { children } = $props()
+
+	const isAuthRoute = $derived.by(() => {
+		const path = $page.url.pathname
+		return path === '/login' || path === '/signup'
+	})
 </script>
 
 <Tooltip.Provider>
@@ -36,30 +45,42 @@
 		<!-- DEV ONLY: Debug Menu -->
 		<DebugMenu {theme} bind:currentBackground />
 
-		<div class="relative z-1 flex h-screen">
-			<!-- Sidebar -->
-			<ChatSidebar />
-
-			<!-- Main Content -->
-			<div class="relative flex min-w-0 flex-1 flex-col">
-				<!-- System chrome: island (top header) -->
-				<div class="mx-auto w-full max-w-7xl px-8 pt-8">
-					<Island />
+		{#if isAuthRoute}
+			<div class="relative z-1 flex h-screen">
+				<div class="relative flex min-w-0 flex-1 flex-col">
+					{@render children()}
+				</div>
+			</div>
+		{:else}
+			<div class="relative z-1 flex h-screen">
+				<!-- Sidebar (overlay to avoid main layout reflow) -->
+				<div class="relative h-screen w-18 shrink-0">
+					<div class="absolute inset-y-0 left-0 z-20">
+						<ChatSidebar />
+					</div>
 				</div>
 
-				{@render children()}
-			</div>
+				<!-- Main Content -->
+				<div class="relative flex min-w-0 flex-1 flex-col">
+					<!-- System chrome: island (top header) -->
+					<div class="mx-auto w-full max-w-7xl px-8 pt-8">
+						<Island />
+					</div>
 
-			<!-- System chrome: dock (right sidebar overlay) -->
-			<div class="absolute top-0 right-0 bottom-0 z-30 w-80 px-6 pt-8 pb-8">
-				<Dock />
-			</div>
+					{@render children()}
+				</div>
 
-			<SettingsModal open={$activeModal === 'settings'} onClose={() => closeModal()} />
-			<ArchivedChatsModal
-				open={$activeModal === 'archived-chats'}
-				onClose={() => closeModal()}
-			/>
-		</div>
+				<!-- System chrome: dock (right sidebar overlay) -->
+				<div class="absolute top-0 right-0 bottom-0 z-30 w-80 px-6 pt-8 pb-8">
+					<Dock />
+				</div>
+
+				<SettingsModal open={$activeModal === 'settings'} onClose={() => closeModal()} />
+				<ArchivedChatsModal
+					open={$activeModal === 'archived-chats'}
+					onClose={() => closeModal()}
+				/>
+			</div>
+		{/if}
 	</BackgroundManager>
 </Tooltip.Provider>

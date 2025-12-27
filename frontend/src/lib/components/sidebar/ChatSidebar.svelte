@@ -13,6 +13,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { openModal } from '$lib/stores/modals'
+	import { isLoggedIn, recentThreads, refreshThreads } from '$lib/stores/session'
 
 	type SidebarContext = {
 		readonly isOpen: boolean
@@ -57,10 +58,13 @@
 
 				if (start) {
 					start.call(document, async () => {
-						await goto(resolve('/'), { keepFocus: true, noScroll: true })
+						await goto('/?chat=new', {
+							keepFocus: true,
+							noScroll: true,
+						})
 					})
 				} else {
-					goto(resolve('/'), { keepFocus: true, noScroll: true })
+					goto('/?chat=new', { keepFocus: true, noScroll: true })
 				}
 			},
 		},
@@ -74,39 +78,16 @@
 		},
 	]
 
-	// Demo chat data
-	interface Chat {
-		id: string
-		title: string
-		lastMessage: string
-		timestamp: Date
-	}
+	$effect(() => {
+		if ($isLoggedIn) void refreshThreads({ limit: 25 })
+	})
 
-	let chats = $state<Chat[]>([
-		{
-			id: '1',
-			title: 'Building a sidebar component',
-			lastMessage: 'Can you help me implement a sidebar?',
-			timestamp: new Date(),
-		},
-		{
-			id: '2',
-			title: 'API Integration',
-			lastMessage: 'How do I connect to the backend?',
-			timestamp: new Date(Date.now() - 3600000),
-		},
-		{
-			id: '3',
-			title: 'Liquid UI Effects',
-			lastMessage: 'Implementing glass morphism...',
-			timestamp: new Date(Date.now() - 7200000),
-		},
-	])
-
-	function formatTime(date: Date): string {
-		const now = new Date()
-		const diff = now.getTime() - date.getTime()
-		const hours = Math.floor(diff / 3600000)
+	function formatTime(iso: string): string {
+		const date = new Date(iso)
+		if (Number.isNaN(date.getTime())) return ''
+		const now = Date.now()
+		const diff = now - date.getTime()
+		const hours = Math.floor(diff / 3_600_000)
 		if (hours < 1) return 'just now'
 		if (hours < 24) return `${hours}h ago`
 		return date.toLocaleDateString()
@@ -168,26 +149,30 @@
 							</div>
 						{/if}
 					</div>
-					{#if sidebar.isChatSidebarOpen}
+					<div
+						class="ml-1 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+							? 'max-w-[220px] opacity-100'
+							: 'max-w-0 opacity-0'}"
+					>
 						<img
 							src="https://nokodo.net/media/images/logo_full.svg"
 							alt="nokodo logo"
-							class="ml-1 h-7 w-auto -translate-y-[5px] object-contain"
+							class="h-7 w-auto -translate-y-[5px] object-contain"
 						/>
-					{/if}
+					</div>
 				</div>
 			</button>
 
 			<!-- Close button (only when expanded) -->
-			{#if sidebar.isChatSidebarOpen}
-				<button
-					class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white"
-					onclick={() => sidebar.toggleChatSidebar()}
-					aria-label="Close sidebar"
-				>
-					<ChevronLeft className="h-5 w-5" />
-				</button>
-			{/if}
+			<button
+				class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white {sidebar.isChatSidebarOpen
+					? 'opacity-100'
+					: 'pointer-events-none opacity-0'}"
+				onclick={() => sidebar.toggleChatSidebar()}
+				aria-label="Close sidebar"
+			>
+				<ChevronLeft className="h-5 w-5" />
+			</button>
 		</div>
 
 		<Separator.Root class="bg-white/10" />
@@ -261,36 +246,59 @@
 			</Tooltip.Root>
 		{/each}
 
-		<!-- Chats Section (only when expanded) -->
-		{#if sidebar.isChatSidebarOpen}
-			<Separator.Root class="my-2 bg-white/10" />
-			<div
-				class="flex w-full flex-1 flex-col gap-2 overflow-hidden px-2 opacity-0 transition-opacity delay-100 duration-300 {sidebar.isChatSidebarOpen
-					? 'opacity-100'
-					: ''}"
-			>
-				<div class="mb-1 flex items-center gap-2 px-3">
-					<ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
-					<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
-				</div>
-				<ScrollArea.Root class="h-full">
-					<div class="space-y-1">
-						{#each chats as chat (chat.id)}
+		<!-- Chats Section -->
+		<Separator.Root class="my-2 bg-white/10" />
+		<div
+			class="flex w-full flex-1 flex-col gap-2 overflow-hidden px-2 transition-[opacity,transform] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+				? 'translate-x-0 opacity-100'
+				: 'pointer-events-none -translate-x-2 opacity-0'}"
+		>
+			<div class="mb-1 flex items-center gap-2 px-3">
+				<ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
+				<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
+			</div>
+			<ScrollArea.Root class="h-full">
+				<div class="space-y-1">
+					{#if !$isLoggedIn}
+						<div
+							class="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/55"
+						>
+							log in to see your recent chats
+						</div>
+					{:else if $recentThreads.length === 0}
+						<div
+							class="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/55"
+						>
+							no chats yet
+						</div>
+					{:else}
+						{#each $recentThreads as thread (thread.id)}
 							<div class="group/chat relative flex items-center gap-2">
 								<div
 									class="flex flex-1 cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent bg-transparent p-3 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
-									chat.id
+									thread.id
 										? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
 										: ''}"
-									style={sidebar.selectedChatId === chat.id
+									style={sidebar.selectedChatId === thread.id
 										? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
 										: ''}
-									onclick={() => sidebar.selectChat(chat.id)}
+									onclick={async () => {
+										sidebar.selectChat(thread.id)
+										await goto(resolve(`/c/${thread.id}`), {
+											keepFocus: true,
+											noScroll: true,
+										})
+									}}
 									role="button"
 									tabindex="0"
-									onkeydown={(e) => {
+									onkeydown={async (e) => {
 										if (e.key === 'Enter' || e.key === ' ') {
-											sidebar.selectChat(chat.id)
+											e.preventDefault()
+											sidebar.selectChat(thread.id)
+											await goto(resolve(`/c/${thread.id}`), {
+												keepFocus: true,
+												noScroll: true,
+											})
 										}
 									}}
 								>
@@ -298,11 +306,12 @@
 										<div class="mb-1 flex items-center gap-2">
 											<span
 												class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap"
-												>{chat.title}</span
 											>
+												{thread.title || 'untitled chat'}
+											</span>
 										</div>
 										<span class="text-xs text-white/50">
-											{formatTime(chat.timestamp)}
+											{formatTime(thread.last_activity_at ?? '')}
 										</span>
 									</div>
 								</div>
@@ -310,17 +319,17 @@
 									class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
 									onclick={(e) => {
 										e.stopPropagation()
-										console.log('Chat actions for', chat.id)
+										console.log('Chat actions for', thread.id)
 									}}
 								>
 									<EllipsisHorizontal className="h-4 w-4" />
 								</button>
 							</div>
 						{/each}
-					</div>
-				</ScrollArea.Root>
-			</div>
-		{/if}
+					{/if}
+				</div>
+			</ScrollArea.Root>
+		</div>
 	</div>
 </div>
 

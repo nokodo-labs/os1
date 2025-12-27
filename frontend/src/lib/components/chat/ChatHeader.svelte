@@ -97,8 +97,7 @@
 
 	function handleTemporaryChat() {
 		sidebar?.selectChat?.(null)
-		const tempId = `temp-${Date.now()}`
-		navigateWithTransition(`/chats/${tempId}`)
+		navigateWithTransition('/?chat=temp')
 	}
 
 	const quickActions: QuickAction[] = [

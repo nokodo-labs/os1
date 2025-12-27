@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { page } from '$app/state'
+	import { v1Client } from '$lib/api/v1/client'
+	import { getJwtUserId } from '$lib/auth/jwt'
+	import { getAccessToken } from '$lib/auth/session'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
@@ -9,10 +13,12 @@
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
+	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { openModal } from '$lib/stores/modals'
+	import { setActiveThread, userDisplay } from '$lib/stores/session'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state('')
@@ -25,6 +31,32 @@
 
 	const chrome = useSystemChrome()
 	const debugUi = useDebugUi()
+
+	type ChatMode = 'new' | 'temp' | null
+
+	const chatMode = $derived((page.url.searchParams.get('chat') as ChatMode) ?? null)
+	const isChatMode = $derived(chatMode === 'new' || chatMode === 'temp')
+	const isTemporaryChatMode = $derived(chatMode === 'temp')
+	let showChatBanner = $state(false)
+
+	let chatStartError = $state<string | null>(null)
+
+	$effect(() => {
+		let timeoutId: number | null = null
+		if (isChatMode) {
+			showChatBanner = false
+			// Wait for the input's move-to-bottom transition to mostly finish.
+			timeoutId = window.setTimeout(() => {
+				showChatBanner = true
+			}, 420) as unknown as number
+		} else {
+			showChatBanner = false
+		}
+
+		return () => {
+			if (timeoutId !== null) window.clearTimeout(timeoutId)
+		}
+	})
 
 	const normalizedQuery = $derived(inputValue.trim().toLowerCase())
 
@@ -95,7 +127,7 @@
 	})
 
 	async function navigateToChat(threadId: string, content: string) {
-		const target = `/chats/${threadId}?q=${encodeURIComponent(content)}`
+		const target = `/c/${threadId}?q=${encodeURIComponent(content)}`
 		// Assume View Transitions API exists (per requirement), but keep a safe fallback.
 		const start = (
 			document as unknown as {
@@ -114,11 +146,61 @@
 		await goto(resolve(target as never), { keepFocus: true, noScroll: true })
 	}
 
+	async function setHomeChatMode(mode: Exclude<ChatMode, null>, opts?: { replace?: boolean }) {
+		chatStartError = null
+		const target = `/?chat=${mode}`
+		const go = async () => {
+			// @ts-expect-error resolve typing is narrower than our constructed URL
+			await goto(resolve(target as never), {
+				keepFocus: true,
+				noScroll: true,
+				replaceState: opts?.replace ?? false,
+			})
+		}
+
+		// For within-home state changes (/?chat=...), avoid ViewTransition overlay so
+		// controls remain interactive mid-animation.
+		await go()
+	}
+
+	async function createThreadAndNavigate(content: string): Promise<void> {
+		const token = getAccessToken()
+		const userId = token ? getJwtUserId(token) : null
+		if (!token || !userId) {
+			chatStartError = 'please log in again'
+			inputValue = content
+			return
+		}
+
+		const { data, error } = await v1Client().POST('/threads', {
+			body: {
+				owner_id: userId,
+				is_archived: false,
+				is_temporary: isTemporaryChatMode,
+				tags: [],
+				project_ids: [],
+			},
+		})
+
+		if (error || !data) {
+			chatStartError = 'could not start chat. try again.'
+			inputValue = content
+			return
+		}
+
+		setActiveThread(data)
+
+		await navigateToChat(data.id, content)
+	}
+
 	function handleSendMessage(content: string) {
-		// Create a new thread ID (mock)
-		const threadId = Date.now().toString()
-		// Navigate to the chat page with a view transition
-		void navigateToChat(threadId, content)
+		chatStartError = null
+		void (async () => {
+			if (!isChatMode) {
+				await setHomeChatMode('new', { replace: true })
+			}
+			await createThreadAndNavigate(content)
+		})()
 	}
 
 	function handleStopGeneration() {
@@ -195,32 +277,69 @@
 	}
 </script>
 
-<!-- Scrollable Area (kept for layout parity with /chats/[id]) -->
+<!-- Scrollable Area (kept for layout parity with /c/[id]) -->
 <div class="flex-1 overflow-y-auto">
-	<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32"></div>
+	<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
+		{#if isChatMode && showChatBanner}
+			<div
+				class="flex flex-1 items-center justify-center py-16"
+				in:fade={{ duration: 220 }}
+				out:fade={{ duration: 120 }}
+			>
+				<div class="max-w-md text-center">
+					<div
+						class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
+					>
+						<EyeSlash className="h-7 w-7" />
+					</div>
+					{#if isTemporaryChatMode}
+						<h2 class="text-2xl font-semibold text-white/90">temporary chat enabled</h2>
+						<p class="mt-2 text-sm text-white/60">
+							send a message to start. messages here won’t be saved.
+						</p>
+					{:else}
+						<h2 class="text-2xl font-semibold text-white/90">new chat</h2>
+						<p class="mt-2 text-sm text-white/60">send a message to begin.</p>
+					{/if}
+				</div>
+			</div>
+		{/if}
+	</div>
 </div>
 
-<!-- Input Area (Fixed Bottom) -->
 <div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
 	<div class="mx-auto w-full max-w-7xl px-8">
 		<div
 			style="view-transition-name: chat-input;"
-			class="relative -translate-y-[40vh] transition-all duration-500 ease-in-out"
+			class="relative transition-all duration-500 ease-in-out {isChatMode
+				? 'translate-y-0'
+				: '-translate-y-[40vh]'}"
 		>
-			<div
-				style="view-transition-name: landing-greeting;"
-				class="mb-12 flex flex-col items-center justify-center gap-2 text-center"
-				in:fade={{ duration: 200 }}
-			>
-				<h1 class="text-4xl font-medium text-white">
-					hi <span
-						class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
-						style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
-						>admin</span
-					>
-				</h1>
-				<p class="text-xl text-white/60">good afternoon</p>
-			</div>
+			{#if !isChatMode}
+				<div
+					style="view-transition-name: landing-greeting;"
+					class="absolute right-0 bottom-full left-0 mb-12 flex flex-col items-center justify-center gap-2 text-center"
+					in:fade={{ duration: 200 }}
+					out:fade={{ duration: 160 }}
+				>
+					<h1 class="text-4xl font-medium text-white">
+						hi <span
+							class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
+							style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
+							>{$userDisplay.name}</span
+						>
+					</h1>
+					<p class="text-xl text-white/60">good afternoon</p>
+				</div>
+			{/if}
+
+			{#if isChatMode && chatStartError}
+				<div
+					class="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70"
+				>
+					{chatStartError}
+				</div>
+			{/if}
 			<ChatInputLiquidGlass
 				bind:value={inputValue}
 				onSubmit={handleSendMessage}
@@ -230,8 +349,12 @@
 				placeholder="send a message"
 			/>
 
-			<div class="absolute top-full right-0 left-0 mt-14">
-				<div style="view-transition-name: apps-grid;" class="relative">
+			<div
+				class="absolute top-full right-0 left-0 mt-14 transition-opacity duration-200 {isChatMode
+					? 'pointer-events-none opacity-0'
+					: 'opacity-100'}"
+			>
+				<div class="relative">
 					<AppsGrid iconShape={debugUi.appsGridIconShape} />
 
 					<div class="absolute top-0 right-0 left-0 z-20 -mt-10">
