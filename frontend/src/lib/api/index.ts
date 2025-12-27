@@ -26,7 +26,7 @@ export const api = {
 		return data ?? []
 	},
 
-	async getUser(id: number): Promise<User> {
+	async getUser(id: string): Promise<User> {
 		const { data, error, response } = await v1Client().GET('/users/{user_id}', {
 			params: { path: { user_id: id } },
 		})

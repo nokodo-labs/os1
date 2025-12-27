@@ -38,6 +38,9 @@ export type { OpenAIChatCompletionUsage } from './models/OpenAIChatCompletionUsa
 export type { OpenAIChatMessage } from './models/OpenAIChatMessage';
 export type { ProblemDetails } from './models/ProblemDetails';
 export type { Project } from './models/Project';
+export type { Prompt } from './models/Prompt';
+export type { PromptCreate } from './models/PromptCreate';
+export type { PromptUpdate } from './models/PromptUpdate';
 export type { Provider } from './models/Provider';
 export type { ProviderCreate } from './models/ProviderCreate';
 export type { ProviderStatus } from './models/ProviderStatus';
@@ -72,6 +75,7 @@ export { ModelsService } from './services/ModelsService';
 export { NotificationsService } from './services/NotificationsService';
 export { OpenaiService } from './services/OpenaiService';
 export { ProjectsService } from './services/ProjectsService';
+export { PromptsService } from './services/PromptsService';
 export { ProvidersService } from './services/ProvidersService';
 export { SystemService } from './services/SystemService';
 export { TasksService } from './services/TasksService';

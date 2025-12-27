@@ -1,5 +1,6 @@
 import createClient from 'openapi-fetch'
 
+import { getAccessToken } from '$lib/auth/session'
 import type { paths } from '../types'
 
 let apiOrigin: string | null = null
@@ -20,5 +21,23 @@ export function getV1BaseUrl(): string {
 }
 
 export function v1Client() {
-	return createClient<paths>({ baseUrl: getV1BaseUrl() })
+	return createClient<paths>({
+		baseUrl: getV1BaseUrl(),
+		fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+			const token = getAccessToken()
+			if (!token) return fetch(input, init)
+
+			const headers = new Headers(init?.headers)
+			if (!headers.has('Authorization')) {
+				headers.set('Authorization', `Bearer ${token}`)
+			}
+
+			if (input instanceof Request) {
+				const nextRequest = new Request(input, { ...init, headers })
+				return fetch(nextRequest)
+			}
+
+			return fetch(input, { ...init, headers })
+		},
+	})
 }

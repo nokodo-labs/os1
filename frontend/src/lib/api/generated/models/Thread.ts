@@ -13,6 +13,7 @@ export type Thread = {
     title?: (string | null);
     tags?: Array<string>;
     is_archived?: boolean;
+    is_temporary?: boolean;
     project_ids?: Array<string>;
     id: string;
     owner_id: string;
