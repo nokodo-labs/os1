@@ -265,7 +265,7 @@
 	}
 
 	:global(.dark) .send-btn:disabled {
-		background-color: rgb(55 65 81); /* gray-700 */
-		color: rgb(156 163 175); /* gray-400 */
+		background-color: white; /* gray-700 */
+		color: rgb(107 114 128); /* gray-400 */
 	}
 </style>

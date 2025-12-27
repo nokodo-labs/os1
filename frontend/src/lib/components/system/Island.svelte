@@ -6,6 +6,7 @@
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Home from '$lib/components/icons/Home.svelte'
+	import Sidebar from '$lib/components/icons/Sidebar.svelte'
 	import UserProfileTrigger from '$lib/components/sidebar/UserProfileTrigger.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -20,10 +21,27 @@
 
 	type SidebarContext = {
 		selectChat?: (id: string | null) => void
+		toggleChatSidebar?: () => void
+		openChatSidebar?: () => void
+		closeChatSidebar?: () => void
+		isChatSidebarOpen?: boolean
 	}
 
 	const chrome = useSystemChrome()
 	const sidebar = useSidebar() as SidebarContext | null
+
+	let isMobileViewport = $state(false)
+
+	$effect(() => {
+		if (typeof window === 'undefined') return
+		const mq = window.matchMedia('(max-width: 888px)')
+		const update = () => {
+			isMobileViewport = mq.matches
+		}
+		update()
+		mq.addEventListener('change', update)
+		return () => mq.removeEventListener('change', update)
+	})
 
 	$effect(() => {
 		void refreshSession()
@@ -135,23 +153,25 @@
 
 <div style="view-transition-name: chat-header;">
 	<header
-		class="liquid-glass mt-5 mb-0 rounded-full px-7 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+		class="liquid-glass mt-5 mb-0 max-h-[88px] overflow-hidden rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>
 
-		<div class="liquid-glass__content grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+		<div
+			class="liquid-glass__content grid grid-cols-[1fr_auto_1fr] items-center gap-[clamp(6px,2.5vw,16px)]"
+		>
 			<!-- left: adaptive controls -->
-			<div class="flex items-center gap-3">
+			<div class="flex min-w-0 items-center gap-[clamp(6px,2.2vw,12px)]">
 				{#if chrome.island.agentSelector}
-					<div class="agent-selector relative flex items-center gap-2">
+					<div class="agent-selector relative flex min-w-0 items-center gap-2">
 						<button
-							class="flex cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-4 py-2 transition-all duration-200 hover:bg-white/5 active:scale-[0.98]"
+							class="flex min-w-0 cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-[clamp(8px,2.5vw,16px)] py-2 transition-all duration-200 hover:bg-white/5 active:scale-[0.98]"
 							onclick={toggleAgentDropdown}
 							aria-expanded={isAgentDropdownOpen}
 							aria-haspopup="listbox"
 						>
 							<span
-								class="bg-clip-text text-xl font-semibold text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
+								class="min-w-0 truncate bg-clip-text text-xl font-semibold whitespace-nowrap text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 								style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
 								>{currentAgent.name}</span
 							>
@@ -203,6 +223,19 @@
 							</div>
 						{/if}
 					</div>
+
+					{#if isMobileViewport}
+						<button
+							class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+							onclick={() => sidebar?.toggleChatSidebar?.()}
+							aria-label={sidebar?.isChatSidebarOpen
+								? 'close sidebar'
+								: 'open sidebar'}
+							aria-expanded={sidebar?.isChatSidebarOpen}
+						>
+							<Sidebar className="h-6 w-6" />
+						</button>
+					{/if}
 
 					<button
 						class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"

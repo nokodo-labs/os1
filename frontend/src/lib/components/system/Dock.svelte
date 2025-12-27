@@ -44,14 +44,10 @@
 	]
 </script>
 
-<aside
-	class="h-full transition-all duration-300 ease-out {chrome.isDockOpen
-		? 'pointer-events-auto translate-x-0 opacity-100'
-		: 'pointer-events-none translate-x-full opacity-0'}"
-	aria-hidden={!chrome.isDockOpen}
->
+<aside class="relative h-full w-full" aria-hidden={!chrome.isDockOpen}>
 	<div class="flex h-full flex-col gap-4">
 		<section
+			data-dock-panel
 			class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
 			aria-label="notifications"
 		>
@@ -88,6 +84,7 @@
 		<div class="flex-1"></div>
 
 		<section
+			data-dock-panel
 			class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
 			aria-label="control center"
 		>

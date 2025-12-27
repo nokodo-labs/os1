@@ -2,11 +2,11 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Python: FastAPI",
+			"name": "Backend: FastAPI Uvicorn Server",
 			"type": "debugpy",
 			"request": "launch",
 			"module": "uvicorn",
-			"preLaunchTask": "Docker: Dev Dependencies",
+			"preLaunchTask": "Docker: Ensure Dev Deps",
 			"args": [
 				"api.main:app",
 				"--reload",
@@ -36,7 +36,7 @@
 			}
 		},
 		{
-			"name": "Python: Pytest",
+			"name": "Backend: Pytest",
 			"type": "debugpy",
 			"request": "launch",
 			"module": "pytest",
@@ -115,7 +115,7 @@
 		{
 			"name": "Full Stack",
 			"configurations": [
-				"Python: FastAPI",
+				"Backend: FastAPI Uvicorn Server",
 				"Frontend: Vite Dev Server",
 				"Frontend: Chrome",
 				"Console: Vite Dev Server",
@@ -131,7 +131,7 @@
 		{
 			"name": "API + Frontend",
 			"configurations": [
-				"Python: FastAPI",
+				"Backend: FastAPI Uvicorn Server",
 				"Frontend: Vite Dev Server",
 				"Frontend: Chrome"
 			],
@@ -145,7 +145,7 @@
 		{
 			"name": "API + Console",
 			"configurations": [
-				"Python: FastAPI",
+				"Backend: FastAPI Uvicorn Server",
 				"Console: Vite Dev Server",
 				"Console: Chrome"
 			],

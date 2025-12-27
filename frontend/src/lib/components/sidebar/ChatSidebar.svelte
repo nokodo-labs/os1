@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { page } from '$app/state'
+	import { getV1BaseUrl } from '$lib/api/v1/client'
+	import { getAccessToken } from '$lib/auth/session'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
@@ -30,6 +33,29 @@
 
 	const sidebar = useSidebar() as SidebarContext
 
+	let openThreadMenuId = $state<string | null>(null)
+	let confirmDeleteThread = $state<{ id: string; title: string } | null>(null)
+	let isDeleting = $state(false)
+	let deleteError = $state<string | null>(null)
+
+	let isMobile = $state(false)
+	let closeSwipePointerId = $state<number | null>(null)
+	let closeSwipeStartX = $state(0)
+	let closeSwipeStartY = $state(0)
+	let closeSwipeActive = $state(false)
+
+	$effect(() => {
+		if (typeof window === 'undefined') return
+		const mq = window.matchMedia('(max-width: 888px)')
+		const update = () => {
+			isMobile = mq.matches
+			if (isMobile) sidebar.closeChatSidebar()
+		}
+		update()
+		mq.addEventListener('change', update)
+		return () => mq.removeEventListener('change', update)
+	})
+
 	function handleSearchClick() {
 		// TODO: Open global search overlay
 		console.log('Open global search')
@@ -39,7 +65,7 @@
 		id: string
 		icon: typeof Search
 		label: string
-		action: () => void
+		action: () => void | Promise<void>
 	}
 
 	const items: SidebarItem[] = [
@@ -47,7 +73,7 @@
 			id: 'new-chat',
 			icon: ChatPlus,
 			label: 'new chat',
-			action: () => {
+			action: async () => {
 				sidebar.selectChat(null)
 
 				const start = (
@@ -62,9 +88,11 @@
 							keepFocus: true,
 							noScroll: true,
 						})
+						if (isMobile) sidebar.closeChatSidebar()
 					})
 				} else {
-					goto('/?chat=new', { keepFocus: true, noScroll: true })
+					await goto('/?chat=new', { keepFocus: true, noScroll: true })
+					if (isMobile) sidebar.closeChatSidebar()
 				}
 			},
 		},
@@ -82,6 +110,60 @@
 		if ($isLoggedIn) void refreshThreads({ limit: 25 })
 	})
 
+	function onCloseSwipePointerDown(event: PointerEvent) {
+		if (!isMobile) return
+		if (!sidebar.isChatSidebarOpen) return
+		closeSwipePointerId = event.pointerId
+		closeSwipeStartX = event.clientX
+		closeSwipeStartY = event.clientY
+		closeSwipeActive = true
+		;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
+	}
+
+	function onCloseSwipePointerUp(event: PointerEvent) {
+		if (!closeSwipeActive) return
+		if (closeSwipePointerId !== event.pointerId) return
+		const dx = event.clientX - closeSwipeStartX
+		const dy = event.clientY - closeSwipeStartY
+		closeSwipeActive = false
+		closeSwipePointerId = null
+
+		if (Math.abs(dx) <= 80) return
+		if (Math.abs(dx) <= Math.abs(dy)) return
+		// Close gesture: right-to-left
+		if (dx < 0) sidebar.closeChatSidebar()
+	}
+
+	function onCloseSwipePointerCancel(event: PointerEvent) {
+		if (closeSwipePointerId !== event.pointerId) return
+		closeSwipeActive = false
+		closeSwipePointerId = null
+	}
+	$effect(() => {
+		if (!openThreadMenuId) return
+		const handleDocClick = (event: MouseEvent) => {
+			const target = event.target as HTMLElement | null
+			if (!target) return
+			if (target.closest('[data-thread-menu]')) return
+			openThreadMenuId = null
+		}
+		document.addEventListener('click', handleDocClick)
+		return () => document.removeEventListener('click', handleDocClick)
+	})
+
+	async function deleteThread(threadId: string): Promise<number | null> {
+		const token = getAccessToken()
+		if (!token) return null
+
+		const res = await fetch(`${getV1BaseUrl()}/threads/${threadId}`, {
+			method: 'DELETE',
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
+		})
+		return res.status
+	}
+
 	function formatTime(iso: string): string {
 		const date = new Date(iso)
 		if (Number.isNaN(date.getTime())) return ''
@@ -94,36 +176,56 @@
 	}
 </script>
 
-<div
-	class="relative backdrop-blur-[20px] backdrop-saturate-180 {sidebar.isChatSidebarOpen
-		? 'w-72'
-		: 'w-18'} h-screen rounded-none border-r border-white/10 transition-[width] duration-300 ease-in-out"
+{#if isMobile && sidebar.isChatSidebarOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-40 bg-black/40" onclick={() => sidebar.closeChatSidebar()}></div>
+
+	<!-- Right-edge swipe catcher to close fullscreen sidebar (mobile only) -->
+	<div
+		class="fixed inset-y-0 right-0 z-60 w-8"
+		role="presentation"
+		style="touch-action: pan-y;"
+		onpointerdown={onCloseSwipePointerDown}
+		onpointerup={onCloseSwipePointerUp}
+		onpointercancel={onCloseSwipePointerCancel}
+	></div>
+{/if}
+
+<aside
+	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-transform duration-300 ease-in-out {isMobile
+		? 'w-full'
+		: 'w-72'} {sidebar.isChatSidebarOpen
+		? 'translate-x-0'
+		: isMobile
+			? 'pointer-events-none -translate-x-full'
+			: '-translate-x-[216px]'}"
 	style="background-color: var(--accent-bg);"
+	aria-hidden={isMobile ? !sidebar.isChatSidebarOpen : false}
 >
 	<!-- Gradient overlay (replaces ::before pseudo-element) -->
 	<div
 		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/10 via-white/5 to-transparent"
 	></div>
 
-	<!-- Clickable overlay quando sidebar è chiusa -->
-	{#if !sidebar.isChatSidebarOpen}
+	<!-- Clickable rail overlay when closed (desktop only) -->
+	{#if !isMobile && !sidebar.isChatSidebarOpen}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="absolute inset-0 z-10 cursor-pointer hover:bg-white/2"
+			class="absolute inset-y-0 right-0 z-10 w-18 cursor-pointer hover:bg-white/2"
 			onclick={() => sidebar.toggleChatSidebar()}
 		></div>
 	{/if}
 
 	<div
-		class="pointer-events-none relative z-20 flex h-full flex-col items-center gap-2 px-2 py-4 *:pointer-events-auto"
+		class="pointer-events-none relative z-20 flex h-full flex-col items-center gap-2 px-3 py-4 transition-transform duration-300 ease-in-out *:pointer-events-auto {!isMobile &&
+		!sidebar.isChatSidebarOpen
+			? 'translate-x-[216px]'
+			: ''}"
 	>
 		<!-- Logo / Brand with Close Button -->
-		<div
-			class="flex items-center {sidebar.isChatSidebarOpen
-				? 'justify-between'
-				: 'justify-center'} w-full gap-2"
-		>
+		<div class="flex w-full items-center justify-between gap-2">
 			<button
 				class="group relative flex items-center justify-center {sidebar.isChatSidebarOpen
 					? 'max-w-[calc(100%-2.5rem)] flex-1'
@@ -165,9 +267,9 @@
 
 			<!-- Close button (only when expanded) -->
 			<button
-				class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white {sidebar.isChatSidebarOpen
-					? 'opacity-100'
-					: 'pointer-events-none opacity-0'}"
+				class="flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white {sidebar.isChatSidebarOpen
+					? 'w-8 opacity-100'
+					: 'pointer-events-none w-0 overflow-hidden opacity-0'}"
 				onclick={() => sidebar.toggleChatSidebar()}
 				aria-label="Close sidebar"
 			>
@@ -273,9 +375,9 @@
 						</div>
 					{:else}
 						{#each $recentThreads as thread (thread.id)}
-							<div class="group/chat relative flex items-center gap-2">
+							<div class="group/chat relative">
 								<div
-									class="flex flex-1 cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent bg-transparent p-3 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
+									class="relative flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent bg-transparent p-3 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
 									thread.id
 										? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
 										: ''}"
@@ -314,16 +416,59 @@
 											{formatTime(thread.last_activity_at ?? '')}
 										</span>
 									</div>
+
+									<button
+										type="button"
+										class="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
+										onclick={(e) => {
+											e.stopPropagation()
+											openThreadMenuId =
+												openThreadMenuId === thread.id ? null : thread.id
+										}}
+										aria-label="thread actions"
+									>
+										<EllipsisHorizontal className="h-4 w-4" />
+									</button>
+
+									{#if openThreadMenuId === thread.id}
+										<div
+											data-thread-menu
+											class="absolute top-full right-2 z-50 mt-2 w-52 rounded-2xl border border-white/10 bg-black/60 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+										>
+											{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action}
+												<button
+													type="button"
+													class="flex w-full cursor-pointer items-center rounded-xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+													onclick={(e) => {
+														e.stopPropagation()
+														openThreadMenuId = null
+														console.log(
+															'thread action',
+															action,
+															thread.id
+														)
+													}}
+												>
+													{action}
+												</button>
+											{/each}
+											<button
+												type="button"
+												class="mt-1 flex w-full cursor-pointer items-center rounded-xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+												onclick={(e) => {
+													e.stopPropagation()
+													openThreadMenuId = null
+													confirmDeleteThread = {
+														id: thread.id,
+														title: thread.title || 'untitled chat',
+													}
+												}}
+											>
+												delete
+											</button>
+										</div>
+									{/if}
 								</div>
-								<button
-									class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
-									onclick={(e) => {
-										e.stopPropagation()
-										console.log('Chat actions for', thread.id)
-									}}
-								>
-									<EllipsisHorizontal className="h-4 w-4" />
-								</button>
 							</div>
 						{/each}
 					{/if}
@@ -331,7 +476,88 @@
 			</ScrollArea.Root>
 		</div>
 	</div>
-</div>
+</aside>
+
+{#if confirmDeleteThread}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-60 flex items-center justify-center bg-black/55 px-6"
+		onclick={() => {
+			if (!isDeleting) {
+				confirmDeleteThread = null
+				deleteError = null
+			}
+		}}
+	>
+		<div
+			class="liquid-glass w-full max-w-sm rounded-3xl px-6 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.6)]"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<span class="liquid-glass__highlight" aria-hidden="true"></span>
+			<div class="liquid-glass__content">
+				<div class="text-lg font-semibold text-white/90">delete chat?</div>
+				<div class="mt-2 text-sm text-white/60">{confirmDeleteThread.title}</div>
+
+				{#if deleteError}
+					<div
+						class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+					>
+						{deleteError}
+					</div>
+				{/if}
+
+				<div class="mt-5 flex items-center justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+						disabled={isDeleting}
+						onclick={() => {
+							confirmDeleteThread = null
+							deleteError = null
+						}}
+					>
+						cancel
+					</button>
+					<button
+						type="button"
+						class="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:opacity-60"
+						disabled={isDeleting}
+						onclick={() => {
+							void (async () => {
+								if (!confirmDeleteThread) return
+								isDeleting = true
+								deleteError = null
+								try {
+									const status = await deleteThread(confirmDeleteThread.id)
+									if (status !== 204) {
+										deleteError = 'could not delete chat'
+										return
+									}
+
+									sidebar.selectChat(null)
+									await refreshThreads({ limit: 25 })
+
+									if (page.url.pathname === `/c/${confirmDeleteThread.id}`) {
+										await goto('/', { keepFocus: true, noScroll: true })
+									}
+
+									confirmDeleteThread = null
+								} catch {
+									deleteError = 'could not delete chat'
+								} finally {
+									isDeleting = false
+								}
+							})()
+						}}
+					>
+						{isDeleting ? 'deleting…' : 'delete'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	@keyframes float {

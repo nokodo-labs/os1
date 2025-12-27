@@ -36,7 +36,7 @@ class AuthState {
 		const decoded = parseJwt(this.token)
 		if (!decoded || !decoded.sub) return
 
-		const userId = parseInt(decoded.sub)
+		const userId = String(decoded.sub)
 		try {
 			this.user = await UsersService.readUserUsersUserIdGet(userId)
 		} catch (e) {

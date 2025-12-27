@@ -54,11 +54,12 @@
 		{ id: 'teams', title: 'teams', icon: Users },
 	]
 
-	const TILE_PX = 76
-	const LABEL_PX = 18
-	const TILE_TO_LABEL_GAP_PX = 8
-	const GRID_GAP_X_PX = 30
-	const GRID_GAP_Y_PX = 35
+	let tilePx = $state(76)
+	let labelPx = $state(18)
+	let tileToLabelGapPx = $state(8)
+	let gridGapXPx = $state(30)
+	let gridGapYPx = $state(35)
+	let iconPx = $state(32)
 	const INDICATOR_SPACE_PX = 28
 	const BOTTOM_PADDING_PX = 12
 
@@ -74,6 +75,7 @@
 	let dragStartX = 0
 	let dragStartScrollLeft = 0
 	let elasticOffsetPx = $state(0)
+	let rubberbandAnimation: Animation | null = null
 	let hasPassedDragThreshold = $state(false)
 	const DRAG_THRESHOLD_PX = 6
 	const ELASTIC_CONSTANT = 0.55
@@ -92,20 +94,42 @@
 		return Math.max(min, Math.min(max, value))
 	}
 
+	let recalcRaf: number | null = null
+	function scheduleRecalc() {
+		if (typeof window === 'undefined') return
+		if (recalcRaf !== null) cancelAnimationFrame(recalcRaf)
+		recalcRaf = requestAnimationFrame(() => {
+			recalcRaf = null
+			recalcLayout()
+			// One extra frame helps when the viewport is mid-transition (mobile URL bar / orientation).
+			requestAnimationFrame(recalcLayout)
+		})
+	}
+
 	function recalcLayout() {
 		if (!rootEl) return
 
 		const rect = rootEl.getBoundingClientRect()
 		const width = rect.width
-		const availableHeight = Math.max(0, window.innerHeight - rect.top - BOTTOM_PADDING_PX)
 
-		const tileBlockWidth = TILE_PX + GRID_GAP_X_PX
-		const nextCols = clamp(Math.floor((width + GRID_GAP_X_PX) / tileBlockWidth), 3, 7)
+		// Scale tile sizing down on small viewports.
+		const scale = clamp(width / 560, 0.78, 1)
+		tilePx = Math.round(76 * scale)
+		gridGapXPx = Math.round(30 * scale)
+		gridGapYPx = Math.round(35 * scale)
+		tileToLabelGapPx = Math.max(6, Math.round(8 * scale))
+		labelPx = Math.max(16, Math.round(18 * scale))
+		iconPx = clamp(Math.round(tilePx * 0.42), 22, 32)
+		const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+		const availableHeight = Math.max(0, viewportHeight - rect.top - BOTTOM_PADDING_PX)
 
-		const cellHeight = TILE_PX + TILE_TO_LABEL_GAP_PX + LABEL_PX
-		const tileBlockHeight = cellHeight + GRID_GAP_Y_PX
+		const tileBlockWidth = tilePx + gridGapXPx
+		const nextCols = clamp(Math.floor((width + gridGapXPx) / tileBlockWidth), 3, 7)
+
+		const cellHeight = tilePx + tileToLabelGapPx + labelPx
+		const tileBlockHeight = cellHeight + gridGapYPx
 		const heightForGrid = Math.max(0, availableHeight - INDICATOR_SPACE_PX)
-		const nextRows = clamp(Math.floor((heightForGrid + GRID_GAP_Y_PX) / tileBlockHeight), 1, 5)
+		const nextRows = clamp(Math.floor((heightForGrid + gridGapYPx) / tileBlockHeight), 1, 5)
 
 		cols = nextCols
 		rows = nextRows
@@ -134,6 +158,8 @@
 
 	function applyDragScroll(desiredScrollLeft: number) {
 		if (!scrollerEl) return
+		rubberbandAnimation?.cancel()
+		rubberbandAnimation = null
 		const maxScroll = Math.max(0, scrollerEl.scrollWidth - scrollerEl.clientWidth)
 
 		if (desiredScrollLeft < 0) {
@@ -164,12 +190,39 @@
 	function handlePointerDown(event: PointerEvent) {
 		if (!scrollerEl) return
 		if (event.pointerType === 'mouse' && event.button !== 0) return
+		rubberbandAnimation?.cancel()
+		rubberbandAnimation = null
 		isDragging = false
 		hasPassedDragThreshold = false
 		suppressClick = false
 		dragPointerId = event.pointerId
 		dragStartX = event.clientX
 		dragStartScrollLeft = scrollerEl.scrollLeft
+	}
+
+	function animateElasticReturn() {
+		if (!trackEl) {
+			elasticOffsetPx = 0
+			return
+		}
+		const start = elasticOffsetPx
+		if (start === 0) return
+		rubberbandAnimation?.cancel()
+		rubberbandAnimation = trackEl.animate(
+			[{ transform: `translateX(${start}px)` }, { transform: 'translateX(0px)' }],
+			{
+				duration: 280,
+				easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+				fill: 'forwards',
+			}
+		)
+		rubberbandAnimation.onfinish = () => {
+			rubberbandAnimation = null
+			elasticOffsetPx = 0
+		}
+		rubberbandAnimation.oncancel = () => {
+			rubberbandAnimation = null
+		}
 	}
 
 	function handlePointerMove(event: PointerEvent) {
@@ -198,9 +251,7 @@
 		if (!scrollerEl) return
 		const width = scrollerEl.clientWidth
 		if (width <= 0) return
-		requestAnimationFrame(() => {
-			elasticOffsetPx = 0
-		})
+		animateElasticReturn()
 		if (didDrag) {
 			currentPage = clamp(Math.round(scrollerEl.scrollLeft / width), 0, pages.length - 1)
 			scrollToPage(currentPage)
@@ -216,26 +267,30 @@
 		if (dragPointerId !== event.pointerId) return
 		isDragging = false
 		hasPassedDragThreshold = false
-		requestAnimationFrame(() => {
-			elasticOffsetPx = 0
-		})
+		animateElasticReturn()
 		dragPointerId = null
 	}
 
 	const resizeObserver =
-		typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => recalcLayout())
+		typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => scheduleRecalc())
 
 	$effect(() => {
 		if (!rootEl) return
 		resizeObserver?.observe(rootEl)
-		window.addEventListener('resize', recalcLayout, { passive: true })
+		window.addEventListener('resize', scheduleRecalc, { passive: true })
+		window.addEventListener('orientationchange', scheduleRecalc, { passive: true })
+		window.visualViewport?.addEventListener('resize', scheduleRecalc, { passive: true })
+		window.visualViewport?.addEventListener('scroll', scheduleRecalc, { passive: true })
 
 		// Ensure we measure after layout (especially because this grid is positioned under the input)
-		const raf = requestAnimationFrame(recalcLayout)
+		scheduleRecalc()
 
 		return () => {
-			cancelAnimationFrame(raf)
-			window.removeEventListener('resize', recalcLayout)
+			if (recalcRaf !== null) cancelAnimationFrame(recalcRaf)
+			window.removeEventListener('resize', scheduleRecalc)
+			window.removeEventListener('orientationchange', scheduleRecalc)
+			window.visualViewport?.removeEventListener('resize', scheduleRecalc)
+			window.visualViewport?.removeEventListener('scroll', scheduleRecalc)
 			resizeObserver?.unobserve(rootEl)
 		}
 	})
@@ -270,21 +325,21 @@
 	>
 		<div
 			bind:this={trackEl}
-			class="flex w-full {isDragging ? '' : 'transition-transform duration-300 ease-out'}"
+			class="flex w-full"
 			style="transform: translateX({elasticOffsetPx}px);"
 		>
 			{#each pages as pageApps, pageIndex (pageIndex)}
 				<div class="w-full shrink-0 snap-start">
 					<div
 						class="grid w-full justify-center"
-						style="grid-template-columns: repeat({cols}, {TILE_PX}px); column-gap: {GRID_GAP_X_PX}px; row-gap: {GRID_GAP_Y_PX}px;"
+						style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px;"
 					>
 						{#each pageApps as app (app.id)}
 							{@const Icon = app.icon}
 							<button
 								type="button"
 								class="group flex flex-col items-center border-none bg-transparent"
-								style="height: {TILE_PX + TILE_TO_LABEL_GAP_PX + LABEL_PX}px;"
+								style="height: {tilePx + tileToLabelGapPx + labelPx}px;"
 								aria-label={app.title}
 							>
 								<div
@@ -292,16 +347,18 @@
 									'circle'
 										? 'rounded-full'
 										: 'rounded-3xl'}"
-									style="width: {TILE_PX}px; height: {TILE_PX}px; background-color: var(--accent-bg);"
+									style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
 								>
 									<span class="liquid-glass__highlight" aria-hidden="true"></span>
 									<div class="liquid-glass__content">
-										<Icon className="h-8 w-8 text-white/90" />
+										<Icon
+											className="h-(--icon-px) w-(--icon-px) text-white/90"
+										/>
 									</div>
 								</div>
 								<div
 									class="text-center text-xs font-medium text-white/70"
-									style="margin-top: {TILE_TO_LABEL_GAP_PX}px; line-height: {LABEL_PX}px; height: {LABEL_PX}px;"
+									style="margin-top: {tileToLabelGapPx}px; line-height: {labelPx}px; height: {labelPx}px;"
 								>
 									{app.title}
 								</div>
