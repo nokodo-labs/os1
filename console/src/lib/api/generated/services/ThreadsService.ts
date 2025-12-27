@@ -50,6 +50,7 @@ export class ThreadsService {
      * @param ownerId
      * @param skip
      * @param limit
+     * @param includeHidden
      * @returns Thread Successful Response
      * @throws ApiError
      */
@@ -57,6 +58,7 @@ export class ThreadsService {
         ownerId?: (string | null),
         skip?: number,
         limit: number = 20,
+        includeHidden: boolean = false,
     ): CancelablePromise<Array<Thread>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -65,6 +67,7 @@ export class ThreadsService {
                 'owner_id': ownerId,
                 'skip': skip,
                 'limit': limit,
+                'include_hidden': includeHidden,
             },
             errors: {
                 400: `bad request`,
@@ -82,17 +85,22 @@ export class ThreadsService {
      * Get Thread
      * Fetch a single thread with messages.
      * @param threadId
+     * @param includeHidden
      * @returns Thread Successful Response
      * @throws ApiError
      */
     public static getThreadThreadsThreadIdGet(
         threadId: string,
+        includeHidden: boolean = false,
     ): CancelablePromise<Thread> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/threads/{thread_id}',
             path: {
                 'thread_id': threadId,
+            },
+            query: {
+                'include_hidden': includeHidden,
             },
             errors: {
                 400: `bad request`,
@@ -144,6 +152,7 @@ export class ThreadsService {
      * @param threadId
      * @param skip
      * @param limit
+     * @param includeHidden
      * @returns Message Successful Response
      * @throws ApiError
      */
@@ -151,6 +160,7 @@ export class ThreadsService {
         threadId: string,
         skip?: number,
         limit: number = 100,
+        includeHidden: boolean = false,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -161,6 +171,7 @@ export class ThreadsService {
             query: {
                 'skip': skip,
                 'limit': limit,
+                'include_hidden': includeHidden,
             },
             errors: {
                 400: `bad request`,
@@ -210,17 +221,22 @@ export class ThreadsService {
      * Get Current Branch
      * Return the current root→leaf branch for this thread.
      * @param threadId
+     * @param includeHidden
      * @returns Message Successful Response
      * @throws ApiError
      */
     public static getCurrentBranchThreadsThreadIdBranchGet(
         threadId: string,
+        includeHidden: boolean = false,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/threads/{thread_id}/branch',
             path: {
                 'thread_id': threadId,
+            },
+            query: {
+                'include_hidden': includeHidden,
             },
             errors: {
                 400: `bad request`,
@@ -238,17 +254,22 @@ export class ThreadsService {
      * Get Message Tree
      * Return all messages for this thread as a flat list.
      * @param threadId
+     * @param includeHidden
      * @returns Message Successful Response
      * @throws ApiError
      */
     public static getMessageTreeThreadsThreadIdTreeGet(
         threadId: string,
+        includeHidden: boolean = false,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/threads/{thread_id}/tree',
             path: {
                 'thread_id': threadId,
+            },
+            query: {
+                'include_hidden': includeHidden,
             },
             errors: {
                 400: `bad request`,
