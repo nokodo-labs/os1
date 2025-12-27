@@ -162,11 +162,34 @@ def upgrade() -> None:
 	)
 
 	op.create_table(
+		"prompts",
+		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
+		sa.Column("command", sa.String(length=120), nullable=False),
+		sa.Column("content", sa.Text(), nullable=False),
+		sa.Column(
+			"created_at",
+			sa.DateTime(timezone=True),
+			server_default=sa.text("now()"),
+			nullable=False,
+		),
+		sa.Column(
+			"updated_at",
+			sa.DateTime(timezone=True),
+			server_default=sa.text("now()"),
+			nullable=False,
+		),
+		sa.Column("metadata", sa.JSON(), nullable=False),
+		sa.PrimaryKeyConstraint("id"),
+	)
+	op.create_index("ix_prompts_command", "prompts", ["command"], unique=True)
+
+	op.create_table(
 		"threads",
 		sa.Column("id", sa.String(length=TYPEID_LENGTH), nullable=False),
 		sa.Column("title", sa.String(length=255), nullable=True),
 		sa.Column("tags", sa.JSON(), nullable=False),
 		sa.Column("is_archived", sa.Boolean(), nullable=False),
+		sa.Column("is_temporary", sa.Boolean(), nullable=False),
 		sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
 		sa.Column(
 			"last_activity_at",
@@ -736,6 +759,8 @@ def downgrade() -> None:
 	op.drop_table("thread_projects")
 	op.drop_table("projects")
 	op.drop_table("threads")
+	op.drop_index("ix_prompts_command", table_name="prompts")
+	op.drop_table("prompts")
 	op.drop_table("agents")
 	op.drop_index("ix_models_provider_id", table_name="models")
 	op.drop_table("models")

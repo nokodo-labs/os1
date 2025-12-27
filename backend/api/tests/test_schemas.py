@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
+from api.schemas.content import TextContent
+from api.schemas.message import MessageCreate
 from api.schemas.project import Project as ProjectSchema
+from api.schemas.prompt import PromptCreate, PromptUpdate
+from api.schemas.runs import ThreadRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
 from nokodo_ai.utils.typeid import new_typeid
@@ -88,3 +94,56 @@ def test_thread_schema_populates_project_ids() -> None:
 
 	assert detailed.project_ids == [project_id]
 	assert summary.project_ids == [project_id]
+
+
+def test_message_create_normalizes_content_variants() -> None:
+	text = "hello"
+	part_dict = {"type": "text", "text": "world"}
+	model_part = TextContent(text="model")
+
+	from_str = MessageCreate(content=text)
+	from_list = MessageCreate(content=[part_dict, model_part])
+	from_empty = MessageCreate(content="")
+
+	assert from_str.content[0]["text"] == text
+	assert from_list.content == [part_dict, model_part.model_dump()]
+	assert from_empty.content == []
+
+
+def test_prompt_schema_validates_and_normalizes() -> None:
+	valid = PromptCreate(command="my-prompt", content="body")
+	assert valid.command == "/my-prompt"
+
+	updated = PromptUpdate(command="/next", content="x")
+	assert updated.command == "/next"
+
+	with pytest.raises(ValueError):
+		PromptCreate(command="not ok!", content="bad")
+
+
+def test_prompt_schema_none_and_blank_commands() -> None:
+	update = PromptUpdate(command=None, content=None)
+	assert update.command is None
+
+	with pytest.raises(ValueError):
+		PromptCreate(command="   ", content="x")
+
+
+def test_thread_run_request_requires_selector() -> None:
+	with pytest.raises(ValueError):
+		ThreadRunRequest()
+
+	req = ThreadRunRequest(agent_id=new_typeid("agent"))
+	assert req.agent_id is not None
+
+
+def test_thread_schema_defaults_for_flags() -> None:
+	thread = _stamp_thread(
+		ThreadModel(owner_id=new_typeid("user")), thread_id=new_typeid("thread")
+	)
+	thread.is_temporary = None  # type: ignore[assignment]
+	thread.is_archived = None  # type: ignore[assignment]
+
+	serialized = ThreadSchema.model_validate(thread)
+	assert serialized.is_temporary is False
+	assert serialized.is_archived is False

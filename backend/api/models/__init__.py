@@ -10,6 +10,7 @@ from api.models.message import Message
 from api.models.model import Model
 from api.models.notification import Notification
 from api.models.project import Project
+from api.models.prompt import Prompt
 from api.models.provider import Provider
 from api.models.reminder import Reminder
 from api.models.role import Role
@@ -31,6 +32,7 @@ __all__ = [
 	"Notification",
 	"Project",
 	"Provider",
+	"Prompt",
 	"Reminder",
 	"Role",
 	"Task",

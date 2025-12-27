@@ -1,0 +1,65 @@
+"""Prompt routers."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.database import get_db
+from api.models.prompt import Prompt
+from api.schemas.prompt import Prompt as PromptSchema
+from api.schemas.prompt import PromptCreate, PromptUpdate
+from api.v1.service import prompts as prompt_service
+from api.v1.service.auth import require_admin
+
+
+router = APIRouter(
+	prefix="/prompts",
+	tags=["prompts"],
+	dependencies=[Depends(require_admin)],
+)
+
+
+@router.post("", response_model=PromptSchema, status_code=status.HTTP_201_CREATED)
+async def create_prompt(
+	prompt_in: PromptCreate,
+	db: AsyncSession = Depends(get_db),
+) -> Prompt:
+	"""Create a prompt."""
+	return await prompt_service.create_prompt(prompt_in, db)
+
+
+@router.get("", response_model=list[PromptSchema])
+async def list_prompts(
+	db: AsyncSession = Depends(get_db),
+) -> list[Prompt]:
+	"""List prompts."""
+	return await prompt_service.list_prompts(db)
+
+
+@router.get("/{prompt_id}", response_model=PromptSchema)
+async def get_prompt(
+	prompt_id: str,
+	db: AsyncSession = Depends(get_db),
+) -> Prompt:
+	"""Fetch a prompt."""
+	return await prompt_service.get_prompt(prompt_id, db)
+
+
+@router.patch("/{prompt_id}", response_model=PromptSchema)
+async def update_prompt(
+	prompt_id: str,
+	prompt_in: PromptUpdate,
+	db: AsyncSession = Depends(get_db),
+) -> Prompt:
+	"""Update a prompt."""
+	return await prompt_service.update_prompt(prompt_id, prompt_in, db)
+
+
+@router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_prompt(
+	prompt_id: str,
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""Delete a prompt."""
+	await prompt_service.delete_prompt(prompt_id, db)

@@ -47,6 +47,7 @@ async def list_threads(
 	owner_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 20,
+	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Thread]:
@@ -57,17 +58,24 @@ async def list_threads(
 		owner_id=owner_id,
 		skip=skip,
 		limit=limit,
+		include_hidden=include_hidden,
 	)
 
 
 @router.get("/{thread_id}", response_model=ThreadSchema)
 async def get_thread(
 	thread_id: TypeID,
+	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Thread:
 	"""Fetch a single thread with messages."""
-	return await thread_service.get_thread(thread_id, db, principal=principal)
+	return await thread_service.get_thread(
+		thread_id,
+		db,
+		principal=principal,
+		include_hidden=include_hidden,
+	)
 
 
 @router.patch("/{thread_id}", response_model=ThreadSchema)
@@ -86,11 +94,22 @@ async def update_thread(
 	)
 
 
+@router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_thread(
+	thread_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""Delete a thread."""
+	await thread_service.delete_thread(thread_id, db, principal=principal)
+
+
 @router.get("/{thread_id}/messages", response_model=list[MessageSchema])
 async def list_messages(
 	thread_id: TypeID,
 	skip: int = 0,
 	limit: int = 100,
+	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
@@ -101,27 +120,40 @@ async def list_messages(
 		principal=principal,
 		skip=skip,
 		limit=limit,
+		include_hidden=include_hidden,
 	)
 
 
 @router.get("/{thread_id}/branch", response_model=list[MessageSchema])
 async def get_current_branch(
 	thread_id: TypeID,
+	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
 	"""Return the current root→leaf branch for this thread."""
-	return await thread_service.get_current_branch(thread_id, db, principal=principal)
+	return await thread_service.get_current_branch(
+		thread_id,
+		db,
+		principal=principal,
+		include_hidden=include_hidden,
+	)
 
 
 @router.get("/{thread_id}/tree", response_model=list[MessageSchema])
 async def get_message_tree(
 	thread_id: TypeID,
+	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
 	"""Return all messages for this thread as a flat list."""
-	return await thread_service.list_message_tree(thread_id, db, principal=principal)
+	return await thread_service.list_message_tree(
+		thread_id,
+		db,
+		principal=principal,
+		include_hidden=include_hidden,
+	)
 
 
 @router.post(

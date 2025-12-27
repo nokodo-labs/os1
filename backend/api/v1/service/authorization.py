@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, or_, select, true
+from sqlalchemy import and_, exists, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import ColumnElement
 
@@ -29,10 +29,16 @@ def thread_access_predicate(
 	principal: Principal,
 	*,
 	required_role: AccessRole = AccessRole.VIEWER,
+	include_hidden: bool = False,
 ) -> ColumnElement[bool]:
 	"""Return a SQL predicate limiting threads to those accessible to principal."""
+	visibility = (
+		true()
+		if include_hidden and principal.is_admin
+		else and_(Thread.deleted_at.is_(None), Thread.is_temporary.is_(False))
+	)
 	if principal.is_admin:
-		return true()
+		return visibility
 
 	allowed_roles = _allowed_roles(required_role)
 	user_id = principal.user.id
@@ -52,7 +58,8 @@ def thread_access_predicate(
 		)
 	)
 
-	return or_(Thread.owner_id == user_id, user_acl, group_acl)
+	base_access = or_(Thread.owner_id == user_id, user_acl, group_acl)
+	return and_(base_access, visibility)
 
 
 def project_access_predicate(
@@ -91,12 +98,29 @@ async def require_thread_access(
 	principal: Principal,
 	*,
 	required_role: AccessRole = AccessRole.VIEWER,
+	include_hidden: bool = False,
 ) -> None:
+	if include_hidden and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+
 	stmt = (
 		select(Thread.id)
 		.where(Thread.id == thread_id)
-		.where(thread_access_predicate(principal, required_role=required_role))
+		.where(
+			thread_access_predicate(
+				principal,
+				required_role=required_role,
+				include_hidden=include_hidden,
+			)
+		)
 	)
+
+	if include_hidden and principal.is_admin:
+		stmt = stmt.execution_options(include_deleted=True)
+
 	if (await session.execute(stmt)).scalar_one_or_none() is None:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,

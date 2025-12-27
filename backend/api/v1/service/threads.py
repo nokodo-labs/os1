@@ -31,10 +31,19 @@ from api.v1.service.authorization import (
 	require_thread_access,
 	thread_access_predicate,
 )
+from api.v1.service.prompt_runtime import render_inline_with_prompts
 from nokodo_ai.agent import Agent as SDKAgent
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
+
+
+def _ensure_admin_for_hidden(include_hidden: bool, principal: Principal) -> None:
+	if include_hidden and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
 
 
 async def _load_thread(
@@ -43,6 +52,7 @@ async def _load_thread(
 	principal: Principal,
 	*,
 	required_role: AccessRole = AccessRole.VIEWER,
+	include_hidden: bool = False,
 ) -> Thread:
 	stmt = (
 		select(Thread)
@@ -52,8 +62,17 @@ async def _load_thread(
 			selectinload(Thread.projects),
 		)
 		.where(Thread.id == thread_id)
-		.where(thread_access_predicate(principal, required_role=required_role))
+		.where(
+			thread_access_predicate(
+				principal,
+				required_role=required_role,
+				include_hidden=include_hidden,
+			)
+		)
 	)
+
+	if include_hidden:
+		stmt = stmt.execution_options(include_deleted=True)
 	result = await session.execute(stmt)
 	thread = result.scalars().unique().one_or_none()
 
@@ -69,6 +88,8 @@ async def _load_thread(
 async def _load_thread_unrestricted(
 	thread_id: TypeID,
 	session: AsyncSession,
+	*,
+	include_hidden: bool = False,
 ) -> Thread:
 	stmt = (
 		select(Thread)
@@ -79,6 +100,12 @@ async def _load_thread_unrestricted(
 		)
 		.where(Thread.id == thread_id)
 	)
+
+	if include_hidden:
+		stmt = stmt.execution_options(include_deleted=True)
+	else:
+		stmt = stmt.where(Thread.deleted_at.is_(None), Thread.is_temporary.is_(False))
+
 	result = await session.execute(stmt)
 	thread = result.scalars().unique().one_or_none()
 
@@ -143,11 +170,10 @@ async def create_thread(
 	thread.projects = projects
 	session.add(thread)
 	await session.commit()
-	return await _load_thread(
+	return await _load_thread_unrestricted(
 		TypeID(thread.id),
 		session,
-		principal,
-		required_role=AccessRole.VIEWER,
+		include_hidden=True,
 	)
 
 
@@ -158,7 +184,9 @@ async def list_threads(
 	owner_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 20,
+	include_hidden: bool = False,
 ) -> list[Thread]:
+	_ensure_admin_for_hidden(include_hidden, principal)
 	stmt = (
 		select(Thread)
 		.options(
@@ -167,11 +195,20 @@ async def list_threads(
 			selectinload(Thread.projects),
 		)
 		.order_by(Thread.last_activity_at.desc())
-		.where(thread_access_predicate(principal, required_role=AccessRole.VIEWER))
+		.where(
+			thread_access_predicate(
+				principal,
+				required_role=AccessRole.VIEWER,
+				include_hidden=include_hidden,
+			)
+		)
 	)
 
 	if owner_id is not None:
 		stmt = stmt.where(Thread.owner_id == owner_id)
+
+	if include_hidden:
+		stmt = stmt.execution_options(include_deleted=True)
 
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().unique().all())
@@ -182,12 +219,15 @@ async def get_thread(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	include_hidden: bool = False,
 ) -> Thread:
+	_ensure_admin_for_hidden(include_hidden, principal)
 	return await _load_thread(
 		thread_id,
 		session,
 		principal,
 		required_role=AccessRole.VIEWER,
+		include_hidden=include_hidden,
 	)
 
 
@@ -246,6 +286,29 @@ async def update_thread(
 	)
 
 
+async def delete_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.EDITOR,
+	)
+
+	if not principal.is_admin and thread.owner_id != principal.user.id:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+
+	thread.soft_delete()
+	await session.commit()
+
+
 async def list_messages(
 	thread_id: TypeID,
 	session: AsyncSession,
@@ -253,12 +316,15 @@ async def list_messages(
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
+	include_hidden: bool = False,
 ) -> list[Message]:
+	_ensure_admin_for_hidden(include_hidden, principal)
 	await require_thread_access(
 		thread_id,
 		session,
 		principal,
 		required_role=AccessRole.VIEWER,
+		include_hidden=include_hidden,
 	)
 	stmt = (
 		select(Message)
@@ -276,14 +342,17 @@ async def list_message_tree(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	include_hidden: bool = False,
 ) -> list[Message]:
 	"""Return all messages in a thread as a flat list."""
+	_ensure_admin_for_hidden(include_hidden, principal)
 	return await list_messages(
 		thread_id,
 		session,
 		principal=principal,
 		skip=0,
 		limit=10_000,
+		include_hidden=include_hidden,
 	)
 
 
@@ -292,13 +361,16 @@ async def get_current_branch(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	include_hidden: bool = False,
 ) -> list[Message]:
 	"""Return the root→leaf path ending at thread.current_message_id."""
+	_ensure_admin_for_hidden(include_hidden, principal)
 	thread = await _load_thread(
 		thread_id,
 		session,
 		principal,
 		required_role=AccessRole.VIEWER,
+		include_hidden=include_hidden,
 	)
 	if not thread.current_message_id:
 		return []
@@ -459,9 +531,12 @@ async def run_thread(
 
 		# system prompt goes into the thread, not the agent
 		if agent.system_prompt:
-			sdk_messages.insert(
-				0, llm_runtime.system_prompt_message(agent.system_prompt)
+			rendered_prompt = await render_inline_with_prompts(
+				session,
+				text=agent.system_prompt,
+				variables=None,
 			)
+			sdk_messages.insert(0, llm_runtime.system_prompt_message(rendered_prompt))
 
 		max_iterations = 10
 		cfg = agent.config or {}

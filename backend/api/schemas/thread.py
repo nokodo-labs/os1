@@ -17,9 +17,15 @@ from nokodo_ai.utils.typeid import TypeID
 def _populate_project_ids(data: Any) -> Any:
 	"""Attach project_ids to ORM instances without mutating schema defaults."""
 	try:
-		from api.models.thread import Thread as ThreadModel  # type: ignore
+		from api.models.thread import Thread as ThreadModel
 	except Exception:  # pragma: no cover
 		return data
+
+	if isinstance(data, ThreadModel) and getattr(data, "is_temporary", None) is None:
+		data.is_temporary = False
+
+	if isinstance(data, ThreadModel) and getattr(data, "is_archived", None) is None:
+		data.is_archived = False
 
 	if isinstance(data, ThreadModel) and not getattr(data, "project_ids", None):
 		projects = getattr(data, "__dict__", {}).get("projects")
@@ -37,6 +43,7 @@ class ThreadBase(MetadataModel):
 	title: str | None = None
 	tags: list[str] = Field(default_factory=list)
 	is_archived: bool = False
+	is_temporary: bool = False
 	project_ids: list[TypeID] = Field(default_factory=list)
 
 
@@ -52,6 +59,7 @@ class ThreadUpdate(MetadataModel):
 	title: str | None = None
 	tags: list[str] | None = None
 	is_archived: bool | None = None
+	is_temporary: bool | None = None
 	project_ids: list[TypeID] | None = None
 	owner_id: TypeID | None = None
 
@@ -61,6 +69,7 @@ class ThreadSummary(ORMModel):
 
 	id: TypeID
 	title: str | None = None
+	is_temporary: bool = False
 	last_activity_at: datetime
 	project_ids: list[TypeID] = Field(default_factory=list)
 

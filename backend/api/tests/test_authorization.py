@@ -6,10 +6,11 @@ from typing import cast
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import true
+from sqlalchemy import and_, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.acl import AccessRole
+from api.models.thread import Thread
 from api.models.user import User
 from api.v1.service import authorization
 from api.v1.service.auth import Principal
@@ -41,6 +42,34 @@ def test_require_permission_denied() -> None:
 		authorization.require_permission(principal, "agents:manage")
 
 
+def test_require_permission_allows() -> None:
+	user = User(email="authz-allow@example.com", hashed_password="pw", is_active=True)
+	principal = Principal(
+		user=user,
+		group_ids=(),
+		permissions=frozenset({"agents:manage"}),
+	)
+
+	authorization.require_permission(principal, "agents:manage")
+
+
+@pytest.mark.asyncio
+async def test_require_thread_access_hidden_forbidden(db_session: AsyncSession) -> None:
+	user = User(email="authz-hidden@example.com", hashed_password="pw", is_active=True)
+	db_session.add(user)
+	await db_session.commit()
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+
+	with pytest.raises(HTTPException) as exc:
+		await authorization.require_thread_access(
+			"thread",
+			db_session,
+			principal=principal,
+			include_hidden=True,
+		)
+	assert exc.value.status_code == 403
+
+
 def test_allowed_roles_default_case() -> None:
 	assert authorization._allowed_roles(cast(AccessRole, "unexpected")) == (
 		AccessRole.ADMIN,
@@ -60,5 +89,9 @@ async def test_authorization_admin_predicates(db_session: AsyncSession) -> None:
 	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
 
 	assert authorization._allowed_roles(AccessRole.ADMIN) == (AccessRole.ADMIN,)
-	assert authorization.thread_access_predicate(principal).compare(true())
+	visibility = and_(Thread.deleted_at.is_(None), Thread.is_temporary.is_(False))
+	assert authorization.thread_access_predicate(principal).compare(visibility)
+	assert authorization.thread_access_predicate(
+		principal, include_hidden=True
+	).compare(true())
 	assert authorization.project_access_predicate(principal).compare(true())

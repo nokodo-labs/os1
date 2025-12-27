@@ -20,7 +20,7 @@
 		{
 			"label": "Backend: Run Server",
 			"type": "shell",
-			"command": "uvicorn api.main:app --reload --host 0.0.0.0 --port 8000",
+			"command": "uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},

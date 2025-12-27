@@ -7,11 +7,13 @@ from typing import Any, cast
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.acl import AccessControlEntry, AccessRole
 from api.models.message import MessageType
 from api.models.project import Project
+from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
@@ -109,6 +111,149 @@ async def test_list_threads(client: AsyncClient, user_auth: dict[str, object]) -
 	assert len(threads) == 2
 	titles = {t["title"] for t in threads}
 	assert titles == {"T1", "T2"}
+
+
+@pytest.mark.asyncio
+async def test_temporary_threads_hidden_by_default(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+	admin_auth: dict[str, object],
+) -> None:
+	"""Temporary threads are persisted but hidden unless admin opts in."""
+	user_headers = user_auth["headers"]
+	assert isinstance(user_headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	create_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "Temp", "is_temporary": True},
+		headers=user_headers,
+	)
+	assert create_resp.status_code == 201
+	temp_thread_id = create_resp.json()["id"]
+
+	user_list = await client.get(
+		f"/v1/threads?owner_id={user['id']}",
+		headers=user_headers,
+	)
+	assert user_list.status_code == 200
+	assert temp_thread_id not in {t["id"] for t in user_list.json()}
+
+	user_get = await client.get(f"/v1/threads/{temp_thread_id}", headers=user_headers)
+	assert user_get.status_code == 404
+
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+
+	admin_default_list = await client.get("/v1/threads", headers=admin_headers)
+	assert admin_default_list.status_code == 200
+	assert temp_thread_id not in {t["id"] for t in admin_default_list.json()}
+
+	admin_hidden_list = await client.get(
+		"/v1/threads",
+		headers=admin_headers,
+		params={"include_hidden": True},
+	)
+	assert admin_hidden_list.status_code == 200
+	assert temp_thread_id in {t["id"] for t in admin_hidden_list.json()}
+
+	admin_get_hidden = await client.get(
+		f"/v1/threads/{temp_thread_id}",
+		headers=admin_headers,
+		params={"include_hidden": True},
+	)
+	assert admin_get_hidden.status_code == 200
+	assert admin_get_hidden.json()["is_temporary"] is True
+
+
+@pytest.mark.asyncio
+async def test_soft_deleted_threads_hidden(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""Soft-deleted threads stay hidden except for explicit admin queries."""
+	user_headers = user_auth["headers"]
+	assert isinstance(user_headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	create_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "Soft Delete"},
+		headers=user_headers,
+	)
+	assert create_resp.status_code == 201
+	thread_id = create_resp.json()["id"]
+
+	thread_orm = await db_session.get(Thread, thread_id)
+	assert thread_orm is not None
+	pre_delete_threads = list((await db_session.scalars(select(Thread))).all())
+	assert len(pre_delete_threads) == 1
+	thread_orm.soft_delete()
+	await db_session.commit()
+	raw_threads = list(
+		(await db_session.execute(text("SELECT id, deleted_at FROM threads"))).all()
+	)
+	assert raw_threads, "raw query found no threads"
+
+	user_list = await client.get(
+		f"/v1/threads?owner_id={user['id']}",
+		headers=user_headers,
+	)
+	assert user_list.status_code == 200
+	assert thread_id not in {t["id"] for t in user_list.json()}
+
+	user_get = await client.get(f"/v1/threads/{thread_id}", headers=user_headers)
+	assert user_get.status_code == 404
+
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+
+	admin_default_list = await client.get("/v1/threads", headers=admin_headers)
+	assert admin_default_list.status_code == 200
+	assert thread_id not in {t["id"] for t in admin_default_list.json()}
+
+	admin_hidden_list = await client.get(
+		"/v1/threads",
+		headers=admin_headers,
+		params={"include_hidden": True},
+	)
+	assert admin_hidden_list.status_code == 200
+	admin_user = await db_session.get(User, admin_auth["user"]["id"])
+	assert admin_user is not None
+	admin_principal = Principal(user=admin_user, group_ids=(), permissions=frozenset())
+	all_threads = list(
+		(
+			await db_session.scalars(
+				select(Thread).execution_options(include_deleted=True)
+			)
+		).all()
+	)
+	assert all_threads, "no threads persisted"
+	service_threads = await thread_service.list_threads(
+		db_session,
+		principal=admin_principal,
+		include_hidden=True,
+	)
+	service_ids = {str(t.id) for t in service_threads}
+	assert thread_id in service_ids
+
+	admin_hidden_body = admin_hidden_list.json()
+	assert thread_id in {t["id"] for t in admin_hidden_body}, {
+		"api_body": admin_hidden_body,
+		"service_ids": list(service_ids),
+	}
+
+	admin_get_hidden = await client.get(
+		f"/v1/threads/{thread_id}",
+		headers=admin_headers,
+		params={"include_hidden": True},
+	)
+	assert admin_get_hidden.status_code == 200
+	assert admin_get_hidden.json()["id"] == thread_id
 
 
 @pytest.mark.asyncio
