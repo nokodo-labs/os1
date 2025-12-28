@@ -11,6 +11,7 @@ from nokodo_ai.adapters.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
 	resolve_adapter,
+	split_model_identifier,
 )
 from nokodo_ai.base import Base
 from nokodo_ai.message import AssistantMessage, Message
@@ -90,7 +91,7 @@ class ChatModel(ChatGenerationParams, Base):
 		input: list[Message] | Thread,
 		stream: Literal[False] = False,
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
@@ -100,7 +101,7 @@ class ChatModel(ChatGenerationParams, Base):
 		input: list[Message] | Thread,
 		stream: Literal[True],
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
@@ -109,7 +110,7 @@ class ChatModel(ChatGenerationParams, Base):
 		input: list[Message] | Thread,
 		stream: bool = False,
 		tools: list[Tool] | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		"""generate an assistant response.
@@ -132,7 +133,9 @@ class ChatModel(ChatGenerationParams, Base):
 			messages = input
 
 		effective_params = self.model_copy(update={})
-		if tool_choice is not None:
+		if tool_choice is None:
+			effective_params.tool_choice = "auto" if tools else None
+		else:
 			effective_params.tool_choice = tool_choice
 		if params is not None:
 			if isinstance(params, dict):
@@ -142,14 +145,20 @@ class ChatModel(ChatGenerationParams, Base):
 			)
 
 		if stream:
+			_model_provider, _model_variant, model_name = split_model_identifier(
+				self.model
+			)
 			return self._adapter_resolved.generate(
 				messages,
+				model=model_name,
 				stream=True,
 				tools=tools,
 				params=effective_params,
 			)
+		_model_provider, _model_variant, model_name = split_model_identifier(self.model)
 		return self._adapter_resolved.generate(
 			messages,
+			model=model_name,
 			stream=False,
 			tools=tools,
 			params=effective_params,

@@ -48,27 +48,11 @@ if TYPE_CHECKING:
 class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 	"""adapter for anthropic's /v1/messages endpoint."""
 
-	def __init__(
-		self,
-		*,
-		model: str = "claude-sonnet-4-20250514",
-		api_key: str | None = None,
-		timeout: float = 60.0,
-	) -> None:
-		"""initialize messages adapter.
-
-		args:
-			model: model identifier (e.g., "claude-sonnet-4-20250514")
-			api_key: anthropic API key
-			timeout: request timeout in seconds
-		"""
-		super().__init__(api_key=api_key, timeout=timeout)
-		self.model = model
-
 	@overload
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: Literal[False] = False,
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -78,6 +62,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: Literal[True],
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -86,19 +71,22 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: bool = False,
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		params = params or ChatGenerationParams()
 		if stream:
-			return self._generate_streaming(messages, tools=tools, params=params)
-		return self._generate_once(messages, tools=tools, params=params)
+			return self._generate_streaming(
+				messages, model=model, tools=tools, params=params
+			)
+		return self._generate_once(messages, model=model, tools=tools, params=params)
 
 	async def _generate_once(
 		self,
 		messages: list[Message],
-		*,
+		model: str,
 		tools: list[Tool] | None,
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
@@ -123,8 +111,8 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		anthropic_top_p = params.top_p if params.top_p is not None else anthropic.omit
 		anthropic_top_k = params.top_k if params.top_k is not None else anthropic.omit
 
-		response = await self._client.messages.create(
-			model=self.model,
+		response = await self.client.messages.create(
+			model=model,
 			max_tokens=anthropic_max_tokens,
 			messages=anthropic_messages,
 			system=anthropic_system,
@@ -182,7 +170,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 	async def _generate_streaming(
 		self,
 		messages: list[Message],
-		*,
+		model: str,
 		tools: list[Tool] | None,
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
@@ -207,8 +195,8 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		anthropic_top_p = params.top_p if params.top_p is not None else anthropic.omit
 		anthropic_top_k = params.top_k if params.top_k is not None else anthropic.omit
 
-		stream = await self._client.messages.create(
-			model=self.model,
+		stream = await self.client.messages.create(
+			model=model,
 			max_tokens=anthropic_max_tokens,
 			messages=anthropic_messages,
 			system=anthropic_system,

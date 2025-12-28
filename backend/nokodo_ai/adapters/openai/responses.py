@@ -48,29 +48,11 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 	this is the newer responses API with built-in tool handling.
 	"""
 
-	def __init__(
-		self,
-		*,
-		model: str = "gpt-4o",
-		api_key: str | None = None,
-		base_url: str | None = None,
-		timeout: float = 60.0,
-	) -> None:
-		"""initialize responses adapter.
-
-		args:
-			model: model identifier
-			api_key: openai API key
-			base_url: custom base URL
-			timeout: request timeout in seconds
-		"""
-		super().__init__(api_key=api_key, base_url=base_url, timeout=timeout)
-		self.model = model
-
 	@overload
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: Literal[False] = False,
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -80,6 +62,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: Literal[True],
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -88,19 +71,25 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: bool = False,
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		params = params or ChatGenerationParams()
 		if stream:
-			return self._generate_streaming(messages, tools=tools, params=params)
-		return self._generate_once(messages, tools=tools, params=params)
+			return self._generate_streaming(
+				messages,
+				model=model,
+				tools=tools,
+				params=params,
+			)
+		return self._generate_once(messages, model=model, tools=tools, params=params)
 
 	async def _generate_once(
 		self,
 		messages: list[Message],
-		*,
+		model: str,
 		tools: list[Tool] | None,
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
@@ -135,7 +124,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		)
 
 		request_kwargs = {
-			"model": self.model,
+			"model": model,
 			"input": input_items,
 			"max_output_tokens": openai_max_output_tokens,
 			"temperature": openai_temperature,
@@ -195,7 +184,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 	async def _generate_streaming(
 		self,
 		messages: list[Message],
-		*,
+		model: str,
 		tools: list[Tool] | None,
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
@@ -219,7 +208,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		)
 
 		request_kwargs = {
-			"model": self.model,
+			"model": model,
 			"input": input_items,
 			"stream": True,
 			"max_output_tokens": openai_max_output_tokens,

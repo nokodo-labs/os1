@@ -59,6 +59,7 @@ class BaseChatAdapter(Base, ABC):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: Literal[False] = False,
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -68,6 +69,7 @@ class BaseChatAdapter(Base, ABC):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: Literal[True],
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -77,6 +79,7 @@ class BaseChatAdapter(Base, ABC):
 	def generate(
 		self,
 		messages: list[Message],
+		model: str,
 		stream: bool = False,
 		tools: list[Tool] | None = None,
 		params: ChatGenerationParams | None = None,
@@ -91,6 +94,23 @@ class BaseChatAdapter(Base, ABC):
 		...
 
 
+def split_model_identifier(model: str) -> tuple[str, str | None, str]:
+	"""split a model identifier into (provider, variant, model_name)."""
+	if ":" in model:
+		provider_part, model_name = model.split(":", 1)
+	else:
+		provider_part = DEFAULT_PROVIDER
+		model_name = model
+
+	if "." in provider_part:
+		provider, variant = provider_part.split(".", 1)
+	else:
+		provider = provider_part
+		variant = None
+
+	return provider, variant, model_name
+
+
 def resolve_adapter(model: str) -> BaseChatAdapter:
 	"""resolve a model string to an adapter instance.
 
@@ -102,19 +122,7 @@ def resolve_adapter(model: str) -> BaseChatAdapter:
 		- "anthropic:claude-sonnet-4-20250514" -> anthropic default chat adapter
 		- "ollama:llama3.2" -> ollama default chat adapter
 	"""
-	# parse provider and model from string
-	if ":" in model:
-		provider_part, model_name = model.split(":", 1)
-	else:
-		# no provider specified: fallback to default provider
-		provider_part = DEFAULT_PROVIDER
-
-	# parse provider and optional variant
-	if "." in provider_part:
-		provider, variant = provider_part.split(".", 1)
-	else:
-		provider = provider_part
-		variant = None
+	provider, variant, model_name = split_model_identifier(model)
 
 	# delegate to provider factory
 	match provider:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import Field, PrivateAttr
+
 from nokodo_ai.adapters.base import BaseAdapter
 
 
@@ -14,19 +16,6 @@ class BaseOllamaAdapter(BaseAdapter):
 	- timeout settings
 	"""
 
-	def __init__(
-		self,
-		*,
-		base_url: str = "http://localhost:11434",
-		timeout: float = 120.0,
-	) -> None:
-		"""initialize ollama adapter.
-
-		args:
-			base_url: ollama server URL
-			timeout: request timeout in seconds
-		"""
-		self.base_url = base_url
-		self.timeout = timeout
-		# client will be lazily initialized when needed
-		self._client = None
+	base_url: str = Field(default="http://localhost:11434")
+	timeout: float = Field(default=120.0)
+	_client: object | None = PrivateAttr(default=None)

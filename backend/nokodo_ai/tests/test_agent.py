@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from typing import TypedDict
 
 import pytest
+from pydantic import PrivateAttr
 
 from nokodo_ai import (
 	Agent,
@@ -20,36 +21,46 @@ from nokodo_ai.tool import ToolExecutionContext
 
 class _Call(TypedDict):
 	messages: list[object]
+	model: str
 	tools: object
 	params: ChatGenerationParams
 	stream: bool
 
 
 class _StubChatAdapter(BaseChatAdapter):
+	_responses: list[AssistantMessage] = PrivateAttr()
+	_calls: list[_Call] = PrivateAttr(default_factory=list)
+
 	def __init__(self, responses: list[AssistantMessage]) -> None:
-		self.responses = list(responses)
-		self.calls: list[_Call] = []
+		super().__init__()
+		self._responses = list(responses)
+
+	@property
+	def calls(self) -> list[_Call]:
+		return self._calls
 
 	async def generate(
 		self,
 		messages,
 		*,
+		model: str,
 		stream: bool = False,
 		tools=None,
 		params: ChatGenerationParams | None = None,
 	) -> AssistantMessage | AsyncIterator[AssistantMessage]:
 		params = params or ChatGenerationParams()
-		self.calls.append(
+		self._calls.append(
 			{
 				"messages": list(messages),
+				"model": model,
 				"tools": tools,
 				"params": params,
 				"stream": stream,
 			}
 		)
-		if not self.responses:
+		if not self._responses:
 			raise AssertionError("no more stub responses")
-		return self.responses.pop(0)
+		return self._responses.pop(0)
 
 
 @pytest.mark.asyncio

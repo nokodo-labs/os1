@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator, Awaitable
 
 import pytest
+from pydantic import PrivateAttr, ValidationError
 
 from nokodo_ai import (
 	AssistantMessage,
@@ -17,8 +18,8 @@ from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
 
 
 def test_llm_requires_model() -> None:
-	with pytest.raises(ValueError, match="model must be provided"):
-		ChatModel()
+	with pytest.raises(ValidationError):
+		ChatModel.model_validate({})
 
 
 def test_llm_resolves_openai_model() -> None:
@@ -26,7 +27,6 @@ def test_llm_resolves_openai_model() -> None:
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(llm._adapter_resolved, OpenAIChatCompletionsAdapter)
-	assert llm._adapter_resolved.model == "gpt-4o"
 
 
 def test_llm_resolves_openai_explicit() -> None:
@@ -34,7 +34,6 @@ def test_llm_resolves_openai_explicit() -> None:
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(llm._adapter_resolved, OpenAIChatCompletionsAdapter)
-	assert llm._adapter_resolved.model == "gpt-4o-mini"
 
 
 def test_llm_resolves_openai_responses_api() -> None:
@@ -88,20 +87,29 @@ def test_embedding_unknown_provider_raises() -> None:
 
 
 class _StubChatAdapter(BaseChatAdapter):
+	_response: AssistantMessage = PrivateAttr()
+	_stream_chunks: list[AssistantMessage] = PrivateAttr(default_factory=list)
+	_calls: list[dict[str, object]] = PrivateAttr(default_factory=list)
+
 	def __init__(
 		self,
 		response: AssistantMessage,
 		*,
 		stream_chunks: list[AssistantMessage] | None = None,
 	) -> None:
-		self.response = response
-		self.stream_chunks = stream_chunks or []
-		self.calls: list[dict[str, object]] = []
+		super().__init__()
+		self._response = response
+		self._stream_chunks = stream_chunks or []
+
+	@property
+	def calls(self) -> list[dict[str, object]]:
+		return self._calls
 
 	def generate(
 		self,
 		messages: list[UserMessage],
 		*,
+		model: str,
 		stream: bool = False,
 		tools=None,
 		params: ChatGenerationParams | None = None,
@@ -109,21 +117,22 @@ class _StubChatAdapter(BaseChatAdapter):
 		params = params or ChatGenerationParams()
 		call = {
 			"messages": messages,
+			"model": model,
 			"stream": stream,
 			"tools": tools,
 			"params": params,
 		}
-		self.calls.append(call)
+		self._calls.append(call)
 		if stream:
 
 			async def _gen() -> AsyncIterator[AssistantMessage]:
-				for chunk in self.stream_chunks:
+				for chunk in self._stream_chunks:
 					yield chunk
 
 			return _gen()
 
 		async def _resp() -> AssistantMessage:
-			return self.response
+			return self._response
 
 		return _resp()
 
@@ -149,6 +158,7 @@ async def test_chat_model_generate_with_thread(monkeypatch: pytest.MonkeyPatch) 
 	assert result.text == "ok"
 	call = adapter.calls[-1]
 	assert call["messages"] == thread.messages
+	assert call["model"] == "stub"
 	params = call["params"]
 	assert isinstance(params, ChatGenerationParams)
 	assert params.tool_choice is None
@@ -183,6 +193,7 @@ async def test_chat_model_streaming_with_tools() -> None:
 	assert [c.text for c in chunks] == ["c1", "c2"]
 	call = adapter.calls[-1]
 	assert call["stream"] is True
+	assert call["model"] == "stub"
 	params = call["params"]
 	assert isinstance(params, ChatGenerationParams)
 	assert params.tool_choice == "auto"

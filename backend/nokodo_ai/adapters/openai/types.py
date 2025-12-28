@@ -7,10 +7,15 @@ stay small and type check cleanly.
 from __future__ import annotations
 
 from openai._streaming import AsyncStream as OpenAIAsyncStream
-from openai.types import ChatModel as OpenAIChatModel
-from openai.types import CompletionUsage as OpenAICompletionUsage
-from openai.types import ResponseFormatJSONSchema as OpenAIResponseFormatJSONSchema
-from openai.types.chat import ChatCompletion as OpenAIChatCompletion
+from openai.types import (
+	ChatModel as OpenAIChatModel,
+)
+from openai.types import (
+	CompletionUsage as OpenAICompletionUsage,
+)
+from openai.types.chat import (
+	ChatCompletion as OpenAIChatCompletion,
+)
 from openai.types.chat import (
 	ChatCompletionAssistantMessageParam as OpenAIChatCompletionAssistantMessageParam,
 )
@@ -90,8 +95,11 @@ from openai.types.responses.response_create_params import (
 from openai.types.responses.response_input_item_param import (
 	FunctionCallOutput as OpenAIResponseFunctionCallOutput,
 )
-from openai.types.shared.response_format_json_schema import (
+from openai.types.shared_params.response_format_json_schema import (
 	JSONSchema as OpenAIJSONSchema,
+)
+from openai.types.shared_params.response_format_json_schema import (
+	ResponseFormatJSONSchema as OpenAIResponseFormatJSONSchema,
 )
 
 
