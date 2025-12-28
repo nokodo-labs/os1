@@ -19,7 +19,6 @@ from nokodo_ai.message import (
 	AssistantMessage,
 	SystemMessage,
 	ToolMessage,
-	ToolResult,
 	Usage,
 	UserMessage,
 )
@@ -528,9 +527,7 @@ async def test_llm_runtime_conversions():
 	system_sdk = SystemMessage.from_text("sys")
 	assistant_sdk = AssistantMessage.from_text("hey")
 	assistant_sdk.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
-	tool_sdk = ToolMessage(
-		tool_result=ToolResult(tool_call_id="t", output="o", is_error=False)
-	)
+	tool_sdk = ToolMessage(tool_call_id="t", tool_output="o", is_error=False)
 
 	user_create = llm_runtime.sdk_message_to_orm_create(
 		user_sdk,
@@ -621,11 +618,11 @@ def test_llm_runtime_orm_to_sdk_variants():
 	assert user_sdk.role == "user"
 	assert system_sdk.role == "system"
 	assert assistant_sdk.usage.total_tokens == 3
-	assert tool_sdk.tool_result.is_error is True
-	assert tool_sdk.tool_result.output == "out"
-	assert tool_sdk_empty.tool_result.output == ""
-	assert tool_sdk_empty.tool_result.tool_call_id == ""
-	assert tool_sdk_empty.tool_result.is_error is False
+	assert tool_sdk.is_error is True
+	assert tool_sdk.tool_output == "out"
+	assert tool_sdk_empty.tool_output == ""
+	assert tool_sdk_empty.tool_call_id == ""
+	assert tool_sdk_empty.is_error is False
 	assert fallback_sdk.role == "user"
 
 	branch_msgs = llm_runtime.build_sdk_messages_from_branch([user_orm, system_orm])

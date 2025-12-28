@@ -18,6 +18,7 @@ from nokodo_ai.adapters.openai.types import (
 	OpenAIResponseFunctionToolParam,
 	OpenAIResponseInputItemParam,
 	OpenAIResponseInputParam,
+	OpenAIResponsesModel,
 	OpenAIResponseTextConfigParam,
 	OpenAIResponseTextDeltaEvent,
 	OpenAIResponseTextJSONSchemaConfigParam,
@@ -35,7 +36,7 @@ from nokodo_ai.message import (
 	UserMessage,
 )
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.validators import validate
 
 
 if TYPE_CHECKING:
@@ -94,20 +95,17 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		"""generate a completion using /v1/responses."""
-		input_items = _messages_to_openai_responses_input(messages)
 
-		openai_tools = openai.omit
-		openai_tool_choice = openai.omit
-		if tools:
-			openai_tools = _tools_to_openai_responses(tools)
-			if params.tool_choice is not None:
-				openai_tool_choice = _tool_choice_to_openai_responses(
-					params.tool_choice
-				)
-
-		text = openai.omit
-		if params.response_model:
-			text = OpenAIResponseTextConfigParam(
+		response = await self._client.responses.create(
+			model=validate(model, OpenAIResponsesModel),
+			input=_messages_to_openai_responses_input(messages),
+			max_output_tokens=params.max_tokens
+			if params.max_tokens is not None
+			else openai.omit,
+			temperature=params.temperature
+			if params.temperature is not None
+			else openai.omit,
+			text=OpenAIResponseTextConfigParam(
 				format=OpenAIResponseTextJSONSchemaConfigParam(
 					type="json_schema",
 					name="response",
@@ -115,50 +113,24 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 					schema=dict[str, object](params.response_model),
 				)
 			)
-
-		openai_temperature = (
-			params.temperature if params.temperature is not None else openai.omit
+			if params.response_model
+			else openai.omit,
+			tool_choice=_tool_choice_to_openai_responses(params.tool_choice)
+			if params.tool_choice is not None
+			else openai.omit,
+			tools=_tools_to_openai_responses(tools) if tools else openai.omit,
+			top_p=params.top_p if params.top_p is not None else openai.omit,
 		)
-		openai_max_output_tokens = (
-			params.max_tokens if params.max_tokens is not None else openai.omit
-		)
-
-		request_kwargs = {
-			"model": model,
-			"input": input_items,
-			"max_output_tokens": openai_max_output_tokens,
-			"temperature": openai_temperature,
-			"text": text,
-			"tool_choice": openai_tool_choice,
-			"tools": openai_tools,
-		}
-
-		if params.top_p is not None:
-			request_kwargs["top_p"] = params.top_p
-		if params.stop:
-			request_kwargs["stop"] = params.stop
-		if params.seed is not None:
-			request_kwargs["seed"] = params.seed
-		if params.logit_bias is not None:
-			request_kwargs["logit_bias"] = params.logit_bias
-		if params.presence_penalty is not None:
-			request_kwargs["presence_penalty"] = params.presence_penalty
-		if params.frequency_penalty is not None:
-			request_kwargs["frequency_penalty"] = params.frequency_penalty
-
-		response = await self._client.responses.create(**request_kwargs)
 
 		tool_calls: list[ToolCall] = []
 		for item in response.output:
 			if not isinstance(item, OpenAIResponseFunctionToolCall):
 				continue
-			args, metadata = _try_parse_tool_arguments(item.arguments)
 			tool_calls.append(
 				ToolCall(
-					id=item.call_id,
 					name=item.name,
-					arguments=args,
-					metadata=metadata,
+					arguments=item.arguments,
+					metadata={"openai_tool_call_id": item.call_id},
 				)
 			)
 
@@ -189,7 +161,6 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/responses."""
-		input_items = _messages_to_openai_responses_input(messages)
 
 		openai_tools = openai.omit
 		openai_tool_choice = openai.omit
@@ -200,37 +171,20 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 					params.tool_choice
 				)
 
-		openai_temperature = (
-			params.temperature if params.temperature is not None else openai.omit
+		stream = await self._client.responses.create(
+			model=validate(model, OpenAIResponsesModel),
+			input=_messages_to_openai_responses_input(messages),
+			stream=True,
+			max_output_tokens=params.max_tokens
+			if params.max_tokens is not None
+			else openai.omit,
+			temperature=params.temperature
+			if params.temperature is not None
+			else openai.omit,
+			tool_choice=openai_tool_choice,
+			tools=openai_tools,
+			top_p=params.top_p if params.top_p is not None else openai.omit,
 		)
-		openai_max_output_tokens = (
-			params.max_tokens if params.max_tokens is not None else openai.omit
-		)
-
-		request_kwargs = {
-			"model": model,
-			"input": input_items,
-			"stream": True,
-			"max_output_tokens": openai_max_output_tokens,
-			"temperature": openai_temperature,
-			"tool_choice": openai_tool_choice,
-			"tools": openai_tools,
-		}
-
-		if params.top_p is not None:
-			request_kwargs["top_p"] = params.top_p
-		if params.stop:
-			request_kwargs["stop"] = params.stop
-		if params.seed is not None:
-			request_kwargs["seed"] = params.seed
-		if params.logit_bias is not None:
-			request_kwargs["logit_bias"] = params.logit_bias
-		if params.presence_penalty is not None:
-			request_kwargs["presence_penalty"] = params.presence_penalty
-		if params.frequency_penalty is not None:
-			request_kwargs["frequency_penalty"] = params.frequency_penalty
-
-		stream = await self._client.responses.create(**request_kwargs)
 		async for event in stream:
 			if isinstance(event, OpenAIResponseTextDeltaEvent):
 				if event.delta:
@@ -271,53 +225,51 @@ def _messages_to_openai_responses_input(
 					)
 				if message.tool_calls:
 					for tool_call in message.tool_calls:
+						openai_tool_call_id = (
+							(tool_call.metadata or {}).get("openai_tool_call_id")
+							if tool_call.metadata
+							else None
+						)
+						if (
+							not isinstance(openai_tool_call_id, str)
+							or openai_tool_call_id == ""
+						):
+							raise ValueError(
+								"ToolCall missing openai_tool_call_id in metadata"
+							)
 						openai_messages.append(
 							OpenAIResponseFunctionToolCallParam(
 								type="function_call",
-								call_id=tool_call.id,
+								call_id=openai_tool_call_id,
 								name=tool_call.name,
-								arguments=json.dumps(tool_call.arguments),
+								arguments=tool_call.arguments
+								if isinstance(tool_call.arguments, str)
+								else json.dumps(tool_call.arguments),
 							)
 						)
 			case ToolMessage():
+				openai_tool_call_id = (
+					message.metadata.get("openai_tool_call_id")
+					if message.metadata
+					else None
+				)
+				if (
+					not isinstance(openai_tool_call_id, str)
+					or openai_tool_call_id == ""
+				):
+					raise ValueError(
+						"ToolMessage missing openai_tool_call_id in metadata"
+					)
 				openai_messages.append(
 					OpenAIResponseFunctionCallOutput(
 						type="function_call_output",
-						call_id=message.tool_result.tool_call_id,
-						output=message.tool_result.output,
+						call_id=openai_tool_call_id,
+						output=message.tool_output,
 					)
 				)
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
 	return openai_messages
-
-
-def _try_parse_tool_arguments(raw: str) -> tuple[JSONObject, JSONObject | None]:
-	try:
-		parsed = json.loads(raw)
-	except json.JSONDecodeError as e:
-		return (
-			{},
-			{"arguments_parse_error": str(e), "raw_arguments": raw},
-		)
-
-	if not isinstance(parsed, dict):
-		return (
-			{},
-			{
-				"arguments_parse_error": "tool arguments were not a json object",
-				"raw_arguments": raw,
-			},
-		)
-
-	args: JSONObject = {}
-	for key, value in parsed.items():
-		if isinstance(key, str):
-			args[key] = value
-		else:
-			args[str(key)] = value
-
-	return (args, None)
 
 
 def _tools_to_openai_responses(

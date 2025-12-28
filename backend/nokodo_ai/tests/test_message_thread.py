@@ -11,7 +11,6 @@ from nokodo_ai import (
 	Thread,
 	ToolCall,
 	ToolMessage,
-	ToolResult,
 	UserMessage,
 )
 from nokodo_ai.message import _HasTextContentHelpers
@@ -44,15 +43,14 @@ def test_tool_call_default_id_is_set() -> None:
 
 
 def test_tool_message_creation() -> None:
-	result = ToolResult(tool_call_id="call_1", output="sunny")
-	msg = ToolMessage(tool_result=result)
-	assert msg.tool_result.output == "sunny"
-	assert msg.tool_result.is_error is False
+	msg = ToolMessage(tool_call_id="call_1", tool_output="sunny")
+	assert msg.tool_output == "sunny"
+	assert msg.is_error is False
 
 
 def test_tool_result_error() -> None:
-	result = ToolResult(tool_call_id="call_1", output="not found", is_error=True)
-	assert result.is_error is True
+	msg = ToolMessage(tool_call_id="call_1", tool_output="not found", is_error=True)
+	assert msg.is_error is True
 
 
 def test_system_message_creation() -> None:

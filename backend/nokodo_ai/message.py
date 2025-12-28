@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, TypeAdapter
 
 from nokodo_ai.base import Base
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils import typeid
 
 
@@ -99,16 +99,7 @@ class ToolCall(Base):
 
 	id: str = Field(default_factory=lambda: typeid.new_typeid("tool_call"))
 	name: str
-	arguments: JSONObject = Field(default_factory=dict)
-	metadata: JSONObject | None = None
-
-
-class ToolResult(Base):
-	"""result of a tool call execution."""
-
-	tool_call_id: str
-	output: str
-	is_error: bool = False
+	arguments: JSONValue = Field(default_factory=dict)
 	metadata: JSONObject | None = None
 
 
@@ -225,7 +216,9 @@ class ToolMessage(BaseMessage):
 	"""a message containing tool execution results."""
 
 	role: Literal["tool"] = "tool"
-	tool_result: ToolResult
+	tool_call_id: str
+	tool_output: str
+	is_error: bool = False
 
 
 Message = Annotated[

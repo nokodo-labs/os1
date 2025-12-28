@@ -111,8 +111,8 @@ async def test_agent_executes_tool_and_returns_all_messages() -> None:
 	assert isinstance(result[0], AssistantMessage)
 	assert isinstance(result[1], ToolMessage)
 	assert isinstance(result[2], AssistantMessage)
-	assert result[1].tool_result.output == "hi:tc1"
-	assert result[1].tool_result.is_error is False
+	assert result[1].tool_output == "hi:tc1"
+	assert result[1].is_error is False
 	assert result[2].text == "all done"
 
 
@@ -161,11 +161,11 @@ async def test_agent_handles_unknown_tool_gracefully() -> None:
 	# should have: assistant with tool call, error tool message, final assistant
 	assert len(result) == 3
 	assert isinstance(result[1], ToolMessage)
-	assert result[1].tool_result.is_error is True
-	assert "unknown tool" in result[1].tool_result.output
+	assert result[1].is_error is True
+	assert "unknown tool" in result[1].tool_output
 	assert result[2].text == "done"
 	assert calls == [("missing", "tc1", {})]
-	assert results == [("tc1", result[1].tool_result.output, True)]
+	assert results == [("tc1", result[1].tool_output, True)]
 
 
 @pytest.mark.asyncio
@@ -287,8 +287,8 @@ async def test_agent_tool_error_without_result_callback() -> None:
 	assert isinstance(result, list)
 	# result[1] should be the tool error message
 	assert isinstance(result[1], ToolMessage)
-	assert result[1].tool_result.is_error is True
-	assert "error executing tool" in result[1].tool_result.output
+	assert result[1].is_error is True
+	assert "error executing tool" in result[1].tool_output
 	last_msg = result[-1]
 	assert isinstance(last_msg, AssistantMessage)
 	assert last_msg.text == "ok"

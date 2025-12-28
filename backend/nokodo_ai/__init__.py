@@ -41,7 +41,6 @@ from nokodo_ai.message import (
 	TextContent,
 	ToolCall,
 	ToolMessage,
-	ToolResult,
 	Usage,
 	UserMessage,
 )
@@ -69,7 +68,6 @@ __all__ = [
 	"ToolMessage",
 	"SystemMessage",
 	"ToolCall",
-	"ToolResult",
 	# content types
 	"ContentPart",
 	"TextContent",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 
 import openai
 
@@ -43,7 +43,7 @@ from nokodo_ai.message import (
 )
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
-from nokodo_ai.utils.validators import validate_literal
+from nokodo_ai.utils.validators import validate
 
 
 if TYPE_CHECKING:
@@ -103,10 +103,10 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		"""generate a completion using /v1/chat/completions."""
 
 		response = await self._client.chat.completions.create(
-			model=validate_literal(model, OpenAIChatModel),
-			messages=_messages_to_openai_chat_completions(messages),
-			tools=_tools_to_openai(tools) or openai.omit,
-			tool_choice=_tool_choice_to_openai(params.tool_choice)
+			model=validate(model, OpenAIChatModel),
+			messages=_messages_to_openai_chatcompletions(messages),
+			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,
+			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
 			if params and params.tool_choice is not None
 			else openai.omit,
 			max_tokens=params.max_tokens
@@ -115,13 +115,15 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			temperature=params.temperature
 			if params and params.temperature is not None
 			else openai.omit,
-			response_format=_response_format_to_openai(params.response_model)
+			response_format=_response_format_to_openai_chatcompletions(
+				params.response_model
+			)
 			if params and params.response_model is not None
 			else openai.omit,
 			top_p=params.top_p if params and params.top_p is not None else openai.omit,
 			stop=params.stop if params and params.stop else openai.omit,
 			seed=params.seed if params and params.seed is not None else openai.omit,
-			logit_bias=_logit_bias_to_openai(params.logit_bias)
+			logit_bias=_logit_bias_to_openai_chatcompletions(params.logit_bias)
 			if params and params.logit_bias is not None
 			else openai.omit,
 			presence_penalty=params.presence_penalty
@@ -141,150 +143,56 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] | None = None,
+		tools: list[Tool] = [],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/chat/completions."""
 		params = params or ChatGenerationParams()
-		openai_model: OpenAIChatModel = validate_literal(model, OpenAIChatModel)
 
 		stream = await self._client.chat.completions.create(
-			model=openai_model,
-			messages=_messages_to_openai_chat_completions(messages),
+			model=validate(model, OpenAIChatModel),
+			messages=_messages_to_openai_chatcompletions(messages),
 			stream=True,
-			tools=_tools_to_openai(tools) if tools else openai.omit,
-			tool_choice=_tool_choice_to_openai(params.tool_choice)
-			if params.tool_choice is not None
+			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,
+			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
+			if params and params.tool_choice is not None
 			else openai.omit,
 			max_tokens=params.max_tokens
-			if params.max_tokens is not None
+			if params and params.max_tokens is not None
 			else openai.omit,
 			temperature=params.temperature
-			if params.temperature is not None
+			if params and params.temperature is not None
 			else openai.omit,
-			response_format=_response_format_to_openai(params.response_model)
-			if params.response_model is not None
+			response_format=_response_format_to_openai_chatcompletions(
+				params.response_model
+			)
+			if params and params.response_model is not None
 			else openai.omit,
-			top_p=params.top_p if params.top_p is not None else openai.omit,
-			stop=params.stop if params.stop else openai.omit,
-			seed=params.seed if params.seed is not None else openai.omit,
-			logit_bias=_logit_bias_to_openai(params.logit_bias)
-			if params.logit_bias is not None
+			top_p=params.top_p if params and params.top_p is not None else openai.omit,
+			stop=params.stop if params and params.stop else openai.omit,
+			seed=params.seed if params and params.seed is not None else openai.omit,
+			logit_bias=_logit_bias_to_openai_chatcompletions(params.logit_bias)
+			if params and params.logit_bias is not None
 			else openai.omit,
 			presence_penalty=params.presence_penalty
-			if params.presence_penalty is not None
+			if params and params.presence_penalty is not None
 			else openai.omit,
 			frequency_penalty=params.frequency_penalty
-			if params.frequency_penalty is not None
+			if params and params.frequency_penalty is not None
 			else openai.omit,
 			reasoning_effort=params.reasoning_effort
-			if params.reasoning_effort is not None
+			if params and params.reasoning_effort is not None
 			else openai.omit,
 		)
 
-		finish_reason: FinishReason | None = None
-		usage: Usage | None = None
-		refusal_parts: list[str] = []
-
-		tool_call_ids: dict[int, str] = {}
-		tool_call_names: dict[int, str] = {}
-		tool_call_arguments: dict[int, str] = {}
-
-		async for chunk in stream:
-			if chunk.usage is not None:
-				usage = _openai_usage_to_usage(chunk.usage)
-
-			if not chunk.choices:
-				continue
-
-			for choice in chunk.choices:
-				if choice.index != 0:
-					continue
-				if choice.finish_reason is not None:
-					if choice.finish_reason in (
-						"stop",
-						"length",
-						"tool_calls",
-						"content_filter",
-					):
-						finish_reason = choice.finish_reason
-					else:
-						logger.warning("unknown openai finish reason")
-
-				delta = choice.delta
-				if delta.content:
-					yield AssistantMessage(content=[TextContent(text=delta.content)])
-
-				if delta.refusal:
-					refusal_parts.append(delta.refusal)
-					yield AssistantMessage(
-						content=[RefusalContent(reason=delta.refusal)]
-					)
-
-				if delta.tool_calls:
-					for tool_call_delta in delta.tool_calls:
-						index = tool_call_delta.index
-						if tool_call_delta.id:
-							tool_call_ids[index] = tool_call_delta.id
-						if tool_call_delta.function and tool_call_delta.function.name:
-							tool_call_names[index] = tool_call_delta.function.name
-						if (
-							tool_call_delta.function
-							and tool_call_delta.function.arguments
-						):
-							tool_call_arguments[index] = (
-								tool_call_arguments.get(index, "")
-								+ tool_call_delta.function.arguments
-							)
-
-		final_tool_calls: list[ToolCall] = []
-		for index in sorted(tool_call_names.keys() | tool_call_arguments.keys()):
-			name = tool_call_names.get(index)
-			if not name:
-				logger.warning("openai tool call missing function name")
-				continue
-
-			openai_id = tool_call_ids.get(index)
-			raw_args = tool_call_arguments.get(index, "")
-			metadata: JSONObject | None = None
-
-			try:
-				parsed_args = json.loads(raw_args) if raw_args else {}
-			except json.JSONDecodeError:
-				logger.warning("openai tool call arguments are not valid json")
-				parsed_args = {}
-				if raw_args:
-					metadata = {"arguments_raw": raw_args}
-
-			if openai_id is None:
-				final_tool_calls.append(
-					ToolCall(name=name, arguments=parsed_args, metadata=metadata)
-				)
-			else:
-				final_tool_calls.append(
-					ToolCall(
-						id=openai_id,
-						name=name,
-						arguments=parsed_args,
-						metadata=metadata,
-					)
-				)
-
-		final_content: list[ContentPart] = []
-		refusal = "".join(refusal_parts)
-		if finish_reason == "content_filter":
-			final_content.append(RefusalContent(reason=refusal or "content filtered"))
-
-		if finish_reason is not None or final_tool_calls or usage is not None:
-			yield AssistantMessage(
-				content=final_content,
-				tool_calls=final_tool_calls,
-				usage=usage,
-				finish_reason=finish_reason,
-			)
+		accumulated = _accumulate_streaming_chunks(stream)
+		async for delta_message in accumulated:
+			yield delta_message
 
 
-def _tools_to_openai(tools: list[Tool]) -> list[OpenAIChatCompletionToolParam]:
+def _tools_to_openai_chatcompletions(
+	tools: list[Tool],
+) -> list[OpenAIChatCompletionToolParam]:
 	"""convert SDK tools to openai tool params."""
 	result: list[OpenAIChatCompletionToolParam] = []
 	for t in tools:
@@ -302,7 +210,7 @@ def _tools_to_openai(tools: list[Tool]) -> list[OpenAIChatCompletionToolParam]:
 	return result
 
 
-def _tool_choice_to_openai(
+def _tool_choice_to_openai_chatcompletions(
 	tool_choice: str,
 ) -> OpenAIChatCompletionToolChoiceOptionParam:
 	"""convert SDK tool_choice to openai format."""
@@ -316,7 +224,7 @@ def _tool_choice_to_openai(
 	return {"type": "function", "function": {"name": tool_choice}}
 
 
-def _logit_bias_to_openai(
+def _logit_bias_to_openai_chatcompletions(
 	logit_bias: dict[str, float],
 ) -> dict[str, int]:
 	"""convert SDK logit bias to openai format (float to int)."""
@@ -326,7 +234,7 @@ def _logit_bias_to_openai(
 	return result
 
 
-def _response_format_to_openai(
+def _response_format_to_openai_chatcompletions(
 	response_model: JSONObject,
 ) -> OpenAIResponseFormatJSONSchema:
 	"""convert SDK response_model to openai response_format param."""
@@ -349,6 +257,108 @@ def _openai_usage_to_usage(openai_usage: OpenAICompletionUsage) -> Usage:
 	)
 
 
+async def _accumulate_streaming_chunks(stream) -> AsyncIterator[AssistantMessage]:
+	"""process streaming chunks and yield delta messages, then final summary."""
+	finish_reason: FinishReason | None = None
+	usage: Usage | None = None
+	refusal_parts: list[str] = []
+	tool_call_ids: dict[int, str] = {}
+	tool_call_names: dict[int, str] = {}
+	tool_call_arguments: dict[int, str] = {}
+
+	async for chunk in stream:
+		if chunk.usage is not None:
+			usage = _openai_usage_to_usage(chunk.usage)
+
+		if not chunk.choices:
+			continue
+
+		for choice in chunk.choices:
+			if choice.index != 0:
+				continue
+
+			if choice.finish_reason is not None:
+				if choice.finish_reason in (
+					"stop",
+					"length",
+					"tool_calls",
+					"content_filter",
+				):
+					finish_reason = choice.finish_reason
+				else:
+					logger.warning("unknown openai finish reason")
+
+			delta = choice.delta
+			if delta.content:
+				yield AssistantMessage(content=[TextContent(text=delta.content)])
+
+			if delta.refusal:
+				refusal_parts.append(delta.refusal)
+				yield AssistantMessage(content=[RefusalContent(reason=delta.refusal)])
+
+			if delta.tool_calls:
+				for tool_call_delta in delta.tool_calls:
+					index = tool_call_delta.index
+					if tool_call_delta.id:
+						tool_call_ids[index] = tool_call_delta.id
+					if tool_call_delta.function and tool_call_delta.function.name:
+						tool_call_names[index] = tool_call_delta.function.name
+					if tool_call_delta.function and tool_call_delta.function.arguments:
+						tool_call_arguments[index] = (
+							tool_call_arguments.get(index, "")
+							+ tool_call_delta.function.arguments
+						)
+
+	final_tool_calls = _build_tool_calls_from_deltas(
+		tool_call_ids, tool_call_names, tool_call_arguments
+	)
+
+	final_content: list[ContentPart] = []
+	refusal = "".join(refusal_parts)
+	if finish_reason == "content_filter":
+		final_content.append(RefusalContent(reason=refusal or "content filtered"))
+
+	if finish_reason is not None or final_tool_calls or usage is not None:
+		yield AssistantMessage(
+			content=final_content,
+			tool_calls=final_tool_calls,
+			usage=usage,
+			finish_reason=finish_reason,
+		)
+
+
+def _build_tool_calls_from_deltas(
+	tool_call_ids: dict[int, str],
+	tool_call_names: dict[int, str],
+	tool_call_arguments: dict[int, str],
+) -> list[ToolCall]:
+	"""build final tool calls from accumulated streaming deltas."""
+	final_tool_calls: list[ToolCall] = []
+	for index in sorted(tool_call_names.keys() | tool_call_arguments.keys()):
+		name = tool_call_names.get(index)
+		if not name:
+			logger.warning("openai tool call missing function name")
+			continue
+
+		openai_id = tool_call_ids.get(index)
+		raw_args = tool_call_arguments.get(index) or "{}"
+		metadata: JSONObject | None = None
+
+		if openai_id is not None:
+			if metadata is None:
+				metadata = {}
+			metadata["openai_tool_call_id"] = openai_id
+
+		final_tool_calls.append(
+			ToolCall(
+				name=name,
+				arguments=raw_args,
+				metadata=metadata,
+			)
+		)
+	return final_tool_calls
+
+
 def _openai_tool_calls_to_tool_calls(
 	openai_tool_calls: list[OpenAIChatCompletionMessageToolCallUnion],
 ) -> list[ToolCall]:
@@ -357,12 +367,12 @@ def _openai_tool_calls_to_tool_calls(
 	for openai_tool_call in openai_tool_calls:
 		if not isinstance(openai_tool_call, OpenAIChatCompletionFunctionToolCall):
 			continue
-		args = json.loads(openai_tool_call.function.arguments)
-		metadata: JSONObject = {"openai_id": openai_tool_call.id}
+		raw_args = openai_tool_call.function.arguments or "{}"
+		metadata: JSONObject = {"openai_tool_call_id": openai_tool_call.id}
 		tool_calls.append(
 			ToolCall(
 				name=openai_tool_call.function.name,
-				arguments=args,
+				arguments=raw_args,
 				metadata=metadata,
 			)
 		)
@@ -414,7 +424,7 @@ def _chat_completion_to_assistant_message(
 	)
 
 
-def _messages_to_openai_chat_completions(
+def _messages_to_openai_chatcompletions(
 	messages: list[Message],
 ) -> list[OpenAIChatCompletionMessageParam]:
 	"""convert SDK messages into OpenAI chat.completions message params."""
@@ -443,22 +453,36 @@ def _messages_to_openai_chat_completions(
 				if message.tool_calls:
 					openai_message["tool_calls"] = [
 						OpenAIChatCompletionFunctionToolCallParam(
-							id=tool_call.id,
+							id=cast(
+								str,
+								(tool_call.metadata or {}).get("openai_tool_call_id"),
+							),
 							type="function",
 							function={
 								"name": tool_call.name,
-								"arguments": json.dumps(tool_call.arguments),
+								"arguments": tool_call.arguments
+								if isinstance(tool_call.arguments, str)
+								else json.dumps(tool_call.arguments),
 							},
 						)
 						for tool_call in message.tool_calls
 					]
 				openai_messages.append(openai_message)
 			case ToolMessage():
+				openai_tool_call_id = (
+					message.metadata.get("openai_tool_call_id")
+					if message.metadata
+					else None
+				)
+				if openai_tool_call_id is None:
+					raise ValueError(
+						"ToolMessage missing openai_tool_call_id in metadata"
+					)
 				openai_messages.append(
 					OpenAIChatCompletionToolMessageParam(
 						role="tool",
-						tool_call_id=message.tool_result.tool_call_id,
-						content=message.tool_result.output,
+						tool_call_id=cast(str, openai_tool_call_id),
+						content=message.tool_output,
 					)
 				)
 			case _:

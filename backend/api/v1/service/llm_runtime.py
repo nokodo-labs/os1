@@ -19,7 +19,6 @@ from nokodo_ai.message import Message as SDKMessage
 from nokodo_ai.message import SystemMessage as SDKSystemMessage
 from nokodo_ai.message import ToolCall as SDKToolCall
 from nokodo_ai.message import ToolMessage as SDKToolMessage
-from nokodo_ai.message import ToolResult as SDKToolResult
 from nokodo_ai.message import Usage as SDKUsage
 from nokodo_ai.message import UserMessage as SDKUserMessage
 from nokodo_ai.utils.typeid import TypeID
@@ -64,18 +63,15 @@ def orm_message_to_sdk(orm: MessageORM) -> SDKMessage:
 				metadata=orm.metadata_,
 			)
 		case MessageTypeORM.TOOL:
-			# Tool messages store tool_result in the first content part or metadata
-			# For now, extract from first text content as the output
+			# tool messages store output in first text content; metadata holds call id
 			output = ""
 			if sdk_content and hasattr(sdk_content[0], "text"):
 				output = sdk_content[0].text
 			meta = orm.metadata_ or {}
 			return SDKToolMessage(
-				tool_result=SDKToolResult(
-					tool_call_id=meta.get("tool_call_id", ""),
-					output=output,
-					is_error=meta.get("is_error", False),
-				),
+				tool_call_id=meta.get("tool_call_id", ""),
+				tool_output=output,
+				is_error=meta.get("is_error", False),
 				metadata=orm.metadata_,
 			)
 		case _:
@@ -120,10 +116,10 @@ def sdk_message_to_orm_create(
 			assert isinstance(sdk_msg, SDKToolMessage)
 			return MessageCreate(
 				type=MessageTypeORM.TOOL,
-				content=[TextContent(text=sdk_msg.tool_result.output).model_dump()],
+				content=[TextContent(text=sdk_msg.tool_output).model_dump()],
 				metadata_={
-					"tool_call_id": sdk_msg.tool_result.tool_call_id,
-					"is_error": sdk_msg.tool_result.is_error,
+					"tool_call_id": sdk_msg.tool_call_id,
+					"is_error": sdk_msg.is_error,
 				},
 			)
 		case _:

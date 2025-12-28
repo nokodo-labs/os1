@@ -38,7 +38,7 @@ from nokodo_ai.message import (
 	UserMessage,
 )
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.types.json import JSONObject
 
 
 if TYPE_CHECKING:
@@ -100,26 +100,17 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		if tools and params.tool_choice is not None:
 			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
 
-		anthropic_system = system_text if system_text else anthropic.omit
-		anthropic_temperature = (
-			params.temperature if params.temperature is not None else anthropic.omit
-		)
-		anthropic_max_tokens = (
-			params.max_tokens if params.max_tokens is not None else 1024
-		)
-		anthropic_stop = params.stop if params.stop else anthropic.omit
-		anthropic_top_p = params.top_p if params.top_p is not None else anthropic.omit
-		anthropic_top_k = params.top_k if params.top_k is not None else anthropic.omit
-
-		response = await self.client.messages.create(
+		response = await self._client.messages.create(
 			model=model,
-			max_tokens=anthropic_max_tokens,
+			max_tokens=params.max_tokens if params.max_tokens is not None else 1024,
 			messages=anthropic_messages,
-			system=anthropic_system,
-			temperature=anthropic_temperature,
-			top_p=anthropic_top_p,
-			top_k=anthropic_top_k,
-			stop_sequences=anthropic_stop,
+			system=system_text if system_text else anthropic.omit,
+			temperature=params.temperature
+			if params.temperature is not None
+			else anthropic.omit,
+			top_p=params.top_p if params.top_p is not None else anthropic.omit,
+			top_k=params.top_k if params.top_k is not None else anthropic.omit,
+			stop_sequences=params.stop if params.stop else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
 		)
@@ -132,13 +123,12 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 					content.append(TextContent(text=block.text))
 				continue
 			if isinstance(block, ToolUseBlock):
-				args, metadata = _coerce_tool_input(block.input)
+				raw_args = json.dumps(block.input) if block.input else "{}"
 				tool_calls.append(
 					ToolCall(
-						id=block.id,
 						name=block.name,
-						arguments=args,
-						metadata=metadata,
+						arguments=raw_args,
+						metadata={"anthropic_tool_call_id": block.id},
 					)
 				)
 				continue
@@ -184,26 +174,17 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		if tools and params.tool_choice is not None:
 			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
 
-		anthropic_system = system_text if system_text else anthropic.omit
-		anthropic_temperature = (
-			params.temperature if params.temperature is not None else anthropic.omit
-		)
-		anthropic_max_tokens = (
-			params.max_tokens if params.max_tokens is not None else 1024
-		)
-		anthropic_stop = params.stop if params.stop else anthropic.omit
-		anthropic_top_p = params.top_p if params.top_p is not None else anthropic.omit
-		anthropic_top_k = params.top_k if params.top_k is not None else anthropic.omit
-
-		stream = await self.client.messages.create(
+		stream = await self._client.messages.create(
 			model=model,
-			max_tokens=anthropic_max_tokens,
+			max_tokens=params.max_tokens if params.max_tokens is not None else 1024,
 			messages=anthropic_messages,
-			system=anthropic_system,
-			temperature=anthropic_temperature,
-			top_p=anthropic_top_p,
-			top_k=anthropic_top_k,
-			stop_sequences=anthropic_stop,
+			system=system_text if system_text else anthropic.omit,
+			temperature=params.temperature
+			if params.temperature is not None
+			else anthropic.omit,
+			top_p=params.top_p if params.top_p is not None else anthropic.omit,
+			top_k=params.top_k if params.top_k is not None else anthropic.omit,
+			stop_sequences=params.stop if params.stop else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
 			stream=True,
@@ -242,14 +223,13 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 				if state is None:
 					continue
 				tool_id, tool_name, buf = state
-				args, metadata = _try_parse_tool_input_json(buf)
+				raw_args = buf if buf.strip() else "{}"
 				yield AssistantMessage(
 					tool_calls=[
 						ToolCall(
-							id=tool_id,
 							name=tool_name,
-							arguments=args,
-							metadata=metadata,
+							arguments=raw_args,
+							metadata={"anthropic_tool_call_id": tool_id},
 						)
 					]
 				)
@@ -297,12 +277,33 @@ def _messages_to_anthropic(
 					blocks.append({"type": "text", "text": assistant_text})
 				if message.tool_calls:
 					for call in message.tool_calls:
+						tool_use_id = (
+							(call.metadata or {}).get("anthropic_tool_call_id")
+							if call.metadata
+							else None
+						)
+						if not isinstance(tool_use_id, str) or tool_use_id == "":
+							tool_use_id = call.id
+						input_map: dict[str, object] = {}
+						if isinstance(call.arguments, dict):
+							input_map = dict[str, object](call.arguments)
+						elif isinstance(call.arguments, str):
+							try:
+								parsed = (
+									json.loads(call.arguments)
+									if call.arguments.strip()
+									else {}
+								)
+							except json.JSONDecodeError:
+								parsed = {}
+							if isinstance(parsed, dict):
+								input_map = dict[str, object](parsed)
 						blocks.append(
 							{
 								"type": "tool_use",
-								"id": call.id,
+								"id": tool_use_id,
 								"name": call.name,
-								"input": dict[str, object](call.arguments),
+								"input": input_map,
 							}
 						)
 				if not blocks:
@@ -312,15 +313,24 @@ def _messages_to_anthropic(
 				else:
 					result.append({"role": "assistant", "content": blocks})
 			case ToolMessage():
+				tool_use_id_value = (
+					message.metadata.get("anthropic_tool_call_id")
+					if message.metadata
+					else None
+				)
+				if not isinstance(tool_use_id_value, str) or tool_use_id_value == "":
+					raise ValueError(
+						"ToolMessage missing anthropic_tool_call_id in metadata"
+					)
 				result.append(
 					{
 						"role": "user",
 						"content": [
 							ToolResultBlockParam(
 								type="tool_result",
-								tool_use_id=message.tool_result.tool_call_id,
-								content=message.tool_result.output,
-								is_error=message.tool_result.is_error,
+								tool_use_id=tool_use_id_value,
+								content=message.tool_output,
+								is_error=message.is_error,
 							)
 						],
 					}
@@ -355,82 +365,3 @@ def _tool_choice_to_anthropic(
 	if tool_choice == "required":
 		return ToolChoiceAnyParam(type="any")
 	return ToolChoiceToolParam(type="tool", name=tool_choice)
-
-
-def _try_parse_tool_input_json(raw: str) -> tuple[JSONObject, JSONObject | None]:
-	if raw.strip() == "":
-		return ({}, None)
-
-	try:
-		parsed = json.loads(raw)
-	except json.JSONDecodeError as e:
-		return (
-			{},
-			{
-				"arguments_parse_error": str(e),
-				"raw_arguments": raw,
-			},
-		)
-
-	if not isinstance(parsed, dict):
-		return (
-			{},
-			{
-				"arguments_parse_error": "tool input was not a json object",
-				"raw_arguments": raw,
-			},
-		)
-
-	input_map: dict[str, object] = {}
-	for k, v in parsed.items():
-		input_map[str(k)] = v
-
-	return _coerce_tool_input(input_map)
-
-
-def _coerce_tool_input(
-	input_map: dict[str, object],
-) -> tuple[JSONObject, JSONObject | None]:
-	args: JSONObject = {}
-	for key, value in input_map.items():
-		ok, json_value = _coerce_json_value(value)
-		if not ok:
-			return (
-				{},
-				{
-					"arguments_parse_error": "tool input contained non-json values",
-					"raw_arguments": json.dumps(input_map, default=str),
-				},
-			)
-		args[key] = json_value
-	return (args, None)
-
-
-def _coerce_json_value(value: object) -> tuple[bool, JSONValue]:
-	if value is None:
-		return (True, None)
-	if isinstance(value, bool):
-		return (True, value)
-	if isinstance(value, int):
-		return (True, value)
-	if isinstance(value, float):
-		return (True, value)
-	if isinstance(value, str):
-		return (True, value)
-	if isinstance(value, list):
-		out_list: list[JSONValue] = []
-		for item in value:
-			ok, coerced = _coerce_json_value(item)
-			if not ok:
-				return (False, None)
-			out_list.append(coerced)
-		return (True, out_list)
-	if isinstance(value, dict):
-		out_dict: dict[str, JSONValue] = {}
-		for k, v in value.items():
-			ok, coerced = _coerce_json_value(v)
-			if not ok:
-				return (False, None)
-			out_dict[str(k)] = coerced
-		return (True, out_dict)
-	return (False, None)

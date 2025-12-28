@@ -13,6 +13,9 @@ from openai.types import (
 from openai.types import (
 	CompletionUsage as OpenAICompletionUsage,
 )
+from openai.types import (
+	ResponsesModel as OpenAIResponsesModel,
+)
 from openai.types.chat import (
 	ChatCompletion as OpenAIChatCompletion,
 )
@@ -131,6 +134,7 @@ __all__ = [
 	"OpenAIChatCompletionToolChoiceOptionParam",
 	# responses
 	"OpenAIResponse",
+	"OpenAIResponsesModel",
 	"OpenAIResponseInputParam",
 	"OpenAIResponseInputItemParam",
 	"OpenAIResponseToolChoice",

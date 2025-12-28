@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Literal
 
@@ -11,7 +12,6 @@ from nokodo_ai.message import (
 	Message,
 	TextContent,
 	ToolMessage,
-	ToolResult,
 )
 from nokodo_ai.thread import Thread
 from nokodo_ai.tool import Tool, ToolExecutionContext
@@ -209,40 +209,91 @@ class Agent:
 
 		for tool_call in response.tool_calls or []:
 			tool = self.tools.get(tool_call.name)
-			args: JSONObject = tool_call.arguments
+			args: JSONObject
+			raw_args = tool_call.arguments
+			if isinstance(raw_args, dict):
+				args = raw_args
+			elif isinstance(raw_args, str):
+				try:
+					parsed = json.loads(raw_args)
+				except json.JSONDecodeError as e:
+					result = ToolMessage(
+						tool_call_id=tool_call.id,
+						tool_output=(
+							"could not parse arguments. invalid json: " + str(e)
+						),
+						is_error=True,
+						metadata=tool_call.metadata,
+					)
+					if self.on_tool_result:
+						self.on_tool_result(tool_call.id, result.tool_output, True)
+					messages.append(result)
+					continue
+
+				if not isinstance(parsed, dict):
+					result = ToolMessage(
+						tool_call_id=tool_call.id,
+						tool_output=(
+							"could not parse arguments. expected a json object"
+						),
+						is_error=True,
+						metadata=tool_call.metadata,
+					)
+					if self.on_tool_result:
+						self.on_tool_result(tool_call.id, result.tool_output, True)
+					messages.append(result)
+					continue
+
+				args = parsed
+			else:
+				result = ToolMessage(
+					tool_call_id=tool_call.id,
+					tool_output=(
+						"could not parse arguments. expected json object or json string"
+					),
+					is_error=True,
+					metadata=tool_call.metadata,
+				)
+				if self.on_tool_result:
+					self.on_tool_result(tool_call.id, result.tool_output, True)
+				messages.append(result)
+				continue
 
 			if self.on_tool_call:
 				self.on_tool_call(tool_call.name, tool_call.id, args)
 
 			if tool is None:
-				result = ToolResult(
+				result = ToolMessage(
 					tool_call_id=tool_call.id,
-					output=f"error: unknown tool '{tool_call.name}'",
+					tool_output=f"error: unknown tool '{tool_call.name}'",
 					is_error=True,
+					metadata=tool_call.metadata,
 				)
 				if self.on_tool_result:
-					self.on_tool_result(tool_call.id, result.output, True)
-				messages.append(ToolMessage(tool_result=result))
+					self.on_tool_result(tool_call.id, result.tool_output, True)
+				messages.append(result)
 				continue
 
 			try:
 				context = ToolExecutionContext(call_id=tool_call.id, thread=thread)
 				output = await tool.call(__context=context, **args)
-				result = ToolResult(
+				result = ToolMessage(
 					tool_call_id=tool_call.id,
-					output=str(output),
+					tool_output=str(output),
+					metadata=tool_call.metadata,
 				)
 				if self.on_tool_result:
-					self.on_tool_result(tool_call.id, result.output, False)
-				messages.append(ToolMessage(tool_result=result))
+					self.on_tool_result(tool_call.id, result.tool_output, False)
+				messages.append(result)
 			except Exception as e:
-				result = ToolResult(
+				result = ToolMessage(
 					tool_call_id=tool_call.id,
-					output=f"error executing tool: {e}",
+					tool_output=f"error executing tool: {e}",
 					is_error=True,
+					metadata=tool_call.metadata,
 				)
 				if self.on_tool_result:
-					self.on_tool_result(tool_call.id, result.output, True)
-				messages.append(ToolMessage(tool_result=result))
+					self.on_tool_result(tool_call.id, result.tool_output, True)
+				messages.append(result)
 
 		return messages
