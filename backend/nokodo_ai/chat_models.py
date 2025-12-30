@@ -14,6 +14,7 @@ from nokodo_ai.adapters.chat import (
 	split_model_identifier,
 )
 from nokodo_ai.base import Base
+from nokodo_ai.deltas import ChatModelDelta, stream_chat_model_deltas
 from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.thread import Thread
 from nokodo_ai.tool import Tool
@@ -26,7 +27,7 @@ class ChatModel(ChatGenerationParams, Base):
 		llm = ChatModel("gpt-4o")  # uses default provider and adapter
 		response = await llm.generate(messages)
 
-		async for chunk in llm.generate(messages, stream=True):
+		async for delta in llm.generate(messages, stream=True):
 			...
 
 	usage (explicit adapter):
@@ -103,7 +104,7 @@ class ChatModel(ChatGenerationParams, Base):
 		tools: list[Tool] | None = None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
-	) -> AsyncIterator[AssistantMessage]: ...
+	) -> AsyncIterator[ChatModelDelta]: ...
 
 	def generate(
 		self,
@@ -112,7 +113,7 @@ class ChatModel(ChatGenerationParams, Base):
 		tools: list[Tool] | None = None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
-	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+	) -> Awaitable[AssistantMessage] | AsyncIterator[ChatModelDelta]:
 		"""generate an assistant response.
 
 		args:
@@ -144,18 +145,16 @@ class ChatModel(ChatGenerationParams, Base):
 				update=params.model_dump(exclude_none=True)
 			)
 
+		_model_provider, _model_variant, model_name = split_model_identifier(self.model)
 		if stream:
-			_model_provider, _model_variant, model_name = split_model_identifier(
-				self.model
-			)
-			return self._adapter_resolved.generate(
+			raw_stream = self._adapter_resolved.generate(
 				messages,
 				model=model_name,
 				stream=True,
 				tools=tools,
 				params=effective_params,
 			)
-		_model_provider, _model_variant, model_name = split_model_identifier(self.model)
+			return stream_chat_model_deltas(raw_stream)
 		return self._adapter_resolved.generate(
 			messages,
 			model=model_name,

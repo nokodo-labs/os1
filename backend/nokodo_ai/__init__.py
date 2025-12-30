@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from nokodo_ai.agent import Agent
 from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.deltas import AgentDelta, ChatModelDelta
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -56,6 +57,8 @@ __all__ = [
 	"EmbeddingModel",
 	"Vectorstore",
 	"Agent",
+	"ChatModelDelta",
+	"AgentDelta",
 	"Tool",
 	"ToolExecutionContext",
 	"tool",

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Callable
-from typing import Literal
+from typing import Literal, overload
 
 from pydantic import Field
 
 from nokodo_ai.base import Base
 from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.deltas import AgentDelta, stream_agent_deltas
 from nokodo_ai.messages import (
 	AssistantMessage,
 	Message,
@@ -54,8 +55,8 @@ class Agent(Base):
 		messages = await agent.run(thread)
 
 		# streaming
-		async for message in agent.run(thread, stream=True):
-			print(message)
+		async for delta in agent.run(thread, stream=True):
+			print(delta)
 	"""
 
 	llm: ChatModel = Field(..., description="which model to use for Agent execution")
@@ -72,12 +73,28 @@ class Agent(Base):
 		description="callback when a tool returns",
 	)
 
+	@overload
+	async def run(
+		self,
+		thread: Thread,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		stream: Literal[False] = False,
+	) -> list[Message]: ...
+
+	@overload
+	async def run(
+		self,
+		thread: Thread,
+		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		stream: Literal[True] = True,
+	) -> AsyncIterator[AgentDelta]: ...
+
 	async def run(
 		self,
 		thread: Thread,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 		stream: bool = False,
-	) -> list[Message] | AsyncIterator[Message]:
+	) -> list[Message] | AsyncIterator[AgentDelta]:
 		"""run the agent against a thread.
 
 		the thread should already contain any system prompt and user messages.
@@ -94,7 +111,9 @@ class Agent(Base):
 			an async iterator yielding messages as they are produced (streaming)
 		"""
 		if stream:
-			return self._run_stream(thread, tool_choice=tool_choice)
+			return stream_agent_deltas(
+				self._run_stream_messages(thread, tool_choice=tool_choice)
+			)
 		return await self._run_sync(thread, tool_choice=tool_choice)
 
 	async def _run_sync(
@@ -106,11 +125,11 @@ class Agent(Base):
 		produced: list[Message] = []
 
 		for _iteration in range(self.max_iterations):
-			current_tool_choice = tool_choice if self.tools_list else None
+			current_tool_choice = tool_choice if self.tools else None
 
 			response = await self.llm.generate(
 				thread,
-				tools=self.tools_list if self.tools_list else None,
+				tools=self.tools if self.tools else None,
 				tool_choice=current_tool_choice,
 			)
 			thread.add(response)
@@ -142,18 +161,18 @@ class Agent(Base):
 
 		return produced
 
-	async def _run_stream(
+	async def _run_stream_messages(
 		self,
 		thread: Thread,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 	) -> AsyncIterator[Message]:
 		"""run the agent loop, yielding messages as they are produced."""
 		for _iteration in range(self.max_iterations):
-			current_tool_choice = tool_choice if self.tools_list else None
+			current_tool_choice = tool_choice if self.tools else None
 
 			response = await self.llm.generate(
 				thread,
-				tools=self.tools_list if self.tools_list else None,
+				tools=self.tools if self.tools else None,
 				tool_choice=current_tool_choice,
 			)
 			thread.add(response)
@@ -193,7 +212,7 @@ class Agent(Base):
 		messages: list[ToolMessage] = []
 
 		for tool_call in response.tool_calls or []:
-			tool = self.tools.get(tool_call.name)
+			tool = next((t for t in self.tools if t.name == tool_call.name), None)
 			args: JSONObject
 			raw_args = tool_call.arguments
 			if isinstance(raw_args, dict):
