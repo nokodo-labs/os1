@@ -27,8 +27,8 @@ from __future__ import annotations
 
 from nokodo_ai.agent import Agent
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.embedding import EmbeddingModel
-from nokodo_ai.message import (
+from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.messages import (
 	AssistantMessage,
 	BaseMessage,
 	ContentPart,

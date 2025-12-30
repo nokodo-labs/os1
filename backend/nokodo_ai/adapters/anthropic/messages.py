@@ -7,26 +7,28 @@ from collections.abc import AsyncIterator, Awaitable
 from typing import TYPE_CHECKING, Literal, overload
 
 import anthropic
-from anthropic.types.input_json_delta import InputJSONDelta
-from anthropic.types.message_param import MessageParam
-from anthropic.types.raw_content_block_delta_event import RawContentBlockDeltaEvent
-from anthropic.types.raw_content_block_start_event import RawContentBlockStartEvent
-from anthropic.types.raw_content_block_stop_event import RawContentBlockStopEvent
-from anthropic.types.text_block import TextBlock
-from anthropic.types.text_block_param import TextBlockParam
-from anthropic.types.text_delta import TextDelta
-from anthropic.types.tool_choice_any_param import ToolChoiceAnyParam
-from anthropic.types.tool_choice_auto_param import ToolChoiceAutoParam
-from anthropic.types.tool_choice_none_param import ToolChoiceNoneParam
-from anthropic.types.tool_choice_tool_param import ToolChoiceToolParam
-from anthropic.types.tool_param import ToolParam
-from anthropic.types.tool_result_block_param import ToolResultBlockParam
-from anthropic.types.tool_use_block import ToolUseBlock
-from anthropic.types.tool_use_block_param import ToolUseBlockParam
 
 from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
+from nokodo_ai.adapters.anthropic.types import (
+	AnthropicInputJSONDelta,
+	AnthropicMessageParam,
+	AnthropicRawContentBlockDeltaEvent,
+	AnthropicRawContentBlockStartEvent,
+	AnthropicRawContentBlockStopEvent,
+	AnthropicTextBlock,
+	AnthropicTextBlockParam,
+	AnthropicTextDelta,
+	AnthropicToolChoiceAnyParam,
+	AnthropicToolChoiceAutoParam,
+	AnthropicToolChoiceNoneParam,
+	AnthropicToolChoiceToolParam,
+	AnthropicToolParam,
+	AnthropicToolResultBlockParam,
+	AnthropicToolUseBlock,
+	AnthropicToolUseBlockParam,
+)
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.message import (
+from nokodo_ai.messages import (
 	AssistantMessage,
 	ContentPart,
 	JsonContent,
@@ -42,7 +44,7 @@ from nokodo_ai.types.json import JSONObject
 
 
 if TYPE_CHECKING:
-	from nokodo_ai.message import Message
+	from nokodo_ai.messages import Message
 
 
 class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
@@ -118,11 +120,11 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		tool_calls: list[ToolCall] = []
 		content: list[ContentPart] = []
 		for block in response.content:
-			if isinstance(block, TextBlock):
+			if isinstance(block, AnthropicTextBlock):
 				if block.text:
 					content.append(TextContent(text=block.text))
 				continue
-			if isinstance(block, ToolUseBlock):
+			if isinstance(block, AnthropicToolUseBlock):
 				raw_args = json.dumps(block.input) if block.input else "{}"
 				tool_calls.append(
 					ToolCall(
@@ -193,19 +195,19 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		tool_use_state: dict[int, tuple[str, str, str]] = {}
 		# index -> (tool_id, tool_name, input_json_buffer)
 		async for event in stream:
-			if isinstance(event, RawContentBlockStartEvent):
+			if isinstance(event, AnthropicRawContentBlockStartEvent):
 				block = event.content_block
-				if isinstance(block, ToolUseBlock):
+				if isinstance(block, AnthropicToolUseBlock):
 					tool_use_state[event.index] = (block.id, block.name, "")
 				continue
 
-			if isinstance(event, RawContentBlockDeltaEvent):
+			if isinstance(event, AnthropicRawContentBlockDeltaEvent):
 				delta = event.delta
-				if isinstance(delta, TextDelta):
+				if isinstance(delta, AnthropicTextDelta):
 					if delta.text:
 						yield AssistantMessage(content=[TextContent(text=delta.text)])
 					continue
-				if isinstance(delta, InputJSONDelta):
+				if isinstance(delta, AnthropicInputJSONDelta):
 					state = tool_use_state.get(event.index)
 					if state is None:
 						continue
@@ -218,7 +220,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 					continue
 				continue
 
-			if isinstance(event, RawContentBlockStopEvent):
+			if isinstance(event, AnthropicRawContentBlockStopEvent):
 				state = tool_use_state.get(event.index)
 				if state is None:
 					continue
@@ -238,7 +240,10 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 
 
 type AnthropicToolChoice = (
-	ToolChoiceAutoParam | ToolChoiceAnyParam | ToolChoiceNoneParam | ToolChoiceToolParam
+	AnthropicToolChoiceAutoParam
+	| AnthropicToolChoiceAnyParam
+	| AnthropicToolChoiceNoneParam
+	| AnthropicToolChoiceToolParam
 )
 
 
@@ -258,9 +263,9 @@ def _apply_response_model_to_system(
 
 def _messages_to_anthropic(
 	messages: list[Message],
-) -> tuple[str | None, list[MessageParam]]:
+) -> tuple[str | None, list[AnthropicMessageParam]]:
 	system_parts: list[str] = []
-	result: list[MessageParam] = []
+	result: list[AnthropicMessageParam] = []
 	for message in messages:
 		match message:
 			case SystemMessage():
@@ -269,7 +274,7 @@ def _messages_to_anthropic(
 			case UserMessage():
 				result.append({"role": "user", "content": message.text})
 			case AssistantMessage():
-				blocks: list[TextBlockParam | ToolUseBlockParam] = []
+				blocks: list[AnthropicTextBlockParam | AnthropicToolUseBlockParam] = []
 				assistant_text = message.text
 				if not assistant_text and message.json is not None:
 					assistant_text = json.dumps(message.json)
@@ -326,7 +331,7 @@ def _messages_to_anthropic(
 					{
 						"role": "user",
 						"content": [
-							ToolResultBlockParam(
+							AnthropicToolResultBlockParam(
 								type="tool_result",
 								tool_use_id=tool_use_id_value,
 								content=message.tool_output,
@@ -342,11 +347,11 @@ def _messages_to_anthropic(
 	return (system_text or None, result)
 
 
-def _tools_to_anthropic(tools: list[Tool]) -> list[ToolParam]:
-	result: list[ToolParam] = []
+def _tools_to_anthropic(tools: list[Tool]) -> list[AnthropicToolParam]:
+	result: list[AnthropicToolParam] = []
 	for t in tools:
 		result.append(
-			ToolParam(
+			AnthropicToolParam(
 				name=t.name,
 				description=t.description,
 				input_schema=dict[str, object](t.parameters),
@@ -359,9 +364,9 @@ def _tool_choice_to_anthropic(
 	tool_choice: str,
 ) -> AnthropicToolChoice:
 	if tool_choice == "auto":
-		return ToolChoiceAutoParam(type="auto")
+		return AnthropicToolChoiceAutoParam(type="auto")
 	if tool_choice == "none":
-		return ToolChoiceNoneParam(type="none")
+		return AnthropicToolChoiceNoneParam(type="none")
 	if tool_choice == "required":
-		return ToolChoiceAnyParam(type="any")
-	return ToolChoiceToolParam(type="tool", name=tool_choice)
+		return AnthropicToolChoiceAnyParam(type="any")
+	return AnthropicToolChoiceToolParam(type="tool", name=tool_choice)

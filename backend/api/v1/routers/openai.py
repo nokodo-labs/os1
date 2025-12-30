@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.message import AssistantMessage, Message, SystemMessage, UserMessage
+from nokodo_ai.messages import AssistantMessage, Message, SystemMessage, UserMessage
 
 
 router = APIRouter(prefix="/openai", tags=["openai"])

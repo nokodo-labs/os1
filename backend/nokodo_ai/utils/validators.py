@@ -52,6 +52,7 @@ def validate[T](
 		raise TypeError(f"expected type {expected_type}, got {type(value)}")
 
 	elif type_origin is Literal:
+		expected_type = cast(TypeForm[T], expected_type)
 		return validate_literal(value, expected_type)
 
 	elif type_origin is None:
@@ -60,6 +61,7 @@ def validate[T](
 
 	else:
 		# let pydantic handle complex types
+		expected_type = cast(TypeForm[T], expected_type)
 		return _validate_pydantic(value, expected_type)
 
 	return cast(T, value)

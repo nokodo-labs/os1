@@ -29,7 +29,7 @@ from nokodo_ai.adapters.openai.types import (
 	OpenAIJSONSchema,
 	OpenAIResponseFormatJSONSchema,
 )
-from nokodo_ai.message import (
+from nokodo_ai.messages import (
 	AssistantMessage,
 	ContentPart,
 	FinishReason,
@@ -47,7 +47,7 @@ from nokodo_ai.utils.validators import validate
 
 
 if TYPE_CHECKING:
-	from nokodo_ai.message import Message
+	from nokodo_ai.messages import Message
 
 logger = logging.getLogger(__name__)
 

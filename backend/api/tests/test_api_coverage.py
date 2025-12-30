@@ -15,7 +15,7 @@ from api.v1.service import authorization, llm_runtime, prompt_runtime
 from api.v1.service import prompts as prompt_service
 from api.v1.service import threads as thread_service
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.message import (
+from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
 	ToolMessage,

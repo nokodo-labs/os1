@@ -13,14 +13,14 @@ from api.models.message import MessageType as MessageTypeORM
 from api.models.model import Model
 from api.schemas.content import TextContent
 from api.schemas.message import MessageCreate
-from nokodo_ai.message import AssistantMessage as SDKAssistantMessage
-from nokodo_ai.message import ContentPartAdapter as SDKContentPartAdapter
-from nokodo_ai.message import Message as SDKMessage
-from nokodo_ai.message import SystemMessage as SDKSystemMessage
-from nokodo_ai.message import ToolCall as SDKToolCall
-from nokodo_ai.message import ToolMessage as SDKToolMessage
-from nokodo_ai.message import Usage as SDKUsage
-from nokodo_ai.message import UserMessage as SDKUserMessage
+from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
+from nokodo_ai.messages import ContentPartAdapter as SDKContentPartAdapter
+from nokodo_ai.messages import Message as SDKMessage
+from nokodo_ai.messages import SystemMessage as SDKSystemMessage
+from nokodo_ai.messages import ToolCall as SDKToolCall
+from nokodo_ai.messages import ToolMessage as SDKToolMessage
+from nokodo_ai.messages import Usage as SDKUsage
+from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.utils.typeid import TypeID
 
 

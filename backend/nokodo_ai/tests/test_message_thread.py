@@ -13,7 +13,7 @@ from nokodo_ai import (
 	ToolMessage,
 	UserMessage,
 )
-from nokodo_ai.message import _HasTextContentHelpers
+from nokodo_ai.messages import _HasTextContentHelpers
 
 
 def test_user_message_creation() -> None:

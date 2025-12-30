@@ -12,7 +12,7 @@ from nokodo_ai.base import Base
 
 
 if TYPE_CHECKING:
-	from nokodo_ai.message import AssistantMessage, Message
+	from nokodo_ai.messages import AssistantMessage, Message
 	from nokodo_ai.tool import Tool
 
 

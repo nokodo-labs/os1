@@ -14,7 +14,7 @@ from nokodo_ai.adapters.chat import (
 	split_model_identifier,
 )
 from nokodo_ai.base import Base
-from nokodo_ai.message import AssistantMessage, Message
+from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.thread import Thread
 from nokodo_ai.tool import Tool
 

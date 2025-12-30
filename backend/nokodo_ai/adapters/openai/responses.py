@@ -24,7 +24,7 @@ from nokodo_ai.adapters.openai.types import (
 	OpenAIResponseTextJSONSchemaConfigParam,
 	OpenAIResponseToolChoice,
 )
-from nokodo_ai.message import (
+from nokodo_ai.messages import (
 	AssistantMessage,
 	ContentPart,
 	JsonContent,
@@ -40,7 +40,7 @@ from nokodo_ai.utils.validators import validate
 
 
 if TYPE_CHECKING:
-	from nokodo_ai.message import Message
+	from nokodo_ai.messages import Message
 
 
 class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):

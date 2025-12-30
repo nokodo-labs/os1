@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Literal
+from collections.abc import AsyncIterator, Callable
+from typing import Literal
 
+from pydantic import Field
+
+from nokodo_ai.base import Base
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.message import (
+from nokodo_ai.messages import (
 	AssistantMessage,
 	Message,
 	TextContent,
@@ -18,11 +21,7 @@ from nokodo_ai.tool import Tool, ToolExecutionContext
 from nokodo_ai.types.json import JSONObject
 
 
-if TYPE_CHECKING:
-	from collections.abc import Callable
-
-
-class Agent:
+class Agent(Base):
 	"""an agent that orchestrates an llm with tools.
 
 	agents can execute multi-step reasoning by:
@@ -59,35 +58,23 @@ class Agent:
 			print(message)
 	"""
 
-	def __init__(
-		self,
-		*,
-		llm: ChatModel,
-		tools: list[Tool] | None = None,
-		max_iterations: int = 10,
-		on_tool_call: Callable[[str, str, JSONObject], None] | None = None,
-		on_tool_result: Callable[[str, str, bool], None] | None = None,
-	) -> None:
-		"""initialize agent.
-
-		args:
-			llm: the ChatModel to use for reasoning (includes temp/max_tokens config)
-			tools: list of tools the agent can use
-			max_iterations: maximum tool-use iterations before stopping
-			on_tool_call: callback when a tool is called (tool_name, tool_call_id, args)
-			on_tool_result: callback when tool returns (tool_call_id, result, is_error)
-		"""
-		self.llm = llm
-		self.tools = {t.name: t for t in (tools or [])}
-		self.tools_list = tools or []
-		self.max_iterations = max_iterations
-		self.on_tool_call = on_tool_call
-		self.on_tool_result = on_tool_result
+	llm: ChatModel = Field(..., description="which model to use for Agent execution")
+	tools: list[Tool] = Field(
+		default_factory=list, description="list of tools the agent can use"
+	)
+	max_iterations: int = Field(default=10, description="maximum Agent iterations")
+	on_tool_call: Callable[..., None] | None = Field(
+		default=None,
+		description="callback when a tool is called",
+	)
+	on_tool_result: Callable[..., None] | None = Field(
+		default=None,
+		description="callback when a tool returns",
+	)
 
 	async def run(
 		self,
 		thread: Thread,
-		*,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 		stream: bool = False,
 	) -> list[Message] | AsyncIterator[Message]:
@@ -113,7 +100,6 @@ class Agent:
 	async def _run_sync(
 		self,
 		thread: Thread,
-		*,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 	) -> list[Message]:
 		"""run the agent loop synchronously, returning all produced messages."""
@@ -159,7 +145,6 @@ class Agent:
 	async def _run_stream(
 		self,
 		thread: Thread,
-		*,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 	) -> AsyncIterator[Message]:
 		"""run the agent loop, yielding messages as they are produced."""
