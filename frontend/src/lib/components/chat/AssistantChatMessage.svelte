@@ -2,10 +2,11 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte'
 	import { renderMarkdownToHtml } from '$lib/markdown/render'
 	import type { Snippet } from 'svelte'
+	import { SvelteDate } from 'svelte/reactivity'
 
 	interface Props {
 		content: string
-		timestamp?: Date
+		timestamp?: { getTime: () => number }
 		actions?: Snippet
 		isLastMessage?: boolean
 		modelName?: string
@@ -35,13 +36,13 @@
 		isHovered = false
 	}
 
-	function formatRelativeTime(date: Date): string {
-		const base = new Date(date)
-		const now = new Date()
-		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-		const yesterday = new Date(today)
+	function formatRelativeTime(date: { getTime: () => number }): string {
+		const base = new SvelteDate(date.getTime())
+		const now = new SvelteDate()
+		const today = new SvelteDate(now.getFullYear(), now.getMonth(), now.getDate())
+		const yesterday = new SvelteDate(today)
 		yesterday.setDate(today.getDate() - 1)
-		const messageDate = new Date(base.getFullYear(), base.getMonth(), base.getDate())
+		const messageDate = new SvelteDate(base.getFullYear(), base.getMonth(), base.getDate())
 
 		const timeStr = base
 			.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -63,8 +64,8 @@
 			.toLowerCase()
 	}
 
-	function formatFullDate(date: Date): string {
-		const base = new Date(date)
+	function formatFullDate(date: { getTime: () => number }): string {
+		const base = new SvelteDate(date.getTime())
 
 		return base
 			.toLocaleDateString('en-US', {
@@ -115,6 +116,7 @@
 				<div
 					class="text-destructive assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
 				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html renderedHtml}
 				</div>
 			</div>
@@ -122,6 +124,7 @@
 			<div
 				class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]"
 			>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html renderedHtml}
 			</div>
 		{/if}

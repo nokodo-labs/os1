@@ -25,6 +25,8 @@
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let selectedModel = $state('gpt-4')
+	let focusToken = $state(0)
+	let lastFocusValue = $state<string | null>(null)
 
 	let showSuggestions = $state(false)
 	let highlightedIndex = $state(-1)
@@ -39,6 +41,15 @@
 	const isChatMode = $derived(chatMode === 'new' || chatMode === 'temp')
 	const isTemporaryChatMode = $derived(chatMode === 'temp')
 	let showChatBanner = $state(false)
+
+	$effect(() => {
+		if (typeof window === 'undefined') return
+		const focus = page.url.searchParams.get('focus')
+		if (!focus) return
+		if (focus === lastFocusValue) return
+		lastFocusValue = focus
+		focusToken += 1
+	})
 
 	let chatStartError = $state<string | null>(null)
 
@@ -314,8 +325,8 @@
 	</div>
 </div>
 
-<div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
-	<div class="mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)]">
+<div class="absolute right-0 bottom-0 left-0 z-10 pt-4 pb-5">
+	<div class="relative mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)]">
 		<div
 			style="view-transition-name: chat-input;"
 			class="relative transition-all duration-500 ease-in-out {isChatMode
@@ -354,6 +365,7 @@
 				onKeyDown={handleHomeInputKeyDown}
 				{isGenerating}
 				placeholder="send a message"
+				{focusToken}
 			/>
 
 			<div

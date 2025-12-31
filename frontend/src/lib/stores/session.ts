@@ -1,5 +1,6 @@
 import { derived, get, writable } from 'svelte/store'
 
+import { eventStreamClient } from '$lib/api/eventStream'
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
 import { getJwtEmail, getJwtUserId } from '$lib/auth/jwt'
@@ -36,9 +37,11 @@ export const userDisplay = derived(
 export function setSessionToken(token: string): void {
 	setAccessToken(token)
 	accessToken.set(token)
+	eventStreamClient.connect(token)
 }
 
 export function clearSession(): void {
+	eventStreamClient.disconnect()
 	clearAccessToken()
 	accessToken.set(null)
 	currentUser.set(null)

@@ -276,7 +276,8 @@ void main(){
 </script>
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-	<canvas class="absolute inset-0 block h-full w-full" bind:this={canvasRef}></canvas>
+	<canvas class="pointer-events-none absolute inset-0 block h-full w-full" bind:this={canvasRef}
+	></canvas>
 
 	<!-- Slotted content rendered on top of background -->
 	<div class="relative z-1 h-full w-full">

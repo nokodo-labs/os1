@@ -59,8 +59,9 @@
 	})
 
 	function handleSearchClick() {
-		// TODO: Open global search overlay
-		console.log('Open global search')
+		sidebar.selectChat(null)
+		navigateWithTransition(`/?focus=${Date.now()}`)
+		if (isMobile) sidebar.closeChatSidebar()
 	}
 
 	function navigateWithTransition(target: string) {
@@ -238,13 +239,12 @@
 	></div>
 
 	<div
-		class="pointer-events-none relative z-20 flex h-full w-full flex-col items-center gap-2 px-3 py-4 *:pointer-events-auto"
+		class="pointer-events-none relative z-20 flex h-full w-full flex-col items-center gap-1.5 px-3 py-4 *:pointer-events-auto"
 	>
 		<!-- Logo / Brand with Close Button -->
-		<div class="relative flex w-full items-center justify-start">
+		<div class="relative grid w-full grid-cols-[auto_1fr_auto] items-center">
 			<button
-				class="group relative flex h-12 w-full shrink-0 cursor-pointer items-center justify-start gap-0 rounded-xl border border-transparent bg-transparent py-0 text-white/80 transition-all duration-200 hover:text-white"
-				style="z-index: 10; padding-left: 0.375rem; padding-right: 0.75rem;"
+				class="group relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:text-white"
 				onclick={() => {
 					if (!sidebar.isChatSidebarOpen) {
 						sidebar.toggleChatSidebar()
@@ -253,38 +253,37 @@
 				}}
 				aria-label="Home"
 			>
-				<div class="relative flex shrink-0 items-center justify-center">
-					<!-- Symmetrical float animation (centered) -->
-					<div
-						class="relative flex h-8 w-8 shrink-0 animate-[float_3s_ease-in-out_infinite] items-center justify-center rounded-full shadow-[0_4px_12px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:shadow-[0_6px_16px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.4)]"
-						style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
-					>
-						{#if !sidebar.isChatSidebarOpen}
-							<div
-								class="absolute flex scale-75 items-center justify-center text-white opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100"
-							>
-								<Sidebar className="h-4 w-4" />
-							</div>
-						{/if}
-					</div>
-					<!-- Logo Text Reveal: Match other labels + margin animation preventing overlap -->
-					<div
-						class="flex items-center overflow-hidden whitespace-nowrap transition-[opacity,margin] duration-300 ease-in-out {sidebar.isChatSidebarOpen
-							? 'ml-3 max-w-[200px] opacity-100'
-							: 'ml-0 max-w-0 opacity-0'}"
-					>
-						<img
-							src="https://nokodo.net/media/images/logo_full.svg"
-							alt="nokodo logo"
-							class="h-7 w-auto shrink-0 -translate-y-[5px] object-contain"
-						/>
-					</div>
+				<!-- Symmetrical float animation (centered) -->
+				<div
+					class="relative flex h-8 w-8 shrink-0 animate-[float_3s_ease-in-out_infinite] items-center justify-center rounded-full shadow-[0_4px_12px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:shadow-[0_6px_16px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.4)]"
+					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
+				>
+					{#if !sidebar.isChatSidebarOpen}
+						<div
+							class="absolute flex scale-75 items-center justify-center text-white opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100"
+						>
+							<Sidebar className="h-4 w-4" />
+						</div>
+					{/if}
 				</div>
 			</button>
 
+			<div
+				class="flex items-center justify-center overflow-hidden transition-[opacity,max-width] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+					? 'max-w-[220px] opacity-100'
+					: 'max-w-0 opacity-0'}"
+				aria-hidden={!sidebar.isChatSidebarOpen}
+			>
+				<img
+					src="https://nokodo.net/media/images/logo_full.svg"
+					alt="nokodo logo"
+					class="h-7 w-auto shrink-0 -translate-y-[5px] object-contain"
+				/>
+			</div>
+
 			<!-- Close button -->
 			<button
-				class="absolute top-1/2 right-0 z-20 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center border-none bg-transparent text-white/70 transition-all duration-200 hover:scale-[1.05] hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
+				class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:scale-[1.05] hover:bg-white/5 hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
 					? 'opacity-100'
 					: 'pointer-events-none opacity-0'}"
 				onclick={(e) => {
@@ -305,23 +304,23 @@
 				{#snippet child({ props }: { props: TriggerProps })}
 					<button
 						{...props}
-						class="relative flex h-12 w-full shrink-0 cursor-pointer items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent px-3 py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+						class="relative flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-full border border-transparent bg-transparent py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.isChatSidebarOpen
+							? 'w-full justify-start px-4'
+							: 'mx-auto w-12 justify-center px-0'}"
 						onclick={handleSearchClick}
 						aria-label="Search"
 					>
 						<Search className="h-5 w-5 shrink-0" />
-						<span
-							class="text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-300 {sidebar.isChatSidebarOpen
-								? 'max-w-[100px] opacity-100'
-								: 'max-w-0 overflow-hidden opacity-0'}">search</span
-						>
+						{#if sidebar.isChatSidebarOpen}
+							<span class="text-sm font-medium whitespace-nowrap">search</span>
+						{/if}
 					</button>
 				{/snippet}
 			</Tooltip.Trigger>
 			{#if !sidebar.isChatSidebarOpen}
 				<Tooltip.Content
 					side="right"
-					class="rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-sm text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+					class="rounded-2xl border border-white/10 bg-black/90 px-3 py-2 text-sm text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
 				>
 					<p>search</p>
 				</Tooltip.Content>
@@ -336,23 +335,25 @@
 					{#snippet child({ props }: { props: TriggerProps })}
 						<button
 							{...props}
-							class="relative flex h-12 w-full shrink-0 cursor-pointer items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent px-3 py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+							class="relative flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-full border border-transparent bg-transparent py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.isChatSidebarOpen
+								? 'w-full justify-start px-4'
+								: 'mx-auto w-12 justify-center px-0'}"
 							onclick={item.action}
 							aria-label={item.label}
 						>
 							<Icon className="h-5 w-5 shrink-0" />
-							<span
-								class="text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-300 {sidebar.isChatSidebarOpen
-									? 'max-w-[150px] opacity-100'
-									: 'max-w-0 overflow-hidden opacity-0'}">{item.label}</span
-							>
+							{#if sidebar.isChatSidebarOpen}
+								<span class="text-sm font-medium whitespace-nowrap"
+									>{item.label}</span
+								>
+							{/if}
 						</button>
 					{/snippet}
 				</Tooltip.Trigger>
 				{#if !sidebar.isChatSidebarOpen}
 					<Tooltip.Content
 						side="right"
-						class="rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-sm text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+						class="rounded-2xl border border-white/10 bg-black/90 px-3 py-2 text-sm text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
 					>
 						<p>{item.label}</p>
 					</Tooltip.Content>
@@ -363,7 +364,7 @@
 		<!-- Chats Section -->
 		<Separator.Root class="my-2 bg-white/10" />
 		<div
-			class="flex w-full flex-1 flex-col gap-2 overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-in-out {sidebar.isChatSidebarOpen
+			class="flex w-full flex-1 flex-col gap-1.5 overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-in-out {sidebar.isChatSidebarOpen
 				? 'translate-x-0 opacity-100'
 				: 'pointer-events-none -translate-x-2 opacity-0'}"
 		>
@@ -372,11 +373,11 @@
 				<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 			</div>
 			<ScrollArea.Root class="h-full">
-				<div class="flex h-full flex-col space-y-1">
+				<div class="flex h-full flex-col space-y-0.5">
 					{#if !$isLoggedIn}
 						<div class="flex flex-1 flex-col items-center justify-center">
 							<div
-								class="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+								class="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
 							>
 								log in to see your recent chats
 							</div>
@@ -384,7 +385,7 @@
 					{:else if $recentThreads.length === 0}
 						<div class="flex flex-1 flex-col items-center justify-center">
 							<div
-								class="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+								class="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
 							>
 								no chats yet
 							</div>
@@ -393,7 +394,7 @@
 						{#each $recentThreads as thread (thread.id)}
 							<div class="group/chat relative min-w-0">
 								<div
-									class="relative flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent bg-transparent p-3 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
+									class="relative flex cursor-pointer items-center justify-between gap-2 rounded-full border border-transparent bg-transparent px-4 py-2.5 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
 									thread.id
 										? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
 										: ''}"
@@ -429,7 +430,7 @@
 
 									<button
 										type="button"
-										class="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
+										class="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
 										onclick={(e) => {
 											e.stopPropagation()
 											openThreadMenuId =
@@ -443,12 +444,12 @@
 									{#if openThreadMenuId === thread.id}
 										<div
 											data-thread-menu
-											class="absolute top-full right-2 z-50 mt-2 w-52 rounded-2xl border border-white/10 bg-black/60 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+											class="absolute top-full right-2 z-50 mt-2 w-52 rounded-3xl border border-white/10 bg-black/60 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
 										>
-											{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action}
+											{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action (action)}
 												<button
 													type="button"
-													class="flex w-full cursor-pointer items-center rounded-xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+													class="flex w-full cursor-pointer items-center rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
 													onclick={(e) => {
 														e.stopPropagation()
 														openThreadMenuId = null
@@ -464,7 +465,7 @@
 											{/each}
 											<button
 												type="button"
-												class="mt-1 flex w-full cursor-pointer items-center rounded-xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+												class="mt-1 flex w-full cursor-pointer items-center rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
 												onclick={(e) => {
 													e.stopPropagation()
 													openThreadMenuId = null
@@ -511,7 +512,7 @@
 
 				{#if deleteError}
 					<div
-						class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+						class="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
 					>
 						{deleteError}
 					</div>
@@ -549,7 +550,11 @@
 									await refreshThreads({ limit: 25 })
 
 									if (page.url.pathname === `/c/${confirmDeleteThread.id}`) {
-										await goto('/', { keepFocus: true, noScroll: true })
+										// @ts-expect-error resolve typing is narrower than our constructed URL
+										await goto(resolve('/' as never), {
+											keepFocus: true,
+											noScroll: true,
+										})
 									}
 
 									confirmDeleteThread = null

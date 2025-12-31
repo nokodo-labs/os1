@@ -421,7 +421,7 @@
 </script>
 
 <div class="relative flex-1 overflow-y-auto" style="view-transition-name: thread-body;">
-	<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
+	<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-20">
 		{#if isTemporaryChat && hasLoadedBranch && messages.length === 0}
 			<div class="flex flex-1 items-center justify-center py-16">
 				<div class="max-w-md text-center">
@@ -449,7 +449,7 @@
 				</div>
 			</div>
 		{:else if hasLoadedBranch}
-			<div class="flex flex-1 flex-col gap-6 py-8">
+			<div class="flex flex-1 flex-col gap-6 py-4">
 				{#each messages as message, index (message.id)}
 					<div in:fade={{ duration: 200 }}>
 						{#if message.role === 'user'}
@@ -594,8 +594,8 @@
 	{/if}
 </div>
 
-<div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
-	<div class="mx-auto w-full max-w-7xl px-8">
+<div class="absolute right-0 bottom-0 left-0 z-10 pt-4 pb-5">
+	<div class="relative mx-auto w-full max-w-7xl px-8">
 		<div
 			style="view-transition-name: chat-input;"
 			class="transition-all duration-500 ease-in-out"

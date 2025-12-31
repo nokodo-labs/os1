@@ -480,7 +480,7 @@ void main() {
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
 	<canvas
-		class="absolute inset-0 block h-full w-full"
+		class="pointer-events-none absolute inset-0 block h-full w-full"
 		bind:this={canvasRef}
 		style="background-color: {transparent ? 'transparent' : '#000000'};"
 	></canvas>

@@ -10,6 +10,7 @@
 		placeholder?: string
 		disabled?: boolean
 		isGenerating?: boolean
+		focusToken?: number
 		onSubmit?: (message: string) => void
 		onStop?: () => void
 		onKeyDown?: (event: KeyboardEvent) => boolean | void
@@ -20,6 +21,7 @@
 		placeholder = 'send a message',
 		disabled = false,
 		isGenerating = false,
+		focusToken,
 		onSubmit,
 		onStop,
 		onKeyDown,
@@ -32,6 +34,17 @@
 
 	let fileInput: HTMLInputElement
 	let imageInput: HTMLInputElement
+
+	$effect(() => {
+		if (!textarea) return
+		if (!focusToken) return
+		if (disabled) return
+		requestAnimationFrame(() => {
+			textarea.focus()
+			const end = textarea.value.length
+			textarea.setSelectionRange(end, end)
+		})
+	})
 
 	function closeAddMenu() {
 		isAddMenuOpen = false
@@ -117,20 +130,10 @@
 
 <form class="w-full" onsubmit={handleFormSubmit}>
 	<div
-		class="liquid-glass relative w-full rounded-full shadow-lg transition-all duration-500 ease-in-out"
+		class="liquid-glass chat-input relative w-full rounded-full transition-all duration-300"
 		class:liquid-glass--frosted={isFocused}
 	>
-		<!-- LiquidMetal component removed as requested, using CSS styles instead -->
-		<!-- <div
-            class="absolute inset-0 overflow-hidden rounded-full transition-opacity duration-500"
-            class:opacity-100={true}
-        >
-            <LiquidMetal speed={0.05} />
-        </div> -->
-
-		<div class="liquid-glass__highlight"></div>
-
-		<div class="liquid-glass__content relative z-10 px-1 py-1">
+		<div class="relative z-10 px-1 py-1">
 			<div class="flex items-center gap-2 px-2.5 py-2.5">
 				<div class="ml-1 flex shrink-0 items-center" data-chat-add-menu-root>
 					<Tooltip.Root>
@@ -246,26 +249,33 @@
 </form>
 
 <style>
+	.chat-input {
+		--lg-blur: 12px;
+		--lg-saturate: 1.2;
+	}
+
+	.chat-input.liquid-glass--frosted {
+		--lg-blur: 28px;
+		--lg-saturate: 1.25;
+	}
+
 	.send-btn {
-		/* Default (Light Mode): Dark Accent BG, White Text */
 		background-color: var(--accent-primary);
 		color: white;
 	}
 
 	:global(.dark) .send-btn {
-		/* Dark Mode: White BG, Dark Accent Text */
 		background-color: white;
 		color: var(--accent-primary);
 	}
 
-	/* Disabled state overrides */
 	.send-btn:disabled {
-		background-color: rgb(229 231 235); /* gray-200 */
-		color: rgb(107 114 128); /* gray-500 */
+		background-color: rgb(229 231 235);
+		color: rgb(107 114 128);
 	}
 
 	:global(.dark) .send-btn:disabled {
-		background-color: white; /* gray-700 */
-		color: rgb(107 114 128); /* gray-400 */
+		background-color: rgb(55 65 81);
+		color: rgb(156 163 175);
 	}
 </style>

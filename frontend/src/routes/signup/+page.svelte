@@ -53,7 +53,7 @@
 		<div class="flex flex-1 items-center justify-center">
 			<div class="w-full max-w-md">
 				<div
-					class="overflow-hidden rounded-3xl border border-white/10 bg-black/65 shadow-[0_28px_80px_rgba(0,0,0,0.45)] backdrop-blur-md"
+					class="liquid-glass liquid-glass--frosted overflow-hidden rounded-3xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]"
 				>
 					<div class="p-8">
 						<div class="mb-8 space-y-2">
@@ -72,7 +72,7 @@
 									autocomplete="name"
 									bind:value={displayName}
 									placeholder="optional"
-									class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
+									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>
 
@@ -87,7 +87,7 @@
 									required
 									bind:value={email}
 									placeholder="you@company.com"
-									class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
+									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>
 
@@ -102,7 +102,7 @@
 									required
 									bind:value={password}
 									placeholder="••••••••"
-									class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
+									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>
 
@@ -137,7 +137,7 @@
 							<Button.Root
 								type="submit"
 								disabled={!canSubmit || isSubmitting}
-								class="h-11 w-full rounded-2xl"
+								class="h-11 w-full rounded-full"
 							>
 								{isSubmitting ? 'creating account…' : 'sign up'}
 							</Button.Root>

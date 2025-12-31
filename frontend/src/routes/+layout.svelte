@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores'
 	import { configureApiAuth } from '$lib/api/auth'
+	import { eventStreamClient } from '$lib/api/eventStream'
+	import { getAccessToken } from '$lib/auth/session'
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import DebugMenu from '$lib/components/debug/DebugMenu.svelte'
@@ -20,6 +22,12 @@
 	import '../app.css'
 
 	configureApiAuth()
+
+	// Initialize event stream if already logged in (page load/refresh)
+	const existingToken = getAccessToken()
+	if (existingToken) {
+		eventStreamClient.connect(existingToken)
+	}
 
 	// Initialize sidebar context
 	createSidebarContext()
@@ -221,8 +229,6 @@
 				</div>
 
 				<!-- System chrome: dock (right sidebar overlay) -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="dock-shell fixed top-0 right-0 bottom-0 z-30 px-6 pt-8 pb-8 {chrome.isDockOpen
 						? 'pointer-events-auto'

@@ -32,7 +32,7 @@
 		iconShape?: IconShape
 	}
 
-	let { iconShape = 'default' }: Props = $props()
+	let { iconShape = 'circle' }: Props = $props()
 
 	const apps: AppDefinition[] = [
 		{ id: 'notes', title: 'notes', icon: Document },
@@ -140,7 +140,7 @@
 		scrollToPage(currentPage, 'auto')
 	}
 
-	function scrollToPage(pageIndex: number, behavior: ScrollBehavior = 'smooth') {
+	function scrollToPage(pageIndex: number, behavior: 'smooth' | 'auto' = 'smooth') {
 		if (!scrollerEl) return
 		const width = scrollerEl.clientWidth
 		if (width <= 0) return
@@ -303,7 +303,7 @@
 		const appsPerPage = Math.max(1, cols * rows)
 		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
 
-		return Array.from({ length: pageCount }, (_, pageIndex) =>
+		return Array.from({ length: pageCount }, (_unused, pageIndex) =>
 			apps.slice(pageIndex * appsPerPage, (pageIndex + 1) * appsPerPage)
 		)
 	})
@@ -371,13 +371,13 @@
 	</div>
 
 	<div class="mt-6 flex items-center justify-center gap-2" aria-label="apps pages">
-		{#each pages as _, index (index)}
+		{#each pages as _page, index (index)}
 			<button
 				type="button"
 				class="transition-all duration-200 {index === currentPage
 					? 'h-2 w-6 rounded-full bg-white/80'
 					: 'h-2 w-2 rounded-full bg-white/30 hover:bg-white/45'}"
-				aria-label={`page ${index + 1}`}
+				aria-label={`page ${index + 1} (${_page.length})`}
 				aria-current={index === currentPage ? 'page' : undefined}
 				onclick={() => {
 					currentPage = index

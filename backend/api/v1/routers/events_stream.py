@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from api.core.config import settings
-from api.core.database import async_session_factory
+from api.core.database import AsyncSessionLocal
 from api.core.logging import get_logger
 from api.models.user import User
 from api.v1.service.connection_manager import event_connections
@@ -36,7 +36,7 @@ async def _authenticate_websocket(token: str | None) -> User | None:
 	except Exception:
 		return None
 
-	async with async_session_factory() as session:
+	async with AsyncSessionLocal() as session:
 		result = await session.execute(
 			select(User).options(selectinload(User.role)).where(User.id == user_id)
 		)

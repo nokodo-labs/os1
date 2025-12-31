@@ -1,7 +1,8 @@
 <script lang="ts">
+	import SearchIcon from '$lib/components/icons/Search.svelte'
 	import '$lib/styles/liquid-glass.css'
 
-	type IconComponent = any
+	type IconComponent = typeof SearchIcon
 
 	export type HomeSuggestion = {
 		id: string
