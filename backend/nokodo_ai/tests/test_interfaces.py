@@ -63,27 +63,27 @@ def test_llm_unknown_provider_raises() -> None:
 
 
 def test_embedding_requires_model_or_adapter() -> None:
-	with pytest.raises(ValueError, match="model must be provided"):
+	with pytest.raises(ValidationError):
 		EmbeddingModel()
 
 
 def test_embedding_resolves_openai() -> None:
-	embedder = EmbeddingModel("openai:text-embedding-3-large")
+	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
 	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
 
-	assert isinstance(embedder._adapter, OpenAIEmbeddingAdapter)
+	assert isinstance(embedder._adapter_resolved, OpenAIEmbeddingAdapter)
 
 
 def test_embedding_resolves_ollama() -> None:
-	embedder = EmbeddingModel("ollama:nomic-embed-text")
+	embedder = EmbeddingModel(model="ollama:nomic-embed-text")
 	from nokodo_ai.adapters.ollama import OllamaEmbeddingAdapter
 
-	assert isinstance(embedder._adapter, OllamaEmbeddingAdapter)
+	assert isinstance(embedder._adapter_resolved, OllamaEmbeddingAdapter)
 
 
 def test_embedding_unknown_provider_raises() -> None:
 	with pytest.raises(ValueError, match="unknown embedding provider"):
-		EmbeddingModel("unknownprovider:model")
+		EmbeddingModel(model="unknownprovider:model")
 
 
 class _StubChatAdapter(BaseChatAdapter):
@@ -140,9 +140,11 @@ class _StubChatAdapter(BaseChatAdapter):
 class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 	def __init__(self) -> None:
 		self.seen: list[list[str]] = []
+		self.seen_models: list[str] = []
 
-	async def embed(self, texts: list[str]) -> list[list[float]]:
+	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
 		self.seen.append(texts)
+		self.seen_models.append(model)
 		return [[float(len(t))] for t in texts]
 
 
@@ -181,16 +183,17 @@ async def test_chat_model_streaming_with_tools() -> None:
 		return "ok"
 
 	chunks = [
-		chunk
-		async for chunk in llm.generate(
+		delta
+		async for delta in llm.generate(
 			[UserMessage.from_text("hi")],
 			stream=True,
 			tools=[noop],
 			params=ChatGenerationParams(),
 		)
 	]
+	message_chunks = [d.message for d in chunks if not d.done]
 
-	assert [c.text for c in chunks] == ["c1", "c2"]
+	assert [c.text for c in message_chunks] == ["c1", "c2"]
 	call = adapter.calls[-1]
 	assert call["stream"] is True
 	assert call["model"] == "stub"
@@ -222,9 +225,8 @@ async def test_chat_model_resolves_default_provider(
 ) -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("resolved"))
 
-	def fake_get_chat_adapter(variant: str | None, model: str):
+	def fake_get_chat_adapter(variant: str | None):
 		assert variant is None
-		assert model == "gpt-4o"
 		return adapter
 
 	monkeypatch.setattr(
@@ -252,34 +254,35 @@ async def test_embedding_resolves_default_provider(
 ) -> None:
 	adapter = _StubEmbeddingAdapter()
 
-	def fake_get_embedding_adapter(variant: str | None, model: str):
+	def fake_get_embedding_adapter(variant: str | None):
 		assert variant is None
-		assert model == "text-embedding-3-small"
 		return adapter
 
 	monkeypatch.setattr(
 		"nokodo_ai.adapters.openai.get_embedding_adapter", fake_get_embedding_adapter
 	)
-	embedder = EmbeddingModel("text-embedding-3-small")
+	embedder = EmbeddingModel(model="text-embedding-3-small")
 
 	result = await embedder.embed(["hi"])
 	assert result == [[2.0]]
+	assert adapter.seen_models == ["text-embedding-3-small"]
 
 
 @pytest.mark.asyncio
 async def test_embedding_variant_is_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
 	adapter = _StubEmbeddingAdapter()
-	seen: list[tuple[str | None, str]] = []
+	seen: list[str | None] = []
 
-	def fake_get_embedding_adapter(variant: str | None, model: str):
-		seen.append((variant, model))
+	def fake_get_embedding_adapter(variant: str | None):
+		seen.append(variant)
 		return adapter
 
 	monkeypatch.setattr(
 		"nokodo_ai.adapters.openai.get_embedding_adapter", fake_get_embedding_adapter
 	)
-	embedder = EmbeddingModel("openai.beta:text-embedding-3-large")
+	embedder = EmbeddingModel(model="openai.beta:text-embedding-3-large")
 
 	result = await embedder.embed(["hi"])
 	assert result == [[2.0]]
-	assert seen == [("beta", "text-embedding-3-large")]
+	assert seen == ["beta"]
+	assert adapter.seen_models == ["text-embedding-3-large"]

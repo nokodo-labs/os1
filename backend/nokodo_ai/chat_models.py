@@ -5,22 +5,20 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable
 from typing import Literal, overload
 
-from pydantic import Field, PrivateAttr, ValidationError, model_validator
-
+from nokodo_ai.adapter_enabled import AdapterEnabledMixin
 from nokodo_ai.adapters.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
 	resolve_adapter,
 	split_model_identifier,
 )
-from nokodo_ai.base import Base
 from nokodo_ai.deltas import ChatModelDelta, stream_chat_model_deltas
 from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.thread import Thread
 from nokodo_ai.tool import Tool
 
 
-class ChatModel(ChatGenerationParams, Base):
+class ChatModel(ChatGenerationParams, AdapterEnabledMixin[BaseChatAdapter]):
 	"""high-level unified interface for LLM chat models.
 
 	usage (defaults):
@@ -62,29 +60,8 @@ class ChatModel(ChatGenerationParams, Base):
 		data = response.json  # parsed JSON data
 	"""
 
-	model: str = Field(
-		...,
-		description="model identifier with optional provider and adapter type prefix",
-	)
-	adapter: BaseChatAdapter | None = Field(
-		default=None,
-		exclude=True,
-		description="chat adapter instance",
-	)
-	_adapter_resolved: BaseChatAdapter = PrivateAttr()
-
-	@model_validator(mode="before")
-	@classmethod
-	def _resolve_adapter(cls, values: dict) -> dict:
-		adapter = values.get("adapter", None)
-
-		if adapter is None:
-			model = values.get("model")
-			if model is None:
-				raise ValidationError("couldn't resolve adapter: model is required")
-			adapter = resolve_adapter(model)
-			values["_adapter_resolved"] = adapter
-		return values
+	def _resolve_adapter_from_model(self, model: str) -> BaseChatAdapter:
+		return resolve_adapter(model)
 
 	@overload
 	def generate(

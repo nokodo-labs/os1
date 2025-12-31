@@ -210,17 +210,10 @@
 		class="pointer-events-none relative z-20 flex h-full w-full flex-col items-center gap-2 px-3 py-4 *:pointer-events-auto"
 	>
 		<!-- Logo / Brand with Close Button -->
-		<!-- Removed gap-2 to prevent left-shift when close button is hidden -->
-		<div
-			class="relative flex w-full items-center {sidebar.isChatSidebarOpen
-				? 'justify-between'
-				: 'justify-start'}"
-		>
+		<div class="relative flex w-full items-center justify-start">
 			<button
-				class="group relative flex items-center justify-center {sidebar.isChatSidebarOpen
-					? 'max-w-[calc(100%-2.5rem)] flex-1'
-					: ''} h-12 w-12 shrink-0 cursor-pointer border-none bg-transparent p-0 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-				style="z-index: 10;"
+				class="group relative flex h-12 w-full shrink-0 cursor-pointer items-center justify-start gap-0 rounded-xl border border-transparent bg-transparent py-0 text-white/80 transition-all duration-200 hover:text-white"
+				style="z-index: 10; padding-left: 0.375rem; padding-right: 0.75rem;"
 				onclick={() => {
 					if (!sidebar.isChatSidebarOpen) {
 						sidebar.toggleChatSidebar()
@@ -230,7 +223,7 @@
 				aria-label="Home"
 			>
 				<div class="relative flex shrink-0 items-center justify-center">
-					<!-- Changed animate-bounce to animate-float (custom) for symmetrical oscillation -->
+					<!-- Symmetrical float animation (centered) -->
 					<div
 						class="relative flex h-8 w-8 shrink-0 animate-[float_3s_ease-in-out_infinite] items-center justify-center rounded-full shadow-[0_4px_12px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:shadow-[0_6px_16px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.4)]"
 						style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
@@ -243,28 +236,26 @@
 							</div>
 						{/if}
 					</div>
-					<!-- Increased left margin for logo from ml-1 to ml-3 -->
-					<!-- Removed {#if} block, used CSS transition for width/opacity for smooth reveal -->
+					<!-- Logo Text Reveal: Match other labels + margin animation preventing overlap -->
 					<div
-						class="flex items-center overflow-hidden transition-[max-width,opacity,margin] duration-300 ease-in-out {sidebar.isChatSidebarOpen
-							? 'ml-3 max-w-[220px] opacity-100'
+						class="flex items-center overflow-hidden whitespace-nowrap transition-[opacity,margin] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+							? 'ml-3 max-w-[200px] opacity-100'
 							: 'ml-0 max-w-0 opacity-0'}"
 					>
 						<img
 							src="https://nokodo.net/media/images/logo_full.svg"
 							alt="nokodo logo"
-							class="h-7 w-auto -translate-y-[5px] object-contain"
+							class="h-7 w-auto shrink-0 -translate-y-[5px] object-contain"
 						/>
 					</div>
 				</div>
 			</button>
 
-			<!-- Close button (only when expanded) -->
-			<!-- Added absolute positioning or z-index to ensure clickable -->
+			<!-- Close button -->
 			<button
-				class="relative z-20 flex h-8 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent text-white/70 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
-					? 'ml-auto w-8 opacity-100'
-					: 'pointer-events-none w-0 overflow-hidden opacity-0'}"
+				class="absolute top-1/2 right-0 z-20 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center border-none bg-transparent text-white/70 transition-all duration-200 hover:scale-[1.05] hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
+					? 'opacity-100'
+					: 'pointer-events-none opacity-0'}"
 				onclick={(e) => {
 					e.stopPropagation()
 					sidebar.closeChatSidebar()
@@ -289,9 +280,9 @@
 					>
 						<Search className="h-5 w-5 shrink-0" />
 						<span
-							class="text-sm font-medium whitespace-nowrap transition-[opacity,width] duration-300 {sidebar.isChatSidebarOpen
-								? 'w-auto opacity-100'
-								: 'w-0 overflow-hidden opacity-0'}">search</span
+							class="text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-300 {sidebar.isChatSidebarOpen
+								? 'max-w-[100px] opacity-100'
+								: 'max-w-0 overflow-hidden opacity-0'}">search</span
 						>
 					</button>
 				{/snippet}
@@ -320,9 +311,9 @@
 						>
 							<Icon className="h-5 w-5 shrink-0" />
 							<span
-								class="text-sm font-medium whitespace-nowrap transition-[opacity,width] duration-300 {sidebar.isChatSidebarOpen
-									? 'w-auto opacity-100'
-									: 'w-0 overflow-hidden opacity-0'}">{item.label}</span
+								class="text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-300 {sidebar.isChatSidebarOpen
+									? 'max-w-[150px] opacity-100'
+									: 'max-w-0 overflow-hidden opacity-0'}">{item.label}</span
 							>
 						</button>
 					{/snippet}
@@ -341,7 +332,7 @@
 		<!-- Chats Section -->
 		<Separator.Root class="my-2 bg-white/10" />
 		<div
-			class="flex w-full flex-1 flex-col gap-2 overflow-hidden px-2 transition-[opacity,transform] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+			class="flex w-full flex-1 flex-col gap-2 overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-in-out {sidebar.isChatSidebarOpen
 				? 'translate-x-0 opacity-100'
 				: 'pointer-events-none -translate-x-2 opacity-0'}"
 		>
@@ -350,22 +341,26 @@
 				<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 			</div>
 			<ScrollArea.Root class="h-full">
-				<div class="space-y-1">
+				<div class="flex h-full flex-col space-y-1">
 					{#if !$isLoggedIn}
-						<div
-							class="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/55"
-						>
-							log in to see your recent chats
+						<div class="flex flex-1 flex-col items-center justify-center">
+							<div
+								class="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+							>
+								log in to see your recent chats
+							</div>
 						</div>
 					{:else if $recentThreads.length === 0}
-						<div
-							class="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/55"
-						>
-							no chats yet
+						<div class="flex flex-1 flex-col items-center justify-center">
+							<div
+								class="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+							>
+								no chats yet
+							</div>
 						</div>
 					{:else}
 						{#each $recentThreads as thread (thread.id)}
-							<div class="group/chat relative">
+							<div class="group/chat relative min-w-0">
 								<div
 									class="relative flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-transparent bg-transparent p-3 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
 									thread.id
@@ -394,7 +389,7 @@
 										}
 									}}
 								>
-									<div class="min-w-0 flex-1">
+									<div class="min-w-0 flex-1 overflow-hidden">
 										<div class="mb-1 flex items-center gap-2">
 											<span
 												class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap"
@@ -402,7 +397,7 @@
 												{thread.title || 'untitled chat'}
 											</span>
 										</div>
-										<span class="text-xs text-white/50">
+										<span class="truncate text-xs text-white/50">
 											{formatTime(thread.last_activity_at ?? '')}
 										</span>
 									</div>

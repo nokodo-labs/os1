@@ -12,7 +12,7 @@ usage (simple):
 	llm = LLM("gpt-4o")
 	response = await llm.generate(messages)
 
-	embedder = EmbeddingModel("openai:text-embedding-3-large")
+	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
 	vectors = await embedder.embed(["hello", "world"])
 
 usage (explicit adapter):

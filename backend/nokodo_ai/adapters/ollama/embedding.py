@@ -9,6 +9,7 @@ from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
 class OllamaEmbeddingAdapter(BaseOllamaAdapter, BaseEmbeddingAdapter):
 	"""adapter for ollama's embedding API."""
 
-	async def embed(self, model: str, texts: list[str]) -> list[list[float]]:
+	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
 		"""generate embeddings using ollama's embedding API."""
+		_ = (texts, model)
 		raise NotImplementedError("ollama embedding adapter not yet implemented")
