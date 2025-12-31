@@ -1,4 +1,4 @@
-"""llm execution helpers (api -> sdk -> api)."""
+"""chat runtime helpers for running ChatModels and Agents (api <-> sdk)."""
 
 from __future__ import annotations
 

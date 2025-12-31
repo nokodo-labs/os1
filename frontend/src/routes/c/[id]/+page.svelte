@@ -54,11 +54,7 @@
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
-	let showThreadLoader = $state(false)
-
-	$effect(() => {
-		showThreadLoader = isThreadLoading
-	})
+	let showThreadLoader = $derived(isThreadLoading)
 
 	function contentPartsToText(parts: ApiMessage['content']): string {
 		if (!parts || parts.length === 0) return ''
@@ -195,23 +191,25 @@
 		const trimmed = content.trim()
 		if (!trimmed) return
 		if (!thread) return
+		const runBaseMessage = trimmed
 		if (!selectedAgent) {
 			runError = true
-			lastRunInput = trimmed
+			lastRunInput = runBaseMessage
 			optimisticUserMessage = {
 				id: `client-${Date.now()}`,
 				role: 'user',
-				content: trimmed,
+				content: runBaseMessage,
 				timestamp: new Date(),
 			}
 			return
 		}
 		runError = false
-		lastRunInput = trimmed
+		lastRunInput = runBaseMessage
+		// optimistic user message will be replaced by message_created event
 		optimisticUserMessage = {
 			id: `client-${Date.now()}`,
 			role: 'user',
-			content: trimmed,
+			content: runBaseMessage,
 			timestamp: new Date(),
 		}
 
@@ -230,23 +228,43 @@
 			await runThreadStream({
 				threadId: thread.id,
 				agentId: selectedAgent,
-				input: trimmed,
+				input: runBaseMessage,
 				runId,
 			})
 			if (runId !== activeRun) return
 			inputValue = ''
+			runError = false
+			// messages are added via message_created events during streaming
 			optimisticUserMessage = null
 			streamingAssistant = null
-			runError = false
-			await loadBranch(thread.id)
 		} catch (e) {
 			console.error('Failed to run thread', e)
 			runError = true
-			const ok = await loadBranch(thread.id)
-			if (ok) optimisticUserMessage = null
+			optimisticUserMessage = null
 			streamingAssistant = null
 		} finally {
 			if (runId === activeRun) isGenerating = false
+		}
+	}
+
+	function sseMessageToUiMessage(msg: {
+		id: string
+		type: string
+		content: Array<{ type?: string; text?: string }>
+		sender_agent_id?: string | null
+		created_at?: string | null
+	}): Message {
+		const textContent = (msg.content || [])
+			.map((p) => (p?.type === 'text' ? p.text : ''))
+			.filter(Boolean)
+			.join('\n')
+		return {
+			id: msg.id,
+			role: msg.type === 'user' ? 'user' : 'assistant',
+			content: textContent,
+			timestamp: msg.created_at ? new Date(msg.created_at) : new Date(),
+			model: 'assistant',
+			senderAgentId: msg.sender_agent_id ?? null,
 		}
 	}
 
@@ -301,27 +319,45 @@
 					if (line.startsWith('data:')) data += line.slice(5).trim()
 				}
 				if (!eventType || !data) continue
-				if (eventType === 'agent_error') {
-					throw new Error(data)
-				}
-				if (eventType !== 'agent_delta') continue
-				const delta = JSON.parse(data) as {
-					chat?: { message?: { content?: any[] }; done?: boolean }
-					done?: boolean
-				}
-				if (delta.done) return
-				const contentParts = delta.chat?.message?.content
-				if (!contentParts || !streamingAssistant) continue
 
-				const nextText = contentParts
-					.map((p) => (p?.type === 'text' ? p.text : ''))
-					.filter(Boolean)
-					.join('')
-				if (nextText) {
-					streamingAssistant = {
-						...streamingAssistant,
-						content: streamingAssistant.content + nextText,
+				if (eventType === 'error') {
+					const parsed = JSON.parse(data) as { message?: string }
+					throw new Error(parsed.message || 'generation failed')
+				}
+
+				if (eventType === 'done') {
+					return
+				}
+
+				if (eventType === 'message_created') {
+					const msg = JSON.parse(data) as {
+						id: string
+						type: string
+						content: Array<{ type?: string; text?: string }>
+						sender_agent_id?: string | null
+						created_at?: string | null
 					}
+					const uiMsg = sseMessageToUiMessage(msg)
+					// replace optimistic user message with real one, or add assistant
+					if (uiMsg.role === 'user') {
+						optimisticUserMessage = null
+					}
+					if (uiMsg.role === 'assistant') {
+						streamingAssistant = null
+					}
+					messages = [...messages, uiMsg]
+					continue
+				}
+
+				if (eventType === 'text_delta') {
+					const parsed = JSON.parse(data) as { text?: string }
+					if (parsed.text && streamingAssistant) {
+						streamingAssistant = {
+							...streamingAssistant,
+							content: streamingAssistant.content + parsed.text,
+						}
+					}
+					continue
 				}
 			}
 		}
@@ -350,8 +386,8 @@
 			})
 			if (runId !== activeRun) return
 			runError = false
+			optimisticUserMessage = null
 			streamingAssistant = null
-			await loadBranch(thread.id)
 		} catch (e) {
 			console.error('Failed to retry run', e)
 			runError = true
@@ -535,9 +571,6 @@
 										handleCopyMessage(streamingAssistant?.content ?? '')}
 								>
 									<DocumentDuplicate className="w-3.5 h-3.5" strokeWidth="2" />
-								</Button>
-								<Button variant="ghost" size="sm" onclick={handleStopGeneration}>
-									stop
 								</Button>
 							{/snippet}
 						</AssistantChatMessage>

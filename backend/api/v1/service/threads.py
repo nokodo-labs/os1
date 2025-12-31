@@ -26,7 +26,7 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.v1.service import llm_runtime
+from api.v1.service import chat_runtime
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	project_access_predicate,
@@ -35,7 +35,7 @@ from api.v1.service.authorization import (
 )
 from api.v1.service.prompt_runtime import render_inline_with_prompts
 from nokodo_ai.agent import Agent as SDKAgent
-from nokodo_ai.deltas import AgentDelta, ChatModelDelta
+from nokodo_ai.deltas import ChatModelDelta
 from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -506,9 +506,9 @@ async def run_thread(
 		)
 
 	branch = await get_current_branch(thread_id, session, principal=principal)
-	sdk_messages = llm_runtime.build_sdk_messages_from_branch(branch)
+	sdk_messages = chat_runtime.build_sdk_messages_from_branch(branch)
 
-	llm = await llm_runtime.resolve_chat_model_for_run(
+	llm = await chat_runtime.resolve_chat_model_for_run(
 		session,
 		agent_id=agent_id,
 		model_id=model_id,
@@ -517,7 +517,7 @@ async def run_thread(
 		max_tokens=max_tokens,
 	)
 
-	produced_sdk_messages: list[llm_runtime.SDKMessage] = []
+	produced_sdk_messages: list[chat_runtime.SDKMessage] = []
 	if agent_id is not None:
 		agent = await session.get(Agent, agent_id)
 		if agent is None:
@@ -533,7 +533,7 @@ async def run_thread(
 				text=agent.system_prompt,
 				variables=None,
 			)
-			sdk_messages.insert(0, llm_runtime.system_prompt_message(rendered_prompt))
+			sdk_messages.insert(0, chat_runtime.system_prompt_message(rendered_prompt))
 
 		max_iterations = 10
 		cfg = agent.config or {}
@@ -554,7 +554,7 @@ async def run_thread(
 
 	created: list[Message] = []
 	for sdk_msg in produced_sdk_messages:
-		create_in = llm_runtime.sdk_message_to_orm_create(
+		create_in = chat_runtime.sdk_message_to_orm_create(
 			sdk_msg,
 			sender_agent_id=agent_id,
 		)
@@ -575,6 +575,27 @@ def _sse_event(*, event: str, data: dict[str, object]) -> bytes:
 	return f"event: {event}\ndata: {payload}\n\n".encode()
 
 
+def _message_to_sse_data(msg: Message) -> dict[str, object]:
+	"""serialize a persisted orm message for sse streaming."""
+	content_parts: list[dict[str, object]] = []
+	for part in msg.content or []:
+		if isinstance(part, dict):
+			content_parts.append(part)
+		else:
+			content_parts.append({"type": "text", "text": str(part)})
+
+	return {
+		"id": str(msg.id),
+		"thread_id": str(msg.thread_id),
+		"parent_id": str(msg.parent_id) if msg.parent_id else None,
+		"type": msg.type.value if hasattr(msg.type, "value") else str(msg.type),
+		"content": content_parts,
+		"sender_agent_id": str(msg.sender_agent_id) if msg.sender_agent_id else None,
+		"sender_user_id": str(msg.sender_user_id) if msg.sender_user_id else None,
+		"created_at": msg.created_at.isoformat() if msg.created_at else None,
+	}
+
+
 async def run_thread_stream(
 	thread_id: TypeID,
 	session: AsyncSession,
@@ -587,28 +608,51 @@ async def run_thread_stream(
 	temperature: float | None = None,
 	max_tokens: int | None = None,
 ) -> AsyncIterator[bytes]:
-	"""stream a thread run as sse AgentDelta events and persist results."""
+	"""stream a thread run as sse events and persist messages as they complete.
+
+	events emitted:
+	- message_created: a message was persisted (contains full message data)
+	- text_delta: incremental text chunk for the current assistant message
+	- error: something went wrong (generic message, never exposes internals)
+	- done: stream is complete
+
+	the frontend can render optimistically from these events without refetching.
+	"""
+	import logging
+
+	logger = logging.getLogger(__name__)
+
+	# persist and stream user message if provided
 	if input is not None and input.strip() != "":
-		await create_message(
+		user_msg = await create_message(
 			thread_id,
 			MessageCreate(content=input),
 			session,
 			principal=principal,
 		)
+		yield _sse_event(event="message_created", data=_message_to_sse_data(user_msg))
 
 	branch = await get_current_branch(thread_id, session, principal=principal)
-	sdk_messages = llm_runtime.build_sdk_messages_from_branch(branch)
+	sdk_messages = chat_runtime.build_sdk_messages_from_branch(branch)
 
-	llm = await llm_runtime.resolve_chat_model_for_run(
-		session,
-		agent_id=agent_id,
-		model_id=model_id,
-		model=model,
-		temperature=temperature,
-		max_tokens=max_tokens,
-	)
+	try:
+		llm = await chat_runtime.resolve_chat_model_for_run(
+			session,
+			agent_id=agent_id,
+			model_id=model_id,
+			model=model,
+			temperature=temperature,
+			max_tokens=max_tokens,
+		)
+	except HTTPException:
+		raise
+	except Exception:
+		logger.exception("failed to resolve chat model")
+		yield _sse_event(event="error", data={"message": "failed to initialize model"})
+		yield _sse_event(event="done", data={})
+		return
 
-	# if we're running as an agent, prepend its system prompt (tools not wired yet).
+	# if we're running as an agent, prepend its system prompt
 	if agent_id is not None:
 		agent = await session.get(Agent, agent_id)
 		if agent is None:
@@ -622,11 +666,10 @@ async def run_thread_stream(
 				text=agent.system_prompt,
 				variables=None,
 			)
-			sdk_messages.insert(0, llm_runtime.system_prompt_message(rendered_prompt))
+			sdk_messages.insert(0, chat_runtime.system_prompt_message(rendered_prompt))
 
-	# stream chat deltas and wrap into AgentDelta frames.
+	# stream chat deltas and persist the final message
 	full_text = ""
-	chunk_index = 0
 	try:
 		deltas = llm.generate(
 			sdk_messages,
@@ -638,36 +681,39 @@ async def run_thread_stream(
 			raise TypeError("expected async iterator for streaming run")
 		async for chat_delta in deltas:
 			assert isinstance(chat_delta, ChatModelDelta)
-			agent_delta = AgentDelta(chat=chat_delta, chunk_index=chunk_index)
 			if chat_delta.message.text:
 				full_text += chat_delta.message.text
-			yield _sse_event(event="agent_delta", data=agent_delta.model_dump())
-			chunk_index += 1
-		yield _sse_event(
-			event="agent_delta",
-			data=AgentDelta.done_sentinel(chunk_index=chunk_index).model_dump(),
-		)
-	except Exception as e:
-		yield _sse_event(
-			event="agent_error",
-			data={"message": str(e)},
-		)
-		yield _sse_event(
-			event="agent_delta",
-			data=AgentDelta.done_sentinel(chunk_index=chunk_index).model_dump(),
-		)
-		raise
+				yield _sse_event(
+					event="text_delta",
+					data={"text": chat_delta.message.text},
+				)
+	except Exception:
+		logger.exception("error during llm streaming")
+		yield _sse_event(event="error", data={"message": "generation failed"})
+		yield _sse_event(event="done", data={})
+		return
 
-	# persist the final assistant message. (tools streaming not implemented yet.)
+	# persist the final assistant message
 	if full_text.strip() != "":
-		assistant_msg = llm_runtime.SDKAssistantMessage.from_text(full_text)
-		create_in = llm_runtime.sdk_message_to_orm_create(
-			assistant_msg,
-			sender_agent_id=agent_id,
-		)
-		await create_message(
-			thread_id,
-			create_in,
-			session,
-			principal=principal,
-		)
+		try:
+			assistant_sdk = chat_runtime.SDKAssistantMessage.from_text(full_text)
+			create_in = chat_runtime.sdk_message_to_orm_create(
+				assistant_sdk,
+				sender_agent_id=agent_id,
+			)
+			assistant_msg = await create_message(
+				thread_id,
+				create_in,
+				session,
+				principal=principal,
+			)
+			yield _sse_event(
+				event="message_created", data=_message_to_sse_data(assistant_msg)
+			)
+		except Exception:
+			logger.exception("error persisting assistant message")
+			yield _sse_event(event="error", data={"message": "failed to save response"})
+			yield _sse_event(event="done", data={})
+			return
+
+	yield _sse_event(event="done", data={})

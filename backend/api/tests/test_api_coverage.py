@@ -11,7 +11,7 @@ from api.models.message import MessageType as MessageTypeORM
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import threads as threads_router
-from api.v1.service import authorization, llm_runtime, prompt_runtime
+from api.v1.service import authorization, chat_runtime, prompt_runtime
 from api.v1.service import prompts as prompt_service
 from api.v1.service import threads as thread_service
 from nokodo_ai.chat_models import ChatModel
@@ -522,23 +522,23 @@ async def test_prompts_service_update_and_delete(monkeypatch):
 	assert session.deleted == [prompt_obj]
 
 
-async def test_llm_runtime_conversions():
+async def test_chat_runtime_conversions():
 	user_sdk = UserMessage.from_text("hi")
 	system_sdk = SystemMessage.from_text("sys")
 	assistant_sdk = AssistantMessage.from_text("hey")
 	assistant_sdk.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
 	tool_sdk = ToolMessage(tool_call_id="t", tool_output="o", is_error=False)
 
-	user_create = llm_runtime.sdk_message_to_orm_create(
+	user_create = chat_runtime.sdk_message_to_orm_create(
 		user_sdk,
 		sender_user_id=new_typeid("user"),
 	)
-	system_create = llm_runtime.sdk_message_to_orm_create(system_sdk)
-	assistant_create = llm_runtime.sdk_message_to_orm_create(
+	system_create = chat_runtime.sdk_message_to_orm_create(system_sdk)
+	assistant_create = chat_runtime.sdk_message_to_orm_create(
 		assistant_sdk,
 		sender_agent_id=new_typeid("agent"),
 	)
-	tool_create = llm_runtime.sdk_message_to_orm_create(tool_sdk)
+	tool_create = chat_runtime.sdk_message_to_orm_create(tool_sdk)
 
 	assert str(user_create.sender_user_id).startswith("user_")
 	assert system_create.type.name == "SYSTEM"
@@ -563,9 +563,9 @@ async def test_llm_runtime_conversions():
 			self.name = "chat"
 
 	with pytest.raises(ValueError):
-		llm_runtime.build_chat_model_from_orm_model(_Model(_Provider("")))
+		chat_runtime.build_chat_model_from_orm_model(_Model(_Provider("")))
 
-	llm = llm_runtime.build_chat_model_from_orm_model(
+	llm = chat_runtime.build_chat_model_from_orm_model(
 		_Model(_Provider("ollama.chat", base_url="http://example.test:11434"))
 	)
 	assert llm.provider == "ollama"
@@ -575,23 +575,23 @@ async def test_llm_runtime_conversions():
 	assert llm.adapter.base_url == "http://example.test:11434"
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_for_run(_FakeSession(), model="local:foo")
+		await chat_runtime.resolve_model_for_run(_FakeSession(), model="local:foo")
 
 	async def exec_model(stmt):
 		return _FakeResult(_Model(_Provider("ollama.chat")))
 
 	session_model = _FakeSession()
 	session_model.execute = exec_model  # type: ignore[assignment]
-	resolved = await llm_runtime.resolve_model_for_run(
+	resolved = await chat_runtime.resolve_model_for_run(
 		session_model, model_id=new_typeid("model")
 	)
 	assert getattr(resolved, "name") == "chat"
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_for_run(_FakeSession(), model=None)
+		await chat_runtime.resolve_model_for_run(_FakeSession(), model=None)
 
 
-def test_llm_runtime_orm_to_sdk_variants():
+def test_chat_runtime_orm_to_sdk_variants():
 	user_orm = SimpleNamespace(
 		type=MessageTypeORM.USER,
 		content=[{"type": "text", "text": "u"}],
@@ -621,12 +621,12 @@ def test_llm_runtime_orm_to_sdk_variants():
 	)
 	unknown_orm = SimpleNamespace(type="other", content=[], metadata_={})
 
-	user_sdk = llm_runtime.orm_message_to_sdk(user_orm)
-	system_sdk = llm_runtime.orm_message_to_sdk(system_orm)
-	assistant_sdk = llm_runtime.orm_message_to_sdk(assistant_orm)
-	tool_sdk = llm_runtime.orm_message_to_sdk(tool_orm)
-	tool_sdk_empty = llm_runtime.orm_message_to_sdk(tool_orm_empty)
-	fallback_sdk = llm_runtime.orm_message_to_sdk(unknown_orm)
+	user_sdk = chat_runtime.orm_message_to_sdk(user_orm)
+	system_sdk = chat_runtime.orm_message_to_sdk(system_orm)
+	assistant_sdk = chat_runtime.orm_message_to_sdk(assistant_orm)
+	tool_sdk = chat_runtime.orm_message_to_sdk(tool_orm)
+	tool_sdk_empty = chat_runtime.orm_message_to_sdk(tool_orm_empty)
+	fallback_sdk = chat_runtime.orm_message_to_sdk(unknown_orm)
 
 	assert user_sdk.role == "user"
 	assert system_sdk.role == "system"
@@ -638,13 +638,13 @@ def test_llm_runtime_orm_to_sdk_variants():
 	assert tool_sdk_empty.is_error is False
 	assert fallback_sdk.role == "user"
 
-	branch_msgs = llm_runtime.build_sdk_messages_from_branch([user_orm, system_orm])
+	branch_msgs = chat_runtime.build_sdk_messages_from_branch([user_orm, system_orm])
 	assert [m.role for m in branch_msgs] == ["user", "system"]
 
-	sys_prompt = llm_runtime.system_prompt_message("hi")
+	sys_prompt = chat_runtime.system_prompt_message("hi")
 	assert sys_prompt.role == "system"
 
-	assistant_create = llm_runtime.sdk_assistant_to_api_create(
+	assistant_create = chat_runtime.sdk_assistant_to_api_create(
 		AssistantMessage.from_text("assistant"),
 		sender_agent_id=new_typeid("agent"),
 	)
@@ -655,10 +655,10 @@ def test_llm_runtime_orm_to_sdk_variants():
 		content: list[object] = []
 
 	with pytest.raises(ValueError):
-		llm_runtime.sdk_message_to_orm_create(_BadMessage())
+		chat_runtime.sdk_message_to_orm_create(_BadMessage())
 
 
-async def test_llm_runtime_agent_resolution_paths():
+async def test_chat_runtime_agent_resolution_paths():
 	class _Provider:
 		def __init__(
 			self,
@@ -681,23 +681,23 @@ async def test_llm_runtime_agent_resolution_paths():
 			self.model = model
 
 	valid_session = _FakeSession(_Agent(_Model(_Provider("openai.base"))))
-	resolved = await llm_runtime.resolve_model_for_run(
+	resolved = await chat_runtime.resolve_model_for_run(
 		valid_session, agent_id=new_typeid("agent")
 	)
 	assert getattr(resolved, "name") == "chat"
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_for_run(
+		await chat_runtime.resolve_model_for_run(
 			_FakeSession(None), agent_id=new_typeid("agent")
 		)
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_for_run(
+		await chat_runtime.resolve_model_for_run(
 			_FakeSession(_Agent(None)), agent_id=new_typeid("agent")
 		)
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_for_run(
+		await chat_runtime.resolve_model_for_run(
 			_FakeSession(None), model_id=new_typeid("model")
 		)
 
@@ -719,7 +719,7 @@ async def test_thread_service_run_thread_agent(monkeypatch):
 
 	monkeypatch.setattr(thread_service, "get_current_branch", _get_current_branch)
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
@@ -728,7 +728,7 @@ async def test_thread_service_run_thread_agent(monkeypatch):
 		return object()
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"resolve_chat_model_for_run",
 		_resolve_llm,
 	)
@@ -786,7 +786,7 @@ async def test_thread_service_run_thread_agent_prompt(monkeypatch):
 
 	monkeypatch.setattr(thread_service, "get_current_branch", _empty_branch)
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
@@ -795,7 +795,7 @@ async def test_thread_service_run_thread_agent_prompt(monkeypatch):
 		return object()
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"resolve_chat_model_for_run",
 		_resolve_llm,
 	)
@@ -851,7 +851,7 @@ async def test_thread_service_run_thread_agent_defaults(monkeypatch):
 
 	monkeypatch.setattr(thread_service, "get_current_branch", _empty_branch)
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
@@ -860,7 +860,7 @@ async def test_thread_service_run_thread_agent_defaults(monkeypatch):
 		return object()
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"resolve_chat_model_for_run",
 		_resolve_llm,
 	)
@@ -919,7 +919,7 @@ async def test_thread_service_run_thread_creates_user_message(monkeypatch):
 
 	monkeypatch.setattr(thread_service, "create_message", fake_create_message)
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
@@ -935,7 +935,7 @@ async def test_thread_service_run_thread_creates_user_message(monkeypatch):
 		return FakeChatModel("ignored")
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"resolve_chat_model_for_run",
 		_resolve_llm,
 	)
@@ -955,7 +955,7 @@ async def test_thread_service_run_thread_creates_user_message(monkeypatch):
 async def test_thread_service_run_thread_agent_missing(monkeypatch):
 	monkeypatch.setattr(thread_service, "get_current_branch", _empty_branch)
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
@@ -964,7 +964,7 @@ async def test_thread_service_run_thread_agent_missing(monkeypatch):
 		return object()
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"resolve_chat_model_for_run",
 		_resolve_llm,
 	)
@@ -990,7 +990,7 @@ async def test_thread_service_run_thread_no_agent(monkeypatch):
 	monkeypatch.setattr(thread_service, "create_message", fake_create_message)
 	monkeypatch.setattr(thread_service, "get_current_branch", _empty_branch)
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
@@ -1006,7 +1006,7 @@ async def test_thread_service_run_thread_no_agent(monkeypatch):
 		return FakeChatModel("ignored")
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime,
+		thread_service.chat_runtime,
 		"resolve_chat_model_for_run",
 		_resolve_llm,
 	)
