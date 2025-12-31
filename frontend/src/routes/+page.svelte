@@ -317,12 +317,14 @@
 <div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
 	<div class="mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)]">
 		<div
+			style="view-transition-name: chat-input;"
 			class="relative transition-all duration-500 ease-in-out {isChatMode
 				? 'translate-y-0'
 				: '-translate-y-[40vh]'}"
 		>
 			{#if !isChatMode}
 				<div
+					style="view-transition-name: landing-greeting;"
 					class="absolute right-0 bottom-full left-0 mb-12 flex flex-col items-center justify-center gap-2 text-center"
 					in:fade={{ duration: 200 }}
 					out:fade={{ duration: 160 }}

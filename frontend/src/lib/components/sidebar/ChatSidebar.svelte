@@ -63,6 +63,38 @@
 		console.log('Open global search')
 	}
 
+	function navigateWithTransition(target: string) {
+		const targetUrl = new URL(target, page.url)
+		const isSamePath = targetUrl.pathname === page.url.pathname
+		const isSameSearch = targetUrl.search === page.url.search
+		if (isSamePath && isSameSearch) return
+
+		const go = async () => {
+			// @ts-expect-error resolve typing is narrower than our constructed URL
+			await goto(resolve(target as never), { keepFocus: true, noScroll: true })
+		}
+
+		if (isSamePath) {
+			// For same-route navigations (/?chat=...), avoid ViewTransition overlay so
+			// controls stay interactive during the CSS transition.
+			void go()
+			return
+		}
+
+		const start = (
+			document as unknown as {
+				startViewTransition?: (cb: () => Promise<void> | void) => void
+			}
+		).startViewTransition
+
+		if (start) {
+			start.call(document, go)
+			return
+		}
+
+		void go()
+	}
+
 	interface SidebarItem {
 		id: string
 		icon: typeof Search
@@ -77,8 +109,7 @@
 			label: 'new chat',
 			action: async () => {
 				sidebar.selectChat(null)
-				// For same-route navigations (/?chat=new), avoid ViewTransition overlays.
-				await goto('/?chat=new', { keepFocus: true, noScroll: true })
+				navigateWithTransition('/?chat=new')
 				if (isMobile) sidebar.closeChatSidebar()
 			},
 		},
@@ -371,10 +402,7 @@
 										: ''}
 									onclick={async () => {
 										sidebar.selectChat(thread.id)
-										await goto(resolve(`/c/${thread.id}`), {
-											keepFocus: true,
-											noScroll: true,
-										})
+										navigateWithTransition(`/c/${thread.id}`)
 									}}
 									role="button"
 									tabindex="0"
@@ -382,10 +410,7 @@
 										if (e.key === 'Enter' || e.key === ' ') {
 											e.preventDefault()
 											sidebar.selectChat(thread.id)
-											await goto(resolve(`/c/${thread.id}`), {
-												keepFocus: true,
-												noScroll: true,
-											})
+											navigateWithTransition(`/c/${thread.id}`)
 										}
 									}}
 								>

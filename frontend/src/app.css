@@ -189,14 +189,34 @@
 	}
 }
 
-::view-transition-group(chat-input),
 ::view-transition-group(chat-header) {
 	animation-duration: 360ms;
 	/* Clean, non-overshooting ease-out */
 	animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Match home input choreography (duration-500 ease-in-out) when crossing routes. */
+::view-transition-group(chat-input) {
+	animation-duration: 500ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* Landing greeting disappears when going to /c/[id] */
 ::view-transition-old(landing-greeting) {
 	animation: 200ms ease both nokodo-vt-fade-out;
+}
+
+/* Landing greeting appears when returning home */
+::view-transition-new(landing-greeting) {
+	animation: 260ms ease 80ms both nokodo-vt-fade-in;
+}
+
+/* Thread body fades away when leaving /c/[id] */
+::view-transition-old(thread-body) {
+	animation: 220ms ease both nokodo-vt-fade-out;
+}
+
+/* Thread body fades in when entering /c/[id] (after input settles) */
+::view-transition-new(thread-body) {
+	animation: 240ms ease 220ms both nokodo-vt-fade-in;
 }

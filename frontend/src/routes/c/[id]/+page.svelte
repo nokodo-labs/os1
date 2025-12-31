@@ -8,6 +8,7 @@
 	import Button from '$lib/components/chat/Button.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
+	import NokodoLoader from '$lib/components/common/NokodoLoader.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
@@ -51,6 +52,13 @@
 
 	let thread = $state<Thread | null>(null)
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
+	let isThreadLoading = $state(false)
+	let hasLoadedBranch = $state(false)
+	let showThreadLoader = $state(false)
+
+	$effect(() => {
+		showThreadLoader = isThreadLoading
+	})
 
 	function contentPartsToText(parts: ApiMessage['content']): string {
 		if (!parts || parts.length === 0) return ''
@@ -121,27 +129,39 @@
 			thread = null
 			setActiveThread(null)
 			messages = []
+			isThreadLoading = false
+			hasLoadedBranch = false
 			return
 		}
 
 		let cancelled = false
+		isThreadLoading = true
+		hasLoadedBranch = false
 		void (async () => {
-			const { data } = await v1Client().GET('/threads/{thread_id}', {
-				params: { path: { thread_id: threadId } },
-			})
-			if (cancelled) return
-			thread = data ?? null
-			setActiveThread(data ?? null)
-			if (data) {
-				await loadBranch(data.id)
+			try {
+				const { data } = await v1Client().GET('/threads/{thread_id}', {
+					params: { path: { thread_id: threadId } },
+				})
+				if (cancelled) return
+				thread = data ?? null
+				setActiveThread(data ?? null)
+				if (data) {
+					hasLoadedBranch = await loadBranch(data.id)
+				} else {
+					hasLoadedBranch = true
+				}
+			} finally {
+				if (!cancelled) isThreadLoading = false
 			}
 		})()
 
 		return () => {
 			cancelled = true
+			isThreadLoading = true
 			thread = null
 			setActiveThread(null)
 			messages = []
+			hasLoadedBranch = false
 		}
 	})
 
@@ -364,9 +384,9 @@
 	)
 </script>
 
-<div class="flex-1 overflow-y-auto">
+<div class="relative flex-1 overflow-y-auto" style="view-transition-name: thread-body;">
 	<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8 pt-8 pb-32">
-		{#if isTemporaryChat && messages.length === 0}
+		{#if isTemporaryChat && hasLoadedBranch && messages.length === 0}
 			<div class="flex flex-1 items-center justify-center py-16">
 				<div class="max-w-md text-center">
 					<div
@@ -380,7 +400,7 @@
 					</p>
 				</div>
 			</div>
-		{:else if !hasRenderableMessages}
+		{:else if hasLoadedBranch && !hasRenderableMessages}
 			<div class="flex flex-1 items-center justify-center py-16">
 				<div class="max-w-md text-center">
 					<div
@@ -392,7 +412,7 @@
 					<p class="mt-2 text-sm text-white/60">send a message to begin this thread.</p>
 				</div>
 			</div>
-		{:else}
+		{:else if hasLoadedBranch}
 			<div class="flex flex-1 flex-col gap-6 py-8">
 				{#each messages as message, index (message.id)}
 					<div in:fade={{ duration: 200 }}>
@@ -524,8 +544,21 @@
 					</div>
 				{/if}
 			</div>
+		{:else}
+			<!-- while data is loading, keep layout stable; loader is rendered as an overlay -->
+			<div class="flex-1"></div>
 		{/if}
 	</div>
+
+	{#if showThreadLoader}
+		<div
+			class="pointer-events-none absolute inset-0 flex items-center justify-center"
+			in:fade={{ duration: 120 }}
+			out:fade={{ duration: 260 }}
+		>
+			<NokodoLoader className="opacity-80" shimmer expanded />
+		</div>
+	{/if}
 </div>
 
 <div class="absolute right-0 bottom-0 left-0 z-10 pt-10 pb-8">
