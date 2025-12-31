@@ -129,7 +129,7 @@ class Agent(Base):
 
 			response = await self.llm.generate(
 				thread,
-				tools=self.tools if self.tools else None,
+				tools=self.tools,
 				tool_choice=current_tool_choice,
 			)
 			thread.add(response)
@@ -146,8 +146,8 @@ class Agent(Base):
 		# max iterations reached - call llm one more time without tools
 		final_response = await self.llm.generate(
 			thread,
-			tools=None,
-			tool_choice=None,
+			tools=self.tools,
+			tool_choice="none",
 		)
 		thread.add(final_response)
 		produced.append(final_response)
@@ -172,7 +172,7 @@ class Agent(Base):
 
 			response = await self.llm.generate(
 				thread,
-				tools=self.tools if self.tools else None,
+				tools=self.tools,
 				tool_choice=current_tool_choice,
 			)
 			thread.add(response)
@@ -189,7 +189,7 @@ class Agent(Base):
 		# max iterations reached - call llm one more time without tools
 		final_response = await self.llm.generate(
 			thread,
-			tools=None,
+			tools=[],
 			tool_choice=None,
 		)
 		thread.add(final_response)

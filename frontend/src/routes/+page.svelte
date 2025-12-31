@@ -19,7 +19,7 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { openModal } from '$lib/stores/modals'
-	import { setActiveThread, userDisplay } from '$lib/stores/session'
+	import { setActiveThread, setPendingChatStart, userDisplay } from '$lib/stores/session'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state('')
@@ -127,8 +127,8 @@
 		return () => chrome.setAgentSelector(null)
 	})
 
-	async function navigateToChat(threadId: string, content: string) {
-		const target = `/c/${threadId}?q=${encodeURIComponent(content)}`
+	async function navigateToChat(threadId: string) {
+		const target = `/c/${threadId}`
 		// Assume View Transitions API exists (per requirement), but keep a safe fallback.
 		const start = (
 			document as unknown as {
@@ -190,8 +190,8 @@
 		}
 
 		setActiveThread(data)
-
-		await navigateToChat(data.id, content)
+		setPendingChatStart({ threadId: data.id, content })
+		await navigateToChat(data.id)
 	}
 
 	function handleSendMessage(content: string) {

@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import type { Agent } from '$lib/api/generated'
+	import { v1Client } from '$lib/api/v1/client'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
@@ -12,12 +14,6 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { activeThread, refreshSession, userDisplay } from '$lib/stores/session'
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
-
-	interface Agent {
-		id: string
-		name: string
-		description?: string
-	}
 
 	type SidebarContext = {
 		selectChat?: (id: string | null) => void
@@ -47,21 +43,43 @@
 		void refreshSession()
 	})
 
-	// Mock agent data (until backend-driven)
-	const agents: Agent[] = [
-		{ id: 'gpt-4', name: 'GPT-4', description: 'most capable model' },
-		{ id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'faster, optimized' },
-		{ id: 'claude-3-opus', name: 'Claude 3 Opus', description: "anthropic's flagship" },
-		{ id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', description: 'balanced performance' },
-		{ id: 'gemini-pro', name: 'Gemini Pro', description: "google's advanced model" },
-		{ id: 'llama-3', name: 'Llama 3', description: 'open source powerhouse' },
-	]
+	let agents = $state<Agent[]>([])
+	let didLoadAgents = $state(false)
+	let didAutoSelectAgent = $state(false)
 
 	let isAgentDropdownOpen = $state(false)
 
-	let currentAgent = $derived(
-		agents.find((a) => a.id === chrome.island.agentSelector?.selectedAgent) || agents[0]
+	let currentAgent = $derived<Agent | null>(
+		agents.length === 0
+			? null
+			: agents.find((a) => a.id === chrome.island.agentSelector?.selectedAgent) || agents[0]
 	)
+
+	$effect(() => {
+		if (didLoadAgents) return
+		didLoadAgents = true
+		void (async () => {
+			const { data, error } = await v1Client().GET('/agents')
+			if (error) {
+				console.error('Failed to load agents', error)
+				agents = []
+				return
+			}
+			agents = data ?? []
+		})()
+	})
+
+	$effect(() => {
+		if (didAutoSelectAgent) return
+		if (!chrome.island.agentSelector) return
+		if (agents.length === 0) return
+		const selected = chrome.island.agentSelector.selectedAgent
+		const hasSelected = selected && agents.some((a) => a.id === selected)
+		if (!hasSelected) {
+			didAutoSelectAgent = true
+			chrome.island.agentSelector.onAgentChange(agents[0].id)
+		}
+	})
 
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as HTMLElement
@@ -71,6 +89,7 @@
 	}
 
 	function toggleAgentDropdown() {
+		if (agents.length === 0) return
 		isAgentDropdownOpen = !isAgentDropdownOpen
 	}
 
@@ -173,7 +192,7 @@
 							<span
 								class="min-w-0 truncate bg-clip-text text-xl font-semibold whitespace-nowrap text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 								style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
-								>{currentAgent.name}</span
+								>{currentAgent?.name ?? 'assistant'}</span
 							>
 							<span style="color: var(--accent-secondary);">
 								<ChevronDown

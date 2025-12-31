@@ -1,4 +1,4 @@
-import { derived, writable } from 'svelte/store'
+import { derived, get, writable } from 'svelte/store'
 
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
@@ -14,6 +14,9 @@ export const isLoggedIn = derived(accessToken, (token) => Boolean(token))
 export const currentUser = writable<User | null>(null)
 export const recentThreads = writable<Thread[]>([])
 export const activeThread = writable<Thread | null>(null)
+
+export type PendingChatStart = { threadId: string; content: string }
+export const pendingChatStart = writable<PendingChatStart | null>(null)
 
 export const isLoadingUser = writable(false)
 export const isLoadingThreads = writable(false)
@@ -45,6 +48,17 @@ export function clearSession(): void {
 
 export function setActiveThread(thread: Thread | null): void {
 	activeThread.set(thread)
+}
+
+export function setPendingChatStart(value: PendingChatStart | null): void {
+	pendingChatStart.set(value)
+}
+
+export function consumePendingChatStart(threadId: string): string | null {
+	const value = get(pendingChatStart)
+	if (!value || value.threadId !== threadId) return null
+	pendingChatStart.set(null)
+	return value.content
 }
 
 export async function refreshUser(): Promise<void> {

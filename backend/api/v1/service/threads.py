@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -33,7 +35,7 @@ from api.v1.service.authorization import (
 )
 from api.v1.service.prompt_runtime import render_inline_with_prompts
 from nokodo_ai.agent import Agent as SDKAgent
-from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.deltas import AgentDelta, ChatModelDelta
 from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -493,11 +495,7 @@ async def run_thread(
 	temperature: float | None = None,
 	max_tokens: int | None = None,
 ) -> tuple[Message | None, list[Message]]:
-	"""run a thread and persist the messages produced by the sdk.
-
-	this is intentionally thin: model/provider selection and adapter selection are
-	delegated to the sdk via a model string.
-	"""
+	"""run a thread and persist the messages produced by the sdk."""
 	user_message: Message | None = None
 	if input is not None and input.strip() != "":
 		user_message = await create_message(
@@ -510,15 +508,14 @@ async def run_thread(
 	branch = await get_current_branch(thread_id, session, principal=principal)
 	sdk_messages = llm_runtime.build_sdk_messages_from_branch(branch)
 
-	model_string = await llm_runtime.resolve_model_string_for_run(
+	llm = await llm_runtime.resolve_chat_model_for_run(
 		session,
 		agent_id=agent_id,
 		model_id=model_id,
 		model=model,
+		temperature=temperature,
+		max_tokens=max_tokens,
 	)
-
-	# llm config lives in the ChatModel
-	llm = ChatModel(model_string, temperature=temperature, max_tokens=max_tokens)
 
 	produced_sdk_messages: list[llm_runtime.SDKMessage] = []
 	if agent_id is not None:
@@ -545,7 +542,7 @@ async def run_thread(
 
 		sdk_agent = SDKAgent(
 			llm=llm,
-			tools=None,
+			tools=[],
 			max_iterations=max_iterations,
 		)
 		sdk_thread = SDKThread(messages=sdk_messages)
@@ -571,3 +568,106 @@ async def run_thread(
 		)
 
 	return user_message, created
+
+
+def _sse_event(*, event: str, data: dict[str, object]) -> bytes:
+	payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+	return f"event: {event}\ndata: {payload}\n\n".encode()
+
+
+async def run_thread_stream(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	agent_id: TypeID | None = None,
+	model_id: TypeID | None = None,
+	model: str | None = None,
+	input: str | None = None,
+	temperature: float | None = None,
+	max_tokens: int | None = None,
+) -> AsyncIterator[bytes]:
+	"""stream a thread run as sse AgentDelta events and persist results."""
+	if input is not None and input.strip() != "":
+		await create_message(
+			thread_id,
+			MessageCreate(content=input),
+			session,
+			principal=principal,
+		)
+
+	branch = await get_current_branch(thread_id, session, principal=principal)
+	sdk_messages = llm_runtime.build_sdk_messages_from_branch(branch)
+
+	llm = await llm_runtime.resolve_chat_model_for_run(
+		session,
+		agent_id=agent_id,
+		model_id=model_id,
+		model=model,
+		temperature=temperature,
+		max_tokens=max_tokens,
+	)
+
+	# if we're running as an agent, prepend its system prompt (tools not wired yet).
+	if agent_id is not None:
+		agent = await session.get(Agent, agent_id)
+		if agent is None:
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="Agent not found",
+			)
+		if agent.system_prompt:
+			rendered_prompt = await render_inline_with_prompts(
+				session,
+				text=agent.system_prompt,
+				variables=None,
+			)
+			sdk_messages.insert(0, llm_runtime.system_prompt_message(rendered_prompt))
+
+	# stream chat deltas and wrap into AgentDelta frames.
+	full_text = ""
+	chunk_index = 0
+	try:
+		deltas = llm.generate(
+			sdk_messages,
+			stream=True,
+			tools=[],
+			tool_choice="auto",
+		)
+		if not hasattr(deltas, "__aiter__"):
+			raise TypeError("expected async iterator for streaming run")
+		async for chat_delta in deltas:
+			assert isinstance(chat_delta, ChatModelDelta)
+			agent_delta = AgentDelta(chat=chat_delta, chunk_index=chunk_index)
+			if chat_delta.message.text:
+				full_text += chat_delta.message.text
+			yield _sse_event(event="agent_delta", data=agent_delta.model_dump())
+			chunk_index += 1
+		yield _sse_event(
+			event="agent_delta",
+			data=AgentDelta.done_sentinel(chunk_index=chunk_index).model_dump(),
+		)
+	except Exception as e:
+		yield _sse_event(
+			event="agent_error",
+			data={"message": str(e)},
+		)
+		yield _sse_event(
+			event="agent_delta",
+			data=AgentDelta.done_sentinel(chunk_index=chunk_index).model_dump(),
+		)
+		raise
+
+	# persist the final assistant message. (tools streaming not implemented yet.)
+	if full_text.strip() != "":
+		assistant_msg = llm_runtime.SDKAssistantMessage.from_text(full_text)
+		create_in = llm_runtime.sdk_message_to_orm_create(
+			assistant_msg,
+			sender_agent_id=agent_id,
+		)
+		await create_message(
+			thread_id,
+			create_in,
+			session,
+			principal=principal,
+		)

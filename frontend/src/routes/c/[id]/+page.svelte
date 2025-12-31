@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import type { Agent } from '$lib/api/generated'
+	import type { components } from '$lib/api/types'
 	import { v1Client } from '$lib/api/v1/client'
+	import { getAccessToken } from '$lib/auth/session'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import Button from '$lib/components/chat/Button.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
@@ -10,7 +13,12 @@
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { setActiveThread, type Thread } from '$lib/stores/session'
+	import {
+		consumePendingChatStart,
+		pendingChatStart,
+		setActiveThread,
+		type Thread,
+	} from '$lib/stores/session'
 	import { fade } from 'svelte/transition'
 
 	interface Message {
@@ -19,24 +27,100 @@
 		content: string
 		timestamp: Date
 		model?: string
+		senderAgentId?: string | null
 	}
 
-	let selectedModel = $state('gpt-4')
+	type ApiMessage = components['schemas']['Message']
+
 	let messages = $state<Message[]>([])
 	let inputValue = $state('')
 	let isGenerating = $state(false)
-	let generationTimeout: number | null = null
+	let activeRun = 0
+	let selectedAgent = $state('')
+	let agents = $state<Agent[]>([])
+	let optimisticUserMessage = $state<Message | null>(null)
+	let streamingAssistant = $state<Message | null>(null)
+	let runError = $state(false)
+	let lastRunInput = $state('')
 
 	const chrome = useSystemChrome()
+	let selectedAgentName = $derived(
+		agents.find((a) => a.id === selectedAgent)?.name ?? 'assistant'
+	)
+	let agentNameById = $derived(new Map(agents.map((a) => [a.id, a.name])))
 
 	let thread = $state<Thread | null>(null)
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
+
+	function contentPartsToText(parts: ApiMessage['content']): string {
+		if (!parts || parts.length === 0) return ''
+		return parts
+			.map((p) => {
+				if (!p) return ''
+				if (p.type === 'text') return p.text
+				if (p.type === 'refusal') return p.reason
+				if (p.type === 'json') {
+					try {
+						return JSON.stringify(p.data)
+					} catch {
+						return ''
+					}
+				}
+				return ''
+			})
+			.filter(Boolean)
+			.join('\n')
+	}
+
+	function apiMessageToUiMessage(msg: ApiMessage): Message {
+		const senderAgentId = msg.sender_agent_id ?? null
+		return {
+			id: msg.id,
+			role: msg.type === 'user' ? 'user' : 'assistant',
+			content: contentPartsToText(msg.content),
+			timestamp: new Date(msg.created_at),
+			model: 'assistant',
+			senderAgentId,
+		}
+	}
+
+	$effect(() => {
+		let cancelled = false
+		void (async () => {
+			const { data, error } = await v1Client().GET('/agents')
+			if (cancelled) return
+			if (error) {
+				console.error('Failed to load agents', error)
+				agents = []
+				return
+			}
+			agents = data ?? []
+			if (selectedAgent === '' && agents.length > 0) selectedAgent = agents[0].id
+		})()
+		return () => {
+			cancelled = true
+		}
+	})
+
+	async function loadBranch(threadId: string): Promise<boolean> {
+		const { data, error } = await v1Client().GET('/threads/{thread_id}/branch', {
+			params: { path: { thread_id: threadId } },
+		})
+		if (error) {
+			console.error('Failed to load thread branch', error)
+			messages = []
+			return false
+		}
+		messages = (data ?? []).map(apiMessageToUiMessage)
+		return true
+	}
 
 	$effect(() => {
 		const threadId = page.params.id
 		if (!threadId) {
 			thread = null
 			setActiveThread(null)
+			messages = []
 			return
 		}
 
@@ -48,19 +132,23 @@
 			if (cancelled) return
 			thread = data ?? null
 			setActiveThread(data ?? null)
+			if (data) {
+				await loadBranch(data.id)
+			}
 		})()
 
 		return () => {
 			cancelled = true
 			thread = null
 			setActiveThread(null)
+			messages = []
 		}
 	})
 
 	$effect(() => {
 		chrome.setAgentSelector({
-			selectedAgent: selectedModel,
-			onAgentChange: (agentId: string) => (selectedModel = agentId),
+			selectedAgent,
+			onAgentChange: (agentId: string) => (selectedAgent = agentId),
 		})
 	})
 
@@ -69,48 +157,193 @@
 	})
 
 	$effect(() => {
-		const initialQuery = page.url.searchParams.get('q')
-		if (initialQuery && messages.length === 0) {
-			handleSendMessage(initialQuery)
+		if (!thread) return
+		const pending = $pendingChatStart
+		if (!pending || pending.threadId !== thread.id) return
+		if (messages.length !== 0) {
+			consumePendingChatStart(thread.id)
+			return
 		}
+		if (isGenerating || runError || optimisticUserMessage !== null || selectedAgent === '')
+			return
+		const content = consumePendingChatStart(thread.id)
+		if (!content) return
+		handleSendMessage(content)
 	})
 
-	function handleSendMessage(content: string) {
-		const userMessage: Message = {
-			id: Date.now().toString(),
+	async function handleSendMessage(content: string) {
+		const trimmed = content.trim()
+		if (!trimmed) return
+		if (!thread) return
+		if (!selectedAgent) {
+			runError = true
+			lastRunInput = trimmed
+			optimisticUserMessage = {
+				id: `client-${Date.now()}`,
+				role: 'user',
+				content: trimmed,
+				timestamp: new Date(),
+			}
+			return
+		}
+		runError = false
+		lastRunInput = trimmed
+		optimisticUserMessage = {
+			id: `client-${Date.now()}`,
 			role: 'user',
-			content,
+			content: trimmed,
 			timestamp: new Date(),
 		}
-		messages.push(userMessage)
 
-		const aiMessageId = (Date.now() + 1).toString()
-		const aiMessage: Message = {
-			id: aiMessageId,
+		isGenerating = true
+		streamingAssistant = {
+			id: `stream-${Date.now()}`,
 			role: 'assistant',
 			content: '',
 			timestamp: new Date(),
-			model: selectedModel,
+			model: selectedAgentName,
+			senderAgentId: selectedAgent,
 		}
-		messages.push(aiMessage)
-		isGenerating = true
+		const runId = ++activeRun
 
-		generationTimeout = setTimeout(() => {
-			const response = `I received your message: "${content}". This is a demo response showcasing the liquid UI!`
-			const lastMsg = messages[messages.length - 1]
-			if (lastMsg && lastMsg.id === aiMessageId) {
-				lastMsg.content = response
+		try {
+			await runThreadStream({
+				threadId: thread.id,
+				agentId: selectedAgent,
+				input: trimmed,
+				runId,
+			})
+			if (runId !== activeRun) return
+			inputValue = ''
+			optimisticUserMessage = null
+			streamingAssistant = null
+			runError = false
+			await loadBranch(thread.id)
+		} catch (e) {
+			console.error('Failed to run thread', e)
+			runError = true
+			const ok = await loadBranch(thread.id)
+			if (ok) optimisticUserMessage = null
+			streamingAssistant = null
+		} finally {
+			if (runId === activeRun) isGenerating = false
+		}
+	}
+
+	async function runThreadStream(opts: {
+		threadId: string
+		agentId: string
+		input: string | null
+		runId: number
+	}): Promise<void> {
+		const token = getAccessToken()
+		const response = await fetch(`/v1/threads/${opts.threadId}/run/stream`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Accept: 'text/event-stream',
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			body: JSON.stringify({ agent_id: opts.agentId, input: opts.input }),
+		})
+		if (!response.ok || !response.body) {
+			throw new Error(`stream request failed: ${response.status}`)
+		}
+
+		const reader = response.body.getReader()
+		const decoder = new TextDecoder()
+		let buffer = ''
+
+		while (true) {
+			if (opts.runId !== activeRun) {
+				try {
+					await reader.cancel()
+				} catch {
+					// ignore
+				}
+				return
 			}
-			isGenerating = false
-			generationTimeout = null
-		}, 1000) as unknown as number
+
+			const { value, done } = await reader.read()
+			if (done) break
+			buffer += decoder.decode(value, { stream: true })
+
+			let splitIndex = buffer.indexOf('\n\n')
+			while (splitIndex !== -1) {
+				const rawEvent = buffer.slice(0, splitIndex)
+				buffer = buffer.slice(splitIndex + 2)
+				splitIndex = buffer.indexOf('\n\n')
+
+				let eventType = ''
+				let data = ''
+				for (const line of rawEvent.split('\n')) {
+					if (line.startsWith('event:')) eventType = line.slice(6).trim()
+					if (line.startsWith('data:')) data += line.slice(5).trim()
+				}
+				if (!eventType || !data) continue
+				if (eventType === 'agent_error') {
+					throw new Error(data)
+				}
+				if (eventType !== 'agent_delta') continue
+				const delta = JSON.parse(data) as {
+					chat?: { message?: { content?: any[] }; done?: boolean }
+					done?: boolean
+				}
+				if (delta.done) return
+				const contentParts = delta.chat?.message?.content
+				if (!contentParts || !streamingAssistant) continue
+
+				const nextText = contentParts
+					.map((p) => (p?.type === 'text' ? p.text : ''))
+					.filter(Boolean)
+					.join('')
+				if (nextText) {
+					streamingAssistant = {
+						...streamingAssistant,
+						content: streamingAssistant.content + nextText,
+					}
+				}
+			}
+		}
+	}
+
+	async function retryLastRun() {
+		if (!thread) return
+		if (!selectedAgent) return
+		runError = false
+		isGenerating = true
+		const runId = ++activeRun
+		try {
+			streamingAssistant = {
+				id: `stream-${Date.now()}`,
+				role: 'assistant',
+				content: '',
+				timestamp: new Date(),
+				model: selectedAgentName,
+				senderAgentId: selectedAgent,
+			}
+			await runThreadStream({
+				threadId: thread.id,
+				agentId: selectedAgent,
+				input: optimisticUserMessage ? lastRunInput : null,
+				runId,
+			})
+			if (runId !== activeRun) return
+			runError = false
+			streamingAssistant = null
+			await loadBranch(thread.id)
+		} catch (e) {
+			console.error('Failed to retry run', e)
+			runError = true
+			streamingAssistant = null
+		} finally {
+			if (runId === activeRun) isGenerating = false
+		}
 	}
 
 	function handleStopGeneration() {
-		if (generationTimeout) {
-			clearTimeout(generationTimeout)
-			generationTimeout = null
-		}
+		// no server-side cancellation yet; this just ignores the in-flight response.
+		activeRun++
 		isGenerating = false
 	}
 
@@ -119,12 +352,16 @@
 	}
 
 	function handleRegenerateMessage() {
-		console.log('Regenerate message')
+		void retryLastRun()
 	}
 
 	function handleEditMessage(messageId: string) {
 		console.log('Edit message:', messageId)
 	}
+
+	let hasRenderableMessages = $derived(
+		messages.length > 0 || optimisticUserMessage !== null || runError
+	)
 </script>
 
 <div class="flex-1 overflow-y-auto">
@@ -143,7 +380,7 @@
 					</p>
 				</div>
 			</div>
-		{:else if messages.length === 0}
+		{:else if !hasRenderableMessages}
 			<div class="flex flex-1 items-center justify-center py-16">
 				<div class="max-w-md text-center">
 					<div
@@ -188,7 +425,9 @@
 							<AssistantChatMessage
 								content={message.content}
 								timestamp={message.timestamp}
-								modelName={message.model}
+								modelName={message.senderAgentId
+									? (agentNameById.get(message.senderAgentId) ?? 'assistant')
+									: 'assistant'}
 								isLastMessage={index === messages.length - 1}
 							>
 								{#snippet actions()}
@@ -214,6 +453,76 @@
 						{/if}
 					</div>
 				{/each}
+
+				{#if optimisticUserMessage}
+					<div in:fade={{ duration: 200 }}>
+						<UserChatMessage
+							content={optimisticUserMessage.content}
+							timestamp={optimisticUserMessage.timestamp}
+						>
+							{#snippet actions()}
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() =>
+										handleCopyMessage(optimisticUserMessage?.content ?? '')}
+								>
+									<DocumentDuplicate className="w-3.5 h-3.5" strokeWidth="2" />
+								</Button>
+							{/snippet}
+						</UserChatMessage>
+					</div>
+				{/if}
+
+				{#if runError}
+					<div in:fade={{ duration: 200 }}>
+						<AssistantChatMessage
+							content={selectedAgent
+								? 'there was an error generating a response.'
+								: 'select an agent to generate a response.'}
+							modelName={selectedAgentName}
+							isLastMessage={true}
+							tone="error"
+						>
+							{#snippet actions()}
+								<Button variant="ghost" size="sm" onclick={retryLastRun}>
+									retry
+								</Button>
+								<Button variant="ghost" size="sm" onclick={retryLastRun}>
+									regenerate
+								</Button>
+							{/snippet}
+						</AssistantChatMessage>
+					</div>
+				{/if}
+
+				{#if streamingAssistant}
+					<div in:fade={{ duration: 200 }}>
+						<AssistantChatMessage
+							content={streamingAssistant.content}
+							timestamp={streamingAssistant.timestamp}
+							modelName={streamingAssistant.senderAgentId
+								? (agentNameById.get(streamingAssistant.senderAgentId) ??
+									'assistant')
+								: 'assistant'}
+							isLastMessage={true}
+						>
+							{#snippet actions()}
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() =>
+										handleCopyMessage(streamingAssistant?.content ?? '')}
+								>
+									<DocumentDuplicate className="w-3.5 h-3.5" strokeWidth="2" />
+								</Button>
+								<Button variant="ghost" size="sm" onclick={handleStopGeneration}>
+									stop
+								</Button>
+							{/snippet}
+						</AssistantChatMessage>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>

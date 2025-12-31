@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
 from api.models.acl import AccessControlEntry
@@ -202,6 +203,36 @@ async def run_thread(
 		if user_message is not None
 		else None,
 		messages=[MessageSchema.model_validate(m) for m in created],
+	)
+
+
+@router.post("/{thread_id}/run/stream")
+async def run_thread_stream(
+	thread_id: TypeID,
+	req: ThreadRunRequest,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+	"""stream a thread run via sse AgentDelta events."""
+	stream = thread_service.run_thread_stream(
+		thread_id,
+		db,
+		principal=principal,
+		agent_id=req.agent_id,
+		model_id=req.model_id,
+		model=req.model,
+		input=req.input,
+		temperature=req.temperature,
+		max_tokens=req.max_tokens,
+	)
+	return StreamingResponse(
+		stream,
+		media_type="text/event-stream",
+		headers={
+			"Cache-Control": "no-cache",
+			"Connection": "keep-alive",
+			"X-Accel-Buffering": "no",
+		},
 	)
 
 

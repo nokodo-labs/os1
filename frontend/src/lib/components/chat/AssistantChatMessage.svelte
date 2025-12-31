@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Tooltip from '$lib/components/common/Tooltip.svelte'
+	import { renderMarkdownToHtml } from '$lib/markdown/render'
 	import type { Snippet } from 'svelte'
 
 	interface Props {
@@ -8,6 +9,7 @@
 		actions?: Snippet
 		isLastMessage?: boolean
 		modelName?: string
+		tone?: 'default' | 'error'
 	}
 
 	let {
@@ -16,10 +18,12 @@
 		actions,
 		isLastMessage = false,
 		modelName = 'assistant',
+		tone = 'default',
 	}: Props = $props()
 
 	let showActions = $state(false)
 	let isHovered = $state(false)
+	let renderedHtml = $derived(renderMarkdownToHtml(content))
 
 	function handleMouseEnter() {
 		showActions = true
@@ -106,11 +110,21 @@
 		</div>
 
 		<!-- Message content -->
-		<div
-			class="text-[0.95rem] leading-relaxed wrap-break-word text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]"
-		>
-			{content}
-		</div>
+		{#if tone === 'error'}
+			<div class="border-destructive/30 bg-destructive/10 rounded-2xl border px-4 py-3">
+				<div
+					class="text-destructive assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+				>
+					{@html renderedHtml}
+				</div>
+			</div>
+		{:else}
+			<div
+				class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]"
+			>
+				{@html renderedHtml}
+			</div>
+		{/if}
 
 		<!-- Actions -->
 		{#if actions}
@@ -126,6 +140,24 @@
 </div>
 
 <style>
+	:global(.assistant-markdown pre) {
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	:global(.assistant-markdown code) {
+		white-space: pre-wrap;
+	}
+
+	:global(.assistant-markdown a) {
+		text-decoration: underline;
+	}
+
+	:global(.assistant-markdown ul),
+	:global(.assistant-markdown ol) {
+		padding-left: 1.25rem;
+	}
+
 	@keyframes messageSlideIn {
 		from {
 			opacity: 0;

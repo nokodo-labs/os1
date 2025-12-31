@@ -30,6 +30,14 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 		)
 	"""
 
+	def __init__(self, model_name: str | None = None, **data: Any) -> None:
+		# convenience: allow `ChatModel("gpt-4o")` without supporting legacy `model=`
+		if model_name is not None:
+			if "model_name" in data:
+				raise TypeError("model_name provided twice")
+			data["model_name"] = model_name
+		super().__init__(**data)
+
 	@model_validator(mode="before")
 	@classmethod
 	def resolve_adapter_config(cls, data: Any) -> Any:
@@ -42,15 +50,31 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 				data.setdefault("api", api)
 				data.setdefault("model_name", name)
 
+			# If an adapter dict is provided but uses a shorthand type (e.g. "openai"),
+			# expand it to the fully-qualified discriminator tag expected by
+			# ChatAdapter.
+			adapter = data.get("adapter")
+			if isinstance(adapter, dict):
+				type_value = adapter.get("type")
+				if isinstance(type_value, str) and "." not in type_value:
+					provider = str(data.get("provider") or type_value)
+					api = data.get("api")
+					adapter_type = resolve_chat_adapter_type(provider, api)
+					if not adapter_type:
+						raise ValueError(f"unknown provider: {provider}")
+					adapter["type"] = adapter_type
+					data.setdefault("provider", provider)
+
 			if "adapter" not in data:
 				provider = data.get("provider")
 				api = data.get("api")
 
 				if provider:
 					adapter_type = resolve_chat_adapter_type(provider, api)
-					if adapter_type:
-						adapter_config = {"type": adapter_type}
-						data["adapter"] = adapter_config
+					if not adapter_type:
+						raise ValueError(f"unknown provider: {provider}")
+					adapter_config = {"type": adapter_type}
+					data["adapter"] = adapter_config
 
 		return data
 

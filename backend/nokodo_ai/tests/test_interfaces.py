@@ -23,43 +23,43 @@ def test_llm_requires_model() -> None:
 
 
 def test_llm_resolves_openai_model() -> None:
-	llm = ChatModel(model="gpt-4o")
+	llm = ChatModel("gpt-4o")
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm._adapter_resolved, OpenAIChatCompletionsAdapter)
+	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
 
 def test_llm_resolves_openai_explicit() -> None:
-	llm = ChatModel(model="openai:gpt-4o-mini")
+	llm = ChatModel("openai:gpt-4o-mini")
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm._adapter_resolved, OpenAIChatCompletionsAdapter)
+	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
 
 def test_llm_resolves_openai_responses_api() -> None:
-	llm = ChatModel(model="openai.responses:gpt-4o")
+	llm = ChatModel("openai.responses:gpt-4o")
 	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
-	assert isinstance(llm._adapter_resolved, OpenAIResponsesAdapter)
+	assert isinstance(llm.adapter, OpenAIResponsesAdapter)
 
 
 def test_llm_resolves_anthropic() -> None:
-	llm = ChatModel(model="anthropic:claude-sonnet-4-20250514")
+	llm = ChatModel("anthropic:claude-sonnet-4-20250514")
 	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
-	assert isinstance(llm._adapter_resolved, AnthropicMessagesAdapter)
+	assert isinstance(llm.adapter, AnthropicMessagesAdapter)
 
 
 def test_llm_resolves_ollama() -> None:
-	llm = ChatModel(model="ollama:llama3.2")
+	llm = ChatModel("ollama:llama3.2")
 	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
-	assert isinstance(llm._adapter_resolved, OllamaChatAdapter)
+	assert isinstance(llm.adapter, OllamaChatAdapter)
 
 
 def test_llm_unknown_provider_raises() -> None:
 	with pytest.raises(ValueError, match="unknown provider"):
-		ChatModel(model="unknownprovider:model")
+		ChatModel("unknownprovider:model")
 
 
 def test_embedding_requires_model_or_adapter() -> None:
@@ -71,14 +71,14 @@ def test_embedding_resolves_openai() -> None:
 	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
 	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
 
-	assert isinstance(embedder._adapter_resolved, OpenAIEmbeddingAdapter)
+	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)
 
 
 def test_embedding_resolves_ollama() -> None:
 	embedder = EmbeddingModel(model="ollama:nomic-embed-text")
 	from nokodo_ai.adapters.ollama import OllamaEmbeddingAdapter
 
-	assert isinstance(embedder._adapter_resolved, OllamaEmbeddingAdapter)
+	assert isinstance(embedder.adapter, OllamaEmbeddingAdapter)
 
 
 def test_embedding_unknown_provider_raises() -> None:
@@ -151,7 +151,12 @@ class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 @pytest.mark.asyncio
 async def test_chat_model_generate_with_thread(monkeypatch: pytest.MonkeyPatch) -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
@@ -176,7 +181,12 @@ async def test_chat_model_streaming_with_tools() -> None:
 			AssistantMessage.from_text("c2"),
 		],
 	)
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 
 	@tool(description="noop")
 	def noop() -> str:
@@ -205,7 +215,12 @@ async def test_chat_model_streaming_with_tools() -> None:
 @pytest.mark.asyncio
 async def test_chat_model_parses_params_dict() -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 
 	result = await llm.generate(
 		[UserMessage.from_text("hi")],
@@ -223,25 +238,25 @@ async def test_chat_model_parses_params_dict() -> None:
 async def test_chat_model_resolves_default_provider(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	adapter = _StubChatAdapter(AssistantMessage.from_text("resolved"))
+	_ = monkeypatch
+	llm = ChatModel("gpt-4o")
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	def fake_get_chat_adapter(variant: str | None):
-		assert variant is None
-		return adapter
-
-	monkeypatch.setattr(
-		"nokodo_ai.adapters.openai.get_chat_adapter", fake_get_chat_adapter
-	)
-	llm = ChatModel(model="gpt-4o")
-
-	result = await llm.generate([UserMessage.from_text("hi")])
-	assert result.text == "resolved"
+	assert llm.provider == "openai"
+	assert llm.api is None
+	assert llm.model_name == "gpt-4o"
+	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
 
 @pytest.mark.asyncio
 async def test_embedding_uses_provided_adapter() -> None:
 	adapter = _StubEmbeddingAdapter()
-	embedder = EmbeddingModel(model="custom", adapter=adapter)
+	embedder = EmbeddingModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="custom",
+		adapter=adapter,
+	)
 	result = await embedder.embed(["a", "bc"])
 
 	assert result == [[1.0], [2.0]]
@@ -252,37 +267,23 @@ async def test_embedding_uses_provided_adapter() -> None:
 async def test_embedding_resolves_default_provider(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	adapter = _StubEmbeddingAdapter()
+	_ = monkeypatch
+	embedder = EmbeddingModel("text-embedding-3-small")
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
 
-	def fake_get_embedding_adapter(variant: str | None):
-		assert variant is None
-		return adapter
-
-	monkeypatch.setattr(
-		"nokodo_ai.adapters.openai.get_embedding_adapter", fake_get_embedding_adapter
-	)
-	embedder = EmbeddingModel(model="text-embedding-3-small")
-
-	result = await embedder.embed(["hi"])
-	assert result == [[2.0]]
-	assert adapter.seen_models == ["text-embedding-3-small"]
+	assert embedder.provider == "openai"
+	assert embedder.api is None
+	assert embedder.model_name == "text-embedding-3-small"
+	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)
 
 
 @pytest.mark.asyncio
 async def test_embedding_variant_is_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
-	adapter = _StubEmbeddingAdapter()
-	seen: list[str | None] = []
+	_ = monkeypatch
+	embedder = EmbeddingModel("openai.beta:text-embedding-3-large")
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
 
-	def fake_get_embedding_adapter(variant: str | None):
-		seen.append(variant)
-		return adapter
-
-	monkeypatch.setattr(
-		"nokodo_ai.adapters.openai.get_embedding_adapter", fake_get_embedding_adapter
-	)
-	embedder = EmbeddingModel(model="openai.beta:text-embedding-3-large")
-
-	result = await embedder.embed(["hi"])
-	assert result == [[2.0]]
-	assert seen == ["beta"]
-	assert adapter.seen_models == ["text-embedding-3-large"]
+	assert embedder.provider == "openai"
+	assert embedder.api == "beta"
+	assert embedder.model_name == "text-embedding-3-large"
+	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)

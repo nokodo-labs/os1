@@ -7,12 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.config import settings
 from api.models.agent import Agent
 from api.models.message import Message as MessageORM
 from api.models.message import MessageType as MessageTypeORM
 from api.models.model import Model
+from api.models.provider import Provider
 from api.schemas.content import TextContent
 from api.schemas.message import MessageCreate
+from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import ContentPartAdapter as SDKContentPartAdapter
 from nokodo_ai.messages import Message as SDKMessage
@@ -21,6 +24,7 @@ from nokodo_ai.messages import ToolCall as SDKToolCall
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.messages import Usage as SDKUsage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
+from nokodo_ai.utils.security import decrypt_string
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -146,34 +150,66 @@ def system_prompt_message(text: str) -> SDKSystemMessage:
 	return SDKSystemMessage.from_text(text)
 
 
-def model_string_from_orm_model(model: Model) -> str:
-	"""build the sdk model string from an orm model.
-
-	we map the db provider adapter_type to the sdk provider name by taking the
-	first segment (e.g. "openai.responses" -> "openai").
-
-	for now we intentionally ignore adapter variants and let the sdk select its
-	default adapter for that provider.
-	"""
-	provider_key = model.provider.adapter_type.split(".", 1)[0].strip().lower()
-	if provider_key == "":
+def _parse_adapter_type(adapter_type: str) -> tuple[str, str | None]:
+	adapter_type = adapter_type.strip()
+	if adapter_type == "":
 		raise ValueError("provider adapter_type is empty")
-	return f"{provider_key}:{model.name}"
+	if "." not in adapter_type:
+		return adapter_type, None
+	provider, api = adapter_type.split(".", 1)
+	provider = provider.strip()
+	api = api.strip()
+	return provider, api or None
 
 
-async def resolve_model_string_for_run(
+def build_sdk_adapter_config(provider: Provider) -> dict[str, object]:
+	"""build a fully explicit sdk adapter config dict from an orm Provider."""
+	adapter_config: dict[str, object] = {
+		"type": provider.adapter_type,
+	}
+	if provider.base_url is not None and provider.base_url.strip() != "":
+		adapter_config["base_url"] = provider.base_url
+	if provider.encrypted_api_key is not None and provider.encrypted_api_key != "":
+		adapter_config["api_key"] = decrypt_string(
+			provider.encrypted_api_key, settings.SECRET_KEY
+		)
+	return adapter_config
+
+
+def build_chat_model_from_orm_model(
+	model: Model,
+	*,
+	temperature: float | None = None,
+	max_tokens: int | None = None,
+) -> ChatModel:
+	"""create an sdk ChatModel with fully explicit adapter configuration."""
+	provider_key, api = _parse_adapter_type(model.provider.adapter_type)
+	adapter_config = build_sdk_adapter_config(model.provider)
+	return ChatModel.model_validate(
+		{
+			"provider": provider_key,
+			"api": api,
+			"model_name": model.name,
+			"adapter": adapter_config,
+			"temperature": temperature,
+			"max_tokens": max_tokens,
+		}
+	)
+
+
+async def resolve_model_for_run(
 	session: AsyncSession,
 	*,
 	agent_id: TypeID | None = None,
 	model_id: TypeID | None = None,
 	model: str | None = None,
-) -> str:
-	"""resolve the sdk model string for a run.
+) -> Model:
+	"""resolve the orm Model for a run.
 
 	resolution order:
-	- agent_id -> agent.model -> provider
-	- model_id -> model -> provider
-	- model string passed through as-is
+	- agent_id -> agent.model
+	- model_id -> Model
+	- model (string) treated as Model id
 	"""
 	if agent_id is not None:
 		stmt = (
@@ -187,7 +223,7 @@ async def resolve_model_string_for_run(
 			raise HTTPException(status_code=404, detail="Agent not found")
 		if agent.model is None:
 			raise HTTPException(status_code=409, detail="Agent has no model configured")
-		return model_string_from_orm_model(agent.model)
+		return agent.model
 
 	if model_id is not None:
 		stmt = (
@@ -196,15 +232,54 @@ async def resolve_model_string_for_run(
 			.where(Model.id == model_id)
 		)
 		result = await session.execute(stmt)
-		m = result.scalars().one_or_none()
-		if m is None:
+		resolved_model = result.scalars().one_or_none()
+		if resolved_model is None:
 			raise HTTPException(status_code=404, detail="Model not found")
-		return model_string_from_orm_model(m)
+		return resolved_model
 
-	if model is None or model.strip() == "":
-		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-			detail="model is required",
+	if model is not None and model.strip() != "":
+		try:
+			model_typeid = TypeID(model)
+		except Exception as e:
+			raise HTTPException(
+				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				detail="model must be a model id",
+			) from e
+		stmt = (
+			select(Model)
+			.options(selectinload(Model.provider))
+			.where(Model.id == model_typeid)
 		)
+		result = await session.execute(stmt)
+		resolved_model = result.scalars().one_or_none()
+		if resolved_model is None:
+			raise HTTPException(status_code=404, detail="Model not found")
+		return resolved_model
 
-	return model
+	raise HTTPException(
+		status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+		detail="agent_id, model_id, or model is required",
+	)
+
+
+async def resolve_chat_model_for_run(
+	session: AsyncSession,
+	*,
+	agent_id: TypeID | None = None,
+	model_id: TypeID | None = None,
+	model: str | None = None,
+	temperature: float | None = None,
+	max_tokens: int | None = None,
+) -> ChatModel:
+	"""resolve and build an sdk ChatModel with full adapter config."""
+	resolved_model = await resolve_model_for_run(
+		session,
+		agent_id=agent_id,
+		model_id=model_id,
+		model=model,
+	)
+	return build_chat_model_from_orm_model(
+		resolved_model,
+		temperature=temperature,
+		max_tokens=max_tokens,
+	)

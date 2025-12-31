@@ -67,7 +67,12 @@ class _StubChatAdapter(BaseChatAdapter):
 async def test_agent_runs_without_tools_returns_messages() -> None:
 	"""agent.run() returns list of messages produced."""
 	adapter = _StubChatAdapter([AssistantMessage.from_text("done")])
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	agent = Agent(llm=llm)
 
 	thread = Thread()
@@ -95,7 +100,12 @@ async def test_agent_executes_tool_and_returns_all_messages() -> None:
 		AssistantMessage.from_text("all done"),
 	]
 	adapter = _StubChatAdapter(responses)
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 
 	@tool(description="echo input")
 	def echo(text: str, *, __context: ToolExecutionContext) -> str:
@@ -120,7 +130,12 @@ async def test_agent_executes_tool_and_returns_all_messages() -> None:
 async def test_agent_respects_existing_thread_messages() -> None:
 	"""agent works with pre-populated threads."""
 	adapter = _StubChatAdapter([AssistantMessage.from_text("ok")])
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	thread = Thread()
 	thread.add(UserMessage.from_text("prior"))
 
@@ -141,7 +156,12 @@ async def test_agent_handles_unknown_tool_gracefully() -> None:
 		AssistantMessage.from_text("done"),
 	]
 	adapter = _StubChatAdapter(responses)
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	calls: list[tuple[str, str, dict]] = []
 	results: list[tuple[str, str, bool]] = []
 
@@ -176,7 +196,12 @@ async def test_agent_fallback_when_iteration_limit_hit() -> None:
 		AssistantMessage(content=[]),
 	]
 	adapter = _StubChatAdapter(responses)
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	agent = Agent(llm=llm, tools=[], max_iterations=1)
 
 	thread = Thread()
@@ -195,7 +220,12 @@ async def test_agent_fallback_when_iteration_limit_hit() -> None:
 async def test_agent_final_response_without_fallback() -> None:
 	"""no fallback when llm responds with text before limit."""
 	adapter = _StubChatAdapter([AssistantMessage.from_text("done")])
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	agent = Agent(llm=llm, tools=[], max_iterations=0)
 
 	thread = Thread()
@@ -234,7 +264,12 @@ async def test_agent_executes_tool_callbacks_and_error_handling() -> None:
 	]
 
 	adapter = _StubChatAdapter(responses)
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	agent = Agent(
 		llm=llm,
 		tools=[good_tool, bad_tool],
@@ -277,7 +312,12 @@ async def test_agent_tool_error_without_result_callback() -> None:
 	]
 
 	adapter = _StubChatAdapter(responses)
-	llm = ChatModel(model="stub", adapter=adapter)
+	llm = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=adapter,
+	)
 	agent = Agent(llm=llm, tools=[explode])
 
 	thread = Thread()

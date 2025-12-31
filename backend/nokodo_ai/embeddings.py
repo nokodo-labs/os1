@@ -54,9 +54,10 @@ class EmbeddingModel(AdapterEnabledMixin[EmbeddingAdapter]):
 
 				if provider:
 					adapter_type = resolve_embedding_adapter_type(provider, api)
-					if adapter_type:
-						adapter_config = {"type": adapter_type}
-						data["adapter"] = adapter_config
+					if not adapter_type:
+						raise ValueError(f"unknown embedding provider: {provider}")
+					adapter_config = {"type": adapter_type}
+					data["adapter"] = adapter_config
 
 		return data
 

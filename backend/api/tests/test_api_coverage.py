@@ -546,8 +546,16 @@ async def test_llm_runtime_conversions():
 	assert tool_create.metadata["tool_call_id"] == "t"
 
 	class _Provider:
-		def __init__(self, adapter_type: str):
+		def __init__(
+			self,
+			adapter_type: str,
+			*,
+			base_url: str | None = None,
+			encrypted_api_key: str | None = None,
+		):
 			self.adapter_type = adapter_type
+			self.base_url = base_url
+			self.encrypted_api_key = encrypted_api_key
 
 	class _Model:
 		def __init__(self, provider):
@@ -555,27 +563,32 @@ async def test_llm_runtime_conversions():
 			self.name = "chat"
 
 	with pytest.raises(ValueError):
-		llm_runtime.model_string_from_orm_model(_Model(_Provider("")))
+		llm_runtime.build_chat_model_from_orm_model(_Model(_Provider("")))
 
-	model_str = llm_runtime.model_string_from_orm_model(
-		_Model(_Provider("openai.responses"))
+	llm = llm_runtime.build_chat_model_from_orm_model(
+		_Model(_Provider("ollama.chat", base_url="http://example.test:11434"))
 	)
-	assert model_str == "openai:chat"
+	assert llm.provider == "ollama"
+	assert llm.api == "chat"
+	assert llm.model_name == "chat"
+	assert llm.adapter.type == "ollama.chat"
+	assert llm.adapter.base_url == "http://example.test:11434"
 
-	await llm_runtime.resolve_model_string_for_run(_FakeSession(), model="local:foo")
+	with pytest.raises(HTTPException):
+		await llm_runtime.resolve_model_for_run(_FakeSession(), model="local:foo")
 
 	async def exec_model(stmt):
-		return _FakeResult(_Model(_Provider("ollama.base")))
+		return _FakeResult(_Model(_Provider("ollama.chat")))
 
 	session_model = _FakeSession()
 	session_model.execute = exec_model  # type: ignore[assignment]
-	resolved = await llm_runtime.resolve_model_string_for_run(
-		session_model, model_id="m1"
+	resolved = await llm_runtime.resolve_model_for_run(
+		session_model, model_id=new_typeid("model")
 	)
-	assert resolved == "ollama:chat"
+	assert getattr(resolved, "name") == "chat"
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_string_for_run(_FakeSession(), model=None)
+		await llm_runtime.resolve_model_for_run(_FakeSession(), model=None)
 
 
 def test_llm_runtime_orm_to_sdk_variants():
@@ -647,8 +660,16 @@ def test_llm_runtime_orm_to_sdk_variants():
 
 async def test_llm_runtime_agent_resolution_paths():
 	class _Provider:
-		def __init__(self, adapter_type: str):
+		def __init__(
+			self,
+			adapter_type: str,
+			*,
+			base_url: str | None = None,
+			encrypted_api_key: str | None = None,
+		):
 			self.adapter_type = adapter_type
+			self.base_url = base_url
+			self.encrypted_api_key = encrypted_api_key
 
 	class _Model:
 		def __init__(self, provider):
@@ -660,24 +681,24 @@ async def test_llm_runtime_agent_resolution_paths():
 			self.model = model
 
 	valid_session = _FakeSession(_Agent(_Model(_Provider("openai.base"))))
-	resolved = await llm_runtime.resolve_model_string_for_run(
-		valid_session, agent_id="agent-1"
+	resolved = await llm_runtime.resolve_model_for_run(
+		valid_session, agent_id=new_typeid("agent")
 	)
-	assert resolved == "openai:chat"
+	assert getattr(resolved, "name") == "chat"
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_string_for_run(
-			_FakeSession(None), agent_id="a1"
+		await llm_runtime.resolve_model_for_run(
+			_FakeSession(None), agent_id=new_typeid("agent")
 		)
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_string_for_run(
-			_FakeSession(_Agent(None)), agent_id="a2"
+		await llm_runtime.resolve_model_for_run(
+			_FakeSession(_Agent(None)), agent_id=new_typeid("agent")
 		)
 
 	with pytest.raises(HTTPException):
-		await llm_runtime.resolve_model_string_for_run(
-			_FakeSession(None), model_id="missing-model"
+		await llm_runtime.resolve_model_for_run(
+			_FakeSession(None), model_id=new_typeid("model")
 		)
 
 
@@ -703,11 +724,13 @@ async def test_thread_service_run_thread_agent(monkeypatch):
 		lambda *_args, **_kwargs: [],
 	)
 
-	async def _resolve_model(*_args, **_kwargs):
-		return "local:model"
+	async def _resolve_llm(*_args, **_kwargs):
+		return object()
 
 	monkeypatch.setattr(
-		thread_service.llm_runtime, "resolve_model_string_for_run", _resolve_model
+		thread_service.llm_runtime,
+		"resolve_chat_model_for_run",
+		_resolve_llm,
 	)
 
 	async def _render_inline(*_args, **_kwargs):
@@ -735,7 +758,6 @@ async def test_thread_service_run_thread_agent(monkeypatch):
 
 	monkeypatch.setattr(thread_service, "SDKAgent", FakeSDKAgent)
 	monkeypatch.setattr(thread_service, "SDKThread", FakeSDKThread)
-	monkeypatch.setattr(thread_service, "ChatModel", FakeChatModel)
 
 	class FakeAgent:
 		def __init__(self):
@@ -768,10 +790,14 @@ async def test_thread_service_run_thread_agent_prompt(monkeypatch):
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
+
+	async def _resolve_llm(*_args, **_kwargs):
+		return object()
+
 	monkeypatch.setattr(
 		thread_service.llm_runtime,
-		"resolve_model_string_for_run",
-		_resolved_model,
+		"resolve_chat_model_for_run",
+		_resolve_llm,
 	)
 
 	async def fake_render_inline(*_args, **_kwargs):
@@ -781,12 +807,6 @@ async def test_thread_service_run_thread_agent_prompt(monkeypatch):
 	monkeypatch.setattr(
 		thread_service, "render_inline_with_prompts", fake_render_inline
 	)
-
-	class FakeChatModel(ChatModel):
-		def __init__(self, *_args, **_kwargs):  # type: ignore[override]
-			pass
-
-	monkeypatch.setattr(thread_service, "ChatModel", FakeChatModel)
 
 	class FakeSDKAgent:
 		def __init__(self, *, max_iterations: int, **_kwargs):
@@ -835,10 +855,14 @@ async def test_thread_service_run_thread_agent_defaults(monkeypatch):
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
+
+	async def _resolve_llm(*_args, **_kwargs):
+		return object()
+
 	monkeypatch.setattr(
 		thread_service.llm_runtime,
-		"resolve_model_string_for_run",
-		_resolved_model,
+		"resolve_chat_model_for_run",
+		_resolve_llm,
 	)
 
 	async def _render_inline(*_args, **_kwargs):
@@ -846,12 +870,6 @@ async def test_thread_service_run_thread_agent_defaults(monkeypatch):
 		return "should-not-render"
 
 	monkeypatch.setattr(thread_service, "render_inline_with_prompts", _render_inline)
-
-	class FakeChatModel(ChatModel):
-		def __init__(self, *_args, **_kwargs):  # type: ignore[override]
-			pass
-
-	monkeypatch.setattr(thread_service, "ChatModel", FakeChatModel)
 
 	class FakeSDKAgent:
 		def __init__(self, *, max_iterations: int, **_kwargs):
@@ -905,12 +923,6 @@ async def test_thread_service_run_thread_creates_user_message(monkeypatch):
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
-	monkeypatch.setattr(
-		thread_service.llm_runtime,
-		"resolve_model_string_for_run",
-		_resolved_model,
-	)
-	monkeypatch.setattr(thread_service, "get_current_branch", _empty_branch)
 
 	class FakeChatModel(ChatModel):
 		def __init__(self, *_args, **_kwargs):  # type: ignore[override]
@@ -919,7 +931,15 @@ async def test_thread_service_run_thread_creates_user_message(monkeypatch):
 		async def generate(self, *_args, **_kwargs):  # type: ignore[override]
 			return AssistantMessage.from_text("assistant")
 
-	monkeypatch.setattr(thread_service, "ChatModel", FakeChatModel)
+	async def _resolve_llm(*_args, **_kwargs):
+		return FakeChatModel("ignored")
+
+	monkeypatch.setattr(
+		thread_service.llm_runtime,
+		"resolve_chat_model_for_run",
+		_resolve_llm,
+	)
+	monkeypatch.setattr(thread_service, "get_current_branch", _empty_branch)
 
 	user_msg, created_msgs = await thread_service.run_thread(
 		new_typeid("thread"),
@@ -939,17 +959,15 @@ async def test_thread_service_run_thread_agent_missing(monkeypatch):
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
+
+	async def _resolve_llm(*_args, **_kwargs):
+		return object()
+
 	monkeypatch.setattr(
 		thread_service.llm_runtime,
-		"resolve_model_string_for_run",
-		_resolved_model,
+		"resolve_chat_model_for_run",
+		_resolve_llm,
 	)
-
-	class FakeChatModel(ChatModel):
-		def __init__(self, *_args, **_kwargs):  # type: ignore[override]
-			pass
-
-	monkeypatch.setattr(thread_service, "ChatModel", FakeChatModel)
 
 	with pytest.raises(HTTPException):
 		await thread_service.run_thread(
@@ -976,11 +994,6 @@ async def test_thread_service_run_thread_no_agent(monkeypatch):
 		"build_sdk_messages_from_branch",
 		lambda *_args, **_kwargs: [],
 	)
-	monkeypatch.setattr(
-		thread_service.llm_runtime,
-		"resolve_model_string_for_run",
-		_resolved_model,
-	)
 
 	class FakeChatModel(ChatModel):
 		def __init__(self, *_args, **_kwargs):  # type: ignore[override]
@@ -989,7 +1002,14 @@ async def test_thread_service_run_thread_no_agent(monkeypatch):
 		async def generate(self, *_args, **_kwargs):  # type: ignore[override]
 			return AssistantMessage.from_text("hi")
 
-	monkeypatch.setattr(thread_service, "ChatModel", FakeChatModel)
+	async def _resolve_llm(*_args, **_kwargs):
+		return FakeChatModel("ignored")
+
+	monkeypatch.setattr(
+		thread_service.llm_runtime,
+		"resolve_chat_model_for_run",
+		_resolve_llm,
+	)
 
 	user_msg, created_msgs = await thread_service.run_thread(
 		new_typeid("thread"),
