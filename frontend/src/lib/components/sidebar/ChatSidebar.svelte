@@ -38,6 +38,8 @@
 	let isDeleting = $state(false)
 	let deleteError = $state<string | null>(null)
 
+	type TriggerProps = Record<string, unknown>
+
 	let isMobile = $state(false)
 	let closeSwipePointerId = $state<number | null>(null)
 	let closeSwipeStartX = $state(0)
@@ -75,25 +77,9 @@
 			label: 'new chat',
 			action: async () => {
 				sidebar.selectChat(null)
-
-				const start = (
-					document as unknown as {
-						startViewTransition?: (cb: () => Promise<void> | void) => void
-					}
-				).startViewTransition
-
-				if (start) {
-					start.call(document, async () => {
-						await goto('/?chat=new', {
-							keepFocus: true,
-							noScroll: true,
-						})
-						if (isMobile) sidebar.closeChatSidebar()
-					})
-				} else {
-					await goto('/?chat=new', { keepFocus: true, noScroll: true })
-					if (isMobile) sidebar.closeChatSidebar()
-				}
+				// For same-route navigations (/?chat=new), avoid ViewTransition overlays.
+				await goto('/?chat=new', { keepFocus: true, noScroll: true })
+				if (isMobile) sidebar.closeChatSidebar()
 			},
 		},
 		{
@@ -193,43 +179,48 @@
 {/if}
 
 <aside
-	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-transform duration-300 ease-in-out {isMobile
+	class="chat-sidebar group fixed inset-y-0 left-0 z-50 h-screen border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-[width,transform] duration-300 ease-in-out {isMobile
 		? 'w-full'
-		: 'w-72'} {sidebar.isChatSidebarOpen
+		: sidebar.isChatSidebarOpen
+			? 'w-72'
+			: 'w-18'} {sidebar.isChatSidebarOpen
 		? 'translate-x-0'
 		: isMobile
 			? 'pointer-events-none -translate-x-full'
-			: '-translate-x-[216px]'}"
+			: 'translate-x-0'}"
 	style="background-color: var(--accent-bg);"
 	aria-hidden={isMobile ? !sidebar.isChatSidebarOpen : false}
+	onclick={() => {
+		if (isMobile) return
+		if (sidebar.isChatSidebarOpen) return
+		// Allow clicking anywhere in the collapsed sidebar to open it.
+		// Buttons will still run their own actions.
+		sidebar.openChatSidebar()
+	}}
 >
 	<!-- Gradient overlay (replaces ::before pseudo-element) -->
 	<div
-		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/10 via-white/5 to-transparent"
+		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/10 via-white/5 to-transparent opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+	></div>
+	<div
+		class="pointer-events-none absolute inset-0 bg-white/3 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 
-	<!-- Clickable rail overlay when closed (desktop only) -->
-	{#if !isMobile && !sidebar.isChatSidebarOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="absolute inset-y-0 right-0 z-10 w-18 cursor-pointer hover:bg-white/2"
-			onclick={() => sidebar.toggleChatSidebar()}
-		></div>
-	{/if}
-
 	<div
-		class="pointer-events-none relative z-20 flex h-full flex-col items-center gap-2 px-3 py-4 transition-transform duration-300 ease-in-out *:pointer-events-auto {!isMobile &&
-		!sidebar.isChatSidebarOpen
-			? 'translate-x-[216px]'
-			: ''}"
+		class="pointer-events-none relative z-20 flex h-full w-full flex-col items-center gap-2 px-3 py-4 *:pointer-events-auto"
 	>
 		<!-- Logo / Brand with Close Button -->
-		<div class="flex w-full items-center justify-between gap-2">
+		<!-- Removed gap-2 to prevent left-shift when close button is hidden -->
+		<div
+			class="relative flex w-full items-center {sidebar.isChatSidebarOpen
+				? 'justify-between'
+				: 'justify-start'}"
+		>
 			<button
 				class="group relative flex items-center justify-center {sidebar.isChatSidebarOpen
 					? 'max-w-[calc(100%-2.5rem)] flex-1'
-					: ''} h-12 w-12 shrink-0 cursor-pointer rounded-xl border border-transparent bg-transparent p-2 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+					: ''} h-12 w-12 shrink-0 cursor-pointer border-none bg-transparent p-0 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+				style="z-index: 10;"
 				onclick={() => {
 					if (!sidebar.isChatSidebarOpen) {
 						sidebar.toggleChatSidebar()
@@ -238,9 +229,10 @@
 				}}
 				aria-label="Home"
 			>
-				<div class="relative flex shrink-0 items-center gap-3">
+				<div class="relative flex shrink-0 items-center justify-center">
+					<!-- Changed animate-bounce to animate-float (custom) for symmetrical oscillation -->
 					<div
-						class="relative flex h-8 w-8 shrink-0 animate-[bounce_2s_ease-in-out_infinite] items-center justify-center rounded-full shadow-[0_4px_12px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:shadow-[0_6px_16px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.4)]"
+						class="relative flex h-8 w-8 shrink-0 animate-[float_3s_ease-in-out_infinite] items-center justify-center rounded-full shadow-[0_4px_12px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.3)] transition-[background,box-shadow] duration-300 group-hover:shadow-[0_6px_16px_var(--accent-shadow),inset_0_2px_8px_rgba(255,255,255,0.4)]"
 						style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
 					>
 						{#if !sidebar.isChatSidebarOpen}
@@ -251,10 +243,12 @@
 							</div>
 						{/if}
 					</div>
+					<!-- Increased left margin for logo from ml-1 to ml-3 -->
+					<!-- Removed {#if} block, used CSS transition for width/opacity for smooth reveal -->
 					<div
-						class="ml-1 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out {sidebar.isChatSidebarOpen
-							? 'max-w-[220px] opacity-100'
-							: 'max-w-0 opacity-0'}"
+						class="flex items-center overflow-hidden transition-[max-width,opacity,margin] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+							? 'ml-3 max-w-[220px] opacity-100'
+							: 'ml-0 max-w-0 opacity-0'}"
 					>
 						<img
 							src="https://nokodo.net/media/images/logo_full.svg"
@@ -266,11 +260,15 @@
 			</button>
 
 			<!-- Close button (only when expanded) -->
+			<!-- Added absolute positioning or z-index to ensure clickable -->
 			<button
-				class="flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white {sidebar.isChatSidebarOpen
-					? 'w-8 opacity-100'
+				class="relative z-20 flex h-8 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent text-white/70 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
+					? 'ml-auto w-8 opacity-100'
 					: 'pointer-events-none w-0 overflow-hidden opacity-0'}"
-				onclick={() => sidebar.toggleChatSidebar()}
+				onclick={(e) => {
+					e.stopPropagation()
+					sidebar.closeChatSidebar()
+				}}
 				aria-label="Close sidebar"
 			>
 				<ChevronLeft className="h-5 w-5" />
@@ -282,23 +280,19 @@
 		<!-- Search -->
 		<Tooltip.Root delayDuration={300} disabled={sidebar.isChatSidebarOpen}>
 			<Tooltip.Trigger>
-				{#snippet child({ props }: { props: Record })}
+				{#snippet child({ props }: { props: TriggerProps })}
 					<button
 						{...props}
-						class="relative flex items-center {sidebar.isChatSidebarOpen
-							? 'w-full justify-start gap-3 px-3'
-							: 'w-12 justify-center'} h-12 shrink-0 cursor-pointer rounded-xl border border-transparent bg-transparent text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+						class="relative flex h-12 w-full shrink-0 cursor-pointer items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent px-3 py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
 						onclick={handleSearchClick}
 						aria-label="Search"
 					>
-						<Search className="h-5 w-5" />
-						{#if sidebar.isChatSidebarOpen}
-							<span
-								class="text-sm font-medium whitespace-nowrap opacity-0 transition-opacity delay-100 duration-300 {sidebar.isChatSidebarOpen
-									? 'opacity-100'
-									: ''}">search</span
-							>
-						{/if}
+						<Search className="h-5 w-5 shrink-0" />
+						<span
+							class="text-sm font-medium whitespace-nowrap transition-[opacity,width] duration-300 {sidebar.isChatSidebarOpen
+								? 'w-auto opacity-100'
+								: 'w-0 overflow-hidden opacity-0'}">search</span
+						>
 					</button>
 				{/snippet}
 			</Tooltip.Trigger>
@@ -317,23 +311,19 @@
 			{@const Icon = item.icon}
 			<Tooltip.Root delayDuration={300} disabled={sidebar.isChatSidebarOpen}>
 				<Tooltip.Trigger>
-					{#snippet child({ props }: { props: Record })}
+					{#snippet child({ props }: { props: TriggerProps })}
 						<button
 							{...props}
-							class="relative flex items-center {sidebar.isChatSidebarOpen
-								? 'w-full justify-start gap-3 px-3'
-								: 'w-12 justify-center'} h-12 shrink-0 cursor-pointer rounded-xl border border-transparent bg-transparent text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+							class="relative flex h-12 w-full shrink-0 cursor-pointer items-center justify-start gap-3 rounded-xl border border-transparent bg-transparent px-3 py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
 							onclick={item.action}
 							aria-label={item.label}
 						>
-							<Icon className="h-5 w-5" />
-							{#if sidebar.isChatSidebarOpen}
-								<span
-									class="text-sm font-medium whitespace-nowrap opacity-0 transition-opacity delay-100 duration-300 {sidebar.isChatSidebarOpen
-										? 'opacity-100'
-										: ''}">{item.label}</span
-								>
-							{/if}
+							<Icon className="h-5 w-5 shrink-0" />
+							<span
+								class="text-sm font-medium whitespace-nowrap transition-[opacity,width] duration-300 {sidebar.isChatSidebarOpen
+									? 'w-auto opacity-100'
+									: 'w-0 overflow-hidden opacity-0'}">{item.label}</span
+							>
 						</button>
 					{/snippet}
 				</Tooltip.Trigger>
@@ -560,13 +550,14 @@
 {/if}
 
 <style>
+	/* Symmetrical float animation (centered at 0, oscillates up/down) */
 	@keyframes float {
 		0%,
 		100% {
 			transform: translateY(0px);
 		}
 		50% {
-			transform: translateY(-10px);
+			transform: translateY(-8px);
 		}
 	}
 </style>

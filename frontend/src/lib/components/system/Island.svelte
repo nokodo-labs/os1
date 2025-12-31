@@ -153,7 +153,7 @@
 
 <div style="view-transition-name: chat-header;">
 	<header
-		class="liquid-glass mt-5 mb-0 max-h-[88px] overflow-hidden rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+		class="liquid-glass mt-5 mb-0 max-h-[88px] overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>
 
@@ -295,11 +295,11 @@
 	@keyframes dropdown-appear {
 		from {
 			opacity: 0;
-			transform: translateX(-50%) translateY(-0.5rem);
+			transform: translateY(-0.5rem);
 		}
 		to {
 			opacity: 1;
-			transform: translateX(-50%) translateY(0);
+			transform: translateY(0);
 		}
 	}
 </style>

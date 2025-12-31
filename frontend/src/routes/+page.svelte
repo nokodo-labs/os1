@@ -12,6 +12,7 @@
 	} from '$lib/components/home/HomeSuggestions.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
+	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
@@ -292,7 +293,11 @@
 					<div
 						class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
 					>
-						<EyeSlash className="h-7 w-7" />
+						{#if isTemporaryChatMode}
+							<EyeSlash className="h-7 w-7" />
+						{:else}
+							<ChatPlus className="h-7 w-7" />
+						{/if}
 					</div>
 					{#if isTemporaryChatMode}
 						<h2 class="text-2xl font-semibold text-white/90">temporary chat enabled</h2>

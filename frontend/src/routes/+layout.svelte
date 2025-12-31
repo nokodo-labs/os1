@@ -61,6 +61,11 @@
 		return path === '/' || path.startsWith('/c/')
 	})
 
+	const sidebarSpacerWidthClass = $derived.by(() => {
+		if (isMobileViewport) return 'w-0'
+		return sidebar.isChatSidebarOpen ? 'w-72' : 'w-18'
+	})
+
 	function maybeCloseDockFromMobileShellClick(event: MouseEvent) {
 		if (!isMobileViewport) return
 		if (!chrome.isDockOpen) return
@@ -180,7 +185,9 @@
 			<div class="relative z-1 flex h-screen">
 				<!-- Sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
 				<ChatSidebar />
-				<div class="sidebar-spacer h-screen shrink-0"></div>
+				<div
+					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
+				></div>
 
 				{#if isMobileViewport && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
 					<div
@@ -258,15 +265,7 @@
 </Tooltip.Provider>
 
 <style>
-	.sidebar-spacer {
-		width: 72px;
-	}
-
 	@media (max-width: 888px) {
-		.sidebar-spacer {
-			width: 0;
-		}
-
 		.dock-shell {
 			left: 0;
 			width: 100%;

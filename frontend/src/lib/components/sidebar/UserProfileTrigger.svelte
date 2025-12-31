@@ -130,7 +130,7 @@
 		position: absolute;
 		bottom: 0;
 		left: calc(100% + 0.5rem);
-		z-index: 50;
+		z-index: 1000;
 		border-radius: 0.75rem;
 		animation: fadeIn 0.15s ease-out;
 	}
