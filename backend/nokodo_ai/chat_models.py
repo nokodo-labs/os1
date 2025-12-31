@@ -3,72 +3,63 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable
-from typing import Literal, overload
+from typing import Any, Literal, overload
 
-from nokodo_ai.adapter_enabled import AdapterEnabledMixin
-from nokodo_ai.adapters.chat import (
-	BaseChatAdapter,
-	ChatGenerationParams,
-	resolve_adapter,
-	split_model_identifier,
-)
+from pydantic import model_validator
+
+from nokodo_ai.adapter_enabled import AdapterEnabledMixin, split_model_identifier
+from nokodo_ai.adapters.base.chat import ChatGenerationParams
+from nokodo_ai.adapters.chat import ChatAdapter, resolve_chat_adapter_type
 from nokodo_ai.deltas import ChatModelDelta, stream_chat_model_deltas
 from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.thread import Thread
 from nokodo_ai.tool import Tool
 
 
-class ChatModel(ChatGenerationParams, AdapterEnabledMixin[BaseChatAdapter]):
+class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 	"""high-level unified interface for LLM chat models.
 
 	usage (defaults):
-		llm = ChatModel("gpt-4o")  # uses default provider and adapter
+		llm = ChatModel("gpt-4o")
 		response = await llm.generate(messages)
 
-		async for delta in llm.generate(messages, stream=True):
-			...
-
-	usage (explicit adapter):
-		from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
-		adapter = OpenAIResponsesAdapter(api_key="...")
-		llm = ChatModel("openai:gpt-4o", adapter=adapter)
-
-	usage (with tools):
-		from nokodo_ai import tool
-
-		@tool(
-			description="get weather for a city",
-			parameters={
-				"type": "object",
-				"properties": {"city": {"type": "string"}},
-				"required": ["city"],
-			},
+	usage (explicit adapter config):
+		llm = ChatModel(
+			"openai:gpt-4o",
+			adapter={"api_key": "..."}
 		)
-		def get_weather(city: str) -> str:
-			return f"sunny in {city}"
-
-		response = await llm.generate(thread, tools=[get_weather])
-
-	usage (structured output):
-		schema = {
-			"type": "object",
-			"properties": {"name": {"type": "string"}},
-			"required": ["name"],
-		}
-		params = ChatGenerationParams(response_model=schema)
-		response = await llm.generate(messages, params=params)
-		data = response.json  # parsed JSON data
 	"""
 
-	def _resolve_adapter_from_model(self, model: str) -> BaseChatAdapter:
-		return resolve_adapter(model)
+	@model_validator(mode="before")
+	@classmethod
+	def resolve_adapter_config(cls, data: Any) -> Any:
+		"""resolve adapter configuration from input data."""
+		if isinstance(data, dict):
+			model = data.pop("model_name", None)
+			if model and isinstance(model, str):
+				provider, api, name = split_model_identifier(model)
+				data.setdefault("provider", provider)
+				data.setdefault("api", api)
+				data.setdefault("model_name", name)
+
+			if "adapter" not in data:
+				provider = data.get("provider")
+				api = data.get("api")
+
+				if provider:
+					adapter_type = resolve_chat_adapter_type(provider, api)
+					if adapter_type:
+						adapter_config = {"type": adapter_type}
+						data["adapter"] = adapter_config
+
+		return data
 
 	@overload
 	def generate(
 		self,
 		input: list[Message] | Thread,
 		stream: Literal[False] = False,
-		tools: list[Tool] | None = None,
+		tools: list[Tool] = [],
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AssistantMessage]: ...
@@ -78,7 +69,7 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[BaseChatAdapter]):
 		self,
 		input: list[Message] | Thread,
 		stream: Literal[True],
-		tools: list[Tool] | None = None,
+		tools: list[Tool] = [],
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> AsyncIterator[ChatModelDelta]: ...
@@ -87,23 +78,11 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[BaseChatAdapter]):
 		self,
 		input: list[Message] | Thread,
 		stream: bool = False,
-		tools: list[Tool] | None = None,
+		tools: list[Tool] = [],
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[ChatModelDelta]:
-		"""generate an assistant response.
-
-		args:
-			input: list of messages or a Thread to generate from
-			stream: whether to stream the response
-			tools: list of tools the model can call
-			params: generation parameters (tool choice, schema, sampling settings)
-
-		usage:
-			response = await llm.generate(messages)
-			async for chunk in llm.generate(messages, stream=True):
-				...
-		"""
+		"""generate an assistant response."""
 		messages: list[Message]
 		if isinstance(input, Thread):
 			messages = input.messages
@@ -122,19 +101,18 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[BaseChatAdapter]):
 				update=params.model_dump(exclude_none=True)
 			)
 
-		_model_provider, _model_variant, model_name = split_model_identifier(self.model)
 		if stream:
-			raw_stream = self._adapter_resolved.generate(
+			raw_stream = self.adapter.generate(
 				messages,
-				model=model_name,
+				model=self.model_name,
 				stream=True,
 				tools=tools,
 				params=effective_params,
 			)
 			return stream_chat_model_deltas(raw_stream)
-		return self._adapter_resolved.generate(
+		return self.adapter.generate(
 			messages,
-			model=model_name,
+			model=self.model_name,
 			stream=False,
 			tools=tools,
 			params=effective_params,

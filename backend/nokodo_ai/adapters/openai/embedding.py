@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
+from typing import Literal
+
+from nokodo_ai.adapters.base.embedding import BaseEmbeddingAdapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 
 
 class OpenAIEmbeddingAdapter(BaseOpenAIAdapter, BaseEmbeddingAdapter):
 	"""adapter for openai's embedding API."""
+
+	type: Literal["openai.embedding"] = "openai.embedding"
 
 	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
 		"""generate embeddings using openai's embedding API."""

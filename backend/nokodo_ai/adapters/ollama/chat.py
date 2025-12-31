@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, overload
 
-from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
 
 
@@ -17,13 +17,37 @@ if TYPE_CHECKING:
 class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 	"""adapter for ollama's chat API."""
 
+	type: Literal["ollama.chat"] = "ollama.chat"
+
+	@overload
+	def generate(
+		self,
+		messages: list[Message],
+		*,
+		model: str,
+		stream: Literal[False] = False,
+		tools: list[Tool] = [],
+		params: ChatGenerationParams | None = None,
+	) -> Awaitable[AssistantMessage]: ...
+
+	@overload
+	def generate(
+		self,
+		messages: list[Message],
+		*,
+		model: str,
+		stream: Literal[True],
+		tools: list[Tool] = [],
+		params: ChatGenerationParams | None = None,
+	) -> AsyncIterator[AssistantMessage]: ...
+
 	def generate(
 		self,
 		messages: list[Message],
 		*,
 		model: str,
 		stream: bool = False,
-		tools: list[Tool] | None = None,
+		tools: list[Tool] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		_ = (model, tools, params)

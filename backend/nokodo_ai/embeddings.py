@@ -2,23 +2,26 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from typing import Any
+
+from pydantic import ConfigDict, model_validator
 
 from nokodo_ai.adapter_enabled import AdapterEnabledMixin, split_model_identifier
-from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
+from nokodo_ai.adapters.embedding import (
+	EmbeddingAdapter,
+	resolve_embedding_adapter_type,
+)
 
 
-DEFAULT_PROVIDER = "openai"
-
-
-class EmbeddingModel(AdapterEnabledMixin[BaseEmbeddingAdapter]):
+class EmbeddingModel(AdapterEnabledMixin[EmbeddingAdapter]):
 	"""high-level unified interface for embedding models.
 
 	usage (magic - auto-selects adapter):
-		embedder = EmbeddingModel(model="openai:text-embedding-3-large")
+		embedder = EmbeddingModel("openai:text-embedding-3-large")
 		vectors = await embedder.embed(["hello", "world"])
 
 	usage (explicit adapter):
+		from nokodo_ai.adapters.openai.embedding import OpenAIEmbeddingAdapter
 		adapter = OpenAIEmbeddingAdapter(api_key="...")
 		embedder = EmbeddingModel(
 			model="openai:text-embedding-3-large",
@@ -28,30 +31,35 @@ class EmbeddingModel(AdapterEnabledMixin[BaseEmbeddingAdapter]):
 
 	model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
-	def _resolve_adapter_from_model(self, model: str) -> BaseEmbeddingAdapter:
-		provider, variant, _model_name = split_model_identifier(
-			model,
-			default_provider=DEFAULT_PROVIDER,
-		)
+	def __init__(self, model: str | None = None, **data: Any) -> None:
+		if model is not None:
+			data["model"] = model
+		super().__init__(**data)
 
-		match provider:
-			case "openai":
-				from nokodo_ai.adapters.openai import get_embedding_adapter
+	@model_validator(mode="before")
+	@classmethod
+	def resolve_adapter_config(cls, data: Any) -> Any:
+		"""resolve adapter configuration from input data."""
+		if isinstance(data, dict):
+			model = data.pop("model", None)
+			if model and isinstance(model, str):
+				provider, api, name = split_model_identifier(model)
+				data.setdefault("provider", provider)
+				data.setdefault("api", api)
+				data.setdefault("model_name", name)
 
-				return get_embedding_adapter(variant)
+			if "adapter" not in data:
+				provider = data.get("provider")
+				api = data.get("api")
 
-			case "ollama":
-				from nokodo_ai.adapters.ollama import get_embedding_adapter
+				if provider:
+					adapter_type = resolve_embedding_adapter_type(provider, api)
+					if adapter_type:
+						adapter_config = {"type": adapter_type}
+						data["adapter"] = adapter_config
 
-				return get_embedding_adapter(variant)
-
-			case _:
-				raise ValueError(f"unknown embedding provider: {provider}")
+		return data
 
 	async def embed(self, texts: list[str]) -> list[list[float]]:
 		"""generate embeddings for the given texts."""
-		_provider, _variant, model_name = split_model_identifier(
-			self.model,
-			default_provider=DEFAULT_PROVIDER,
-		)
-		return await self._adapter_resolved.embed(texts, model=model_name)
+		return await self.adapter.embed(texts, model=self.model_name)

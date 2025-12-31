@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, overload
 
 import openai
 
-from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.types import (
 	OpenAIEasyInputMessageParam,
@@ -48,6 +48,8 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 
 	this is the newer responses API with built-in tool handling.
 	"""
+
+	type: Literal["openai.responses"] = "openai.responses"
 
 	@overload
 	def generate(

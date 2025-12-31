@@ -1,25 +1,33 @@
-"""base embedding adapter - capability ABC for embedding models."""
+"""embedding adapter union - single entry point for all embedding adapters."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from typing import Annotated
+
+from pydantic import Field
+
+from nokodo_ai.adapters.base.embedding import BaseEmbeddingAdapter
+from nokodo_ai.adapters.ollama.embedding import OllamaEmbeddingAdapter
+from nokodo_ai.adapters.openai.embedding import OpenAIEmbeddingAdapter
 
 
-class BaseEmbeddingAdapter(ABC):
-	"""capability ABC for embedding APIs.
+EmbeddingAdapter = Annotated[
+	OpenAIEmbeddingAdapter | OllamaEmbeddingAdapter,
+	Field(discriminator="type"),
+]
 
-	adapters implementing this interface provide:
-	- embed(): convert text to vector embeddings
-	"""
 
-	@abstractmethod
-	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
-		"""generate embeddings for the given texts.
+def resolve_embedding_adapter_type(provider: str, api: str | None) -> str | None:
+	"""resolve the adapter type string from provider and api."""
+	if provider == "openai":
+		return "openai.embedding"
+	if provider == "ollama":
+		return "ollama.embedding"
+	return None
 
-		args:
-			texts: list of strings to embed
 
-		returns:
-			list of embedding vectors (one per input text)
-		"""
-		...
+__all__ = [
+	"BaseEmbeddingAdapter",
+	"EmbeddingAdapter",
+	"resolve_embedding_adapter_type",
+]

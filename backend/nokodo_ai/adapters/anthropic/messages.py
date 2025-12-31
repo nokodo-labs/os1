@@ -27,7 +27,7 @@ from nokodo_ai.adapters.anthropic.types import (
 	AnthropicToolUseBlock,
 	AnthropicToolUseBlockParam,
 )
-from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.messages import (
 	AssistantMessage,
 	ContentPart,
@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 
 class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 	"""adapter for anthropic's /v1/messages endpoint."""
+
+	type: Literal["anthropic.messages"] = "anthropic.messages"
 
 	@overload
 	def generate(

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, cast, overload
 
 import openai
 
-from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.types import (
 	OpenAIChatCompletion,
@@ -57,6 +57,8 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 
 	this is the standard openai chat API used by most applications.
 	"""
+
+	type: Literal["openai.chat_completions"] = "openai.chat_completions"
 
 	@overload
 	def generate(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nokodo_ai.adapters.vectorstore import BaseVectorstoreAdapter, SearchResult
+from nokodo_ai.adapters.base.vectorstore import BaseVectorstoreAdapter, SearchResult
 from nokodo_ai.types.json import JSONObject
 
 
