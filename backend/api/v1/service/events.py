@@ -12,6 +12,7 @@ from api.models.notification import Notification
 from api.schemas.event import EventCreate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.connection_manager import event_connections
 
 
 async def emit_event(
@@ -30,6 +31,10 @@ async def emit_event(
 
 	await session.commit()
 	await session.refresh(event)
+
+	# Broadcast to connected WebSocket clients
+	await event_connections.broadcast_event(event)
+
 	return event
 
 
