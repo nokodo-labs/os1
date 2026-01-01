@@ -95,12 +95,7 @@
 		}
 
 		if (newPrincipalType === 'user') {
-			const userId = Number(principalId)
-			if (!Number.isFinite(userId) || userId <= 0) {
-				error = 'user id must be a positive number'
-				return
-			}
-			next.user_id = userId
+			next.user_id = principalId
 		}
 		if (newPrincipalType === 'group') next.group_id = principalId
 		if (newPrincipalType === 'agent') next.agent_id = principalId
@@ -162,13 +157,17 @@
 			</div>
 
 			{#if error}
-				<div class="mb-4 rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-400">
+				<div
+					class="mb-4 rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-400"
+				>
 					{error}
 				</div>
 			{/if}
 
 			{#if isLoading}
-				<div class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 text-sm text-zinc-400">
+				<div
+					class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 text-sm text-zinc-400"
+				>
 					loading permissions...
 				</div>
 			{:else}
@@ -189,7 +188,11 @@
 							</div>
 							<div class="space-y-2">
 								<Label>id</Label>
-								<Input bind:value={newPrincipalId} class="rounded-xl" placeholder="e.g. 123 or uuid" />
+								<Input
+									bind:value={newPrincipalId}
+									class="rounded-xl"
+									placeholder="e.g. 123 or uuid"
+								/>
 							</div>
 							<div class="space-y-2">
 								<Label>role</Label>
@@ -204,7 +207,9 @@
 							</div>
 						</div>
 						<div class="mt-3 flex justify-end">
-							<Button class="rounded-xl" onclick={addEntry} disabled={isSaving}>add</Button>
+							<Button class="rounded-xl" onclick={addEntry} disabled={isSaving}
+								>add</Button
+							>
 						</div>
 					</div>
 
@@ -213,18 +218,29 @@
 							entries
 						</div>
 						{#if entries.length === 0}
-							<div class="px-4 py-8 text-center text-sm text-zinc-500">no entries yet.</div>
+							<div class="px-4 py-8 text-center text-sm text-zinc-500">
+								no entries yet.
+							</div>
 						{:else}
 							<div class="divide-y divide-zinc-800">
 								{#each entries as entry (entry.id)}
-									<div class="grid items-center gap-3 px-4 py-3 sm:grid-cols-[1fr,140px,80px]">
+									<div
+										class="grid items-center gap-3 px-4 py-3 sm:grid-cols-[1fr,140px,80px]"
+									>
 										<div class="text-sm">
-											<div class="font-mono text-xs text-zinc-400">{principalLabel(entry)}</div>
+											<div class="font-mono text-xs text-zinc-400">
+												{principalLabel(entry)}
+											</div>
 										</div>
 										<div>
 											<select
 												value={entry.role}
-												onchange={(e) => updateRole(entry.id, (e.currentTarget as HTMLSelectElement).value as Role)}
+												onchange={(e) =>
+													updateRole(
+														entry.id,
+														(e.currentTarget as HTMLSelectElement)
+															.value as Role
+													)}
 												class="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm"
 												disabled={isSaving}
 											>
@@ -252,7 +268,12 @@
 			{/if}
 
 			<div class="mt-6 flex justify-end gap-2">
-				<Button variant="outline" class="rounded-xl" onclick={() => (open = false)} disabled={isSaving}>
+				<Button
+					variant="outline"
+					class="rounded-xl"
+					onclick={() => (open = false)}
+					disabled={isSaving}
+				>
 					cancel
 				</Button>
 				<Button class="rounded-xl" onclick={save} disabled={isSaving || isLoading}>

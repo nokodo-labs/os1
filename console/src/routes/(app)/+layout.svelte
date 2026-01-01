@@ -1,7 +1,16 @@
 <script lang="ts">
 	import { page } from '$app/state'
 	import { auth } from '$lib/auth.svelte'
-	import { Bot, Box, FlaskConical, LayoutDashboard, ScrollText, Server } from '@lucide/svelte'
+	import {
+		Bot,
+		Box,
+		FlaskConical,
+		LayoutDashboard,
+		MessageSquare,
+		ScrollText,
+		Server,
+		Users,
+	} from '@lucide/svelte'
 
 	let { children } = $props()
 </script>
@@ -79,6 +88,28 @@
 			>
 				<ScrollText class="h-4 w-4" />
 				prompts
+			</a>
+			<a
+				href="/threads"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/threads'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<MessageSquare class="h-4 w-4" />
+				threads
+			</a>
+			<a
+				href="/users"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/users'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Users class="h-4 w-4" />
+				users
 			</a>
 		</nav>
 

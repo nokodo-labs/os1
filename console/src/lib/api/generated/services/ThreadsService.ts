@@ -147,6 +147,34 @@ export class ThreadsService {
         });
     }
     /**
+     * Delete Thread
+     * Delete a thread.
+     * @param threadId
+     * @returns void
+     * @throws ApiError
+     */
+    public static deleteThreadThreadsThreadIdDelete(
+        threadId: string,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/threads/{thread_id}',
+            path: {
+                'thread_id': threadId,
+            },
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
      * List Messages
      * List messages within a thread.
      * @param threadId
@@ -298,6 +326,38 @@ export class ThreadsService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/threads/{thread_id}/run',
+            path: {
+                'thread_id': threadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Run Thread Stream
+     * stream a thread run via sse AgentDelta events.
+     * @param threadId
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static runThreadStreamThreadsThreadIdRunStreamPost(
+        threadId: string,
+        requestBody: ThreadRunRequest,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/threads/{thread_id}/run/stream',
             path: {
                 'thread_id': threadId,
             },

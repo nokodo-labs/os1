@@ -35,4 +35,54 @@ export class AuthService {
             },
         });
     }
+    /**
+     * Refresh Access Token
+     * Exchange refresh token for new access token (sliding refresh).
+     * @param refreshToken
+     * @returns Token Successful Response
+     * @throws ApiError
+     */
+    public static refreshAccessTokenAuthRefreshPost(
+        refreshToken?: (string | null),
+    ): CancelablePromise<Token> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/auth/refresh',
+            cookies: {
+                'refresh_token': refreshToken,
+            },
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Logout
+     * Clear refresh token cookie to log out.
+     * @returns void
+     * @throws ApiError
+     */
+    public static logoutAuthLogoutPost(): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/auth/logout',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
 }
