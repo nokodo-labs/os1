@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/stores'
-	import { AuthService } from '$lib/api/generated'
+	import { v1Client } from '$lib/api/v1/client'
 	import * as Button from '$lib/components/ui/button'
 	import { refreshSession, setSessionToken } from '$lib/stores/session'
 
@@ -26,11 +26,26 @@
 		isSubmitting = true
 
 		try {
-			const token = await AuthService.loginAccessTokenAuthLoginAccessTokenPost({
-				username: email.trim(),
-				password,
+			const { data, error, response } = await v1Client().POST('/auth/login/access-token', {
+				body: {
+					username: email.trim(),
+					password,
+					scope: '',
+				},
+				bodySerializer: (body) => {
+					const params = new URLSearchParams()
+					params.append('username', body.username)
+					params.append('password', body.password)
+					params.append('scope', body.scope)
+					return params
+				},
 			})
-			setSessionToken(token.access_token)
+
+			if (error || !data) {
+				throw new Error(error?.detail || response.statusText || 'failed to sign in')
+			}
+
+			setSessionToken(data.access_token)
 			void refreshSession()
 			// @ts-expect-error resolve typing is narrower than our constructed URL
 			await goto(resolve(next as never))

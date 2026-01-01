@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/stores'
-	import { configureApiAuth } from '$lib/api/auth'
 	import { eventStreamClient } from '$lib/api/streaming'
 	import { getAccessToken } from '$lib/auth/session'
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
@@ -20,8 +19,6 @@
 	import { activeModal, closeModal } from '$lib/stores/modals'
 	import '$lib/styles/liquid-glass.css'
 	import '../app.css'
-
-	configureApiAuth()
 
 	// Initialize event stream if already logged in (page load/refresh)
 	const existingToken = getAccessToken()

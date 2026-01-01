@@ -6,7 +6,7 @@
  */
 
 import { get, writable } from 'svelte/store'
-import { buildApiBaseURL } from '../client'
+import { getV1BaseUrl } from '../v1/client'
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
@@ -56,7 +56,7 @@ export class EventStreamClient {
 	readonly lastEvent = writable<StreamMessage | null>(null)
 
 	private buildWsUrl(token: string): string {
-		const baseUrl = buildApiBaseURL(import.meta.env.VITE_API_ORIGIN)
+		const baseUrl = getV1BaseUrl()
 		const wsBase = baseUrl.replace(/^http/, 'ws')
 		return `${wsBase}/events/stream?token=${encodeURIComponent(token)}`
 	}

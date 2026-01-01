@@ -73,7 +73,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Refresh Access Token */
+        /**
+         * Refresh Access Token
+         * @description Exchange refresh token for new access token (sliding refresh).
+         */
         post: operations["refresh_access_token_auth_refresh_post"];
         delete?: never;
         options?: never;
@@ -90,7 +93,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Logout */
+        /**
+         * Logout
+         * @description Clear refresh token cookie to log out.
+         */
         post: operations["logout_auth_logout_post"];
         delete?: never;
         options?: never;
@@ -2079,6 +2085,8 @@ export interface components {
             access_token: string;
             /** Token Type */
             token_type: string;
+            /** Refresh Token */
+            refresh_token?: string | null;
         };
         /**
          * User
@@ -2533,7 +2541,7 @@ export interface operations {
             header?: never;
             path?: never;
             cookie?: {
-                "nokodo.refresh_token"?: string | null;
+                refresh_token?: string | null;
             };
         };
         requestBody?: never;

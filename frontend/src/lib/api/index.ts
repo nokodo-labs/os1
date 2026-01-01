@@ -1,4 +1,3 @@
-import { APIError } from './client'
 import type { components } from './types'
 import { v1Client } from './v1/client'
 
@@ -8,6 +7,17 @@ type RuntimeConfig = components['schemas']['RuntimeConfigOut']
 
 // Root health is not part of the v1 OpenAPI schema.
 type HealthCheck = { status: string }
+
+class APIError extends Error {
+	constructor(
+		message: string,
+		public status: number,
+		public response?: unknown
+	) {
+		super(message)
+		this.name = 'APIError'
+	}
+}
 
 export const api = {
 	async healthCheck(): Promise<HealthCheck> {
