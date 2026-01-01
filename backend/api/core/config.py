@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 	SECRET_KEY: str = "changeme"
 	ALGORITHM: str = "HS256"
 	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+	REFRESH_TOKEN_EXPIRE_DAYS: int = 90
+	AUTH_COOKIE_SECURE: bool = False
 
 	# Public origins (runtime config for static frontends)
 	# These are intentionally "public" (safe to expose to clients).

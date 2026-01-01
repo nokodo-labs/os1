@@ -36,6 +36,7 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 		data={"username": user_payload["email"], "password": user_payload["password"]},
 	)
 	assert login_resp.status_code == 200
+	assert "refresh_token=" in login_resp.headers.get("set-cookie", "")
 	token = login_resp.json()["access_token"]
 
 	me_resp = await client.get(
@@ -45,6 +46,17 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	assert me_resp.status_code == 200
 	me_data = me_resp.json()
 	assert me_data["email"] == user_payload["email"]
+
+	refresh_resp = await client.post("/v1/auth/refresh")
+	assert refresh_resp.status_code == 200
+	refresh_token = refresh_resp.json()["access_token"]
+	assert refresh_token
+
+	me_refreshed_resp = await client.get(
+		f"/v1/users/{user_id}",
+		headers={"Authorization": f"Bearer {refresh_token}"},
+	)
+	assert me_refreshed_resp.status_code == 200
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,7 @@ from nokodo_ai.utils.typeid import TypeID
 class Token(BaseModel):
 	access_token: str
 	token_type: str
+	refresh_token: str | None = None
 
 
 class TokenPayload(BaseModel):

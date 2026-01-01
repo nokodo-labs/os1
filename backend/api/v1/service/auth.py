@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Annotated
 
 from authlib.jose import JoseError
@@ -15,8 +16,13 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.models.group import GroupMembership
 from api.models.user import User
-from api.v1.schemas.token import TokenPayload
-from nokodo_ai.utils.security import decode_jwt_token, verify_password
+from api.v1.schemas.token import Token, TokenPayload
+from nokodo_ai.utils.security import (
+	create_jwt_token,
+	decode_jwt_token,
+	verify_password,
+)
+from nokodo_ai.utils.typeid import TypeID, assert_typeid
 
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -151,3 +157,99 @@ async def require_admin(
 ) -> None:
 	if not principal.is_admin:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
+def create_access_token(user_id: str) -> str:
+	"""Create a short-lived access token for API requests."""
+	expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+	return create_jwt_token(
+		subject=user_id,
+		secret_key=settings.SECRET_KEY,
+		algorithm=settings.ALGORITHM,
+		expires_delta=expires_delta,
+	)
+
+
+def create_refresh_token(user_id: str) -> str:
+	"""Create a long-lived refresh token for silent re-authentication."""
+	expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+	return create_jwt_token(
+		subject=user_id,
+		secret_key=settings.SECRET_KEY,
+		algorithm=settings.ALGORITHM,
+		expires_delta=expires_delta,
+		additional_claims={"typ": "refresh"},
+	)
+
+
+async def create_token_pair(user: User) -> Token:
+	"""Create access + refresh token pair for successful login."""
+	if not user.is_active:
+		raise HTTPException(status_code=400, detail="Inactive user")
+	access_token = create_access_token(str(user.id))
+	refresh_token = create_refresh_token(str(user.id))
+	return Token(
+		access_token=access_token, token_type="bearer", refresh_token=refresh_token
+	)
+
+
+async def refresh_token_for_user(refresh_token: str, session: AsyncSession) -> Token:
+	"""
+	Validate refresh token and return new access+refresh tokens.
+	Returns: (Token, should_clear_cookie) tuple.
+	"""
+	try:
+		payload = decode_jwt_token(
+			refresh_token,
+			secret_key=settings.SECRET_KEY,
+			algorithms=[settings.ALGORITHM],
+		)
+	except JoseError:
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="could not validate credentials",
+			headers={"WWW-Authenticate": "Bearer"},
+		)
+
+	if payload.get("typ") != "refresh":
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="could not validate credentials",
+			headers={"WWW-Authenticate": "Bearer"},
+		)
+
+	user_id_str = payload.get("sub")
+	if not user_id_str:
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="could not validate credentials",
+			headers={"WWW-Authenticate": "Bearer"},
+		)
+
+	try:
+		user_id = TypeID(assert_typeid(str(user_id_str), prefix="user"))
+	except ValueError:
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="could not validate credentials",
+			headers={"WWW-Authenticate": "Bearer"},
+		)
+
+	user_result = await session.execute(select(User).where(User.id == user_id))
+	user = user_result.scalar_one_or_none()
+	if not user or not user.is_active:
+		# Signal router to clear cookie
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="could not validate credentials",
+			headers={"WWW-Authenticate": "Bearer", "X-Clear-Refresh-Cookie": "true"},
+		)
+
+	# Sliding refresh: new tokens extend session
+	access_token = create_access_token(str(user.id))
+	new_refresh_token = create_refresh_token(str(user.id))
+	return Token(
+		access_token=access_token,
+		token_type="bearer",
+		refresh_token=new_refresh_token,
+	)
