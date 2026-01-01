@@ -47,7 +47,7 @@
 		<div class="flex flex-1 items-center justify-center">
 			<div class="w-full max-w-md">
 				<div
-					class="liquid-glass liquid-glass--frosted overflow-hidden rounded-3xl shadow-[0_28px_80px_rgba(0,0,0,0.45)]"
+					class="liquid-glass liquid-glass--frosted rounded-container overflow-hidden shadow-[0_28px_80px_rgba(0,0,0,0.45)]"
 				>
 					<div class="p-8">
 						<div class="mb-8 space-y-2">

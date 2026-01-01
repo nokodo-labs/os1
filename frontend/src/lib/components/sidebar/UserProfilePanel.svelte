@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { logoutV1 } from '$lib/api/v1/client'
 	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import * as Separator from '$lib/components/ui/separator'
 	import { openModal } from '$lib/stores/modals'
@@ -36,6 +37,7 @@
 
 	function handleLogout() {
 		onClose?.()
+		void logoutV1()
 		clearSession()
 		void goto(resolve('/login'))
 	}

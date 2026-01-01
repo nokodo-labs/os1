@@ -171,7 +171,7 @@
 
 					{#if isAddMenuOpen}
 						<div
-							class="absolute bottom-full left-0 mb-3 w-56 overflow-hidden rounded-2xl border border-white/10 bg-black/85 p-1 text-white/85 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
+							class="rounded-container absolute bottom-full left-0 mb-3 w-56 overflow-hidden border border-white/10 bg-black/85 p-1 text-white/85 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
 							role="menu"
 						>
 							<button
@@ -250,13 +250,27 @@
 
 <style>
 	.chat-input {
-		--lg-blur: 12px;
-		--lg-saturate: 1.2;
+		--lg-blur: 20px;
+		--lg-saturate: 1.3;
+		--lg-bg: rgba(255, 255, 255, 0.12);
+		--lg-border: rgba(255, 255, 255, 0.15);
+	}
+
+	:global(.dark) .chat-input {
+		--lg-bg: rgba(0, 0, 0, 0.35);
+		--lg-border: rgba(255, 255, 255, 0.1);
 	}
 
 	.chat-input.liquid-glass--frosted {
-		--lg-blur: 28px;
-		--lg-saturate: 1.25;
+		--lg-blur: 32px;
+		--lg-saturate: 1.35;
+		--lg-bg: rgba(255, 255, 255, 0.25);
+		--lg-border: rgba(255, 255, 255, 0.2);
+	}
+
+	:global(.dark) .chat-input.liquid-glass--frosted {
+		--lg-bg: rgba(0, 0, 0, 0.45);
+		--lg-border: rgba(255, 255, 255, 0.12);
 	}
 
 	.send-btn {
@@ -265,7 +279,7 @@
 	}
 
 	:global(.dark) .send-btn {
-		background-color: white;
+		background-color: rgba(255, 255, 255, 0.95);
 		color: var(--accent-primary);
 	}
 

@@ -346,7 +346,7 @@
 									class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[transform,box-shadow] duration-150 group-hover:scale-[1.03] group-hover:ring-white/10 group-active:scale-[0.99] group-active:ring-white/20 {iconShape ===
 									'circle'
 										? 'rounded-full'
-										: 'rounded-3xl'}"
+										: 'rounded-container'}"
 									style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
 								>
 									<span class="liquid-glass__highlight" aria-hidden="true"></span>

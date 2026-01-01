@@ -2,10 +2,13 @@
 
 @import 'tw-animate-css';
 
+@import './lib/styles/liquid-glass.css';
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
 	--radius: 0.625rem;
+	--radius-container-base: 1.5rem;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.13 0.028 261.692);
 	--card: oklch(1 0 0);
@@ -104,6 +107,7 @@
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
+	--radius-container: var(--radius-container-base);
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
 	--color-sidebar-primary: var(--sidebar-primary);

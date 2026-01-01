@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state'
 	import type { Agent } from '$lib/api/generated'
+	import { runChatStream, type StreamedMessage } from '$lib/api/streaming'
 	import type { components } from '$lib/api/types'
 	import { v1Client } from '$lib/api/v1/client'
-	import { getAccessToken } from '$lib/auth/session'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import Button from '$lib/components/chat/Button.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
@@ -247,15 +247,9 @@
 		}
 	}
 
-	function sseMessageToUiMessage(msg: {
-		id: string
-		type: string
-		content: Array<{ type?: string; text?: string }>
-		sender_agent_id?: string | null
-		created_at?: string | null
-	}): Message {
-		const textContent = (msg.content || [])
-			.map((p) => (p?.type === 'text' ? p.text : ''))
+	function streamedMsgToUi(msg: StreamedMessage): Message {
+		const textContent = msg.content
+			.map((p) => (p.type === 'text' && p.text ? p.text : ''))
 			.filter(Boolean)
 			.join('\n')
 		return {
@@ -268,97 +262,48 @@
 		}
 	}
 
+	let runAbortController: AbortController | null = null
+
 	async function runThreadStream(opts: {
 		threadId: string
 		agentId: string
 		input: string | null
 		runId: number
 	}): Promise<void> {
-		const token = getAccessToken()
-		const response = await fetch(`/v1/threads/${opts.threadId}/run/stream`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Accept: 'text/event-stream',
-				...(token ? { Authorization: `Bearer ${token}` } : {}),
-			},
-			body: JSON.stringify({ agent_id: opts.agentId, input: opts.input }),
-		})
-		if (!response.ok || !response.body) {
-			throw new Error(`stream request failed: ${response.status}`)
-		}
+		runAbortController?.abort()
+		runAbortController = new AbortController()
 
-		const reader = response.body.getReader()
-		const decoder = new TextDecoder()
-		let buffer = ''
-
-		while (true) {
+		for await (const delta of runChatStream({
+			threadId: opts.threadId,
+			agentId: opts.agentId,
+			input: opts.input,
+			signal: runAbortController.signal,
+		})) {
 			if (opts.runId !== activeRun) {
-				try {
-					await reader.cancel()
-				} catch {
-					// ignore
-				}
+				runAbortController.abort()
 				return
 			}
 
-			const { value, done } = await reader.read()
-			if (done) break
-			buffer += decoder.decode(value, { stream: true })
-
-			let splitIndex = buffer.indexOf('\n\n')
-			while (splitIndex !== -1) {
-				const rawEvent = buffer.slice(0, splitIndex)
-				buffer = buffer.slice(splitIndex + 2)
-				splitIndex = buffer.indexOf('\n\n')
-
-				let eventType = ''
-				let data = ''
-				for (const line of rawEvent.split('\n')) {
-					if (line.startsWith('event:')) eventType = line.slice(6).trim()
-					if (line.startsWith('data:')) data += line.slice(5).trim()
-				}
-				if (!eventType || !data) continue
-
-				if (eventType === 'error') {
-					const parsed = JSON.parse(data) as { message?: string }
-					throw new Error(parsed.message || 'generation failed')
-				}
-
-				if (eventType === 'done') {
+			switch (delta.event) {
+				case 'error':
+					throw new Error(delta.data.message || 'generation failed')
+				case 'done':
 					return
-				}
-
-				if (eventType === 'message_created') {
-					const msg = JSON.parse(data) as {
-						id: string
-						type: string
-						content: Array<{ type?: string; text?: string }>
-						sender_agent_id?: string | null
-						created_at?: string | null
-					}
-					const uiMsg = sseMessageToUiMessage(msg)
-					// replace optimistic user message with real one, or add assistant
-					if (uiMsg.role === 'user') {
-						optimisticUserMessage = null
-					}
-					if (uiMsg.role === 'assistant') {
-						streamingAssistant = null
-					}
+				case 'message_created': {
+					const uiMsg = streamedMsgToUi(delta.data)
+					if (uiMsg.role === 'user') optimisticUserMessage = null
+					if (uiMsg.role === 'assistant') streamingAssistant = null
 					messages = [...messages, uiMsg]
-					continue
+					break
 				}
-
-				if (eventType === 'text_delta') {
-					const parsed = JSON.parse(data) as { text?: string }
-					if (parsed.text && streamingAssistant) {
+				case 'text_delta':
+					if (delta.data.text && streamingAssistant) {
 						streamingAssistant = {
 							...streamingAssistant,
-							content: streamingAssistant.content + parsed.text,
+							content: streamingAssistant.content + delta.data.text,
 						}
 					}
-					continue
-				}
+					break
 			}
 		}
 	}
@@ -459,8 +404,8 @@
 							>
 								{#snippet actions()}
 									<Button
-										variant="ghost"
-										size="sm"
+										variant="glass"
+										size="icon"
 										onclick={() => handleCopyMessage(message.content)}
 									>
 										<DocumentDuplicate
@@ -469,8 +414,8 @@
 										/>
 									</Button>
 									<Button
-										variant="ghost"
-										size="sm"
+										variant="glass"
+										size="icon"
 										onclick={() => handleEditMessage(message.id)}
 									>
 										<Pencil className="w-3.5 h-3.5" strokeWidth="2" />
@@ -488,8 +433,8 @@
 							>
 								{#snippet actions()}
 									<Button
-										variant="ghost"
-										size="sm"
+										variant="glass"
+										size="icon"
 										onclick={() => handleCopyMessage(message.content)}
 									>
 										<DocumentDuplicate
@@ -498,8 +443,8 @@
 										/>
 									</Button>
 									<Button
-										variant="ghost"
-										size="sm"
+										variant="glass"
+										size="icon"
 										onclick={handleRegenerateMessage}
 									>
 										<ArrowPath className="w-3.5 h-3.5" strokeWidth="2" />
@@ -518,8 +463,8 @@
 						>
 							{#snippet actions()}
 								<Button
-									variant="ghost"
-									size="sm"
+									variant="glass"
+									size="icon"
 									onclick={() =>
 										handleCopyMessage(optimisticUserMessage?.content ?? '')}
 								>
@@ -541,10 +486,10 @@
 							tone="error"
 						>
 							{#snippet actions()}
-								<Button variant="ghost" size="sm" onclick={retryLastRun}>
+								<Button variant="secondary" size="sm" onclick={retryLastRun}>
 									retry
 								</Button>
-								<Button variant="ghost" size="sm" onclick={retryLastRun}>
+								<Button variant="secondary" size="sm" onclick={retryLastRun}>
 									regenerate
 								</Button>
 							{/snippet}
@@ -565,8 +510,8 @@
 						>
 							{#snippet actions()}
 								<Button
-									variant="ghost"
-									size="sm"
+									variant="glass"
+									size="icon"
 									onclick={() =>
 										handleCopyMessage(streamingAssistant?.content ?? '')}
 								>

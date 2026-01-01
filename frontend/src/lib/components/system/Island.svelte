@@ -206,7 +206,7 @@
 
 						{#if isAgentDropdownOpen}
 							<div
-								class="liquid-glass z-1000 min-w-64 animate-[dropdown-appear_0.2s_ease] rounded-3xl p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
+								class="liquid-glass rounded-container z-1000 min-w-64 animate-[dropdown-appear_0.2s_ease] p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
 								style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
 							>
 								<span class="liquid-glass__highlight" aria-hidden="true"></span>

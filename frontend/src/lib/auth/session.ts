@@ -1,4 +1,25 @@
-const ACCESS_TOKEN_KEY = 'nokodo.access_token'
+const ACCESS_TOKEN_KEY = 'access_token'
+
+const ACCESS_TOKEN_CHANGED_EVENT = 'auth:token-changed'
+
+function emitAccessTokenChanged(token: string | null): void {
+	if (typeof window === 'undefined') return
+	window.dispatchEvent(
+		new CustomEvent(ACCESS_TOKEN_CHANGED_EVENT, {
+			detail: { token },
+		})
+	)
+}
+
+export function onAccessTokenChanged(handler: (token: string | null) => void): () => void {
+	if (typeof window === 'undefined') return () => {}
+	const listener = (event: Event) => {
+		const custom = event as CustomEvent<{ token: string | null }>
+		handler(custom.detail?.token ?? null)
+	}
+	window.addEventListener(ACCESS_TOKEN_CHANGED_EVENT, listener)
+	return () => window.removeEventListener(ACCESS_TOKEN_CHANGED_EVENT, listener)
+}
 
 export function getAccessToken(): string | null {
 	if (typeof window === 'undefined') return null
@@ -8,11 +29,13 @@ export function getAccessToken(): string | null {
 export function setAccessToken(token: string): void {
 	if (typeof window === 'undefined') return
 	window.localStorage.setItem(ACCESS_TOKEN_KEY, token)
+	emitAccessTokenChanged(token)
 }
 
 export function clearAccessToken(): void {
 	if (typeof window === 'undefined') return
 	window.localStorage.removeItem(ACCESS_TOKEN_KEY)
+	emitAccessTokenChanged(null)
 }
 
 export function isLoggedIn(): boolean {

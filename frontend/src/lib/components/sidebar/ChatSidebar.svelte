@@ -2,8 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { getV1BaseUrl } from '$lib/api/v1/client'
-	import { getAccessToken } from '$lib/auth/session'
+	import { v1Client } from '$lib/api/v1/client'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
@@ -170,16 +169,10 @@
 	})
 
 	async function deleteThread(threadId: string): Promise<number | null> {
-		const token = getAccessToken()
-		if (!token) return null
-
-		const res = await fetch(`${getV1BaseUrl()}/threads/${threadId}`, {
-			method: 'DELETE',
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+		const { response } = await v1Client().DELETE('/threads/{thread_id}', {
+			params: { path: { thread_id: threadId } },
 		})
-		return res.status
+		return response.status
 	}
 
 	function formatTime(iso: string): string {
@@ -238,9 +231,7 @@
 		class="pointer-events-none absolute inset-0 bg-white/3 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 
-	<div
-		class="pointer-events-none relative z-20 flex h-full w-full flex-col items-center gap-1.5 px-3 py-4 *:pointer-events-auto"
-	>
+	<div class="relative z-20 flex h-full w-full flex-col items-center gap-1.5 px-3 py-4">
 		<!-- Logo / Brand with Close Button -->
 		<div class="relative grid w-full grid-cols-[auto_1fr_auto] items-center">
 			<button
@@ -283,7 +274,7 @@
 
 			<!-- Close button -->
 			<button
-				class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-200 hover:scale-[1.05] hover:bg-white/5 hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
+				class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/50 transition-all duration-200 hover:text-white active:scale-[0.97] {sidebar.isChatSidebarOpen
 					? 'opacity-100'
 					: 'pointer-events-none opacity-0'}"
 				onclick={(e) => {
@@ -361,131 +352,141 @@
 			</Tooltip.Root>
 		{/each}
 
-		<!-- Chats Section -->
-		<Separator.Root class="my-2 bg-white/10" />
-		<div
-			class="flex w-full flex-1 flex-col gap-1.5 overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-in-out {sidebar.isChatSidebarOpen
-				? 'translate-x-0 opacity-100'
-				: 'pointer-events-none -translate-x-2 opacity-0'}"
-		>
-			<div class="mb-1 flex items-center gap-2 px-3">
-				<ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
-				<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
-			</div>
-			<ScrollArea.Root class="h-full">
-				<div class="flex h-full flex-col space-y-0.5">
-					{#if !$isLoggedIn}
-						<div class="flex flex-1 flex-col items-center justify-center">
-							<div
-								class="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
-							>
-								log in to see your recent chats
-							</div>
-						</div>
-					{:else if $recentThreads.length === 0}
-						<div class="flex flex-1 flex-col items-center justify-center">
-							<div
-								class="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
-							>
-								no chats yet
-							</div>
-						</div>
-					{:else}
-						{#each $recentThreads as thread (thread.id)}
-							<div class="group/chat relative min-w-0">
+		{#if sidebar.isChatSidebarOpen}
+			<!-- Chats Section -->
+			<Separator.Root class="my-2 bg-white/10" />
+			<div class="flex w-full flex-1 flex-col gap-1.5 overflow-hidden px-2">
+				<div class="mb-1 flex items-center gap-2 px-3">
+					<ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
+					<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
+				</div>
+				<ScrollArea.Root class="h-full">
+					<div class="flex h-full flex-col space-y-0.5">
+						{#if !$isLoggedIn}
+							<div class="flex flex-1 flex-col items-center justify-center">
 								<div
-									class="relative flex cursor-pointer items-center justify-between gap-2 rounded-full border border-transparent bg-transparent px-4 py-2.5 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
-									thread.id
-										? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
-										: ''}"
-									style={sidebar.selectedChatId === thread.id
-										? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
-										: ''}
-									onclick={async () => {
-										sidebar.selectChat(thread.id)
-										navigateWithTransition(`/c/${thread.id}`)
-									}}
-									role="button"
-									tabindex="0"
-									onkeydown={async (e) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault()
+									class="rounded-container w-full overflow-hidden border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+								>
+									log in to see your recent chats
+								</div>
+							</div>
+						{:else if $recentThreads.length === 0}
+							<div class="flex flex-1 flex-col items-center justify-center">
+								<div
+									class="rounded-container w-full overflow-hidden border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+								>
+									no chats yet
+								</div>
+							</div>
+						{:else}
+							{#each $recentThreads as thread (thread.id)}
+								<div class="group/chat relative min-w-0">
+									<div
+										class="rounded-container relative flex cursor-pointer items-center justify-between gap-2 border border-transparent bg-transparent px-4 py-2 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
+										thread.id
+											? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
+											: ''}"
+										style={sidebar.selectedChatId === thread.id
+											? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
+											: ''}
+										onclick={async () => {
 											sidebar.selectChat(thread.id)
 											navigateWithTransition(`/c/${thread.id}`)
-										}
-									}}
-								>
-									<div class="min-w-0 flex-1 overflow-hidden">
-										<div class="mb-1 flex items-center gap-2">
-											<span
-												class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap"
-											>
-												{thread.title || 'untitled chat'}
-											</span>
-										</div>
-										<span class="truncate text-xs text-white/50">
-											{formatTime(thread.last_activity_at ?? '')}
-										</span>
-									</div>
-
-									<button
-										type="button"
-										class="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
-										onclick={(e) => {
-											e.stopPropagation()
-											openThreadMenuId =
-												openThreadMenuId === thread.id ? null : thread.id
 										}}
-										aria-label="thread actions"
+										role="button"
+										tabindex="0"
+										onkeydown={async (e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault()
+												sidebar.selectChat(thread.id)
+												navigateWithTransition(`/c/${thread.id}`)
+											}
+										}}
 									>
-										<EllipsisHorizontal className="h-4 w-4" />
-									</button>
+										<div class="min-w-0 flex-1 overflow-hidden">
+											<div class="flex items-center gap-2">
+												<span
+													class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap"
+												>
+													{thread.title || 'untitled chat'}
+												</span>
+											</div>
+											<div class="mt-0.5 flex items-center gap-2">
+												{#if thread.tags && thread.tags.length > 0}
+													<span
+														class="min-w-0 flex-1 truncate text-xs text-white/45"
+														title={thread.tags.join(', ')}
+													>
+														{thread.tags.join(' · ')}
+													</span>
+												{/if}
+												<span class="shrink-0 text-xs text-white/50">
+													{formatTime(thread.last_activity_at ?? '')}
+												</span>
+											</div>
+										</div>
 
-									{#if openThreadMenuId === thread.id}
-										<div
-											data-thread-menu
-											class="absolute top-full right-2 z-50 mt-2 w-52 rounded-3xl border border-white/10 bg-black/60 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+										<button
+											type="button"
+											class="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
+											onclick={(e) => {
+												e.stopPropagation()
+												openThreadMenuId =
+													openThreadMenuId === thread.id
+														? null
+														: thread.id
+											}}
+											aria-label="thread actions"
 										>
-											{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action (action)}
+											<EllipsisHorizontal className="h-4 w-4" />
+										</button>
+
+										{#if openThreadMenuId === thread.id}
+											<div
+												data-thread-menu
+												class="rounded-container absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/60 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+											>
+												{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action (action)}
+													<button
+														type="button"
+														class="flex w-full cursor-pointer items-center rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+														onclick={(e) => {
+															e.stopPropagation()
+															openThreadMenuId = null
+															console.log(
+																'thread action',
+																action,
+																thread.id
+															)
+														}}
+													>
+														{action}
+													</button>
+												{/each}
 												<button
 													type="button"
-													class="flex w-full cursor-pointer items-center rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+													class="mt-1 flex w-full cursor-pointer items-center rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
 													onclick={(e) => {
 														e.stopPropagation()
 														openThreadMenuId = null
-														console.log(
-															'thread action',
-															action,
-															thread.id
-														)
+														confirmDeleteThread = {
+															id: thread.id,
+															title: thread.title || 'untitled chat',
+														}
 													}}
 												>
-													{action}
+													delete
 												</button>
-											{/each}
-											<button
-												type="button"
-												class="mt-1 flex w-full cursor-pointer items-center rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-												onclick={(e) => {
-													e.stopPropagation()
-													openThreadMenuId = null
-													confirmDeleteThread = {
-														id: thread.id,
-														title: thread.title || 'untitled chat',
-													}
-												}}
-											>
-												delete
-											</button>
-										</div>
-									{/if}
+											</div>
+										{/if}
+									</div>
 								</div>
-							</div>
-						{/each}
-					{/if}
-				</div>
-			</ScrollArea.Root>
-		</div>
+							{/each}
+						{/if}
+					</div>
+				</ScrollArea.Root>
+			</div>
+		{/if}
 	</div>
 </aside>
 
@@ -502,7 +503,7 @@
 		}}
 	>
 		<div
-			class="liquid-glass w-full max-w-sm rounded-3xl px-6 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.6)]"
+			class="liquid-glass rounded-container w-full max-w-sm px-6 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.6)]"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<span class="liquid-glass__highlight" aria-hidden="true"></span>

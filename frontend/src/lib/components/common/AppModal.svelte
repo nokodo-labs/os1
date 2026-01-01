@@ -1,6 +1,4 @@
 <script lang="ts">
-	import '$lib/styles/liquid-glass.css'
-
 	interface AppModalProps {
 		open: boolean
 		title: string
@@ -43,7 +41,7 @@
 		onmousedown={onBackdropMouseDown}
 	>
 		<div
-			class="liquid-glass w-full {widthClassName} rounded-3xl shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
+			class="liquid-glass w-full {widthClassName} rounded-container shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}

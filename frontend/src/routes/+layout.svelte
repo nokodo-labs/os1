@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores'
 	import { configureApiAuth } from '$lib/api/auth'
-	import { eventStreamClient } from '$lib/api/eventStream'
+	import { eventStreamClient } from '$lib/api/streaming'
 	import { getAccessToken } from '$lib/auth/session'
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'

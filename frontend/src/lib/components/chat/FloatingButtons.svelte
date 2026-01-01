@@ -167,7 +167,7 @@
 	>
 		{#if mode === 'menu'}
 			<div
-				class="liquid-glass--frosted flex items-center gap-1 rounded-xl p-1 transition-all"
+				class="liquid-glass--frosted rounded-container flex items-center gap-1 p-1 transition-all"
 			>
 				<button
 					class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
@@ -209,7 +209,7 @@
 			</div>
 		{:else if mode === 'response'}
 			<div
-				class="liquid-glass--frosted flex w-80 flex-col gap-3 rounded-2xl p-4"
+				class="liquid-glass--frosted rounded-container flex w-80 flex-col gap-3 p-4"
 				transition:fly={{ y: 5, duration: 200 }}
 			>
 				<div

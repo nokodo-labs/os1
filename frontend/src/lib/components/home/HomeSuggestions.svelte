@@ -24,7 +24,9 @@
 </script>
 
 {#if open && suggestions.length > 0}
-	<div class="liquid-glass overflow-hidden rounded-3xl shadow-[0_32px_64px_rgba(12,10,30,0.45)]">
+	<div
+		class="liquid-glass rounded-container overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+	>
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>
 		<div class="liquid-glass__content">
 			<div class="p-2" role="listbox" aria-label="suggestions">

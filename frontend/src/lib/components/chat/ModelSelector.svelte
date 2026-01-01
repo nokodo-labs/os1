@@ -29,7 +29,7 @@
 
 <div class="relative">
 	<button
-		class="liquid-glass flex min-w-[180px] cursor-pointer items-center gap-3 rounded-xl border-none bg-linear-to-br from-white/15 to-white/5 px-4 py-2 backdrop-blur-[10px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-0.5 hover:from-white/20 hover:to-white/10"
+		class="liquid-glass rounded-container flex min-w-[180px] cursor-pointer items-center gap-3 border-none bg-linear-to-br from-white/15 to-white/5 px-4 py-2 backdrop-blur-[10px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-0.5 hover:from-white/20 hover:to-white/10"
 		onclick={toggleDropdown}
 	>
 		<div class="flex flex-1 flex-col items-start">
@@ -54,7 +54,7 @@
 
 	{#if isOpen}
 		<div
-			class="liquid-glass absolute top-[calc(100%+0.5rem)] right-0 z-100 min-w-[220px] animate-[dropdownSlide_0.2s_cubic-bezier(0.34,1.56,0.64,1)] rounded-xl border border-white/10 bg-linear-to-br from-[rgba(30,30,40,0.95)] to-[rgba(20,20,30,0.95)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-[20px] [backdrop-saturate:180%]"
+			class="liquid-glass rounded-container absolute top-[calc(100%+0.5rem)] right-0 z-100 min-w-[220px] animate-[dropdownSlide_0.2s_cubic-bezier(0.34,1.56,0.64,1)] border border-white/10 bg-linear-to-br from-[rgba(30,30,40,0.95)] to-[rgba(20,20,30,0.95)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-[20px] [backdrop-saturate:180%]"
 		>
 			{#each models as model (model.id)}
 				<button

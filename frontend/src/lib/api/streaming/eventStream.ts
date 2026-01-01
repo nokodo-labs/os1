@@ -1,10 +1,12 @@
 /**
  * WebSocket client for real-time event streaming.
+ * WS /events/stream?token=<jwt>
+ *
  * Provides auto-reconnect, Svelte store integration, and event subscription.
  */
 
 import { get, writable } from 'svelte/store'
-import { buildApiBaseURL } from './client'
+import { buildApiBaseURL } from '../client'
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
@@ -40,7 +42,7 @@ export interface StreamEvent extends StreamMessage {
 
 type EventHandler = (message: StreamMessage) => void
 
-class EventStreamClient {
+export class EventStreamClient {
 	private ws: WebSocket | null = null
 	private token: string | null = null
 	private reconnectAttempts = 0
@@ -50,31 +52,21 @@ class EventStreamClient {
 	private handlers: Set<EventHandler> = new Set()
 	private intentionalDisconnect = false
 
-	// Svelte stores for reactive UI
 	readonly status = writable<ConnectionStatus>('disconnected')
 	readonly lastEvent = writable<StreamMessage | null>(null)
 
-	/**
-	 * Build the WebSocket URL for the event stream.
-	 */
 	private buildWsUrl(token: string): string {
 		const baseUrl = buildApiBaseURL(import.meta.env.VITE_API_ORIGIN)
-		// Convert http(s):// to ws(s)://
 		const wsBase = baseUrl.replace(/^http/, 'ws')
 		return `${wsBase}/events/stream?token=${encodeURIComponent(token)}`
 	}
 
-	/**
-	 * Connect to the event stream with the given JWT token.
-	 */
 	connect(token: string): void {
 		if (
 			this.ws?.readyState === WebSocket.OPEN ||
 			this.ws?.readyState === WebSocket.CONNECTING
 		) {
-			// Already connected or connecting
 			if (this.token === token) return
-			// Token changed, reconnect
 			this.disconnect()
 		}
 
@@ -84,9 +76,6 @@ class EventStreamClient {
 		this.doConnect()
 	}
 
-	/**
-	 * Disconnect from the event stream.
-	 */
 	disconnect(): void {
 		this.intentionalDisconnect = true
 		this.cleanup()
@@ -94,27 +83,16 @@ class EventStreamClient {
 		this.status.set('disconnected')
 	}
 
-	/**
-	 * Subscribe to incoming events.
-	 * Returns an unsubscribe function.
-	 */
 	subscribe(handler: EventHandler): () => void {
 		this.handlers.add(handler)
 		return () => this.handlers.delete(handler)
 	}
 
-	/**
-	 * Internal: Perform the actual WebSocket connection.
-	 */
 	private doConnect(): void {
 		if (!this.token) return
 
 		const currentStatus = get(this.status)
-		if (currentStatus === 'disconnected') {
-			this.status.set('connecting')
-		} else {
-			this.status.set('reconnecting')
-		}
+		this.status.set(currentStatus === 'disconnected' ? 'connecting' : 'reconnecting')
 
 		try {
 			this.ws = new WebSocket(this.buildWsUrl(this.token))
@@ -133,22 +111,19 @@ class EventStreamClient {
 			try {
 				const message = JSON.parse(event.data) as StreamMessage
 				this.lastEvent.set(message)
-				this.handlers.forEach((handler) => handler(message))
+				this.handlers.forEach((h) => h(message))
 			} catch {
-				// Ignore malformed messages
+				// ignore malformed
 			}
 		}
 
 		this.ws.onclose = (event) => {
 			this.stopPing()
-
-			// Auth error - don't reconnect
 			if (event.code === 4001) {
 				this.status.set('disconnected')
 				this.token = null
 				return
 			}
-
 			if (!this.intentionalDisconnect) {
 				this.scheduleReconnect()
 			} else {
@@ -156,14 +131,9 @@ class EventStreamClient {
 			}
 		}
 
-		this.ws.onerror = () => {
-			// Error will trigger onclose, let that handle reconnection
-		}
+		this.ws.onerror = () => {}
 	}
 
-	/**
-	 * Internal: Schedule a reconnection with exponential backoff.
-	 */
 	private scheduleReconnect(): void {
 		if (this.intentionalDisconnect) return
 		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
@@ -174,17 +144,10 @@ class EventStreamClient {
 		this.status.set('reconnecting')
 		this.reconnectAttempts++
 
-		// Exponential backoff: 1s, 2s, 4s, 8s... capped at 30s
 		const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000)
-
-		this.reconnectTimeoutId = setTimeout(() => {
-			this.doConnect()
-		}, delay)
+		this.reconnectTimeoutId = setTimeout(() => this.doConnect(), delay)
 	}
 
-	/**
-	 * Internal: Start the ping interval to keep connection alive.
-	 */
 	private startPing(): void {
 		this.stopPing()
 		this.pingIntervalId = setInterval(() => {
@@ -192,15 +155,12 @@ class EventStreamClient {
 				try {
 					this.ws.send(JSON.stringify({ type: 'ping' }))
 				} catch {
-					// Connection may have died
+					// ignore
 				}
 			}
-		}, 30000) // Ping every 30 seconds
+		}, 30000)
 	}
 
-	/**
-	 * Internal: Stop the ping interval.
-	 */
 	private stopPing(): void {
 		if (this.pingIntervalId) {
 			clearInterval(this.pingIntervalId)
@@ -208,23 +168,17 @@ class EventStreamClient {
 		}
 	}
 
-	/**
-	 * Internal: Clean up connection and timers.
-	 */
 	private cleanup(): void {
 		this.stopPing()
-
 		if (this.reconnectTimeoutId) {
 			clearTimeout(this.reconnectTimeoutId)
 			this.reconnectTimeoutId = null
 		}
-
 		if (this.ws) {
 			this.ws.onopen = null
 			this.ws.onmessage = null
 			this.ws.onclose = null
 			this.ws.onerror = null
-
 			if (
 				this.ws.readyState === WebSocket.OPEN ||
 				this.ws.readyState === WebSocket.CONNECTING
@@ -236,5 +190,4 @@ class EventStreamClient {
 	}
 }
 
-// Singleton instance for app-wide use
 export const eventStreamClient = new EventStreamClient()

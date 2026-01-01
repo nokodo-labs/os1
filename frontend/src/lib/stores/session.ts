@@ -1,16 +1,29 @@
 import { derived, get, writable } from 'svelte/store'
 
-import { eventStreamClient } from '$lib/api/eventStream'
+import { eventStreamClient } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
 import { getJwtEmail, getJwtUserId } from '$lib/auth/jwt'
-import { clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth/session'
+import {
+	clearAccessToken,
+	getAccessToken,
+	onAccessTokenChanged,
+	setAccessToken,
+} from '$lib/auth/session'
 
 export type User = components['schemas']['User']
 export type Thread = components['schemas']['Thread']
 
 export const accessToken = writable<string | null>(getAccessToken())
 export const isLoggedIn = derived(accessToken, (token) => Boolean(token))
+
+if (typeof window !== 'undefined') {
+	onAccessTokenChanged((token) => {
+		accessToken.set(token)
+		if (token) eventStreamClient.connect(token)
+		else eventStreamClient.disconnect()
+	})
+}
 
 export const currentUser = writable<User | null>(null)
 export const recentThreads = writable<Thread[]>([])

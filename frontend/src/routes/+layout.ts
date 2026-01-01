@@ -3,6 +3,7 @@ import { initRuntimeConfig } from '$lib/config/runtime'
 
 import { redirect } from '@sveltejs/kit'
 
+import { refreshV1AccessToken } from '$lib/api/v1/client'
 import { getAccessToken } from '$lib/auth/session'
 
 export const ssr = false
@@ -16,6 +17,8 @@ export const load = async ({ url }) => {
 	const isPublic = PUBLIC_PATHS.has(url.pathname)
 
 	if (!token && !isPublic) {
+		const refreshed = await refreshV1AccessToken()
+		if (refreshed) return { config }
 		const next = `${url.pathname}${url.search}`
 		throw redirect(307, `/login?next=${encodeURIComponent(next)}`)
 	}

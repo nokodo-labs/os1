@@ -48,7 +48,7 @@
 	<div class="flex h-full flex-col gap-4">
 		<section
 			data-dock-panel
-			class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
+			class="liquid-glass rounded-container px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
 			aria-label="notifications"
 		>
 			<span class="liquid-glass__highlight" aria-hidden="true"></span>
@@ -85,7 +85,7 @@
 
 		<section
 			data-dock-panel
-			class="liquid-glass rounded-3xl px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
+			class="liquid-glass rounded-container px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
 			aria-label="control center"
 		>
 			<span class="liquid-glass__highlight" aria-hidden="true"></span>

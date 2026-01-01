@@ -131,7 +131,7 @@
 		bottom: 0;
 		left: calc(100% + 0.5rem);
 		z-index: 1000;
-		border-radius: 0.75rem;
+		border-radius: var(--radius-container-base);
 		animation: fadeIn 0.15s ease-out;
 	}
 
