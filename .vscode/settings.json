@@ -47,6 +47,8 @@
 	"python.analysis.autoImportCompletions": true,
 	"python.testing.pytestEnabled": true,
 	"python.testing.unittestEnabled": false,
+	"python.testing.cwd": "${workspaceFolder}/backend",
+	"python.testing.pytestArgs": [],
 	"ruff.enable": true,
 	"ruff.organizeImports": true,
 	"ruff.fixAll": true,
@@ -192,6 +194,5 @@
 		"eval": false,
 		"Invoke-Expression": false,
 		"iex": false
-	},
-	"python.testing.pytestArgs": ["backend"]
+	}
 }
