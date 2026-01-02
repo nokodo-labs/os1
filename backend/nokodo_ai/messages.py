@@ -191,6 +191,79 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 				return part.reason
 		return None
 
+	def merge(self, delta: AssistantMessage) -> AssistantMessage:
+		"""merge a streamed delta into this message, returning self for chaining.
+
+		handles:
+		- text content concatenation
+		- tool call argument streaming (matched by id)
+		- usage and finish_reason updates
+		"""
+		# --- merge text content ---
+		if delta.text:
+			# find existing text part or create one
+			text_part = next(
+				(p for p in self.content if isinstance(p, TextContent)),
+				None,
+			)
+			if text_part is not None:
+				text_part.text += delta.text
+			else:
+				self.content.append(TextContent(text=delta.text))
+
+		# --- merge other content parts (non-text) ---
+		for part in delta.content:
+			if isinstance(part, TextContent):
+				continue  # already handled above
+			# for non-text parts, just append (images, json, refusals, files)
+			self.content.append(part)
+
+		# --- merge tool calls ---
+		for delta_tc in delta.tool_calls:
+			# find existing tool call by id
+			existing_tc = next(
+				(tc for tc in self.tool_calls if tc.id == delta_tc.id),
+				None,
+			)
+			if existing_tc is not None:
+				# append streamed arguments (they come as string chunks)
+				if isinstance(existing_tc.arguments, str) and isinstance(
+					delta_tc.arguments, str
+				):
+					existing_tc.arguments += delta_tc.arguments
+				elif delta_tc.arguments:
+					# if delta has parsed dict or first chunk, just assign
+					existing_tc.arguments = delta_tc.arguments
+				# update name if provided (usually comes in first chunk)
+				if delta_tc.name:
+					existing_tc.name = delta_tc.name
+			else:
+				# new tool call, append it
+				self.tool_calls.append(delta_tc.model_copy(deep=True))
+
+		# --- merge usage (take latest non-None) ---
+		if delta.usage is not None:
+			if self.usage is None:
+				self.usage = delta.usage
+			else:
+				# accumulate tokens
+				self.usage.input_tokens += delta.usage.input_tokens
+				self.usage.output_tokens += delta.usage.output_tokens
+				self.usage.total_tokens += delta.usage.total_tokens
+
+		# --- merge finish_reason (take latest non-None) ---
+		if delta.finish_reason is not None:
+			self.finish_reason = delta.finish_reason
+
+		# --- merge metadata ---
+		if delta.metadata:
+			if self.metadata is None:
+				self.metadata = delta.metadata
+			else:
+				self.metadata.update(delta.metadata)
+
+		return self
+
 
 SystemContentPart = Annotated[TextContent, Field()]
 

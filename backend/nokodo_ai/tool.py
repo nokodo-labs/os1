@@ -1,103 +1,131 @@
-"""Tool decorator and class - callable capabilities for agents."""
+"""Tool ABC and implementations - callable capabilities for agents."""
 
 from __future__ import annotations
 
-import inspect
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ParamSpec
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from functools import cached_property
+from typing import Concatenate
 
+from pydantic import Field
+
+from nokodo_ai.base import Base
+from nokodo_ai.context import AgentContext
+from nokodo_ai.messages import ToolMessage
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.json_schema import schema_from_callable
+from nokodo_ai.utils.validators import validate_callable
 
 
-P = ParamSpec("P")
+class Tool[AppContextT = None](Base, ABC):
+	"""abstract base class for agent tools.
 
-
-@dataclass(frozen=True, slots=True)
-class ToolExecutionContext:
-	"""context provided to a tool during execution."""
-
-	call_id: str
-	thread: Thread | None = None
-
-
-if TYPE_CHECKING:
-	from nokodo_ai.thread import Thread
-
-
-@dataclass
-class Tool:
-	"""a callable tool that can be used by an agent.
-
-	tools are functions with metadata that agents can invoke
-	to perform actions or retrieve information.
+	tools are typed capabilities that agents can invoke to perform actions
+	or retrieve information. they are generic over AppContextT to allow
+	application-specific context to be passed during execution.
 	"""
 
-	name: str
-	description: str
-	func: Callable[..., object]
-	parameters: JSONObject = field(default_factory=dict)
-	metadata: JSONObject | None = None
+	name: str = Field(...)
+	description: str = Field(...)
+	parameters: JSONObject | None = Field(default=None)
 
+	@cached_property
+	def parameters_resolved(self) -> JSONObject:
+		"""resolve parameters schema from get_parameters() if not explicitly set."""
+		if self.parameters is not None:
+			return self.parameters
+
+		schema = schema_from_callable(
+			self.call,
+			skip_self=True,
+			skip_dunder=True,
+		)
+		return schema
+
+	@abstractmethod
 	async def call(
 		self,
+		__agent_context__: AgentContext,
+		__app_context__: AppContextT,
 		**kwargs: object,
-	) -> object:
+	) -> ToolMessage:
 		"""execute the tool with the given arguments.
 
-		a reserved kwarg `__context` may be provided and will be forwarded to the
-		tool function only if it explicitly accepts it (or accepts **kwargs).
+		args:
+			__agent_context__: runtime context from the agent execution
+			__app_context__: application-specific context
+			**kwargs: tool-specific arguments matching get_parameters() schema
+
+		returns:
+			ToolMessage containing the result or error
 		"""
-		context = None
-		if "__context" in kwargs:
-			context = kwargs.pop("__context")
+		raise NotImplementedError(
+			"call method must be implemented by concrete subclasses"
+		)
 
-		call_kwargs = dict(kwargs)
-		if context is not None:
-			sig = inspect.signature(self.func)
-			params = sig.parameters
-			accepts_context = "__context" in params or any(
-				p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-			)
-			if accepts_context:
-				call_kwargs["__context"] = context
+	def success(
+		self,
+		output: str,
+		agent_context: AgentContext,
+	) -> ToolMessage:
+		"""helper to create a successful tool response."""
+		return ToolMessage(
+			tool_call_id=agent_context.tool_call_id,
+			tool_output=output,
+			metadata=agent_context.metadata,
+			is_error=False,
+		)
 
-		result = self.func(**call_kwargs)
-		# handle async functions
-		if isinstance(result, Awaitable):
-			return await result
-		return result
+	def error(
+		self,
+		message: str,
+		agent_context: AgentContext,
+	) -> ToolMessage:
+		"""helper to create an error tool response."""
+		return ToolMessage(
+			tool_call_id=agent_context.tool_call_id,
+			tool_output=message,
+			metadata=agent_context.metadata,
+			is_error=True,
+		)
 
-	async def __call__(self, **kwargs: object) -> object:
-		return await self.call(**kwargs)
 
+def tool[AppContextT = None](name: str | None = None, description: str | None = None):
+	"""decorator to define a function as a Tool subclass."""
 
-def tool(
-	name: str | None = None,
-	description: str = "",
-	parameters: JSONObject | None = None,
-) -> Callable[[Callable[P, object]], Tool]:
-	"""decorator to create a tool from a function.
+	def decorator(
+		func: Callable[Concatenate[AgentContext, AppContextT, ...], ToolMessage],
+	) -> Tool[AppContextT]:
+		# validate structure only - skip type check on __app_context__ since it's
+		# a TypeVar that can be any type
+		validate_callable(
+			func,
+			expected_arg_types=[AgentContext],
+			expected_arg_count={"min": 2, "max": None},
+			expected_arg_names=["__agent_context__", "__app_context__"],
+			expected_return_type=ToolMessage,
+		)
 
-	usage:
-		@tool(description="add two numbers together")
-		def add(a: int, b: int) -> int:
-			return a + b
+		# pre-generate schema from original func to avoid TypeVar resolution issues
+		schema = schema_from_callable(func, skip_self=False, skip_dunder=True)
 
-		@tool(name="calculator", description="perform math operations")
-		async def calculate(expression: str) -> float:
-			...
-	"""
+		class FuncTool(Tool[AppContextT]):
+			async def call(
+				self,
+				__agent_context__: AgentContext,
+				__app_context__: AppContextT,
+				**kwargs: object,
+			) -> ToolMessage:
+				return func(
+					__agent_context__,
+					__app_context__,
+					**kwargs,
+				)
 
-	def decorator(func: Callable[P, object]) -> Tool:
-		tool_name = name or func.__name__
-		tool_desc = description or func.__doc__ or ""
-		tool_parameters = parameters or {}
-		return Tool(
-			name=tool_name,
-			description=tool_desc,
-			func=func,
-			parameters=tool_parameters,
+		return FuncTool(
+			name=name or func.__name__,
+			description=description or func.__doc__ or "No description provided.",
+			parameters=schema or None,
 		)
 
 	return decorator
