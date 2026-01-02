@@ -6,7 +6,7 @@ from abc import ABC
 
 from pydantic import Field, PrivateAttr, model_validator
 
-from nokodo_ai.base import Base
+from ...base import Base
 
 
 class BaseAdapter(Base, ABC):

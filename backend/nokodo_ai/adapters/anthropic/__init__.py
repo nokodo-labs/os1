@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
-from nokodo_ai.adapters.anthropic.messages import AnthropicMessagesAdapter
+from .base import BaseAnthropicAdapter
+from .messages import AnthropicMessagesAdapter
 
 
 __all__ = [

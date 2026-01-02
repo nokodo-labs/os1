@@ -1,82 +1,181 @@
-"""tests for SDK tool decorator and class."""
+"""tests for SDK Tool base class and decorator."""
+
+from __future__ import annotations
 
 import pytest
 
-from nokodo_ai import Tool, ToolExecutionContext, tool
+from nokodo_ai import AgentContext, ChatModel, Tool, ToolMessage, tool
+from nokodo_ai.adapters.base.chat import (
+	BaseChatAdapter,
+	ChatGenerationParams,
+)
+from nokodo_ai.thread import Thread
+from nokodo_ai.tool import ToolDefinition
+from nokodo_ai.types.json import JSONObject
 
 
-def test_tool_decorator_basic() -> None:
-	@tool(description="add two numbers")
-	def add(a: int, b: int) -> int:
-		return a + b
+class _NoopChatAdapter(BaseChatAdapter):
+	def generate(
+		self,
+		messages,
+		model: str,
+		stream: bool = False,
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	):
+		raise AssertionError("adapter.generate should not be called in tool tests")
 
-	assert isinstance(add, Tool)
-	assert add.name == "add"
-	assert add.description == "add two numbers"
+
+def _make_agent_context(
+	tool_call_id: str = "tc1",
+	*,
+	metadata: JSONObject | None = None,
+) -> AgentContext:
+	chat_model = ChatModel.model_construct(
+		provider="openai",
+		api=None,
+		model_name="stub",
+		adapter=_NoopChatAdapter(),
+	)
+	return AgentContext(
+		thread=Thread(),
+		model=chat_model,
+		iteration=0,
+		tool_call_id=tool_call_id,
+		metadata=metadata or {},
+	)
 
 
-def test_tool_decorator_custom_name() -> None:
-	@tool(name="calculator", description="do math")
-	def compute(expr: str) -> float:
-		return 0.0
+class _AddTool(Tool[None]):
+	async def call(
+		self,
+		__agent_context__: AgentContext,
+		__app_context__: None,
+		*,
+		a: int = 0,
+		b: int = 0,
+	) -> ToolMessage:
+		return self.success(str(a + b), __agent_context__)
 
-	assert compute.name == "calculator"
+
+class _CallsSuperTool(Tool[None]):
+	async def call(
+		self,
+		__agent_context__: AgentContext,
+		__app_context__: None,
+		**kwargs: object,
+	) -> ToolMessage:
+		return await super().call(__agent_context__, __app_context__, **kwargs)
+
+
+def test_tool_definition_uses_explicit_parameters() -> None:
+	params: JSONObject = {
+		"type": "object",
+		"properties": {"a": {"type": "integer"}},
+		"required": ["a"],
+	}
+	add_tool = _AddTool(
+		name="add",
+		description="add two numbers",
+		parameters=params,
+	)
+	definition = add_tool.definition
+	assert isinstance(definition, ToolDefinition)
+	assert definition.name == "add"
+	assert definition.description == "add two numbers"
+	assert definition.parameters == params
+	assert add_tool.parameters_resolved == params
+
+
+def test_tool_parameters_resolved_is_cached() -> None:
+	add_tool = _AddTool(name="add", description="add")
+	first = add_tool.parameters_resolved
+	second = add_tool.parameters_resolved
+	assert first is second
+	assert "properties" in first
+
+
+def test_tool_success_and_error_helpers_include_metadata() -> None:
+	ctx = _make_agent_context("call-1", metadata={"x": "y"})
+	add_tool = _AddTool(name="add", description="add")
+
+	ok = add_tool.success("ok", ctx)
+	assert ok.tool_call_id == "call-1"
+	assert ok.tool_output == "ok"
+	assert ok.is_error is False
+	assert ok.metadata == {"x": "y"}
+
+	err = add_tool.error("no", ctx)
+	assert err.tool_call_id == "call-1"
+	assert err.tool_output == "no"
+	assert err.is_error is True
+	assert err.metadata == {"x": "y"}
 
 
 @pytest.mark.asyncio
-async def test_tool_sync_call() -> None:
-	@tool(description="multiply")
-	def multiply(a: int, b: int) -> int:
-		return a * b
-
-	result = await multiply(a=3, b=4)
-	assert result == 12
-
-
-@pytest.mark.asyncio
-async def test_tool_async_call() -> None:
-	@tool(description="async add")
-	async def async_add(a: int, b: int) -> int:
-		return a + b
-
-	result = await async_add(a=5, b=7)
-	assert result == 12
+async def test_tool_call_returns_tool_message() -> None:
+	ctx = _make_agent_context("call-2")
+	add_tool = _AddTool(name="add", description="add")
+	result = await add_tool.call(ctx, None, a=2, b=3)
+	assert result.tool_output == "5"
+	assert result.is_error is False
 
 
-@pytest.mark.asyncio
-async def test_tool_context_forwarded_when_supported() -> None:
-	received: dict[str, object] = {}
+def test_tool_decorator_creates_tool_instance_and_schema() -> None:
+	@tool(name="decorated", description="a decorated tool")
+	def decorated(
+		__agent_context__: AgentContext,
+		__app_context__: None,
+		*,
+		value: int,
+	) -> ToolMessage:
+		return ToolMessage(
+			tool_call_id=__agent_context__.tool_call_id,
+			tool_output=str(value * 2),
+		)
 
-	@tool(description="needs context")
-	def with_context(value: int, __context: ToolExecutionContext) -> int:
-		received["call_id"] = __context.call_id
-		return value
-
-	ctx = ToolExecutionContext(call_id="call-1")
-	result = await with_context(value=7, __context=ctx)
-	assert result == 7
-	assert received["call_id"] == "call-1"
+	assert isinstance(decorated, Tool)
+	assert decorated.name == "decorated"
+	assert decorated.description == "a decorated tool"
+	params = decorated.parameters_resolved
+	assert "properties" in params
 
 
 @pytest.mark.asyncio
-async def test_tool_context_forwarded_via_kwargs() -> None:
-	received: dict[str, object] = {}
+async def test_tool_decorator_executes_function() -> None:
+	ctx = _make_agent_context("call-3")
 
-	@tool(description="kwargs context")
-	def kwargs_tool(value: int, **kwargs: object) -> int:
-		received["context"] = kwargs.get("__context")
-		return value
+	@tool(description="uses function name")
+	def auto_named(
+		__agent_context__: AgentContext,
+		__app_context__: None,
+		*,
+		text: str,
+	) -> ToolMessage:
+		return ToolMessage(
+			tool_call_id=__agent_context__.tool_call_id,
+			tool_output=text,
+		)
 
-	ctx = ToolExecutionContext(call_id="call-kw")
-	assert await kwargs_tool(value=5, __context=ctx) == 5
-	assert received["context"] is ctx
+	assert auto_named.name == "auto_named"
+	result = await auto_named.call(ctx, None, text="ok")
+	assert result.tool_output == "ok"
+
+
+def test_tool_decorator_validates_signature() -> None:
+	with pytest.raises(TypeError, match="parameter 0 must be named"):
+
+		@tool(description="bad")
+		def bad(
+			agent_context: AgentContext,
+			app_context: None,
+		) -> ToolMessage:
+			return ToolMessage(tool_call_id="x", tool_output="y")
 
 
 @pytest.mark.asyncio
-async def test_tool_context_ignored_when_not_supported() -> None:
-	@tool(description="no context")
-	def without_context(value: int) -> int:
-		return value
-
-	ctx = ToolExecutionContext(call_id="call-2")
-	assert await without_context(value=3, __context=ctx) == 3
+async def test_tool_call_base_raises_not_implemented() -> None:
+	ctx = _make_agent_context("call-4")
+	t = _CallsSuperTool(name="super", description="calls super")
+	with pytest.raises(NotImplementedError, match="call method must be implemented"):
+		await t.call(ctx, None)

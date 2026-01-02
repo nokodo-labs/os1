@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable
 from typing import TYPE_CHECKING, Literal, overload
 
-from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
-from nokodo_ai.tool import ToolDefinition
+from ...tool import ToolDefinition
+from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from .base import BaseOllamaAdapter
 
 
 if TYPE_CHECKING:

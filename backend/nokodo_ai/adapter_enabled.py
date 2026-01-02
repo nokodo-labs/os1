@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import ConfigDict, Field
 
-from nokodo_ai.base import Base
+from .base import Base
 
 
 def split_model_identifier(

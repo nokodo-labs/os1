@@ -7,13 +7,13 @@ from typing import Any, Literal, overload
 
 from pydantic import model_validator
 
-from nokodo_ai.adapter_enabled import AdapterEnabledMixin, split_model_identifier
-from nokodo_ai.adapters.base.chat import ChatGenerationParams
-from nokodo_ai.adapters.chat import ChatAdapter, resolve_chat_adapter_type
-from nokodo_ai.deltas import ChatModelDelta, stream_chat_model_deltas
-from nokodo_ai.messages import AssistantMessage, Message
-from nokodo_ai.thread import Thread
-from nokodo_ai.tool import ToolDefinition
+from .adapter_enabled import AdapterEnabledMixin, split_model_identifier
+from .adapters.base.chat import ChatGenerationParams
+from .adapters.chat import ChatAdapter, resolve_chat_adapter_type
+from .deltas import ChatModelDelta, stream_chat_model_deltas
+from .messages import AssistantMessage, Message
+from .thread import Thread
+from .tool import ToolDefinition
 
 
 class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):

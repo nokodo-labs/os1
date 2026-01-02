@@ -10,8 +10,8 @@ from collections.abc import AsyncIterator
 
 from pydantic import Field
 
-from nokodo_ai.base import Base
-from nokodo_ai.messages import AssistantMessage, Message, ToolMessage
+from .base import Base
+from .messages import AssistantMessage, Message, ToolMessage
 
 
 class ChatModelDelta(Base):

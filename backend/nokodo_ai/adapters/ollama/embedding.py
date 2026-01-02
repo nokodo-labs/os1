@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from nokodo_ai.adapters.base.embedding import BaseEmbeddingAdapter
-from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
+from ..base.embedding import BaseEmbeddingAdapter
+from .base import BaseOllamaAdapter
 
 
 class OllamaEmbeddingAdapter(BaseOllamaAdapter, BaseEmbeddingAdapter):

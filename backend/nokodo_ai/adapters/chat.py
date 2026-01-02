@@ -6,14 +6,14 @@ from typing import Annotated
 
 from pydantic import Field
 
-from nokodo_ai.adapters.anthropic.messages import AnthropicMessagesAdapter
-from nokodo_ai.adapters.base.chat import (
+from .anthropic.messages import AnthropicMessagesAdapter
+from .base.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
 )
-from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
-from nokodo_ai.adapters.openai.chat_completions import OpenAIChatCompletionsAdapter
-from nokodo_ai.adapters.openai.responses import OpenAIResponsesAdapter
+from .ollama.chat import OllamaChatAdapter
+from .openai.chat_completions import OpenAIChatCompletionsAdapter
+from .openai.responses import OpenAIResponsesAdapter
 
 
 ChatAdapter = Annotated[

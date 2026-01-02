@@ -8,9 +8,22 @@ from typing import TYPE_CHECKING, Literal, overload
 
 import openai
 
-from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
-from nokodo_ai.adapters.openai.types import (
+from ...messages import (
+	AssistantMessage,
+	ContentPart,
+	JsonContent,
+	SystemMessage,
+	TextContent,
+	ToolCall,
+	ToolMessage,
+	Usage,
+	UserMessage,
+)
+from ...tool import ToolDefinition
+from ...utils.validators import validate
+from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from .base import BaseOpenAIAdapter
+from .types import (
 	OpenAIEasyInputMessageParam,
 	OpenAIResponseFunctionCallOutput,
 	OpenAIResponseFunctionToolCall,
@@ -24,19 +37,6 @@ from nokodo_ai.adapters.openai.types import (
 	OpenAIResponseTextJSONSchemaConfigParam,
 	OpenAIResponseToolChoice,
 )
-from nokodo_ai.messages import (
-	AssistantMessage,
-	ContentPart,
-	JsonContent,
-	SystemMessage,
-	TextContent,
-	ToolCall,
-	ToolMessage,
-	Usage,
-	UserMessage,
-)
-from nokodo_ai.tool import ToolDefinition
-from nokodo_ai.utils.validators import validate
 
 
 if TYPE_CHECKING:

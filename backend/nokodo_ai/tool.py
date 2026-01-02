@@ -9,12 +9,12 @@ from typing import Concatenate
 
 from pydantic import Field
 
-from nokodo_ai.base import Base
-from nokodo_ai.context import AgentContext
-from nokodo_ai.messages import ToolMessage
-from nokodo_ai.types.json import JSONObject
-from nokodo_ai.utils.json_schema import schema_from_callable
-from nokodo_ai.utils.validators import validate_callable
+from .base import Base
+from .context import AgentContext
+from .messages import ToolMessage
+from .types.json import JSONObject
+from .utils.json_schema import schema_from_callable
+from .utils.validators import validate_callable
 
 
 class ToolDefinition(Base):

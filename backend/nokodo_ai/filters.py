@@ -7,8 +7,8 @@ from typing import Literal
 
 from pydantic import Field
 
-from nokodo_ai.base import Base
-from nokodo_ai.thread import Thread
+from .base import Base
+from .thread import Thread
 
 
 class BaseFilter[AppContextT, PhaseT: Literal["pre", "post"]](Base, ABC):

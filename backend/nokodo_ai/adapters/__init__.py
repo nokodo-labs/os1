@@ -1,9 +1,9 @@
 """adapters for different AI providers and API shapes."""
 
-from nokodo_ai.adapters.base import BaseAdapter
-from nokodo_ai.adapters.base.chat import BaseChatAdapter
-from nokodo_ai.adapters.base.embedding import BaseEmbeddingAdapter
-from nokodo_ai.adapters.base.vectorstore import BaseVectorstoreAdapter
+from .base import BaseAdapter
+from .base.chat import BaseChatAdapter
+from .base.embedding import BaseEmbeddingAdapter
+from .base.vectorstore import BaseVectorstoreAdapter
 
 
 __all__ = [

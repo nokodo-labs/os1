@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from nokodo_ai.adapters.base.embedding import BaseEmbeddingAdapter
-from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
+from ..base.embedding import BaseEmbeddingAdapter
+from .base import BaseOpenAIAdapter
 
 
 class OpenAIEmbeddingAdapter(BaseOpenAIAdapter, BaseEmbeddingAdapter):

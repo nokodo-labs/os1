@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field, PrivateAttr
 
-from nokodo_ai.adapters.base import BaseAdapter
+from ..base import BaseAdapter
 
 
 class BaseOllamaAdapter(BaseAdapter):

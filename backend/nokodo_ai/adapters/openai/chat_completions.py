@@ -9,9 +9,24 @@ from typing import TYPE_CHECKING, Literal, cast, overload
 
 import openai
 
-from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
-from nokodo_ai.adapters.openai.types import (
+from ...messages import (
+	AssistantMessage,
+	ContentPart,
+	FinishReason,
+	RefusalContent,
+	SystemMessage,
+	TextContent,
+	ToolCall,
+	ToolMessage,
+	Usage,
+	UserMessage,
+)
+from ...tool import ToolDefinition
+from ...types.json import JSONObject
+from ...utils.validators import validate
+from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from .base import BaseOpenAIAdapter
+from .types import (
 	OpenAIChatCompletion,
 	OpenAIChatCompletionAssistantMessageParam,
 	OpenAIChatCompletionFunctionDefinition,
@@ -29,21 +44,6 @@ from nokodo_ai.adapters.openai.types import (
 	OpenAIJSONSchema,
 	OpenAIResponseFormatJSONSchema,
 )
-from nokodo_ai.messages import (
-	AssistantMessage,
-	ContentPart,
-	FinishReason,
-	RefusalContent,
-	SystemMessage,
-	TextContent,
-	ToolCall,
-	ToolMessage,
-	Usage,
-	UserMessage,
-)
-from nokodo_ai.tool import ToolDefinition
-from nokodo_ai.types.json import JSONObject
-from nokodo_ai.utils.validators import validate
 
 
 if TYPE_CHECKING:

@@ -8,8 +8,22 @@ from typing import TYPE_CHECKING, Literal, overload
 
 import anthropic
 
-from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
-from nokodo_ai.adapters.anthropic.types import (
+from ...messages import (
+	AssistantMessage,
+	ContentPart,
+	JsonContent,
+	SystemMessage,
+	TextContent,
+	ToolCall,
+	ToolMessage,
+	Usage,
+	UserMessage,
+)
+from ...tool import ToolDefinition
+from ...types.json import JSONObject
+from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from .base import BaseAnthropicAdapter
+from .types import (
 	AnthropicInputJSONDelta,
 	AnthropicMessageParam,
 	AnthropicRawContentBlockDeltaEvent,
@@ -27,20 +41,6 @@ from nokodo_ai.adapters.anthropic.types import (
 	AnthropicToolUseBlock,
 	AnthropicToolUseBlockParam,
 )
-from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.messages import (
-	AssistantMessage,
-	ContentPart,
-	JsonContent,
-	SystemMessage,
-	TextContent,
-	ToolCall,
-	ToolMessage,
-	Usage,
-	UserMessage,
-)
-from nokodo_ai.tool import ToolDefinition
-from nokodo_ai.types.json import JSONObject
 
 
 if TYPE_CHECKING:

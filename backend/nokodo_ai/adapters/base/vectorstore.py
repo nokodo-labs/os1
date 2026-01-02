@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from nokodo_ai.types.json import JSONObject
+from ...types.json import JSONObject
 
 
 @dataclass

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
-from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
-from nokodo_ai.adapters.ollama.embedding import OllamaEmbeddingAdapter
+from .base import BaseOllamaAdapter
+from .chat import OllamaChatAdapter
+from .embedding import OllamaEmbeddingAdapter
 
 
 __all__ = [

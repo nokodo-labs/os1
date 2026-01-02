@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from anthropic import AsyncAnthropic
 
-from nokodo_ai.adapters.base import BaseApiAdapter
+from ..base import BaseApiAdapter
 
 
 class BaseAnthropicAdapter(BaseApiAdapter[AsyncAnthropic]):

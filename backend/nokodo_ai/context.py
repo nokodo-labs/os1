@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-	from nokodo_ai import JSONObject
-	from nokodo_ai.chat_models import ChatModel
-	from nokodo_ai.thread import Thread
+	from .chat_models import ChatModel
+	from .thread import Thread
+	from .types import JSONObject
 
 
 @dataclass(slots=True)

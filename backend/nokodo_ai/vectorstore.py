@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from nokodo_ai.adapters.base.vectorstore import BaseVectorstoreAdapter, SearchResult
-from nokodo_ai.types.json import JSONObject
+from .adapters.base.vectorstore import BaseVectorstoreAdapter, SearchResult
+from .types.json import JSONObject
 
 
 class Vectorstore:

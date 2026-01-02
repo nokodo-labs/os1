@@ -7,9 +7,9 @@ from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter
 
-from nokodo_ai.base import Base
-from nokodo_ai.types.json import JSONObject, JSONValue
-from nokodo_ai.utils import typeid
+from .base import Base
+from .types.json import JSONObject, JSONValue
+from .utils import typeid
 
 
 # --- content types ---

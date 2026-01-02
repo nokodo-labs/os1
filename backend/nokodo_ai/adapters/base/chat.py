@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Literal, overload
 
 from pydantic import ConfigDict
 
-from nokodo_ai.base import Base
-from nokodo_ai.tool import ToolDefinition
+from ...base import Base
+from ...tool import ToolDefinition
 
 
 if TYPE_CHECKING:

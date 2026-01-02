@@ -10,11 +10,13 @@ from nokodo_ai import (
 	ChatModel,
 	EmbeddingModel,
 	Thread,
+	ToolMessage,
 	UserMessage,
 	tool,
 )
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
+from nokodo_ai.context import AgentContext
 
 
 def test_llm_requires_model() -> None:
@@ -189,8 +191,14 @@ async def test_chat_model_streaming_with_tools() -> None:
 	)
 
 	@tool(description="noop")
-	def noop() -> str:
-		return "ok"
+	def noop(
+		__agent_context__: AgentContext,
+		__app_context__: None,
+	) -> ToolMessage:
+		return ToolMessage(
+			tool_call_id=__agent_context__.tool_call_id,
+			tool_output="ok",
+		)
 
 	chunks = [
 		delta

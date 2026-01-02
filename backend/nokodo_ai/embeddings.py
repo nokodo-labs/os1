@@ -6,8 +6,8 @@ from typing import Any
 
 from pydantic import ConfigDict, model_validator
 
-from nokodo_ai.adapter_enabled import AdapterEnabledMixin, split_model_identifier
-from nokodo_ai.adapters.embedding import (
+from .adapter_enabled import AdapterEnabledMixin, split_model_identifier
+from .adapters.embedding import (
 	EmbeddingAdapter,
 	resolve_embedding_adapter_type,
 )

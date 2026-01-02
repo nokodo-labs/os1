@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 from pydantic import Field
 
-from nokodo_ai.base import Base
-from nokodo_ai.messages import Message
-from nokodo_ai.types.json import JSONObject
+from .base import Base
+from .messages import Message
+from .types.json import JSONObject
 
 
 class Thread(Base):

@@ -7,22 +7,22 @@ from collections.abc import AsyncIterator
 from functools import cached_property
 from typing import Literal, overload
 
-from pydantic import Field
+from pydantic import Field, SkipValidation
 
-from nokodo_ai.base import Base
-from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.context import AgentContext
-from nokodo_ai.deltas import AgentDelta
-from nokodo_ai.filters import PostFilter, PreFilter
-from nokodo_ai.messages import (
+from .base import Base
+from .chat_models import ChatModel
+from .context import AgentContext
+from .deltas import AgentDelta
+from .filters import PostFilter, PreFilter
+from .messages import (
 	AssistantMessage,
 	TextContent,
 	ToolCall,
 	ToolMessage,
 )
-from nokodo_ai.thread import Thread
-from nokodo_ai.tool import Tool, ToolDefinition
-from nokodo_ai.types.json import JSONObject
+from .thread import Thread
+from .tool import Tool, ToolDefinition
+from .types.json import JSONObject
 
 
 AgentProducedMessages = list[AssistantMessage | ToolMessage]
@@ -76,11 +76,14 @@ class Agent[AppContextT = None](Base):
 	chat_model: ChatModel = Field(
 		..., description="which model to use for Agent execution"
 	)
-	tools: list[Tool[AppContextT]] = Field(
+	tools: list[SkipValidation[Tool[AppContextT]]] = Field(
 		default_factory=list, description="list of tools the agent can use"
 	)
-	filters: list[PreFilter[AppContextT] | PostFilter[AppContextT]] = Field(
-		default_factory=list, description="pre and post filters for message processing"
+	filters: list[SkipValidation[PreFilter[AppContextT] | PostFilter[AppContextT]]] = (
+		Field(
+			default_factory=list,
+			description="pre and post filters for message processing",
+		)
 	)
 	max_iterations: int = Field(default=10, description="maximum Agent iterations")
 

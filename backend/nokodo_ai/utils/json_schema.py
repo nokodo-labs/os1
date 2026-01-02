@@ -4,7 +4,7 @@ from typing import Any, get_type_hints
 
 from pydantic import create_model
 
-from nokodo_ai.types.json import JSONObject
+from ..types.json import JSONObject
 
 
 def schema_from_callable(
