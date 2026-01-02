@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Literal, overload
 from pydantic import ConfigDict
 
 from nokodo_ai.base import Base
+from nokodo_ai.tool import ToolDefinition
 
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import AssistantMessage, Message
-	from nokodo_ai.tool import Tool
 
 
 from nokodo_ai.types.json import JSONObject
@@ -58,7 +58,7 @@ class BaseChatAdapter(Base, ABC):
 		messages: list[Message],
 		model: str,
 		stream: Literal[False] = False,
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
@@ -68,7 +68,7 @@ class BaseChatAdapter(Base, ABC):
 		messages: list[Message],
 		model: str,
 		stream: Literal[True],
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
@@ -78,7 +78,7 @@ class BaseChatAdapter(Base, ABC):
 		messages: list[Message],
 		model: str,
 		stream: bool = False,
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		"""generate a response.
@@ -88,4 +88,4 @@ class BaseChatAdapter(Base, ABC):
 			async for chunk in adapter.generate(messages, stream=True):
 				...
 		"""
-		...
+		raise NotImplementedError("generate() not implemented in base class")

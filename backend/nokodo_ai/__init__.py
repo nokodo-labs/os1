@@ -25,10 +25,12 @@ usage (explicit adapter):
 
 from __future__ import annotations
 
-from nokodo_ai.agent import Agent
+from nokodo_ai.agents import Agent
 from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.context import AgentContext
 from nokodo_ai.deltas import AgentDelta, ChatModelDelta
 from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.filters import PostFilter, PreFilter
 from nokodo_ai.messages import (
 	AssistantMessage,
 	BaseMessage,
@@ -46,7 +48,7 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.thread import Thread
-from nokodo_ai.tool import Tool, ToolExecutionContext, tool
+from nokodo_ai.tool import Tool, ToolDefinition, tool
 from nokodo_ai.types import JSONArray, JSONObject, JSONValue
 from nokodo_ai.vectorstore import Vectorstore
 
@@ -59,9 +61,14 @@ __all__ = [
 	"Agent",
 	"ChatModelDelta",
 	"AgentDelta",
+	# tools
 	"Tool",
-	"ToolExecutionContext",
+	"ToolDefinition",
 	"tool",
+	# context and filters
+	"AgentContext",
+	"PreFilter",
+	"PostFilter",
 	# domain models
 	"Thread",
 	"Message",

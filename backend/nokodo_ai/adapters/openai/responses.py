@@ -35,7 +35,7 @@ from nokodo_ai.messages import (
 	Usage,
 	UserMessage,
 )
-from nokodo_ai.tool import Tool
+from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.utils.validators import validate
 
 
@@ -57,7 +57,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: Literal[False] = False,
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
@@ -67,7 +67,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: Literal[True],
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
@@ -76,7 +76,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: bool = False,
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		params = params or ChatGenerationParams()
@@ -93,7 +93,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] | None,
+		tools: list[ToolDefinition],
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		"""generate a completion using /v1/responses."""
@@ -159,7 +159,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] | None,
+		tools: list[ToolDefinition],
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/responses."""
@@ -275,7 +275,7 @@ def _messages_to_openai_responses_input(
 
 
 def _tools_to_openai_responses(
-	tools: list[Tool],
+	tools: list[ToolDefinition],
 ) -> list[OpenAIResponseFunctionToolParam]:
 	result: list[OpenAIResponseFunctionToolParam] = []
 	for t in tools:

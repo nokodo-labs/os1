@@ -17,6 +17,21 @@ from nokodo_ai.utils.json_schema import schema_from_callable
 from nokodo_ai.utils.validators import validate_callable
 
 
+class ToolDefinition(Base):
+	"""schema-only tool definition for LLM APIs.
+
+	this contains just the metadata needed to describe a tool to an LLM,
+	without the actual callable implementation. used by ChatModel/adapters
+	which only need to send tool schemas, not execute them.
+	"""
+
+	name: str = Field(..., description="name of the tool")
+	description: str = Field(..., description="description of the tool")
+	parameters: JSONObject = Field(
+		..., description="JSON schema of the tool parameters"
+	)
+
+
 class Tool[AppContextT = None](Base, ABC):
 	"""abstract base class for agent tools.
 
@@ -41,6 +56,19 @@ class Tool[AppContextT = None](Base, ABC):
 			skip_dunder=True,
 		)
 		return schema
+
+	@property
+	def definition(self) -> ToolDefinition:
+		"""get the tool definition for LLM APIs.
+
+		returns just the schema metadata (name, description, parameters)
+		without the callable implementation.
+		"""
+		return ToolDefinition(
+			name=self.name,
+			description=self.description,
+			parameters=self.parameters_resolved,
+		)
 
 	@abstractmethod
 	async def call(

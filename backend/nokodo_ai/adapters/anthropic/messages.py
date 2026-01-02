@@ -39,7 +39,7 @@ from nokodo_ai.messages import (
 	Usage,
 	UserMessage,
 )
-from nokodo_ai.tool import Tool
+from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
 
 
@@ -58,7 +58,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: Literal[False] = False,
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
@@ -68,7 +68,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: Literal[True],
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
@@ -77,7 +77,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: bool = False,
-		tools: list[Tool] | None = None,
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		params = params or ChatGenerationParams()
@@ -91,7 +91,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] | None,
+		tools: list[ToolDefinition],
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		system_text, anthropic_messages = _messages_to_anthropic(messages)
@@ -165,7 +165,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] | None,
+		tools: list[ToolDefinition],
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		system_text, anthropic_messages = _messages_to_anthropic(messages)
@@ -349,7 +349,7 @@ def _messages_to_anthropic(
 	return (system_text or None, result)
 
 
-def _tools_to_anthropic(tools: list[Tool]) -> list[AnthropicToolParam]:
+def _tools_to_anthropic(tools: list[ToolDefinition]) -> list[AnthropicToolParam]:
 	result: list[AnthropicToolParam] = []
 	for t in tools:
 		result.append(

@@ -41,7 +41,7 @@ from nokodo_ai.messages import (
 	Usage,
 	UserMessage,
 )
-from nokodo_ai.tool import Tool
+from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.validators import validate
 
@@ -66,7 +66,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: Literal[False] = False,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
@@ -76,7 +76,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: Literal[True],
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
@@ -85,9 +85,11 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		messages: list[Message],
 		model: str,
 		stream: bool = False,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		if tools is None:
+			tools = []
 		params = params or ChatGenerationParams()
 		if stream:
 			return self._generate_streaming(
@@ -99,7 +101,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition],
 		params: ChatGenerationParams | None = None,
 	) -> AssistantMessage:
 		"""generate a completion using /v1/chat/completions."""
@@ -145,7 +147,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		self,
 		messages: list[Message],
 		model: str,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/chat/completions."""
@@ -193,7 +195,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 
 
 def _tools_to_openai_chatcompletions(
-	tools: list[Tool],
+	tools: list[ToolDefinition],
 ) -> list[OpenAIChatCompletionToolParam]:
 	"""convert SDK tools to openai tool params."""
 	result: list[OpenAIChatCompletionToolParam] = []

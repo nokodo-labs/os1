@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Literal, overload
 
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.ollama.base import BaseOllamaAdapter
+from nokodo_ai.tool import ToolDefinition
 
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import AssistantMessage, Message
-	from nokodo_ai.tool import Tool
 
 
 class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
@@ -26,7 +26,7 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 		*,
 		model: str,
 		stream: Literal[False] = False,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage]: ...
 
@@ -37,7 +37,7 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 		*,
 		model: str,
 		stream: Literal[True],
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> AsyncIterator[AssistantMessage]: ...
 
@@ -47,15 +47,14 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 		*,
 		model: str,
 		stream: bool = False,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
-		_ = (model, tools, params)
 		if stream:
 			return self._stream(messages)
 		return self._complete(messages)
 
-	async def _complete(self, messages: list[Message]) -> AssistantMessage:
+	async def _complete(self, messages: list[Message]) -> Awaitable[AssistantMessage]:
 		"""generate a completion using ollama chat API."""
 		raise NotImplementedError("ollama chat adapter not yet implemented")
 

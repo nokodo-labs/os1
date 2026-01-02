@@ -13,7 +13,7 @@ from nokodo_ai.adapters.chat import ChatAdapter, resolve_chat_adapter_type
 from nokodo_ai.deltas import ChatModelDelta, stream_chat_model_deltas
 from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.thread import Thread
-from nokodo_ai.tool import Tool
+from nokodo_ai.tool import ToolDefinition
 
 
 class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
@@ -83,7 +83,7 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 		self,
 		input: list[Message] | Thread,
 		stream: Literal[False] = False,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AssistantMessage]: ...
@@ -93,7 +93,7 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 		self,
 		input: list[Message] | Thread,
 		stream: Literal[True],
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> AsyncIterator[ChatModelDelta]: ...
@@ -102,7 +102,7 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 		self,
 		input: list[Message] | Thread,
 		stream: bool = False,
-		tools: list[Tool] = [],
+		tools: list[ToolDefinition] = [],
 		tool_choice: Literal["auto", "none", "required"] | str | None = None,
 		params: ChatGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AssistantMessage] | AsyncIterator[ChatModelDelta]:

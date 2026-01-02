@@ -21,7 +21,7 @@ from nokodo_ai.messages import (
 	ToolMessage,
 )
 from nokodo_ai.thread import Thread
-from nokodo_ai.tool import Tool
+from nokodo_ai.tool import Tool, ToolDefinition
 from nokodo_ai.types.json import JSONObject
 
 
@@ -73,7 +73,9 @@ class Agent[AppContextT = None](Base):
 			print(delta)
 	"""
 
-	llm: ChatModel = Field(..., description="which model to use for Agent execution")
+	chat_model: ChatModel = Field(
+		..., description="which model to use for Agent execution"
+	)
 	tools: list[Tool[AppContextT]] = Field(
 		default_factory=list, description="list of tools the agent can use"
 	)
@@ -86,6 +88,11 @@ class Agent[AppContextT = None](Base):
 	def tools_map(self) -> dict[str, Tool[AppContextT]]:
 		"""map of tool names to tool instances for fast lookup."""
 		return {t.name: t for t in self.tools}
+
+	@cached_property
+	def tool_definitions(self) -> list[ToolDefinition]:
+		"""get tool definitions for llm.generate() calls."""
+		return [t.definition for t in self.tools]
 
 	@cached_property
 	def pre_filters(self) -> list[PreFilter[AppContextT]]:
@@ -161,9 +168,9 @@ class Agent[AppContextT = None](Base):
 
 			current_tool_choice = tool_choice if self.tools else None
 
-			assistant_response = await self.llm.generate(
+			assistant_response = await self.chat_model.generate(
 				filtered_thread,
-				tools=self.tools,
+				tools=self.tool_definitions,
 				tool_choice=current_tool_choice,
 			)
 			thread.add(assistant_response)
@@ -179,7 +186,7 @@ class Agent[AppContextT = None](Base):
 			for tool_call in assistant_response.tool_calls:
 				agent_context = AgentContext(
 					thread=thread,
-					model=self.llm,
+					model=self.chat_model,
 					tool_call_id=tool_call.id,
 					iteration=iteration,
 				)
@@ -192,9 +199,9 @@ class Agent[AppContextT = None](Base):
 				produced.append(tool_message)
 
 		# max iterations reached - call llm one more time without tools
-		final_response = await self.llm.generate(
+		final_response = await self.chat_model.generate(
 			thread,
-			tools=self.tools,
+			tools=self.tool_definitions,
 			tool_choice="none",
 		)
 		thread.add(final_response)
@@ -221,10 +228,10 @@ class Agent[AppContextT = None](Base):
 
 			# stream from llm and accumulate full message
 			assistant_message = AssistantMessage()
-			async for chat_delta in self.llm.generate(
+			async for chat_delta in self.chat_model.generate(
 				filtered_thread,
 				stream=True,
-				tools=self.tools,
+				tools=self.tool_definitions,
 				tool_choice=current_tool_choice,
 			):
 				# accumulate into complete message for thread
@@ -250,7 +257,7 @@ class Agent[AppContextT = None](Base):
 			for tool_call in assistant_message.tool_calls:
 				agent_context = AgentContext(
 					thread=thread,
-					model=self.llm,
+					model=self.chat_model,
 					tool_call_id=tool_call.id,
 					iteration=iteration,
 				)
@@ -265,10 +272,10 @@ class Agent[AppContextT = None](Base):
 
 		# max iterations reached - final call without tools
 		final_message = AssistantMessage()
-		async for chat_delta in self.llm.generate(
+		async for chat_delta in self.chat_model.generate(
 			thread,
 			stream=True,
-			tools=[],
+			tools=self.tool_definitions,
 			tool_choice=None,
 		):
 			final_message = final_message.merge(chat_delta.message)
