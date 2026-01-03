@@ -1,5 +1,7 @@
 """Application configuration."""
 
+import asyncio
+import sys
 from typing import Literal
 
 from pydantic import field_validator
@@ -70,3 +72,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def configure_psycopg_asyncio_event_loop_policy() -> None:
+	"""Ensure psycopg runs on a selector event loop on Windows."""
+	# psycopg async mode is not compatible with Windows' default Proactor event loop.
+	if sys.platform == "win32":
+		asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

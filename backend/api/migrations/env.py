@@ -1,17 +1,23 @@
 """Alembic environment configuration."""
 
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from api import models  # noqa: F401
-from api.core.config import settings
+from api.core.config import configure_psycopg_asyncio_event_loop_policy, settings
 from api.models.base import Base
 
+
+configure_psycopg_asyncio_event_loop_policy()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
