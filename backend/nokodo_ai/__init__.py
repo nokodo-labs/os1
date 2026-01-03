@@ -30,7 +30,8 @@ from .chat_models import ChatModel
 from .context import AgentContext
 from .deltas import AgentDelta, ChatModelDelta
 from .embeddings import EmbeddingModel
-from .filters import PostFilter, PreFilter
+from .filters import Filter
+from .hooks import Hook
 from .messages import (
 	AssistantMessage,
 	BaseMessage,
@@ -65,10 +66,10 @@ __all__ = [
 	"Tool",
 	"ToolDefinition",
 	"tool",
-	# context and filters
+	# context, filters, and hooks
 	"AgentContext",
-	"PreFilter",
-	"PostFilter",
+	"Filter",
+	"Hook",
 	# domain models
 	"Thread",
 	"Message",

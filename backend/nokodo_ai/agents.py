@@ -13,7 +13,8 @@ from .base import Base
 from .chat_models import ChatModel
 from .context import AgentContext
 from .deltas import AgentDelta
-from .filters import PostFilter, PreFilter
+from .filters import Filter
+from .hooks import Hook
 from .messages import (
 	AssistantMessage,
 	TextContent,
@@ -79,11 +80,13 @@ class Agent[AppContextT = None](Base):
 	tools: list[SkipValidation[Tool[AppContextT]]] = Field(
 		default_factory=list, description="list of tools the agent can use"
 	)
-	filters: list[SkipValidation[PreFilter[AppContextT] | PostFilter[AppContextT]]] = (
-		Field(
-			default_factory=list,
-			description="pre and post filters for message processing",
-		)
+	filters: list[SkipValidation[Filter[AppContextT]]] = Field(
+		default_factory=list,
+		description="pre-processing filters that can modify the thread",
+	)
+	hooks: list[SkipValidation[Hook[AppContextT]]] = Field(
+		default_factory=list,
+		description="post-execution hooks for observation (read-only)",
 	)
 	max_iterations: int = Field(default=10, description="maximum Agent iterations")
 
@@ -96,16 +99,6 @@ class Agent[AppContextT = None](Base):
 	def tool_definitions(self) -> list[ToolDefinition]:
 		"""get tool definitions for llm.generate() calls."""
 		return [t.definition for t in self.tools]
-
-	@cached_property
-	def pre_filters(self) -> list[PreFilter[AppContextT]]:
-		"""get all pre-filters."""
-		return [f for f in self.filters if isinstance(f, PreFilter)]
-
-	@cached_property
-	def post_filters(self) -> list[PostFilter[AppContextT]]:
-		"""get all post-filters."""
-		return [f for f in self.filters if isinstance(f, PostFilter)]
 
 	@overload
 	async def run(
@@ -164,10 +157,10 @@ class Agent[AppContextT = None](Base):
 		produced: AgentProducedMessages = []
 
 		for iteration in range(self.max_iterations):
-			# apply pre-filters to thread messages
+			# apply filters to thread messages (pre-processing)
 			filtered_thread = thread
-			for filter in self.pre_filters:
-				filtered_thread = await filter.process(filtered_thread, app_context)
+			for filter_ in self.filters:
+				filtered_thread = await filter_.process(filtered_thread, app_context)
 
 			current_tool_choice = tool_choice if self.tools else None
 
@@ -179,9 +172,9 @@ class Agent[AppContextT = None](Base):
 			thread.add(assistant_response)
 			produced.append(assistant_response)
 
-			# apply post-filters to response
-			for filter in self.post_filters:
-				await filter.process(thread, app_context)
+			# execute hooks after response (read-only observation)
+			for hook in self.hooks:
+				await hook.execute(thread, app_context)
 
 			if not assistant_response.tool_calls:
 				return produced
@@ -222,10 +215,10 @@ class Agent[AppContextT = None](Base):
 		chunk_index = 0
 
 		for iteration in range(self.max_iterations):
-			# apply pre-filters to thread
+			# apply filters to thread (pre-processing)
 			filtered_thread = thread
-			for pre_filter in self.pre_filters:
-				filtered_thread = await pre_filter.process(filtered_thread, app_context)
+			for filter_ in self.filters:
+				filtered_thread = await filter_.process(filtered_thread, app_context)
 
 			current_tool_choice = tool_choice if self.tools else None
 
@@ -247,9 +240,9 @@ class Agent[AppContextT = None](Base):
 			# add completed message to thread
 			thread.add(assistant_message)
 
-			# apply post-filters
-			for post_filter in self.post_filters:
-				await post_filter.process(thread, app_context)
+			# execute hooks (read-only observation)
+			for hook in self.hooks:
+				await hook.execute(thread, app_context)
 
 			# no tool calls = final response, we're done
 			if not assistant_message.tool_calls:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable
-from typing import Literal
 
 import pytest
 from pydantic import PrivateAttr
@@ -21,7 +20,8 @@ from nokodo_ai import (
 	UserMessage,
 )
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.filters import PostFilter, PreFilter
+from nokodo_ai.filters import Filter
+from nokodo_ai.hooks import Hook
 from nokodo_ai.tool import ToolDefinition
 
 
@@ -323,26 +323,28 @@ async def test_agent_sync_tool_exception_returns_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_sync_applies_pre_and_post_filters() -> None:
+async def test_agent_sync_applies_filters_and_hooks() -> None:
 	seen: list[str] = []
 
-	class _Pre(PreFilter[None]):
-		phase: Literal["pre"] = "pre"
+	class _TestFilter(Filter[None]):
+		name: str = "test_filter"
+		description: str = "test filter"
 
 		async def process(self, thread: Thread, app_context: None) -> Thread:
-			seen.append("pre")
+			seen.append("filter")
 			thread.add(SystemMessage.from_text("injected"))
 			return thread
 
-	class _Post(PostFilter[None]):
-		phase: Literal["post"] = "post"
+	class _TestHook(Hook[None]):
+		name: str = "test_hook"
+		description: str = "test hook"
 
-		async def process(self, thread: Thread, app_context: None) -> None:
-			seen.append("post")
+		async def execute(self, thread: Thread, app_context: None) -> None:
+			seen.append("hook")
 
 	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage.from_text("ok")])
 	chat_model = _make_chat_model(adapter)
-	agent = Agent(chat_model=chat_model, filters=[_Pre(), _Post()])
+	agent = Agent(chat_model=chat_model, filters=[_TestFilter()], hooks=[_TestHook()])
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
@@ -351,7 +353,7 @@ async def test_agent_sync_applies_pre_and_post_filters() -> None:
 	assert len(result) == 1
 	assert isinstance(result[0], AssistantMessage)
 	assert result[0].text == "ok"
-	assert seen == ["pre", "post"]
+	assert seen == ["filter", "hook"]
 	call_messages = adapter.calls[-1]["messages"]
 	assert isinstance(call_messages, list)
 	assert any(
@@ -461,26 +463,28 @@ async def test_agent_streaming_final_call_no_fallback_when_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_streaming_applies_pre_and_post_filters() -> None:
+async def test_agent_streaming_applies_filters_and_hooks() -> None:
 	seen: list[str] = []
 
-	class _Pre(PreFilter[None]):
-		phase: Literal["pre"] = "pre"
+	class _TestFilter(Filter[None]):
+		name: str = "test_filter"
+		description: str = "test filter"
 
 		async def process(self, thread: Thread, app_context: None) -> Thread:
-			seen.append("pre")
+			seen.append("filter")
 			thread.add(SystemMessage.from_text("injected"))
 			return thread
 
-	class _Post(PostFilter[None]):
-		phase: Literal["post"] = "post"
+	class _TestHook(Hook[None]):
+		name: str = "test_hook"
+		description: str = "test hook"
 
-		async def process(self, thread: Thread, app_context: None) -> None:
-			seen.append("post")
+		async def execute(self, thread: Thread, app_context: None) -> None:
+			seen.append("hook")
 
 	adapter = _QueuedChatAdapter(stream_responses=[[AssistantMessage.from_text("ok")]])
 	chat_model = _make_chat_model(adapter)
-	agent = Agent(chat_model=chat_model, filters=[_Pre(), _Post()])
+	agent = Agent(chat_model=chat_model, filters=[_TestFilter()], hooks=[_TestHook()])
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
@@ -488,7 +492,7 @@ async def test_agent_streaming_applies_pre_and_post_filters() -> None:
 	deltas = [d async for d in stream]
 
 	assert deltas[-1].done is True
-	assert seen == ["pre", "post"]
+	assert seen == ["filter", "hook"]
 	call_messages = adapter.calls[-1]["messages"]
 	assert isinstance(call_messages, list)
 	assert any(
