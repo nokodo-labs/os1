@@ -346,12 +346,9 @@ def _build_tool_calls_from_deltas(
 
 		openai_id = tool_call_ids.get(index)
 		raw_args = tool_call_arguments.get(index) or "{}"
-		metadata: JSONObject | None = None
-
-		if openai_id is not None:
-			if metadata is None:
-				metadata = {}
-			metadata["openai_tool_call_id"] = openai_id
+		metadata: JSONObject | None = (
+			{"openai_tool_call_id": openai_id} if openai_id is not None else None
+		)
 
 		final_tool_calls.append(
 			ToolCall(

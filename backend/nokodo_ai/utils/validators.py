@@ -25,7 +25,10 @@ from typing_extensions import TypeForm
 
 def validate_literal[T](value: object, literal_type: TypeForm[T]) -> T:
 	"""validate that a value is one of the values in a Literal[...] type."""
-	if get_origin(literal_type) is not Literal:
+	origin = get_origin(literal_type)
+	if origin is None and literal_type is Literal:
+		origin = Literal
+	if origin is not Literal:
 		raise TypeError("literal_type must be a typing.Literal[...] type")
 
 	allowed = get_args(literal_type)
@@ -134,6 +137,12 @@ def validate_callable(
 	sig = signature(func)
 	params = list(sig.parameters.values())
 
+	try:
+		hints = get_type_hints(func)
+	except Exception:
+		# get_type_hints can fail on some edge cases
+		hints = getattr(func, "__annotations__", {})
+
 	# filter out *args and **kwargs
 	positional_params = [
 		p
@@ -182,12 +191,6 @@ def validate_callable(
 	# validate argument types
 	# ─────────────────────────────────────────────────────────────────────────
 	if expected_arg_types is not None:
-		try:
-			hints = get_type_hints(func)
-		except Exception:
-			# get_type_hints can fail on some edge cases
-			hints = getattr(func, "__annotations__", {})
-
 		for i, expected_type in enumerate(expected_arg_types):
 			if i >= len(positional_params):
 				raise TypeError(

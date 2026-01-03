@@ -31,10 +31,8 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 	"""
 
 	def __init__(self, model_name: str | None = None, **data: Any) -> None:
-		# convenience: allow `ChatModel("gpt-4o")` without supporting legacy `model=`
+		# convenience: allow `ChatModel("gpt-4o")`
 		if model_name is not None:
-			if "model_name" in data:
-				raise TypeError("model_name provided twice")
 			data["model_name"] = model_name
 		super().__init__(**data)
 
