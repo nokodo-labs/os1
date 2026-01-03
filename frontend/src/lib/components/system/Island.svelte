@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import type { Agent } from '$lib/api/generated'
+	import type { Agent } from '$lib/api'
 	import { v1Client } from '$lib/api/v1/client'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'

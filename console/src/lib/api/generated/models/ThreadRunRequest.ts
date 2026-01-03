@@ -3,14 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Payload to run a thread, optionally appending a new user message.
+ * Payload to run a thread with an agent, optionally appending a new user message.
  */
 export type ThreadRunRequest = {
-    agent_id?: (string | null);
-    model_id?: (string | null);
-    model?: (string | null);
+    agent_id: string;
     input?: (string | null);
-    temperature?: (number | null);
-    max_tokens?: (number | null);
 };
 

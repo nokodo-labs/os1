@@ -2,10 +2,12 @@
 	import {
 		AgentsService,
 		ModelsService,
+		PluginsService,
 		type Agent,
 		type AgentCreate,
 		type AgentVisibility,
 		type Model,
+		type PluginInfo,
 	} from '$lib/api'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -26,6 +28,8 @@
 
 	let agents = $state<Agent[]>([])
 	let models = $state<Model[]>([])
+	let availableToolPlugins = $state<PluginInfo[]>([])
+	let availableFilterPlugins = $state<PluginInfo[]>([])
 	let showModal = $state(false)
 	let isFetching = $state(true)
 	let isLoading = $state(false)
@@ -37,19 +41,24 @@
 	let formSystemPrompt = $state('')
 	let formVisibility = $state<AgentVisibility>('admin-only')
 	let formModelId = $state<string>('')
+	let formPluginIds = $state<string[]>([])
 
 	async function fetchData() {
 		isFetching = true
 		error = null
 		try {
-			const [agentsData, modelsData] = await Promise.all([
+			const [agentsData, modelsData, toolPluginsData, filterPluginsData] = await Promise.all([
 				AgentsService.listAgentsAgentsGet(),
 				ModelsService.listModelsModelsGet(),
+				PluginsService.listAvailablePluginsPluginsAvailableGet('tool'),
+				PluginsService.listAvailablePluginsPluginsAvailableGet('filter'),
 			])
 			agents = agentsData
 			models = modelsData
+			availableToolPlugins = toolPluginsData
+			availableFilterPlugins = filterPluginsData
 		} catch (e) {
-			console.error('Failed to load agents/models', e)
+			console.error('Failed to load agents/models/plugins', e)
 			error = 'Failed to load agents'
 		} finally {
 			isFetching = false
@@ -66,6 +75,7 @@
 		formSystemPrompt = ''
 		formVisibility = 'admin-only'
 		formModelId = ''
+		formPluginIds = []
 		submitError = null
 		showModal = true
 	}
@@ -74,6 +84,14 @@
 		if (!modelId) return 'none'
 		const m = models.find((m) => m.id === modelId)
 		return m ? m.display_name || m.name : modelId
+	}
+
+	function togglePlugin(pluginId: string) {
+		if (formPluginIds.includes(pluginId)) {
+			formPluginIds = formPluginIds.filter((id) => id !== pluginId)
+		} else {
+			formPluginIds = [...formPluginIds, pluginId]
+		}
 	}
 
 	async function handleSubmit(e: Event) {
@@ -88,6 +106,7 @@
 				system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
 				visibility: formVisibility,
 				model_id: formModelId ? formModelId : null,
+				plugin_ids: formPluginIds,
 			}
 
 			await AgentsService.createAgentAgentsPost(payload)
@@ -153,6 +172,12 @@
 								<span>model:</span>
 								<span class="truncate">{getModelLabel(agent.model_id)}</span>
 							</div>
+							{#if agent.plugin_ids && agent.plugin_ids.length > 0}
+								<div class="flex justify-between">
+									<span>plugins:</span>
+									<span class="truncate">{agent.plugin_ids.length}</span>
+								</div>
+							{/if}
 							{#if agent.description}
 								<div class="mt-2 border-t border-zinc-800 pt-2">
 									<p class="text-xs text-zinc-500">{agent.description}</p>
@@ -252,6 +277,64 @@
 							class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm"
 						></textarea>
 					</div>
+
+					{#if availableToolPlugins.length > 0}
+						<div class="space-y-2">
+							<Label>tools</Label>
+							<div
+								class="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+							>
+								{#each availableToolPlugins as tool}
+									<label
+										class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800"
+									>
+										<input
+											type="checkbox"
+											checked={formPluginIds.includes(tool.id)}
+											onchange={() => togglePlugin(tool.id)}
+											class="h-4 w-4 rounded border-zinc-700 bg-zinc-900"
+										/>
+										<span class="text-sm">{tool.name}</span>
+										{#if tool.is_native}
+											<span
+												class="rounded bg-zinc-700 px-1 text-xs text-zinc-400"
+												>native</span
+											>
+										{/if}
+									</label>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					{#if availableFilterPlugins.length > 0}
+						<div class="space-y-2">
+							<Label>filters</Label>
+							<div
+								class="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+							>
+								{#each availableFilterPlugins as filter}
+									<label
+										class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800"
+									>
+										<input
+											type="checkbox"
+											checked={formPluginIds.includes(filter.id)}
+											onchange={() => togglePlugin(filter.id)}
+											class="h-4 w-4 rounded border-zinc-700 bg-zinc-900"
+										/>
+										<span class="text-sm">{filter.name}</span>
+										{#if filter.is_native}
+											<span
+												class="rounded bg-zinc-700 px-1 text-xs text-zinc-400"
+												>native</span
+											>
+										{/if}
+									</label>
+								{/each}
+							</div>
+						</div>
+					{/if}
 				</CardContent>
 				<CardFooter class="flex justify-end gap-2">
 					<Button

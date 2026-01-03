@@ -13,7 +13,7 @@ export type Agent = {
     description?: (string | null);
     system_prompt?: (string | null);
     visibility?: AgentVisibility;
-    tool_ids?: Array<string>;
+    plugin_ids?: Array<string>;
     config?: Record<string, any>;
     model_id?: (string | null);
     id: string;

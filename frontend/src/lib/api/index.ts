@@ -4,6 +4,7 @@ import { v1Client } from './v1/client'
 type User = components['schemas']['User']
 type UserCreate = components['schemas']['UserCreate']
 type RuntimeConfig = components['schemas']['RuntimeConfigOut']
+type Agent = components['schemas']['Agent']
 
 // Root health is not part of the v1 OpenAPI schema.
 type HealthCheck = { status: string }
@@ -60,4 +61,4 @@ export const api = {
 }
 
 export { APIError }
-export type { HealthCheck, RuntimeConfig, User, UserCreate }
+export type { Agent, HealthCheck, RuntimeConfig, User, UserCreate }

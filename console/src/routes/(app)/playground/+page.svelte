@@ -217,7 +217,11 @@
 								<span class="font-mono text-xs">{thread.id}</span>
 							</div>
 							<div class="mt-3 flex justify-end">
-								<Button variant="outline" class="rounded-xl" onclick={() => (isAclOpen = true)}>
+								<Button
+									variant="outline"
+									class="rounded-xl"
+									onclick={() => (isAclOpen = true)}
+								>
 									permissions
 								</Button>
 							</div>
@@ -338,5 +342,10 @@
 </div>
 
 {#if thread}
-	<AclModal bind:open={isAclOpen} resourceType="thread" resourceId={thread.id} title="thread permissions" />
+	<AclModal
+		bind:open={isAclOpen}
+		resourceType="thread"
+		resourceId={thread.id}
+		title="thread permissions"
+	/>
 {/if}

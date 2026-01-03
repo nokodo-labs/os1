@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state'
-	import type { Agent } from '$lib/api/generated'
+	import type { Agent } from '$lib/api'
 	import { runChatStream, type StreamedMessage } from '$lib/api/streaming'
 	import type { components } from '$lib/api/types'
 	import { v1Client } from '$lib/api/v1/client'

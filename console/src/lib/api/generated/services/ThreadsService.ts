@@ -313,7 +313,7 @@ export class ThreadsService {
     }
     /**
      * Run Thread
-     * run a thread and persist all messages produced by the sdk.
+     * run a thread with an agent and persist all messages produced.
      * @param threadId
      * @param requestBody
      * @returns ThreadRunResponse Successful Response
@@ -345,7 +345,7 @@ export class ThreadsService {
     }
     /**
      * Run Thread Stream
-     * stream a thread run via sse AgentDelta events.
+     * stream a thread run via sse events.
      * @param threadId
      * @param requestBody
      * @returns any Successful Response

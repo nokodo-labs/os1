@@ -7,6 +7,7 @@
 		FlaskConical,
 		LayoutDashboard,
 		MessageSquare,
+		Plug,
 		ScrollText,
 		Server,
 		Users,
@@ -66,6 +67,17 @@
 			>
 				<Bot class="h-4 w-4" />
 				agents
+			</a>
+			<a
+				href="/plugins"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/plugins'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Plug class="h-4 w-4" />
+				plugins
 			</a>
 			<a
 				href="/playground"
