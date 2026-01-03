@@ -44,7 +44,7 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		StringEnum(AgentVisibility),
 		default=AgentVisibility.PUBLIC,
 	)
-	tool_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+	plugin_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
 	config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 	model_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),

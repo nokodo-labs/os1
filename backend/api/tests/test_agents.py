@@ -17,6 +17,7 @@ from api.v1.service import agents as agent_service
 from api.v1.service import models as model_service
 from api.v1.service import providers as provider_service
 from api.v1.service.auth import Principal
+from nokodo_ai.utils.typeid import new_typeid
 
 
 def _admin_principal() -> Principal:
@@ -37,7 +38,7 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		description="Test Agent",
 		system_prompt="You are a test agent.",
 		visibility=AgentVisibility.PRIVATE,
-		tool_ids=[],
+		plugin_ids=[],
 		config={},
 	)
 	agent = await agent_service.create_agent(
@@ -58,7 +59,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-1",
 			visibility=AgentVisibility.PUBLIC,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
@@ -68,7 +69,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-2",
 			visibility=AgentVisibility.PRIVATE,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
@@ -90,7 +91,7 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-get",
 			visibility=AgentVisibility.PUBLIC,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
@@ -111,7 +112,7 @@ async def test_update_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-update",
 			visibility=AgentVisibility.PUBLIC,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
@@ -139,7 +140,7 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-delete",
 			visibility=AgentVisibility.PUBLIC,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
@@ -157,14 +158,14 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
-	"""Test creating an agent with invalid model."""
+	"""Test creating an agent with invalid model (non-existent model_id)."""
 	principal = _admin_principal()
 	agent_in = AgentCreate(
 		name="agent-invalid-model",
 		visibility=AgentVisibility.PUBLIC,
-		tool_ids=[],
+		plugin_ids=[],
 		config={},
-		model_id="nonexistent",
+		model_id=new_typeid("model"),  # valid format but doesn't exist
 	)
 	with pytest.raises(HTTPException) as exc:
 		await agent_service.create_agent(agent_in, db_session, principal=principal)
@@ -179,14 +180,16 @@ async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None
 		AgentCreate(
 			name="agent-update-model",
 			visibility=AgentVisibility.PUBLIC,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
 		principal=principal,
 	)
 
-	update_in = AgentUpdate(model_id="nonexistent")
+	update_in = AgentUpdate(
+		model_id=new_typeid("model")
+	)  # valid format but doesn't exist
 	with pytest.raises(HTTPException) as exc:
 		await agent_service.update_agent(
 			agent.id,
@@ -204,7 +207,7 @@ async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-no-model",
 		visibility=AgentVisibility.PUBLIC,
-		tool_ids=[],
+		plugin_ids=[],
 		config={},
 		model_id=None,
 	)
@@ -222,7 +225,7 @@ async def test_private_agent_hidden_from_non_admin(db_session: AsyncSession) -> 
 		description=None,
 		system_prompt=None,
 		visibility=AgentVisibility.PRIVATE,
-		tool_ids=[],
+		plugin_ids=[],
 		config={},
 		model_id=None,
 	)
@@ -259,7 +262,7 @@ async def test_create_agent_with_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-with-model",
 		visibility=AgentVisibility.PUBLIC,
-		tool_ids=[],
+		plugin_ids=[],
 		config={},
 		model_id=model.id,
 	)
@@ -277,7 +280,7 @@ async def test_get_agent_endpoint(
 	assert isinstance(headers, dict)
 	create_resp = await client.post(
 		"/v1/agents",
-		json={"name": "router-agent", "tool_ids": [], "config": {}},
+		json={"name": "router-agent", "plugin_ids": [], "config": {}},
 		headers=headers,
 	)
 	assert create_resp.status_code == 201
@@ -297,7 +300,7 @@ async def test_list_agents_filters_private_for_non_admin(
 		AgentCreate(
 			name="list-public",
 			visibility=AgentVisibility.PUBLIC,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,
@@ -307,7 +310,7 @@ async def test_list_agents_filters_private_for_non_admin(
 		AgentCreate(
 			name="list-private",
 			visibility=AgentVisibility.PRIVATE,
-			tool_ids=[],
+			plugin_ids=[],
 			config={},
 		),
 		db_session,

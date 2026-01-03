@@ -175,7 +175,7 @@ async def test_update_provider_api_key(db_session: AsyncSession) -> None:
 	# Create without key
 	provider_in = ProviderCreate(
 		name="Update Provider",
-	adapter_type="openai",
+		adapter_type="openai",
 	)
 	principal = _admin_principal()
 	provider = await provider_service.create_provider(

@@ -181,9 +181,9 @@
 			}
 		},
 		{
-			"label": "Frontend: Generate API",
+			"label": "Frontend: Generate API Types",
 			"type": "shell",
-			"command": "npm run generate:api",
+			"command": "npm run generate:api-types",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},

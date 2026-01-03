@@ -129,12 +129,17 @@ def test_prompt_schema_none_and_blank_commands() -> None:
 		PromptCreate(command="   ", content="x")
 
 
-def test_thread_run_request_requires_selector() -> None:
+def test_thread_run_request_requires_agent_id() -> None:
+	"""agent_id is now required for thread run requests."""
 	with pytest.raises(ValueError):
-		ThreadRunRequest()
+		ThreadRunRequest()  # type: ignore[call-arg]
 
 	req = ThreadRunRequest(agent_id=new_typeid("agent"))
 	assert req.agent_id is not None
+	assert req.input is None
+
+	req_with_input = ThreadRunRequest(agent_id=new_typeid("agent"), input="hello")
+	assert req_with_input.input == "hello"
 
 
 def test_thread_schema_defaults_for_flags() -> None:

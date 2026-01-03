@@ -22,6 +22,8 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.messages import Message as SDKMessage
+from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -119,3 +121,37 @@ class Thread(
 		"Task",
 		back_populates="spawned_thread",
 	)
+
+	def to_sdk(self) -> SDKThread:
+		"""convert thread to sdk thread using the current branch.
+
+		the sdk thread only supports a linear message list.
+		we derive the current root→leaf branch from current_message_id and the
+		in-memory message list, avoiding lazy-loading relationships.
+		"""
+		if not self.current_message_id:
+			sdk_messages: list[SDKMessage] = []
+			return SDKThread(
+				created_at=self.created_at,
+				messages=sdk_messages,
+				metadata=self.metadata_,
+			)
+
+		messages_by_id: dict[TypeID, Message] = {
+			TypeID(msg.id): msg for msg in self.messages
+		}
+		branch: list[Message] = []
+		cur_id: TypeID | None = self.current_message_id
+		while cur_id is not None:
+			cur = messages_by_id.get(cur_id)
+			if cur is None:
+				break
+			branch.insert(0, cur)
+			cur_id = cur.parent_id
+
+		sdk_messages = [msg.to_sdk() for msg in branch]
+		return SDKThread(
+			created_at=self.created_at,
+			messages=sdk_messages,
+			metadata=self.metadata_,
+		)

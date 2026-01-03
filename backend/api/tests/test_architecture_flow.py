@@ -60,7 +60,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 			"name": "nokodo-copilot",
 			"system_prompt": "You are nokodo.",
 			"model_id": model_id,
-			"tool_ids": ["web-search"],
+			"plugin_ids": [],  # empty list - no plugins assigned
 		},
 		headers=headers,
 	)

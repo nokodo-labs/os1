@@ -27,6 +27,8 @@ from api.schemas.thread import (
 from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.chat import run_thread as chat_run_thread
+from api.v1.service.chat import run_thread_stream as chat_run_thread_stream
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -184,25 +186,21 @@ async def run_thread(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> ThreadRunResponse:
-	"""run a thread and persist all messages produced by the sdk."""
-	user_message, created = await thread_service.run_thread(
+	"""run a thread with an agent and persist all messages produced."""
+	result = await chat_run_thread(
 		thread_id,
+		req.agent_id,
 		db,
-		principal=principal,
-		agent_id=req.agent_id,
-		model_id=req.model_id,
-		model=req.model,
+		principal,
 		input=req.input,
-		temperature=req.temperature,
-		max_tokens=req.max_tokens,
 	)
 
 	return ThreadRunResponse(
 		thread_id=thread_id,
-		user_message=MessageSchema.model_validate(user_message)
-		if user_message is not None
+		user_message=MessageSchema.model_validate(result.user_message)
+		if result.user_message is not None
 		else None,
-		messages=[MessageSchema.model_validate(m) for m in created],
+		messages=[MessageSchema.model_validate(m) for m in result.produced_messages],
 	)
 
 
@@ -213,17 +211,13 @@ async def run_thread_stream(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-	"""stream a thread run via sse AgentDelta events."""
-	stream = thread_service.run_thread_stream(
+	"""stream a thread run via sse events."""
+	stream = chat_run_thread_stream(
 		thread_id,
+		req.agent_id,
 		db,
-		principal=principal,
-		agent_id=req.agent_id,
-		model_id=req.model_id,
-		model=req.model,
+		principal,
 		input=req.input,
-		temperature=req.temperature,
-		max_tokens=req.max_tokens,
 	)
 	return StreamingResponse(
 		stream,

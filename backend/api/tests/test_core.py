@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from api.core import config as config_module
 from api.core import database as database_module
 from api.core.config import Settings
 
@@ -86,16 +87,23 @@ def test_psycopg_event_loop_policy_noop_off_windows(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""Policy helper should be a no-op when not on Windows."""
+	import types
+
 	called = False
 
 	def _mark_called(_policy) -> None:
 		nonlocal called
 		called = True
 
-	monkeypatch.setattr(database_module.sys, "platform", "linux")
-	monkeypatch.setattr(database_module.asyncio, "set_event_loop_policy", _mark_called)
+	# Create a fake sys module with linux platform
+	fake_sys = types.ModuleType("fake_sys")
+	fake_sys.platform = "linux"  # type: ignore[attr-defined]
+
+	monkeypatch.setattr(config_module, "sys", fake_sys)
+	monkeypatch.setattr(config_module, "asyncio", database_module.asyncio)
+	monkeypatch.setattr(config_module.asyncio, "set_event_loop_policy", _mark_called)
 	# Call helper again under a non-windows platform
-	database_module._configure_psycopg_asyncio_event_loop_policy()
+	config_module.configure_psycopg_asyncio_event_loop_policy()
 	assert called is False
 
 

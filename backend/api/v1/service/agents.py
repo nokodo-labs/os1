@@ -33,11 +33,7 @@ async def _get_agent(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Agent:
-	stmt = (
-		select(Agent)
-		.options(selectinload(Agent.model))
-		.where(Agent.id == agent_id)
-	)
+	stmt = select(Agent).options(selectinload(Agent.model)).where(Agent.id == agent_id)
 	if not principal.is_admin:
 		stmt = stmt.where(Agent.visibility == AgentVisibility.PUBLIC)
 	result = await session.execute(stmt)

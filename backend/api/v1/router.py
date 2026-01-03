@@ -11,6 +11,7 @@ from api.v1.routers import (
 	models,
 	notifications,
 	openai,
+	plugins,
 	projects,
 	prompts,
 	providers,
@@ -38,3 +39,4 @@ api_router.include_router(models.router)
 api_router.include_router(agents.router)
 api_router.include_router(prompts.router)
 api_router.include_router(openai.router)
+api_router.include_router(plugins.router)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -12,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.acl import AccessRole
-from api.models.agent import Agent
 from api.models.message import (
 	AssistantMessage,
 	Message,
@@ -26,17 +23,12 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.v1.service import chat_runtime
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	project_access_predicate,
 	require_thread_access,
 	thread_access_predicate,
 )
-from api.v1.service.prompt_runtime import render_inline_with_prompts
-from nokodo_ai.agent import Agent as SDKAgent
-from nokodo_ai.deltas import ChatModelDelta
-from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -481,239 +473,3 @@ async def create_message(
 	await session.commit()
 	await session.refresh(message)
 	return message
-
-
-async def run_thread(
-	thread_id: TypeID,
-	session: AsyncSession,
-	*,
-	principal: Principal,
-	agent_id: TypeID | None = None,
-	model_id: TypeID | None = None,
-	model: str | None = None,
-	input: str | None = None,
-	temperature: float | None = None,
-	max_tokens: int | None = None,
-) -> tuple[Message | None, list[Message]]:
-	"""run a thread and persist the messages produced by the sdk."""
-	user_message: Message | None = None
-	if input is not None and input.strip() != "":
-		user_message = await create_message(
-			thread_id,
-			MessageCreate(content=input),
-			session,
-			principal=principal,
-		)
-
-	branch = await get_current_branch(thread_id, session, principal=principal)
-	sdk_messages = chat_runtime.build_sdk_messages_from_branch(branch)
-
-	llm = await chat_runtime.resolve_chat_model_for_run(
-		session,
-		agent_id=agent_id,
-		model_id=model_id,
-		model=model,
-		temperature=temperature,
-		max_tokens=max_tokens,
-	)
-
-	produced_sdk_messages: list[chat_runtime.SDKMessage] = []
-	if agent_id is not None:
-		agent = await session.get(Agent, agent_id)
-		if agent is None:
-			raise HTTPException(
-				status_code=status.HTTP_404_NOT_FOUND,
-				detail="Agent not found",
-			)
-
-		# system prompt goes into the thread, not the agent
-		if agent.system_prompt:
-			rendered_prompt = await render_inline_with_prompts(
-				session,
-				text=agent.system_prompt,
-				variables=None,
-			)
-			sdk_messages.insert(0, chat_runtime.system_prompt_message(rendered_prompt))
-
-		max_iterations = 10
-		cfg = agent.config or {}
-		if isinstance(cfg.get("max_iterations"), int):
-			max_iterations = int(cfg["max_iterations"])
-
-		sdk_agent = SDKAgent(
-			llm=llm,
-			tools=[],
-			max_iterations=max_iterations,
-		)
-		sdk_thread = SDKThread(messages=sdk_messages)
-		result = await sdk_agent.run(sdk_thread, tool_choice="auto")
-		produced_sdk_messages = list(result)  # type: ignore[arg-type]
-	else:
-		assistant = await llm.generate(sdk_messages, stream=False)
-		produced_sdk_messages = [assistant]
-
-	created: list[Message] = []
-	for sdk_msg in produced_sdk_messages:
-		create_in = chat_runtime.sdk_message_to_orm_create(
-			sdk_msg,
-			sender_agent_id=agent_id,
-		)
-		created.append(
-			await create_message(
-				thread_id,
-				create_in,
-				session,
-				principal=principal,
-			)
-		)
-
-	return user_message, created
-
-
-def _sse_event(*, event: str, data: dict[str, object]) -> bytes:
-	payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
-	return f"event: {event}\ndata: {payload}\n\n".encode()
-
-
-def _message_to_sse_data(msg: Message) -> dict[str, object]:
-	"""serialize a persisted orm message for sse streaming."""
-	content_parts: list[dict[str, object]] = []
-	for part in msg.content or []:
-		if isinstance(part, dict):
-			content_parts.append(part)
-		else:
-			content_parts.append({"type": "text", "text": str(part)})
-
-	return {
-		"id": str(msg.id),
-		"thread_id": str(msg.thread_id),
-		"parent_id": str(msg.parent_id) if msg.parent_id else None,
-		"type": msg.type.value if hasattr(msg.type, "value") else str(msg.type),
-		"content": content_parts,
-		"sender_agent_id": str(msg.sender_agent_id) if msg.sender_agent_id else None,
-		"sender_user_id": str(msg.sender_user_id) if msg.sender_user_id else None,
-		"created_at": msg.created_at.isoformat() if msg.created_at else None,
-	}
-
-
-async def run_thread_stream(
-	thread_id: TypeID,
-	session: AsyncSession,
-	*,
-	principal: Principal,
-	agent_id: TypeID | None = None,
-	model_id: TypeID | None = None,
-	model: str | None = None,
-	input: str | None = None,
-	temperature: float | None = None,
-	max_tokens: int | None = None,
-) -> AsyncIterator[bytes]:
-	"""stream a thread run as sse events and persist messages as they complete.
-
-	events emitted:
-	- message_created: a message was persisted (contains full message data)
-	- text_delta: incremental text chunk for the current assistant message
-	- error: something went wrong (generic message, never exposes internals)
-	- done: stream is complete
-
-	the frontend can render optimistically from these events without refetching.
-	"""
-	import logging
-
-	logger = logging.getLogger(__name__)
-
-	# persist and stream user message if provided
-	if input is not None and input.strip() != "":
-		user_msg = await create_message(
-			thread_id,
-			MessageCreate(content=input),
-			session,
-			principal=principal,
-		)
-		yield _sse_event(event="message_created", data=_message_to_sse_data(user_msg))
-
-	branch = await get_current_branch(thread_id, session, principal=principal)
-	sdk_messages = chat_runtime.build_sdk_messages_from_branch(branch)
-
-	try:
-		llm = await chat_runtime.resolve_chat_model_for_run(
-			session,
-			agent_id=agent_id,
-			model_id=model_id,
-			model=model,
-			temperature=temperature,
-			max_tokens=max_tokens,
-		)
-	except HTTPException:
-		raise
-	except Exception:
-		logger.exception("failed to resolve chat model")
-		yield _sse_event(event="error", data={"message": "failed to initialize model"})
-		yield _sse_event(event="done", data={})
-		return
-
-	# if we're running as an agent, prepend its system prompt
-	if agent_id is not None:
-		agent = await session.get(Agent, agent_id)
-		if agent is None:
-			raise HTTPException(
-				status_code=status.HTTP_404_NOT_FOUND,
-				detail="Agent not found",
-			)
-		if agent.system_prompt:
-			rendered_prompt = await render_inline_with_prompts(
-				session,
-				text=agent.system_prompt,
-				variables=None,
-			)
-			sdk_messages.insert(0, chat_runtime.system_prompt_message(rendered_prompt))
-
-	# stream chat deltas and persist the final message
-	full_text = ""
-	try:
-		deltas = llm.generate(
-			sdk_messages,
-			stream=True,
-			tools=[],
-			tool_choice="auto",
-		)
-		if not hasattr(deltas, "__aiter__"):
-			raise TypeError("expected async iterator for streaming run")
-		async for chat_delta in deltas:
-			assert isinstance(chat_delta, ChatModelDelta)
-			if chat_delta.message.text:
-				full_text += chat_delta.message.text
-				yield _sse_event(
-					event="text_delta",
-					data={"text": chat_delta.message.text},
-				)
-	except Exception:
-		logger.exception("error during llm streaming")
-		yield _sse_event(event="error", data={"message": "generation failed"})
-		yield _sse_event(event="done", data={})
-		return
-
-	# persist the final assistant message
-	if full_text.strip() != "":
-		try:
-			assistant_sdk = chat_runtime.SDKAssistantMessage.from_text(full_text)
-			create_in = chat_runtime.sdk_message_to_orm_create(
-				assistant_sdk,
-				sender_agent_id=agent_id,
-			)
-			assistant_msg = await create_message(
-				thread_id,
-				create_in,
-				session,
-				principal=principal,
-			)
-			yield _sse_event(
-				event="message_created", data=_message_to_sse_data(assistant_msg)
-			)
-		except Exception:
-			logger.exception("error persisting assistant message")
-			yield _sse_event(event="error", data={"message": "failed to save response"})
-			yield _sse_event(event="done", data={})
-			return
-
-	yield _sse_event(event="done", data={})

@@ -9,6 +9,7 @@ from api.models.memory import Memory
 from api.models.message import Message
 from api.models.model import Model
 from api.models.notification import Notification
+from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
 from api.models.provider import Provider
@@ -30,6 +31,7 @@ __all__ = [
 	"Message",
 	"Model",
 	"Notification",
+	"Plugin",
 	"Project",
 	"Provider",
 	"Prompt",

@@ -104,7 +104,7 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 				description=None,
 				system_prompt=None,
 				visibility=AgentVisibility.PUBLIC,
-				tool_ids=[],
+				plugin_ids=[],
 				config={},
 			),
 			session=db_session,
@@ -118,7 +118,7 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 		description=None,
 		system_prompt=None,
 		visibility=AgentVisibility.PRIVATE,
-		tool_ids=[],
+		plugin_ids=[],
 		config={},
 		model_id=None,
 	)
