@@ -726,7 +726,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Agent
+         * @description Update an agent.
+         */
+        patch: operations["update_agent_agents__agent_id__patch"];
         trace?: never;
     };
     "/prompts": {
@@ -1026,6 +1030,35 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
+            /** Model Id */
+            model_id?: string | null;
+            /** Profile Image File Id */
+            profile_image_file_id?: string | null;
+            /** Profile Image Url */
+            profile_image_url?: string | null;
+        };
+        /**
+         * AgentUpdate
+         * @description Payload for agent update.
+         */
+        AgentUpdate: {
+            /** Metadata */
+            metadata_?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** System Prompt */
+            system_prompt?: string | null;
+            visibility?: components["schemas"]["AgentVisibility"] | null;
+            /** Plugin Ids */
+            plugin_ids?: string[] | null;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            } | null;
             /** Model Id */
             model_id?: string | null;
             /** Profile Image File Id */
@@ -7133,6 +7166,104 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_agent_agents__agent_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

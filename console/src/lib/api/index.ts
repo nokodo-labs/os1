@@ -40,6 +40,7 @@ export type {
 	AccessRole,
 	Agent,
 	AgentCreate,
+	AgentUpdate,
 	AgentVisibility,
 	Message,
 	MessageCreate,

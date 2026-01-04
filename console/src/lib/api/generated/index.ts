@@ -12,6 +12,7 @@ export type { AccessControlEntryCreate } from './models/AccessControlEntryCreate
 export type { AccessRole } from './models/AccessRole';
 export type { Agent } from './models/Agent';
 export type { AgentCreate } from './models/AgentCreate';
+export type { AgentUpdate } from './models/AgentUpdate';
 export type { AgentVisibility } from './models/AgentVisibility';
 export type { Body_login_access_token_auth_login_access_token_post } from './models/Body_login_access_token_auth_login_access_token_post';
 export type { Event } from './models/Event';
