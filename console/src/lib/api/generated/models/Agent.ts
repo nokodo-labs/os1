@@ -16,6 +16,8 @@ export type Agent = {
     plugin_ids?: Array<string>;
     config?: Record<string, any>;
     model_id?: (string | null);
+    profile_image_file_id?: (string | null);
+    profile_image_url?: (string | null);
     id: string;
     created_at: string;
     updated_at: string;

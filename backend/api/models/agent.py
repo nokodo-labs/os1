@@ -18,6 +18,7 @@ from api.models.mixins import (
 
 if TYPE_CHECKING:
 	from api.models.acl import AccessControlEntry
+	from api.models.file import File
 	from api.models.message import Message
 	from api.models.model import Model
 	from api.models.thread_participant import ThreadParticipant
@@ -50,10 +51,19 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		String(TYPEID_LENGTH),
 		ForeignKey("models.id", ondelete="SET NULL"),
 	)
+	profile_image_file_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("files.id", ondelete="SET NULL"),
+	)
+	profile_image_url: Mapped[str | None] = mapped_column(String(2048))
 
 	model: Mapped[Model | None] = relationship(
 		"Model",
 		back_populates="agents",
+	)
+	profile_image_file: Mapped[File | None] = relationship(
+		"File",
+		foreign_keys=[profile_image_file_id],
 	)
 	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
 		"AccessControlEntry",

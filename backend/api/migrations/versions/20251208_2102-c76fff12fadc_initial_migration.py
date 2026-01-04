@@ -139,6 +139,12 @@ def upgrade() -> None:
 		sa.Column("config", sa.JSON(), nullable=False),
 		sa.Column("model_id", sa.String(length=TYPEID_LENGTH), nullable=True),
 		sa.Column(
+			"profile_image_file_id",
+			sa.String(length=TYPEID_LENGTH),
+			nullable=True,
+		),
+		sa.Column("profile_image_url", sa.String(length=2048), nullable=True),
+		sa.Column(
 			"created_at",
 			sa.DateTime(timezone=True),
 			server_default=sa.text("now()"),
@@ -539,6 +545,14 @@ def upgrade() -> None:
 	op.create_index("ix_files_owner_id", "files", ["owner_id"], unique=False)
 	op.create_index("ix_files_project_id", "files", ["project_id"], unique=False)
 	op.create_index("ix_files_message_id", "files", ["message_id"], unique=False)
+	op.create_foreign_key(
+		"fk_agents_profile_image_file_id_files",
+		"agents",
+		"files",
+		["profile_image_file_id"],
+		["id"],
+		ondelete="SET NULL",
+	)
 
 	op.create_table(
 		"access_control_entries",
@@ -766,6 +780,11 @@ def downgrade() -> None:
 	op.drop_index("ix_files_message_id", table_name="files")
 	op.drop_index("ix_files_project_id", table_name="files")
 	op.drop_index("ix_files_owner_id", table_name="files")
+	op.drop_constraint(
+		"fk_agents_profile_image_file_id_files",
+		"agents",
+		type_="foreignkey",
+	)
 	op.drop_table("files")
 	op.drop_index("ix_thread_participants_user_id", table_name="thread_participants")
 	op.drop_index("ix_thread_participants_thread_id", table_name="thread_participants")
