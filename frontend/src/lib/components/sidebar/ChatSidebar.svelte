@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import type { StreamMessage } from '$lib/api/streaming'
 	import { v1Client } from '$lib/api/v1/client'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
@@ -15,7 +16,8 @@
 	import * as Tooltip from '$lib/components/ui/tooltip'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { openModal } from '$lib/stores/modals'
-	import { isLoggedIn, recentThreads, refreshThreads } from '$lib/stores/session'
+	import { onThreadEvent } from '$lib/stores/notifications'
+	import { isLoggedIn, recentThreads, refreshThreads, type Thread } from '$lib/stores/session'
 
 	type SidebarContext = {
 		readonly isOpen: boolean
@@ -44,6 +46,48 @@
 	let closeSwipeStartX = $state(0)
 	let closeSwipeStartY = $state(0)
 	let closeSwipeActive = $state(false)
+
+	// subscribe to thread events for real-time updates
+	$effect(() => {
+		const unsubscribe = onThreadEvent(handleThreadEvent)
+		return unsubscribe
+	})
+
+	function handleThreadEvent(event: StreamMessage): void {
+		const eventType = event.type
+		const data = event.data as Record<string, unknown> | undefined
+		const threadId = (data?.thread_id as string) || (event.thread_id as string) || ''
+
+		if (eventType === 'thread.deleted' && threadId) {
+			// remove from list
+			recentThreads.update((threads) => threads.filter((t) => t.id !== threadId))
+
+			// if we're viewing this thread, navigate away
+			if (page.url.pathname === `/c/${threadId}`) {
+				void goto('/', { replaceState: true })
+			}
+		} else if (eventType === 'thread.updated' && threadId) {
+			// move thread to top and update title if available
+			const newTitle = data?.title as string | undefined
+			recentThreads.update((threads) => {
+				const idx = threads.findIndex((t) => t.id === threadId)
+				if (idx === -1) return threads
+
+				const thread = threads[idx]
+				const updated: Thread = {
+					...thread,
+					title: newTitle ?? thread.title,
+					last_activity_at: new Date().toISOString(),
+				}
+
+				// move to top
+				return [updated, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
+			})
+		} else if (eventType === 'thread.created') {
+			// refresh to get the new thread (or we could add it directly)
+			void refreshThreads({ limit: 25 })
+		}
+	}
 
 	$effect(() => {
 		if (typeof window === 'undefined') return

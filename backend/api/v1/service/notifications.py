@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -84,3 +84,36 @@ async def dismiss_notification(
 	await session.commit()
 	await session.refresh(notification)
 	return notification
+
+
+async def mark_all_notifications_read(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	user_id: str,
+) -> int:
+	"""Mark all unread notifications as read for a user. Returns count updated."""
+	if not principal.is_admin and str(user_id) != str(principal.user.id):
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+	stmt = (
+		update(Notification)
+		.where(Notification.user_id == user_id)
+		.where(Notification.read_at.is_(None))
+		.values(read_at=datetime.now(tz=UTC))
+	)
+	result = await session.execute(stmt)
+	await session.commit()
+	return result.rowcount
+
+
+async def delete_notification(
+	notification_id: str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	"""Delete a notification."""
+	notification = await _get_notification(notification_id, session, principal)
+	await session.delete(notification)
+	await session.commit()

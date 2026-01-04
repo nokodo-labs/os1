@@ -23,6 +23,8 @@ class AgentBase(MetadataModel):
 	plugin_ids: list[str] = Field(default_factory=list)
 	config: dict[str, Any] = Field(default_factory=dict)
 	model_id: TypeID | None = None
+	profile_image_file_id: TypeID | None = None
+	profile_image_url: str | None = None
 
 
 class AgentCreate(AgentBase):
@@ -41,6 +43,8 @@ class AgentUpdate(MetadataModel):
 	plugin_ids: list[str] | None = None
 	config: dict[str, Any] | None = None
 	model_id: TypeID | None = None
+	profile_image_file_id: TypeID | None = None
+	profile_image_url: str | None = None
 
 
 class Agent(AgentBase):

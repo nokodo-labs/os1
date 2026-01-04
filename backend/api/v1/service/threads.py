@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.acl import AccessRole
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.message import (
 	AssistantMessage,
 	Message,
@@ -23,6 +25,7 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	project_access_predicate,
@@ -163,7 +166,23 @@ async def create_thread(
 	thread = Thread(**thread_data)
 	thread.projects = projects
 	session.add(thread)
-	await session.commit()
+	await session.flush()
+
+	# emit thread.created event
+	event = Event(
+		scope=EventScope.THREAD,
+		scope_id=thread.id,
+		type=EventType.THREAD_CREATED,
+		data={
+			"thread_id": str(thread.id),
+			"title": thread.title,
+			"owner_id": str(owner_id),
+		},
+		user_id=str(owner_id),
+		thread_id=thread.id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return await _load_thread_unrestricted(
 		TypeID(thread.id),
 		session,
@@ -264,7 +283,24 @@ async def update_thread(
 	if project_ids is not None:
 		thread.projects = await _load_projects(project_ids, session, principal)
 
-	await session.commit()
+	await session.flush()
+
+	# emit thread.updated event
+	event = Event(
+		scope=EventScope.THREAD,
+		scope_id=thread.id,
+		type=EventType.THREAD_UPDATED,
+		data={
+			"thread_id": str(thread.id),
+			"title": thread.title,
+			"owner_id": str(thread.owner_id),
+			"updated_fields": list(thread_in.model_dump(exclude_unset=True).keys()),
+		},
+		user_id=str(thread.owner_id),
+		thread_id=thread.id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	if (
 		owner_changed
 		and not principal.is_admin
@@ -299,8 +335,25 @@ async def delete_thread(
 			detail="forbidden",
 		)
 
+	owner_id = str(thread.owner_id)
+	thread_title = thread.title
+
 	thread.soft_delete()
-	await session.commit()
+	await session.flush()
+
+	# emit thread.deleted event
+	event = Event(
+		scope=EventScope.THREAD,
+		scope_id=str(thread_id),
+		type=EventType.THREAD_DELETED,
+		data={
+			"thread_id": str(thread_id),
+			"title": thread_title,
+		},
+		user_id=owner_id,
+		thread_id=str(thread_id),
+	)
+	await event_service.publish_event(session, event=event)
 
 
 async def list_messages(

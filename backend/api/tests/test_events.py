@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import EventScope
+from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.models.task import Task, TaskType
 from api.models.thread import Thread
@@ -30,6 +31,14 @@ def _admin_principal() -> Principal:
 		usage_quotas={},
 	)
 	return Principal(user=user, group_ids=(), permissions=frozenset())
+
+
+def _non_admin_events_manager_principal(user: User) -> Principal:
+	return Principal(
+		user=user,
+		group_ids=(),
+		permissions=frozenset({"events:manage"}),
+	)
 
 
 @pytest.mark.asyncio
@@ -53,12 +62,12 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 	event_in = EventCreate(
 		scope=EventScope.USER,
 		scope_id=str(user.id),
-		type="test.event",
+		type=EventType.NOTIFICATION_CUSTOM,
 		data={"foo": "bar"},
 		user_id=user.id,
 	)
 	event = await event_service.emit_event(event_in, db_session, principal=principal)
-	assert event.type == "test.event"
+	assert event.type == EventType.NOTIFICATION_CUSTOM
 	assert event.user_id == user.id
 	assert event.data == {"foo": "bar"}
 
@@ -69,6 +78,54 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 	notification = result.scalar_one_or_none()
 	assert notification is not None
 	assert notification.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_emit_event_non_admin_cannot_notify_other_user(
+	db_session: AsyncSession,
+) -> None:
+	"""Non-admins may only create notifications for themselves."""
+	actor = User(
+		email="actor@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	target = User(
+		email="target@example.com",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add_all([actor, target])
+	await db_session.commit()
+	await db_session.refresh(actor)
+	await db_session.refresh(target)
+
+	principal = _non_admin_events_manager_principal(actor)
+
+	with pytest.raises(Exception) as excinfo:
+		await event_service.emit_event(
+			EventCreate(
+				scope=EventScope.USER,
+				scope_id=str(target.id),
+				type=EventType.NOTIFICATION_CUSTOM,
+				data={"foo": "bar"},
+				user_id=target.id,
+			),
+			db_session,
+			principal=principal,
+		)
+
+	# Avoid importing FastAPI HTTPException directly in tests; assert via status_code.
+	err = excinfo.value
+	assert getattr(err, "status_code", None) == 403
 
 
 @pytest.mark.asyncio

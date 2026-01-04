@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.models.agent import Agent
 from api.schemas.agent import Agent as AgentSchema
-from api.schemas.agent import AgentCreate
+from api.schemas.agent import AgentCreate, AgentUpdate
 from api.v1.service import agents as agent_service
 from api.v1.service.auth import Principal, get_current_principal
 
@@ -43,3 +43,14 @@ async def get_agent(
 ) -> Agent:
 	"""Fetch an agent."""
 	return await agent_service.get_agent(agent_id, db, principal=principal)
+
+
+@router.patch("/{agent_id}", response_model=AgentSchema)
+async def update_agent(
+	agent_id: str,
+	agent_in: AgentUpdate,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> Agent:
+	"""Update an agent."""
+	return await agent_service.update_agent(agent_id, agent_in, db, principal=principal)

@@ -73,7 +73,7 @@
 						<Input
 							id="email"
 							type="email"
-							placeholder="m@nokodo.net"
+							placeholder="admin@nokodo.net"
 							required
 							bind:value={email}
 						/>

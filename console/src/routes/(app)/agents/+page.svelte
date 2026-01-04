@@ -6,6 +6,7 @@
 		PluginsService,
 		type Agent,
 		type AgentCreate,
+		type AgentUpdate,
 		type AgentVisibility,
 		type Model,
 		type PluginInfo,
@@ -31,7 +32,10 @@
 	let models = $state<Model[]>([])
 	let availableToolPlugins = $state<PluginInfo[]>([])
 	let availableFilterPlugins = $state<PluginInfo[]>([])
+
 	let showModal = $state(false)
+	let modalMode = $state<'create' | 'edit'>('create')
+	let editingId = $state<string | null>(null)
 	let isFetching = $state(true)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
@@ -43,6 +47,8 @@
 	let formVisibility = $state<AgentVisibility>('admin-only')
 	let formModelId = $state<string>('')
 	let formPluginIds = $state<string[]>([])
+	let formProfileImageUrl = $state('')
+	let formProfileImageFileId = $state('')
 
 	async function fetchData() {
 		isFetching = true
@@ -71,14 +77,58 @@
 	})
 
 	function openCreateModal() {
+		modalMode = 'create'
+		editingId = null
 		formName = ''
 		formDescription = ''
 		formSystemPrompt = ''
 		formVisibility = 'admin-only'
 		formModelId = ''
 		formPluginIds = []
+		formProfileImageUrl = ''
+		formProfileImageFileId = ''
 		submitError = null
 		showModal = true
+	}
+
+	function openEditModal(agent: Agent) {
+		modalMode = 'edit'
+		editingId = agent.id
+		formName = agent.name ?? ''
+		formDescription = agent.description ?? ''
+		formSystemPrompt = agent.system_prompt ?? ''
+		formVisibility = agent.visibility ?? 'admin-only'
+		formModelId = agent.model_id ?? ''
+		formPluginIds = agent.plugin_ids ?? []
+		formProfileImageUrl = agent.profile_image_url ?? ''
+		formProfileImageFileId = agent.profile_image_file_id ?? ''
+		submitError = null
+		showModal = true
+	}
+
+	function closeModal() {
+		showModal = false
+	}
+
+	async function handleSvgFileChange(e: Event) {
+		const input = e.target as HTMLInputElement
+		const file = input.files?.[0]
+		if (!file) return
+		if (file.type !== 'image/svg+xml' && !file.name.toLowerCase().endsWith('.svg')) {
+			submitError = 'only svg files are supported for agent profile images'
+			return
+		}
+
+		submitError = null
+		const reader = new FileReader()
+		reader.onload = () => {
+			formProfileImageUrl = typeof reader.result === 'string' ? reader.result : ''
+			formProfileImageFileId = ''
+		}
+		reader.onerror = () => {
+			submitError = 'failed to read svg file'
+		}
+		reader.readAsDataURL(file)
 	}
 
 	function getModelLabel(modelId: string | null | undefined) {
@@ -113,7 +163,7 @@
 			if (typeof message === 'string' && message) return message
 		}
 
-		return 'failed to create agent'
+		return modalMode === 'create' ? 'failed to create agent' : 'failed to save agent'
 	}
 
 	async function handleSubmit(e: Event) {
@@ -122,21 +172,51 @@
 		submitError = null
 
 		try {
-			const payload: AgentCreate = {
-				name: formName.trim(),
-				description: formDescription.trim() ? formDescription.trim() : null,
-				system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
-				visibility: formVisibility,
-				model_id: formModelId ? formModelId : null,
-				plugin_ids: formPluginIds,
+			const normalizedProfileImageFileId = formProfileImageFileId.trim()
+			const normalizedProfileImageUrl = formProfileImageUrl.trim()
+			const profile_image_file_id = normalizedProfileImageFileId
+				? normalizedProfileImageFileId
+				: null
+			const profile_image_url = profile_image_file_id
+				? null
+				: normalizedProfileImageUrl
+					? normalizedProfileImageUrl
+					: null
+
+			if (modalMode === 'create') {
+				const payload: AgentCreate = {
+					name: formName.trim(),
+					description: formDescription.trim() ? formDescription.trim() : null,
+					system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
+					visibility: formVisibility,
+					model_id: formModelId ? formModelId : null,
+					plugin_ids: formPluginIds,
+					profile_image_file_id,
+					profile_image_url,
+				}
+				await AgentsService.createAgentAgentsPost(payload)
+			} else if (editingId) {
+				const payload: AgentUpdate = {
+					name: formName.trim(),
+					description: formDescription.trim() ? formDescription.trim() : null,
+					system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
+					visibility: formVisibility,
+					model_id: formModelId ? formModelId : null,
+					plugin_ids: formPluginIds,
+					profile_image_file_id,
+					profile_image_url,
+				}
+				await AgentsService.updateAgentAgentsAgentIdPatch(editingId, payload)
 			}
 
-			await AgentsService.createAgentAgentsPost(payload)
 			showModal = false
 			await fetchData()
-		} catch (e: any) {
-			console.error('Failed to create agent', e)
-			submitError = formatSubmitError(e)
+		} catch (err: unknown) {
+			console.error(
+				modalMode === 'create' ? 'Failed to create agent' : 'Failed to save agent',
+				err
+			)
+			submitError = formatSubmitError(err)
 		} finally {
 			isLoading = false
 		}
@@ -181,8 +261,8 @@
 								variant="ghost"
 								size="icon"
 								class="h-8 w-8 text-zinc-500"
-								disabled
-								title="editing not implemented yet"
+								onclick={() => openEditModal(agent)}
+								title="edit agent"
 							>
 								<Pencil class="h-4 w-4" />
 							</Button>
@@ -221,7 +301,7 @@
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
 		<Card class="w-full max-w-lg rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
 			<CardHeader>
-				<CardTitle>create agent</CardTitle>
+				<CardTitle>{modalMode === 'create' ? 'create agent' : 'edit agent'}</CardTitle>
 				<CardDescription>define prompting + attach a model (optional).</CardDescription>
 			</CardHeader>
 			<form onsubmit={handleSubmit}>
@@ -242,6 +322,54 @@
 							class="rounded-xl"
 						/>
 					</div>
+
+					<div class="space-y-2">
+						<Label for="profile_image_url">profile image url (optional)</Label>
+						<Input
+							id="profile_image_url"
+							bind:value={formProfileImageUrl}
+							placeholder="https://... or data:image/svg+xml;base64,..."
+							class="rounded-xl"
+						/>
+						<p class="text-xs text-zinc-500">
+							use a direct url, or upload an svg below to embed it as a data url.
+						</p>
+					</div>
+
+					<div class="space-y-2">
+						<Label for="profile_image_svg">upload svg (optional)</Label>
+						<Input
+							id="profile_image_svg"
+							type="file"
+							accept="image/svg+xml,.svg"
+							onchange={handleSvgFileChange}
+							class="rounded-xl"
+						/>
+					</div>
+
+					<div class="space-y-2">
+						<Label for="profile_image_file_id">profile image file id (optional)</Label>
+						<Input
+							id="profile_image_file_id"
+							bind:value={formProfileImageFileId}
+							placeholder="file_..."
+							class="rounded-xl"
+						/>
+						<p class="text-xs text-zinc-500">if set, this overrides the url field.</p>
+					</div>
+
+					{#if formProfileImageUrl.trim()}
+						<div
+							class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3"
+						>
+							<img
+								src={formProfileImageUrl}
+								alt="agent profile preview"
+								class="h-10 w-10 rounded-lg bg-zinc-800 object-contain"
+							/>
+							<div class="text-xs text-zinc-500">preview</div>
+						</div>
+					{/if}
 
 					<div class="space-y-2">
 						<Label for="model">model (optional)</Label>
@@ -364,7 +492,7 @@
 						variant="outline"
 						class="rounded-xl"
 						disabled={isLoading}
-						onclick={() => (showModal = false)}
+						onclick={closeModal}
 					>
 						cancel
 					</Button>
@@ -373,7 +501,11 @@
 						class="rounded-xl"
 						disabled={isLoading || !formName.trim()}
 					>
-						{isLoading ? 'creating...' : 'create'}
+						{#if isLoading}
+							{modalMode === 'create' ? 'creating…' : 'saving…'}
+						{:else}
+							{modalMode === 'create' ? 'create agent' : 'save changes'}
+						{/if}
 					</Button>
 				</CardFooter>
 			</form>
