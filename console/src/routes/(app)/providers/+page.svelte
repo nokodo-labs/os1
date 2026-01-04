@@ -19,8 +19,9 @@
 	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Bot, Cpu, Pencil, Plus, Server, Settings2, Sparkles, Trash2 } from '@lucide/svelte'
+	import { Bot, Cpu, Pencil, Plus, Settings2, Sparkles, Trash2 } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
 	let providers = $state<Provider[]>([])
@@ -84,15 +85,6 @@
 			url: 'http://localhost:11434/v1',
 			prefix: 'ollama',
 			icon: Cpu,
-		},
-		{
-			id: 'azure',
-			name: 'Azure OpenAI',
-			type: 'azure',
-			provider_type: 'external',
-			url: '',
-			prefix: 'azure',
-			icon: Server,
 		},
 		{
 			id: 'custom',
@@ -381,27 +373,45 @@
 							<Label for="name">name</Label>
 							<div class="space-y-2">
 								<Label for="api_type">API type</Label>
-								<select
-									id="api_type"
-									bind:value={formState.adapter_type}
-									class="flex h-10 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-zinc-300"
+								<Select
+									value={formState.adapter_type}
+									onValueChange={(v: string) => (formState.adapter_type = v)}
 								>
-									<option value="openai">OpenAI</option>
-									<option value="anthropic">Anthropic</option>
-									<option value="ollama">Ollama</option>
-									<option value="azure">Azure OpenAI</option>
-								</select>
+									<SelectTrigger id="api_type" class="rounded-xl">
+										<span class="truncate text-left">
+											{formState.adapter_type === 'openai'
+												? 'OpenAI'
+												: formState.adapter_type === 'anthropic'
+													? 'Anthropic'
+													: formState.adapter_type === 'ollama'
+														? 'Ollama'
+														: formState.adapter_type}
+										</span>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="openai">OpenAI</SelectItem>
+										<SelectItem value="anthropic">Anthropic</SelectItem>
+										<SelectItem value="ollama">Ollama</SelectItem>
+									</SelectContent>
+								</Select>
 							</div>
 							<div class="space-y-2">
 								<Label for="provider_type">provider type</Label>
-								<select
-									id="provider_type"
-									bind:value={formState.provider_type}
-									class="flex h-10 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400 dark:focus-visible:ring-zinc-300"
+								<Select
+									value={formState.provider_type}
+									onValueChange={(v: string) =>
+										(formState.provider_type = v as ProviderType)}
 								>
-									<option value="external">external</option>
-									<option value="local">local</option>
-								</select>
+									<SelectTrigger id="provider_type" class="rounded-xl">
+										<span class="truncate text-left"
+											>{formState.provider_type}</span
+										>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="external">external</SelectItem>
+										<SelectItem value="local">local</SelectItem>
+									</SelectContent>
+								</Select>
 							</div>
 						</div>
 

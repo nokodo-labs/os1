@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { PromptsService, type Prompt } from '$lib/api'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
@@ -146,7 +147,13 @@
 		</div>
 	{/if}
 
-	{#if prompts.length === 0 && !isLoading}
+	{#if isLoading && prompts.length === 0}
+		<div
+			class="flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-950 p-10"
+		>
+			<NokodoLoader />
+		</div>
+	{:else if prompts.length === 0}
 		<div
 			class="rounded-2xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 		>

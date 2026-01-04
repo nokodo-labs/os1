@@ -4,6 +4,7 @@
 	import { page } from '$app/stores'
 	import { UsersService, type User } from '$lib/api'
 	import CreateUserModal from '$lib/components/CreateUserModal.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -221,6 +222,14 @@
 			</div>
 		</CardHeader>
 		<CardContent class="space-y-2">
+			{#if isLoading && users.length === 0}
+				<div
+					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+				>
+					<NokodoLoader />
+				</div>
+			{/if}
+
 			{#if users.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"

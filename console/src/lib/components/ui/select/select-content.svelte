@@ -8,13 +8,13 @@
 <SelectPrimitive.Portal>
 	<SelectPrimitive.Content
 		class={cn(
-			'z-50 min-w-[10rem] overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-md focus:outline-none',
+			'z-50 max-h-[60vh] w-(--bits-select-anchor-width) max-w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width) overflow-x-hidden overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-md focus:outline-none',
 			className
 		)}
 		{...rest}
 	>
-		<SelectPrimitive.Viewport class="p-1">
+		<div class="p-1">
 			{@render children?.()}
-		</SelectPrimitive.Viewport>
+		</div>
 	</SelectPrimitive.Content>
 </SelectPrimitive.Portal>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		AgentsService,
+		ApiError,
 		ModelsService,
 		PluginsService,
 		type Agent,
@@ -59,7 +60,7 @@
 			availableFilterPlugins = filterPluginsData
 		} catch (e) {
 			console.error('Failed to load agents/models/plugins', e)
-			error = 'Failed to load agents'
+			error = 'failed to load agents'
 		} finally {
 			isFetching = false
 		}
@@ -94,6 +95,27 @@
 		}
 	}
 
+	function formatSubmitError(err: unknown): string {
+		if (err instanceof ApiError) {
+			const detail = err.body?.detail
+			if (typeof detail === 'string') return detail
+			if (Array.isArray(detail) && detail.length > 0) {
+				const first = detail[0]
+				const msg = typeof first?.msg === 'string' ? first.msg : err.message
+				const loc = Array.isArray(first?.loc) ? first.loc.join('.') : null
+				return loc ? `${loc}: ${msg}` : msg
+			}
+			return err.message
+		}
+
+		if (err && typeof err === 'object' && 'message' in err) {
+			const message = (err as { message?: unknown }).message
+			if (typeof message === 'string' && message) return message
+		}
+
+		return 'failed to create agent'
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault()
 		isLoading = true
@@ -114,7 +136,7 @@
 			await fetchData()
 		} catch (e: any) {
 			console.error('Failed to create agent', e)
-			submitError = e?.message || 'Failed to create agent'
+			submitError = formatSubmitError(e)
 		} finally {
 			isLoading = false
 		}

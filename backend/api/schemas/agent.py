@@ -20,7 +20,7 @@ class AgentBase(MetadataModel):
 	description: str | None = None
 	system_prompt: str | None = None
 	visibility: AgentVisibility = AgentVisibility.PUBLIC
-	plugin_ids: list[TypeID] = Field(default_factory=list)
+	plugin_ids: list[str] = Field(default_factory=list)
 	config: dict[str, Any] = Field(default_factory=dict)
 	model_id: TypeID | None = None
 
@@ -38,7 +38,7 @@ class AgentUpdate(MetadataModel):
 	description: str | None = None
 	system_prompt: str | None = None
 	visibility: AgentVisibility | None = None
-	plugin_ids: list[TypeID] | None = None
+	plugin_ids: list[str] | None = None
 	config: dict[str, Any] | None = None
 	model_id: TypeID | None = None
 

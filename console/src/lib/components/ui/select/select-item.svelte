@@ -13,7 +13,7 @@
 
 <SelectPrimitive.Item
 	class={cn(
-		'group relative flex w-full cursor-pointer items-center rounded-sm px-3 py-2 text-sm text-zinc-200 outline-none select-none focus:bg-zinc-800 focus:text-white data-[state=checked]:bg-zinc-800',
+		'group relative flex w-full cursor-pointer items-center rounded-sm px-3 py-2 text-sm text-zinc-200 outline-none select-none hover:bg-zinc-800 hover:text-white data-highlighted:bg-zinc-800 data-highlighted:text-white data-[state=checked]:bg-zinc-800',
 		className
 	)}
 	{...rest}

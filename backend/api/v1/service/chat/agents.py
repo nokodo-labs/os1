@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.agent import Agent as AgentORM
 from api.models.message import Message as MessageORM
+from api.models.model import Model
 from api.schemas.message import MessageCreate
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
@@ -51,10 +52,10 @@ class RunResult:
 
 
 async def _load_agent(agent_id: TypeID, session: AsyncSession) -> AgentORM:
-	"""load an agent with its model relationship."""
+	"""load an agent with its model + provider relationships."""
 	stmt = (
 		select(AgentORM)
-		.options(selectinload(AgentORM.model))
+		.options(selectinload(AgentORM.model).selectinload(Model.provider))
 		.where(AgentORM.id == agent_id)
 	)
 	result = await session.execute(stmt)

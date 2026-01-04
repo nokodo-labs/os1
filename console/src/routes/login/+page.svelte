@@ -51,7 +51,7 @@
 					<Input
 						id="email"
 						type="text"
-						placeholder="m@example.com"
+						placeholder="admin@nokodo.net"
 						required
 						bind:value={email}
 					/>

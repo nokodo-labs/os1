@@ -20,7 +20,11 @@
 	<!-- Sidebar -->
 	<aside class="flex w-64 flex-col border-r border-zinc-800 p-6">
 		<div class="mb-8">
-			<p class="text-sm tracking-[0.3em] text-zinc-400 uppercase">nokodo</p>
+			<img
+				src="https://nokodo.net/media/images/logo_full.svg"
+				alt="nokodo logo"
+				class="h-6 w-auto object-contain"
+			/>
 			<h1 class="text-xl font-semibold">console</h1>
 		</div>
 

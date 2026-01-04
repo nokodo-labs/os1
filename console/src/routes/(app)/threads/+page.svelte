@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { page } from '$app/stores'
 	import { ThreadsService, type Thread } from '$lib/api'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadDetailsModal from '$lib/components/ThreadDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -245,6 +246,14 @@
 			</div>
 		</CardHeader>
 		<CardContent class="space-y-2">
+			{#if isLoading && threads.length === 0}
+				<div
+					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+				>
+					<NokodoLoader />
+				</div>
+			{/if}
+
 			{#if threads.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"

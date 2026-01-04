@@ -42,7 +42,11 @@
 	{#if step === 'welcome'}
 		<div class="max-w-md space-y-6 p-6 text-center">
 			<div class="space-y-2">
-				<p class="text-sm tracking-[0.3em] text-zinc-400 uppercase">nokodo</p>
+				<img
+					src="https://nokodo.net/media/images/logo_full.svg"
+					alt="nokodo logo"
+					class="mx-auto h-7 w-auto object-contain"
+				/>
 				<h1 class="text-4xl font-bold tracking-tight">welcome</h1>
 			</div>
 			<p class="text-zinc-400">
@@ -69,7 +73,7 @@
 						<Input
 							id="email"
 							type="email"
-							placeholder="m@example.com"
+							placeholder="m@nokodo.net"
 							required
 							bind:value={email}
 						/>

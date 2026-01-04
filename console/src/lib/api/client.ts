@@ -53,6 +53,19 @@ class APIClient {
 			headers,
 		})
 
+		if (response.status === 401 && typeof window !== 'undefined') {
+			try {
+				localStorage.removeItem('access_token')
+			} catch {
+				// ignore
+			}
+
+			const path = window.location?.pathname ?? ''
+			if (path !== '/login' && path !== '/welcome') {
+				window.location.assign('/login')
+			}
+		}
+
 		if (!response.ok) {
 			const errorData = await response.json().catch(() => null)
 			throw new APIError(errorData?.detail || response.statusText, response.status, errorData)

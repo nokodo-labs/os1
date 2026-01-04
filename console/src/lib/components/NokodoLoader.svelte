@@ -1,11 +1,28 @@
 <script lang="ts">
-	let { expanded = true, shimmer = true } = $props()
+	let {
+		shimmer = true,
+		expanded = true,
+		className = '',
+	} = $props<{
+		shimmer?: boolean
+		expanded?: boolean
+		className?: string
+	}>()
 </script>
 
-<div class="brand-text" class:expanded class:splash-shimmer={shimmer}>
-	<span class="brand-hidden">n</span><span class="brand-visible">ok</span><span
-		class="brand-hidden">odo</span
-	>
+<div class={`brand ${className}`} class:expanded>
+	<div class="brand-solid">
+		<span class="brand-hidden">n</span><span class="brand-visible">ok</span><span
+			class="brand-hidden">odo</span
+		>
+	</div>
+	{#if shimmer}
+		<div class="brand-shimmer" aria-hidden="true">
+			<span class="brand-hidden">n</span><span class="brand-visible">ok</span><span
+				class="brand-hidden">odo</span
+			>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -17,7 +34,7 @@
 		font-display: swap;
 	}
 
-	.brand-text {
+	.brand {
 		font-family:
 			'nokodoFont',
 			-apple-system,
@@ -27,20 +44,53 @@
 			'Helvetica Neue',
 			Arial,
 			sans-serif;
-		font-size: clamp(3rem, 8vw, 5rem);
+		font-size: clamp(2.25rem, 6vw, 3.25rem);
 		font-weight: 600;
-		line-height: 1.2;
-		color: var(--text-primary);
+		line-height: 1.1;
+		color: rgb(255 255 255 / 0.92);
 		white-space: nowrap;
 		position: relative;
 		isolation: isolate;
+		user-select: none;
 
 		transform: translateX(calc(0.5em));
 		transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
-	.brand-text.expanded {
+	.brand.expanded {
 		transform: translateX(0);
+	}
+
+	.brand-solid,
+	.brand-shimmer {
+		display: inline-block;
+	}
+
+	.brand-shimmer {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 1;
+
+		/* Clip the animated gradient *into* the glyphs (no shimmer outside the logo). */
+		color: transparent;
+		background-image: linear-gradient(
+			90deg,
+			transparent 0%,
+			rgb(255 255 255 / 0) 20%,
+			rgb(255 255 255 / 0.35) 40%,
+			rgb(255 255 255 / 0.75) 50%,
+			rgb(255 255 255 / 0.35) 60%,
+			rgb(255 255 255 / 0) 80%,
+			transparent 100%
+		);
+		background-repeat: no-repeat;
+		background-size: 300% 100%;
+		background-position: 150% 0;
+		animation: splash-shimmer 2s linear infinite;
+
+		-webkit-background-clip: text;
+		background-clip: text;
 	}
 
 	.brand-visible {
@@ -54,67 +104,28 @@
 		transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
-	.brand-text.expanded .brand-hidden {
+	.brand.expanded .brand-hidden {
 		opacity: 1;
-	}
-
-	/* Theme-specific color variables */
-	:global(html.light) {
-		--text-primary: #1a1a1a;
-	}
-
-	:global(html.dark) {
-		--text-primary: #ffffff;
-	}
-
-	/* Force exact dark-mode base color for splash banner text */
-	:global(html.dark) .brand-text {
-		color: #f8f3f8ff;
-	}
-
-	/* Accessibility: Respect reduced motion preference */
-	@media (prefers-reduced-motion: reduce) {
-		.brand-text {
-			transition: all 0.2s ease;
-		}
-
-		.brand-hidden {
-			transition: all 0.2s ease;
-		}
 	}
 
 	@keyframes splash-shimmer {
 		0% {
-			/* start with the highlight off to the left side */
-			background-position: 150%;
+			background-position: 150% 0;
 		}
 		100% {
-			/* move image left so the highlight sweeps left->right */
-			background-position: -50%;
+			background-position: -50% 0;
 		}
 	}
 
-	.splash-shimmer::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		pointer-events: none;
-		z-index: 1;
-		background-image: linear-gradient(
-			90deg,
-			transparent 0%,
-			rgba(0, 0, 0, 0) 20%,
-			rgba(0, 0, 0, 0.46) 40%,
-			rgba(0, 0, 0, 0.66) 50%,
-			rgba(0, 0, 0, 0.46) 60%,
-			rgba(0, 0, 0, 0) 80%,
-			transparent 100%
-		);
-		background-repeat: no-repeat;
-		background-position: 0%;
-		background-size: 300%;
-		animation: splash-shimmer 2s linear infinite;
-		mix-blend-mode: multiply;
-		will-change: background-position;
+	@media (prefers-reduced-motion: reduce) {
+		.brand {
+			transition: transform 0.2s ease;
+		}
+		.brand-hidden {
+			transition: opacity 0.2s ease;
+		}
+		.brand-shimmer {
+			animation: none;
+		}
 	}
 </style>

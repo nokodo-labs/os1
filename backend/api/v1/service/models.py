@@ -2,16 +2,272 @@
 
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
+
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.model import Model
-from api.models.provider import Provider
+from api.models.provider import Provider, ProviderStatus
 from api.schemas.model import ModelCreate, ModelUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+
+
+logger = logging.getLogger(__name__)
+
+
+_DEFAULT_BASE_URLS: dict[str, str] = {
+	"openai": "https://api.openai.com/v1",
+	"anthropic": "https://api.anthropic.com/v1",
+	"ollama": "http://localhost:11434/v1",
+}
+
+
+def _normalize_base_url(provider: Provider) -> str | None:
+	if provider.base_url is not None and provider.base_url.strip() != "":
+		return provider.base_url.strip().rstrip("/")
+	default = _DEFAULT_BASE_URLS.get(provider.adapter_type)
+	if default is None:
+		return None
+	return default.rstrip("/")
+
+
+def _merge_headers(
+	*,
+	base: dict[str, str],
+	additional: dict | None,
+) -> dict[str, str]:
+	headers = dict(base)
+	if additional is None:
+		return headers
+	for key, value in additional.items():
+		if isinstance(key, str) and isinstance(value, str) and key.strip() != "":
+			headers[key] = value
+	return headers
+
+
+def _parse_openai_models_payload(payload: object) -> list[str]:
+	if not isinstance(payload, dict):
+		raise ValueError("invalid models payload")
+	data = payload.get("data")
+	if not isinstance(data, list):
+		raise ValueError("invalid models payload")
+
+	model_ids: list[str] = []
+	for item in data:
+		if not isinstance(item, dict):
+			continue
+		model_id = item.get("id")
+		if isinstance(model_id, str) and model_id.strip() != "":
+			model_ids.append(model_id)
+	return model_ids
+
+
+def _parse_anthropic_models_payload(
+	payload: object,
+) -> tuple[list[tuple[str, str | None]], str | None, bool]:
+	if not isinstance(payload, dict):
+		raise ValueError("invalid models payload")
+	data = payload.get("data")
+	if not isinstance(data, list):
+		raise ValueError("invalid models payload")
+
+	items: list[tuple[str, str | None]] = []
+	for item in data:
+		if not isinstance(item, dict):
+			continue
+		model_id = item.get("id")
+		if not isinstance(model_id, str) or model_id.strip() == "":
+			continue
+		display_name = item.get("display_name")
+		items.append(
+			(model_id, display_name if isinstance(display_name, str) else None)
+		)
+
+	last_id = payload.get("last_id")
+	has_more = payload.get("has_more")
+	return (
+		items,
+		last_id if isinstance(last_id, str) and last_id.strip() != "" else None,
+		has_more is True,
+	)
+
+
+async def _fetch_openai_compatible_models(
+	client: httpx.AsyncClient,
+	*,
+	base_url: str,
+	headers: dict[str, str],
+) -> list[str]:
+	resp = await client.get(f"{base_url}/models", headers=headers)
+	resp.raise_for_status()
+	payload = resp.json()
+	return _parse_openai_models_payload(payload)
+
+
+async def _fetch_anthropic_models(
+	client: httpx.AsyncClient,
+	*,
+	base_url: str,
+	headers: dict[str, str],
+) -> list[tuple[str, str | None]]:
+	all_items: list[tuple[str, str | None]] = []
+	params: dict[str, str] | None = None
+	while True:
+		resp = await client.get(
+			f"{base_url}/models",
+			headers=headers,
+			params=params,
+		)
+		resp.raise_for_status()
+		payload = resp.json()
+		items, last_id, has_more = _parse_anthropic_models_payload(payload)
+		all_items.extend(items)
+		if not has_more or last_id is None:
+			return all_items
+		params = {"after_id": last_id}
+
+
+def _is_valid_autofetch_provider(provider: Provider) -> bool:
+	if provider.status != ProviderStatus.ENABLED:
+		return False
+	if not provider.is_autofetch_enabled:
+		return False
+	return provider.adapter_type in _DEFAULT_BASE_URLS
+
+
+def _namespaced_display_name(
+	*,
+	prefix: str | None,
+	model_id: str,
+	upstream_display_name: str | None,
+) -> str | None:
+	if prefix is None or prefix.strip() == "":
+		return upstream_display_name
+	base = upstream_display_name if upstream_display_name is not None else model_id
+	return f"{prefix.strip()}/{base}"
+
+
+async def _sync_autofetched_models(
+	session: AsyncSession,
+	*,
+	provider_id: str | None,
+) -> None:
+	stmt = select(Provider).where(
+		Provider.status == ProviderStatus.ENABLED,
+		Provider.is_autofetch_enabled.is_(True),
+	)
+	if provider_id is not None:
+		stmt = stmt.where(Provider.id == provider_id)
+
+	result = await session.execute(stmt)
+	providers = list(result.scalars().all())
+	providers = [p for p in providers if _is_valid_autofetch_provider(p)]
+	if len(providers) == 0:
+		return
+
+	async with httpx.AsyncClient(timeout=15.0) as client:
+		for provider in providers:
+			base_url = _normalize_base_url(provider)
+			if base_url is None:
+				continue
+
+			try:
+				if provider.adapter_type == "anthropic":
+					api_key = provider.api_key
+					if api_key is None:
+						continue
+					headers = _merge_headers(
+						base={
+							"X-Api-Key": api_key,
+							"anthropic-version": "2023-06-01",
+						},
+						additional=provider.additional_headers,
+					)
+					fetched = await _fetch_anthropic_models(
+						client,
+						base_url=base_url,
+						headers=headers,
+					)
+					fetched_by_id = {model_id: display for model_id, display in fetched}
+				else:
+					base_headers: dict[str, str] = {}
+					if provider.adapter_type == "openai":
+						api_key = provider.api_key
+						if api_key is None:
+							continue
+						base_headers["Authorization"] = f"Bearer {api_key}"
+					headers = _merge_headers(
+						base=base_headers,
+						additional=provider.additional_headers,
+					)
+					model_ids = await _fetch_openai_compatible_models(
+						client,
+						base_url=base_url,
+						headers=headers,
+					)
+					fetched_by_id = {model_id: None for model_id in model_ids}
+			except (httpx.HTTPError, ValueError) as exc:
+				logger.warning(
+					"provider model autofetch failed",
+					extra={
+						"provider_id": provider.id,
+						"provider_adapter": provider.adapter_type,
+						"error": str(exc),
+					},
+				)
+				continue
+
+			result_models = await session.execute(
+				select(Model).where(Model.provider_id == provider.id)
+			)
+			existing_models = list(result_models.scalars().all())
+			existing_by_name = {m.name: m for m in existing_models}
+			fetched_ids = set(fetched_by_id.keys())
+
+			for model_id, upstream_display_name in fetched_by_id.items():
+				existing = existing_by_name.get(model_id)
+				if existing is not None and not existing.is_autofetched:
+					continue
+
+				display_name = _namespaced_display_name(
+					prefix=provider.model_prefix,
+					model_id=model_id,
+					upstream_display_name=upstream_display_name,
+				)
+
+				if existing is None:
+					session.add(
+						Model(
+							provider_id=provider.id,
+							name=model_id,
+							display_name=display_name,
+							capabilities=[],
+							enabled=True,
+							is_autofetched=True,
+						)
+					)
+					continue
+
+				existing.enabled = True
+				existing.is_autofetched = True
+				existing.display_name = display_name
+
+			for model in existing_models:
+				if not model.is_autofetched:
+					continue
+				if model.name not in fetched_ids:
+					await session.delete(model)
+
+			provider.last_synced_at = datetime.now(UTC)
+			session.add(provider)
+
+	await session.commit()
 
 
 async def _ensure_provider(
@@ -58,7 +314,7 @@ async def create_model(
 	model = Model(**model_in.model_dump(by_alias=True))
 	session.add(model)
 	await session.commit()
-	return await _get_model(model.id, session, principal)
+	return await _get_model(str(model.id), session, principal)
 
 
 async def list_models(
@@ -68,6 +324,7 @@ async def list_models(
 	provider_id: str | None = None,
 ) -> list[Model]:
 	require_permission(principal, "models:manage")
+	await _sync_autofetched_models(session, provider_id=provider_id)
 	stmt = (
 		select(Model)
 		.options(selectinload(Model.provider))

@@ -11,10 +11,8 @@ function v1RawClient() {
 	return createClient<paths>({
 		baseUrl: getV1BaseUrl(),
 		fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-			return fetch(input, {
-				...init,
-				credentials: 'include',
-			})
+			const request = input instanceof Request ? input : new Request(input, init)
+			return fetch(new Request(request, { credentials: 'include' }))
 		},
 	})
 }
@@ -73,33 +71,37 @@ export function v1Client() {
 	return createClient<paths>({
 		baseUrl: getV1BaseUrl(),
 		fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+			// openapi-fetch calls custom fetch with a fully-formed Request.
+			// if we ignore that request's headers/body, we can accidentally drop
+			// critical info like Content-Type and cause backend 422s.
+			const baseRequest = input instanceof Request ? input : new Request(input, init)
+			const retryBaseRequest = baseRequest.clone()
+
 			const token = getAccessToken()
-			const headers = new Headers(init?.headers)
-			if (token && !headers.has('Authorization')) {
-				headers.set('Authorization', `Bearer ${token}`)
+			const baseHeaders = new Headers(baseRequest.headers)
+			if (token && !baseHeaders.has('Authorization')) {
+				baseHeaders.set('Authorization', `Bearer ${token}`)
 			}
 
-			const nextInit: RequestInit = {
-				...init,
-				headers,
-				credentials: 'include',
-			}
-
-			const doFetch = async (t: string | null): Promise<Response> => {
-				const nextHeaders = new Headers(headers)
-				if (t) nextHeaders.set('Authorization', `Bearer ${t}`)
-				if (input instanceof Request) {
-					return fetch(new Request(input, { ...nextInit, headers: nextHeaders }))
-				}
-				return fetch(input, { ...nextInit, headers: nextHeaders })
-			}
-
-			let res = await doFetch(token)
+			let res = await fetch(
+				new Request(baseRequest, {
+					headers: baseHeaders,
+					credentials: 'include',
+				})
+			)
 			if (res.status !== 401) return res
 
 			const refreshed = await refreshV1AccessToken()
 			if (!refreshed) return res
-			res = await doFetch(refreshed)
+
+			const retryHeaders = new Headers(retryBaseRequest.headers)
+			retryHeaders.set('Authorization', `Bearer ${refreshed}`)
+			res = await fetch(
+				new Request(retryBaseRequest, {
+					headers: retryHeaders,
+					credentials: 'include',
+				})
+			)
 			return res
 		},
 	})

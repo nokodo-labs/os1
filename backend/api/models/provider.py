@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING
 from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from api.core.config import settings
 from api.models.base import Base, StringEnum
 from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.security import decrypt_string
 
 
 if TYPE_CHECKING:
@@ -73,3 +75,10 @@ class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	def autofetched_models(self) -> list[Model]:
 		"""Return models that were automatically fetched."""
 		return [m for m in self.models if m.is_autofetched]
+
+	@property
+	def api_key(self) -> str | None:
+		"""Return decrypted api key for this provider, if set."""
+		if self.encrypted_api_key is None or self.encrypted_api_key.strip() == "":
+			return None
+		return decrypt_string(self.encrypted_api_key, settings.SECRET_KEY)

@@ -111,6 +111,11 @@ def test_openai_and_anthropic_base_get_client_includes_optional_fields(
 	assert created2[-1]["base_url"] == "http://y"
 	assert created2[-1]["timeout"] == 2.0
 
+	BaseAnthropicAdapter(
+		api_key="k", base_url="https://api.anthropic.com/v1", timeout=2.0
+	)
+	assert created2[-1]["base_url"] == "https://api.anthropic.com"
+
 
 def test_base_chat_adapter_generate_not_implemented_is_covered() -> None:
 	class _CallsSuperChat(BaseChatAdapter):

@@ -86,7 +86,7 @@
 									autocomplete="email"
 									required
 									bind:value={email}
-									placeholder="you@company.com"
+									placeholder="you@nokodo.net"
 									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>

@@ -560,6 +560,10 @@ async def test_chat_service_conversions():
 			self.base_url = base_url
 			self.encrypted_api_key = encrypted_api_key
 
+		@property
+		def api_key(self) -> str | None:
+			return None
+
 	class _Model:
 		def __init__(self, provider):
 			self.provider = provider

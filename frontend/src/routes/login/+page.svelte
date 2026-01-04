@@ -27,22 +27,30 @@
 
 		try {
 			const { data, error, response } = await v1Client().POST('/auth/login/access-token', {
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
 				body: {
 					username: email.trim(),
 					password,
 					scope: '',
 				},
-				bodySerializer: (body) => {
-					const params = new URLSearchParams()
-					params.append('username', body.username)
-					params.append('password', body.password)
-					params.append('scope', body.scope)
-					return params
-				},
 			})
 
 			if (error || !data) {
-				throw new Error(error?.detail || response.statusText || 'failed to sign in')
+				const detail = (error as { detail?: unknown } | undefined)?.detail
+				if (typeof detail === 'string' && detail) throw new Error(detail)
+				if (Array.isArray(detail) && detail.length) {
+					const messages = detail
+						.map((item) =>
+							typeof item === 'object' && item && 'msg' in item
+								? (item as { msg: string }).msg
+								: null
+						)
+						.filter((msg): msg is string => Boolean(msg))
+					if (messages.length) throw new Error(messages.join(', '))
+				}
+				throw new Error(response.statusText || 'failed to sign in')
 			}
 
 			setSessionToken(data.access_token)
@@ -81,7 +89,7 @@
 									autocomplete="email"
 									required
 									bind:value={email}
-									placeholder="you@company.com"
+									placeholder="you@nokodo.net"
 									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>

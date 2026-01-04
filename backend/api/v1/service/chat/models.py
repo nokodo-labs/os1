@@ -7,13 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.config import settings
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
-from nokodo_ai.utils.security import decrypt_string
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -37,10 +35,8 @@ def build_sdk_adapter_config(provider: Provider) -> dict[str, object]:
 	}
 	if provider.base_url is not None and provider.base_url.strip() != "":
 		adapter_config["base_url"] = provider.base_url
-	if provider.encrypted_api_key is not None and provider.encrypted_api_key != "":
-		adapter_config["api_key"] = decrypt_string(
-			provider.encrypted_api_key, settings.SECRET_KEY
-		)
+	if provider.api_key is not None:
+		adapter_config["api_key"] = provider.api_key
 	return adapter_config
 
 
