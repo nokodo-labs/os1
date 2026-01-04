@@ -82,7 +82,7 @@ async def refresh_access_token(
 	try:
 		token_pair = await auth_service.refresh_token_for_user(refresh_token, session)
 	except HTTPException as e:
-		if e.headers and "X-Clear-Refresh-Cookie" in e.headers:
+		if e.headers and e.headers.get("X-Clear-Refresh-Cookie") == "true":
 			_clear_refresh_cookie(response)
 		raise
 

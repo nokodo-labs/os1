@@ -44,10 +44,9 @@ async def test_refresh_clears_cookie_on_flag(
 		_raise,
 	)
 
-	resp = await client.post(
-		"/v1/auth/refresh",
-		cookies={"refresh_token": "r"},
-	)
+	client.cookies.set("refresh_token", "r")
+
+	resp = await client.post("/v1/auth/refresh")
 	assert resp.status_code == 401
 	assert cleared["called"] is True
 
@@ -65,10 +64,9 @@ async def test_refresh_sets_cookie_on_success(
 		_ok,
 	)
 
-	resp = await client.post(
-		"/v1/auth/refresh",
-		cookies={"refresh_token": "r"},
-	)
+	client.cookies.set("refresh_token", "r")
+
+	resp = await client.post("/v1/auth/refresh")
 	assert resp.status_code == 200
 	assert resp.json()["access_token"] == "a"
 	assert "set-cookie" in resp.headers
@@ -98,10 +96,9 @@ async def test_refresh_does_not_clear_cookie_without_header(
 		_raise,
 	)
 
-	resp = await client.post(
-		"/v1/auth/refresh",
-		cookies={"refresh_token": "r"},
-	)
+	client.cookies.set("refresh_token", "r")
+
+	resp = await client.post("/v1/auth/refresh")
 	assert resp.status_code == 401
 	assert cleared["called"] is False
 
@@ -119,10 +116,9 @@ async def test_refresh_does_not_set_cookie_when_refresh_token_missing(
 		_ok,
 	)
 
-	resp = await client.post(
-		"/v1/auth/refresh",
-		cookies={"refresh_token": "r"},
-	)
+	client.cookies.set("refresh_token", "r")
+
+	resp = await client.post("/v1/auth/refresh")
 	assert resp.status_code == 200
 	assert "set-cookie" not in resp.headers
 
