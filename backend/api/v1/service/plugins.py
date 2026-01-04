@@ -95,6 +95,8 @@ async def update_plugin(
 
 	session.add(plugin)
 	await session.commit()
+	# ensure server-side updated columns (e.g., updated_at) are loaded
+	await session.refresh(plugin)
 	return await _get_plugin(str(plugin.id), session)
 
 

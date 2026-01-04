@@ -142,7 +142,11 @@ class Thread(
 		}
 		branch: list[Message] = []
 		cur_id: TypeID | None = self.current_message_id
+		visited: set[TypeID] = set()
 		while cur_id is not None:
+			if cur_id in visited:
+				break
+			visited.add(cur_id)
 			cur = messages_by_id.get(cur_id)
 			if cur is None:
 				break

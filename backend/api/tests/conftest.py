@@ -1,4 +1,4 @@
-"""Pytest configuration and fixtures."""
+"""Pytest configuration and fixtures for API tests."""
 
 from __future__ import annotations
 
@@ -28,17 +28,6 @@ from sqlalchemy.ext.asyncio import (
 	create_async_engine,
 )
 
-# Ensure all model tables are registered in Base.metadata before create_all.
-import api.models  # noqa: F401
-
-# Ensure SQLAlchemy models are registered with Base metadata for DDL operations
-from api.core.config import settings
-from api.models.base import Base
-
-
-# Configure settings for tests before importing the app
-settings.TESTING = True
-
 
 class AdminConnectionUnavailableError(RuntimeError):
 	"""Raised when a privileged Postgres connection cannot be established."""
@@ -50,7 +39,12 @@ def _derive_test_database_template_url() -> URL:
 	if override:
 		template_url = make_url(override)
 	else:
-		database_url = make_url(str(settings.DATABASE_URL))
+		try:
+			database_url = make_url(os.environ["DATABASE_URL"])
+		except KeyError:
+			from api.core.config import settings
+
+			database_url = make_url(str(settings.DATABASE_URL))
 		if not database_url.database:
 			raise RuntimeError("DATABASE_URL must include a database name for tests")
 		template_url = database_url
@@ -73,7 +67,8 @@ def _create_database(url: URL) -> None:
 
 	_ensure_template_role_exists()
 	_drop_database(url)
-	owner = TEST_DATABASE_TEMPLATE_URL.username
+	template_url = _template_url()
+	owner = template_url.username
 	owner_clause = f" OWNER {_quote_ident(owner)}" if owner else ""
 	create_sql = text(f"CREATE DATABASE {_quote_ident(url.database)}{owner_clause}")
 
@@ -143,23 +138,16 @@ def _can_connect(url: URL) -> bool:
 
 def _template_connection_available(url: URL) -> bool:
 	"""Check whether template credentials can reach Postgres."""
-	# Prefer connecting to the built-in maintenance DB so tests do not touch the
-	# application's dev database.
 	if _can_connect(url.set(database="postgres")):
 		return True
-	# Fallback for environments where the user has access only to a specific DB.
 	if url.database and url.database != "postgres":
 		return _can_connect(url.set(database=url.database))
 	return False
 
 
 def _cleanup_leftover_test_databases() -> None:
-	"""Drop any leftover per-test databases from prior runs.
-
-	This is a safety net for interrupted runs; the per-test fixture still drops
-	its own database in a finally block.
-	"""
-	base_name = TEST_DATABASE_TEMPLATE_URL.database or "nokodo_ai_test"
+	"""Drop any leftover per-test databases from prior runs."""
+	base_name = _template_url().database or "nokodo_ai_test"
 	pattern = f"{base_name}_test_%"
 	try:
 		with _admin_connection() as conn:
@@ -186,13 +174,11 @@ WHERE datname LIKE :pattern
 				)
 				conn.execute(text(f"DROP DATABASE IF EXISTS {_quote_ident(db_name)}"))
 	except AdminConnectionUnavailableError:
-		# If we can't get a privileged connection, cleanup is best-effort.
 		return
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
-	"""Ensure no per-test databases remain after the suite completes."""
-	# In xdist, run cleanup only once from the controller process.
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+	_ = (session, exitstatus)
 	if os.getenv("PYTEST_XDIST_WORKER"):
 		return
 	_cleanup_leftover_test_databases()
@@ -246,7 +232,6 @@ class EmbeddedPostgresCluster:
 		self._started = False
 
 	def start(self) -> URL:
-		"""Initialize and launch the embedded Postgres cluster."""
 		self._run_initdb()
 		_rewrite_pg_hba_conf(self._data_dir)
 		_append_postgresql_conf(self._data_dir)
@@ -258,7 +243,6 @@ class EmbeddedPostgresCluster:
 		)
 
 	def stop(self) -> None:
-		"""Terminate the embedded cluster if it is running."""
 		if not self._started:
 			return
 		self._run_pg_ctl("stop", extra=["-m", "fast"], check=False)
@@ -286,7 +270,11 @@ class EmbeddedPostgresCluster:
 			)
 
 	def _run_pg_ctl(
-		self, action: str, extra: list[str] | None = None, check: bool = True
+		self,
+		action: str,
+		*,
+		extra: list[str] | None = None,
+		check: bool = True,
 	) -> None:
 		args = [self._pg_ctl, "-D", str(self._data_dir)]
 		if extra:
@@ -305,7 +293,6 @@ class EmbeddedPostgresCluster:
 
 
 def _pgpass_candidate_paths() -> list[Path]:
-	"""Return possible pgpass file locations for the current platform."""
 	paths: list[Path] = []
 	override = os.getenv("PGPASSFILE")
 	if override:
@@ -324,7 +311,6 @@ PGPASS_CANDIDATE_PATHS = _pgpass_candidate_paths()
 
 
 def _parse_pgpass_line(line: str) -> list[str] | None:
-	"""Parse a pgpass line into its five fields, handling escapes."""
 	if not line or line.startswith("#"):
 		return None
 	parts: list[str] = []
@@ -348,14 +334,12 @@ def _parse_pgpass_line(line: str) -> list[str] | None:
 
 
 def _pgpass_field_matches(pattern: str, value: str | None) -> bool:
-	"""Return whether a pgpass field matches the provided value."""
 	if pattern == "*":
 		return True
 	return pattern == (value or "")
 
 
 def _load_pgpass_passwords(url: URL) -> list[str]:
-	"""Load matching passwords from known pgpass files."""
 	host = url.host or "localhost"
 	port = str(url.port or 5432)
 	database = url.database or "*"
@@ -385,7 +369,6 @@ def _load_pgpass_passwords(url: URL) -> list[str]:
 
 
 def _collect_password_candidates(template_url: URL) -> list[str | None]:
-	"""Assemble the ordered list of password guesses for Postgres connections."""
 	candidate_values: list[str | None] = [
 		template_url.password,
 		os.getenv("TEST_DATABASE_PASSWORD"),
@@ -413,28 +396,38 @@ def _collect_password_candidates(template_url: URL) -> list[str | None]:
 	return ordered
 
 
-TEST_DATABASE_TEMPLATE_URL = _derive_test_database_template_url()
+TEST_DATABASE_TEMPLATE_URL: URL | None = None
 _TEMPLATE_ROLE_ENSURED = False
 _TEMPLATE_ROLE_LOCK = Lock()
 _TEMPLATE_ROLE_ADVISORY_LOCK_KEY = 0x6E6F4B4F444F  # "nokodo" in hex
 _ADMIN_CONNECTION_URL_IN_USE: URL | None = None
 _EMBEDDED_CLUSTER: EmbeddedPostgresCluster | None = None
 
-if not _template_connection_available(TEST_DATABASE_TEMPLATE_URL):
-	try:
-		_EMBEDDED_CLUSTER = EmbeddedPostgresCluster()
-		TEST_DATABASE_TEMPLATE_URL = _EMBEDDED_CLUSTER.start()
-		port = TEST_DATABASE_TEMPLATE_URL.port or 0
-		print(f"[tests] started embedded Postgres cluster on port {port}")
-	except RuntimeError as exc:  # pragma: no cover - requires local failure
-		raise RuntimeError(
-			"Unable to connect to TEST_DATABASE_URL and failed to start an embedded "
-			"Postgres instance."
-		) from exc
+
+def _template_url() -> URL:
+	global TEST_DATABASE_TEMPLATE_URL
+	global _EMBEDDED_CLUSTER
+	if TEST_DATABASE_TEMPLATE_URL is not None:
+		return TEST_DATABASE_TEMPLATE_URL
+
+	template_url = _derive_test_database_template_url()
+	if not _template_connection_available(template_url):
+		try:
+			_EMBEDDED_CLUSTER = EmbeddedPostgresCluster()
+			template_url = _EMBEDDED_CLUSTER.start()
+			port = template_url.port or 0
+			print(f"[tests] started embedded Postgres cluster on port {port}")
+		except RuntimeError as exc:  # pragma: no cover
+			raise RuntimeError(
+				"Unable to connect to TEST_DATABASE_URL and failed to start an embedded "
+				"Postgres instance."
+			) from exc
+
+	TEST_DATABASE_TEMPLATE_URL = template_url
+	return template_url
 
 
 def _build_admin_database_urls(template_url: URL) -> list[URL]:
-	"""Generate candidate admin URLs for managing disposable databases."""
 	override = os.getenv("TEST_DATABASE_ADMIN_URL")
 	if override:
 		admin_url = make_url(override)
@@ -447,12 +440,7 @@ def _build_admin_database_urls(template_url: URL) -> list[URL]:
 	if template_url.username:
 		template_passwords = _collect_password_candidates(template_url)
 		for password in dict.fromkeys(template_passwords):
-			urls.append(
-				template_url.set(
-					password=password,
-					database="postgres",
-				)
-			)
+			urls.append(template_url.set(password=password, database="postgres"))
 
 	user_candidates = ["postgres"]
 	for user in dict.fromkeys(user_candidates):
@@ -475,17 +463,14 @@ def _build_admin_database_urls(template_url: URL) -> list[URL]:
 
 
 def _quote_ident(value: str) -> str:
-	"""Quote identifiers for raw SQL statements."""
-	return f'"{value.replace('"', '""')}"'
+	return '"' + value.replace('"', '""') + '"'
 
 
 def _quote_literal(value: str) -> str:
-	"""Quote string literals for raw SQL statements."""
-	return f"'{value.replace("'", "''")}'"
+	return "'" + value.replace("'", "''") + "'"
 
 
 def _connection_has_admin_rights(conn: Connection) -> bool:
-	"""Check whether the current connection can manage roles and databases."""
 	row = conn.execute(
 		text(
 			"""
@@ -503,10 +488,9 @@ def _connection_has_admin_rights(conn: Connection) -> bool:
 
 @contextmanager
 def _admin_connection() -> Generator[Connection]:
-	"""Yield a Postgres connection using the first admin URL with required rights."""
 	global _ADMIN_CONNECTION_URL_IN_USE
 	last_error: Exception | None = None
-	for admin_url in _build_admin_database_urls(TEST_DATABASE_TEMPLATE_URL):
+	for admin_url in _build_admin_database_urls(_template_url()):
 		engine = create_engine(admin_url)
 		masked_url = admin_url.render_as_string(hide_password=True)
 		try:
@@ -514,15 +498,13 @@ def _admin_connection() -> Generator[Connection]:
 				conn = raw_conn.execution_options(isolation_level="AUTOCOMMIT")
 				if not _connection_has_admin_rights(conn):
 					last_error = RuntimeError(
-						f"Admin connection '{masked_url}' lacks CREATEDB and "
-						"CREATEROLE privileges"
+						f"Admin connection '{masked_url}' lacks CREATEDB and CREATEROLE privileges"
 					)
 					continue
 				_ADMIN_CONNECTION_URL_IN_USE = admin_url
-				print(f"[tests] admin connection established via {masked_url}")
 				yield conn
 				return
-		except OperationalError as exc:  # pragma: no cover - exercised in CI
+		except OperationalError as exc:  # pragma: no cover
 			last_error = exc
 		finally:
 			engine.dispose()
@@ -535,9 +517,9 @@ def _admin_connection() -> Generator[Connection]:
 
 @contextmanager
 def _owner_connection() -> Generator[Connection]:
-	"""Yield a Postgres connection using the template credentials for DDL fallback."""
-	ddl_database = TEST_DATABASE_TEMPLATE_URL.database or "postgres"
-	owner_url = TEST_DATABASE_TEMPLATE_URL.set(database=ddl_database)
+	template_url = _template_url()
+	ddl_database = template_url.database or "postgres"
+	owner_url = template_url.set(database=ddl_database)
 	engine = create_engine(owner_url)
 	try:
 		raw_conn = engine.connect()
@@ -557,10 +539,10 @@ def _owner_connection() -> Generator[Connection]:
 
 
 def _ensure_template_role_exists() -> None:
-	"""Ensure the disposable database owner role exists before creating DBs."""
 	global _TEMPLATE_ROLE_ENSURED
-	role = TEST_DATABASE_TEMPLATE_URL.username
-	password = TEST_DATABASE_TEMPLATE_URL.password
+	template_url = _template_url()
+	role = template_url.username
+	password = template_url.password
 	if _TEMPLATE_ROLE_ENSURED or not role:
 		return
 
@@ -568,8 +550,8 @@ def _ensure_template_role_exists() -> None:
 		if _TEMPLATE_ROLE_ENSURED:
 			return
 
-		probe_db = TEST_DATABASE_TEMPLATE_URL.database or "postgres"
-		probe_url = TEST_DATABASE_TEMPLATE_URL.set(database=probe_db)
+		probe_db = template_url.database or "postgres"
+		probe_url = template_url.set(database=probe_db)
 		if _can_connect(probe_url):
 			_TEMPLATE_ROLE_ENSURED = True
 			return
@@ -600,15 +582,14 @@ def _ensure_template_role_exists() -> None:
 							conn.execute(
 								text(
 									"ALTER ROLE "
-									f"{_quote_ident(role)} "
-									f"PASSWORD {_quote_literal(password)}"
+									+ f"{_quote_ident(role)} "
+									+ f"PASSWORD {_quote_literal(password)}"
 								)
 							)
 						except ProgrammingError as exc:
 							raise RuntimeError(
 								f"Unable to update Postgres role '{role}'. "
-								"Provide TEST_DATABASE_ADMIN_URL with a superuser "
-								"connection or set the password manually."
+								"Provide TEST_DATABASE_ADMIN_URL with a superuser connection."
 							) from exc
 				finally:
 					conn.execute(
@@ -618,43 +599,37 @@ def _ensure_template_role_exists() -> None:
 		except AdminConnectionUnavailableError as exc:
 			raise RuntimeError(
 				f"Unable to ensure Postgres role '{role}'. "
-				"Provide TEST_DATABASE_ADMIN_URL with a superuser connection or "
-				"supply working TEST_DATABASE_URL credentials."
+				"Provide TEST_DATABASE_ADMIN_URL with a superuser connection."
 			) from exc
 
-		_TEMPLATE_ROLE_ENSURED = True
+	_TEMPLATE_ROLE_ENSURED = True
 
 
 def _create_isolated_test_database_url() -> URL:
-	"""Mint a unique Postgres database URL for a single test case."""
-	base_name = TEST_DATABASE_TEMPLATE_URL.database or "nokodo_ai_test"
+	template_url = _template_url()
+	base_name = template_url.database or "nokodo_ai_test"
 	suffix = uuid4().hex[:8]
 	db_name = f"{base_name}_test_{suffix}"
-	url = TEST_DATABASE_TEMPLATE_URL.set(database=db_name)
+	url = template_url.set(database=db_name)
 	_create_database(url)
 	return url
 
 
 async def _create_async_engine_with_fallback(url: URL) -> AsyncEngine:
-	"""Create an async engine, falling back to an admin user if template creds fail."""
 	candidates: list[URL] = [url]
 	if _ADMIN_CONNECTION_URL_IN_USE is not None:
 		candidates.append(_ADMIN_CONNECTION_URL_IN_USE.set(database=url.database))
 	candidates = _deduplicate_urls(candidates)
 	errors: list[Exception] = []
 	for candidate in candidates:
-		print(
-			"[tests] attempting async engine connection via "
-			f"{candidate.render_as_string(hide_password=True)}"
-		)
 		engine = create_async_engine(
-			candidate.render_as_string(hide_password=False), echo=False
+			candidate.render_as_string(hide_password=False),
+			echo=False,
 		)
 		try:
 			async with engine.connect() as conn:
 				await conn.execute(text("SELECT 1"))
 		except OperationalError as exc:
-			print(f"[tests] connection attempt failed: {exc.__class__.__name__}: {exc}")
 			errors.append(exc)
 			await engine.dispose()
 			continue
@@ -668,7 +643,6 @@ async def _create_async_engine_with_fallback(url: URL) -> AsyncEngine:
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop]:
-	"""Create an instance of the default event loop for the test session."""
 	loop = asyncio.get_event_loop_policy().new_event_loop()
 	yield loop
 	loop.close()
@@ -676,7 +650,12 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession]:
-	"""Create a test database session backed by an isolated Postgres DB."""
+	# Import models/Base at runtime so coverage sees them.
+	import api.models as _models
+	from api.models.base import Base
+
+	_ = _models
+
 	test_db_url = _create_isolated_test_database_url()
 	engine = await _create_async_engine_with_fallback(test_db_url)
 
@@ -701,9 +680,10 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
-	"""Create a test client with overridden database dependency."""
+	from api.core.config import settings
 
-	# Import after TESTING flag is set to avoid startup DB init
+	settings.TESTING = True
+
 	from api.core.database import get_db
 	from api.main import app
 	from api.v1.app import v1_app
@@ -715,7 +695,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 	v1_app.dependency_overrides[get_db] = override_get_db
 
 	async with AsyncClient(
-		transport=ASGITransport(app=app), base_url="http://test"
+		transport=ASGITransport(app=app),
+		base_url="http://test",
 	) as test_client:
 		yield test_client
 
@@ -725,7 +706,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 @pytest_asyncio.fixture(scope="function")
 async def admin_auth(client: AsyncClient) -> dict[str, object]:
-	"""Create a bootstrap admin user and return auth context."""
 	email = f"admin-{uuid4().hex}@example.com"
 	password = "password"
 	user_resp = await client.post(
@@ -756,7 +736,6 @@ async def user_auth(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> dict[str, object]:
-	"""Create a non-admin user and return auth context."""
 	email = f"user-{uuid4().hex}@example.com"
 	password = "password"
 	headers = admin_auth["headers"]
@@ -786,8 +765,7 @@ async def user_auth(
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_user(db_session: AsyncSession) -> dict:
-	"""Create a test user."""
+async def test_user(db_session: AsyncSession) -> dict[str, object]:
 	from api.models.user import User
 	from nokodo_ai.utils.security import hash_password
 
@@ -801,7 +779,4 @@ async def test_user(db_session: AsyncSession) -> dict:
 	await db_session.commit()
 	await db_session.refresh(user)
 
-	return {
-		"id": user.id,
-		"email": user.email,
-	}
+	return {"id": user.id, "email": user.email}

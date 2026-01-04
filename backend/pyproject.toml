@@ -72,7 +72,7 @@ force-single-line = false
 lines-after-imports = 2
 
 [tool.coverage.run]
-source = ["api"]
+source = ["api", "nokodo_ai"]
 branch = true
 concurrency = ["greenlet"]
 data_file = "data/.coverage"

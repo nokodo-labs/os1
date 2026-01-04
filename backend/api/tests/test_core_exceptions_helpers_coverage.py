@@ -1,3 +1,5 @@
+"""Coverage-focused tests for api.core.exceptions helpers."""
+
 from __future__ import annotations
 
 from fastapi.exceptions import RequestValidationError
