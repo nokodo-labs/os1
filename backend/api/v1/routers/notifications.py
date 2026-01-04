@@ -58,3 +58,34 @@ async def dismiss_notification(
 		db,
 		principal=principal,
 	)
+
+
+@router.post("/users/{user_id}/read-all", response_model=int)
+async def mark_all_notifications_read(
+	user_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""
+	Mark all notifications as read for a user.
+	Returns count of updated notifications.
+	"""
+	return await notification_service.mark_all_notifications_read(
+		db,
+		principal=principal,
+		user_id=user_id,
+	)
+
+
+@router.delete("/{notification_id}", status_code=204)
+async def delete_notification(
+	notification_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""Delete a notification."""
+	await notification_service.delete_notification(
+		notification_id,
+		db,
+		principal=principal,
+	)
