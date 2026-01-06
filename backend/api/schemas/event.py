@@ -39,3 +39,9 @@ class Event(EventBase):
 	id: TypeID
 	created_at: datetime
 	updated_at: datetime
+
+
+class EventsByMessageIDsRequest(MetadataModel):
+	"""Request payload to fetch events for a set of messages."""
+
+	message_ids: list[TypeID] = Field(default_factory=list, max_length=500)

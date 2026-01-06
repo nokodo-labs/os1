@@ -89,6 +89,8 @@ def test_psycopg_event_loop_policy_noop_off_windows(
 	"""Policy helper should be a no-op when not on Windows."""
 	import types
 
+	from api.core import runtime as runtime_module
+
 	called = False
 
 	def _mark_called(_policy) -> None:
@@ -99,9 +101,9 @@ def test_psycopg_event_loop_policy_noop_off_windows(
 	fake_sys = types.ModuleType("fake_sys")
 	fake_sys.platform = "linux"  # type: ignore[attr-defined]
 
-	monkeypatch.setattr(config_module, "sys", fake_sys)
-	monkeypatch.setattr(config_module, "asyncio", database_module.asyncio)
-	monkeypatch.setattr(config_module.asyncio, "set_event_loop_policy", _mark_called)
+	monkeypatch.setattr(runtime_module, "sys", fake_sys)
+	monkeypatch.setattr(runtime_module, "asyncio", database_module.asyncio)
+	monkeypatch.setattr(runtime_module.asyncio, "set_event_loop_policy", _mark_called)
 	# Call helper again under a non-windows platform
 	config_module.configure_psycopg_asyncio_event_loop_policy()
 	assert called is False

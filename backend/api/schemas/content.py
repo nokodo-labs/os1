@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 
 class BaseContentPart(BaseModel):
@@ -90,3 +90,6 @@ SystemContentPart = Annotated[
 	TextContent,
 	Field(discriminator="type"),
 ]
+
+# Type adapter for validating content parts from dicts
+ContentPartAdapter = TypeAdapter(ContentPart)

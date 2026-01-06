@@ -15,6 +15,7 @@ from api.core.exceptions import (
 	validation_exception_handler,
 )
 from api.core.logging import configure_logging, get_logger
+from api.core.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.middleware import (
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,
@@ -22,6 +23,8 @@ from api.middleware import (
 )
 from api.v1.app import v1_app
 
+
+configure_psycopg_asyncio_event_loop_policy()
 
 # configure logging early, before anything else logs
 configure_logging()

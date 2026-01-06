@@ -384,6 +384,43 @@ async def list_messages(
 	return list(result.scalars().all())
 
 
+async def list_events_for_message_ids(
+	thread_id: TypeID,
+	message_ids: list[TypeID],
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_hidden: bool = False,
+) -> list[Event]:
+	"""Return events associated with the given messages in this thread.
+
+	authz is based on thread access (viewer+), not the global events permission.
+	"""
+	_ensure_admin_for_hidden(include_hidden, principal)
+	await require_thread_access(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+		include_hidden=include_hidden,
+	)
+
+	if not message_ids:
+		return []
+
+	stmt = (
+		select(Event)
+		.where(
+			Event.thread_id == str(thread_id),
+			Event.message_id.in_([str(mid) for mid in message_ids]),
+		)
+		.order_by(Event.created_at)
+		.limit(2000)
+	)
+	result = await session.execute(stmt)
+	return list(result.scalars().all())
+
+
 async def list_message_tree(
 	thread_id: TypeID,
 	session: AsyncSession,
@@ -476,6 +513,7 @@ async def create_message(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	message_id: TypeID | None = None,
 ) -> Message:
 	thread = await _load_thread(
 		thread_id,
@@ -507,17 +545,44 @@ async def create_message(
 				detail="Parent message not found",
 			)
 
+	pk: dict[str, object] = {"id": message_id} if message_id is not None else {}
+
 	match message_in.type:
 		case MessageType.USER:
-			message = UserMessage(thread_id=thread_id, parent_id=parent_id, **data)
+			message = UserMessage(
+				thread_id=thread_id,
+				parent_id=parent_id,
+				**pk,
+				**data,
+			)
 		case MessageType.ASSISTANT:
-			message = AssistantMessage(thread_id=thread_id, parent_id=parent_id, **data)
+			message = AssistantMessage(
+				thread_id=thread_id,
+				parent_id=parent_id,
+				**pk,
+				**data,
+			)
 		case MessageType.TOOL:
-			message = ToolMessage(thread_id=thread_id, parent_id=parent_id, **data)
+			message = ToolMessage(
+				thread_id=thread_id,
+				parent_id=parent_id,
+				**pk,
+				**data,
+			)
 		case MessageType.SYSTEM:
-			message = SystemMessage(thread_id=thread_id, parent_id=parent_id, **data)
+			message = SystemMessage(
+				thread_id=thread_id,
+				parent_id=parent_id,
+				**pk,
+				**data,
+			)
 		case _:
-			message = UserMessage(thread_id=thread_id, parent_id=parent_id, **data)
+			message = UserMessage(
+				thread_id=thread_id,
+				parent_id=parent_id,
+				**pk,
+				**data,
+			)
 
 	thread.last_activity_at = datetime.now(tz=UTC)
 	session.add(message)
@@ -526,3 +591,88 @@ async def create_message(
 	await session.commit()
 	await session.refresh(message)
 	return message
+
+
+async def delete_user_message_turn(
+	thread_id: TypeID,
+	message_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	"""delete a user message and its generated response(s) on the active branch.
+
+	deletes the user message and all subsequent messages until (but not including)
+	the next user message, if any.
+
+	if a next user message exists, it will be re-parented to the deleted user's
+	parent so the remaining branch stays connected.
+	"""
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.EDITOR,
+	)
+
+	branch = await get_current_branch(
+		thread_id,
+		session,
+		principal=principal,
+		include_hidden=False,
+	)
+	if not branch:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="Message not found",
+		)
+
+	start_idx: int | None = None
+	for i, msg in enumerate(branch):
+		if TypeID(msg.id) == message_id:
+			start_idx = i
+			break
+	if start_idx is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="Message not found",
+		)
+
+	start_msg = branch[start_idx]
+	if start_msg.type != MessageType.USER:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="only user messages can be deleted",
+		)
+
+	end_idx = len(branch)
+	for j in range(start_idx + 1, len(branch)):
+		if branch[j].type == MessageType.USER:
+			end_idx = j
+			break
+
+	parent_id = start_msg.parent_id
+
+	# re-parent the next user message (if any) before deleting its ancestors
+	if end_idx < len(branch):
+		next_user = branch[end_idx]
+		next_user.parent_id = parent_id
+		await session.flush()
+
+	# delete the message segment
+	deleted_ids = {TypeID(m.id) for m in branch[start_idx:end_idx]}
+	for msg in branch[start_idx:end_idx]:
+		await session.delete(msg)
+
+	# update thread leaf if needed
+	if thread.current_message_id and TypeID(thread.current_message_id) in deleted_ids:
+		if end_idx < len(branch):
+			# leaf remains valid; keep current_message_id
+			pass
+			# note: we intentionally do not recompute leaf here; the remaining branch
+			# still terminates at the existing leaf id.
+		else:
+			thread.current_message_id = parent_id
+
+	thread.last_activity_at = datetime.now(tz=UTC)
+	await session.commit()

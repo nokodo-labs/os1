@@ -1,23 +1,60 @@
-"""chat app context for sdk execution."""
+"""application context for SDK execution.
+
+AppContext is injected into tools and filters during agent execution.
+it provides access to session, auth, and an event_emitter callback.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID
 
 
+EventEmitter = Callable[[Event], Awaitable[None]]
+
+
 @dataclass(frozen=True, slots=True)
 class AppContext:
-	"""application context passed to sdk tools and filters."""
+	"""application context passed to SDK tools and filters.
+
+	provides:
+	- session: database access
+	- principal: authenticated user
+	- event_emitter: function to broadcast events in real-time
+
+	usage in a tool:
+		async def call(self, agent_ctx, app_ctx: AppContext, **kwargs):
+			# build an Event and emit it
+			event = Event(...)
+			await app_ctx.event_emitter(event)
+			return self.success("done", agent_ctx)
+	"""
 
 	session: AsyncSession
 	principal: Principal
+	event_emitter: EventEmitter
 	agent_id: TypeID | None = None
+	thread_id: TypeID | None = None
 
 	@property
 	def user_id(self) -> TypeID:
-		return self.principal.user.id
+		return TypeID(str(self.principal.user.id))
+
+	def with_emitter(self, emitter: EventEmitter) -> AppContext:
+		"""create a new context with a specific emitter."""
+		return AppContext(
+			session=self.session,
+			principal=self.principal,
+			agent_id=self.agent_id,
+			thread_id=self.thread_id,
+			event_emitter=emitter,
+		)
+
+
+__all__ = ["AppContext"]

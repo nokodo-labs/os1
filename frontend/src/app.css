@@ -3,6 +3,10 @@
 @import 'tw-animate-css';
 
 @import './lib/styles/liquid-glass.css';
+@import './lib/styles/liquid-metal.css';
+
+/* Ensure Streamdown's built-in Tailwind classes are included (Tailwind v4 @source). */
+@source '../node_modules/svelte-streamdown/**/*';
 
 @custom-variant dark (&:is(.dark *));
 
