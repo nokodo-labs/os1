@@ -186,14 +186,14 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	assistant = AssistantMessage(content=[], tool_calls=[tool_call])
 	system = SystemMessage.from_text("sys")
 	user = UserMessage.from_text("hi")
-	# tool call should fall back to ToolCall.id when anthropic_tool_call_id missing
+	# tool call should fall back to ToolCall.id when provider data missing
 	system_text, msgs = _messages_to_anthropic([system, user, assistant])
 	assert system_text == "sys"
 	assert len(msgs) == 2
 	assert msgs[0]["role"] == "user"
 	assert msgs[1]["role"] == "assistant"
 
-	with pytest.raises(ValueError, match="missing anthropic_tool_call_id"):
+	with pytest.raises(ValueError, match="missing provider tool_call_id"):
 		_messages_to_anthropic(
 			[ToolMessage(tool_call_id="x", tool_output="out", metadata={})]
 		)
@@ -216,25 +216,37 @@ def test_anthropic_messages_to_anthropic_additional_edge_branches() -> None:
 			id="tc1",
 			name="t1",
 			arguments={"a": 1},
-			metadata={"anthropic_tool_call_id": ""},
+			metadata={},
 		),
 		ToolCall(
 			id="tc2",
 			name="t2",
 			arguments="[]",
-			metadata={"anthropic_tool_call_id": 123},
+			metadata={},
 		),
 		ToolCall(
 			id="tc3",
 			name="t3",
 			arguments="{bad",
-			metadata={"anthropic_tool_call_id": "tid3"},
+			metadata={
+				"_provider_data": {
+					"anthropic.messages": {
+						"tool_call_id": "tid3",
+					}
+				}
+			},
 		),
 		ToolCall(
 			id="tc4",
 			name="t4",
 			arguments=None,
-			metadata={"anthropic_tool_call_id": "tid4"},
+			metadata={
+				"_provider_data": {
+					"anthropic.messages": {
+						"tool_call_id": "tid4",
+					}
+				}
+			},
 		),
 	]
 
@@ -342,7 +354,13 @@ def test_openai_chat_helpers_cover_branches(
 		ToolCall(
 			name="t",
 			arguments={"a": 1},
-			metadata={"openai_tool_call_id": "id1"},
+			metadata={
+				"_provider_data": {
+					"openai.chat_completions": {
+						"tool_call_id": "id1",
+					}
+				}
+			},
 		)
 	]
 	openai_msgs = _messages_to_openai_chatcompletions(
@@ -350,7 +368,7 @@ def test_openai_chat_helpers_cover_branches(
 	)
 	assert len(openai_msgs) == 3
 
-	with pytest.raises(ValueError, match="missing openai_tool_call_id"):
+	with pytest.raises(ValueError, match="missing provider tool_call_id"):
 		_messages_to_openai_chatcompletions(
 			[ToolMessage(tool_call_id="x", tool_output="y")]
 		)
@@ -529,7 +547,13 @@ def test_openai_build_tool_calls_from_deltas_metadata_created() -> None:
 		tool_call_names={0: "f"},
 		tool_call_arguments={0: "{}"},
 	)
-	assert built and built[0].metadata == {"openai_tool_call_id": "id0"}
+	assert built and built[0].metadata == {
+		"_provider_data": {
+			"openai.chat_completions": {
+				"tool_call_id": "id0",
+			}
+		}
+	}
 
 	# openai_id None should keep metadata=None
 	built2 = _build_tool_calls_from_deltas(
@@ -552,7 +576,13 @@ def test_openai_messages_to_chatcompletions_tool_message_success() -> None:
 			ToolMessage(
 				tool_call_id="x",
 				tool_output="y",
-				metadata={"openai_tool_call_id": "id1"},
+				metadata={
+					"_provider_data": {
+						"openai.chat_completions": {
+							"tool_call_id": "id1",
+						}
+					}
+				},
 			)
 		]
 	)
@@ -784,13 +814,13 @@ async def test_openai_adapters_generate_and_embedding(
 
 
 def test_openai_responses_input_helpers_and_errors() -> None:
-	# assistant tool call requires openai_tool_call_id
+	# assistant tool call requires provider tool_call_id
 	assistant = AssistantMessage.from_text("a")
 	assistant.tool_calls = [ToolCall(name="t", arguments="{}", metadata={})]
-	with pytest.raises(ValueError, match="ToolCall missing openai_tool_call_id"):
+	with pytest.raises(ValueError, match="ToolCall missing provider tool_call_id"):
 		_messages_to_openai_responses_input([assistant])
 
-	with pytest.raises(ValueError, match="ToolMessage missing openai_tool_call_id"):
+	with pytest.raises(ValueError, match="ToolMessage missing provider tool_call_id"):
 		_messages_to_openai_responses_input(
 			[ToolMessage(tool_call_id="x", tool_output="y")]
 		)
@@ -815,7 +845,13 @@ def test_openai_responses_input_happy_paths() -> None:
 		ToolCall(
 			name="t",
 			arguments={"a": 1},
-			metadata={"openai_tool_call_id": "id1"},
+			metadata={
+				"_provider_data": {
+					"openai.responses": {
+						"tool_call_id": "id1",
+					}
+				}
+			},
 		)
 	]
 	items = _messages_to_openai_responses_input([assistant])
@@ -827,7 +863,13 @@ def test_openai_responses_input_happy_paths() -> None:
 	tool_msg = ToolMessage(
 		tool_call_id="x",
 		tool_output="ok",
-		metadata={"openai_tool_call_id": "id1"},
+		metadata={
+			"_provider_data": {
+				"openai.responses": {
+					"tool_call_id": "id1",
+				}
+			}
+		},
 	)
 	items2 = _messages_to_openai_responses_input([tool_msg])
 	first2 = cast(Any, items2[0])
@@ -1044,7 +1086,13 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 	)
 	assert msg.text == "hi"
 	assert msg.tool_calls
-	assert msg.tool_calls[0].metadata == {"anthropic_tool_call_id": "t1"}
+	assert msg.tool_calls[0].metadata == {
+		"_provider_data": {
+			"anthropic.messages": {
+				"tool_call_id": "t1",
+			}
+		}
+	}
 	assert msg.usage == Usage(
 		input_tokens=1,
 		output_tokens=2,
@@ -1261,7 +1309,13 @@ def test_anthropic_messages_to_anthropic_json_and_tool_result_blocks() -> None:
 		tool_call_id="x",
 		tool_output="ok",
 		is_error=True,
-		metadata={"anthropic_tool_call_id": "tid"},
+		metadata={
+			"_provider_data": {
+				"anthropic.messages": {
+					"tool_call_id": "tid",
+				}
+			}
+		},
 	)
 	system_text, msgs = _messages_to_anthropic([sys, user, assistant, tool_msg])
 	assert system_text == "a"

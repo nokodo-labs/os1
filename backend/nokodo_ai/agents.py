@@ -16,6 +16,7 @@ from .deltas import AgentDelta
 from .filters import Filter
 from .hooks import Hook
 from .messages import (
+	PROVIDER_DATA_KEY,
 	AssistantMessage,
 	TextContent,
 	ToolCall,
@@ -24,6 +25,7 @@ from .messages import (
 from .thread import Thread
 from .tool import Tool, ToolDefinition
 from .types.json import JSONObject
+from .utils.dicts import deep_merge
 
 
 AgentProducedMessages = list[AssistantMessage | ToolMessage]
@@ -353,7 +355,7 @@ class Agent[AppContextT = None](Base):
 
 		# execute
 		try:
-			return await tool.call(tool_ctx, app_context, **args)
+			tool_message = await tool.call(tool_ctx, app_context, **args)
 		except Exception as e:
 			return ToolMessage(
 				tool_call_id=tool_call.id,
@@ -361,3 +363,23 @@ class Agent[AppContextT = None](Base):
 				is_error=True,
 				metadata=tool_call.metadata,
 			)
+
+		# ensure ToolMessage carries the provider tool_call id metadata (e.g. openai)
+		# even if the concrete tool returned a ToolMessage without metadata.
+		tool_call_provider_meta = {
+			PROVIDER_DATA_KEY: (tool_call.metadata or {}).get(PROVIDER_DATA_KEY)
+		}
+		tool_message_provider_meta = {
+			PROVIDER_DATA_KEY: (tool_message.metadata or {}).get(PROVIDER_DATA_KEY)
+		}
+		merged_provider_meta = deep_merge(
+			tool_message_provider_meta,
+			tool_call_provider_meta,
+			overwrite=False,
+		)
+		merged_provider_data = merged_provider_meta.get(PROVIDER_DATA_KEY)
+		if merged_provider_data is not None:
+			tool_message.metadata = tool_message.metadata or {}
+			tool_message.metadata[PROVIDER_DATA_KEY] = merged_provider_data
+
+		return tool_message

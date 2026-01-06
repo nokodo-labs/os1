@@ -12,6 +12,9 @@ from .types.json import JSONObject, JSONValue
 from .utils import typeid
 
 
+PROVIDER_DATA_KEY = "_provider_data"
+
+
 # --- content types ---
 
 

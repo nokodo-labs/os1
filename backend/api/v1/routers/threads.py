@@ -8,10 +8,13 @@ from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
 from api.models.acl import AccessControlEntry
+from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
 from api.schemas.acl import AccessControlEntry as AccessControlEntrySchema
 from api.schemas.acl import AccessControlEntryCreate
+from api.schemas.event import Event as EventSchema
+from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
 from api.schemas.runs import ThreadRunRequest, ThreadRunResponse
@@ -127,6 +130,27 @@ async def list_messages(
 	)
 
 
+@router.post(
+	"/{thread_id}/events/by-message-ids",
+	response_model=list[EventSchema],
+)
+async def list_events_for_message_ids(
+	thread_id: TypeID,
+	req: EventsByMessageIDsRequest,
+	include_hidden: bool = False,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[Event]:
+	"""List events associated with specific messages in this thread."""
+	return await thread_service.list_events_for_message_ids(
+		thread_id,
+		req.message_ids,
+		db,
+		principal=principal,
+		include_hidden=include_hidden,
+	)
+
+
 @router.get("/{thread_id}/branch", response_model=list[MessageSchema])
 async def get_current_branch(
 	thread_id: TypeID,
@@ -174,6 +198,29 @@ async def create_message(
 	return await thread_service.create_message(
 		thread_id,
 		message_in,
+		db,
+		principal=principal,
+	)
+
+
+@router.delete(
+	"/{thread_id}/messages/{message_id}",
+	status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_user_message_turn(
+	thread_id: TypeID,
+	message_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""delete a user message and its generated response(s).
+
+	this deletes the user message and all subsequent messages on the active
+	branch until (but not including) the next user message, if any.
+	"""
+	await thread_service.delete_user_message_turn(
+		thread_id,
+		message_id,
 		db,
 		principal=principal,
 	)

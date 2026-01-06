@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, overload
 import anthropic
 
 from ...messages import (
+	PROVIDER_DATA_KEY,
 	AssistantMessage,
 	ContentPart,
 	JsonContent,
@@ -45,6 +46,35 @@ from .types import (
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
+
+
+def _provider_tool_call_metadata(*, provider: str, tool_call_id: str) -> JSONObject:
+	return {
+		PROVIDER_DATA_KEY: {
+			provider: {
+				"tool_call_id": tool_call_id,
+			}
+		}
+	}
+
+
+def _get_provider_tool_call_id(
+	*,
+	metadata: JSONObject | None,
+	provider: str,
+) -> str | None:
+	if not metadata:
+		return None
+	provider_data = metadata.get(PROVIDER_DATA_KEY)
+	if not isinstance(provider_data, dict):
+		return None
+	provider_entry = provider_data.get(provider)
+	if not isinstance(provider_entry, dict):
+		return None
+	tool_call_id = provider_entry.get("tool_call_id")
+	if isinstance(tool_call_id, str) and tool_call_id != "":
+		return tool_call_id
+	return None
 
 
 class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
@@ -132,7 +162,10 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 					ToolCall(
 						name=block.name,
 						arguments=raw_args,
-						metadata={"anthropic_tool_call_id": block.id},
+						metadata=_provider_tool_call_metadata(
+							provider="anthropic.messages",
+							tool_call_id=block.id,
+						),
 					)
 				)
 				continue
@@ -233,7 +266,10 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 						ToolCall(
 							name=tool_name,
 							arguments=raw_args,
-							metadata={"anthropic_tool_call_id": tool_id},
+							metadata=_provider_tool_call_metadata(
+								provider="anthropic.messages",
+								tool_call_id=tool_id,
+							),
 						)
 					]
 				)
@@ -284,12 +320,11 @@ def _messages_to_anthropic(
 					blocks.append({"type": "text", "text": assistant_text})
 				if message.tool_calls:
 					for call in message.tool_calls:
-						tool_use_id = (
-							(call.metadata or {}).get("anthropic_tool_call_id")
-							if call.metadata
-							else None
+						tool_use_id = _get_provider_tool_call_id(
+							metadata=call.metadata,
+							provider="anthropic.messages",
 						)
-						if not isinstance(tool_use_id, str) or tool_use_id == "":
+						if tool_use_id is None:
 							tool_use_id = call.id
 						input_map: dict[str, object] = {}
 						if isinstance(call.arguments, dict):
@@ -320,14 +355,13 @@ def _messages_to_anthropic(
 				else:
 					result.append({"role": "assistant", "content": blocks})
 			case ToolMessage():
-				tool_use_id_value = (
-					message.metadata.get("anthropic_tool_call_id")
-					if message.metadata
-					else None
+				tool_use_id_value = _get_provider_tool_call_id(
+					metadata=message.metadata,
+					provider="anthropic.messages",
 				)
-				if not isinstance(tool_use_id_value, str) or tool_use_id_value == "":
+				if tool_use_id_value is None:
 					raise ValueError(
-						"ToolMessage missing anthropic_tool_call_id in metadata"
+						"ToolMessage missing provider tool_call_id in metadata"
 					)
 				result.append(
 					{
