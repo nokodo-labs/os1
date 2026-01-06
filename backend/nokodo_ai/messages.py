@@ -285,13 +285,24 @@ class SystemMessage(BaseMessage):
 		)
 
 
+ToolAttachment = Annotated[
+	ImageContent | FileContent,
+	Field(discriminator="type"),
+]
+
+
 class ToolMessage(BaseMessage):
-	"""a message containing tool execution results."""
+	"""a message containing tool execution results.
+
+	tools can return both text output and optional attachments (images, files).
+	attachments are passed to the LLM in subsequent turns and rendered in the UI.
+	"""
 
 	role: Literal["tool"] = "tool"
 	tool_call_id: str
 	tool_output: str
 	is_error: bool = False
+	attachments: list[ToolAttachment] = Field(default_factory=list)
 
 
 Message = Annotated[

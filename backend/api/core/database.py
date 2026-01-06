@@ -16,15 +16,12 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, with_loader_criteria
 
-from api.core.config import configure_psycopg_asyncio_event_loop_policy, settings
+from api.core.config import settings
 from api.core.logging import get_logger
 from api.models.mixins import SoftDeleteMixin
 
 
 logger = get_logger(__name__)
-
-
-configure_psycopg_asyncio_event_loop_policy()
 
 
 # Create async engine
