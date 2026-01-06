@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from api.schemas.message import Message
@@ -12,6 +14,7 @@ class ThreadRunRequest(BaseModel):
 	"""Payload to run a thread with an agent, optionally appending a new user message."""
 
 	agent_id: TypeID
+	stream: Literal[True] = True
 	input: str | None = None
 
 

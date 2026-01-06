@@ -1,15 +1,29 @@
 # nokodo AI frontend guidelines
 
-## tech stack
+## code style
 
 - TypeScript strict mode
 - Svelte 5 runes only
-- shadcn-svelte components with Bits UI primitives
-- TailwindCSS for styling
-- Vercel AI SDK for AI interactions
-- OpenAPI-generated types for type safety
-- tabs, unix line endings
-- prettier with tabs (useTabs=true, tabWidth=4); single quotes, no semicolons
+- TailwindCSS 4 for styling
+- OpenAPI-generated types for type safety + OpenAPI-fetch client
+- tabs indents, unix line endings
+- prettier formatter with tabs; single quotes, no semicolons
+- eslint + eslint-plugin-svelte for linting
+- vitest + @testing-library/svelte for testing with coverage
+- adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
+
+> **reminder** - CLEAN code means:
+>
+> 1.  NO `// @ts-ignore` / `// @ts-nocheck` / `<!-- svelte-ignore -->`. if you NEED to use it, you are probably typing something wrong.
+> 2.  NO overuse of comments everywhere. comments are good, but only to explain complex or crucial blocks.
+> 3.  NO `.skip()` / `.todo()` in tests. if you need to skip a test, update the test to cover the case, or remove unreachable code instead.
+> 4.  NO dynamic property access (obj[key]) unless it's the only way. it defeats type checkers and is ugly.
+> 5.  AVOID `as Type` assertions. use only when it's the only way.
+> 6.  AVOID `any` type. only use when absolutely necessary.
+> 7.  AVOID `!` non-null assertions. narrow the type properly instead.
+> 8.  NO `!important` in CSS. if you need it, your specificity is wrong.
+> 9.  NO `// eslint-disable` / `// prettier-ignore`. fix the actual issue.
+> 10. patterns 1, 4, 5, 6, 7 and 9 can be used to **bypass typing issues**, which is **strictly forbidden**.
 
 ## UI/UX philosophy
 
@@ -44,28 +58,50 @@
 ## frontend codebase map
 
 ```
-frontend/src/
-├── app.html                # SvelteKit template shell
-├── app.d.ts                # SvelteKit types
-├── routes/                 # SvelteKit routes
-│   ├── +layout.svelte      # global layout (backgrounds, sidebar)
-│   ├── +layout.ts          # SPA mode (ssr=false)
-│   ├── +page.svelte        # landing experience
-│   └── chats/[id]/+page.svelte # chat threads
-├── lib/
-│   ├── api/                # type-safe API client (generated types live here)
-│   ├── contexts/           # Svelte contexts
-│   ├── styles/             # TailwindCSS styles
-│   └── components/         # Svelte components
-│       ├── backgrounds/    # background components (webgl, etc.)
-│       ├── chat/           # chat UI components
-│       ├── common/         # common reusable components
-│       ├── debug/          # debugging components
-│       ├── icons/          # icon components
-│       ├── sidebar/        # sidebar components
-│       └── primitives/     # shadcn-svelte / Bits UI primitives
-├── static/                 # static assets (served at root)
-└── app.css                 # global styles (TailwindCSS)
+frontend/
+├── src/                    # SvelteKit source
+│   ├── app.html            # SvelteKit template shell
+│   ├── app.d.ts            # SvelteKit types
+│   ├── app.css             # global styles (TailwindCSS)
+│   ├── routes/             # SvelteKit routes
+│   │   ├── +layout.svelte  # global layout
+│   │   ├── +layout.ts      # SPA mode (ssr=false)
+│   │   ├── +page.svelte    # home/landing experience
+│   │   ├── c/              # chat threads
+│   │   │   └── [id]/
+│   │   │       └── +page.svelte
+│   │   ├── login/
+│   │   │   └── +page.svelte
+│   │   └── signup/
+│   │       └── +page.svelte
+│   ├── lib/                # shared app code
+│   │   ├── api/            # generated OpenAPI types/client output
+│   │   ├── auth/           # auth helpers + session utilities
+│   │   ├── components/     # Svelte components (major areas)
+│   │   │   ├── backgrounds/
+│   │   │   ├── chat/
+│   │   │   ├── common/
+│   │   │   ├── debug/
+│   │   │   ├── effects/
+│   │   │   ├── home/
+│   │   │   ├── icons/
+│   │   │   ├── markdown/
+│   │   │   ├── modals/
+│   │   │   ├── sidebar/
+│   │   │   ├── system/
+│   │   │   └── ui/
+│   │   ├── config/         # app/runtime config helpers
+│   │   ├── contexts/       # Svelte contexts
+│   │   ├── stores/         # client state management
+│   │   ├── styles/         # shared styling utilities
+│   │   ├── tools/          # app tooling helpers
+│   │   ├── api.ts          # API wrappers/entrypoints
+│   │   ├── utils.ts        # general utilities
+│   │   └── index.ts        # lib barrel exports
+│   └── test/               # test helpers/utilities
+└── static/                 # static assets served at /
+    ├── robots.txt
+    └── config.json
 ```
 
 ## testing instructions

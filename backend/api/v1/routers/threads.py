@@ -17,7 +17,7 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
-from api.schemas.runs import ThreadRunRequest, ThreadRunResponse
+from api.schemas.runs import ThreadRunRequest
 from api.schemas.thread import (
 	Thread as ThreadSchema,
 )
@@ -30,8 +30,7 @@ from api.schemas.thread import (
 from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.chat import run_thread as chat_run_thread
-from api.v1.service.chat import run_thread_stream as chat_run_thread_stream
+from api.v1.service.chat import run_agent as chat_run_agent
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -226,40 +225,15 @@ async def delete_user_message_turn(
 	)
 
 
-@router.post("/{thread_id}/run", response_model=ThreadRunResponse)
+@router.post("/{thread_id}/run")
 async def run_thread(
-	thread_id: TypeID,
-	req: ThreadRunRequest,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> ThreadRunResponse:
-	"""run a thread with an agent and persist all messages produced."""
-	result = await chat_run_thread(
-		thread_id,
-		req.agent_id,
-		db,
-		principal,
-		input=req.input,
-	)
-
-	return ThreadRunResponse(
-		thread_id=thread_id,
-		user_message=MessageSchema.model_validate(result.user_message)
-		if result.user_message is not None
-		else None,
-		messages=[MessageSchema.model_validate(m) for m in result.produced_messages],
-	)
-
-
-@router.post("/{thread_id}/run/stream")
-async def run_thread_stream(
 	thread_id: TypeID,
 	req: ThreadRunRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
 	"""stream a thread run via sse events."""
-	stream = chat_run_thread_stream(
+	stream = chat_run_agent(
 		thread_id,
 		req.agent_id,
 		db,

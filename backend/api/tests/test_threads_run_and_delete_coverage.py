@@ -9,43 +9,6 @@ from nokodo_ai.utils.typeid import new_typeid
 
 
 @pytest.mark.asyncio
-async def test_thread_run_user_message_none(
-	client: AsyncClient,
-	user_auth: dict[str, object],
-	monkeypatch: pytest.MonkeyPatch,
-) -> None:
-	headers = user_auth["headers"]
-	assert isinstance(headers, dict)
-	user = user_auth["user"]
-	assert isinstance(user, dict)
-
-	created = await client.post(
-		"/v1/threads",
-		headers=headers,
-		json={"owner_id": user["id"], "title": "t"},
-	)
-	assert created.status_code == 201
-	thread_id = created.json()["id"]
-
-	class _Result:
-		user_message = None
-		produced_messages: list[object] = []
-
-	async def _run(*_args, **_kwargs):
-		return _Result()
-
-	monkeypatch.setattr("api.v1.routers.threads.chat_run_thread", _run)
-
-	resp = await client.post(
-		f"/v1/threads/{thread_id}/run",
-		headers=headers,
-		json={"agent_id": new_typeid("agent"), "input": None},
-	)
-	assert resp.status_code == 200
-	assert resp.json()["user_message"] is None
-
-
-@pytest.mark.asyncio
 async def test_thread_run_stream_headers(
 	client: AsyncClient,
 	user_auth: dict[str, object],
@@ -66,12 +29,12 @@ async def test_thread_run_stream_headers(
 
 	async def _stream(*_args, **_kwargs):
 		if False:
-			yield ""
+			yield b""
 
-	monkeypatch.setattr("api.v1.routers.threads.chat_run_thread_stream", _stream)
+	monkeypatch.setattr("api.v1.routers.threads.chat_run_agent", _stream)
 
 	resp = await client.post(
-		f"/v1/threads/{thread_id}/run/stream",
+		f"/v1/threads/{thread_id}/run",
 		headers=headers,
 		json={"agent_id": new_typeid("agent"), "input": None},
 	)

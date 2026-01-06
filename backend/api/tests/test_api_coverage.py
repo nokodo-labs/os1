@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.models.message import MessageType as MessageTypeORM
+from api.schemas.message import MessageCreate
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import threads as threads_router
@@ -290,13 +291,12 @@ async def test_threads_router_delegates(monkeypatch):
 	monkeypatch.setattr(threads_router.acl_service, "list_thread_acl", _return_acl)
 	monkeypatch.setattr(threads_router.acl_service, "set_thread_acl", _return_acl)
 
-	# patch the chat runner for run_thread (now imported at module level)
-	from api.v1.service.chat import RunResult
+	# patch the chat runner for /threads/{id}/run (streaming-only)
+	async def _chat_run_agent(*_args, **_kwargs):
+		if False:
+			yield b""
 
-	async def _chat_run_thread(*_args, **_kwargs):
-		return RunResult(user_message=fake_message, produced_messages=[fake_message])
-
-	monkeypatch.setattr(threads_router, "chat_run_thread", _chat_run_thread)
+	monkeypatch.setattr(threads_router, "chat_run_agent", _chat_run_agent)
 
 	created = await threads_router.create_thread(
 		SimpleNamespace(owner_id="u"),
@@ -324,6 +324,7 @@ async def test_threads_router_delegates(monkeypatch):
 		new_typeid("thread"),
 		SimpleNamespace(
 			agent_id=new_typeid("agent"),
+			stream=True,
 			input=None,
 		),
 		principal=principal,
@@ -346,7 +347,8 @@ async def test_threads_router_delegates(monkeypatch):
 	assert branch == [fake_message]
 	assert tree == [fake_message]
 	assert posted is fake_message
-	assert run_resp.messages[0].id == fake_message.id
+	assert run_resp.media_type == "text/event-stream"
+	assert run_resp.headers.get("X-Accel-Buffering") == "no"
 	assert switched.current_message_id is not None
 	assert acl_list == ["acl"]
 	assert acl_set == ["acl"]
@@ -532,16 +534,16 @@ async def test_chat_service_conversions():
 	assistant_sdk.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
 	tool_sdk = ToolMessage(tool_call_id="t", tool_output="o", is_error=False)
 
-	user_create = chat_service.sdk_message_to_orm_create(
+	user_create = MessageCreate.from_sdk_message(
 		user_sdk,
 		sender_user_id=new_typeid("user"),
 	)
-	system_create = chat_service.sdk_message_to_orm_create(system_sdk)
-	assistant_create = chat_service.sdk_message_to_orm_create(
+	system_create = MessageCreate.from_sdk_message(system_sdk)
+	assistant_create = MessageCreate.from_sdk_message(
 		assistant_sdk,
 		sender_agent_id=new_typeid("agent"),
 	)
-	tool_create = chat_service.sdk_message_to_orm_create(tool_sdk)
+	tool_create = MessageCreate.from_sdk_message(tool_sdk)
 
 	assert str(user_create.sender_user_id).startswith("user_")
 	assert system_create.type.name == "SYSTEM"
@@ -677,10 +679,10 @@ def test_chat_service_orm_to_sdk_variants():
 	branch_msgs = [user_orm.to_sdk(), system_orm.to_sdk()]
 	assert [m.role for m in branch_msgs] == ["user", "system"]
 
-	sys_prompt = chat_service.system_prompt_message("hi")
+	sys_prompt = SystemMessage.from_text("hi")
 	assert sys_prompt.role == "system"
 
-	assistant_create = chat_service.sdk_message_to_orm_create(
+	assistant_create = MessageCreate.from_sdk_message(
 		AssistantMessage.from_text("assistant"),
 		sender_agent_id=new_typeid("agent"),
 	)
@@ -691,7 +693,7 @@ def test_chat_service_orm_to_sdk_variants():
 		content: list[object] = []
 
 	with pytest.raises(ValueError):
-		chat_service.sdk_message_to_orm_create(_BadMessage())
+		MessageCreate.from_sdk_message(_BadMessage())
 
 
 async def test_chat_service_agent_resolution_paths():
@@ -736,156 +738,6 @@ async def test_chat_service_agent_resolution_paths():
 		await chat_service.resolve_model_for_run(
 			_FakeSession(None), model_id=new_typeid("model")
 		)
-
-
-async def test_chat_runner_run_thread(monkeypatch):
-	"""Test the chat runner run_thread function."""
-	from api.v1.service.chat import agents as chat_runner
-
-	principal = _FakePrincipal(is_admin=True)
-	created_messages: list[object] = []
-
-	async def fake_create_message(*_args, **_kwargs):
-		msg = SimpleNamespace(id="m-created")
-		created_messages.append(msg)
-		return msg
-
-	monkeypatch.setattr(
-		chat_runner.thread_service,
-		"create_message",
-		fake_create_message,
-	)
-
-	from nokodo_ai.thread import Thread as SDKThread
-
-	class FakeThreadORM:
-		def to_sdk(self):
-			return SDKThread(messages=[])
-
-	async def fake_load_thread(*_args, **_kwargs):
-		return FakeThreadORM()
-
-	monkeypatch.setattr(chat_runner.thread_service, "get_thread", fake_load_thread)
-
-	async def fake_inject_system_instructions(*args, **_kwargs):
-		return args[1]
-
-	monkeypatch.setattr(
-		chat_runner,
-		"inject_system_instructions",
-		fake_inject_system_instructions,
-	)
-
-	class FakeAgentORM:
-		id = new_typeid("agent")
-		system_prompt = "hello"
-		config = {"max_iterations": 2}
-		plugin_ids = []
-		model = SimpleNamespace(
-			id=new_typeid("model"),
-			provider=SimpleNamespace(adapter_type="openai.base"),
-			name="gpt",
-		)
-
-	async def fake_load_agent(*_args, **_kwargs):
-		return FakeAgentORM()
-
-	monkeypatch.setattr(chat_runner, "_load_agent", fake_load_agent)
-
-	# Mock build_agent_from_orm
-	class FakeSDKAgent:
-		async def run(self, *_args, **_kwargs):
-			return [AssistantMessage.from_text("hi")]
-
-	async def fake_build_agent_from_orm(*_args, **_kwargs):
-		return FakeSDKAgent()
-
-	monkeypatch.setattr(chat_runner, "build_agent_from_orm", fake_build_agent_from_orm)
-
-	result = await chat_runner.run_thread(
-		new_typeid("thread"),
-		new_typeid("agent"),
-		_FakeSession(),
-		principal,
-		input=None,
-	)
-
-	assert result.produced_messages
-
-
-async def test_chat_runner_run_thread_with_input(monkeypatch):
-	"""Test that chat runner creates user message when input is provided."""
-	from api.v1.service.chat import agents as chat_runner
-
-	principal = _FakePrincipal(is_admin=True)
-	created_messages: list[object] = []
-
-	async def fake_create_message(*_args, **_kwargs):
-		msg = SimpleNamespace(id=f"m-{len(created_messages)}")
-		created_messages.append(msg)
-		return msg
-
-	monkeypatch.setattr(
-		chat_runner.thread_service,
-		"create_message",
-		fake_create_message,
-	)
-
-	from nokodo_ai.thread import Thread as SDKThread
-
-	class FakeThreadORM:
-		def to_sdk(self):
-			return SDKThread(messages=[])
-
-	async def fake_load_thread(*_args, **_kwargs):
-		return FakeThreadORM()
-
-	monkeypatch.setattr(chat_runner.thread_service, "get_thread", fake_load_thread)
-
-	async def fake_inject_system_instructions(*args, **_kwargs):
-		return args[1]
-
-	monkeypatch.setattr(
-		chat_runner,
-		"inject_system_instructions",
-		fake_inject_system_instructions,
-	)
-
-	class FakeAgentORM:
-		id = new_typeid("agent")
-		system_prompt = None
-		config = {}
-		plugin_ids = []
-		model = SimpleNamespace(
-			id=new_typeid("model"),
-			provider=SimpleNamespace(adapter_type="openai.base"),
-			name="gpt",
-		)
-
-	async def fake_load_agent(*_args, **_kwargs):
-		return FakeAgentORM()
-
-	monkeypatch.setattr(chat_runner, "_load_agent", fake_load_agent)
-
-	class FakeSDKAgent:
-		async def run(self, *_args, **_kwargs):
-			return [AssistantMessage.from_text("hi")]
-
-	async def fake_build(*_args, **_kwargs):
-		return FakeSDKAgent()
-
-	monkeypatch.setattr(chat_runner, "build_agent_from_orm", fake_build)
-
-	result = await chat_runner.run_thread(
-		new_typeid("thread"),
-		new_typeid("agent"),
-		_FakeSession(),
-		principal,
-		input="hello!",
-	)
-
-	assert result.user_message is not None
-	assert result.user_message.id == "m-0"
 
 
 async def test_chat_runner_load_agent_not_found(monkeypatch):

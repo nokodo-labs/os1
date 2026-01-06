@@ -136,9 +136,11 @@ def test_thread_run_request_requires_agent_id() -> None:
 
 	req = ThreadRunRequest(agent_id=new_typeid("agent"))
 	assert req.agent_id is not None
+	assert req.stream is True
 	assert req.input is None
 
 	req_with_input = ThreadRunRequest(agent_id=new_typeid("agent"), input="hello")
+	assert req_with_input.stream is True
 	assert req_with_input.input == "hello"
 
 
