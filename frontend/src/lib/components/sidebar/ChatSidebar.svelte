@@ -58,25 +58,40 @@
 		const data = event.data as Record<string, unknown> | undefined
 		const threadId = (data?.thread_id as string) || (event.thread_id as string) || ''
 
+		const patch = (data?.patch ?? null) as {
+			title?: unknown
+			tags?: unknown
+		} | null
+
 		if (eventType === 'thread.deleted' && threadId) {
 			// remove from list
 			recentThreads.update((threads) => threads.filter((t) => t.id !== threadId))
 
 			// if we're viewing this thread, navigate away
 			if (page.url.pathname === `/c/${threadId}`) {
-				void goto('/', { replaceState: true })
+				// @ts-expect-error resolve typing is narrower than our constructed URL
+				void goto(resolve('/' as never), { replaceState: true })
 			}
 		} else if (eventType === 'thread.updated' && threadId) {
 			// move thread to top and update title if available
-			const newTitle = data?.title as string | undefined
+			const rawTitle =
+				(typeof patch?.title === 'string' ? patch.title : null) ??
+				(typeof data?.title === 'string' ? data.title : null)
+			const rawTags =
+				(Array.isArray(patch?.tags) ? patch.tags : null) ??
+				(Array.isArray(data?.tags) ? data.tags : null)
 			recentThreads.update((threads) => {
 				const idx = threads.findIndex((t) => t.id === threadId)
 				if (idx === -1) return threads
 
 				const thread = threads[idx]
+				const nextTags = rawTags
+					? rawTags.filter((t): t is string => typeof t === 'string')
+					: null
 				const updated: Thread = {
 					...thread,
-					title: newTitle ?? thread.title,
+					title: rawTitle ?? thread.title,
+					tags: nextTags ?? thread.tags,
 					last_activity_at: new Date().toISOString(),
 				}
 
@@ -103,40 +118,15 @@
 
 	function handleSearchClick() {
 		sidebar.selectChat(null)
-		navigateWithTransition(`/?focus=${Date.now()}`)
-		if (isMobile) sidebar.closeChatSidebar()
-	}
-
-	function navigateWithTransition(target: string) {
-		const targetUrl = new URL(target, page.url)
-		const isSamePath = targetUrl.pathname === page.url.pathname
-		const isSameSearch = targetUrl.search === page.url.search
-		if (isSamePath && isSameSearch) return
-
-		const go = async () => {
+		const isAlreadyHome =
+			page.url.pathname === '/' && page.url.searchParams.get('chat') === null
+		if (isAlreadyHome && typeof window !== 'undefined') {
+			window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
+		} else {
 			// @ts-expect-error resolve typing is narrower than our constructed URL
-			await goto(resolve(target as never), { keepFocus: true, noScroll: true })
+			void goto(resolve('/' as never), { keepFocus: true, noScroll: true })
 		}
-
-		if (isSamePath) {
-			// For same-route navigations (/?chat=...), avoid ViewTransition overlay so
-			// controls stay interactive during the CSS transition.
-			void go()
-			return
-		}
-
-		const start = (
-			document as unknown as {
-				startViewTransition?: (cb: () => Promise<void> | void) => void
-			}
-		).startViewTransition
-
-		if (start) {
-			start.call(document, go)
-			return
-		}
-
-		void go()
+		if (isMobile) sidebar.closeChatSidebar()
 	}
 
 	interface SidebarItem {
@@ -153,7 +143,14 @@
 			label: 'new chat',
 			action: async () => {
 				sidebar.selectChat(null)
-				navigateWithTransition('/?chat=new')
+				const isAlreadyNew =
+					page.url.pathname === '/' && page.url.searchParams.get('chat') === 'new'
+				if (isAlreadyNew && typeof window !== 'undefined') {
+					window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
+				} else {
+					// @ts-expect-error resolve typing is narrower than our constructed URL
+					void goto(resolve('/?chat=new' as never), { keepFocus: true, noScroll: true })
+				}
 				if (isMobile) sidebar.closeChatSidebar()
 			},
 		},
@@ -169,6 +166,27 @@
 
 	$effect(() => {
 		if ($isLoggedIn) void refreshThreads({ limit: 25 })
+	})
+
+	let routeChatId = $derived.by((): string | null => {
+		const match = page.url.pathname.match(/^\/c\/([^/]+)/)
+		return match?.[1] ?? null
+	})
+
+	let routeChatIsInSidebar = $derived.by((): boolean => {
+		if (!routeChatId) return false
+		return $recentThreads.some((t) => t.id === routeChatId)
+	})
+
+	// Keep selection synced with the current route.
+	// - On /c/:id: select it if visible in the sidebar; otherwise clear selection.
+	// - Anywhere else: clear selection.
+	$effect(() => {
+		if (routeChatId && routeChatIsInSidebar) {
+			if (sidebar.selectedChatId !== routeChatId) sidebar.selectChat(routeChatId)
+			return
+		}
+		if (sidebar.selectedChatId !== null) sidebar.selectChat(null)
 	})
 
 	function onCloseSwipePointerDown(event: PointerEvent) {
@@ -435,7 +453,12 @@
 											: ''}
 										onclick={async () => {
 											sidebar.selectChat(thread.id)
-											navigateWithTransition(`/c/${thread.id}`)
+											if (page.url.pathname === `/c/${thread.id}`) return
+											// @ts-expect-error resolve typing is narrower than our constructed URL
+											void goto(resolve(`/c/${thread.id}` as never), {
+												keepFocus: true,
+												noScroll: true,
+											})
 										}}
 										role="button"
 										tabindex="0"
@@ -443,7 +466,12 @@
 											if (e.key === 'Enter' || e.key === ' ') {
 												e.preventDefault()
 												sidebar.selectChat(thread.id)
-												navigateWithTransition(`/c/${thread.id}`)
+												if (page.url.pathname === `/c/${thread.id}`) return
+												// @ts-expect-error resolve typing is narrower than our constructed URL
+												void goto(resolve(`/c/${thread.id}` as never), {
+													keepFocus: true,
+													noScroll: true,
+												})
 											}
 										}}
 									>
@@ -488,7 +516,7 @@
 										{#if openThreadMenuId === thread.id}
 											<div
 												data-thread-menu
-												class="rounded-container absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/60 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+												class="liquid-metal rounded-container absolute top-full right-2 z-50 mt-2 w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
 											>
 												{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action (action)}
 													<button

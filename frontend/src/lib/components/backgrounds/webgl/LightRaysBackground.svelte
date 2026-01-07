@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import { createOnceCallback } from '$lib/utils/once'
 	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
@@ -15,6 +16,7 @@
 
 	interface Props {
 		children?: Snippet
+		onReady?: () => void
 		raysOrigin?: RaysOrigin
 		raysColor?: string
 		raysSpeed?: number
@@ -32,6 +34,7 @@
 
 	let {
 		children,
+		onReady,
 		raysOrigin = 'top-center',
 		raysColor = '#ffffff',
 		raysSpeed = 1,
@@ -46,6 +49,8 @@
 		distortion = 0.0,
 		transparent = false,
 	}: Props = $props()
+
+	const signalReady = createOnceCallback(() => onReady?.())
 
 	let containerRef: HTMLDivElement
 	let canvasRef: HTMLCanvasElement
@@ -360,85 +365,94 @@ void main() {
 	}
 
 	onMount(() => {
-		// Setup intersection observer for performance
-		intersectionObserver = new IntersectionObserver(
-			(entries) => {
-				const entry = entries[0]
-				isVisible = entry.isIntersecting
+		try {
+			// Setup intersection observer for performance
+			intersectionObserver = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0]
+					isVisible = entry.isIntersecting
 
-				if (isVisible && !animationId) {
-					startTime = performance.now()
-					animate()
-				} else if (!isVisible && animationId !== null) {
-					cancelAnimationFrame(animationId)
-					animationId = null
-				}
-			},
-			{ threshold: 0.1 }
-		)
+					if (isVisible && !animationId) {
+						startTime = performance.now()
+						animate()
+					} else if (!isVisible && animationId !== null) {
+						cancelAnimationFrame(animationId)
+						animationId = null
+					}
+				},
+				{ threshold: 0.1 }
+			)
 
-		if (containerRef) {
-			intersectionObserver.observe(containerRef)
-		}
+			if (containerRef) {
+				intersectionObserver.observe(containerRef)
+			}
 
-		const context = canvasRef.getContext('webgl2', {
-			alpha: true,
-			premultipliedAlpha: false,
-			antialias: false,
-			depth: false,
-			stencil: false,
-		})
-		if (!context) {
-			console.error('WebGL2 not supported')
-			return
-		}
+			const context = canvasRef.getContext('webgl2', {
+				alpha: true,
+				premultipliedAlpha: false,
+				antialias: false,
+				depth: false,
+				stencil: false,
+			})
+			if (!context) {
+				console.error('WebGL2 not supported')
+				signalReady()
+				return
+			}
 
-		gl = context
+			gl = context
 
-		const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
-		const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
+			const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
+			const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
 
-		if (!vertexShader || !fragmentShader) {
-			console.error('Failed to create shaders')
-			return
-		}
+			if (!vertexShader || !fragmentShader) {
+				console.error('Failed to create shaders')
+				signalReady()
+				return
+			}
 
-		program = createProgram(gl, vertexShader, fragmentShader)
+			program = createProgram(gl, vertexShader, fragmentShader)
 
-		if (!program) {
-			console.error('Failed to create program')
-			return
-		}
+			if (!program) {
+				console.error('Failed to create program')
+				signalReady()
+				return
+			}
 
-		// Enable blending for transparency
-		gl.enable(gl.BLEND)
-		gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+			// Enable blending for transparency
+			gl.enable(gl.BLEND)
+			gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
-		// Create a fullscreen quad
-		const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+			// Create a fullscreen quad
+			const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
 
-		const positionBuffer = gl.createBuffer()
-		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-		gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
+			const positionBuffer = gl.createBuffer()
+			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+			gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
 
-		const positionLoc = gl.getAttribLocation(program, 'a_position')
-		gl.enableVertexAttribArray(positionLoc)
-		gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
+			const positionLoc = gl.getAttribLocation(program, 'a_position')
+			gl.enableVertexAttribArray(positionLoc)
+			gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0)
 
-		// Setup resize observer
-		resizeObserver = new ResizeObserver(() => resize())
-		resizeObserver.observe(containerRef)
+			// Setup resize observer
+			resizeObserver = new ResizeObserver(() => resize())
+			resizeObserver.observe(containerRef)
 
-		// Add mouse event listener
-		if (followMouse) {
-			window.addEventListener('mousemove', handleMouseMove)
-		}
+			// Add mouse event listener
+			if (followMouse) {
+				window.addEventListener('mousemove', handleMouseMove)
+			}
 
-		// Initial resize and start animation if visible
-		resize()
-		if (isVisible) {
-			startTime = performance.now()
-			animate()
+			// Initial resize and start animation if visible
+			resize()
+			if (isVisible) {
+				startTime = performance.now()
+				animate()
+			}
+			requestAnimationFrame(() => signalReady())
+		} catch (error) {
+			console.error('Failed to initialize LightRays background:', error)
+			signalReady()
 		}
 	})
 

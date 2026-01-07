@@ -41,13 +41,13 @@
 		onmousedown={onBackdropMouseDown}
 	>
 		<div
-			class="liquid-glass w-full {widthClassName} rounded-container shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
+			class="liquid-glass w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
 		>
 			<span class="liquid-glass__highlight" aria-hidden="true"></span>
-			<div class="liquid-glass__content p-6">
+			<div class="liquid-glass__content flex max-h-[calc(100vh-2rem)] flex-col p-6">
 				<header class="mb-5">
 					<div class="text-lg font-semibold text-white/95">{title}</div>
 					{#if description}
@@ -55,7 +55,9 @@
 					{/if}
 				</header>
 
-				{@render children?.()}
+				<div class="min-h-0 overflow-y-auto">
+					{@render children?.()}
+				</div>
 			</div>
 		</div>
 	</div>

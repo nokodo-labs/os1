@@ -1,6 +1,6 @@
 /**
  * SSE client for chat run streaming.
- * POST /threads/{thread_id}/run/stream
+ * POST /threads/{thread_id}/run
  *
  * These types mirror backend schemas and SSE event payloads.
  */
@@ -19,9 +19,13 @@ export interface ContentPart {
 /** Message structure returned by message_created event. */
 export interface StreamedMessage {
 	id: string
-	type: 'user' | 'assistant' | string
+	thread_id: string
+	parent_id?: string | null
+	type: 'user' | 'assistant' | 'tool' | 'system' | string
 	content: ContentPart[]
+	metadata_?: Record<string, unknown>
 	sender_agent_id?: string | null
+	sender_user_id?: string | null
 	created_at?: string | null
 }
 
@@ -35,10 +39,26 @@ export interface StreamError {
 	message: string
 }
 
+/** tool_result event payload. */
+export interface ToolResultDelta {
+	tool_call_id: string
+	is_error: boolean
+	completed: boolean
+}
+
+/** delta event envelope (faithfully forwards backend AgentDelta). */
+export interface AgentDeltaEnvelope {
+	run_id: string
+	message_id: string | null
+	delta: unknown
+}
+
 /** Discriminated union for all SSE events from the chat stream. */
 export type ChatStreamDelta =
+	| { event: 'delta'; data: AgentDeltaEnvelope }
 	| { event: 'message_created'; data: StreamedMessage }
 	| { event: 'text_delta'; data: TextDelta }
+	| { event: 'tool_result'; data: ToolResultDelta }
 	| { event: 'done'; data: null }
 	| { event: 'error'; data: StreamError }
 
@@ -56,7 +76,7 @@ export interface ChatStreamOptions {
 export async function* runChatStream(
 	opts: ChatStreamOptions
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
-	const streamUrl = `${getV1BaseUrl()}/threads/${opts.threadId}/run/stream`
+	const streamUrl = `${getV1BaseUrl()}/threads/${opts.threadId}/run`
 
 	const doRequest = async (token: string | null): Promise<Response> => {
 		return fetch(streamUrl, {
@@ -129,9 +149,21 @@ export async function* runChatStream(
 					continue
 				}
 
+				if (eventType === 'delta') {
+					const parsed = JSON.parse(dataStr) as AgentDeltaEnvelope
+					yield { event: 'delta', data: parsed }
+					continue
+				}
+
 				if (eventType === 'text_delta') {
 					const parsed = JSON.parse(dataStr) as TextDelta
 					yield { event: 'text_delta', data: parsed }
+					continue
+				}
+
+				if (eventType === 'tool_result') {
+					const parsed = JSON.parse(dataStr) as ToolResultDelta
+					yield { event: 'tool_result', data: parsed }
 					continue
 				}
 			}

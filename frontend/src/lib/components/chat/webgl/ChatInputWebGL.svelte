@@ -1,6 +1,6 @@
 <script lang="ts">
+	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import { getBackgroundContext } from '$lib/contexts/backgroundContext'
-	import { Send } from '@lucide/svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface LiquidMetalInputProps {
@@ -404,7 +404,7 @@ void main() {
 			class="send-button"
 			type="button"
 		>
-			<Send size={20} strokeWidth={2.5} />
+			<ArrowUp className="h-5 w-5" strokeWidth="2.5" />
 		</button>
 	</div>
 </div>

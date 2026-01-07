@@ -111,12 +111,9 @@
 	{#if isOpen}
 		<div
 			bind:this={panelElement}
-			class="profile-panel-wrapper liquid-glass {isHeaderPlacement ? 'header' : ''}"
+			class="profile-panel-wrapper liquid-metal {isHeaderPlacement ? 'header' : ''}"
 		>
-			<div class="liquid-glass__highlight"></div>
-			<div class="liquid-glass__content">
-				<UserProfilePanel {user} onClose={closePanel} />
-			</div>
+			<UserProfilePanel {user} onClose={closePanel} />
 		</div>
 	{/if}
 </div>

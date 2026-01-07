@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import { createOnceCallback } from '$lib/utils/once'
 	import { onDestroy, onMount, untrack, type Snippet } from 'svelte'
 	import * as THREE from 'three'
 
 	interface Props {
 		children?: Snippet
+		onReady?: () => void
 		rotation?: number
 		speed?: number
 		colors?: string[]
@@ -20,6 +22,7 @@
 
 	let {
 		children,
+		onReady,
 		rotation = 45,
 		speed = 0.2,
 		colors = [],
@@ -32,6 +35,8 @@
 		parallax = 0.5,
 		noise = 0.1,
 	}: Props = $props()
+
+	const signalReady = createOnceCallback(() => onReady?.())
 
 	const MAX_COLORS = 8
 	const POINTER_SMOOTH = 8
@@ -207,118 +212,134 @@ void main() {
 	}
 
 	onMount(() => {
-		const container = containerRef
-		if (!container) return
+		try {
+			const container = containerRef
+			if (!container) {
+				signalReady()
+				return
+			}
 
-		scene = new THREE.Scene()
-		camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+			scene = new THREE.Scene()
+			camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
 
-		const uColorsArray = Array.from({ length: MAX_COLORS }, () => new THREE.Vector3(0, 0, 0))
-		material = new THREE.ShaderMaterial({
-			vertexShader: vertexShaderSource,
-			fragmentShader: fragmentShaderSource,
-			uniforms: {
-				uCanvas: { value: new THREE.Vector2(1, 1) },
-				uTime: { value: 0 },
-				uSpeed: { value: speed },
-				uRot: { value: new THREE.Vector2(1, 0) },
-				uColorCount: { value: 0 },
-				uColors: { value: uColorsArray },
-				uTransparent: { value: transparent ? 1 : 0 },
-				uScale: { value: scale },
-				uFrequency: { value: frequency },
-				uWarpStrength: { value: warpStrength },
-				uPointer: { value: new THREE.Vector2(0, 0) },
-				uMouseInfluence: { value: mouseInfluence },
-				uParallax: { value: parallax },
-				uNoise: { value: noise },
-			},
-			premultipliedAlpha: true,
-			transparent: true,
-		})
+			const uColorsArray = Array.from(
+				{ length: MAX_COLORS },
+				() => new THREE.Vector3(0, 0, 0)
+			)
+			material = new THREE.ShaderMaterial({
+				vertexShader: vertexShaderSource,
+				fragmentShader: fragmentShaderSource,
+				uniforms: {
+					uCanvas: { value: new THREE.Vector2(1, 1) },
+					uTime: { value: 0 },
+					uSpeed: { value: speed },
+					uRot: { value: new THREE.Vector2(1, 0) },
+					uColorCount: { value: 0 },
+					uColors: { value: uColorsArray },
+					uTransparent: { value: transparent ? 1 : 0 },
+					uScale: { value: scale },
+					uFrequency: { value: frequency },
+					uWarpStrength: { value: warpStrength },
+					uPointer: { value: new THREE.Vector2(0, 0) },
+					uMouseInfluence: { value: mouseInfluence },
+					uParallax: { value: parallax },
+					uNoise: { value: noise },
+				},
+				premultipliedAlpha: true,
+				transparent: true,
+			})
 
-		geometry = new THREE.PlaneGeometry(2, 2)
-		const mesh = new THREE.Mesh(geometry, material)
-		scene.add(mesh)
+			geometry = new THREE.PlaneGeometry(2, 2)
+			const mesh = new THREE.Mesh(geometry, material)
+			scene.add(mesh)
 
-		renderer = new THREE.WebGLRenderer({
-			antialias: false,
-			powerPreference: 'high-performance',
-			alpha: true,
-		})
-		renderer.outputColorSpace = THREE.SRGBColorSpace
-		renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
-		renderer.setClearColor(0x000000, transparent ? 0 : 1)
-		Object.assign(renderer.domElement.style, {
-			width: '100%',
-			height: '100%',
-			display: 'block',
-			position: 'absolute',
-			top: '0',
-			left: '0',
-		})
-
-		canvasEl = renderer.domElement
-		container.appendChild(renderer.domElement)
-
-		applyScalarUniforms()
-		applyColorUniforms()
-
-		const resize = () => {
-			if (!renderer || !material) return
-			const width = container.clientWidth || 1
-			const height = container.clientHeight || 1
+			renderer = new THREE.WebGLRenderer({
+				antialias: false,
+				powerPreference: 'high-performance',
+				alpha: true,
+			})
+			renderer.outputColorSpace = THREE.SRGBColorSpace
 			renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
-			renderer.setSize(width, height, false)
-			;(material.uniforms.uCanvas.value as THREE.Vector2).set(width, height)
-			for (const cb of subscribers) cb()
-		}
+			renderer.setClearColor(0x000000, transparent ? 0 : 1)
+			Object.assign(renderer.domElement.style, {
+				width: '100%',
+				height: '100%',
+				display: 'block',
+				position: 'absolute',
+				top: '0',
+				left: '0',
+			})
 
-		resize()
+			canvasEl = renderer.domElement
+			container.appendChild(renderer.domElement)
 
-		if (typeof ResizeObserver !== 'undefined') {
-			resizeObserver = new ResizeObserver(() => resize())
-			resizeObserver.observe(container)
-		} else {
-			const listener = () => resize()
-			window.addEventListener('resize', listener)
-			windowResizeCleanup = () => window.removeEventListener('resize', listener)
-		}
+			applyScalarUniforms()
+			applyColorUniforms()
 
-		pointerMoveHandler = (event: PointerEvent) => {
-			const rect = container.getBoundingClientRect()
-			const x = ((event.clientX - rect.left) / (rect.width || 1)) * 2 - 1
-			const y = -(((event.clientY - rect.top) / (rect.height || 1)) * 2 - 1)
-			pointerTarget.set(x, y)
-		}
-		container.addEventListener('pointermove', pointerMoveHandler)
+			const resize = () => {
+				if (!renderer || !material) return
+				const width = container.clientWidth || 1
+				const height = container.clientHeight || 1
+				renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
+				renderer.setSize(width, height, false)
+				;(material.uniforms.uCanvas.value as THREE.Vector2).set(width, height)
+				for (const cb of subscribers) cb()
+			}
 
-		pointerLeaveHandler = () => {
-			pointerTarget.set(0, 0)
-		}
-		container.addEventListener('pointerleave', pointerLeaveHandler)
+			resize()
 
-		clock.stop()
-		clock.start()
-		clock.getDelta()
+			if (typeof ResizeObserver !== 'undefined') {
+				resizeObserver = new ResizeObserver(() => resize())
+				resizeObserver.observe(container)
+			} else {
+				const listener = () => resize()
+				window.addEventListener('resize', listener)
+				windowResizeCleanup = () => window.removeEventListener('resize', listener)
+			}
 
-		const loop = () => {
-			if (!renderer || !scene || !camera || !material) return
-			const dt = clock.getDelta()
-			const elapsed = clock.elapsedTime
-			material.uniforms.uTime.value = elapsed
-			const deg: number = (rotationRef.value % 360) + autoRotateRef.value * elapsed
-			const rad = THREE.MathUtils.degToRad(deg)
-			rotationVector.set(1, 0).rotateAround(rotationOrigin, rad)
-			;(material.uniforms.uRot.value as THREE.Vector2).copy(rotationVector)
-			const amt = THREE.MathUtils.clamp(dt * POINTER_SMOOTH, 0, 1)
-			pointerCurrent.lerp(pointerTarget, amt)
-			;(material.uniforms.uPointer.value as THREE.Vector2).copy(pointerCurrent)
-			renderer.render(scene, camera)
+			pointerMoveHandler = (event: PointerEvent) => {
+				const rect = container.getBoundingClientRect()
+				const x = ((event.clientX - rect.left) / (rect.width || 1)) * 2 - 1
+				const y = -(((event.clientY - rect.top) / (rect.height || 1)) * 2 - 1)
+				pointerTarget.set(x, y)
+			}
+			container.addEventListener('pointermove', pointerMoveHandler)
+
+			pointerLeaveHandler = () => {
+				pointerTarget.set(0, 0)
+			}
+			container.addEventListener('pointerleave', pointerLeaveHandler)
+
+			clock.stop()
+			clock.start()
+			clock.getDelta()
+
+			let didRender = false
+			const loop = () => {
+				if (!renderer || !scene || !camera || !material) return
+				const dt = clock.getDelta()
+				const elapsed = clock.elapsedTime
+				material.uniforms.uTime.value = elapsed
+				const deg: number = (rotationRef.value % 360) + autoRotateRef.value * elapsed
+				const rad = THREE.MathUtils.degToRad(deg)
+				rotationVector.set(1, 0).rotateAround(rotationOrigin, rad)
+				;(material.uniforms.uRot.value as THREE.Vector2).copy(rotationVector)
+				const amt = THREE.MathUtils.clamp(dt * POINTER_SMOOTH, 0, 1)
+				pointerCurrent.lerp(pointerTarget, amt)
+				;(material.uniforms.uPointer.value as THREE.Vector2).copy(pointerCurrent)
+				renderer.render(scene, camera)
+				if (!didRender) {
+					didRender = true
+					signalReady()
+				}
+				rafId = requestAnimationFrame(loop)
+			}
+
 			rafId = requestAnimationFrame(loop)
+		} catch (error) {
+			console.error('Failed to initialize LightBends background:', error)
+			signalReady()
 		}
-
-		rafId = requestAnimationFrame(loop)
 	})
 
 	onDestroy(() => {

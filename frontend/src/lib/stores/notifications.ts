@@ -64,6 +64,16 @@ const threadEventHandlers = new Set<ThreadEventHandler>()
 const messageEventHandlers = new Set<MessageEventHandler>()
 const notificationEventHandlers = new Set<NotificationEventHandler>()
 
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleNotificationsRefresh(): void {
+	if (refreshTimer) clearTimeout(refreshTimer)
+	refreshTimer = setTimeout(() => {
+		refreshTimer = null
+		void refreshNotifications()
+	}, 350)
+}
+
 export function onThreadEvent(handler: ThreadEventHandler): () => void {
 	threadEventHandlers.add(handler)
 	return () => threadEventHandlers.delete(handler)
@@ -84,43 +94,8 @@ function handleStreamEvent(message: StreamMessage): void {
 
 	// handle notification events
 	if (NOTIFICATION_EVENT_TYPES.includes(eventType)) {
-		// add to local notifications immediately for real-time feel
-		const eventData = message as StreamMessage & {
-			id: string
-			data: Record<string, unknown>
-			created_at: string
-		}
-
-		type EventScope = 'system' | 'user' | 'thread' | 'message' | 'task' | 'project' | 'file'
-		const scopeValue = ((eventData.scope as string) || 'user') as EventScope
-
-		const syntheticNotification: Notification = {
-			id: `temp_${Date.now()}`,
-			user_id: (eventData.user_id as string) || '',
-			event_id: eventData.id,
-			dismissed: false,
-			read_at: null,
-			created_at: eventData.created_at || new Date().toISOString(),
-			updated_at: eventData.created_at || new Date().toISOString(),
-			event: {
-				id: eventData.id,
-				type: eventType,
-				scope: scopeValue,
-				scope_id: (eventData.scope_id as string) || null,
-				data: eventData.data || {},
-				version: (eventData.version as number) || 1,
-				user_id: (eventData.user_id as string) || null,
-				thread_id: (eventData.thread_id as string) || null,
-				message_id: (eventData.message_id as string) || null,
-				task_id: (eventData.task_id as string) || null,
-				created_at: eventData.created_at || new Date().toISOString(),
-				updated_at: eventData.created_at || new Date().toISOString(),
-				expires_at: null,
-				metadata_: {},
-			},
-		}
-
-		notifications.update((list) => [syntheticNotification, ...list])
+		// notifications are persisted records; refresh to get real ids/state
+		scheduleNotificationsRefresh()
 
 		// notify handlers
 		notificationEventHandlers.forEach((h) => h(message))

@@ -5,6 +5,7 @@
 	import Check from '$lib/components/icons/Check.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { agentsById, ensureAgents } from '$lib/stores/agents'
 	import {
 		deleteNotification,
 		initNotifications,
@@ -18,16 +19,39 @@
 
 	const chrome = useSystemChrome()
 
+	let controlCenterEl: HTMLElement | null = $state(null)
+	let controlCenterHeightPx = $state(0)
+
+	function syncControlCenterHeight(): void {
+		controlCenterHeightPx = controlCenterEl?.offsetHeight ?? 0
+	}
+
 	onMount(() => {
 		if ($isLoggedIn) {
 			initNotifications()
 		}
+
+		syncControlCenterHeight()
+		const ro = new ResizeObserver(() => syncControlCenterHeight())
+		if (controlCenterEl) ro.observe(controlCenterEl)
+
+		return () => ro.disconnect()
 	})
 
 	$effect(() => {
 		if ($isLoggedIn) {
 			initNotifications()
 		}
+	})
+
+	$effect(() => {
+		const agentIds: string[] = []
+		for (const notif of $notifications) {
+			const data = notif.event?.data as Record<string, unknown> | undefined
+			const agentId = data && typeof data.agent_id === 'string' ? data.agent_id : null
+			if (agentId) agentIds.push(agentId)
+		}
+		if (agentIds.length > 0) void ensureAgents(agentIds)
 	})
 
 	function getNotificationTitle(notif: Notification): string {
@@ -42,7 +66,12 @@
 
 	function getNotificationIcon(notif: Notification): string | null {
 		const data = notif.event?.data as Record<string, unknown> | undefined
-		return (data?.icon_url as string) || null
+		const explicit = data && typeof data.icon_url === 'string' ? data.icon_url : null
+		if (explicit) return explicit
+
+		const agentId = data && typeof data.agent_id === 'string' ? data.agent_id : null
+		if (!agentId) return null
+		return $agentsById[agentId]?.profile_image_url ?? null
 	}
 
 	function formatTime(iso: string): string {
@@ -75,11 +104,13 @@
 	<div class="flex h-full flex-col gap-4">
 		<section
 			data-dock-panel
-			class="liquid-glass rounded-container px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
+			class="blur-area rounded-container relative flex min-h-0 flex-col px-5 py-4"
+			style={controlCenterHeightPx > 0
+				? `max-height: calc(100% - ${controlCenterHeightPx}px - 1rem);`
+				: undefined}
 			aria-label="notifications"
 		>
-			<span class="liquid-glass__highlight" aria-hidden="true"></span>
-			<div class="liquid-glass__content">
+			<div class="flex min-h-0 flex-col">
 				<div class="mb-2 flex items-center justify-between">
 					<div class="text-xs font-semibold tracking-wide text-white/60">
 						notifications
@@ -101,7 +132,7 @@
 						</button>
 					{/if}
 				</div>
-				<div class="flex max-h-80 flex-col gap-2 overflow-y-auto">
+				<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
 					{#if !$isLoggedIn}
 						<div
 							class="rounded-2xl bg-white/5 px-3 py-3 text-center text-sm text-white/50"
@@ -138,11 +169,13 @@
 								</div>
 								<div class="min-w-0 flex-1">
 									<div
-										class="flex items-center gap-2 text-[0.8125rem] font-semibold {isUnread
+										class="flex min-w-0 items-center gap-2 text-[0.8125rem] font-semibold {isUnread
 											? 'text-white/90'
 											: 'text-white/70'}"
 									>
-										{getNotificationTitle(notif)}
+										<span class="min-w-0 truncate"
+											>{getNotificationTitle(notif)}</span
+										>
 										{#if isUnread}
 											<span class="h-1.5 w-1.5 rounded-full bg-blue-400"
 											></span>
@@ -188,46 +221,129 @@
 			</div>
 		</section>
 
-		<div class="flex-1"></div>
+		<div class="min-h-0 flex-1" aria-hidden="true"></div>
 
 		<section
 			data-dock-panel
-			class="liquid-glass rounded-container px-5 py-4 shadow-[0_24px_48px_rgba(12,10,30,0.45)]"
+			class="blur-area rounded-container shrink-0 px-5 py-4"
 			aria-label="control center"
+			bind:this={controlCenterEl}
 		>
-			<span class="liquid-glass__highlight" aria-hidden="true"></span>
-			<div class="liquid-glass__content">
-				<div class="mb-3 text-xs font-semibold tracking-wide text-white/60">
-					control center
-				</div>
+			<div class="mb-3 text-xs font-semibold tracking-wide text-white/60">control center</div>
 
-				<div class="grid grid-cols-2 gap-2">
-					<button
-						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-						type="button"
-					>
-						wifi
-					</button>
-					<button
-						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-						type="button"
-					>
-						bluetooth
-					</button>
-					<button
-						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-						type="button"
-					>
-						focus
-					</button>
-					<button
-						class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
-						type="button"
-					>
-						dark mode
-					</button>
-				</div>
+			<div class="grid grid-cols-2 gap-2">
+				<button
+					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					type="button"
+				>
+					wifi
+				</button>
+				<button
+					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					type="button"
+				>
+					bluetooth
+				</button>
+				<button
+					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					type="button"
+				>
+					focus
+				</button>
+				<button
+					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					type="button"
+				>
+					dark mode
+				</button>
 			</div>
 		</section>
 	</div>
 </aside>
+
+<style>
+	.blur-area {
+		position: relative;
+		isolation: isolate;
+		overflow: visible; /* let the blur bleed out */
+	}
+
+	.blur-area::before {
+		content: '';
+		position: absolute;
+		inset: -100px;
+		pointer-events: none;
+		z-index: 0;
+		border-radius: 100px;
+
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+
+		/* smoother eased ramp using multiple stops */
+		-webkit-mask:
+			linear-gradient(
+				to right,
+				transparent,
+				rgba(0, 0, 0, 0.1) 25px,
+				rgba(0, 0, 0, 0.4) 50px,
+				rgba(0, 0, 0, 0.75) 75px,
+				black 100px,
+				black calc(100% - 100px),
+				rgba(0, 0, 0, 0.75) calc(100% - 75px),
+				rgba(0, 0, 0, 0.4) calc(100% - 50px),
+				rgba(0, 0, 0, 0.1) calc(100% - 25px),
+				transparent
+			),
+			linear-gradient(
+				to bottom,
+				transparent,
+				rgba(0, 0, 0, 0.1) 25px,
+				rgba(0, 0, 0, 0.4) 50px,
+				rgba(0, 0, 0, 0.75) 75px,
+				black 100px,
+				black calc(100% - 100px),
+				rgba(0, 0, 0, 0.75) calc(100% - 75px),
+				rgba(0, 0, 0, 0.4) calc(100% - 50px),
+				rgba(0, 0, 0, 0.1) calc(100% - 25px),
+				transparent
+			);
+		-webkit-mask-composite: source-in;
+		mask:
+			linear-gradient(
+				to right,
+				transparent,
+				rgba(0, 0, 0, 0.1) 25px,
+				rgba(0, 0, 0, 0.4) 50px,
+				rgba(0, 0, 0, 0.75) 75px,
+				black 100px,
+				black calc(100% - 100px),
+				rgba(0, 0, 0, 0.75) calc(100% - 75px),
+				rgba(0, 0, 0, 0.4) calc(100% - 50px),
+				rgba(0, 0, 0, 0.1) calc(100% - 25px),
+				transparent
+			),
+			linear-gradient(
+				to bottom,
+				transparent,
+				rgba(0, 0, 0, 0.1) 25px,
+				rgba(0, 0, 0, 0.4) 50px,
+				rgba(0, 0, 0, 0.75) 75px,
+				black 100px,
+				black calc(100% - 100px),
+				rgba(0, 0, 0, 0.75) calc(100% - 75px),
+				rgba(0, 0, 0, 0.4) calc(100% - 50px),
+				rgba(0, 0, 0, 0.1) calc(100% - 25px),
+				transparent
+			);
+		mask-composite: intersect;
+		transform: translateZ(0);
+		-webkit-transform: translateZ(0);
+		will-change: backdrop-filter;
+		backface-visibility: hidden;
+	}
+
+	.blur-area > :global(*) {
+		position: relative;
+		z-index: 1;
+	}
+</style>

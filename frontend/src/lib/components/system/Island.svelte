@@ -2,8 +2,6 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import type { Agent } from '$lib/api'
-	import { v1Client } from '$lib/api/v1/client'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
@@ -12,6 +10,7 @@
 	import UserProfileTrigger from '$lib/components/sidebar/UserProfileTrigger.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { agentsList, loadAgents } from '$lib/stores/agents'
 	import { activeThread, refreshSession, userDisplay } from '$lib/stores/session'
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
 
@@ -43,41 +42,33 @@
 		void refreshSession()
 	})
 
-	let agents = $state<Agent[]>([])
 	let didLoadAgents = $state(false)
 	let didAutoSelectAgent = $state(false)
 
 	let isAgentDropdownOpen = $state(false)
 
-	let currentAgent = $derived<Agent | null>(
-		agents.length === 0
+	let currentAgent = $derived(
+		$agentsList.length === 0
 			? null
-			: agents.find((a) => a.id === chrome.island.agentSelector?.selectedAgent) || agents[0]
+			: $agentsList.find((a) => a.id === chrome.island.agentSelector?.selectedAgent) ||
+					$agentsList[0]
 	)
 
 	$effect(() => {
 		if (didLoadAgents) return
 		didLoadAgents = true
-		void (async () => {
-			const { data, error } = await v1Client().GET('/agents')
-			if (error) {
-				console.error('Failed to load agents', error)
-				agents = []
-				return
-			}
-			agents = data ?? []
-		})()
+		void loadAgents()
 	})
 
 	$effect(() => {
 		if (didAutoSelectAgent) return
 		if (!chrome.island.agentSelector) return
-		if (agents.length === 0) return
+		if ($agentsList.length === 0) return
 		const selected = chrome.island.agentSelector.selectedAgent
-		const hasSelected = selected && agents.some((a) => a.id === selected)
+		const hasSelected = selected && $agentsList.some((a) => a.id === selected)
 		if (!hasSelected) {
 			didAutoSelectAgent = true
-			chrome.island.agentSelector.onAgentChange(agents[0].id)
+			chrome.island.agentSelector.onAgentChange($agentsList[0].id)
 		}
 	})
 
@@ -89,7 +80,7 @@
 	}
 
 	function toggleAgentDropdown() {
-		if (agents.length === 0) return
+		if ($agentsList.length === 0) return
 		isAgentDropdownOpen = !isAgentDropdownOpen
 	}
 
@@ -98,47 +89,33 @@
 		chrome.island.agentSelector?.onAgentChange(agentId)
 	}
 
-	function navigateWithTransition(target: string) {
-		const targetUrl = new URL(target, page.url)
-		const isSamePath = targetUrl.pathname === page.url.pathname
-		const isSameSearch = targetUrl.search === page.url.search
-		if (isSamePath && isSameSearch) return
-
-		if (isSamePath) {
-			// Within the same route (e.g. / <-> /?chat=temp), avoid the ViewTransition
-			// overlay so controls stay interactive during the CSS transition.
-			// @ts-expect-error resolve typing is narrower than our constructed URL
-			void goto(resolve(target as never), { keepFocus: true, noScroll: true })
-			return
-		}
-
-		const start = (
-			document as unknown as {
-				startViewTransition?: (cb: () => Promise<void> | void) => void
-			}
-		).startViewTransition
-
-		const go = async () => {
-			// @ts-expect-error resolve typing is narrower than our constructed URL
-			await goto(resolve(target as never), { keepFocus: true, noScroll: true })
-		}
-
-		if (start) {
-			start.call(document, go)
-			return
-		}
-
-		void go()
+	function requestHomeInputFocus() {
+		if (typeof window === 'undefined') return
+		window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
 	}
 
 	function handleHome() {
 		sidebar?.selectChat?.(null)
-		navigateWithTransition('/')
+		const isAlreadyHome =
+			page.url.pathname === '/' && page.url.searchParams.get('chat') === null
+		if (isAlreadyHome) {
+			requestHomeInputFocus()
+			return
+		}
+		// @ts-expect-error resolve typing is narrower than our constructed URL
+		void goto(resolve('/' as never), { keepFocus: true, noScroll: true })
 	}
 
 	function handleTemporaryChat() {
 		sidebar?.selectChat?.(null)
-		navigateWithTransition('/?chat=temp')
+		const isAlreadyTemp =
+			page.url.pathname === '/' && page.url.searchParams.get('chat') === 'temp'
+		if (isAlreadyTemp) {
+			requestHomeInputFocus()
+			return
+		}
+		// @ts-expect-error resolve typing is narrower than our constructed URL
+		void goto(resolve('/?chat=temp' as never), { keepFocus: true, noScroll: true })
 	}
 
 	const isTemporaryChatActive = $derived(
@@ -206,12 +183,11 @@
 
 						{#if isAgentDropdownOpen}
 							<div
-								class="liquid-glass rounded-container z-1000 min-w-64 animate-[dropdown-appear_0.2s_ease] p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
+								class="liquid-metal rounded-container z-1000 min-w-64 animate-[dropdown-appear_0.2s_ease] p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
 								style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
 							>
-								<span class="liquid-glass__highlight" aria-hidden="true"></span>
-								<ul class="liquid-glass__content m-0 list-none p-0" role="listbox">
-									{#each agents as agent (agent.id)}
+								<ul class="m-0 list-none p-0" role="listbox">
+									{#each $agentsList as agent (agent.id)}
 										<li
 											role="option"
 											aria-selected={agent.id ===

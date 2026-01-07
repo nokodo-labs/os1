@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import { createOnceCallback } from '$lib/utils/once'
 	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface Props {
 		children?: Snippet
+		onReady?: () => void
 	}
 
-	let { children }: Props = $props()
+	let { children, onReady }: Props = $props()
+
+	const signalReady = createOnceCallback(() => onReady?.())
 
 	type GLShaderType =
 		| WebGL2RenderingContext['VERTEX_SHADER']
@@ -288,9 +292,13 @@ void main() {
 
 			const rect = containerRef.getBoundingClientRect()
 			resize(rect.width, rect.height)
-			animationId = requestAnimationFrame(animate)
+			animationId = requestAnimationFrame((time) => {
+				animate(time)
+				signalReady()
+			})
 		} catch (error) {
 			console.error('Failed to initialize WebGL galaxy background:', error)
+			signalReady()
 		}
 	})
 

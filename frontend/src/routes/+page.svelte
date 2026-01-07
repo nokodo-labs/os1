@@ -26,7 +26,6 @@
 	let isGenerating = $state(false)
 	let selectedModel = $state('gpt-4')
 	let focusToken = $state(0)
-	let lastFocusValue = $state<string | null>(null)
 
 	let showSuggestions = $state(false)
 	let highlightedIndex = $state(-1)
@@ -44,10 +43,22 @@
 
 	$effect(() => {
 		if (typeof window === 'undefined') return
-		const focus = page.url.searchParams.get('focus')
-		if (!focus) return
-		if (focus === lastFocusValue) return
-		lastFocusValue = focus
+		const handleRequestFocus = () => {
+			focusToken += 1
+		}
+		window.addEventListener('nokodo:focus-home-input', handleRequestFocus)
+		return () => window.removeEventListener('nokodo:focus-home-input', handleRequestFocus)
+	})
+
+	let lastAutoFocusKey = $state<string | null>(null)
+	$effect(() => {
+		if (typeof window === 'undefined') return
+		if (page.url.pathname !== '/') return
+		const chat = page.url.searchParams.get('chat')
+		if (chat !== null && chat !== 'new' && chat !== 'temp') return
+		const key = `${page.url.pathname}?chat=${chat ?? ''}`
+		if (key === lastAutoFocusKey) return
+		lastAutoFocusKey = key
 		focusToken += 1
 	})
 
@@ -140,20 +151,7 @@
 
 	async function navigateToChat(threadId: string) {
 		const target = `/c/${threadId}`
-		// Assume View Transitions API exists (per requirement), but keep a safe fallback.
-		const start = (
-			document as unknown as {
-				startViewTransition?: (cb: () => Promise<void> | void) => void
-			}
-		).startViewTransition
-		if (start) {
-			// Must be invoked with `document` as `this`.
-			start.call(document, async () => {
-				// @ts-expect-error resolve typing is narrower than our constructed URL
-				await goto(resolve(target as never), { keepFocus: true, noScroll: true })
-			})
-			return
-		}
+		// Cross-route transitions are handled globally via onNavigate in the root layout.
 		// @ts-expect-error resolve typing is narrower than our constructed URL
 		await goto(resolve(target as never), { keepFocus: true, noScroll: true })
 	}

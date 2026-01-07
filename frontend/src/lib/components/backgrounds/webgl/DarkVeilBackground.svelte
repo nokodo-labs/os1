@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
+	import { createOnceCallback } from '$lib/utils/once'
 	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface Props {
 		children?: Snippet
+		onReady?: () => void
 		hueShift?: number
 		noiseIntensity?: number
 		scanlineIntensity?: number
@@ -16,6 +18,7 @@
 
 	let {
 		children,
+		onReady,
 		hueShift = 0,
 		noiseIntensity = 0,
 		scanlineIntensity = 0,
@@ -24,6 +27,8 @@
 		warpAmount = 0,
 		resolutionScale = 1,
 	}: Props = $props()
+
+	const signalReady = createOnceCallback(() => onReady?.())
 
 	let containerRef: HTMLDivElement
 	let canvasRef: HTMLCanvasElement
@@ -221,6 +226,7 @@ void main(){
 		const context = canvasRef.getContext('webgl2')
 		if (!context) {
 			console.error('WebGL2 not supported')
+			signalReady()
 			return
 		}
 
@@ -231,6 +237,7 @@ void main(){
 
 		if (!vertexShader || !fragmentShader) {
 			console.error('Failed to create shaders')
+			signalReady()
 			return
 		}
 
@@ -238,6 +245,7 @@ void main(){
 
 		if (!program) {
 			console.error('Failed to create program')
+			signalReady()
 			return
 		}
 
@@ -258,6 +266,7 @@ void main(){
 
 		startTime = performance.now()
 		animate()
+		requestAnimationFrame(() => signalReady())
 	})
 
 	onDestroy(() => {

@@ -50,9 +50,17 @@
 		type: BackgroundType
 		config?: BackgroundConfig
 		children?: Snippet
+		onReady?: () => void
 	}
 
-	let { type = 'galaxy', config = {}, children }: Props = $props()
+	let { type = 'galaxy', config = {}, children, onReady }: Props = $props()
+
+	let readySent = $state(false)
+	function signalReady() {
+		if (readySent) return
+		readySent = true
+		onReady?.()
+	}
 
 	// Transition state for smooth swapping
 	let currentBg = $state<BackgroundType>('galaxy')
@@ -73,6 +81,13 @@
 					isTransitioning = false
 				}, 300) // Match CSS transition duration
 			}, 50)
+		}
+	})
+
+	$effect(() => {
+		if (readySent) return
+		if (currentBg === 'static' || currentBg === 'none') {
+			signalReady()
 		}
 	})
 </script>
@@ -110,13 +125,13 @@
 
 	<div class="absolute inset-0" style="opacity: 1; transition: opacity 300ms ease-in-out;">
 		{#if currentBg === 'galaxy'}
-			<GalaxyBackgroundWebGL>
+			<GalaxyBackgroundWebGL onReady={signalReady}>
 				{#if children}
 					{@render children()}
 				{/if}
 			</GalaxyBackgroundWebGL>
 		{:else if currentBg === 'darkveil'}
-			<DarkVeilBackground>
+			<DarkVeilBackground onReady={signalReady}>
 				{#if children}
 					{@render children()}
 				{/if}
@@ -126,6 +141,7 @@
 				colors={config.lightBendsColors || ['#ff0080', '#0080ff', '#00ff80']}
 				speed={config.lightBendsSpeed || 0.2}
 				warpStrength={config.lightBendsWarp || 1}
+				onReady={signalReady}
 			>
 				{#if children}
 					{@render children()}
@@ -136,13 +152,18 @@
 				raysOrigin={config.raysOrigin || 'top-center'}
 				raysColor={config.raysColor || '#ffffff'}
 				raysSpeed={config.raysSpeed || 1}
+				onReady={signalReady}
 			>
 				{#if children}
 					{@render children()}
 				{/if}
 			</LightRaysBackground>
 		{:else if currentBg === 'silk'}
-			<SilkBackground color={config.silkColor || '#7B7481'} speed={config.silkSpeed || 5}>
+			<SilkBackground
+				color={config.silkColor || '#7B7481'}
+				speed={config.silkSpeed || 5}
+				onReady={signalReady}
+			>
 				{#if children}
 					{@render children()}
 				{/if}

@@ -143,7 +143,7 @@
 								aria-label="Add attachment"
 								aria-haspopup="menu"
 								aria-expanded={isAddMenuOpen}
-								class="flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-black/65 transition-all duration-200 hover:bg-black/5 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white/65 dark:hover:bg-white/5 dark:hover:text-white/95"
+								class="flex items-center justify-center bg-transparent p-0 text-black/65 transition-colors duration-200 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white dark:hover:text-white"
 								{disabled}
 								onclick={toggleAddMenu}
 							>
@@ -218,7 +218,7 @@
 								<button
 									type="button"
 									aria-label="stop generating"
-									class="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
+									class="flex h-8 w-8 items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
 									onclick={onStop}
 								>
 									<Stop className="h-3.5 w-3.5" />
@@ -227,7 +227,7 @@
 								<button
 									type="submit"
 									aria-label="send message"
-									class="send-btn flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+									class="send-btn flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
 										value.trim() === '' || disabled
 									)
 										? 'hover:brightness-110'
@@ -279,8 +279,8 @@
 	}
 
 	:global(.dark) .send-btn {
-		background-color: rgba(255, 255, 255, 0.95);
-		color: var(--accent-primary);
+		background-color: rgb(255 255 255);
+		color: rgb(0 0 0);
 	}
 
 	.send-btn:disabled {

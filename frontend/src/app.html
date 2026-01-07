@@ -3,9 +3,75 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			;(function () {
+				try {
+					const mode = localStorage.getItem('nokodo-theme-mode') || 'system'
+					const isDark =
+						mode === 'dark' ||
+						(mode === 'system' &&
+							window.matchMedia('(prefers-color-scheme: dark)').matches)
+					document.documentElement.classList.toggle('dark', isDark)
+				} catch {
+					// ignore
+				}
+			})()
+		</script>
+		<link rel="stylesheet" href="%sveltekit.assets%/splash.css" />
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<div id="nokodo-splash-screen" aria-label="loading" role="status">
+			<div id="nokodo-splash-container">
+				<div
+					id="nokodo-splash-brand"
+					class="nokodo-loader"
+					data-expanded="0"
+					data-shimmer="0"
+				>
+					<div class="nokodo-loader__solid">
+						<span class="nokodo-loader__hidden">n</span
+						><span class="nokodo-loader__visible">ok</span
+						><span class="nokodo-loader__hidden">odo</span>
+					</div>
+					<div class="nokodo-loader__shimmer" aria-hidden="true">
+						<span class="nokodo-loader__hidden">n</span
+						><span class="nokodo-loader__visible">ok</span
+						><span class="nokodo-loader__hidden">odo</span>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script>
+			;(function () {
+				const brand = document.getElementById('nokodo-splash-brand')
+				if (!brand) return
+
+				const isReducedMotion = window.matchMedia(
+					'(prefers-reduced-motion: reduce)'
+				).matches
+
+				const timing = isReducedMotion
+					? { okHold: 100, expansion: 300, pause: 50 }
+					: { okHold: 500, expansion: 800, pause: 200 }
+
+				let shimmerResolve
+				const shimmerStarted = new Promise((resolve) => {
+					shimmerResolve = resolve
+				})
+				window.__nokodoSplash = { shimmerStarted }
+
+				setTimeout(function () {
+					brand.dataset.expanded = '1'
+					setTimeout(function () {
+						setTimeout(function () {
+							brand.dataset.shimmer = '1'
+							shimmerResolve()
+						}, timing.pause)
+					}, timing.expansion)
+				}, timing.okHold)
+			})()
+		</script>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

@@ -1,15 +1,19 @@
 <script lang="ts">
-	import Tooltip from '$lib/components/common/Tooltip.svelte'
-	import { renderMarkdownToHtml } from '$lib/markdown/render'
+	import MessageTimestamp from '$lib/components/chat/MessageTimestamp.svelte'
+	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
+	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import type { Snippet } from 'svelte'
-	import { SvelteDate } from 'svelte/reactivity'
 
 	interface Props {
 		content: string
 		timestamp?: { getTime: () => number }
 		actions?: Snippet
+		lead?: Snippet
+		tail?: Snippet
 		isLastMessage?: boolean
+		isStreaming?: boolean
 		modelName?: string
+		avatarUrl?: string | null
 		tone?: 'default' | 'error'
 	}
 
@@ -17,14 +21,20 @@
 		content,
 		timestamp,
 		actions,
+		lead,
+		tail,
 		isLastMessage = false,
+		isStreaming = false,
 		modelName = 'assistant',
+		avatarUrl = null,
 		tone = 'default',
 	}: Props = $props()
 
+	let hasContent = $derived(content.trim().length > 0)
+
 	let showActions = $state(false)
 	let isHovered = $state(false)
-	let renderedHtml = $derived(renderMarkdownToHtml(content))
+	let avatarError = $state(false)
 
 	function handleMouseEnter() {
 		showActions = true
@@ -34,49 +44,6 @@
 	function handleMouseLeave() {
 		showActions = false
 		isHovered = false
-	}
-
-	function formatRelativeTime(date: { getTime: () => number }): string {
-		const base = new SvelteDate(date.getTime())
-		const now = new SvelteDate()
-		const today = new SvelteDate(now.getFullYear(), now.getMonth(), now.getDate())
-		const yesterday = new SvelteDate(today)
-		yesterday.setDate(today.getDate() - 1)
-		const messageDate = new SvelteDate(base.getFullYear(), base.getMonth(), base.getDate())
-
-		const timeStr = base
-			.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-			.toLowerCase()
-
-		if (messageDate.getTime() === today.getTime()) {
-			return `today, ${timeStr}`
-		} else if (messageDate.getTime() === yesterday.getTime()) {
-			return `yesterday, ${timeStr}`
-		}
-
-		return base
-			.toLocaleDateString([], {
-				month: 'short',
-				day: 'numeric',
-				hour: 'numeric',
-				minute: '2-digit',
-			})
-			.toLowerCase()
-	}
-
-	function formatFullDate(date: { getTime: () => number }): string {
-		const base = new SvelteDate(date.getTime())
-
-		return base
-			.toLocaleDateString('en-US', {
-				weekday: 'long',
-				year: 'numeric',
-				month: 'long',
-				day: 'numeric',
-				hour: 'numeric',
-				minute: '2-digit',
-			})
-			.toLowerCase()
 	}
 </script>
 
@@ -88,51 +55,75 @@
 >
 	<!-- Avatar on the left -->
 	<div
-		class="mt-1 h-10 w-10 shrink-0 rounded-full shadow-lg"
-		style="background-color: var(--accent-primary); box-shadow: 0 10px 15px -3px var(--accent-shadow), 0 4px 6px -2px var(--accent-shadow);"
-	></div>
+		class="mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5 shadow-lg"
+		style="box-shadow: 0 10px 15px -3px var(--accent-shadow), 0 4px 6px -2px var(--accent-shadow);"
+	>
+		{#if avatarUrl && !avatarError}
+			<img
+				src={avatarUrl}
+				alt={modelName}
+				class="h-full w-full object-cover"
+				onerror={() => (avatarError = true)}
+			/>
+		{:else}
+			<div
+				class="flex h-full w-full items-center justify-center"
+				style="background-color: var(--accent-primary);"
+			>
+				<SparklesSolid className="h-5 w-5 text-white/90" />
+			</div>
+		{/if}
+	</div>
 
 	<!-- Content container -->
 	<div class="relative flex min-w-0 flex-1 flex-col gap-2">
-		<!-- Header with model name and timestamp -->
 		<div class="flex items-center gap-2">
-			<span class="text-sm font-medium text-white/90">{modelName}</span>
+			<span class="text-sm font-semibold text-white/90">{modelName}</span>
 			{#if timestamp}
-				<Tooltip content={formatFullDate(timestamp)} placement="top">
-					<span
-						class="text-xs text-white/40 transition-opacity duration-200 {isHovered
-							? 'opacity-100'
-							: 'opacity-0'}"
-					>
-						{formatRelativeTime(timestamp)}
-					</span>
-				</Tooltip>
+				<MessageTimestamp
+					{timestamp}
+					className="text-xs text-white/40 transition-opacity duration-200 {isHovered
+						? 'opacity-100'
+						: 'opacity-0'}"
+				/>
 			{/if}
 		</div>
 
 		<!-- Message content -->
+		{#if lead}
+			<div class="space-y-3">{@render lead()}</div>
+		{/if}
+
 		{#if tone === 'error'}
 			<div class="border-destructive/30 bg-destructive/10 rounded-2xl border px-4 py-3">
-				<div
-					class="text-destructive assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-				>
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html renderedHtml}
-				</div>
+				<MarkdownRenderer
+					{content}
+					{isStreaming}
+					class="assistant-markdown text-destructive **:text-destructive! text-[0.95rem] leading-relaxed wrap-break-word"
+				/>
 			</div>
-		{:else}
+		{:else if isStreaming && !hasContent}
 			<div
-				class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]"
+				class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[0.95rem] leading-relaxed text-white/60"
 			>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html renderedHtml}
+				<span class="animate-pulse">thinking…</span>
 			</div>
+		{:else if hasContent}
+			<MarkdownRenderer
+				{content}
+				{isStreaming}
+				class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+			/>
+		{/if}
+
+		{#if tail}
+			<div class="space-y-3">{@render tail()}</div>
 		{/if}
 
 		<!-- Actions -->
 		{#if actions}
 			<div
-				class="flex gap-1.5 transition-opacity duration-200 {isLastMessage || showActions
+				class="flex gap-1 transition-opacity duration-200 {isLastMessage || showActions
 					? 'opacity-100'
 					: 'opacity-0'}"
 			>
@@ -143,32 +134,12 @@
 </div>
 
 <style>
-	:global(.assistant-markdown pre) {
-		white-space: pre-wrap;
+	:global(.assistant-markdown) {
 		word-break: break-word;
 	}
 
-	:global(.assistant-markdown code) {
-		white-space: pre-wrap;
-	}
-
-	:global(.assistant-markdown a) {
-		text-decoration: underline;
-	}
-
-	:global(.assistant-markdown ul),
-	:global(.assistant-markdown ol) {
-		padding-left: 1.25rem;
-	}
-
-	@keyframes messageSlideIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px) scale(0.98);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0) scale(1);
-		}
+	:global(.assistant-markdown p) {
+		margin-top: 0.75rem;
+		margin-bottom: 0.75rem;
 	}
 </style>

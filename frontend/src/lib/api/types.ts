@@ -224,6 +224,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/{thread_id}/events/by-message-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List Events For Message Ids
+         * @description List events associated with specific messages in this thread.
+         */
+        post: operations["list_events_for_message_ids_threads__thread_id__events_by_message_ids_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}/branch": {
         parameters: {
             query?: never;
@@ -264,6 +284,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/{thread_id}/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete User Message Turn
+         * @description delete a user message and its generated response(s).
+         *
+         *     this deletes the user message and all subsequent messages on the active
+         *     branch until (but not including) the next user message, if any.
+         */
+        delete: operations["delete_user_message_turn_threads__thread_id__messages__message_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}/run": {
         parameters: {
             query?: never;
@@ -275,29 +318,9 @@ export interface paths {
         put?: never;
         /**
          * Run Thread
-         * @description run a thread with an agent and persist all messages produced.
-         */
-        post: operations["run_thread_threads__thread_id__run_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/threads/{thread_id}/run/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Thread Stream
          * @description stream a thread run via sse events.
          */
-        post: operations["run_thread_stream_threads__thread_id__run_stream_post"];
+        post: operations["run_thread_threads__thread_id__run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -410,6 +433,29 @@ export interface paths {
          * @description Persist and broadcast an event.
          */
         post: operations["emit_event_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Notifications
+         * @description Create notification(s).
+         *
+         *     if user_id is provided, sends to that user only.
+         *     if only thread_id is provided, sends to all thread participants.
+         */
+        post: operations["create_notifications_notifications_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1188,6 +1234,18 @@ export interface components {
          */
         EventScope: "system" | "user" | "thread" | "message" | "task" | "project" | "file";
         /**
+         * EventsByMessageIDsRequest
+         * @description Request payload to fetch events for a set of messages.
+         */
+        EventsByMessageIDsRequest: {
+            /** Metadata */
+            metadata_?: {
+                [key: string]: unknown;
+            };
+            /** Message Ids */
+            message_ids?: string[];
+        };
+        /**
          * FileContent
          * @description file attachment content.
          *
@@ -1584,6 +1642,20 @@ export interface components {
              */
             updated_at: string;
             event?: components["schemas"]["Event"] | null;
+        };
+        /**
+         * NotificationCreate
+         * @description Request schema for creating notification(s).
+         */
+        NotificationCreate: {
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Thread Id */
+            thread_id?: string | null;
+            /** User Id */
+            user_id?: string | null;
         };
         /** OpenAIChatCompletionChoice */
         OpenAIChatCompletionChoice: {
@@ -2335,30 +2407,14 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             agent_id: string;
+            /**
+             * Stream
+             * @default true
+             * @constant
+             */
+            stream: true;
             /** Input */
             input?: string | null;
-        };
-        /**
-         * ThreadRunResponse
-         * @description response containing all messages produced by a run.
-         *
-         *     an agent run can produce multiple messages:
-         *     - assistant message with tool calls
-         *     - tool result messages
-         *     - more assistant messages
-         *     - ... repeat until final assistant message
-         *
-         *     the messages list contains all new messages produced during the run.
-         */
-        ThreadRunResponse: {
-            /**
-             * Thread Id
-             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
-             */
-            thread_id: string;
-            user_message?: components["schemas"]["Message"] | null;
-            /** Messages */
-            messages: components["schemas"]["Message"][];
         };
         /**
          * ThreadSwitchRequest
@@ -4003,6 +4059,106 @@ export interface operations {
             };
         };
     };
+    list_events_for_message_ids_threads__thread_id__events_by_message_ids_post: {
+        parameters: {
+            query?: {
+                include_hidden?: boolean;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventsByMessageIDsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_current_branch_threads__thread_id__branch_get: {
         parameters: {
             query?: {
@@ -4195,29 +4351,24 @@ export interface operations {
             };
         };
     };
-    run_thread_threads__thread_id__run_post: {
+    delete_user_message_turn_threads__thread_id__messages__message_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 thread_id: string;
+                message_id: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ThreadRunRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ThreadRunResponse"];
-                };
+                content?: never;
             };
             /** @description bad request */
             400: {
@@ -4293,7 +4444,7 @@ export interface operations {
             };
         };
     };
-    run_thread_stream_threads__thread_id__run_stream_post: {
+    run_thread_threads__thread_id__run_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5090,6 +5241,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Event"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_notifications_notifications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notification"][];
                 };
             };
             /** @description bad request */

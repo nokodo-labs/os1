@@ -4,8 +4,7 @@
 	import LightBulb from '$lib/components/icons/LightBulb.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
-	import DOMPurify from 'dompurify'
-	import { marked } from 'marked'
+	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import { fade, fly } from 'svelte/transition'
 
@@ -153,9 +152,6 @@
 		visible = false
 		resetState()
 	}
-
-	// Parse markdown
-	let parsedContent = $derived(DOMPurify.sanitize(marked.parse(responseContent) as string))
 </script>
 
 {#if visible}
@@ -221,14 +217,15 @@
 					</button>
 				</div>
 
-				<div
-					class="prose prose-sm dark:prose-invert max-h-60 overflow-y-auto text-xs leading-relaxed"
-				>
+				<div class="max-h-60 overflow-y-auto text-xs leading-relaxed">
 					{#if !responseContent && isGenerating}
 						<span class="animate-pulse opacity-40">Thinking...</span>
 					{:else}
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html parsedContent}
+						<MarkdownRenderer
+							content={responseContent}
+							isStreaming={isGenerating}
+							class="text-xs leading-relaxed"
+						/>
 					{/if}
 				</div>
 
