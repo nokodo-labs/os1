@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pydantic import Field
-from sqlalchemy import select
 
-from api.models.agent import Agent
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.v1.service import events as event_service
+from api.v1.service import notifications as notification_service
+from api.v1.service import threads as thread_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
@@ -34,26 +33,34 @@ _TOOL_PARAMETERS: JSONObject = {
 			),
 			"maxLength": 500,
 		},
+		"user_id": {
+			"type": "string",
+			"description": (
+				"optional: specific user ID to send to. "
+				"if omitted, notification goes to all thread participants "
+				"(including the thread owner)."
+			),
+		},
 	},
 	"required": ["title", "body"],
 }
 
 
 class SendNotificationTool(Tool[AppContext]):
-	"""tool for sending notifications directly to the user.
+	"""tool for sending notifications to users.
 
-	this allows agents to proactively notify users about important events,
-	reminders, or information. the notification will appear in the user's
-	dock notification area with the agent's profile icon.
+	by default, notifications are sent to all participants in the thread
+	(including the owner).
+	optionally, a specific user_id can be provided to target one user.
 	"""
 
 	name: str = Field(default="send_notification")
 	description: str = Field(
 		default=(
-			"send a notification directly to the user. use this to alert "
-			"the user about important information, reminders, or updates. "
-			"notifications appear in the user's notification center with "
-			"your agent profile icon."
+			"send a notification to thread participants. use this to alert "
+			"users about important information, reminders, or updates. "
+			"by default notifies all participants (including the owner); "
+			"optionally target a specific user."
 		)
 	)
 	parameters: JSONObject = Field(default=_TOOL_PARAMETERS)
@@ -64,18 +71,13 @@ class SendNotificationTool(Tool[AppContext]):
 		__app_context__: AppContext,
 		**kwargs: object,
 	) -> ToolMessage:
-		"""execute notification send.
+		"""send notification(s) - thread-scoped by default."""
+		ctx = __app_context__
+		tool_call_id = __agent_context__.tool_call_id
 
-		args:
-			__agent_context__: sdk agent context
-			__app_context__: application context with session
-			**kwargs: tool arguments (title, body)
-
-		returns:
-			ToolMessage confirming notification was sent
-		"""
 		title = str(kwargs.get("title", ""))
 		body = str(kwargs.get("body", ""))
+		target_user_id = kwargs.get("user_id")
 
 		if not title or not body:
 			return self.error(
@@ -83,43 +85,62 @@ class SendNotificationTool(Tool[AppContext]):
 				__agent_context__,
 			)
 
-		session = __app_context__.session
-		user_id = str(__app_context__.user_id)
-		agent_id = __app_context__.agent_id
+		session = ctx.session
+		agent_id = str(ctx.agent_id) if ctx.agent_id else None
+		thread_id = str(ctx.thread_id) if ctx.thread_id else None
 
-		# fetch agent profile image info if available
-		agent_profile_url: str | None = None
-		agent_name: str | None = None
+		if target_user_id:
+			target_user_ids = [str(target_user_id)]
+		elif ctx.thread_id is not None:
+			target_user_ids = await thread_service.list_thread_recipient_user_ids(
+				ctx.thread_id,
+				session,
+				principal=ctx.principal,
+			)
+		else:
+			return self.error(
+				"no recipients: provide user_id or run inside a thread",
+				__agent_context__,
+			)
 
-		if agent_id:
-			stmt = select(Agent).where(Agent.id == str(agent_id))
-			result = await session.execute(stmt)
-			agent = result.scalar_one_or_none()
-			if agent:
-				agent_name = agent.name
-				agent_profile_url = agent.profile_image_url
+		# thread-scoped by default; user_id is opt-in for single-user targeting
+		notifications = await notification_service.send_agent_notification(
+			session,
+			title=title,
+			body=body,
+			agent_id=agent_id,
+			user_ids=target_user_ids,
+		)
 
-		# create the event
-		event = Event(
-			scope=EventScope.USER,
-			scope_id=user_id,
-			type=EventType.NOTIFICATION_AGENT,
+		# emit tool event for chat UI (with first notification ID for reference)
+		first_notification_id = str(notifications[0].id) if notifications else None
+		recipient_count = len(notifications)
+
+		tool_event = Event(
+			scope=EventScope.THREAD if thread_id else EventScope.USER,
+			scope_id=thread_id or str(ctx.user_id),
+			type=EventType.TOOL_NOTIFICATION,
 			data={
+				"tool_call_id": tool_call_id,
+				"tool_name": self.name,
+				"notification_id": first_notification_id,
+				"notification_count": recipient_count,
 				"title": title,
 				"body": body,
-				"agent_id": str(agent_id) if agent_id else None,
-				"agent_name": agent_name,
-				"icon_url": agent_profile_url,
+				"target_user_id": str(target_user_id) if target_user_id else None,
+				"status": "sent",
 			},
-			user_id=user_id,
+			user_id=str(ctx.user_id),
+			thread_id=thread_id,
 		)
-		await event_service.publish_event(
-			session,
-			event=event,
-			create_notification=True,
-		)
+		await ctx.event_emitter(tool_event)
 
+		if recipient_count == 1:
+			return self.success(
+				f'notification sent: "{title}"',
+				__agent_context__,
+			)
 		return self.success(
-			f'notification sent to user: "{title}"',
+			f'notification sent to {recipient_count} participants: "{title}"',
 			__agent_context__,
 		)

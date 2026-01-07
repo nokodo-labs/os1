@@ -2,53 +2,45 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.database import AsyncSessionLocal
 from api.models.agent import Agent as AgentORM
+from api.models.event import Event
 from api.models.message import Message as MessageORM
 from api.models.model import Model
 from api.schemas.message import MessageCreate
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.converters import sdk_message_to_orm_create
 from api.v1.service.chat.filters import resolve_filters
 from api.v1.service.chat.hooks import resolve_hooks
 from api.v1.service.chat.models import build_chat_model
 from api.v1.service.chat.tools import resolve_tools
+from api.v1.service.events import build_event_emitter
 from api.v1.service.prompt_runtime import render_inline_with_prompts
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
 from nokodo_ai import Hook as SDKHook
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.deltas import AgentDelta
+from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.tool import Tool
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class RunResult:
-	"""result of a thread run."""
-
-	user_message: MessageORM | None
-	"""the persisted user input message, if any."""
-
-	produced_messages: list[MessageORM]
-	"""all messages produced by the agent during this run."""
 
 
 async def _load_agent(agent_id: TypeID, session: AsyncSession) -> AgentORM:
@@ -200,62 +192,14 @@ def _message_to_sse_data(msg: MessageORM) -> dict[str, object]:
 		"parent_id": str(msg.parent_id) if msg.parent_id else None,
 		"type": msg.type.value,
 		"content": content_parts,
+		"metadata_": msg.metadata_ or {},
 		"sender_agent_id": str(msg.sender_agent_id) if msg.sender_agent_id else None,
 		"sender_user_id": str(msg.sender_user_id) if msg.sender_user_id else None,
 		"created_at": msg.created_at.isoformat() if msg.created_at else None,
 	}
 
 
-async def run_thread(
-	thread_id: TypeID,
-	agent_id: TypeID,
-	session: AsyncSession,
-	principal: Principal,
-	*,
-	input: str | None = None,
-) -> RunResult:
-	"""run a thread with an agent and persist all produced messages."""
-	user_message: MessageORM | None = None
-	if input is not None and input.strip():
-		user_message = await thread_service.create_message(
-			thread_id,
-			MessageCreate(content=input),
-			session,
-			principal=principal,
-		)
-
-	agent = await _load_agent(agent_id, session)
-	ctx = AppContext(session=session, principal=principal, agent_id=agent_id)
-	sdk_agent = await build_agent_from_orm(agent, ctx)
-
-	thread_orm = await thread_service.get_thread(
-		thread_id,
-		session,
-		principal=principal,
-	)
-	thread = await inject_system_instructions(
-		agent,
-		thread_orm.to_sdk(),
-		session=session,
-	)
-
-	produced_sdk = await sdk_agent.run(thread, app_context=ctx, tool_choice="auto")
-
-	produced_messages: list[MessageORM] = []
-	for sdk_msg in produced_sdk:
-		create_in = sdk_message_to_orm_create(sdk_msg, sender_agent_id=agent_id)
-		persisted = await thread_service.create_message(
-			thread_id,
-			create_in,
-			session,
-			principal=principal,
-		)
-		produced_messages.append(persisted)
-
-	return RunResult(user_message=user_message, produced_messages=produced_messages)
-
-
-async def run_thread_stream(
+async def run_agent(
 	thread_id: TypeID,
 	agent_id: TypeID,
 	session: AsyncSession,
@@ -263,15 +207,30 @@ async def run_thread_stream(
 	*,
 	input: str | None = None,
 ) -> AsyncIterator[bytes]:
-	"""stream a thread run as sse events."""
+	"""stream a thread run as sse events.
+
+	This is a faithful transport of SDK AgentDelta objects. Each SSE `delta`
+	event includes:
+	- run_id: stable ID for this run
+	- message_id: stable ID for the currently streaming message (generated on the
+		first chunk of that message and repeated on every chunk)
+	- delta: the raw AgentDelta payload (Pydantic JSON)
+
+	Persistence is handled asynchronously in the background so deltas are never
+	blocked on the database.
+	"""
+	run_id = new_typeid("run")
 	if input is not None and input.strip():
 		user_msg = await thread_service.create_message(
 			thread_id,
-			MessageCreate(content=input),
+			MessageCreate(content=input, metadata_={"run_id": run_id}),
 			session,
 			principal=principal,
 		)
 		yield _sse_event(event="message_created", data=_message_to_sse_data(user_msg))
+		initial_parent_id: TypeID | None = TypeID(str(user_msg.id))
+	else:
+		initial_parent_id = None
 
 	try:
 		agent = await _load_agent(agent_id, session)
@@ -283,7 +242,89 @@ async def run_thread_stream(
 		yield _sse_event(event="done", data={})
 		return
 
-	ctx = AppContext(session=session, principal=principal, agent_id=agent_id)
+	# --- background persistence + event correlation state ---
+	message_queue: asyncio.Queue[tuple[str, SDKMessage]] = asyncio.Queue()
+	message_persisted: dict[str, asyncio.Event] = {}
+	active_message_id_for_events: str | None = None
+
+	def _track_task(name: str, task: asyncio.Task[object]) -> None:
+		"""Ensure exceptions from background tasks are visible in logs."""
+
+		def _log_result(done: asyncio.Task[object]) -> None:
+			try:
+				done.result()
+			except Exception:
+				logger.exception("background task failed: %s", name)
+
+		task.add_done_callback(_log_result)
+
+	async def _persist_message_worker(*, parent_id: TypeID | None) -> None:
+		last_parent_id = parent_id
+		while True:
+			item = await message_queue.get()
+			if item[0] == "__STOP__":
+				message_queue.task_done()
+				return
+			message_id_str, sdk_msg = item
+			try:
+				async with AsyncSessionLocal() as bg_session:
+					create_in = MessageCreate.from_sdk_message(
+						sdk_msg,
+						sender_agent_id=agent_id,
+					)
+					create_in.metadata["run_id"] = run_id
+					create_in.parent_id = last_parent_id
+					persisted = await thread_service.create_message(
+						thread_id=thread_id,
+						message_in=create_in,
+						session=bg_session,
+						principal=principal,
+						message_id=TypeID(message_id_str),
+					)
+					last_parent_id = TypeID(str(persisted.id))
+			except Exception:
+				logger.exception(
+					"failed to persist streamed message",
+					extra={"message_id": message_id_str},
+				)
+			finally:
+				evt = message_persisted.get(message_id_str)
+				if evt is not None:
+					evt.set()
+				message_queue.task_done()
+
+	async def _before_persist_event(event: Event) -> None:
+		msg_id = event.message_id
+		if not msg_id:
+			return
+		evt = message_persisted.get(msg_id)
+		if evt is None:
+			return
+		try:
+			await asyncio.wait_for(evt.wait(), timeout=15)
+		except TimeoutError:
+			logger.warning(
+				"event persistence timed out waiting for message; dropping message_id",
+				extra={"event_id": str(event.id), "message_id": msg_id},
+			)
+			event.message_id = None
+
+	def _message_id_provider() -> str | None:
+		return active_message_id_for_events
+
+	emitter = build_event_emitter(
+		message_id_provider=_message_id_provider,
+		before_persist=_before_persist_event,
+	)
+
+	# create context with non-blocking emitter
+	ctx = AppContext(
+		session=session,
+		principal=principal,
+		agent_id=agent_id,
+		thread_id=thread_id,
+		event_emitter=emitter,
+	)
 	try:
 		sdk_agent = await build_agent_from_orm(agent, ctx)
 	except Exception:
@@ -297,14 +338,26 @@ async def run_thread_stream(
 		session,
 		principal=principal,
 	)
+	# if there was no input, start the persistence chain from the current leaf
+	if initial_parent_id is None:
+		initial_parent_id = (
+			TypeID(str(thread_orm.current_message_id))
+			if thread_orm.current_message_id
+			else None
+		)
 	thread = await inject_system_instructions(
 		agent,
 		thread_orm.to_sdk(),
 		session=session,
 	)
 
+	worker_task: asyncio.Task[object] | None = None
 	try:
-		start_len = len(thread.messages)
+		# start message persistence worker
+		worker_task = asyncio.create_task(
+			_persist_message_worker(parent_id=initial_parent_id)
+		)
+
 		stream = await sdk_agent.run(
 			thread,
 			app_context=ctx,
@@ -312,25 +365,53 @@ async def run_thread_stream(
 			stream=True,
 		)
 
-		async for delta in stream:
-			if delta.chat is not None and delta.chat.message.text:
-				yield _sse_event(
-					event="text_delta",
-					data={"text": delta.chat.message.text},
-				)
+		def _alloc_message_id() -> str:
+			message_id_str = str(TypeID(new_typeid("msg")))
+			message_persisted[message_id_str] = asyncio.Event()
+			return message_id_str
 
-		produced = thread.messages[start_len:]
-		for sdk_msg in produced:
-			create_in = sdk_message_to_orm_create(sdk_msg, sender_agent_id=agent_id)
-			persisted = await thread_service.create_message(
-				thread_id,
-				create_in,
-				session,
-				principal=principal,
-			)
+		def _delta_envelope(
+			*,
+			message_id: str | None,
+			delta: AgentDelta,
+		) -> dict[str, object]:
+			return {
+				"run_id": str(run_id),
+				"message_id": message_id,
+				"delta": delta.model_dump(mode="json"),
+			}
+
+		current_assistant_id: str | None = None
+		assistant_accum = SDKAssistantMessage()
+
+		async for delta in stream:
+			message_id: str | None = None
+			# assistant streaming chunks
+			if delta.chat is not None:
+				if current_assistant_id is None:
+					current_assistant_id = _alloc_message_id()
+					assistant_accum = SDKAssistantMessage()
+				message_id = current_assistant_id
+				assistant_accum = assistant_accum.merge(delta.chat.message)
+				# mark which message tool events should correlate to
+				if delta.chat.done:
+					active_message_id_for_events = current_assistant_id
+					await message_queue.put((current_assistant_id, assistant_accum))
+					current_assistant_id = None
+
+			# tool results (single message)
+			if delta.tool is not None:
+				tool_message_id = _alloc_message_id()
+				message_id = tool_message_id
+				await message_queue.put((tool_message_id, delta.tool))
+
+			# agent run completion sentinel has no message_id
+			if delta.done:
+				message_id = None
+
 			yield _sse_event(
-				event="message_created",
-				data=_message_to_sse_data(persisted),
+				event="delta",
+				data=_delta_envelope(message_id=message_id, delta=delta),
 			)
 
 	except Exception:
@@ -338,74 +419,10 @@ async def run_thread_stream(
 		yield _sse_event(event="error", data={"message": "generation failed"})
 		yield _sse_event(event="done", data={})
 		return
+	finally:
+		# stop worker and let it drain queued persistence in the background
+		if worker_task is not None and not worker_task.done():
+			await message_queue.put(("__STOP__", SDKAssistantMessage()))
+			_track_task("message_persist_worker", worker_task)
 
 	yield _sse_event(event="done", data={})
-
-
-async def run_agent(
-	agent: SDKAgent[AppContext],
-	messages: list[SDKMessage],
-	*,
-	context: AppContext,
-	system_prompt: str | None = None,
-) -> list[SDKMessage]:
-	"""run an agent against a list of messages.
-
-	applies pre-filters before execution and post-filters after.
-
-	args:
-		agent: sdk Agent to run
-		messages: input messages for the agent
-		context: execution context
-		system_prompt: optional system prompt to prepend
-
-	returns:
-		list of messages produced by the agent
-	"""
-	# prepend system prompt if provided
-	if system_prompt:
-		messages = [SDKSystemMessage.from_text(system_prompt), *messages]
-
-	thread = SDKThread(messages=messages)
-	result = await agent.run(thread, app_context=context, tool_choice="auto")
-	produced: list[SDKMessage] = []
-	for msg in result:
-		produced.append(msg)
-
-	return produced
-
-
-async def run_agent_stream(
-	agent: SDKAgent[AppContext],
-	messages: list[SDKMessage],
-	*,
-	context: AppContext,
-	system_prompt: str | None = None,
-) -> AsyncIterator[AgentDelta]:
-	"""run an agent in streaming mode.
-
-	applies pre-filters before execution.
-
-	args:
-		agent: sdk Agent to run
-		messages: input messages for the agent
-		context: execution context
-		system_prompt: optional system prompt to prepend
-
-	yields:
-		AgentDelta events as the agent produces output
-	"""
-	# prepend system prompt if provided
-	if system_prompt:
-		messages = [SDKSystemMessage.from_text(system_prompt), *messages]
-
-	thread = SDKThread(messages=messages)
-	stream = await agent.run(
-		thread,
-		app_context=context,
-		tool_choice="auto",
-		stream=True,
-	)
-
-	async for delta in stream:
-		yield delta

@@ -2,18 +2,38 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.notification import Notification
 from api.schemas.notification import Notification as NotificationSchema
+from api.schemas.notification import NotificationCreate
 from api.v1.service import notifications as notification_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+@router.post(
+	"",
+	response_model=list[NotificationSchema],
+	status_code=status.HTTP_201_CREATED,
+)
+async def create_notifications(
+	payload: NotificationCreate,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[Notification]:
+	"""Create notification(s)."""
+	return await notification_service.send_agent_notification(
+		db,
+		title=payload.title,
+		body=payload.body,
+		user_ids=[str(uid) for uid in payload.user_ids],
+	)
 
 
 @router.get("/users/{user_id}", response_model=list[NotificationSchema])

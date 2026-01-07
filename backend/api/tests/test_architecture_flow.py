@@ -125,7 +125,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 	assert task_update.status_code == 200
 	assert task_update.json()["status"] == "running"
 
-	# Emit an event and ensure a notification is created
+	# Emit an event (events are independent of notifications)
 	event_resp = await client.post(
 		"/v1/events",
 		json={
@@ -140,6 +140,18 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 		headers=headers,
 	)
 	assert event_resp.status_code == 201
+
+	# Create a notification via the notifications endpoint (not auto-created by events)
+	notif_resp = await client.post(
+		"/v1/notifications",
+		json={
+			"user_ids": [user["id"]],
+			"title": "Task Progress",
+			"body": "Analysis stage started",
+		},
+		headers=headers,
+	)
+	assert notif_resp.status_code == 201
 
 	notifications_resp = await client.get(
 		f"/v1/notifications/users/{user['id']}",

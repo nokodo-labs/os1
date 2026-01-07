@@ -64,6 +64,11 @@ class EventType(StrEnum):
 	MEMORY_UPDATED = "memory.updated"
 	MEMORY_DELETED = "memory.deleted"
 
+	# --- tool events (scoped to tool_call_id) ---
+	TOOL_PROGRESS = "tool.progress"
+	TOOL_CUSTOM = "tool.custom"  # generic tool event. can include custom UI components
+	TOOL_NOTIFICATION = "tool.notification"
+
 
 # event type groupings for easier filtering
 THREAD_EVENTS = {
@@ -88,4 +93,10 @@ TYPING_EVENTS = {
 NOTIFICATION_EVENTS = {
 	EventType.NOTIFICATION_CUSTOM,
 	EventType.NOTIFICATION_AGENT,
+}
+
+TOOL_EVENTS = {
+	EventType.TOOL_PROGRESS,
+	EventType.TOOL_CUSTOM,
+	EventType.TOOL_NOTIFICATION,
 }

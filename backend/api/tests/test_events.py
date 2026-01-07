@@ -71,13 +71,12 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 	assert event.user_id == user.id
 	assert event.data == {"foo": "bar"}
 
-	# Check notification created
+	# events.emit_event does NOT auto-create notifications (use notifications.py)
 	result = await db_session.execute(
 		select(Notification).where(Notification.event_id == event.id)
 	)
 	notification = result.scalar_one_or_none()
-	assert notification is not None
-	assert notification.user_id == user.id
+	assert notification is None  # clean architecture: events != notifications
 
 
 @pytest.mark.asyncio

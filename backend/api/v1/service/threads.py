@@ -22,6 +22,7 @@ from api.models.message import (
 )
 from api.models.project import Project
 from api.models.thread import Thread
+from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
@@ -41,6 +42,45 @@ def _ensure_admin_for_hidden(include_hidden: bool, principal: Principal) -> None
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
 		)
+
+
+async def list_thread_recipient_user_ids(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_hidden: bool = False,
+) -> list[str]:
+	"""Return user ids that should receive notifications for this thread.
+
+	This always includes the thread owner, even if there are no participants.
+	authz is based on thread access (viewer+).
+	"""
+	_ensure_admin_for_hidden(include_hidden, principal)
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_role=AccessRole.VIEWER,
+		include_hidden=include_hidden,
+	)
+
+	participant_stmt = select(ThreadParticipant.user_id).where(
+		ThreadParticipant.thread_id == thread_id,
+		ThreadParticipant.user_id.isnot(None),
+	)
+	participant_result = await session.execute(participant_stmt)
+	participant_ids = [str(uid) for uid in participant_result.scalars().all()]
+
+	ordered_ids = [str(thread.owner_id), *participant_ids]
+	seen: set[str] = set()
+	unique_ids: list[str] = []
+	for uid in ordered_ids:
+		if uid in seen:
+			continue
+		seen.add(uid)
+		unique_ids.append(uid)
+	return unique_ids
 
 
 async def _load_thread(

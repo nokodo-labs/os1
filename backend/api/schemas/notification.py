@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from pydantic import BaseModel
+
 from api.schemas.common import ORMModel
 from api.schemas.event import Event
 from nokodo_ai.utils.typeid import TypeID
@@ -25,3 +27,11 @@ class Notification(NotificationBase):
 	created_at: datetime
 	updated_at: datetime
 	event: Event | None = None
+
+
+class NotificationCreate(BaseModel):
+	"""Request schema for creating notification(s)."""
+
+	title: str
+	body: str
+	user_ids: list[TypeID]

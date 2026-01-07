@@ -9,8 +9,12 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.v1.service.auth import Principal
+from api.v1.service.connection_manager import event_connections
+from nokodo_ai.utils.typeid import new_typeid
 
 
 async def _get_notification(
@@ -57,6 +61,70 @@ async def list_user_notifications(
 
 	result = await session.execute(stmt.limit(100))
 	return list(result.scalars().all())
+
+
+async def send_agent_notification(
+	session: AsyncSession,
+	*,
+	title: str,
+	body: str,
+	agent_id: str | None = None,
+	user_ids: list[str],
+) -> list[Notification]:
+	"""Send notification(s) triggered by an agent.
+
+	Creates NOTIFICATION_AGENT event(s) and associated Notification record(s).
+	Returns list of Notification objects created.
+	"""
+	if title == "" or body == "":
+		raise ValueError("notification title and body are required")
+	if not user_ids:
+		raise ValueError("user_ids is required")
+
+	seen: set[str] = set()
+	target_user_ids: list[str] = []
+	for uid in user_ids:
+		uid = str(uid)
+		if uid == "" or uid in seen:
+			continue
+		seen.add(uid)
+		target_user_ids.append(uid)
+	if not target_user_ids:
+		raise ValueError("no recipients provided")
+
+	notifications: list[Notification] = []
+
+	for uid in target_user_ids:
+		# create event
+		event = Event(
+			id=new_typeid("event"),
+			scope=EventScope.USER,
+			scope_id=uid,
+			type=EventType.NOTIFICATION_AGENT,
+			data={
+				"title": title,
+				"body": body,
+				"agent_id": agent_id,
+			},
+			user_id=uid,
+		)
+		session.add(event)
+		await session.flush()
+
+		# create notification linked to event
+		notification = Notification(user_id=uid, event_id=event.id)
+		session.add(notification)
+
+		notifications.append(notification)
+
+	await session.commit()
+
+	# refresh and broadcast each
+	for notif in notifications:
+		await session.refresh(notif, attribute_names=["event"])
+		await event_connections.broadcast_event(notif.event)
+
+	return notifications
 
 
 async def mark_notification_read(
