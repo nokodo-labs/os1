@@ -21,6 +21,7 @@ from ...messages import (
 	UserMessage,
 )
 from ...tool import ToolDefinition
+from ...types import JSONObject
 from ...utils.validators import validate
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
 
 def _provider_tool_call_metadata(
 	*, provider: str, tool_call_id: str
-) -> dict[str, object]:
+) -> JSONObject:
 	return {
 		PROVIDER_DATA_KEY: {
 			provider: {
@@ -58,7 +59,7 @@ def _provider_tool_call_metadata(
 
 def _get_provider_tool_call_id(
 	*,
-	metadata: dict[str, object] | None,
+	metadata: JSONObject | None,
 	provider: str,
 ) -> str | None:
 	if not metadata:

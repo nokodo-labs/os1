@@ -23,7 +23,7 @@ from ...messages import (
 	UserMessage,
 )
 from ...tool import ToolDefinition
-from ...types.json import JSONObject
+from ...types import JSONObject
 from ...utils.validators import validate
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
