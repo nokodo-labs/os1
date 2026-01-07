@@ -504,7 +504,6 @@ async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
 		db_session,
 		principal=owner_principal,
 	)
-	group_id = new_typeid("group")
 	ace = AccessControlEntry(
 		id=TypeID(new_typeid("acl")),
 		thread_id=thread.id,
@@ -570,17 +569,31 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		principal=principal,
 	)
 
-	orig = thread_service._load_thread_unrestricted
+	orig = thread_service._load_thread
 	called = False
+	seen_principal: Principal | None = None
 
 	async def _tracking(
-		thread_id: TypeID, session: AsyncSession
+		thread_id: TypeID,
+		session: AsyncSession,
+		principal: Principal | None = None,
+		*,
+		required_role: AccessRole = AccessRole.VIEWER,
+		include_hidden: bool = False,
 	) -> thread_service.Thread:
 		nonlocal called
+		nonlocal seen_principal
 		called = True
-		return await orig(thread_id, session)
+		seen_principal = principal
+		return await orig(
+			thread_id,
+			session,
+			principal,
+			required_role=required_role,
+			include_hidden=include_hidden,
+		)
 
-	thread_service._load_thread_unrestricted = _tracking
+	thread_service._load_thread = _tracking
 	try:
 		updated = await thread_service.update_thread(
 			thread.id,
@@ -589,17 +602,19 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 			principal=principal,
 		)
 	finally:
-		thread_service._load_thread_unrestricted = orig
+		thread_service._load_thread = orig
 	assert called
+	assert seen_principal is None
 	assert updated.owner_id == new_owner.id
 
 
 @pytest.mark.asyncio
 async def test_load_thread_unrestricted_missing(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException):
-		await thread_service._load_thread_unrestricted(
+		await thread_service._load_thread(
 			TypeID(new_typeid("thread")),
 			db_session,
+			None,
 		)
 
 

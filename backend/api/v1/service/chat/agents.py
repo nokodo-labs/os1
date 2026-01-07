@@ -426,3 +426,26 @@ async def run_agent(
 			_track_task("message_persist_worker", worker_task)
 
 	yield _sse_event(event="done", data={})
+
+	# once the run is complete, opportunistically generate thread metadata.
+	# this is non-blocking and only applies after the first user→assistant turn.
+	try:
+		chat_model = build_chat_model(agent.model)
+
+		# temporary: run inline until taskiq exists
+		async def _generate() -> None:
+			from api.core.database import AsyncSessionLocal
+
+			async with AsyncSessionLocal() as session:
+				await thread_service.generate_thread_metadata(
+					session,
+					thread_id=thread_id,
+					chat_model=chat_model,
+				)
+
+		asyncio.create_task(_generate())
+	except Exception:
+		logger.exception(
+			"failed to enqueue thread metadata generation",
+			extra={"thread_id": str(thread_id)},
+		)

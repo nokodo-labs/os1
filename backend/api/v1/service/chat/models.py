@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -68,6 +71,37 @@ def build_chat_model(
 			"max_tokens": max_tokens,
 		}
 	)
+
+
+async def run_chat_model_json_schema(
+	chat_model: ChatModel,
+	*,
+	thread: SDKThread,
+	json_schema: dict[str, object],
+	temperature: float | None = 0.2,
+	max_tokens: int | None = 200,
+) -> dict[str, object]:
+	"""run a chat model with a structured json schema response.
+
+	this is the shared primitive for structured outputs across the api.
+	"""
+	assistant = await chat_model.generate(
+		thread,
+		stream=False,
+		tools=[],
+		tool_choice="none",
+		params={
+			"response_model": json_schema,
+			"temperature": temperature,
+			"max_tokens": max_tokens,
+		},
+	)
+	data = assistant.json
+	if data is None:
+		data = json.loads(assistant.text)
+	if not isinstance(data, dict):
+		raise ValueError("structured output must be an object")
+	return dict[str, object](data)
 
 
 def build_embedding_model(model: Model) -> EmbeddingModel:

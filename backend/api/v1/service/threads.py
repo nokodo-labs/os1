@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from typing import overload
 
 from fastapi import HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,19 +23,23 @@ from api.models.message import (
 	ToolMessage,
 	UserMessage,
 )
-from api.models.project import Project
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.v1.service import events as event_service
+from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
-	project_access_predicate,
 	require_thread_access,
 	thread_access_predicate,
 )
+from api.v1.service.chat.models import run_chat_model_json_schema
+from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.messages import SystemMessage as SDKSystemMessage
+from nokodo_ai.messages import UserMessage as SDKUserMessage
+from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -44,26 +51,126 @@ def _ensure_admin_for_hidden(include_hidden: bool, principal: Principal) -> None
 		)
 
 
+class _ThreadMetadataOut(BaseModel):
+	"""structured output schema for thread metadata generation."""
+
+	title: str = Field(
+		description="emoji followed by 1-3 lowercase words, e.g. '🔧 fix login bug'",
+		max_length=50,
+	)
+	tags: list[str] = Field(
+		default_factory=list,
+		description="0-6 short lowercase tags",
+		max_length=6,
+	)
+
+
+async def generate_thread_metadata(
+	session: AsyncSession,
+	*,
+	thread_id: TypeID,
+	chat_model: ChatModel,
+	emit_event: bool = True,
+) -> ThreadUpdate | None:
+	"""generate thread metadata and persist via update_thread."""
+	thread = await session.get(
+		Thread,
+		thread_id,
+		options=[selectinload(Thread.messages), selectinload(Thread.owner)],
+	)
+	if not thread or thread.deleted_at or thread.is_temporary:
+		return None
+
+	messages = sorted(thread.messages or [], key=lambda m: m.created_at)
+	first_user = next((m for m in messages if m.type == MessageType.USER), None)
+	first_assistant = next(
+		(m for m in messages if m.type == MessageType.ASSISTANT), None
+	)
+	if not first_assistant:
+		return None
+
+	def extract_text(msg: Message | None) -> str:
+		if not msg:
+			return ""
+		for part in msg.content or []:
+			if isinstance(part, dict) and part.get("type") == "text":
+				return str(part.get("text", ""))[:500]
+		return ""
+
+	payload = {
+		"user": extract_text(first_user),
+		"assistant": extract_text(first_assistant),
+	}
+
+	sdk_thread = SDKThread(
+		messages=[
+			SDKSystemMessage.from_text(
+				"generate thread metadata. "
+				"title must be: one emoji + 1-3 lowercase words. "
+				"tags: 0-6 short lowercase labels. return only valid json."
+			),
+			SDKUserMessage.from_text(json.dumps(payload)),
+		]
+	)
+
+	data = await run_chat_model_json_schema(
+		chat_model,
+		thread=sdk_thread,
+		json_schema=_ThreadMetadataOut.model_json_schema(),
+	)
+	out = _ThreadMetadataOut.model_validate(data)
+
+	desired_title = out.title.strip().lower() or None
+	desired_tags = out.tags[:6]
+	changes: dict[str, object] = {}
+	if desired_title and desired_title != thread.title:
+		changes["title"] = desired_title
+	if desired_tags != (thread.tags or []):
+		changes["tags"] = desired_tags
+	if not changes:
+		return None
+
+	owner = thread.owner or await session.get(User, thread.owner_id)
+	if owner is None:
+		return None
+
+	update_in = ThreadUpdate(**changes)
+	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	await update_thread(
+		thread_id,
+		update_in,
+		session,
+		principal=principal,
+		emit_event=emit_event,
+	)
+	return update_in
+
+
 async def list_thread_recipient_user_ids(
 	thread_id: TypeID,
 	session: AsyncSession,
 	*,
-	principal: Principal,
+	principal: Principal | None = None,
 	include_hidden: bool = False,
 ) -> list[str]:
 	"""Return user ids that should receive notifications for this thread.
 
 	This always includes the thread owner, even if there are no participants.
-	authz is based on thread access (viewer+).
+	When principal is provided, authz is checked. When None, runs unrestricted.
 	"""
-	_ensure_admin_for_hidden(include_hidden, principal)
-	thread = await _load_thread(
-		thread_id,
-		session,
-		principal,
-		required_role=AccessRole.VIEWER,
-		include_hidden=include_hidden,
-	)
+	if principal is not None:
+		_ensure_admin_for_hidden(include_hidden, principal)
+		thread = await _load_thread(
+			thread_id,
+			session,
+			principal,
+			required_role=AccessRole.VIEWER,
+			include_hidden=include_hidden,
+		)
+	else:
+		thread = await _load_thread(
+			thread_id, session, None, include_hidden=include_hidden
+		)
 
 	participant_stmt = select(ThreadParticipant.user_id).where(
 		ThreadParticipant.thread_id == thread_id,
@@ -83,10 +190,31 @@ async def list_thread_recipient_user_ids(
 	return unique_ids
 
 
+@overload
 async def _load_thread(
 	thread_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	required_role: AccessRole = AccessRole.VIEWER,
+	include_hidden: bool = False,
+) -> Thread: ...
+
+
+@overload
+async def _load_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	principal: None = None,
+	*,
+	include_hidden: bool = False,
+) -> Thread: ...
+
+
+async def _load_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	principal: Principal | None = None,
 	*,
 	required_role: AccessRole = AccessRole.VIEWER,
 	include_hidden: bool = False,
@@ -99,50 +227,25 @@ async def _load_thread(
 			selectinload(Thread.projects),
 		)
 		.where(Thread.id == thread_id)
-		.where(
+	)
+
+	if principal is not None:
+		stmt = stmt.where(
 			thread_access_predicate(
 				principal,
 				required_role=required_role,
 				include_hidden=include_hidden,
 			)
 		)
-	)
-
-	if include_hidden:
-		stmt = stmt.execution_options(include_deleted=True)
-	result = await session.execute(stmt)
-	thread = result.scalars().unique().one_or_none()
-
-	if not thread:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Thread not found",
-		)
-
-	return thread
-
-
-async def _load_thread_unrestricted(
-	thread_id: TypeID,
-	session: AsyncSession,
-	*,
-	include_hidden: bool = False,
-) -> Thread:
-	stmt = (
-		select(Thread)
-		.options(
-			selectinload(Thread.messages),
-			selectinload(Thread.owner),
-			selectinload(Thread.projects),
-		)
-		.where(Thread.id == thread_id)
-	)
-
-	if include_hidden:
-		stmt = stmt.execution_options(include_deleted=True)
+		if include_hidden:
+			stmt = stmt.execution_options(include_deleted=True)
 	else:
-		stmt = stmt.where(Thread.deleted_at.is_(None), Thread.is_temporary.is_(False))
-
+		if include_hidden:
+			stmt = stmt.execution_options(include_deleted=True)
+		else:
+			stmt = stmt.where(
+				Thread.deleted_at.is_(None), Thread.is_temporary.is_(False)
+			)
 	result = await session.execute(stmt)
 	thread = result.scalars().unique().one_or_none()
 
@@ -153,39 +256,6 @@ async def _load_thread_unrestricted(
 		)
 
 	return thread
-
-
-async def _ensure_user(user_id: TypeID, session: AsyncSession) -> None:
-	user = await session.get(User, user_id)
-	if not user:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="User not found",
-		)
-
-
-async def _load_projects(
-	project_ids: list[TypeID],
-	session: AsyncSession,
-	principal: Principal,
-	*,
-	required_role: AccessRole = AccessRole.EDITOR,
-) -> list[Project]:
-	if not project_ids:
-		return []
-
-	stmt = select(Project).where(Project.id.in_(project_ids))
-	stmt = stmt.where(project_access_predicate(principal, required_role=required_role))
-	result = await session.scalars(stmt)
-	projects = list(result.all())
-	found = {project.id for project in projects}
-	missing = [project_id for project_id in project_ids if project_id not in found]
-	if missing:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail=f"Projects not found: {missing}",
-		)
-	return projects
 
 
 async def create_thread(
@@ -198,9 +268,16 @@ async def create_thread(
 	if not principal.is_admin:
 		owner_id = TypeID(principal.user.id)
 	else:
-		await _ensure_user(owner_id, session)
+		owner = await session.get(User, owner_id)
+		if not owner:
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="User not found",
+			)
 
-	projects = await _load_projects(thread_in.project_ids, session, principal)
+	projects = await project_service.load_projects(
+		thread_in.project_ids, session, principal, required_role=AccessRole.EDITOR
+	)
 	thread_data = thread_in.model_dump(by_alias=True, exclude={"project_ids"})
 	thread_data["owner_id"] = owner_id
 	thread = Thread(**thread_data)
@@ -223,11 +300,7 @@ async def create_thread(
 	)
 	await event_service.publish_event(session, event=event)
 
-	return await _load_thread_unrestricted(
-		TypeID(thread.id),
-		session,
-		include_hidden=True,
-	)
+	return await _load_thread(TypeID(thread.id), session, None, include_hidden=True)
 
 
 async def list_threads(
@@ -290,6 +363,7 @@ async def update_thread(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	emit_event: bool = True,
 ) -> Thread:
 	thread = await _load_thread(
 		thread_id,
@@ -321,32 +395,35 @@ async def update_thread(
 		setattr(thread, field, value)
 
 	if project_ids is not None:
-		thread.projects = await _load_projects(project_ids, session, principal)
+		thread.projects = await project_service.load_projects(
+			project_ids, session, principal, required_role=AccessRole.EDITOR
+		)
 
 	await session.flush()
 
 	# emit thread.updated event
-	event = Event(
-		scope=EventScope.THREAD,
-		scope_id=thread.id,
-		type=EventType.THREAD_UPDATED,
-		data={
-			"thread_id": str(thread.id),
-			"title": thread.title,
-			"owner_id": str(thread.owner_id),
-			"updated_fields": list(thread_in.model_dump(exclude_unset=True).keys()),
-		},
-		user_id=str(thread.owner_id),
-		thread_id=thread.id,
-	)
-	await event_service.publish_event(session, event=event)
+	if emit_event:
+		event = Event(
+			scope=EventScope.THREAD,
+			scope_id=thread.id,
+			type=EventType.THREAD_UPDATED,
+			data={
+				"thread_id": str(thread.id),
+				"title": thread.title,
+				"owner_id": str(thread.owner_id),
+				"updated_fields": list(thread_in.model_dump(exclude_unset=True).keys()),
+			},
+			user_id=str(thread.owner_id),
+			thread_id=thread.id,
+		)
+		await event_service.publish_event(session, event=event)
 
 	if (
 		owner_changed
 		and not principal.is_admin
 		and str(new_owner_id) != str(principal.user.id)
 	):
-		return await _load_thread_unrestricted(thread_id, session)
+		return await _load_thread(thread_id, session, None)
 
 	return await _load_thread(
 		thread_id,
