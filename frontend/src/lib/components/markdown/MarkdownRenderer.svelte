@@ -3,7 +3,7 @@
 	import { Streamdown, type Extension } from 'svelte-streamdown'
 	import Code from 'svelte-streamdown/code'
 	import Math from 'svelte-streamdown/math'
-	import Mermaid from 'svelte-streamdown/mermaid'
+	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
 
 	type Props = {
 		content: string

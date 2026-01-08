@@ -1033,16 +1033,14 @@
 
 	<div class="absolute right-0 bottom-0 left-0 z-10 pt-4 pb-5" bind:this={inputOverlay}>
 		<div class="relative mx-auto w-full max-w-7xl px-8">
-			<div
-				style="view-transition-name: chat-input;"
-				class="transition-all duration-500 ease-in-out"
-			>
+			<div class="transition-all duration-500 ease-in-out">
 				<ChatInputLiquidGlass
 					bind:value={inputValue}
 					onSubmit={handleSendMessage}
 					onStop={handleStopGeneration}
 					{isGenerating}
 					placeholder="send a message"
+					viewTransitionName="chat-input"
 				/>
 			</div>
 		</div>

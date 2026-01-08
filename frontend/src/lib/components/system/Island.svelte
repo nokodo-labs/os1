@@ -147,9 +147,10 @@
 	})
 </script>
 
-<div style="view-transition-name: chat-header;">
+<div>
 	<header
 		class="liquid-glass mt-5 mb-0 max-h-[88px] overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+		style="view-transition-name: chat-header;"
 	>
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>
 

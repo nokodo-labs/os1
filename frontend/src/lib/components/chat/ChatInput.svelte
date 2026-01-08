@@ -14,6 +14,7 @@
 		onSubmit?: (message: string) => void
 		onStop?: () => void
 		onKeyDown?: (event: KeyboardEvent) => boolean | void
+		viewTransitionName?: string
 	}
 
 	let {
@@ -25,6 +26,7 @@
 		onSubmit,
 		onStop,
 		onKeyDown,
+		viewTransitionName,
 	}: ChatInputProps = $props()
 
 	let textarea: HTMLTextAreaElement
@@ -132,6 +134,7 @@
 	<div
 		class="liquid-glass chat-input relative w-full rounded-full transition-all duration-300"
 		class:liquid-glass--frosted={isFocused}
+		style={viewTransitionName ? `view-transition-name: ${viewTransitionName};` : undefined}
 	>
 		<div class="relative z-10 px-1 py-1">
 			<div class="flex items-center gap-2 px-2.5 py-2.5">

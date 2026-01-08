@@ -288,10 +288,12 @@
 				>
 					<!-- System chrome: island (top header) -->
 					<div
-						class="relative z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
+						class="pointer-events-none absolute top-0 right-0 left-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
 						bind:this={islandShell}
 					>
-						<Island />
+						<div class="pointer-events-auto">
+							<Island />
+						</div>
 					</div>
 
 					{@render children()}
