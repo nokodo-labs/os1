@@ -367,6 +367,7 @@
 			/>
 
 			<div
+				style="view-transition-name: apps-grid;"
 				class="absolute top-full right-0 left-0 mt-14 transition-opacity duration-200 {isChatMode
 					? 'pointer-events-none opacity-0'
 					: 'opacity-100'}"
