@@ -1,5 +1,5 @@
 <script lang="ts">
-	import AppModal from '$lib/components/common/AppModal.svelte'
+	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 
 	interface ArchivedChatsModalProps {
 		open: boolean
@@ -31,7 +31,7 @@
 	]
 </script>
 
-<AppModal
+<BaseModal
 	{open}
 	title="archived chats"
 	description="browse and restore archived threads"
@@ -70,4 +70,4 @@
 			</button>
 		</div>
 	</div>
-</AppModal>
+</BaseModal>

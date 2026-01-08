@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { api } from '$lib/api'
+	import { api } from '$lib/api/index'
 	import * as Button from '$lib/components/ui/button'
 
 	let email = $state('')

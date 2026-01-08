@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
+	import Notification from '$lib/components/system/Notification.svelte'
 	import {
 		type ToolExecution,
 		formatToolEventLine,
@@ -45,16 +46,12 @@
 	let notificationPreview = $derived(
 		(() => {
 			if (execution.toolCall.name !== 'send_notification') return null
-			const title =
-				typeof execution.toolCall.arguments.title === 'string'
-					? execution.toolCall.arguments.title
-					: null
-			const body =
-				typeof execution.toolCall.arguments.body === 'string'
-					? execution.toolCall.arguments.body
-					: null
+			const args = execution.toolCall.arguments
+			const title = typeof args.title === 'string' ? args.title : null
+			const body = typeof args.body === 'string' ? args.body : null
+			const iconUrl = typeof args.icon_url === 'string' ? args.icon_url : null
 			if (!title || !body) return null
-			return { title, body }
+			return { title, body, iconUrl }
 		})()
 	)
 
@@ -189,12 +186,22 @@
 		{#if hasNativeUI}
 			<div class="border-t border-white/10 px-4 py-3">
 				{#if execution.toolCall.name === 'send_notification' && notificationPreview}
-					<div class="rounded-lg border border-white/10 bg-white/5 p-3">
-						<div class="text-sm font-semibold text-white/90">
-							{notificationPreview.title}
-						</div>
-						<div class="mt-1 text-sm text-white/60">{notificationPreview.body}</div>
-					</div>
+					<Notification
+						notification={{
+							id: execution.toolCall.id,
+							user_id: '',
+							event_id: '',
+							dismissed: false,
+							created_at: new Date().toISOString(),
+							updated_at: new Date().toISOString(),
+							read_at: null,
+						}}
+						iconUrl={notificationPreview.iconUrl}
+						title={notificationPreview.title}
+						body={notificationPreview.body}
+						formattedTime="preview"
+						isUnread={true}
+					/>
 				{/if}
 
 				{#if execution.events.length > 0}

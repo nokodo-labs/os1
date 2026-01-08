@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte'
 
-	import AppNotification from '$lib/components/icons/AppNotification.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
-	import XMark from '$lib/components/icons/XMark.svelte'
+	import Notification from '$lib/components/system/Notification.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agentsById, ensureAgents } from '$lib/stores/agents'
 	import {
@@ -13,7 +11,7 @@
 		markNotificationRead,
 		notifications,
 		unreadCount,
-		type Notification,
+		type Notification as NotificationType,
 	} from '$lib/stores/notifications'
 	import { isLoggedIn } from '$lib/stores/session'
 
@@ -54,17 +52,17 @@
 		if (agentIds.length > 0) void ensureAgents(agentIds)
 	})
 
-	function getNotificationTitle(notif: Notification): string {
+	function getNotificationTitle(notif: NotificationType): string {
 		const data = notif.event?.data as Record<string, unknown> | undefined
 		return (data?.title as string) || notif.event?.type || 'notification'
 	}
 
-	function getNotificationBody(notif: Notification): string {
+	function getNotificationBody(notif: NotificationType): string {
 		const data = notif.event?.data as Record<string, unknown> | undefined
 		return (data?.body as string) || ''
 	}
 
-	function getNotificationIcon(notif: Notification): string | null {
+	function getNotificationIcon(notif: NotificationType): string | null {
 		const data = notif.event?.data as Record<string, unknown> | undefined
 		const explicit = data && typeof data.icon_url === 'string' ? data.icon_url : null
 		if (explicit) return explicit
@@ -147,74 +145,16 @@
 						</div>
 					{:else}
 						{#each $notifications as notif (notif.id)}
-							{@const iconUrl = getNotificationIcon(notif)}
-							{@const isUnread = !notif.read_at}
-							<div
-								class="group relative flex items-start gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-150 {isUnread
-									? 'bg-white/8'
-									: 'bg-white/3'} hover:bg-white/10"
-							>
-								<div
-									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/8 text-white/85"
-								>
-									{#if iconUrl}
-										<img
-											src={iconUrl}
-											alt=""
-											class="h-5 w-5 rounded-full object-cover"
-										/>
-									{:else}
-										<AppNotification className="h-5 w-5" />
-									{/if}
-								</div>
-								<div class="min-w-0 flex-1">
-									<div
-										class="flex min-w-0 items-center gap-2 text-[0.8125rem] font-semibold {isUnread
-											? 'text-white/90'
-											: 'text-white/70'}"
-									>
-										<span class="min-w-0 truncate"
-											>{getNotificationTitle(notif)}</span
-										>
-										{#if isUnread}
-											<span class="h-1.5 w-1.5 rounded-full bg-blue-400"
-											></span>
-										{/if}
-									</div>
-									<div
-										class="truncate text-[0.8125rem] {isUnread
-											? 'text-white/60'
-											: 'text-white/45'}"
-									>
-										{getNotificationBody(notif)}
-									</div>
-									<div class="mt-1 text-[0.6875rem] text-white/40">
-										{formatTime(notif.created_at)}
-									</div>
-								</div>
-								<div
-									class="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-								>
-									{#if isUnread}
-										<button
-											type="button"
-											class="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white/60 transition-colors hover:bg-white/20 hover:text-white/90"
-											title="mark as read"
-											onclick={() => handleMarkRead(notif.id)}
-										>
-											<Check className="h-3 w-3" />
-										</button>
-									{/if}
-									<button
-										type="button"
-										class="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white/60 transition-colors hover:bg-white/20 hover:text-white/90"
-										title="dismiss"
-										onclick={() => handleDismiss(notif.id)}
-									>
-										<XMark className="h-3 w-3" />
-									</button>
-								</div>
-							</div>
+							<Notification
+								notification={notif}
+								iconUrl={getNotificationIcon(notif)}
+								title={getNotificationTitle(notif)}
+								body={getNotificationBody(notif)}
+								formattedTime={formatTime(notif.created_at)}
+								isUnread={!notif.read_at}
+								onMarkRead={handleMarkRead}
+								onDismiss={handleDismiss}
+							/>
 						{/each}
 					{/if}
 				</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
-	import AppModal from '$lib/components/common/AppModal.svelte'
 	import DebugMenu from '$lib/components/debug/DebugMenu.svelte'
+	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import type { createThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { currentUser } from '$lib/stores/session'
 
@@ -19,7 +19,7 @@
 	let showAdminDebug = $derived(Boolean($currentUser?.is_superuser))
 </script>
 
-<AppModal
+<BaseModal
 	{open}
 	title="settings"
 	description="manage your preferences"
@@ -61,4 +61,4 @@
 			</button>
 		</div>
 	</div>
-</AppModal>
+</BaseModal>

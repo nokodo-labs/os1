@@ -1,5 +1,5 @@
 <script lang="ts">
-	import MessageTimestamp from '$lib/components/chat/MessageTimestamp.svelte'
+	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Snippet } from 'svelte'
 
 	interface Props {
@@ -46,7 +46,7 @@
 	role="article"
 >
 	{#if timestamp}
-		<MessageTimestamp
+		<Timestamp
 			{timestamp}
 			className="text-xs text-black/50 transition-opacity duration-200 dark:text-white/50 {isHovered
 				? 'opacity-100'

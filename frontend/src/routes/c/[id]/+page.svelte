@@ -4,17 +4,17 @@
 	import type { components } from '$lib/api/types'
 	import { v1Client } from '$lib/api/v1/client'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
-	import Button from '$lib/components/chat/Button.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
+	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
-	import NokodoLoader from '$lib/components/common/NokodoLoader.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agentsList, loadAgents } from '$lib/stores/agents'
 	import {
@@ -761,9 +761,6 @@
 		return true
 	}
 
-	const messageActionButtonClass =
-		'flex h-6 w-6 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]'
-
 	let hasRenderableMessages = $derived(
 		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null || runError
 	)
@@ -839,38 +836,32 @@
 									align={item.align}
 								>
 									{#snippet actions()}
-										<button
-											type="button"
-											class={messageActionButtonClass}
+										<MessageActionButton
 											onclick={() =>
 												handleCopyMessage(
 													contentPartsToText(item.message.content)
 												)}
-											aria-label="copy message"
+											ariaLabel="copy message"
 										>
 											<DocumentDuplicate
 												className="h-4 w-4"
 												strokeWidth="2"
 											/>
-										</button>
+										</MessageActionButton>
 										{#if item.align === 'right'}
-											<button
-												type="button"
-												class={messageActionButtonClass}
+											<MessageActionButton
 												onclick={() => handleEditMessage(item.message.id)}
-												aria-label="edit message"
+												ariaLabel="edit message"
 											>
 												<Pencil className="h-4 w-4" strokeWidth="2" />
-											</button>
-											<button
-												type="button"
-												class={messageActionButtonClass}
+											</MessageActionButton>
+											<MessageActionButton
 												onclick={() =>
 													requestDeleteUserMessage(item.message.id)}
-												aria-label="delete message"
+												ariaLabel="delete message"
 											>
 												<GarbageBin className="h-4 w-4" strokeWidth="2" />
-											</button>
+											</MessageActionButton>
 										{/if}
 									{/snippet}
 								</UserChatMessage>
@@ -932,9 +923,7 @@
 										{/snippet}
 
 										{#snippet actions()}
-											<button
-												type="button"
-												class={messageActionButtonClass}
+											<MessageActionButton
 												onclick={() =>
 													handleCopyMessage(
 														isStreamingBlock
@@ -945,25 +934,23 @@
 																	)
 																: ''
 													)}
-												aria-label="copy message"
+												ariaLabel="copy message"
 											>
 												<DocumentDuplicate
 													className="h-4 w-4"
 													strokeWidth="2"
 												/>
-											</button>
+											</MessageActionButton>
 											{#if !isStreamingBlock}
-												<button
-													type="button"
-													class={messageActionButtonClass}
+												<MessageActionButton
 													onclick={handleRegenerateMessage}
-													aria-label="retry"
+													ariaLabel="retry"
 												>
 													<ArrowPath
 														className="h-4 w-4"
 														strokeWidth="2"
 													/>
-												</button>
+												</MessageActionButton>
 											{/if}
 										{/snippet}
 									</AssistantChatMessage>
@@ -979,15 +966,13 @@
 								timestamp={optimisticUserMessage.timestamp}
 							>
 								{#snippet actions()}
-									<button
-										type="button"
-										class={messageActionButtonClass}
+									<MessageActionButton
 										onclick={() =>
 											handleCopyMessage(optimisticUserMessage?.content ?? '')}
-										aria-label="copy message"
+										ariaLabel="copy message"
 									>
 										<DocumentDuplicate className="h-4 w-4" strokeWidth="2" />
-									</button>
+									</MessageActionButton>
 								{/snippet}
 							</UserChatMessage>
 						</div>
@@ -1004,9 +989,13 @@
 								tone="error"
 							>
 								{#snippet actions()}
-									<Button variant="glass" size="sm" onclick={retryLastRun}>
+									<button
+										type="button"
+										class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-white/70 transition-colors hover:text-white/95"
+										onclick={retryLastRun}
+									>
 										retry
-									</Button>
+									</button>
 								{/snippet}
 							</AssistantChatMessage>
 						</div>

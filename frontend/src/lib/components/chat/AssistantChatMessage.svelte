@@ -1,5 +1,5 @@
 <script lang="ts">
-	import MessageTimestamp from '$lib/components/chat/MessageTimestamp.svelte'
+	import Timestamp from '$lib/components/Timestamp.svelte'
 	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import type { Snippet } from 'svelte'
@@ -80,7 +80,7 @@
 		<div class="flex items-center gap-2">
 			<span class="text-sm font-semibold text-white/90">{modelName}</span>
 			{#if timestamp}
-				<MessageTimestamp
+				<Timestamp
 					{timestamp}
 					className="text-xs text-white/40 transition-opacity duration-200 {isHovered
 						? 'opacity-100'

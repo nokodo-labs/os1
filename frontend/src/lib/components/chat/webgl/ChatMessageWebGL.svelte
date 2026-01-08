@@ -1,5 +1,5 @@
 <script lang="ts">
-	import MessageTimestamp from '$lib/components/chat/MessageTimestamp.svelte'
+	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { getBackgroundContext } from '$lib/contexts/backgroundContext'
 	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
@@ -355,7 +355,7 @@ void main() {
 		</div>
 		{#if timestamp}
 			<div class="message-timestamp">
-				<MessageTimestamp {timestamp} />
+				<Timestamp {timestamp} />
 			</div>
 		{/if}
 	</div>

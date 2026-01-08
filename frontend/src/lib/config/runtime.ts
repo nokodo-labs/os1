@@ -1,4 +1,4 @@
-import { api } from '$lib/api'
+import { api } from '$lib/api/index'
 import { setV1ApiOrigin } from '$lib/api/v1/client'
 import { loadPublicConfig } from '$lib/config/public'
 
