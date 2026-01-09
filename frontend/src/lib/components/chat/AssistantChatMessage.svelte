@@ -5,7 +5,7 @@
 	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import type { Snippet } from 'svelte'
-	import Connecting from './Connecting.svelte'
+	import ChatGptLoadingIndicator from './ChatGptLoadingIndicator.svelte'
 
 	interface Props {
 		content: string
@@ -15,6 +15,7 @@
 		tail?: Snippet
 		isLastMessage?: boolean
 		isStreaming?: boolean
+		showStreamingPlaceholder?: boolean
 		modelName?: string
 		avatarUrl?: string | null
 		tone?: 'default' | 'error'
@@ -32,6 +33,7 @@
 		tail,
 		isLastMessage = false,
 		isStreaming = false,
+		showStreamingPlaceholder = true,
 		modelName = 'assistant',
 		avatarUrl = null,
 		tone = 'default',
@@ -113,11 +115,11 @@
 					class="assistant-markdown text-destructive **:text-destructive! text-[0.95rem] leading-relaxed wrap-break-word"
 				/>
 			</div>
-		{:else if isStreaming && !hasContent}
-			<div
-				class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[0.95rem] leading-relaxed text-white/60"
-			>
-				<Connecting />
+		{:else if isStreaming && !hasContent && showStreamingPlaceholder}
+			<div class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60">
+				<div class="my-3">
+					<ChatGptLoadingIndicator />
+				</div>
 			</div>
 		{:else if hasContent}
 			<MarkdownRenderer

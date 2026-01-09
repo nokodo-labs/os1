@@ -1,9 +1,9 @@
 <script lang="ts">
+	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
 	import { tryUseDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { Streamdown, type Extension } from 'svelte-streamdown'
 	import Code from 'svelte-streamdown/code'
 	import Math from 'svelte-streamdown/math'
-	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
 
 	type Props = {
 		content: string
