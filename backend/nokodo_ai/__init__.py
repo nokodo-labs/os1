@@ -51,7 +51,7 @@ from .messages import (
 from .thread import Thread
 from .tool import Tool, ToolDefinition, tool
 from .types import JSONArray, JSONObject, JSONValue
-from .vectorstore import Vectorstore
+from .vectorstores import Vectorstore
 
 
 __all__ = [
