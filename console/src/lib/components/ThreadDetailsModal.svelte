@@ -28,6 +28,18 @@
 		onClose?.()
 	}
 
+	/**
+	 * Render content with visible special characters for debugging.
+	 * Shows \n, \r, \t as escaped sequences with visual markers.
+	 */
+	function renderDebugText(text: string): string {
+		return text
+			.replace(/\r\n/g, '⏎\r\n')
+			.replace(/\n/g, '⏎\n')
+			.replace(/\r/g, '↵\r')
+			.replace(/\t/g, '→\t')
+	}
+
 	function contentToText(message: Message) {
 		const parts = message.content ?? []
 		const rendered = parts
@@ -41,7 +53,9 @@
 				return ''
 			})
 			.filter(Boolean)
-		return rendered.join('\n\n')
+		// Join with newlines and apply debug rendering
+		const raw = rendered.join('\n\n')
+		return renderDebugText(raw)
 	}
 
 	$effect(() => {
@@ -68,11 +82,14 @@
 
 {#if open}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-		<Card class="w-full max-w-4xl rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
+		<Card class="w-full max-w-7xl rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
 			<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 				<div>
 					<CardTitle>thread details</CardTitle>
 					<CardDescription>{threadId ?? ''}</CardDescription>
+					<div class="mt-1 text-xs text-zinc-500">
+						special chars: ⏎ = newline, → = tab
+					</div>
 				</div>
 				<Button variant="outline" class="rounded-xl" onclick={close}>close</Button>
 			</CardHeader>
@@ -134,7 +151,7 @@
 											class="rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"
 										>
 											<div class="flex items-start justify-between gap-3">
-												<div class="min-w-0">
+												<div class="min-w-0 flex-1">
 													<div class="truncate text-xs text-zinc-400">
 														{m.sender_user_id
 															? `user:${m.sender_user_id}`
@@ -142,11 +159,10 @@
 																? `agent:${m.sender_agent_id}`
 																: (m.type ?? 'message')}
 													</div>
-													<div
-														class="mt-2 font-mono text-xs whitespace-pre-wrap text-zinc-100"
-													>
-														{contentToText(m) || '(no text)'}
-													</div>
+													<pre
+														class="mt-2 max-h-96 overflow-auto font-mono text-xs break-all whitespace-pre-wrap text-zinc-100">{contentToText(
+															m
+														) || '(no text)'}</pre>
 												</div>
 												<div class="shrink-0 text-xs text-zinc-500">
 													{new Date(m.created_at).toLocaleString()}

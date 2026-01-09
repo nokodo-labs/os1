@@ -15,60 +15,38 @@
 		CardTitle,
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
+	import { ArrowDown, ArrowUp } from '@lucide/svelte'
 
-	type SortKey = 'updated_at' | 'last_activity_at' | 'created_at' | 'title' | 'owner_id'
+	type SortKey = 'last_activity_at' | 'updated_at' | 'created_at' | 'title'
+	type SortDir = 'asc' | 'desc'
 
-	const sortOrder: SortKey[] = [
-		'updated_at',
-		'last_activity_at',
-		'created_at',
-		'title',
-		'owner_id',
-	]
+	const sortOrder: SortKey[] = ['last_activity_at', 'updated_at', 'created_at', 'title']
 
 	function sortLabel(key: SortKey) {
 		switch (key) {
-			case 'updated_at':
-				return 'latest updated'
 			case 'last_activity_at':
-				return 'latest activity'
+				return 'activity at'
+			case 'updated_at':
+				return 'updated at'
 			case 'created_at':
-				return 'newest created'
+				return 'created at'
 			case 'title':
-				return 'title (a→z)'
-			case 'owner_id':
-				return 'owner id (a→z)'
+				return 'title'
 		}
 	}
 
-	function parseDate(value: string | null | undefined) {
-		if (!value) return 0
-		const date = new Date(value).getTime()
-		return Number.isFinite(date) ? date : 0
+	function defaultSortDir(sort: SortKey): SortDir {
+		if (sort === 'title') return 'asc'
+		return 'desc'
 	}
 
-	function sortThreads(list: Thread[], key: SortKey) {
-		const sorted = [...list]
-		sorted.sort((a, b) => {
-			if (key === 'title') {
-				return (a.title ?? '').localeCompare(b.title ?? '')
-			}
-			if (key === 'owner_id') {
-				return (a.owner_id ?? '').localeCompare(b.owner_id ?? '')
-			}
-
-			const aValue = parseDate(a[key])
-			const bValue = parseDate(b[key])
-			return bValue - aValue
-		})
-		return sorted
-	}
-
-	const DEFAULT_SORT: SortKey = 'updated_at'
+	const DEFAULT_SORT: SortKey = 'last_activity_at'
 	const SORT_PARAM = 'sort'
+	const SORT_DIR_PARAM = 'sort_dir'
 	const USER_PARAM = 'user'
 
 	let sortKey = $state<SortKey>(DEFAULT_SORT)
+	let sortDir = $state<SortDir>(defaultSortDir(DEFAULT_SORT))
 	let ownerIdFilter = $state<string | null>(null)
 	let pageIndex = $state(0)
 	let limit = $state(20)
@@ -116,8 +94,16 @@
 
 	function setSort(next: SortKey) {
 		sortKey = next
+		sortDir = defaultSortDir(next)
 		pageIndex = 0
-		updateQueryParams({ [SORT_PARAM]: next })
+		updateQueryParams({ [SORT_PARAM]: next, [SORT_DIR_PARAM]: sortDir })
+	}
+
+	function toggleSortDir() {
+		const next = sortDir === 'asc' ? 'desc' : 'asc'
+		sortDir = next
+		pageIndex = 0
+		updateQueryParams({ [SORT_DIR_PARAM]: next })
 	}
 
 	function clearOwnerFilter() {
@@ -133,14 +119,17 @@
 		const sort = sp.get(SORT_PARAM)
 		const nextSort =
 			sort && sortOrder.includes(sort as SortKey) ? (sort as SortKey) : DEFAULT_SORT
+		const dir = sp.get(SORT_DIR_PARAM)
+		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
 		const nextOwner = user?.trim() ? user : null
 
-		if (sortKey !== nextSort || ownerIdFilter !== nextOwner) {
+		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== nextOwner) {
 			pageIndex = 0
 		}
 
 		sortKey = nextSort
+		sortDir = nextDir
 		ownerIdFilter = nextOwner
 	})
 
@@ -149,14 +138,22 @@
 
 		const skip = pageIndex * limit
 		sortKey
+		sortDir
 		refreshToken
 
 		isLoading = true
 		error = null
 
-		ThreadsService.listThreadsThreadsGet(ownerIdFilter ?? undefined, skip, limit, true)
+		ThreadsService.listThreadsThreadsGet(
+			ownerIdFilter ?? undefined,
+			skip,
+			limit,
+			sortKey,
+			sortDir,
+			true
+		)
 			.then((result) => {
-				threads = sortThreads(result, sortKey)
+				threads = result
 				hasNext = result.length === limit
 			})
 			.catch((e: any) => {
@@ -187,6 +184,20 @@
 					{/each}
 				</SelectContent>
 			</Select>
+			<Button
+				variant="outline"
+				class="rounded-xl px-3"
+				onclick={() => toggleSortDir()}
+				disabled={isLoading}
+				title="toggle sort direction"
+				aria-label="toggle sort direction"
+			>
+				{#if sortDir === 'asc'}
+					<ArrowUp class="h-4 w-4" />
+				{:else}
+					<ArrowDown class="h-4 w-4" />
+				{/if}
+			</Button>
 			{#if ownerIdFilter}
 				<Button
 					variant="outline"

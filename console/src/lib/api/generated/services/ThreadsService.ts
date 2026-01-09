@@ -51,6 +51,8 @@ export class ThreadsService {
      * @param ownerId
      * @param skip
      * @param limit
+     * @param sortBy
+     * @param sortDir
      * @param includeHidden
      * @returns Thread Successful Response
      * @throws ApiError
@@ -59,6 +61,8 @@ export class ThreadsService {
         ownerId?: (string | null),
         skip?: number,
         limit: number = 20,
+        sortBy: 'last_activity_at' | 'created_at' | 'updated_at' | 'title' = 'last_activity_at',
+        sortDir: 'asc' | 'desc' = 'desc',
         includeHidden: boolean = false,
     ): CancelablePromise<Array<Thread>> {
         return __request(OpenAPI, {
@@ -68,6 +72,8 @@ export class ThreadsService {
                 'owner_id': ownerId,
                 'skip': skip,
                 'limit': limit,
+                'sort_by': sortBy,
+                'sort_dir': sortDir,
                 'include_hidden': includeHidden,
             },
             errors: {

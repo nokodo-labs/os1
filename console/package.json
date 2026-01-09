@@ -9,8 +9,8 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"format": "prettier --write .",
-		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts",
-		"generate:api-client": "openapi --client fetch --useUnionTypes --input http://localhost:8000/v1/openapi.json --output src/lib/api/generated",
+		"generate:api-types": "openapi-typescript http://localhost:8000/v1/openapi.json -o src/lib/api/types.ts && node scripts/postprocess-openapi-types.mjs",
+		"generate:api-client": "openapi --client fetch --useUnionTypes --input http://localhost:8000/v1/openapi.json --output src/lib/api/generated && node scripts/postprocess-openapi-client.mjs",
 		"generate:api": "npm run generate:api-types && npm run generate:api-client"
 	},
 	"devDependencies": {

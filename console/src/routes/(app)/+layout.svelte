@@ -4,6 +4,7 @@
 	import {
 		Bot,
 		Box,
+		Brain,
 		FlaskConical,
 		LayoutDashboard,
 		MessageSquare,
@@ -115,6 +116,17 @@
 			>
 				<MessageSquare class="h-4 w-4" />
 				threads
+			</a>
+			<a
+				href="/memories"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/memories'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Brain class="h-4 w-4" />
+				memories
 			</a>
 			<a
 				href="/users"

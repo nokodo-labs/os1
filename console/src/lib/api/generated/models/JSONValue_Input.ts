@@ -2,5 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type JSONValue_Input = (boolean | number | string | Record<string, JSONValue_Input> | Array<JSONValue_Input> | null);
-
+export type JSONValue_Input = null | boolean | number | string | Record<string, unknown> | unknown[]

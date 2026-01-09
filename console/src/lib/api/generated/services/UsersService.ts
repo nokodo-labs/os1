@@ -13,12 +13,16 @@ export class UsersService {
      * Retrieve users.
      * @param skip
      * @param limit
+     * @param sortBy
+     * @param sortDir
      * @returns User Successful Response
      * @throws ApiError
      */
     public static readUsersUsersGet(
         skip?: number,
         limit: number = 100,
+        sortBy: 'created_at' | 'updated_at' | 'email' | 'display_name' | 'is_active' | 'is_superuser' = 'created_at',
+        sortDir: 'asc' | 'desc' = 'desc',
     ): CancelablePromise<Array<User>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -26,6 +30,8 @@ export class UsersService {
             query: {
                 'skip': skip,
                 'limit': limit,
+                'sort_by': sortBy,
+                'sort_dir': sortDir,
             },
             errors: {
                 400: `bad request`,

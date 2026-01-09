@@ -44,6 +44,8 @@ export class TasksService {
      * @param statusFilter
      * @param skip
      * @param limit
+     * @param sortBy
+     * @param sortDir
      * @returns Task Successful Response
      * @throws ApiError
      */
@@ -52,6 +54,8 @@ export class TasksService {
         statusFilter?: (TaskStatus | null),
         skip?: number,
         limit: number = 50,
+        sortBy: 'created_at' | 'updated_at' | 'status' | 'task_type' | 'stage' | 'last_event_at' = 'created_at',
+        sortDir: 'asc' | 'desc' = 'desc',
     ): CancelablePromise<Array<Task>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -61,6 +65,8 @@ export class TasksService {
                 'status_filter': statusFilter,
                 'skip': skip,
                 'limit': limit,
+                'sort_by': sortBy,
+                'sort_dir': sortDir,
             },
             errors: {
                 400: `bad request`,

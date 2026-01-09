@@ -10,28 +10,6 @@ import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class PromptsService {
     /**
-     * List Prompts
-     * List prompts.
-     * @returns Prompt Successful Response
-     * @throws ApiError
-     */
-    public static listPromptsPromptsGet(): CancelablePromise<Array<Prompt>> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/prompts',
-            errors: {
-                400: `bad request`,
-                401: `unauthorized`,
-                403: `forbidden`,
-                404: `not found`,
-                409: `conflict`,
-                422: `validation error`,
-                429: `too many requests`,
-                500: `internal server error`,
-            },
-        });
-    }
-    /**
      * Create Prompt
      * Create a prompt.
      * @param requestBody
@@ -46,6 +24,43 @@ export class PromptsService {
             url: '/prompts',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * List Prompts
+     * List prompts.
+     * @param skip
+     * @param limit
+     * @param sortBy
+     * @param sortDir
+     * @returns Prompt Successful Response
+     * @throws ApiError
+     */
+    public static listPromptsPromptsGet(
+        skip?: number,
+        limit: number = 50,
+        sortBy: 'command' | 'created_at' | 'updated_at' = 'command',
+        sortDir: 'asc' | 'desc' = 'asc',
+    ): CancelablePromise<Array<Prompt>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/prompts',
+            query: {
+                'skip': skip,
+                'limit': limit,
+                'sort_by': sortBy,
+                'sort_dir': sortDir,
+            },
             errors: {
                 400: `bad request`,
                 401: `unauthorized`,

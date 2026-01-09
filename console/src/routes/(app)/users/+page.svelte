@@ -15,7 +15,7 @@
 		CardTitle,
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { Plus } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Plus } from '@lucide/svelte'
 
 	type SortKey =
 		| 'updated_at'
@@ -25,51 +25,32 @@
 		| 'is_superuser'
 		| 'is_active'
 
+	type SortDir = 'asc' | 'desc'
+
 	const sortOptions: Array<{ value: SortKey; label: string }> = [
-		{ value: 'updated_at', label: 'latest updated' },
-		{ value: 'created_at', label: 'newest created' },
-		{ value: 'email', label: 'email (a→z)' },
-		{ value: 'display_name', label: 'display name (a→z)' },
-		{ value: 'is_superuser', label: 'superuser first' },
-		{ value: 'is_active', label: 'active first' },
+		{ value: 'updated_at', label: 'updated at' },
+		{ value: 'created_at', label: 'created at' },
+		{ value: 'email', label: 'email' },
+		{ value: 'display_name', label: 'display name' },
+		{ value: 'is_superuser', label: 'is superuser' },
+		{ value: 'is_active', label: 'is active' },
 	]
 
-	function parseDate(value: string | null | undefined) {
-		if (!value) return 0
-		const date = new Date(value).getTime()
-		return Number.isFinite(date) ? date : 0
-	}
-
-	function sortUsers(list: User[], key: SortKey) {
-		const sorted = [...list]
-		sorted.sort((a, b) => {
-			if (key === 'email') return (a.email ?? '').localeCompare(b.email ?? '')
-			if (key === 'display_name') {
-				return (a.display_name ?? '').localeCompare(b.display_name ?? '')
-			}
-			if (key === 'is_superuser') {
-				const aValue = a.is_superuser ? 1 : 0
-				const bValue = b.is_superuser ? 1 : 0
-				return bValue - aValue
-			}
-			if (key === 'is_active') {
-				const aValue = a.is_active === false ? 0 : 1
-				const bValue = b.is_active === false ? 0 : 1
-				return bValue - aValue
-			}
-			const aValue = parseDate(a[key])
-			const bValue = parseDate(b[key])
-			return bValue - aValue
-		})
-		return sorted
+	function defaultSortDir(sort: SortKey): SortDir {
+		if (sort === 'email' || sort === 'display_name') return 'asc'
+		if (sort === 'is_active' || sort === 'is_superuser') return 'desc'
+		return 'desc'
 	}
 
 	let pageIndex = $state(0)
 	let limit = $state(50)
 	let refreshToken = $state(0)
-	let sortKey = $state<SortKey>('updated_at')
+	const DEFAULT_SORT: SortKey = 'updated_at'
+	let sortKey = $state<SortKey>(DEFAULT_SORT)
+	let sortDir = $state<SortDir>(defaultSortDir(DEFAULT_SORT))
 
 	const SORT_PARAM = 'sort'
+	const SORT_DIR_PARAM = 'sort_dir'
 
 	let users = $state<User[]>([])
 	let isLoading = $state(false)
@@ -107,8 +88,16 @@
 
 	function setSort(next: SortKey) {
 		sortKey = next
+		sortDir = defaultSortDir(next)
 		pageIndex = 0
-		updateQueryParams({ [SORT_PARAM]: next })
+		updateQueryParams({ [SORT_PARAM]: next, [SORT_DIR_PARAM]: sortDir })
+	}
+
+	function toggleSortDir() {
+		const next = sortDir === 'asc' ? 'desc' : 'asc'
+		sortDir = next
+		pageIndex = 0
+		updateQueryParams({ [SORT_DIR_PARAM]: next })
 	}
 
 	$effect(() => {
@@ -117,9 +106,13 @@
 		const next =
 			sort && sortOptions.some((o) => o.value === (sort as SortKey))
 				? (sort as SortKey)
-				: 'updated_at'
-		if (sortKey !== next) {
+				: DEFAULT_SORT
+		const dir = $page.url.searchParams.get(SORT_DIR_PARAM)
+		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(next)
+
+		if (sortKey !== next || sortDir !== nextDir) {
 			sortKey = next
+			sortDir = nextDir
 			pageIndex = 0
 		}
 	})
@@ -129,14 +122,15 @@
 
 		const skip = pageIndex * limit
 		sortKey
+		sortDir
 		refreshToken
 
 		isLoading = true
 		error = null
 
-		UsersService.readUsersUsersGet(skip, limit)
+		UsersService.readUsersUsersGet(skip, limit, sortKey, sortDir)
 			.then((result) => {
-				users = sortUsers(result, sortKey)
+				users = result
 				hasNext = result.length === limit
 			})
 			.catch((e: any) => {
@@ -199,6 +193,20 @@
 						{/each}
 					</SelectContent>
 				</Select>
+				<Button
+					variant="outline"
+					class="rounded-xl px-3"
+					onclick={() => toggleSortDir()}
+					disabled={isLoading}
+					title="toggle sort direction"
+					aria-label="toggle sort direction"
+				>
+					{#if sortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
+				</Button>
 				<Button
 					variant="outline"
 					class="rounded-xl"

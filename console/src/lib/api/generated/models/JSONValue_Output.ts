@@ -2,5 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type JSONValue_Output = (boolean | number | string | Record<string, JSONValue_Output> | Array<JSONValue_Output> | null);
-
+export type JSONValue_Output =
+	| null
+	| boolean
+	| number
+	| string
+	| Record<string, unknown>
+	| unknown[]

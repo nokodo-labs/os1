@@ -41,6 +41,8 @@ export class MemoriesService {
      * @param userId
      * @param skip
      * @param limit
+     * @param sortBy
+     * @param sortDir
      * @returns Memory Successful Response
      * @throws ApiError
      */
@@ -48,6 +50,8 @@ export class MemoriesService {
         userId: string,
         skip?: number,
         limit: number = 50,
+        sortBy: 'updated_at' | 'created_at' | 'category' | 'last_accessed_at' | 'confidence' = 'updated_at',
+        sortDir: 'asc' | 'desc' = 'desc',
     ): CancelablePromise<Array<Memory>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -56,6 +60,8 @@ export class MemoriesService {
                 'user_id': userId,
                 'skip': skip,
                 'limit': limit,
+                'sort_by': sortBy,
+                'sort_dir': sortDir,
             },
             errors: {
                 400: `bad request`,
