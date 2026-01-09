@@ -378,14 +378,6 @@
 		return item?.kind === 'assistant' ? item.message : null
 	}
 
-	function getBlockLastAssistantMessage(block: RunBlock): ApiMessage | null {
-		for (let i = block.items.length - 1; i >= 0; i--) {
-			const item = block.items[i]
-			if (item.kind === 'assistant') return item.message
-		}
-		return null
-	}
-
 	function blockHasStreamingAssistant(block: RunBlock): boolean {
 		return block.items.some((item) => item.kind === 'streaming_assistant')
 	}
@@ -1192,15 +1184,32 @@
 											{#if !isStreamingBlock}
 												<MessageActionButton
 													onclick={() => {
-														const userItem = block.items.find(
-															(i) => i.kind === 'user'
-														)
-														const lastAssistant =
-															getBlockLastAssistantMessage(block)
-														const parentId = userItem
-															? userItem.message.id
-															: (lastAssistant?.parent_id ?? null)
-														handleRegenerateMessage(parentId)
+														// Find the user message that started this run
+														// by walking up the tree from the first response
+														const findRunUserMessage = ():
+															| string
+															| null => {
+															const firstResponseId =
+																block.responseRootId
+															if (!firstResponseId) return null
+															const firstResponse =
+																messageTree.get(firstResponseId)
+															if (!firstResponse) return null
+															// Walk up to find the user message
+															let parentId = firstResponse.parent_id
+															while (parentId) {
+																const parent =
+																	messageTree.get(parentId)
+																if (!parent) break
+																if (parent.type === 'user')
+																	return parent.id
+																parentId = parent.parent_id
+															}
+															return null
+														}
+														// Pass the user message ID so new responses branch from there
+														const userMessageId = findRunUserMessage()
+														handleRegenerateMessage(userMessageId)
 													}}
 													ariaLabel="retry"
 												>
