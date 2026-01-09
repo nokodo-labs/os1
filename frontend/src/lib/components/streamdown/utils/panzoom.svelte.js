@@ -31,14 +31,16 @@ export const usePanzoom = (opts = {}) => {
 
 	/** @type {HTMLElement | SVGSVGElement | null} */
 	let node = null // element we transform
-	/** @type {HTMLElement | null} */
+	/** @type {HTMLElement | SVGSVGElement | null} */
 	let eventTarget = null // element we listen on (parent container if available)
 	/** @type {HTMLElement | null} */
 	let createdWrapper = null // wrapper we created if no parent existed
 	const listeners = new SvelteSet()
 
 	// restore context for expansion
+	/** @type {HTMLElement | null} */
 	let restoreParent = null
+	/** @type {ChildNode | null} */
 	let restoreNextSibling = null
 
 	// drag state
@@ -53,8 +55,6 @@ export const usePanzoom = (opts = {}) => {
 	// touch state
 	let touchMode = 'none'
 	let pinchDistance = 0
-	/** @type {{x: number, y: number} | null} */
-	let pinchCenter = null
 
 	// expand/collapse state
 	let isExpanded = $state(false)
@@ -167,10 +167,10 @@ export const usePanzoom = (opts = {}) => {
 	}
 	/** @param {MouseEvent} e */
 	function onDblClick(e) {
+		if (!node) return
 		// Ignore dblclicks that originate outside of the pan/zoom content (the node)
-		/** @type {HTMLElement | null} */
 		const t = e.target
-		if (node && t && !(t === node || node.contains(t))) {
+		if (t instanceof Node && !(t === node || node.contains(t))) {
 			return // likely UI control inside container; don't zoom
 		}
 		// Ignore dblclicks on interactive elements or those explicitly marked to ignore
@@ -192,10 +192,11 @@ export const usePanzoom = (opts = {}) => {
 				el.isContentEditable
 			)
 		}
-		if (t && isInteractive(t)) return
+		if (t instanceof HTMLElement && isInteractive(t)) return
 		e.preventDefault()
 		// Anchor double-click zoom at parent center to avoid shifts on rapid clicks
 		const baseEl = eventTarget ?? node?.parentElement ?? node
+		if (!baseEl) return
 		const base = baseEl.getBoundingClientRect()
 		const cx = base.left + base.width / 2
 		const cy = base.top + base.height / 2
@@ -263,7 +264,9 @@ export const usePanzoom = (opts = {}) => {
 
 	/** @param {TouchEvent} e */
 	function onTouchStart(e) {
-		const hasButton = e.composedPath().some((el) => el.tagName?.toLowerCase?.() === 'button')
+		const hasButton = e
+			.composedPath()
+			.some((el) => el instanceof HTMLElement && el.tagName.toLowerCase() === 'button')
 		if (hasButton) return
 		if (!node) return
 		if (animating) {
@@ -278,10 +281,6 @@ export const usePanzoom = (opts = {}) => {
 			touchMode = 'pinch'
 			const [t1, t2] = [e.touches[0], e.touches[1]]
 			pinchDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
-			pinchCenter = {
-				x: (t1.clientX + t2.clientX) / 2,
-				y: (t1.clientY + t2.clientY) / 2,
-			}
 		}
 		// prevent default scrolling/zooming
 		e.preventDefault()
@@ -318,7 +317,6 @@ export const usePanzoom = (opts = {}) => {
 			}
 			zoomAt(center.x, center.y, factor)
 			pinchDistance = dist
-			pinchCenter = center
 			e.preventDefault()
 		}
 	}
@@ -328,7 +326,6 @@ export const usePanzoom = (opts = {}) => {
 			// reset pinch state, keep resulting transform
 			touchMode = 'none'
 			pinchDistance = 0
-			pinchCenter = null
 		} else if (touchMode === 'pan') {
 			touchMode = 'none'
 		}
@@ -372,13 +369,24 @@ export const usePanzoom = (opts = {}) => {
 			}
 			apply()
 			// helper to add and track listeners with options
+			/**
+			 * @param {string} type
+			 * @param {EventListenerOrEventListenerObject} handler
+			 * @param {boolean | AddEventListenerOptions | undefined} options
+			 */
 			const add = (type, handler, options) => {
 				const n = eventTarget ?? node
+				if (!n) return () => {}
 				n.addEventListener(type, handler, options)
 				const off = () => n.removeEventListener(type, handler, options)
 				listeners.add(off)
 				return off
 			}
+			/**
+			 * @param {string} type
+			 * @param {EventListenerOrEventListenerObject} handler
+			 * @param {boolean | AddEventListenerOptions | undefined} options
+			 */
 			const addWindow = (type, handler, options) => {
 				window.addEventListener(type, handler, options)
 				const off = () => window.removeEventListener(type, handler, options)
@@ -386,13 +394,31 @@ export const usePanzoom = (opts = {}) => {
 				return off
 			}
 			// core events with passive: false where needed
-			add('mousedown', startDrag, { passive: false })
-			add('wheel', onWheel, { passive: false, capture: true })
-			add('dblclick', onDblClick, { passive: false })
-			add('touchstart', onTouchStart, { passive: false })
-			addWindow('keydown', onKeyDown, { passive: true })
+			add('mousedown', (/** @type {Event} */ e) => startDrag(/** @type {MouseEvent} */ (e)), {
+				passive: false,
+			})
+			add('wheel', (/** @type {Event} */ e) => onWheel(/** @type {WheelEvent} */ (e)), {
+				passive: false,
+				capture: true,
+			})
+			add('dblclick', (/** @type {Event} */ e) => onDblClick(/** @type {MouseEvent} */ (e)), {
+				passive: false,
+			})
+			add(
+				'touchstart',
+				(/** @type {Event} */ e) => onTouchStart(/** @type {TouchEvent} */ (e)),
+				{ passive: false }
+			)
+			addWindow(
+				'keydown',
+				(/** @type {Event} */ e) => onKeyDown(/** @type {KeyboardEvent} */ (e)),
+				{
+					passive: true,
+				}
+			)
 			// prevent text selection/scrolling while interacting
 			const t = eventTarget ?? node
+			if (!t) return () => destroy()
 			t.style.userSelect = 'none'
 			t.style.touchAction = 'none'
 			t.style.cursor = 'grab'
@@ -411,16 +437,17 @@ export const usePanzoom = (opts = {}) => {
 	/** @param {boolean} expandStatus */
 	const expand = (expandStatus) => {
 		if (!eventTarget) return
+		const target = eventTarget
 
 		if (expandStatus) {
 			// First: capture state
-			const first = eventTarget.getBoundingClientRect()
+			const first = target.getBoundingClientRect()
 
 			// Prepare placeholder in current parent
-			if (eventTarget.parentElement) {
+			if (target.parentElement) {
 				// Save context
-				restoreParent = eventTarget.parentElement
-				restoreNextSibling = eventTarget.nextSibling
+				restoreParent = target.parentElement
+				restoreNextSibling = target.nextSibling
 
 				// Lock parent height to prevent collapse
 				const styleAttributes = ['margin-block', 'height']
@@ -428,21 +455,21 @@ export const usePanzoom = (opts = {}) => {
 					if (restoreParent) {
 						restoreParent.style.setProperty(
 							attribute,
-							getComputedStyle(eventTarget).getPropertyValue(attribute)
+							getComputedStyle(target).getPropertyValue(attribute)
 						)
 					}
 				})
 			}
 
 			// Move to body to escape Z-Index traps
-			document.body.appendChild(eventTarget)
+			document.body.appendChild(target)
 
-			eventTarget.dataset.expanded = 'true'
+			target.dataset.expanded = 'true'
 			isExpanded = true
 			zoomToFit()
 
 			// Last: capture new state (now fixed on body)
-			const last = eventTarget.getBoundingClientRect()
+			const last = target.getBoundingClientRect()
 
 			const deltaX = first.left - last.left
 			const deltaY = first.top - last.top
@@ -536,7 +563,7 @@ export const usePanzoom = (opts = {}) => {
 					if (restoreNextSibling) {
 						try {
 							restoreParent.insertBefore(eventTarget, restoreNextSibling)
-						} catch (e) {
+						} catch {
 							// Fallback if sibling is gone
 							restoreParent.appendChild(eventTarget)
 						}

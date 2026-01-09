@@ -4,6 +4,7 @@ import { setContext } from 'svelte'
 export class Popover {
 	isOpen = $state(false)
 	// Internal reference to the DOM element
+	/** @type {HTMLElement | null} */
 	_referenceNode = null
 
 	constructor() {
@@ -11,6 +12,7 @@ export class Popover {
 	}
 
 	// Action to capture the reference element
+	/** @param {HTMLElement} node */
 	reference = (node) => {
 		this._referenceNode = node
 		return {
@@ -20,6 +22,7 @@ export class Popover {
 		}
 	}
 
+	/** @param {HTMLElement} node */
 	place = async (node) => {
 		if (!this._referenceNode || !node) return
 
@@ -53,6 +56,7 @@ export class Popover {
 		})
 	}
 
+	/** @param {HTMLElement} node */
 	popoverAttachment = (node) => {
 		// Portal logic: Move to body to avoid clipping
 		document.body.appendChild(node)

@@ -16,6 +16,12 @@
 	const streamdown = useStreamdown()
 	const popover = new Popover()
 
+	const attachSvg = (svg: string) => {
+		return (node: HTMLElement) => {
+			node.innerHTML = svg
+		}
+	}
+
 	useKeyDown({
 		keys: ['Escape'],
 		get isActive() {
@@ -119,10 +125,6 @@
 	}
 </script>
 
-{#snippet customDownloadIcon()}
-	{@html downloadIcon}
-{/snippet}
-
 <div class="relative">
 	<button
 		onclick={() => (popover.isOpen = !popover.isOpen)}
@@ -132,13 +134,13 @@
 		data-panzoom-ignore
 	>
 		<span class="h-4 w-4">
-			{@render customDownloadIcon()}
+			<span aria-hidden="true" {@attach attachSvg(downloadIcon)}></span>
 		</span>
 	</button>
 
 	{#if popover.isOpen}
 		<dialog
-			id={'mermaid-download-popover'}
+			id="mermaid-download-popover"
 			aria-modal="false"
 			transition:scale|global={{ start: 0.95, duration: 100 }}
 			use:clickOutside.attachment

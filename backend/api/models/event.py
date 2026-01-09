@@ -65,7 +65,7 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	message_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
-		ForeignKey("messages.id", ondelete="SET NULL"),
+		ForeignKey("messages.id", ondelete="CASCADE"),
 	)
 	task_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),

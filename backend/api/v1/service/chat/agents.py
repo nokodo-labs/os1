@@ -206,6 +206,7 @@ async def run_agent(
 	principal: Principal,
 	*,
 	input: str | None = None,
+	parent_id: TypeID | None = None,
 ) -> AsyncIterator[bytes]:
 	"""stream a thread run as sse events.
 
@@ -223,14 +224,18 @@ async def run_agent(
 	if input is not None and input.strip():
 		user_msg = await thread_service.create_message(
 			thread_id,
-			MessageCreate(content=input, metadata_={"run_id": run_id}),
+			MessageCreate(
+				content=input,
+				metadata_={"run_id": run_id},
+				parent_id=parent_id,
+			),
 			session,
 			principal=principal,
 		)
 		yield _sse_event(event="message_created", data=_message_to_sse_data(user_msg))
 		initial_parent_id: TypeID | None = TypeID(str(user_msg.id))
 	else:
-		initial_parent_id = None
+		initial_parent_id = parent_id
 
 	try:
 		agent = await _load_agent(agent_id, session)
@@ -345,11 +350,23 @@ async def run_agent(
 			if thread_orm.current_message_id
 			else None
 		)
-	thread = await inject_system_instructions(
-		agent,
-		thread_orm.to_sdk(),
-		session=session,
-	)
+
+	# Ensure we build context from the correct branch point.
+	# When regenerating/branching, we must limit history to the parent_id.
+	original_head = thread_orm.current_message_id
+	if initial_parent_id and original_head != initial_parent_id:
+		thread_orm.current_message_id = initial_parent_id
+
+	try:
+		thread = await inject_system_instructions(
+			agent,
+			thread_orm.to_sdk(),
+			session=session,
+		)
+	finally:
+		# Restore original head to avoid unintended side effects on the session object
+		if initial_parent_id and original_head != initial_parent_id:
+			thread_orm.current_message_id = original_head
 
 	worker_task: asyncio.Task[object] | None = None
 	try:
@@ -430,7 +447,10 @@ async def run_agent(
 	# once the run is complete, opportunistically generate thread metadata.
 	# this is non-blocking and only applies after the first user→assistant turn.
 	try:
-		chat_model = build_chat_model(agent.model)
+		model = agent.model
+		if model is None:
+			raise RuntimeError("agent has no model configured")
+		chat_model = build_chat_model(model)
 
 		# temporary: run inline until taskiq exists
 		async def _generate() -> None:

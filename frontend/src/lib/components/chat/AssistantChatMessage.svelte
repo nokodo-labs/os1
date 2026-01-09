@@ -1,8 +1,11 @@
 <script lang="ts">
 	import Timestamp from '$lib/components/Timestamp.svelte'
+	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
+	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import type { Snippet } from 'svelte'
+	import Connecting from './Connecting.svelte'
 
 	interface Props {
 		content: string
@@ -15,6 +18,10 @@
 		modelName?: string
 		avatarUrl?: string | null
 		tone?: 'default' | 'error'
+		siblingCount?: number
+		currentSiblingIndex?: number
+		onPrevious?: () => void
+		onNext?: () => void
 	}
 
 	let {
@@ -28,6 +35,10 @@
 		modelName = 'assistant',
 		avatarUrl = null,
 		tone = 'default',
+		siblingCount = 0,
+		currentSiblingIndex = 0,
+		onPrevious,
+		onNext,
 	}: Props = $props()
 
 	let hasContent = $derived(content.trim().length > 0)
@@ -106,7 +117,7 @@
 			<div
 				class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[0.95rem] leading-relaxed text-white/60"
 			>
-				<span class="animate-pulse">thinking…</span>
+				<Connecting />
 			</div>
 		{:else if hasContent}
 			<MarkdownRenderer
@@ -121,15 +132,42 @@
 		{/if}
 
 		<!-- Actions -->
-		{#if actions}
-			<div
-				class="flex gap-1 transition-opacity duration-200 {isLastMessage || showActions
-					? 'opacity-100'
-					: 'opacity-0'}"
-			>
+		<div
+			class="flex items-center gap-2 transition-opacity duration-200 {isLastMessage ||
+			showActions
+				? 'opacity-100'
+				: 'opacity-0'}"
+		>
+			{#if siblingCount > 1}
+				<div
+					class="mr-2 flex h-6 items-center text-xs font-medium text-white/50 select-none"
+				>
+					<button
+						class="flex h-6 w-6 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+						disabled={currentSiblingIndex === 0}
+						onclick={onPrevious}
+						title="previous version"
+					>
+						<ChevronLeft className="size-4" strokeWidth="2" />
+					</button>
+					<span class="mx-0.5 font-mono tabular-nums">
+						{currentSiblingIndex + 1}/{siblingCount}
+					</span>
+					<button
+						class="flex h-6 w-6 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+						disabled={currentSiblingIndex === siblingCount - 1}
+						onclick={onNext}
+						title="next version"
+					>
+						<ChevronRight className="size-4" strokeWidth="2" />
+					</button>
+				</div>
+			{/if}
+
+			{#if actions}
 				{@render actions()}
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 </div>
 

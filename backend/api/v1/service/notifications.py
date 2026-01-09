@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -164,6 +164,15 @@ async def mark_all_notifications_read(
 	if not principal.is_admin and str(user_id) != str(principal.user.id):
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
+	to_update = await session.scalar(
+		select(func.count(Notification.id)).where(
+			Notification.user_id == user_id,
+			Notification.read_at.is_(None),
+		)
+	)
+	if int(to_update or 0) == 0:
+		return 0
+
 	stmt = (
 		update(Notification)
 		.where(Notification.user_id == user_id)
@@ -172,7 +181,8 @@ async def mark_all_notifications_read(
 	)
 	result = await session.execute(stmt)
 	await session.commit()
-	return result.rowcount
+	_ = result
+	return int(to_update or 0)
 
 
 async def delete_notification(
@@ -183,5 +193,17 @@ async def delete_notification(
 ) -> None:
 	"""Delete a notification."""
 	notification = await _get_notification(notification_id, session, principal)
+	event_id = notification.event_id
 	await session.delete(notification)
+	await session.flush()
+
+	remaining_stmt = select(func.count(Notification.id)).where(
+		Notification.event_id == event_id
+	)
+	remaining = await session.execute(remaining_stmt)
+	if int(remaining.scalar_one()) == 0:
+		event = await session.get(Event, event_id)
+		if event is not None:
+			await session.delete(event)
+
 	await session.commit()

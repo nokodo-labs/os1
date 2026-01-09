@@ -66,6 +66,7 @@ export interface ChatStreamOptions {
 	threadId: string
 	agentId: string
 	input: string | null
+	parentId?: string | null
 	signal?: AbortSignal
 }
 
@@ -87,7 +88,11 @@ export async function* runChatStream(
 				Accept: 'text/event-stream',
 				...(token ? { Authorization: `Bearer ${token}` } : {}),
 			},
-			body: JSON.stringify({ agent_id: opts.agentId, input: opts.input }),
+			body: JSON.stringify({
+				agent_id: opts.agentId,
+				input: opts.input,
+				parent_id: opts.parentId,
+			}),
 			signal: opts.signal,
 		})
 	}

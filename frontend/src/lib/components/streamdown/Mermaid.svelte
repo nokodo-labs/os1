@@ -17,7 +17,18 @@
 		id: string
 	} = $props()
 
-	let mermaid = $state<any>(null)
+	type MermaidApi = {
+		initialize: (config: MermaidConfig) => void
+		render: (id: string, code: string) => Promise<{ svg: string }>
+	}
+
+	const attachSvg = (svg: string) => {
+		return (node: HTMLElement) => {
+			node.innerHTML = svg
+		}
+	}
+
+	let mermaid = $state<MermaidApi | null>(null)
 	onMount(async () => {
 		mermaid = (await import('mermaid')).default
 	})
@@ -34,6 +45,18 @@
 		try {
 			let sanitized = code
 
+			const stripControlChars = (input: string): string => {
+				let out = ''
+				for (let i = 0; i < input.length; i++) {
+					const charCode = input.charCodeAt(i)
+					const isAllowedWhitespace = charCode === 9 || charCode === 10 || charCode === 13
+					const isControlChar = (charCode >= 0 && charCode <= 31) || charCode === 127
+					if (isControlChar && !isAllowedWhitespace) continue
+					out += input[i]
+				}
+				return out
+			}
+
 			// 1. Remove Byte Order Mark (BOM)
 			sanitized = sanitized.replace(/^\uFEFF/, '')
 
@@ -44,7 +67,7 @@
 			sanitized = sanitized.replace(/[\u200B-\u200F\u2028-\u202F\u205F-\u206F]/g, '')
 
 			// 4. Remove control characters (except tab, line feed, carriage return)
-			sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+			sanitized = stripControlChars(sanitized)
 
 			// 5. Normalize line endings to LF
 			sanitized = sanitized.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -108,7 +131,7 @@
 
 			// Ensure proper spacing in flowchart syntax
 			sanitized = sanitized.replace(
-				/([A-Za-z0-9_]+)(\-\-|\-\-\>|\-\.\-|\-\.\-\>|\=\=|\=\=\>|\=\.\=\>|\=\.\-\>)/g,
+				/([A-Za-z0-9_]+)(--|-->|-\.-|-\.->|==|==>|=\.=>|=\.->)/g,
 				'$1 $2'
 			)
 
@@ -128,6 +151,7 @@
 
 	const renderMermaid = async (code: string, element: HTMLElement) => {
 		try {
+			if (!mermaid) return
 			// Sanitize the code first
 			const sanitizedCode = sanitizeMermaidCode(code)
 
@@ -186,29 +210,13 @@
 	}
 </script>
 
-{#snippet customFitViewIcon()}
-	{@html fitViewIcon}
-{/snippet}
-
-{#snippet customZoomInIcon()}
-	{@html zoomInIcon}
-{/snippet}
-
-{#snippet customZoomOutIcon()}
-	{@html zoomOutIcon}
-{/snippet}
-
-{#snippet customFullscreenIcon()}
-	{@html fullscreenIcon}
-{/snippet}
-
 <div data-streamdown-mermaid={id}>
 	{#if mermaid}
 		<div
 			style={streamdown.isMounted ? streamdown.animationBlockStyle : ''}
 			class={streamdown.theme.mermaid.base}
 			{@attach (node) => renderMermaid(token.text, node)}
-			data-expanded={'false'}
+			data-expanded="false"
 		>
 			{#if streamdown.controls.mermaid}
 				<div class={streamdown.theme.mermaid.buttons}>
@@ -218,7 +226,15 @@
 						onclick={() => panzoom.zoomToFit()}
 						data-panzoom-ignore
 					>
-						{@render (streamdown.icons?.fitView || customFitViewIcon)()}
+						{#if streamdown.icons?.fitView}
+							{@render streamdown.icons.fitView()}
+						{:else}
+							<span
+								class="h-4 w-4"
+								aria-hidden="true"
+								{@attach attachSvg(fitViewIcon)}
+							></span>
+						{/if}
 					</button>
 					<button
 						class={streamdown.theme.components.button}
@@ -226,7 +242,12 @@
 						onclick={() => panzoom.zoomIn()}
 						data-panzoom-ignore
 					>
-						{@render (streamdown.icons?.zoomIn || customZoomInIcon)()}
+						{#if streamdown.icons?.zoomIn}
+							{@render streamdown.icons.zoomIn()}
+						{:else}
+							<span class="h-4 w-4" aria-hidden="true" {@attach attachSvg(zoomInIcon)}
+							></span>
+						{/if}
 					</button>
 					<button
 						class={streamdown.theme.components.button}
@@ -234,7 +255,15 @@
 						onclick={() => panzoom.zoomOut()}
 						data-panzoom-ignore
 					>
-						{@render (streamdown.icons?.zoomOut || customZoomOutIcon)()}
+						{#if streamdown.icons?.zoomOut}
+							{@render streamdown.icons.zoomOut()}
+						{:else}
+							<span
+								class="h-4 w-4"
+								aria-hidden="true"
+								{@attach attachSvg(zoomOutIcon)}
+							></span>
+						{/if}
 					</button>
 					<button
 						class={streamdown.theme.components.button}
@@ -242,7 +271,15 @@
 						onclick={() => panzoom.toggleExpand()}
 						data-panzoom-ignore
 					>
-						{@render (streamdown.icons?.fullscreen || customFullscreenIcon)()}
+						{#if streamdown.icons?.fullscreen}
+							{@render streamdown.icons.fullscreen()}
+						{:else}
+							<span
+								class="h-4 w-4"
+								aria-hidden="true"
+								{@attach attachSvg(fullscreenIcon)}
+							></span>
+						{/if}
 					</button>
 					<MermaidDownload {id} />
 				</div>

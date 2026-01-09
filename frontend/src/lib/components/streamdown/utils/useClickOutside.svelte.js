@@ -1,9 +1,14 @@
 import { on } from 'svelte/events'
 import { SvelteSet } from 'svelte/reactivity'
 
+/**
+ * @param {{ isActive: boolean, callback: () => void }} props
+ */
 export const useClickOutside = (props) => {
 	const refs = new SvelteSet()
+	/** @type {(() => void) | null} */
 	let listener = null
+	/** @param {PointerEvent} e */
 	const onClickOutside = (e) => {
 		let inRef = false
 		if (props.isActive) {
@@ -21,22 +26,21 @@ export const useClickOutside = (props) => {
 		}
 	}
 	return {
-		get attachment() {
-			return props.isActive
-				? (node) => {
-						refs.add(node)
-						if (!listener) {
-							listener = on(node.ownerDocument, 'pointerdown', onClickOutside)
-						}
-						return () => {
-							refs.delete(node)
-							if (listener && refs.size === 0) {
-								listener()
-								listener = null
-							}
-						}
+		/** @param {HTMLElement} node */
+		attachment(node) {
+			refs.add(node)
+			if (!listener) {
+				listener = on(node.ownerDocument, 'pointerdown', onClickOutside)
+			}
+			return {
+				destroy: () => {
+					refs.delete(node)
+					if (listener && refs.size === 0) {
+						listener()
+						listener = null
 					}
-				: null
+				},
+			}
 		},
 	}
 }

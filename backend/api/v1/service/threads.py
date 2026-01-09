@@ -122,19 +122,17 @@ async def generate_thread_metadata(
 
 	desired_title = out.title.strip().lower() or None
 	desired_tags = out.tags[:6]
-	changes: dict[str, object] = {}
-	if desired_title and desired_title != thread.title:
-		changes["title"] = desired_title
-	if desired_tags != (thread.tags or []):
-		changes["tags"] = desired_tags
-	if not changes:
+	update_in = ThreadUpdate(
+		title=desired_title if desired_title != thread.title else None,
+		tags=desired_tags if desired_tags != (thread.tags or []) else None,
+	)
+	if update_in.title is None and update_in.tags is None:
 		return None
 
 	owner = thread.owner or await session.get(User, thread.owner_id)
 	if owner is None:
 		return None
 
-	update_in = ThreadUpdate(**changes)
 	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
 	await update_thread(
 		thread_id,

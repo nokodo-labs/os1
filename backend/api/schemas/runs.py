@@ -16,6 +16,7 @@ class ThreadRunRequest(BaseModel):
 	agent_id: TypeID
 	stream: Literal[True] = True
 	input: str | None = None
+	parent_id: TypeID | None = None
 
 
 class ThreadRunResponse(BaseModel):

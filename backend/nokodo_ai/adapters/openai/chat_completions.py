@@ -143,7 +143,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
 			if params and params.tool_choice is not None
 			else openai.omit,
-			max_tokens=params.max_tokens
+			max_completion_tokens=params.max_tokens
 			if params and params.max_tokens is not None
 			else openai.omit,
 			temperature=params.temperature
@@ -191,7 +191,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
 			if tools and params and params.tool_choice is not None
 			else openai.omit,
-			max_tokens=params.max_tokens
+			max_completion_tokens=params.max_tokens
 			if params and params.max_tokens is not None
 			else openai.omit,
 			temperature=params.temperature

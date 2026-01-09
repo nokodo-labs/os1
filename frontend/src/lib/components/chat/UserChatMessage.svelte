@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
+	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Snippet } from 'svelte'
 
@@ -7,9 +9,22 @@
 		timestamp?: Date
 		align?: 'left' | 'right'
 		actions?: Snippet
+		siblingCount?: number
+		currentSiblingIndex?: number
+		onPrevious?: () => void
+		onNext?: () => void
 	}
 
-	let { content, timestamp, align = 'right', actions }: Props = $props()
+	let {
+		content,
+		timestamp,
+		align = 'right',
+		actions,
+		siblingCount = 1,
+		currentSiblingIndex = 0,
+		onPrevious,
+		onNext,
+	}: Props = $props()
 
 	let showActions = $state(false)
 	let isHovered = $state(false)
@@ -68,13 +83,39 @@
 		</div>
 	</div>
 
-	{#if actions}
+	{#if actions || siblingCount > 1}
 		<div
-			class="flex gap-1 px-1 transition-opacity duration-200 {showActions
+			class="flex items-center gap-1 px-1 transition-opacity duration-200 {showActions
 				? 'opacity-100'
 				: 'opacity-0'}"
 		>
-			{@render actions()}
+			{#if siblingCount > 1}
+				<div
+					class="mr-2 flex items-center text-xs font-medium text-black/50 select-none dark:text-white/50"
+				>
+					<button
+						onclick={onPrevious}
+						disabled={currentSiblingIndex === 0}
+						class="flex h-5 w-5 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.1] hover:text-black active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/50 dark:hover:text-white"
+					>
+						<ChevronLeft className="h-3 w-3" strokeWidth="2.5" />
+					</button>
+					<span class="mx-0.5 tabular-nums">
+						{currentSiblingIndex + 1}/{siblingCount}
+					</span>
+					<button
+						onclick={onNext}
+						disabled={currentSiblingIndex === siblingCount - 1}
+						class="flex h-5 w-5 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.1] hover:text-black active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/50 dark:hover:text-white"
+					>
+						<ChevronRight className="h-3 w-3" strokeWidth="2.5" />
+					</button>
+				</div>
+			{/if}
+
+			{#if actions}
+				{@render actions()}
+			{/if}
 		</div>
 	{/if}
 </div>

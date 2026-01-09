@@ -1,6 +1,12 @@
 import { on } from 'svelte/events'
+
+/**
+ * @param {{ keys: string[], isActive: boolean, callback: () => void }} opts
+ */
 export const useKeyDown = (opts) => {
-	let listener
+	/** @type {(() => void) | null} */
+	let listener = null
+	/** @param {KeyboardEvent} event */
 	const eventCallback = (event) => {
 		if (opts.keys.includes(event.key)) {
 			event.preventDefault()
