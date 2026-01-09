@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { MessageType } from './MessageType';
 /**
  * Payload for creating a message within a thread.
@@ -11,7 +12,7 @@ import type { MessageType } from './MessageType';
  * - A list of content part dicts or ContentPart objects
  */
 export type MessageCreate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     type?: MessageType;
     content?: string;
     tool_calls?: Array<Record<string, any>>;

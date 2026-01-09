@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Output } from './JSONObject_Output';
 import type { Message } from './Message';
 import type { Project } from './Project';
 import type { User } from './User';
@@ -9,7 +10,7 @@ import type { User } from './User';
  * Detailed response schema.
  */
 export type Thread = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     title?: (string | null);
     tags?: Array<string>;
     is_archived?: boolean;

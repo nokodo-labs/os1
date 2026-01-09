@@ -2,13 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { TaskStatus } from './TaskStatus';
 import type { TaskType } from './TaskType';
 /**
  * Payload to start a task.
  */
 export type TaskCreate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     task_type?: TaskType;
     status?: TaskStatus;
     progress?: (number | null);

@@ -2,11 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Output } from './JSONObject_Output';
 /**
  * Response schema.
  */
 export type Prompt = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     /**
      * Prompt identifier, e.g. '/my-prompt'
      */

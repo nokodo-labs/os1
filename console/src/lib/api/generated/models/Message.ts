@@ -5,6 +5,7 @@
 import type { FileContent } from './FileContent';
 import type { ImageContent } from './ImageContent';
 import type { JsonContent } from './JsonContent';
+import type { JSONObject_Output } from './JSONObject_Output';
 import type { MessageType } from './MessageType';
 import type { RefusalContent } from './RefusalContent';
 import type { TextContent } from './TextContent';
@@ -12,7 +13,7 @@ import type { TextContent } from './TextContent';
  * Response schema.
  */
 export type Message = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     type?: MessageType;
     content?: Array<(TextContent | JsonContent | ImageContent | FileContent | RefusalContent)>;
     tool_calls?: Array<Record<string, any>>;

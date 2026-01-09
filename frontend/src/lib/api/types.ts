@@ -451,9 +451,6 @@ export interface paths {
         /**
          * Create Notifications
          * @description Create notification(s).
-         *
-         *     if user_id is provided, sends to that user only.
-         *     if only thread_id is provided, sends to all thread participants.
          */
         post: operations["create_notifications_notifications_post"];
         delete?: never;
@@ -962,10 +959,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -988,10 +982,7 @@ export interface components {
          * @description payload for setting acl entries on a resource.
          */
         AccessControlEntryCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** User Id */
             user_id?: string | null;
             /** Group Id */
@@ -1012,10 +1003,7 @@ export interface components {
          * @description Response schema.
          */
         Agent: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -1058,10 +1046,7 @@ export interface components {
          * @description Payload for agent creation.
          */
         AgentCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -1088,10 +1073,7 @@ export interface components {
          * @description Payload for agent update.
          */
         AgentUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1147,10 +1129,7 @@ export interface components {
          * @description Event response.
          */
         Event: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1197,10 +1176,7 @@ export interface components {
          * @description Payload to emit a new event.
          */
         EventCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1238,10 +1214,7 @@ export interface components {
          * @description Request payload to fetch events for a set of messages.
          */
         EventsByMessageIDsRequest: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Message Ids */
             message_ids?: string[];
         };
@@ -1297,6 +1270,18 @@ export interface components {
             /** Media Type */
             media_type?: string | null;
         };
+        "JSONObject-Input": {
+            [key: string]: components["schemas"]["JSONValue-Input"];
+        };
+        "JSONObject-Output": {
+            [key: string]: components["schemas"]["JSONValue-Output"];
+        };
+        "JSONValue-Input": boolean | number | string | {
+            [key: string]: components["schemas"]["JSONValue-Input"];
+        } | components["schemas"]["JSONValue-Input"][] | null;
+        "JSONValue-Output": boolean | number | string | {
+            [key: string]: components["schemas"]["JSONValue-Output"];
+        } | components["schemas"]["JSONValue-Output"][] | null;
         /**
          * JsonContent
          * @description structured JSON content (for structured outputs).
@@ -1321,10 +1306,7 @@ export interface components {
          * @description Response schema.
          */
         Memory: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1364,10 +1346,7 @@ export interface components {
          * @description Payload to capture a memory.
          */
         MemoryCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1387,10 +1366,7 @@ export interface components {
          * @description Response schema.
          */
         Message: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /** Content */
@@ -1443,10 +1419,7 @@ export interface components {
          *     - A list of content part dicts or ContentPart objects
          */
         MessageCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /**
@@ -1486,10 +1459,7 @@ export interface components {
          * @description Response schema.
          */
         Model: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Display Name */
@@ -1536,10 +1506,7 @@ export interface components {
          * @description Payload to register a model.
          */
         ModelCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Display Name */
@@ -1580,10 +1547,7 @@ export interface components {
          * @description Payload to update a model.
          */
         ModelUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Display Name */
@@ -1652,10 +1616,8 @@ export interface components {
             title: string;
             /** Body */
             body: string;
-            /** Thread Id */
-            thread_id?: string | null;
-            /** User Id */
-            user_id?: string | null;
+            /** User Ids */
+            user_ids: string[];
         };
         /** OpenAIChatCompletionChoice */
         OpenAIChatCompletionChoice: {
@@ -1742,10 +1704,7 @@ export interface components {
          * @description Response schema.
          */
         Plugin: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -1794,10 +1753,7 @@ export interface components {
          * @description Payload for plugin creation.
          */
         PluginCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -1870,10 +1826,7 @@ export interface components {
          * @description Payload for plugin update.
          */
         PluginUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1939,10 +1892,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -1965,10 +1915,7 @@ export interface components {
          * @description Response schema.
          */
         Prompt: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -1994,10 +1941,7 @@ export interface components {
          * @description Payload for prompt creation.
          */
         PromptCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -2011,10 +1955,7 @@ export interface components {
          * @description Payload for prompt update.
          */
         PromptUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Command */
             command?: string | null;
             /** Content */
@@ -2025,10 +1966,7 @@ export interface components {
          * @description Response schema.
          */
         Provider: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2072,10 +2010,7 @@ export interface components {
          * @description Payload to create a provider.
          */
         ProviderCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2121,10 +2056,7 @@ export interface components {
          * @description Partial provider update payload.
          */
         ProviderUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -2181,10 +2113,7 @@ export interface components {
          * @description Response model.
          */
         Task: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -2233,10 +2162,7 @@ export interface components {
          * @description Payload to start a task.
          */
         TaskCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -2274,10 +2200,7 @@ export interface components {
          * @description Mutable task fields for PATCH operations.
          */
         TaskUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             status?: components["schemas"]["TaskStatus"] | null;
             /** Progress */
             progress?: number | null;
@@ -2313,10 +2236,7 @@ export interface components {
          * @description Detailed response schema.
          */
         Thread: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -2371,10 +2291,7 @@ export interface components {
          * @description Payload for creating a thread.
          */
         ThreadCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -2415,6 +2332,8 @@ export interface components {
             stream: true;
             /** Input */
             input?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
         };
         /**
          * ThreadSwitchRequest
@@ -2442,10 +2361,7 @@ export interface components {
          * @description Payload for updating a thread.
          */
         ThreadUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */

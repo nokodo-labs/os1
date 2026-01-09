@@ -2,13 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Output } from './JSONObject_Output';
 import type { TaskStatus } from './TaskStatus';
 import type { TaskType } from './TaskType';
 /**
  * Response model.
  */
 export type Task = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     task_type?: TaskType;
     status?: TaskStatus;
     progress?: (number | null);

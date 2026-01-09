@@ -4,14 +4,10 @@
 /* eslint-disable */
 import type { JSONObject_Input } from './JSONObject_Input';
 /**
- * Payload to capture a memory.
+ * Request payload to fetch events for a set of messages.
  */
-export type MemoryCreate = {
+export type EventsByMessageIDsRequest = {
     metadata_?: JSONObject_Input;
-    content: string;
-    source_message_id?: (string | null);
-    confidence?: (number | null);
-    category?: (string | null);
-    user_id: string;
+    message_ids?: Array<string>;
 };
 

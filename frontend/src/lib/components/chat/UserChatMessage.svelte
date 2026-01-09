@@ -77,7 +77,7 @@
         "
 	>
 		<div
-			class="text-[0.95rem] leading-relaxed wrap-break-word text-black/95 dark:text-white/95"
+			class="text-[0.95rem] leading-relaxed wrap-break-word whitespace-pre-wrap text-black/95 dark:text-white/95"
 		>
 			{content}
 		</div>

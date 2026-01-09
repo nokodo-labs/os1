@@ -3,11 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AgentVisibility } from './AgentVisibility';
+import type { JSONObject_Input } from './JSONObject_Input';
 /**
  * Payload for agent update.
  */
 export type AgentUpdate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     name?: (string | null);
     description?: (string | null);
     system_prompt?: (string | null);

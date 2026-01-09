@@ -3,11 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { EventScope } from './EventScope';
+import type { JSONObject_Output } from './JSONObject_Output';
 /**
  * Event response.
  */
 export type Event = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     scope?: EventScope;
     scope_id?: (string | null);
     type: string;

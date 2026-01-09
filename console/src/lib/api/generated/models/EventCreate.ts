@@ -3,11 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { EventScope } from './EventScope';
+import type { JSONObject_Input } from './JSONObject_Input';
 /**
  * Payload to emit a new event.
  */
 export type EventCreate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     scope?: EventScope;
     scope_id?: (string | null);
     type: string;

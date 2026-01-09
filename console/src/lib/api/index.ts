@@ -1,6 +1,7 @@
 import {
 	AgentsService,
 	AuthService,
+	MemoriesService,
 	ModelsService,
 	OpenAPI,
 	PluginsService,
@@ -24,6 +25,7 @@ export { ApiError } from './generated'
 export {
 	AgentsService,
 	AuthService,
+	MemoriesService,
 	ModelsService,
 	PluginsService,
 	ProjectsService,
@@ -42,6 +44,8 @@ export type {
 	AgentCreate,
 	AgentUpdate,
 	AgentVisibility,
+	Memory,
+	MemoryCreate,
 	Message,
 	MessageCreate,
 	Model,

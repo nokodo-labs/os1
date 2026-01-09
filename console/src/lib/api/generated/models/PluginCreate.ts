@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { PluginType } from './PluginType';
 /**
  * Payload for plugin creation.
  */
 export type PluginCreate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     /**
      * unique plugin name/identifier
      */

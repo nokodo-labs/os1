@@ -224,6 +224,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/{thread_id}/events/by-message-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List Events For Message Ids
+         * @description List events associated with specific messages in this thread.
+         */
+        post: operations["list_events_for_message_ids_threads__thread_id__events_by_message_ids_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}/branch": {
         parameters: {
             query?: never;
@@ -264,6 +284,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/{thread_id}/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete User Message Turn
+         * @description delete a user message and its generated response(s).
+         *
+         *     this deletes the user message and all subsequent messages on the active
+         *     branch until (but not including) the next user message, if any.
+         */
+        delete: operations["delete_user_message_turn_threads__thread_id__messages__message_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}/run": {
         parameters: {
             query?: never;
@@ -275,29 +318,9 @@ export interface paths {
         put?: never;
         /**
          * Run Thread
-         * @description run a thread with an agent and persist all messages produced.
-         */
-        post: operations["run_thread_threads__thread_id__run_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/threads/{thread_id}/run/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Thread Stream
          * @description stream a thread run via sse events.
          */
-        post: operations["run_thread_stream_threads__thread_id__run_stream_post"];
+        post: operations["run_thread_threads__thread_id__run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -410,6 +433,26 @@ export interface paths {
          * @description Persist and broadcast an event.
          */
         post: operations["emit_event_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Notifications
+         * @description Create notification(s).
+         */
+        post: operations["create_notifications_notifications_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -916,10 +959,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -942,10 +982,7 @@ export interface components {
          * @description payload for setting acl entries on a resource.
          */
         AccessControlEntryCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** User Id */
             user_id?: string | null;
             /** Group Id */
@@ -966,10 +1003,7 @@ export interface components {
          * @description Response schema.
          */
         Agent: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -1012,10 +1046,7 @@ export interface components {
          * @description Payload for agent creation.
          */
         AgentCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -1042,10 +1073,7 @@ export interface components {
          * @description Payload for agent update.
          */
         AgentUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1101,10 +1129,7 @@ export interface components {
          * @description Event response.
          */
         Event: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1151,10 +1176,7 @@ export interface components {
          * @description Payload to emit a new event.
          */
         EventCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1187,6 +1209,15 @@ export interface components {
          * @enum {string}
          */
         EventScope: "system" | "user" | "thread" | "message" | "task" | "project" | "file";
+        /**
+         * EventsByMessageIDsRequest
+         * @description Request payload to fetch events for a set of messages.
+         */
+        EventsByMessageIDsRequest: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Message Ids */
+            message_ids?: string[];
+        };
         /**
          * FileContent
          * @description file attachment content.
@@ -1239,6 +1270,18 @@ export interface components {
             /** Media Type */
             media_type?: string | null;
         };
+        "JSONObject-Input": {
+            [key: string]: components["schemas"]["JSONValue-Input"];
+        };
+        "JSONObject-Output": {
+            [key: string]: components["schemas"]["JSONValue-Output"];
+        };
+        "JSONValue-Input": boolean | number | string | {
+            [key: string]: components["schemas"]["JSONValue-Input"];
+        } | components["schemas"]["JSONValue-Input"][] | null;
+        "JSONValue-Output": boolean | number | string | {
+            [key: string]: components["schemas"]["JSONValue-Output"];
+        } | components["schemas"]["JSONValue-Output"][] | null;
         /**
          * JsonContent
          * @description structured JSON content (for structured outputs).
@@ -1263,10 +1306,7 @@ export interface components {
          * @description Response schema.
          */
         Memory: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1306,10 +1346,7 @@ export interface components {
          * @description Payload to capture a memory.
          */
         MemoryCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1329,10 +1366,7 @@ export interface components {
          * @description Response schema.
          */
         Message: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /** Content */
@@ -1385,10 +1419,7 @@ export interface components {
          *     - A list of content part dicts or ContentPart objects
          */
         MessageCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /**
@@ -1428,10 +1459,7 @@ export interface components {
          * @description Response schema.
          */
         Model: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Display Name */
@@ -1478,10 +1506,7 @@ export interface components {
          * @description Payload to register a model.
          */
         ModelCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Display Name */
@@ -1522,10 +1547,7 @@ export interface components {
          * @description Payload to update a model.
          */
         ModelUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Display Name */
@@ -1584,6 +1606,18 @@ export interface components {
              */
             updated_at: string;
             event?: components["schemas"]["Event"] | null;
+        };
+        /**
+         * NotificationCreate
+         * @description Request schema for creating notification(s).
+         */
+        NotificationCreate: {
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** User Ids */
+            user_ids: string[];
         };
         /** OpenAIChatCompletionChoice */
         OpenAIChatCompletionChoice: {
@@ -1670,10 +1704,7 @@ export interface components {
          * @description Response schema.
          */
         Plugin: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -1722,10 +1753,7 @@ export interface components {
          * @description Payload for plugin creation.
          */
         PluginCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -1798,10 +1826,7 @@ export interface components {
          * @description Payload for plugin update.
          */
         PluginUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1867,10 +1892,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -1893,10 +1915,7 @@ export interface components {
          * @description Response schema.
          */
         Prompt: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -1922,10 +1941,7 @@ export interface components {
          * @description Payload for prompt creation.
          */
         PromptCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -1939,10 +1955,7 @@ export interface components {
          * @description Payload for prompt update.
          */
         PromptUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Command */
             command?: string | null;
             /** Content */
@@ -1953,10 +1966,7 @@ export interface components {
          * @description Response schema.
          */
         Provider: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2000,10 +2010,7 @@ export interface components {
          * @description Payload to create a provider.
          */
         ProviderCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2049,10 +2056,7 @@ export interface components {
          * @description Partial provider update payload.
          */
         ProviderUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -2109,10 +2113,7 @@ export interface components {
          * @description Response model.
          */
         Task: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -2161,10 +2162,7 @@ export interface components {
          * @description Payload to start a task.
          */
         TaskCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -2202,10 +2200,7 @@ export interface components {
          * @description Mutable task fields for PATCH operations.
          */
         TaskUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             status?: components["schemas"]["TaskStatus"] | null;
             /** Progress */
             progress?: number | null;
@@ -2241,10 +2236,7 @@ export interface components {
          * @description Detailed response schema.
          */
         Thread: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -2299,10 +2291,7 @@ export interface components {
          * @description Payload for creating a thread.
          */
         ThreadCreate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -2335,30 +2324,16 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             agent_id: string;
+            /**
+             * Stream
+             * @default true
+             * @constant
+             */
+            stream: true;
             /** Input */
             input?: string | null;
-        };
-        /**
-         * ThreadRunResponse
-         * @description response containing all messages produced by a run.
-         *
-         *     an agent run can produce multiple messages:
-         *     - assistant message with tool calls
-         *     - tool result messages
-         *     - more assistant messages
-         *     - ... repeat until final assistant message
-         *
-         *     the messages list contains all new messages produced during the run.
-         */
-        ThreadRunResponse: {
-            /**
-             * Thread Id
-             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
-             */
-            thread_id: string;
-            user_message?: components["schemas"]["Message"] | null;
-            /** Messages */
-            messages: components["schemas"]["Message"][];
+            /** Parent Id */
+            parent_id?: string | null;
         };
         /**
          * ThreadSwitchRequest
@@ -2386,10 +2361,7 @@ export interface components {
          * @description Payload for updating a thread.
          */
         ThreadUpdate: {
-            /** Metadata */
-            metadata_?: {
-                [key: string]: unknown;
-            };
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -4003,6 +3975,106 @@ export interface operations {
             };
         };
     };
+    list_events_for_message_ids_threads__thread_id__events_by_message_ids_post: {
+        parameters: {
+            query?: {
+                include_hidden?: boolean;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventsByMessageIDsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_current_branch_threads__thread_id__branch_get: {
         parameters: {
             query?: {
@@ -4195,29 +4267,24 @@ export interface operations {
             };
         };
     };
-    run_thread_threads__thread_id__run_post: {
+    delete_user_message_turn_threads__thread_id__messages__message_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 thread_id: string;
+                message_id: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ThreadRunRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ThreadRunResponse"];
-                };
+                content?: never;
             };
             /** @description bad request */
             400: {
@@ -4293,7 +4360,7 @@ export interface operations {
             };
         };
     };
-    run_thread_stream_threads__thread_id__run_stream_post: {
+    run_thread_threads__thread_id__run_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -5090,6 +5157,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Event"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_notifications_notifications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notification"][];
                 };
             };
             /** @description bad request */

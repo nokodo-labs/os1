@@ -60,6 +60,21 @@
 			},
 			"problemMatcher": []
 		},
+		{
+			"label": "Backend: Check API Alive",
+			"type": "process",
+			"command": "node",
+			"args": [
+				"-e",
+				"const url=process.env.API_HEALTH_URL||'http://localhost:8000/health';const timeoutMs=Number(process.env.API_HEALTH_TIMEOUT_MS||60000);const intervalMs=Number(process.env.API_HEALTH_INTERVAL_MS||1000);const start=Date.now();const urlObj=new URL(url);const http=require(urlObj.protocol==='https:'?'https':'http');async function isOk(){return await new Promise(resolve=>{const req=http.request(urlObj,{method:'GET',headers:{accept:'application/json'}},res=>{res.resume();resolve(Boolean(res.statusCode&&res.statusCode>=200&&res.statusCode<300));});req.on('error',()=>resolve(false));req.end();});}(async()=>{for(;;){if(await isOk()){console.log('API alive: '+url);process.exit(0);}if(Date.now()-start>timeoutMs){console.error('API not reachable after '+timeoutMs+'ms: '+url);process.exit(1);}await new Promise(r=>setTimeout(r,intervalMs));}})();"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
 
 		// ═══════════════════════════════════════
 		// FRONTEND
@@ -187,7 +202,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
-			"dependsOn": "Backend: Run Server",
+			"dependsOn": "Backend: Check API Alive",
 			"group": "build",
 			"presentation": {
 				"reveal": "always",
@@ -281,7 +296,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
-			"dependsOn": "Backend: Run Server",
+			"dependsOn": "Backend: Check API Alive",
 			"group": "build",
 			"presentation": {
 				"reveal": "always",

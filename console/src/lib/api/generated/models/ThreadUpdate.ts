@@ -2,11 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 /**
  * Payload for updating a thread.
  */
 export type ThreadUpdate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     title?: (string | null);
     tags?: (Array<string> | null);
     is_archived?: (boolean | null);

@@ -2,13 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Output } from './JSONObject_Output';
 /**
  * Project schema.
  */
 export type Project = {
     created_at: string;
     updated_at: string;
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     name: string;
     description?: (string | null);
     id: string;

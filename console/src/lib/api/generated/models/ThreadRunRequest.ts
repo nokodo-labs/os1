@@ -7,6 +7,8 @@
  */
 export type ThreadRunRequest = {
     agent_id: string;
+    stream?: boolean;
     input?: (string | null);
+    parent_id?: (string | null);
 };
 

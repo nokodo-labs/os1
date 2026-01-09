@@ -4,12 +4,13 @@
 /* eslint-disable */
 import type { AccessControlEntry } from '../models/AccessControlEntry';
 import type { AccessControlEntryCreate } from '../models/AccessControlEntryCreate';
+import type { Event } from '../models/Event';
+import type { EventsByMessageIDsRequest } from '../models/EventsByMessageIDsRequest';
 import type { Message } from '../models/Message';
 import type { MessageCreate } from '../models/MessageCreate';
 import type { Thread } from '../models/Thread';
 import type { ThreadCreate } from '../models/ThreadCreate';
 import type { ThreadRunRequest } from '../models/ThreadRunRequest';
-import type { ThreadRunResponse } from '../models/ThreadRunResponse';
 import type { ThreadSwitchRequest } from '../models/ThreadSwitchRequest';
 import type { ThreadSwitchResponse } from '../models/ThreadSwitchResponse';
 import type { ThreadUpdate } from '../models/ThreadUpdate';
@@ -246,6 +247,43 @@ export class ThreadsService {
         });
     }
     /**
+     * List Events For Message Ids
+     * List events associated with specific messages in this thread.
+     * @param threadId
+     * @param requestBody
+     * @param includeHidden
+     * @returns Event Successful Response
+     * @throws ApiError
+     */
+    public static listEventsForMessageIdsThreadsThreadIdEventsByMessageIdsPost(
+        threadId: string,
+        requestBody: EventsByMessageIDsRequest,
+        includeHidden: boolean = false,
+    ): CancelablePromise<Array<Event>> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/threads/{thread_id}/events/by-message-ids',
+            path: {
+                'thread_id': threadId,
+            },
+            query: {
+                'include_hidden': includeHidden,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
      * Get Current Branch
      * Return the current root→leaf branch for this thread.
      * @param threadId
@@ -312,25 +350,27 @@ export class ThreadsService {
         });
     }
     /**
-     * Run Thread
-     * run a thread with an agent and persist all messages produced.
+     * Delete User Message Turn
+     * delete a user message and its generated response(s).
+     *
+     * this deletes the user message and all subsequent messages on the active
+     * branch until (but not including) the next user message, if any.
      * @param threadId
-     * @param requestBody
-     * @returns ThreadRunResponse Successful Response
+     * @param messageId
+     * @returns void
      * @throws ApiError
      */
-    public static runThreadThreadsThreadIdRunPost(
+    public static deleteUserMessageTurnThreadsThreadIdMessagesMessageIdDelete(
         threadId: string,
-        requestBody: ThreadRunRequest,
-    ): CancelablePromise<ThreadRunResponse> {
+        messageId: string,
+    ): CancelablePromise<void> {
         return __request(OpenAPI, {
-            method: 'POST',
-            url: '/threads/{thread_id}/run',
+            method: 'DELETE',
+            url: '/threads/{thread_id}/messages/{message_id}',
             path: {
                 'thread_id': threadId,
+                'message_id': messageId,
             },
-            body: requestBody,
-            mediaType: 'application/json',
             errors: {
                 400: `bad request`,
                 401: `unauthorized`,
@@ -344,20 +384,20 @@ export class ThreadsService {
         });
     }
     /**
-     * Run Thread Stream
+     * Run Thread
      * stream a thread run via sse events.
      * @param threadId
      * @param requestBody
      * @returns any Successful Response
      * @throws ApiError
      */
-    public static runThreadStreamThreadsThreadIdRunStreamPost(
+    public static runThreadThreadsThreadIdRunPost(
         threadId: string,
         requestBody: ThreadRunRequest,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/threads/{thread_id}/run/stream',
+            url: '/threads/{thread_id}/run',
             path: {
                 'thread_id': threadId,
             },

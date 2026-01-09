@@ -2,13 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { ProviderStatus } from './ProviderStatus';
 import type { ProviderType } from './ProviderType';
 /**
  * Partial provider update payload.
  */
 export type ProviderUpdate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     adapter_type?: (string | null);
     provider_type?: (ProviderType | null);
     base_url?: (string | null);

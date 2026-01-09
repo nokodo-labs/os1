@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { ModelType } from './ModelType';
 /**
  * Payload to update a model.
  */
 export type ModelUpdate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     name?: (string | null);
     display_name?: (string | null);
     model_type?: (ModelType | null);

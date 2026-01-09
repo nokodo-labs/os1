@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { TaskStatus } from './TaskStatus';
 /**
  * Mutable task fields for PATCH operations.
  */
 export type TaskUpdate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     status?: (TaskStatus | null);
     progress?: (number | null);
     stage?: (string | null);

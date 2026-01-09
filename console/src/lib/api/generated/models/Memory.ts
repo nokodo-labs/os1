@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Output } from './JSONObject_Output';
 import type { User } from './User';
 /**
  * Response schema.
  */
 export type Memory = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     content: string;
     source_message_id?: (string | null);
     confidence?: (number | null);

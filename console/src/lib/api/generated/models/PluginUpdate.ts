@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Input } from './JSONObject_Input';
 import type { PluginType } from './PluginType';
 /**
  * Payload for plugin update.
  */
 export type PluginUpdate = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Input;
     name?: (string | null);
     description?: (string | null);
     type?: (PluginType | null);

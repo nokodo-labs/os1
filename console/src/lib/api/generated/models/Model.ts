@@ -2,12 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { JSONObject_Output } from './JSONObject_Output';
 import type { ModelType } from './ModelType';
 /**
  * Response schema.
  */
 export type Model = {
-    metadata_?: Record<string, any>;
+    metadata_?: JSONObject_Output;
     name: string;
     display_name?: (string | null);
     model_type?: ModelType;
