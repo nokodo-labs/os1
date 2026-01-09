@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from sqlalchemy import JSON, DateTime, String, func
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from api.models.base import TYPEID_LENGTH
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -43,7 +44,7 @@ class TimestampMixin:
 class MetadataJSONMixin:
 	"""Adds optional metadata column."""
 
-	metadata_: Mapped[dict[str, Any]] = mapped_column(
+	metadata_: Mapped[JSONObject] = mapped_column(
 		"metadata",  # SQLAlchemy reserves "metadata" name on DeclarativeBase
 		JSON,
 		default=dict,

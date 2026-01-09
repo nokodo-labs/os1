@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from nokodo_ai.types.json import JSONObject
 
 
 class ORMModel(BaseModel):
@@ -17,7 +18,14 @@ class ORMModel(BaseModel):
 class MetadataModel(ORMModel):
 	"""Adds metadata support for models using MetadataJSONMixin."""
 
-	metadata: dict[str, Any] = Field(default_factory=dict, alias="metadata_")
+	metadata: JSONObject = Field(default_factory=dict, alias="metadata_")
+
+	@field_validator("metadata", mode="before")
+	@classmethod
+	def _coerce_none_metadata(cls, value: object) -> object:
+		if value is None:
+			return {}
+		return value
 
 
 class TimestampedModel(ORMModel):

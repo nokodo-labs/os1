@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
 from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
 from api.schemas.content import TextContent
+from api.schemas.event import Event as EventSchema
 from api.schemas.message import MessageCreate
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
@@ -154,3 +156,17 @@ def test_thread_schema_defaults_for_flags() -> None:
 	serialized = ThreadSchema.model_validate(thread)
 	assert serialized.is_temporary is False
 	assert serialized.is_archived is False
+
+
+def test_schema_coerces_none_metadata_to_empty_dict() -> None:
+	now = datetime.now(tz=UTC)
+	event = SimpleNamespace(
+		id=new_typeid("event"),
+		type="test",
+		metadata_=None,
+		created_at=now,
+		updated_at=now,
+	)
+
+	serialized = EventSchema.model_validate(event)
+	assert serialized.metadata == {}
