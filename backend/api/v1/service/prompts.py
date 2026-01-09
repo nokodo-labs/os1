@@ -13,6 +13,7 @@ from api.v1.service.prompt_runtime import (
 	http_error_from_validation,
 	validate_prompt_content,
 )
+from api.v1.service.sorting import SortDir, apply_sort
 
 
 async def _ensure_unique_command(
@@ -80,8 +81,29 @@ async def create_prompt(prompt_in: PromptCreate, session: AsyncSession) -> Promp
 	return prompt
 
 
-async def list_prompts(session: AsyncSession) -> list[Prompt]:
-	result = await session.execute(select(Prompt).order_by(Prompt.command))
+async def list_prompts(
+	session: AsyncSession,
+	skip: int = 0,
+	limit: int = 50,
+	sort_by: str = "command",
+	sort_dir: SortDir = "asc",
+) -> list[Prompt]:
+	stmt = (
+		apply_sort(
+			select(Prompt),
+			sort_by=sort_by,
+			sort_dir=sort_dir,
+			columns={
+				"command": Prompt.command,
+				"created_at": Prompt.created_at,
+				"updated_at": Prompt.updated_at,
+			},
+			tie_breaker=Prompt.id,
+		)
+		.offset(skip)
+		.limit(limit)
+	)
+	result = await session.execute(stmt)
 	return list(result.scalars().all())
 
 

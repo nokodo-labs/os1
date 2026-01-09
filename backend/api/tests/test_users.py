@@ -41,6 +41,37 @@ async def test_get_users(client: AsyncClient, admin_auth: dict[str, object]) -> 
 
 
 @pytest.mark.asyncio
+async def test_get_users_sorting(
+	client: AsyncClient, admin_auth: dict[str, object]
+) -> None:
+	"""List users supports server-side sort_by + sort_dir."""
+	headers = admin_auth["headers"]
+	assert isinstance(headers, dict)
+
+	resp_a = await client.post(
+		"/v1/users",
+		json={"email": "a_sort@example.com", "password": "pw"},
+		headers=headers,
+	)
+	assert resp_a.status_code == 201
+	resp_b = await client.post(
+		"/v1/users",
+		json={"email": "b_sort@example.com", "password": "pw"},
+		headers=headers,
+	)
+	assert resp_b.status_code == 201
+
+	response = await client.get(
+		"/v1/users",
+		headers=headers,
+		params={"sort_by": "email", "sort_dir": "asc", "limit": 200},
+	)
+	assert response.status_code == 200
+	emails = [u["email"] for u in response.json()]
+	assert emails == sorted(emails)
+
+
+@pytest.mark.asyncio
 async def test_get_user_by_id(
 	client: AsyncClient,
 	user_auth: dict[str, object],

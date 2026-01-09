@@ -23,6 +23,39 @@ async def test_prompts_admin_only(
 
 
 @pytest.mark.asyncio
+async def test_list_prompts_sorting(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""List prompts supports server-side sort_by + sort_dir."""
+	headers = admin_auth["headers"]
+	assert isinstance(headers, dict)
+
+	a = await client.post(
+		"/v1/prompts",
+		headers=headers,
+		json={"command": "/a", "content": "a"},
+	)
+	assert a.status_code == 201
+
+	b = await client.post(
+		"/v1/prompts",
+		headers=headers,
+		json={"command": "/b", "content": "b"},
+	)
+	assert b.status_code == 201
+
+	resp = await client.get(
+		"/v1/prompts",
+		headers=headers,
+		params={"sort_by": "command", "sort_dir": "desc", "limit": 50},
+	)
+	assert resp.status_code == 200
+	items = resp.json()
+	assert items[0]["command"] == "/b"
+
+
+@pytest.mark.asyncio
 async def test_prompt_create_missing_reference_returns_error(
 	client: AsyncClient,
 	admin_auth: dict[str, object],

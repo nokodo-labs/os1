@@ -114,6 +114,41 @@ async def test_list_threads(client: AsyncClient, user_auth: dict[str, object]) -
 
 
 @pytest.mark.asyncio
+async def test_list_threads_sorting(
+	client: AsyncClient, user_auth: dict[str, object]
+) -> None:
+	"""List threads supports server-side sort_by + sort_dir."""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "b"},
+		headers=headers,
+	)
+	await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "a"},
+		headers=headers,
+	)
+
+	resp = await client.get(
+		"/v1/threads",
+		headers=headers,
+		params={
+			"owner_id": user["id"],
+			"sort_by": "title",
+			"sort_dir": "asc",
+		},
+	)
+	assert resp.status_code == 200
+	threads = resp.json()
+	assert [t["title"] for t in threads] == ["a", "b"]
+
+
+@pytest.mark.asyncio
 async def test_temporary_threads_hidden_by_default(
 	client: AsyncClient,
 	user_auth: dict[str, object],

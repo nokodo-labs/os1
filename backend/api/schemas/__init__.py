@@ -11,6 +11,7 @@ from api.schemas.project import Project, ProjectCreate, ProjectUpdate
 from api.schemas.provider import Provider, ProviderCreate, ProviderUpdate
 from api.schemas.reminder import Reminder, ReminderCreate, ReminderUpdate
 from api.schemas.role import Role, RoleCreate, RoleUpdate
+from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.task import Task, TaskCreate, TaskUpdate
 from api.schemas.thread import Thread, ThreadCreate, ThreadUpdate
 from api.schemas.user import User, UserCreate, UserUpdate
@@ -49,6 +50,8 @@ __all__ = [
 	"Thread",
 	"ThreadCreate",
 	"ThreadUpdate",
+	"CommonSortBy",
+	"SortDir",
 	"User",
 	"UserCreate",
 	"UserUpdate",

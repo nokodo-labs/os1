@@ -36,6 +36,7 @@ from api.v1.service.authorization import (
 	thread_access_predicate,
 )
 from api.v1.service.chat.models import run_chat_model_json_schema
+from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
@@ -308,6 +309,8 @@ async def list_threads(
 	owner_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 20,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
 	include_hidden: bool = False,
 ) -> list[Thread]:
 	_ensure_admin_for_hidden(include_hidden, principal)
@@ -318,7 +321,6 @@ async def list_threads(
 			selectinload(Thread.owner),
 			selectinload(Thread.projects),
 		)
-		.order_by(Thread.last_activity_at.desc())
 		.where(
 			thread_access_predicate(
 				principal,
@@ -333,6 +335,19 @@ async def list_threads(
 
 	if include_hidden:
 		stmt = stmt.execution_options(include_deleted=True)
+
+	stmt = apply_sort(
+		stmt,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"last_activity_at": Thread.last_activity_at,
+			"created_at": Thread.created_at,
+			"updated_at": Thread.updated_at,
+			"title": Thread.title,
+		},
+		tie_breaker=Thread.id,
+	)
 
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().unique().all())

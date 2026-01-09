@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,12 +11,20 @@ from api.core.database import get_db
 from api.models.memory import Memory
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import MemoryCreate
+from api.schemas.sorting import CommonSortBy, SortDir
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/memories", tags=["memories"])
+
+
+MemorySortBy = Literal[
+	"category",
+	"last_accessed_at",
+	"confidence",
+]
 
 
 @router.post("", response_model=MemorySchema, status_code=status.HTTP_201_CREATED)
@@ -32,6 +42,8 @@ async def list_memories(
 	user_id: TypeID,
 	skip: int = 0,
 	limit: int = 50,
+	sort_by: CommonSortBy | MemorySortBy = "updated_at",
+	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Memory]:
@@ -42,6 +54,8 @@ async def list_memories(
 		user_id=user_id,
 		skip=skip,
 		limit=limit,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
 	)
 
 

@@ -198,7 +198,14 @@ async def test_prompts_router_delegates(monkeypatch):
 	async def fake_create(prompt_in, db):
 		return fake_prompt
 
-	async def fake_list(db):
+	async def fake_list(
+		db,
+		*,
+		skip=0,
+		limit=50,
+		sort_by="command",
+		sort_dir="asc",
+	):
 		return [fake_prompt]
 
 	async def fake_get(prompt_id, db):

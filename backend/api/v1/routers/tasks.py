@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.task import Task, TaskStatus
+from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.task import Task as TaskSchema
 from api.schemas.task import TaskCreate, TaskUpdate
 from api.v1.service import tasks as task_service
@@ -15,6 +18,14 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+TaskSortBy = Literal[
+	"status",
+	"task_type",
+	"stage",
+	"last_event_at",
+]
 
 
 @router.post("", response_model=TaskSchema, status_code=status.HTTP_201_CREATED)
@@ -33,6 +44,8 @@ async def list_tasks(
 	status_filter: TaskStatus | None = None,
 	skip: int = 0,
 	limit: int = 50,
+	sort_by: CommonSortBy | TaskSortBy = "created_at",
+	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Task]:
@@ -44,6 +57,8 @@ async def list_tasks(
 		status_filter=status_filter,
 		skip=skip,
 		limit=limit,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
 	)
 
 

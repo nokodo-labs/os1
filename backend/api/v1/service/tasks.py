@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.task import Task, TaskStatus
 from api.schemas.task import TaskCreate, TaskUpdate
 from api.v1.service.auth import Principal
+from api.v1.service.sorting import SortDir, apply_sort
 
 
 def _apply_updates(task: Task, updates: dict[str, object]) -> None:
@@ -55,8 +56,10 @@ async def list_tasks(
 	status_filter: TaskStatus | None = None,
 	skip: int = 0,
 	limit: int = 50,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
 ) -> list[Task]:
-	stmt = select(Task).order_by(Task.created_at.desc())
+	stmt = select(Task)
 
 	if principal.is_admin:
 		if user_id is not None:
@@ -66,6 +69,21 @@ async def list_tasks(
 
 	if status_filter is not None:
 		stmt = stmt.where(Task.status == status_filter)
+
+	stmt = apply_sort(
+		stmt,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"created_at": Task.created_at,
+			"updated_at": Task.updated_at,
+			"status": Task.status,
+			"task_type": Task.task_type,
+			"stage": Task.stage,
+			"last_event_at": Task.last_event_at,
+		},
+		tie_breaker=Task.id,
+	)
 
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().all())

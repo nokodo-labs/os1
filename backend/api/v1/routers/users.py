@@ -1,10 +1,15 @@
 """User routers."""
 
+from __future__ import annotations
+
+from typing import Literal
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.user import User
+from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate
 from api.v1.service import users as user_service
@@ -15,10 +20,20 @@ from nokodo_ai.utils.typeid import TypeID
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+UserSortBy = Literal[
+	"email",
+	"display_name",
+	"is_active",
+	"is_superuser",
+]
+
+
 @router.get("", response_model=list[UserSchema])
 async def read_users(
 	skip: int = 0,
 	limit: int = 100,
+	sort_by: CommonSortBy | UserSortBy = "updated_at",
+	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
@@ -28,6 +43,8 @@ async def read_users(
 		principal=principal,
 		skip=skip,
 		limit=limit,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
 	)
 
 

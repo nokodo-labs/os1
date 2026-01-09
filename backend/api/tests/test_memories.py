@@ -125,6 +125,46 @@ async def test_get_memory_endpoint(
 
 
 @pytest.mark.asyncio
+async def test_list_memories_sorting(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	"""List memories supports server-side sort_by + sort_dir."""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	user_id = user["id"]
+
+	resp_b = await client.post(
+		"/v1/memories",
+		headers=headers,
+		json={"user_id": user_id, "content": "b", "category": "b"},
+	)
+	assert resp_b.status_code == 201
+	resp_a = await client.post(
+		"/v1/memories",
+		headers=headers,
+		json={"user_id": user_id, "content": "a", "category": "a"},
+	)
+	assert resp_a.status_code == 201
+
+	list_resp = await client.get(
+		"/v1/memories",
+		headers=headers,
+		params={
+			"user_id": user_id,
+			"sort_by": "category",
+			"sort_dir": "asc",
+			"limit": 50,
+		},
+	)
+	assert list_resp.status_code == 200
+	items = list_resp.json()
+	assert [m["category"] for m in items[:2]] == ["a", "b"]
+
+
+@pytest.mark.asyncio
 async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> None:
 	"""Admin principals can list memories for another user."""
 	admin = await user_service.create_user(

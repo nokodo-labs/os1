@@ -65,6 +65,50 @@ async def test_list_tasks(
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_sorting(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	"""List tasks supports server-side sort_by + sort_dir."""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	resp_b = await client.post(
+		"/v1/tasks",
+		headers=headers,
+		json={
+			"user_id": user["id"],
+			"task_type": "custom",
+			"status": "pending",
+			"stage": "b",
+		},
+	)
+	assert resp_b.status_code == 201
+	resp_a = await client.post(
+		"/v1/tasks",
+		headers=headers,
+		json={
+			"user_id": user["id"],
+			"task_type": "custom",
+			"status": "pending",
+			"stage": "a",
+		},
+	)
+	assert resp_a.status_code == 201
+
+	response = await client.get(
+		"/v1/tasks",
+		headers=headers,
+		params={"sort_by": "stage", "sort_dir": "asc", "limit": 50},
+	)
+	assert response.status_code == 200
+	data = response.json()
+	assert [t["stage"] for t in data[:2]] == ["a", "b"]
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_filter(
 	client: AsyncClient,
 	db_session: AsyncSession,

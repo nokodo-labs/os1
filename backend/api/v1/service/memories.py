@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate
 from api.v1.service.auth import Principal
+from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -55,15 +56,28 @@ async def list_memories(
 	user_id: TypeID,
 	skip: int = 0,
 	limit: int = 50,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
 ) -> list[Memory]:
 	if not principal.is_admin:
 		user_id = TypeID(principal.user.id)
 
 	stmt = (
-		select(Memory)
-		.options(selectinload(Memory.owner))
-		.where(Memory.user_id == user_id)
-		.order_by(Memory.updated_at.desc())
+		apply_sort(
+			select(Memory)
+			.options(selectinload(Memory.owner))
+			.where(Memory.user_id == user_id),
+			sort_by=sort_by,
+			sort_dir=sort_dir,
+			columns={
+				"updated_at": Memory.updated_at,
+				"created_at": Memory.created_at,
+				"category": Memory.category,
+				"last_accessed_at": Memory.last_accessed_at,
+				"confidence": Memory.confidence,
+			},
+			tie_breaker=Memory.id,
+		)
 		.offset(skip)
 		.limit(limit)
 	)

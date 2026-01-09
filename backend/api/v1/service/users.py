@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.user import User
 from api.schemas.user import UserCreate
 from api.v1.service.auth import Principal
+from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.security import hash_password
 
 
@@ -18,10 +19,26 @@ async def list_users(
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
 ) -> list[User]:
 	if not principal.is_admin:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
-	result = await session.execute(select(User).offset(skip).limit(limit))
+	stmt = apply_sort(
+		select(User),
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"created_at": User.created_at,
+			"updated_at": User.updated_at,
+			"email": User.email,
+			"display_name": User.display_name,
+			"is_active": User.is_active,
+			"is_superuser": User.is_superuser,
+		},
+		tie_breaker=User.id,
+	)
+	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().all())
 
 
