@@ -2,5 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONValue_Output } from './JSONValue_Output';
-export type JSONObject_Output = Record<string, JSONValue_Output>;
+export type ApiJSONObject = Record<string, any>;

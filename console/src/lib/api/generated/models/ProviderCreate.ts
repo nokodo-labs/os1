@@ -2,14 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Input } from './JSONObject_Input';
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { ProviderStatus } from './ProviderStatus';
 import type { ProviderType } from './ProviderType';
 /**
  * Payload to create a provider.
  */
 export type ProviderCreate = {
-    metadata_?: JSONObject_Input;
+    metadata_?: ApiJSONObject;
     name: string;
     adapter_type: string;
     provider_type?: ProviderType;

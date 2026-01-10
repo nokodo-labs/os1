@@ -2,9 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CommonSortBy } from '../models/CommonSortBy';
 import type { Prompt } from '../models/Prompt';
 import type { PromptCreate } from '../models/PromptCreate';
 import type { PromptUpdate } from '../models/PromptUpdate';
+import type { SortDir } from '../models/SortDir';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -49,8 +51,8 @@ export class PromptsService {
     public static listPromptsPromptsGet(
         skip?: number,
         limit: number = 50,
-        sortBy: 'command' | 'created_at' | 'updated_at' = 'command',
-        sortDir: 'asc' | 'desc' = 'asc',
+        sortBy?: (CommonSortBy | string),
+        sortDir: SortDir = 'asc',
     ): CancelablePromise<Array<Prompt>> {
         return __request(OpenAPI, {
             method: 'GET',

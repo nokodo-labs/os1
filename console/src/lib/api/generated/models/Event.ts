@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { EventScope } from './EventScope';
-import type { JSONObject_Output } from './JSONObject_Output';
 /**
  * Event response.
  */
 export type Event = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     scope?: EventScope;
     scope_id?: (string | null);
     type: string;

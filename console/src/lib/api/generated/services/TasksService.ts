@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CommonSortBy } from '../models/CommonSortBy';
+import type { SortDir } from '../models/SortDir';
 import type { Task } from '../models/Task';
 import type { TaskCreate } from '../models/TaskCreate';
 import type { TaskStatus } from '../models/TaskStatus';
@@ -54,8 +56,8 @@ export class TasksService {
         statusFilter?: (TaskStatus | null),
         skip?: number,
         limit: number = 50,
-        sortBy: 'created_at' | 'updated_at' | 'status' | 'task_type' | 'stage' | 'last_event_at' = 'created_at',
-        sortDir: 'asc' | 'desc' = 'desc',
+        sortBy?: (CommonSortBy | 'status' | 'task_type' | 'stage' | 'last_event_at'),
+        sortDir: SortDir = 'desc',
     ): CancelablePromise<Array<Task>> {
         return __request(OpenAPI, {
             method: 'GET',

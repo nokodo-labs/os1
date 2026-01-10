@@ -3,13 +3,13 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AgentVisibility } from './AgentVisibility';
-import type { JSONObject_Output } from './JSONObject_Output';
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { Model } from './Model';
 /**
  * Response schema.
  */
 export type Agent = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     name: string;
     description?: (string | null);
     system_prompt?: (string | null);

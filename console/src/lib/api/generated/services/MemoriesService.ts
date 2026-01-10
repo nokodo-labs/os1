@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CommonSortBy } from '../models/CommonSortBy';
 import type { Memory } from '../models/Memory';
 import type { MemoryCreate } from '../models/MemoryCreate';
+import type { SortDir } from '../models/SortDir';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -50,8 +52,8 @@ export class MemoriesService {
         userId: string,
         skip?: number,
         limit: number = 50,
-        sortBy: 'updated_at' | 'created_at' | 'category' | 'last_accessed_at' | 'confidence' = 'updated_at',
-        sortDir: 'asc' | 'desc' = 'desc',
+        sortBy?: (CommonSortBy | 'category' | 'last_accessed_at' | 'confidence'),
+        sortDir: SortDir = 'desc',
     ): CancelablePromise<Array<Memory>> {
         return __request(OpenAPI, {
             method: 'GET',

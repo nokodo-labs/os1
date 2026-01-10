@@ -4,10 +4,12 @@
 /* eslint-disable */
 import type { AccessControlEntry } from '../models/AccessControlEntry';
 import type { AccessControlEntryCreate } from '../models/AccessControlEntryCreate';
+import type { CommonSortBy } from '../models/CommonSortBy';
 import type { Event } from '../models/Event';
 import type { EventsByMessageIDsRequest } from '../models/EventsByMessageIDsRequest';
 import type { Message } from '../models/Message';
 import type { MessageCreate } from '../models/MessageCreate';
+import type { SortDir } from '../models/SortDir';
 import type { Thread } from '../models/Thread';
 import type { ThreadCreate } from '../models/ThreadCreate';
 import type { ThreadRunRequest } from '../models/ThreadRunRequest';
@@ -61,8 +63,8 @@ export class ThreadsService {
         ownerId?: (string | null),
         skip?: number,
         limit: number = 20,
-        sortBy: 'last_activity_at' | 'created_at' | 'updated_at' | 'title' = 'last_activity_at',
-        sortDir: 'asc' | 'desc' = 'desc',
+        sortBy?: (CommonSortBy | 'last_activity_at' | 'title'),
+        sortDir: SortDir = 'desc',
         includeHidden: boolean = false,
     ): CancelablePromise<Array<Thread>> {
         return __request(OpenAPI, {
@@ -90,7 +92,7 @@ export class ThreadsService {
     }
     /**
      * Get Thread
-     * Fetch a single thread with messages.
+     * Fetch a single thread.
      * @param threadId
      * @param includeHidden
      * @returns Thread Successful Response
@@ -187,6 +189,9 @@ export class ThreadsService {
      * @param threadId
      * @param skip
      * @param limit
+     * @param sortBy
+     * @param sortDir
+     * @param groupTaskRuns
      * @param includeHidden
      * @returns Message Successful Response
      * @throws ApiError
@@ -195,6 +200,9 @@ export class ThreadsService {
         threadId: string,
         skip?: number,
         limit: number = 100,
+        sortBy: CommonSortBy = 'created_at',
+        sortDir: SortDir = 'desc',
+        groupTaskRuns: boolean = true,
         includeHidden: boolean = false,
     ): CancelablePromise<Array<Message>> {
         return __request(OpenAPI, {
@@ -206,6 +214,9 @@ export class ThreadsService {
             query: {
                 'skip': skip,
                 'limit': limit,
+                'sort_by': sortBy,
+                'sort_dir': sortDir,
+                'group_task_runs': groupTaskRuns,
                 'include_hidden': includeHidden,
             },
             errors: {

@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { FileContent } from './FileContent';
 import type { ImageContent } from './ImageContent';
 import type { JsonContent } from './JsonContent';
-import type { JSONObject_Output } from './JSONObject_Output';
 import type { MessageType } from './MessageType';
 import type { RefusalContent } from './RefusalContent';
 import type { TextContent } from './TextContent';
@@ -13,7 +13,7 @@ import type { TextContent } from './TextContent';
  * Response schema.
  */
 export type Message = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     type?: MessageType;
     content?: Array<(TextContent | JsonContent | ImageContent | FileContent | RefusalContent)>;
     tool_calls?: Array<Record<string, any>>;

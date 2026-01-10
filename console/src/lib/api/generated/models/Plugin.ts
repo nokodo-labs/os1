@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Output } from './JSONObject_Output';
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { PluginType } from './PluginType';
 /**
  * Response schema.
  */
 export type Plugin = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     /**
      * unique plugin name/identifier
      */

@@ -10,6 +10,7 @@
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
+	import { tick } from 'svelte'
 
 	type Props = {
 		open: boolean
@@ -22,6 +23,15 @@
 	let thread = $state<Thread | null>(null)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
+
+	let messages = $state<Message[]>([])
+	let messageSkip = $state(0)
+	let messageHasMore = $state(true)
+	let isLoadingMessages = $state(false)
+	let messageError = $state<string | null>(null)
+	let messagesEl = $state<HTMLDivElement | null>(null)
+
+	const messagePageSize = 60
 
 	function close() {
 		open = false
@@ -58,6 +68,82 @@
 		return renderDebugText(raw)
 	}
 
+	async function loadThreadMeta(id: string) {
+		thread = await ThreadsService.getThreadThreadsThreadIdGet(id)
+	}
+
+	async function loadLatestMessages(id: string) {
+		isLoadingMessages = true
+		messageError = null
+		messageHasMore = true
+		messageSkip = 0
+		messages = []
+
+		try {
+			const page = await ThreadsService.listMessagesThreadsThreadIdMessagesGet(
+				id,
+				0,
+				messagePageSize,
+				'created_at',
+				'desc',
+				true
+			)
+			messageSkip += page.length
+			messageHasMore = page.length > 0
+			messages = [...page].reverse()
+			await tick()
+			messagesEl?.scrollTo({ top: messagesEl.scrollHeight })
+		} catch (e: any) {
+			messageError = e?.message ?? 'failed to load messages'
+			messageHasMore = false
+		} finally {
+			isLoadingMessages = false
+		}
+	}
+
+	async function loadOlderMessages() {
+		if (!threadId) return
+		if (!messageHasMore) return
+		if (isLoadingMessages) return
+		if (!messagesEl) return
+
+		isLoadingMessages = true
+		messageError = null
+		const prevScrollHeight = messagesEl.scrollHeight
+		const prevScrollTop = messagesEl.scrollTop
+
+		try {
+			const page = await ThreadsService.listMessagesThreadsThreadIdMessagesGet(
+				threadId,
+				messageSkip,
+				messagePageSize,
+				'created_at',
+				'desc',
+				true
+			)
+			if (page.length === 0) {
+				messageHasMore = false
+				return
+			}
+
+			messageSkip += page.length
+			messages = [...page].reverse().concat(messages)
+			await tick()
+			const newScrollHeight = messagesEl.scrollHeight
+			messagesEl.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight)
+		} catch (e: any) {
+			messageError = e?.message ?? 'failed to load older messages'
+		} finally {
+			isLoadingMessages = false
+		}
+	}
+
+	function onMessagesScroll() {
+		if (!messagesEl) return
+		if (messagesEl.scrollTop > 80) return
+		void loadOlderMessages()
+	}
+
 	$effect(() => {
 		if (!browser) return
 		if (!open) return
@@ -66,11 +152,12 @@
 		isLoading = true
 		error = null
 		thread = null
+		messages = []
+		messageSkip = 0
+		messageHasMore = true
+		messageError = null
 
-		ThreadsService.getThreadThreadsThreadIdGet(threadId, true)
-			.then((t) => {
-				thread = t
-			})
+		Promise.all([loadThreadMeta(threadId), loadLatestMessages(threadId)])
 			.catch((e: any) => {
 				error = e?.message ?? 'failed to load thread'
 			})
@@ -134,11 +221,35 @@
 								<div class="border-b border-zinc-800 px-4 py-3">
 									<div class="text-sm font-medium">messages</div>
 									<div class="text-xs text-zinc-500">
-										{thread.messages?.length ?? 0} messages
+										{messages.length} loaded
 									</div>
 								</div>
-								<div class="max-h-[60vh] space-y-2 overflow-y-auto p-4">
-									{#if !thread.messages || thread.messages.length === 0}
+								<div
+									class="max-h-[60vh] space-y-2 overflow-y-auto p-4"
+									bind:this={messagesEl}
+									onscroll={onMessagesScroll}
+								>
+									<div class="flex items-center justify-between gap-3">
+										<Button
+											variant="outline"
+											class="rounded-xl"
+											disabled={!messageHasMore || isLoadingMessages}
+											onclick={loadOlderMessages}
+										>
+											{#if isLoadingMessages}
+												loading…
+											{:else if messageHasMore}
+												load older
+											{:else}
+												no more
+											{/if}
+										</Button>
+										{#if messageError}
+											<div class="text-xs text-red-300">{messageError}</div>
+										{/if}
+									</div>
+
+									{#if messages.length === 0 && !isLoadingMessages}
 										<div
 											class="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500"
 										>
@@ -146,7 +257,7 @@
 										</div>
 									{/if}
 
-									{#each thread.messages ?? [] as m (m.id)}
+									{#each messages as m (m.id)}
 										<div
 											class="rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"
 										>

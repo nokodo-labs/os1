@@ -3,14 +3,14 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AccessRole } from './AccessRole';
-import type { JSONObject_Output } from './JSONObject_Output';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * response schema for an ace.
  */
 export type AccessControlEntry = {
     created_at: string;
     updated_at: string;
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     id: string;
     thread_id?: (string | null);
     project_id?: (string | null);

@@ -2,10 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type JSONValue_Output =
-	| null
-	| boolean
-	| number
-	| string
-	| Record<string, unknown>
-	| unknown[]
+export type CommonSortBy = 'created_at' | 'updated_at';

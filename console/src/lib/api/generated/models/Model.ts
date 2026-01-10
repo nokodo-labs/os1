@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Output } from './JSONObject_Output';
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { ModelType } from './ModelType';
 /**
  * Response schema.
  */
 export type Model = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     name: string;
     display_name?: (string | null);
     model_type?: ModelType;

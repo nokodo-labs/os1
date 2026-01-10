@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CommonSortBy } from '../models/CommonSortBy';
+import type { SortDir } from '../models/SortDir';
 import type { User } from '../models/User';
 import type { UserCreate } from '../models/UserCreate';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -21,8 +23,8 @@ export class UsersService {
     public static readUsersUsersGet(
         skip?: number,
         limit: number = 100,
-        sortBy: 'created_at' | 'updated_at' | 'email' | 'display_name' | 'is_active' | 'is_superuser' = 'created_at',
-        sortDir: 'asc' | 'desc' = 'desc',
+        sortBy?: (CommonSortBy | 'email' | 'display_name' | 'is_active' | 'is_superuser'),
+        sortDir: SortDir = 'desc',
     ): CancelablePromise<Array<User>> {
         return __request(OpenAPI, {
             method: 'GET',

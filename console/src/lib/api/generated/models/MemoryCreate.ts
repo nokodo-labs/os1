@@ -2,12 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Input } from './JSONObject_Input';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * Payload to capture a memory.
  */
 export type MemoryCreate = {
-    metadata_?: JSONObject_Input;
+    metadata_?: ApiJSONObject;
     content: string;
     source_message_id?: (string | null);
     confidence?: (number | null);

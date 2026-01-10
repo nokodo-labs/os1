@@ -2,12 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Input } from './JSONObject_Input';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * Payload for creating a thread.
  */
 export type ThreadCreate = {
-    metadata_?: JSONObject_Input;
+    metadata_?: ApiJSONObject;
     title?: (string | null);
     tags?: Array<string>;
     is_archived?: boolean;

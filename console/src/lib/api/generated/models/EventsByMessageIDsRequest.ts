@@ -2,12 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Input } from './JSONObject_Input';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * Request payload to fetch events for a set of messages.
  */
 export type EventsByMessageIDsRequest = {
-    metadata_?: JSONObject_Input;
+    metadata_?: ApiJSONObject;
     message_ids?: Array<string>;
 };
 

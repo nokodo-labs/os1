@@ -2,12 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Input } from './JSONObject_Input';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * Payload for prompt creation.
  */
 export type PromptCreate = {
-    metadata_?: JSONObject_Input;
+    metadata_?: ApiJSONObject;
     /**
      * Prompt identifier, e.g. '/my-prompt'
      */

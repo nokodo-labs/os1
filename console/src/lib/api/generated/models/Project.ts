@@ -2,14 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Output } from './JSONObject_Output';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * Project schema.
  */
 export type Project = {
     created_at: string;
     updated_at: string;
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     name: string;
     description?: (string | null);
     id: string;

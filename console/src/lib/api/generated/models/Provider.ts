@@ -2,14 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Output } from './JSONObject_Output';
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { ProviderStatus } from './ProviderStatus';
 import type { ProviderType } from './ProviderType';
 /**
  * Response schema.
  */
 export type Provider = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     name: string;
     adapter_type: string;
     provider_type?: ProviderType;

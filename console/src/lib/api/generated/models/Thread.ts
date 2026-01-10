@@ -2,15 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { JSONObject_Output } from './JSONObject_Output';
-import type { Message } from './Message';
+import type { ApiJSONObject } from './ApiJSONObject';
 import type { Project } from './Project';
 import type { User } from './User';
 /**
  * Detailed response schema.
  */
 export type Thread = {
-    metadata_?: JSONObject_Output;
+    metadata_?: ApiJSONObject;
     title?: (string | null);
     tags?: Array<string>;
     is_archived?: boolean;
@@ -23,7 +22,6 @@ export type Thread = {
     created_at: string;
     updated_at: string;
     owner?: (User | null);
-    messages?: Array<Message>;
     projects?: Array<Project>;
 };
 

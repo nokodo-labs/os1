@@ -3,12 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AgentVisibility } from './AgentVisibility';
-import type { JSONObject_Input } from './JSONObject_Input';
+import type { ApiJSONObject } from './ApiJSONObject';
 /**
  * Payload for agent creation.
  */
 export type AgentCreate = {
-    metadata_?: JSONObject_Input;
+    metadata_?: ApiJSONObject;
     name: string;
     description?: (string | null);
     system_prompt?: (string | null);
