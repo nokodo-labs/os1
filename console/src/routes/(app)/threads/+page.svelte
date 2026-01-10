@@ -40,6 +40,12 @@
 		return 'desc'
 	}
 
+	type ThreadWithDeletedAt = Thread & { deleted_at?: string | null }
+
+	function deletedAt(thread: Thread): string | null {
+		return (thread as ThreadWithDeletedAt).deleted_at ?? null
+	}
+
 	const DEFAULT_SORT: SortKey = 'last_activity_at'
 	const SORT_PARAM = 'sort'
 	const SORT_DIR_PARAM = 'sort_dir'
@@ -310,12 +316,15 @@
 										<span class="ml-1">—</span>
 									{/if}
 								</div>
-								{#if t.is_archived}
-									<div class="text-amber-300">archived</div>
-								{/if}
-								{#if t.is_temporary}
-									<div class="text-amber-300">temporary</div>
-								{/if}
+								<div class={t.is_archived ? 'text-amber-300' : 'text-zinc-500'}>
+									archived: {t.is_archived ? 'yes' : 'no'}
+								</div>
+								<div class={deletedAt(t) ? 'text-red-300' : 'text-zinc-500'}>
+									deleted: {deletedAt(t) ? 'yes' : 'no'}
+								</div>
+								<div class={t.is_temporary ? 'text-amber-300' : 'text-zinc-500'}>
+									temporary: {t.is_temporary ? 'yes' : 'no'}
+								</div>
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">

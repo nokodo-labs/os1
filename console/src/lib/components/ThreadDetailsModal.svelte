@@ -33,6 +33,12 @@
 
 	const messagePageSize = 60
 
+	type ThreadWithDeletedAt = Thread & { deleted_at?: string | null }
+
+	function deletedAt(thread: Thread): string | null {
+		return (thread as ThreadWithDeletedAt).deleted_at ?? null
+	}
+
 	function close() {
 		open = false
 		onClose?.()
@@ -69,7 +75,7 @@
 	}
 
 	async function loadThreadMeta(id: string) {
-		thread = await ThreadsService.getThreadThreadsThreadIdGet(id)
+		thread = await ThreadsService.getThreadThreadsThreadIdGet(id, true)
 	}
 
 	async function loadLatestMessages(id: string) {
@@ -86,6 +92,7 @@
 				messagePageSize,
 				'created_at',
 				'desc',
+				true,
 				true
 			)
 			messageSkip += page.length
@@ -119,6 +126,7 @@
 				messagePageSize,
 				'created_at',
 				'desc',
+				true,
 				true
 			)
 			if (page.length === 0) {
@@ -200,7 +208,15 @@
 									<div>id: {thread.id}</div>
 									<div>owner: {thread.owner_id}</div>
 									<div>archived: {thread.is_archived ? 'yes' : 'no'}</div>
+									<div>deleted: {deletedAt(thread) ? 'yes' : 'no'}</div>
 									<div>temporary: {thread.is_temporary ? 'yes' : 'no'}</div>
+									{#if deletedAt(thread)}
+										<div>
+											deleted at: {new Date(
+												deletedAt(thread)!
+											).toLocaleString()}
+										</div>
+									{/if}
 									<div>
 										created: {new Date(thread.created_at).toLocaleString()}
 									</div>

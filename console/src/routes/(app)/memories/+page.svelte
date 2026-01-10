@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { page } from '$app/stores'
-	import { MemoriesService, UsersService, type Memory, type User } from '$lib/api'
+	import { MemoriesService, type Memory } from '$lib/api'
 	import MemoryDetailsModal from '$lib/components/MemoryDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
@@ -14,7 +14,6 @@
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
-	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { ArrowDown, ArrowUp } from '@lucide/svelte'
 
@@ -41,16 +40,13 @@
 
 	let sortKey = $state<SortKey>(DEFAULT_SORT)
 	let sortDir = $state<SortDir>(defaultSortDir(DEFAULT_SORT))
-	let userIdFilter = $state<string>('')
-	let userIdInput = $state('')
+	let userIdFilter = $state<string | null>(null)
 	let pageIndex = $state(0)
 	let limit = $state(20)
 	let refreshToken = $state(0)
 
 	let memories = $state<Memory[]>([])
-	let users = $state<User[]>([])
 	let isLoading = $state(false)
-	let isLoadingUsers = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
 
@@ -103,17 +99,8 @@
 		updateQueryParams({ [SORT_DIR_PARAM]: next })
 	}
 
-	function applyUserFilter() {
-		const trimmed = userIdInput.trim()
-		if (!trimmed) return
-		userIdFilter = trimmed
-		pageIndex = 0
-		updateQueryParams({ [USER_PARAM]: trimmed })
-	}
-
 	function clearUserFilter() {
-		userIdFilter = ''
-		userIdInput = ''
+		userIdFilter = null
 		pageIndex = 0
 		memories = []
 		updateQueryParams({ [USER_PARAM]: null })
@@ -136,7 +123,7 @@
 		const dir = sp.get(SORT_DIR_PARAM)
 		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
-		const nextUser = user?.trim() ?? ''
+		const nextUser = user?.trim() ? user : null
 
 		if (sortKey !== nextSort || sortDir !== nextDir || userIdFilter !== nextUser) {
 			pageIndex = 0
@@ -145,24 +132,6 @@
 		sortKey = nextSort
 		sortDir = nextDir
 		userIdFilter = nextUser
-		userIdInput = nextUser
-	})
-
-	// Load users for the dropdown (simple fetch, limited)
-	$effect(() => {
-		if (!browser) return
-
-		isLoadingUsers = true
-		UsersService.readUsersUsersGet(0, 100, 'created_at', 'desc')
-			.then((result) => {
-				users = result
-			})
-			.catch(() => {
-				users = []
-			})
-			.finally(() => {
-				isLoadingUsers = false
-			})
 	})
 
 	// Load memories when user filter is set
@@ -203,7 +172,7 @@
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">memories</h2>
-			<p class="text-zinc-400">view user memories stored by the system.</p>
+			<p class="text-zinc-400">user-scoped memories (use filters; start from a user).</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
@@ -240,6 +209,11 @@
 			>
 				{isLoading ? 'loading...' : 'refresh'}
 			</Button>
+			{#if userIdFilter}
+				<Button variant="outline" class="rounded-xl" onclick={() => clearUserFilter()}>
+					user: {userIdFilter} · clear
+				</Button>
+			{/if}
 		</div>
 	</div>
 
@@ -248,68 +222,6 @@
 			{error}
 		</div>
 	{/if}
-
-	<!-- User Filter Card -->
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader>
-			<CardTitle>select user</CardTitle>
-			<CardDescription
-				>memories are scoped by user. select or enter a user id.</CardDescription
-			>
-		</CardHeader>
-		<CardContent>
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-				<div class="flex-1">
-					<Input
-						type="text"
-						placeholder="enter user id..."
-						class="rounded-xl"
-						bind:value={userIdInput}
-						onkeydown={(e) => {
-							if (e.key === 'Enter') applyUserFilter()
-						}}
-					/>
-				</div>
-				<div class="flex gap-2">
-					<Button
-						class="rounded-xl"
-						onclick={applyUserFilter}
-						disabled={!userIdInput.trim()}
-					>
-						load memories
-					</Button>
-					{#if userIdFilter}
-						<Button variant="outline" class="rounded-xl" onclick={clearUserFilter}>
-							clear
-						</Button>
-					{/if}
-				</div>
-			</div>
-
-			{#if users.length > 0}
-				<div class="mt-4">
-					<div class="mb-2 text-xs text-zinc-500">quick select from recent users:</div>
-					<div class="flex flex-wrap gap-2">
-						{#each users.slice(0, 10) as u (u.id)}
-							<Button
-								variant={userIdFilter === u.id ? 'default' : 'outline'}
-								size="sm"
-								class="rounded-xl"
-								onclick={() => {
-									userIdInput = u.id
-									userIdFilter = u.id
-									pageIndex = 0
-									updateQueryParams({ [USER_PARAM]: u.id })
-								}}
-							>
-								{u.email ?? u.id}
-							</Button>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</CardContent>
-	</Card>
 
 	<!-- Memories List -->
 	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
@@ -320,7 +232,7 @@
 					{#if userIdFilter}
 						page {pageIndex + 1} · showing {memories.length}{hasNext ? '+' : ''}
 					{:else}
-						select a user to view memories
+						open a user and click “memories” to filter.
 					{/if}
 				</CardDescription>
 			</div>
@@ -354,7 +266,7 @@
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
-					select a user above to view their memories
+					open a user and use the “memories” button to filter.
 				</div>
 			{:else if isLoading && memories.length === 0}
 				<div

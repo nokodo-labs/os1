@@ -87,6 +87,7 @@ class Thread(ThreadBase, ORMModel):
 	last_activity_at: datetime
 	created_at: datetime
 	updated_at: datetime
+	deleted_at: datetime | None = None
 	owner: User | None = None
 	projects: list[ProjectSchema] = Field(default_factory=list)
 

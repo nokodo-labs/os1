@@ -2275,6 +2275,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Deleted At */
+            deleted_at?: string | null;
             owner?: components["schemas"]["User"] | null;
             /** Projects */
             projects?: components["schemas"]["Project"][];

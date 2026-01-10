@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { goto } from '$app/navigation'
 	import { UsersService, type User } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -26,6 +27,16 @@
 	function close() {
 		open = false
 		onClose?.()
+	}
+
+	function openThreads(userId: string) {
+		goto(`/threads?user=${encodeURIComponent(userId)}`)
+		close()
+	}
+
+	function openMemories(userId: string) {
+		goto(`/memories?user=${encodeURIComponent(userId)}`)
+		close()
 	}
 
 	$effect(() => {
@@ -73,6 +84,19 @@
 					</div>
 				{:else if user}
 					<div class="space-y-3">
+						<div class="flex flex-wrap gap-2">
+							<Button class="rounded-xl" onclick={() => user && openThreads(user.id)}>
+								threads
+							</Button>
+							<Button
+								variant="outline"
+								class="rounded-xl"
+								onclick={() => user && openMemories(user.id)}
+							>
+								memories
+							</Button>
+						</div>
+
 						<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm">
 							<div class="flex justify-between gap-3">
 								<span class="text-zinc-400">email</span>

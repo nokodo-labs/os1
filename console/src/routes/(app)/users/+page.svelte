@@ -276,16 +276,6 @@
 							</div>
 						</div>
 						<div class="flex shrink-0 flex-col items-end gap-2">
-							<Button
-								variant="outline"
-								class="rounded-xl"
-								onclick={(e) => {
-									e.stopPropagation()
-									goto(`/threads?user=${encodeURIComponent(u.id)}`)
-								}}
-							>
-								threads
-							</Button>
 							<div class="text-xs text-zinc-500">
 								updated {new Date(u.updated_at).toLocaleString()}
 								<div>created {new Date(u.created_at).toLocaleString()}</div>

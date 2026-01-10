@@ -21,6 +21,7 @@ export type Thread = {
     last_activity_at: string;
     created_at: string;
     updated_at: string;
+    deleted_at?: (string | null);
     owner?: (User | null);
     projects?: Array<Project>;
 };
