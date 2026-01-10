@@ -17,6 +17,7 @@ class ModelBase(MetadataModel):
 	display_name: str | None = None
 	model_type: ModelType = ModelType.LLM
 	endpoint: str | None = None
+	adapter: str | None = None
 	capabilities: list[str] = Field(default_factory=list)
 	context_window: int | None = None
 	input_cost: float | None = None
@@ -47,6 +48,7 @@ class ModelUpdate(MetadataModel):
 	display_name: str | None = None
 	model_type: ModelType | None = None
 	endpoint: str | None = None
+	adapter: str | None = None
 	capabilities: list[str] | None = None
 	context_window: int | None = None
 	input_cost: float | None = None

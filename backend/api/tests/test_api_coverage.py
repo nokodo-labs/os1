@@ -574,18 +574,21 @@ async def test_chat_service_conversions():
 			return None
 
 	class _Model:
-		def __init__(self, provider):
+		def __init__(self, provider, adapter: str | None = None):
 			self.provider = provider
 			self.name = "chat"
+			self.adapter = adapter
 
 	with pytest.raises(ValueError):
 		chat_service.build_chat_model(_Model(_Provider("")))
 
 	llm = chat_service.build_chat_model(
-		_Model(_Provider("ollama.chat", base_url="http://example.test:11434"))
+		_Model(
+			_Provider("ollama", base_url="http://example.test:11434"), adapter="chat"
+		)
 	)
 	assert llm.provider == "ollama"
-	assert llm.api == "chat"
+	assert llm.variant == "chat"
 	assert llm.model_name == "chat"
 	assert llm.adapter.type == "ollama.chat"
 	assert llm.adapter.base_url == "http://example.test:11434"
@@ -594,7 +597,7 @@ async def test_chat_service_conversions():
 		await chat_service.resolve_model_for_run(_FakeSession(), model="local:foo")
 
 	async def exec_model(stmt):
-		return _FakeResult(_Model(_Provider("ollama.chat")))
+		return _FakeResult(_Model(_Provider("ollama"), adapter="chat"))
 
 	session_model = _FakeSession()
 	session_model.execute = exec_model  # type: ignore[assignment]
@@ -717,15 +720,18 @@ async def test_chat_service_agent_resolution_paths():
 			self.encrypted_api_key = encrypted_api_key
 
 	class _Model:
-		def __init__(self, provider):
+		def __init__(self, provider, adapter: str | None = None):
 			self.provider = provider
 			self.name = "chat"
+			self.adapter = adapter
 
 	class _Agent:
 		def __init__(self, model):
 			self.model = model
 
-	valid_session = _FakeSession(_Agent(_Model(_Provider("openai.base"))))
+	valid_session = _FakeSession(
+		_Agent(_Model(_Provider("openai"), adapter="chat_completions"))
+	)
 	resolved = await chat_service.resolve_model_for_run(
 		valid_session, agent_id=new_typeid("agent")
 	)

@@ -17,7 +17,7 @@ EmbeddingAdapter = Annotated[
 ]
 
 
-def resolve_embedding_adapter_type(provider: str, api: str | None) -> str | None:
+def resolve_embedding_adapter(provider: str, adapter: str | None) -> str | None:
 	"""resolve the adapter type string from provider and api."""
 	if provider == "openai":
 		return "openai.embedding"
@@ -29,5 +29,5 @@ def resolve_embedding_adapter_type(provider: str, api: str | None) -> str | None
 __all__ = [
 	"BaseEmbeddingAdapter",
 	"EmbeddingAdapter",
-	"resolve_embedding_adapter_type",
+	"resolve_embedding_adapter",
 ]

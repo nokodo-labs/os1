@@ -28,6 +28,27 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 }
 
 
+def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
+	"""return the default adapter variant for a given provider+model type."""
+	provider_key = provider_key.strip()
+	if provider_key == "":
+		return None
+
+	if model_type == "llm":
+		match provider_key:
+			case "openai":
+				return "chat_completions"
+			case "anthropic":
+				return "messages"
+			case "ollama":
+				return "chat"
+	if model_type == "embedding":
+		match provider_key:
+			case "openai" | "ollama":
+				return "embedding"
+	return None
+
+
 def _normalize_base_url(provider: Provider) -> str | None:
 	if provider.base_url is not None and provider.base_url.strip() != "":
 		return provider.base_url.strip().rstrip("/")
@@ -247,6 +268,10 @@ async def _sync_autofetched_models(
 							provider_id=provider.id,
 							name=model_id,
 							display_name=display_name,
+							adapter=_default_model_adapter(
+								provider.adapter_type,
+								"llm",
+							),
 							capabilities=[],
 							enabled=True,
 							is_autofetched=True,
@@ -257,6 +282,11 @@ async def _sync_autofetched_models(
 				existing.enabled = True
 				existing.is_autofetched = True
 				existing.display_name = display_name
+				if existing.adapter is None:
+					existing.adapter = _default_model_adapter(
+						provider.adapter_type,
+						"llm",
+					)
 
 			for model in existing_models:
 				if not model.is_autofetched:
@@ -303,6 +333,40 @@ async def _get_model(
 	return model
 
 
+def _check_valid_adapter(
+	provider_type: str,
+	model_type: str,
+	adapter: str | None,
+) -> None:
+	if adapter is None:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="adapter cannot be null.",
+		)
+
+	valid = False
+	if model_type == "llm":
+		if provider_type == "openai":
+			valid = adapter in ("chat_completions", "responses")
+		elif provider_type == "anthropic":
+			valid = adapter == "messages"
+		elif provider_type == "ollama":
+			valid = adapter == "chat"
+	elif model_type == "embedding":
+		if provider_type in ("openai", "ollama"):
+			valid = adapter == "embedding"
+
+	if not valid:
+		msg = (
+			f"Invalid adapter '{adapter}' for provider type '{provider_type}' "
+			f"and model type '{model_type}'."
+		)
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=msg,
+		)
+
+
 async def create_model(
 	model_in: ModelCreate,
 	session: AsyncSession,
@@ -310,8 +374,23 @@ async def create_model(
 	principal: Principal,
 ) -> Model:
 	require_permission(principal, "models:manage")
-	await _ensure_provider(model_in.provider_id, session, principal)
-	model = Model(**model_in.model_dump(by_alias=True))
+
+	provider = await session.get(Provider, model_in.provider_id)
+	if not provider:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="Provider not found",
+		)
+
+	data = model_in.model_dump(by_alias=True)
+	model_type = str(data.get("model_type") or "llm")
+
+	if data.get("adapter") is None:
+		data["adapter"] = _default_model_adapter(provider.adapter_type, model_type)
+
+	_check_valid_adapter(provider.adapter_type, model_type, data.get("adapter"))
+
+	model = Model(**data)
 	session.add(model)
 	await session.commit()
 	return await _get_model(str(model.id), session, principal)
@@ -357,6 +436,12 @@ async def update_model(
 	model = await _get_model(model_id, session, principal)
 
 	update_data = model_in.model_dump(exclude_unset=True)
+
+	if "adapter" in update_data or "model_type" in update_data:
+		adapter = update_data.get("adapter", model.adapter)
+		model_type = str(update_data.get("model_type", model.model_type))
+		_check_valid_adapter(model.provider.adapter_type, model_type, adapter)
+
 	for field, value in update_data.items():
 		setattr(model, field, value)
 

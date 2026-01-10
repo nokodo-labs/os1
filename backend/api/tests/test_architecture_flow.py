@@ -33,7 +33,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 		"/v1/providers",
 		json={
 			"name": "openai",
-			"adapter_type": "openai_chat_completions",
+			"adapter_type": "openai",
 			"base_url": "https://api.openai.com/v1",
 		},
 		headers=headers,

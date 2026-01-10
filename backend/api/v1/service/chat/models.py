@@ -12,29 +12,22 @@ from sqlalchemy.orm import selectinload
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
+from nokodo_ai.adapters.chat import resolve_chat_adapter
+from nokodo_ai.adapters.embedding import resolve_embedding_adapter
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.thread import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 
-def _parse_adapter_type(adapter_type: str) -> tuple[str, str | None]:
-	"""parse provider adapter type into (provider_key, api) tuple."""
-	adapter_type = adapter_type.strip()
-	if adapter_type == "":
-		raise ValueError("provider adapter_type is empty")
-	if "." not in adapter_type:
-		return adapter_type, None
-	provider, api = adapter_type.split(".", 1)
-	provider = provider.strip()
-	api = api.strip()
-	return provider, api or None
-
-
-def build_sdk_adapter_config(provider: Provider) -> dict[str, object]:
+def build_sdk_adapter_config(
+	provider: Provider,
+	*,
+	adapter_type: str,
+) -> dict[str, object]:
 	"""build a fully explicit sdk adapter config dict from an orm Provider."""
 	adapter_config: dict[str, object] = {
-		"type": provider.adapter_type,
+		"type": adapter_type,
 	}
 	if provider.base_url is not None and provider.base_url.strip() != "":
 		adapter_config["base_url"] = provider.base_url
@@ -59,12 +52,20 @@ def build_chat_model(
 	returns:
 		configured ChatModel ready for use
 	"""
-	provider_key, api = _parse_adapter_type(model.provider.adapter_type)
-	adapter_config = build_sdk_adapter_config(model.provider)
+	provider_key = model.provider.adapter_type
+	if not provider_key:
+		raise ValueError("provider adapter_type is empty")
+
+	variant = model.adapter
+	adapter_type = resolve_chat_adapter(provider_key, variant)
+	if adapter_type is None:
+		raise ValueError(f"unknown provider: {provider_key}")
+
+	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
 	return ChatModel.model_validate(
 		{
 			"provider": provider_key,
-			"api": api,
+			"variant": variant,
 			"model_name": model.name,
 			"adapter": adapter_config,
 			"temperature": temperature,
@@ -116,12 +117,20 @@ def build_embedding_model(model: Model) -> EmbeddingModel:
 	if model.model_type != ModelType.EMBEDDING:
 		raise ValueError(f"model {model.id} is not an embedding model")
 
-	provider_key, api = _parse_adapter_type(model.provider.adapter_type)
-	adapter_config = build_sdk_adapter_config(model.provider)
+	provider_key = model.provider.adapter_type
+	if not provider_key:
+		raise ValueError("provider adapter_type is empty")
+
+	variant = model.adapter
+	adapter_type = resolve_embedding_adapter(provider_key, variant)
+	if adapter_type is None:
+		raise ValueError(f"unknown embedding provider: {provider_key}")
+
+	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
 	return EmbeddingModel.model_validate(
 		{
 			"provider": provider_key,
-			"api": api,
+			"variant": variant,
 			"model_name": model.name,
 			"adapter": adapter_config,
 		}

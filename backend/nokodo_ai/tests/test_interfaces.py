@@ -251,7 +251,7 @@ async def test_chat_model_resolves_default_provider(
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert llm.provider == "openai"
-	assert llm.api is None
+	assert llm.variant is None
 	assert llm.model_name == "gpt-4o"
 	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
@@ -261,7 +261,7 @@ async def test_embedding_uses_provided_adapter() -> None:
 	adapter = _StubEmbeddingAdapter()
 	embedder = EmbeddingModel.model_construct(
 		provider="openai",
-		api=None,
+		variant=None,
 		model_name="custom",
 		adapter=adapter,
 	)
@@ -280,7 +280,7 @@ async def test_embedding_resolves_default_provider(
 	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
 
 	assert embedder.provider == "openai"
-	assert embedder.api is None
+	assert embedder.variant is None
 	assert embedder.model_name == "text-embedding-3-small"
 	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)
 
@@ -292,6 +292,6 @@ async def test_embedding_variant_is_forwarded(monkeypatch: pytest.MonkeyPatch) -
 	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
 
 	assert embedder.provider == "openai"
-	assert embedder.api == "beta"
+	assert embedder.variant == "beta"
 	assert embedder.model_name == "text-embedding-3-large"
 	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)

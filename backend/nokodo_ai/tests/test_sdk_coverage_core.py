@@ -313,9 +313,9 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 	assert m3.adapter.type.startswith("openai.")
 
 	# adapter already fully-qualified (contains a dot) should not be expanded
-	from nokodo_ai.adapters.chat import resolve_chat_adapter_type
+	from nokodo_ai.adapters.chat import resolve_chat_adapter
 
-	adapter_type = resolve_chat_adapter_type("openai", None)
+	adapter_type = resolve_chat_adapter("openai", None)
 	assert adapter_type is not None and "." in adapter_type
 	m4 = ChatModel.model_validate(
 		{
@@ -333,7 +333,7 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 	# cover the shorthand-adapter unknown provider branch (chat_models.py line 62)
 	import nokodo_ai.chat_models as cm
 
-	monkeypatch.setattr(cm, "resolve_chat_adapter_type", lambda provider, api: None)
+	monkeypatch.setattr(cm, "resolve_chat_adapter", lambda provider, adapter: None)
 	with pytest.raises(ValueError, match="unknown provider"):
 		ChatModel.model_validate(
 			{

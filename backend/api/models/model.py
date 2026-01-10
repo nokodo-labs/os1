@@ -49,6 +49,7 @@ class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		default=ModelType.LLM,
 	)
 	endpoint: Mapped[str | None] = mapped_column(String(255))
+	adapter: Mapped[str | None] = mapped_column(String(100))
 	capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
 	context_window: Mapped[int | None] = mapped_column(Integer())
 	input_cost: Mapped[float | None] = mapped_column(Float())

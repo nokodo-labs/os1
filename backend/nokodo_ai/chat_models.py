@@ -9,7 +9,7 @@ from pydantic import model_validator
 
 from .adapter_enabled import AdapterEnabledMixin, split_model_identifier
 from .adapters.base.chat import ChatGenerationParams
-from .adapters.chat import ChatAdapter, resolve_chat_adapter_type
+from .adapters.chat import ChatAdapter, resolve_chat_adapter
 from .deltas import ChatModelDelta, stream_chat_model_deltas
 from .messages import AssistantMessage, Message
 from .thread import Thread
@@ -43,9 +43,9 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 		if isinstance(data, dict):
 			model = data.pop("model_name", None)
 			if model and isinstance(model, str):
-				provider, api, name = split_model_identifier(model)
+				provider, variant, name = split_model_identifier(model)
 				data.setdefault("provider", provider)
-				data.setdefault("api", api)
+				data.setdefault("variant", variant)
 				data.setdefault("model_name", name)
 
 			# If an adapter dict is provided but uses a shorthand type (e.g. "openai"),
@@ -56,8 +56,8 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 				type_value = adapter.get("type")
 				if isinstance(type_value, str) and "." not in type_value:
 					provider = str(data.get("provider") or type_value)
-					api = data.get("api")
-					adapter_type = resolve_chat_adapter_type(provider, api)
+					variant = data.get("variant")
+					adapter_type = resolve_chat_adapter(provider, variant)
 					if not adapter_type:
 						raise ValueError(f"unknown provider: {provider}")
 					adapter["type"] = adapter_type
@@ -65,10 +65,10 @@ class ChatModel(ChatGenerationParams, AdapterEnabledMixin[ChatAdapter]):
 
 			if "adapter" not in data:
 				provider = data.get("provider")
-				api = data.get("api")
+				variant = data.get("variant")
 
 				if provider:
-					adapter_type = resolve_chat_adapter_type(provider, api)
+					adapter_type = resolve_chat_adapter(provider, variant)
 					if not adapter_type:
 						raise ValueError(f"unknown provider: {provider}")
 					adapter_config = {"type": adapter_type}

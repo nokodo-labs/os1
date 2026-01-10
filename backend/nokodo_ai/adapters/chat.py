@@ -25,11 +25,11 @@ ChatAdapter = Annotated[
 ]
 
 
-def resolve_chat_adapter_type(provider: str, api: str | None) -> str | None:
-	"""resolve the adapter type string from provider and api."""
+def resolve_chat_adapter(provider: str, adapter: str | None) -> str | None:
+	"""resolve the adapter type string from provider and adapter variant."""
 	match provider:
 		case "openai":
-			if api == "responses":
+			if adapter == "responses":
 				return "openai.responses"
 			return "openai.chat_completions"
 		case "anthropic":
@@ -43,5 +43,5 @@ __all__ = [
 	"BaseChatAdapter",
 	"ChatAdapter",
 	"ChatGenerationParams",
-	"resolve_chat_adapter_type",
+	"resolve_chat_adapter",
 ]
