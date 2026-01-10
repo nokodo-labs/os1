@@ -13,6 +13,7 @@ export type Model = {
     display_name?: (string | null);
     model_type?: ModelType;
     endpoint?: (string | null);
+    adapter?: (string | null);
     capabilities?: Array<string>;
     context_window?: (number | null);
     input_cost?: (number | null);

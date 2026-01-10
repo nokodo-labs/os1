@@ -16,6 +16,8 @@ export type Message = {
     metadata_?: ApiJSONObject;
     type?: MessageType;
     content?: Array<(TextContent | JsonContent | ImageContent | FileContent | RefusalContent)>;
+    tool_call_id?: (string | null);
+    is_error?: (boolean | null);
     tool_calls?: Array<Record<string, any>>;
     usage?: (Record<string, any> | null);
     read_by?: Array<string>;

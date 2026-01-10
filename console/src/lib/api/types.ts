@@ -1364,6 +1364,10 @@ export interface components {
             type: components["schemas"]["MessageType"];
             /** Content */
             content?: (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
+            /** Tool Call Id */
+            tool_call_id?: string | null;
+            /** Is Error */
+            is_error?: boolean | null;
             /** Tool Calls */
             tool_calls?: {
                 [key: string]: unknown;
@@ -1422,6 +1426,10 @@ export interface components {
             content: string | ({
                 [key: string]: unknown;
             } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
+            /** Tool Call Id */
+            tool_call_id?: string | null;
+            /** Is Error */
+            is_error?: boolean | null;
             /** Tool Calls */
             tool_calls?: {
                 [key: string]: unknown;
@@ -1461,6 +1469,8 @@ export interface components {
             model_type: components["schemas"]["ModelType"];
             /** Endpoint */
             endpoint?: string | null;
+            /** Adapter */
+            adapter?: string | null;
             /** Capabilities */
             capabilities?: string[];
             /** Context Window */
@@ -1508,6 +1518,8 @@ export interface components {
             model_type: components["schemas"]["ModelType"];
             /** Endpoint */
             endpoint?: string | null;
+            /** Adapter */
+            adapter?: string | null;
             /** Capabilities */
             capabilities?: string[];
             /** Context Window */
@@ -1548,6 +1560,8 @@ export interface components {
             model_type?: components["schemas"]["ModelType"] | null;
             /** Endpoint */
             endpoint?: string | null;
+            /** Adapter */
+            adapter?: string | null;
             /** Capabilities */
             capabilities?: string[] | null;
             /** Context Window */

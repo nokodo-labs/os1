@@ -15,6 +15,8 @@ export type MessageCreate = {
     metadata_?: ApiJSONObject;
     type?: MessageType;
     content?: string;
+    tool_call_id?: (string | null);
+    is_error?: (boolean | null);
     tool_calls?: Array<Record<string, any>>;
     usage?: (Record<string, any> | null);
     read_by?: Array<string>;
