@@ -87,7 +87,7 @@ async def get_thread(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Thread:
-	"""Fetch a single thread with messages."""
+	"""Fetch a single thread."""
 	return await thread_service.get_thread(
 		thread_id,
 		db,
@@ -127,6 +127,9 @@ async def list_messages(
 	thread_id: TypeID,
 	skip: int = 0,
 	limit: int = 100,
+	sort_by: CommonSortBy = "created_at",
+	sort_dir: SortDir = "desc",
+	group_task_runs: bool = True,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -138,6 +141,9 @@ async def list_messages(
 		principal=principal,
 		skip=skip,
 		limit=limit,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		group_task_runs=group_task_runs,
 		include_hidden=include_hidden,
 	)
 

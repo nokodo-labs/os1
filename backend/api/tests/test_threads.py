@@ -335,6 +335,96 @@ async def test_thread_messages(
 
 
 @pytest.mark.asyncio
+async def test_thread_messages_group_task_runs(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "group runs"},
+		headers=headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = thread_resp.json()["id"]
+
+	run_id = "run-test-1"
+	tool_call_id_1 = "tool_call_test_1"
+	tool_call_id_2 = "tool_call_test_2"
+
+	assistant_payload = {
+		"content": "calling tools",
+		"type": "assistant",
+		"metadata_": {"run_id": run_id},
+		"tool_calls": [
+			{"id": tool_call_id_1, "name": "t1", "arguments": {}},
+			{"id": tool_call_id_2, "name": "t2", "arguments": {}},
+		],
+	}
+	assistant_resp = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json=assistant_payload,
+		headers=headers,
+	)
+	assert assistant_resp.status_code == 201
+	assistant_msg = assistant_resp.json()
+
+	tool_payload_1 = {
+		"content": "tool out 1",
+		"type": "tool",
+		"metadata_": {"run_id": run_id, "tool_call_id": tool_call_id_1},
+	}
+	tool_payload_2 = {
+		"content": "tool out 2",
+		"type": "tool",
+		"metadata_": {"run_id": run_id, "tool_call_id": tool_call_id_2},
+	}
+	tool_resp_1 = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json=tool_payload_1,
+		headers=headers,
+	)
+	assert tool_resp_1.status_code == 201
+	tool_msg_1 = tool_resp_1.json()
+
+	tool_resp_2 = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json=tool_payload_2,
+		headers=headers,
+	)
+	assert tool_resp_2.status_code == 201
+	tool_msg_2 = tool_resp_2.json()
+
+	# With grouping enabled, requesting a small page that lands on tool messages
+	# should stitch in the initiating assistant message (but not the entire run).
+	list_resp = await client.get(
+		f"/v1/threads/{thread_id}/messages",
+		headers=headers,
+		params={"limit": 1},
+	)
+	assert list_resp.status_code == 200
+	items = list_resp.json()
+	assert len(items) == 2
+	assert items[0]["id"] in {tool_msg_1["id"], tool_msg_2["id"]}
+	assert items[1]["id"] == assistant_msg["id"]
+	assert items[1]["type"] == "assistant"
+
+	list_resp_no_group = await client.get(
+		f"/v1/threads/{thread_id}/messages",
+		headers=headers,
+		params={"limit": 1, "group_task_runs": False},
+	)
+	assert list_resp_no_group.status_code == 200
+	items_no_group = list_resp_no_group.json()
+	assert len(items_no_group) == 1
+	assert items_no_group[0]["type"] == "tool"
+
+
+@pytest.mark.asyncio
 async def test_create_thread_invalid_user(
 	client: AsyncClient,
 	admin_auth: dict[str, object],

@@ -358,9 +358,20 @@ async def run_agent(
 		thread_orm.current_message_id = initial_parent_id
 
 	try:
+		branch_orm = await thread_service.get_current_branch(
+			thread_id,
+			session,
+			principal=principal,
+			include_hidden=False,
+		)
+		sdk_thread = SDKThread(
+			created_at=thread_orm.created_at,
+			messages=[m.to_sdk() for m in branch_orm],
+			metadata=thread_orm.metadata_,
+		)
 		thread = await inject_system_instructions(
 			agent,
-			thread_orm.to_sdk(),
+			sdk_thread,
 			session=session,
 		)
 	finally:

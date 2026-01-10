@@ -27,6 +27,7 @@ from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 from api.schemas.message import MessageCreate
+from api.schemas.sorting import CommonSortBy
 from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
@@ -218,15 +219,8 @@ async def _load_thread(
 	required_role: AccessRole = AccessRole.VIEWER,
 	include_hidden: bool = False,
 ) -> Thread:
-	stmt = (
-		select(Thread)
-		.options(
-			selectinload(Thread.messages),
-			selectinload(Thread.owner),
-			selectinload(Thread.projects),
-		)
-		.where(Thread.id == thread_id)
-	)
+	options = [selectinload(Thread.owner), selectinload(Thread.projects)]
+	stmt = select(Thread).options(*options).where(Thread.id == thread_id)
 
 	if principal is not None:
 		stmt = stmt.where(
@@ -493,6 +487,9 @@ async def list_messages(
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
+	sort_by: CommonSortBy = "created_at",
+	sort_dir: SortDir = "desc",
+	group_task_runs: bool = True,
 	include_hidden: bool = False,
 ) -> list[Message]:
 	_ensure_admin_for_hidden(include_hidden, principal)
@@ -503,15 +500,85 @@ async def list_messages(
 		required_role=AccessRole.VIEWER,
 		include_hidden=include_hidden,
 	)
-	stmt = (
-		select(Message)
-		.where(Message.thread_id == thread_id)
-		.order_by(Message.created_at)
-		.offset(skip)
-		.limit(limit)
+	base_stmt = select(Message).where(Message.thread_id == thread_id)
+	base_stmt = apply_sort(
+		base_stmt,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"created_at": Message.created_at,
+			"updated_at": Message.updated_at,
+		},
+		tie_breaker=Message.id,
 	)
-	result = await session.execute(stmt)
-	return list(result.scalars().all())
+	page_result = await session.execute(base_stmt.offset(skip).limit(limit))
+	items = list(page_result.scalars().all())
+	if not group_task_runs or not items:
+		return items
+
+	# identify consecutive tool messages at the "latest" edge of this page.
+	tool_block: list[Message] = []
+	edge = items if sort_dir == "desc" else reversed(items)
+	for msg in edge:
+		if msg.type != MessageType.TOOL:
+			break
+		tool_block.append(msg)
+
+	if not tool_block:
+		return items
+
+	tool_call_ids = {
+		tid
+		for m in tool_block
+		if isinstance(tid := m.metadata_.get("tool_call_id"), str)
+	}
+	if not tool_call_ids:
+		return items
+
+	def _has_all_tool_calls(msg: Message) -> bool:
+		if msg.type != MessageType.ASSISTANT:
+			return False
+		seen = {tc.get("id") for tc in msg.tool_calls or []}
+		return tool_call_ids.issubset(seen)
+
+	# check if parent assistant message is already in page
+	adj_index = (
+		len(tool_block) if sort_dir == "desc" else len(items) - len(tool_block) - 1
+	)
+	if 0 <= adj_index < len(items) and _has_all_tool_calls(items[adj_index]):
+		return items
+
+	# fetch the nearest preceding assistant message that includes all tool call ids.
+	anchor = min(tool_block, key=lambda m: (m.created_at, m.id))
+	boundary_predicate = (Message.created_at < anchor.created_at) | (
+		(Message.created_at == anchor.created_at) & (Message.id < anchor.id)
+	)
+	assistant_stmt = (
+		select(Message)
+		.where(
+			Message.thread_id == thread_id,
+			Message.type == MessageType.ASSISTANT,
+			boundary_predicate,
+		)
+		.order_by(Message.created_at.desc(), Message.id.desc())
+		.limit(25)
+	)
+	if run_id := anchor.metadata_.get("run_id"):
+		assistant_stmt = assistant_stmt.where(
+			Message.metadata_["run_id"].as_string() == run_id
+		)
+
+	assistant_result = await session.execute(assistant_stmt)
+	assistant_msg = next(
+		(m for m in assistant_result.scalars() if _has_all_tool_calls(m)),
+		None,
+	)
+	if assistant_msg is None:
+		return items
+
+	# insert while preserving the requested sort order.
+	insert_at = len(tool_block) if sort_dir == "desc" else len(items) - len(tool_block)
+	return [*items[:insert_at], assistant_msg, *items[insert_at:]]
 
 
 async def list_events_for_message_ids(
@@ -566,6 +633,9 @@ async def list_message_tree(
 		principal=principal,
 		skip=0,
 		limit=10_000,
+		sort_by="created_at",
+		sort_dir="asc",
+		group_task_runs=False,
 		include_hidden=include_hidden,
 	)
 
