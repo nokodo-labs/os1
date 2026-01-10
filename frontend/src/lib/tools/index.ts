@@ -186,12 +186,10 @@ export function parseToolResult(message: ApiMessage): ToolResult | null {
 	const textPart = content.find((p) => p?.type === 'text')
 	const output = textPart && 'text' in textPart ? (textPart.text ?? '') : ''
 
-	const metadata = message.metadata_ ?? {}
-
 	return {
-		toolCallId: (metadata.tool_call_id as string) ?? '',
+		toolCallId: (message.tool_call_id as string | undefined) ?? '',
 		output,
-		isError: (metadata.is_error as boolean) ?? false,
+		isError: (message.is_error as boolean | undefined) ?? false,
 	}
 }
 

@@ -170,3 +170,57 @@ def test_schema_coerces_none_metadata_to_empty_dict() -> None:
 
 	serialized = EventSchema.model_validate(event)
 	assert serialized.metadata == {}
+
+
+def test_message_create_validates_type_specific_fields() -> None:
+	from api.models.message import MessageType
+
+	# tool messages require tool_call_id and is_error
+	with pytest.raises(ValueError, match="tool_call_id is required"):
+		MessageCreate(type=MessageType.TOOL, content="output")
+
+	with pytest.raises(ValueError, match="is_error is required"):
+		MessageCreate(type=MessageType.TOOL, content="output", tool_call_id="tc")
+
+	# valid tool message
+	tool_msg = MessageCreate(
+		type=MessageType.TOOL,
+		content="output",
+		tool_call_id="tc_123",
+		is_error=False,
+	)
+	assert tool_msg.tool_call_id == "tc_123"
+
+	# tool fields forbidden on user/system
+	with pytest.raises(ValueError, match="tool_call_id is only valid"):
+		MessageCreate(type=MessageType.USER, content="hi", tool_call_id="tc")
+
+	with pytest.raises(ValueError, match="is_error is only valid"):
+		MessageCreate(type=MessageType.SYSTEM, content="sys", is_error=False)
+
+	# tool_calls/usage forbidden on user/system
+	with pytest.raises(ValueError, match="tool_calls is only valid"):
+		MessageCreate(type=MessageType.USER, content="hi", tool_calls=[{"id": "x"}])
+
+	with pytest.raises(ValueError, match="usage is only valid"):
+		MessageCreate(type=MessageType.SYSTEM, content="sys", usage={"tokens": 1})
+
+	# tool_calls/usage forbidden on tool messages
+	with pytest.raises(ValueError, match="tool_calls is not valid"):
+		MessageCreate(
+			type=MessageType.TOOL,
+			content="out",
+			tool_call_id="tc",
+			is_error=False,
+			tool_calls=[{"id": "x"}],
+		)
+
+	# assistant allows tool_calls and usage
+	assistant_msg = MessageCreate(
+		type=MessageType.ASSISTANT,
+		content="hi",
+		tool_calls=[{"id": "tc", "name": "fn", "arguments": {}}],
+		usage={"input_tokens": 1, "output_tokens": 2, "total_tokens": 3},
+	)
+	assert len(assistant_msg.tool_calls) == 1
+	assert assistant_msg.usage is not None

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from api.models.message import MessageType
 from api.schemas.common import MetadataModel
@@ -30,6 +30,8 @@ class MessageBase(MetadataModel):
 
 	type: MessageType = MessageType.USER
 	content: ContentPartList = Field(default_factory=list)
+	tool_call_id: str | None = None
+	is_error: bool | None = None
 	tool_calls: list[dict[str, Any]] = Field(default_factory=list)
 	usage: dict[str, Any] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
@@ -45,6 +47,8 @@ class MessageCreate(MetadataModel):
 
 	type: MessageType = MessageType.USER
 	content: str | list[dict[str, Any] | ContentPart] = ""
+	tool_call_id: str | None = None
+	is_error: bool | None = None
 	tool_calls: list[dict[str, Any]] = Field(default_factory=list)
 	usage: dict[str, Any] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
@@ -52,6 +56,41 @@ class MessageCreate(MetadataModel):
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
 	sender_user_id: TypeID | None = None
+
+	@model_validator(mode="after")
+	def validate_message_type_fields(self) -> MessageCreate:
+		"""validate fields based on message type.
+
+		ensures type-specific fields are present/absent as appropriate:
+		- tool: requires tool_call_id, is_error; forbids tool_calls, usage
+		- assistant: allows tool_calls, usage; forbids tool_call_id, is_error
+		- user/system: forbids tool_call_id, is_error, tool_calls, usage
+		"""
+		match self.type:
+			case MessageType.TOOL:
+				if not self.tool_call_id:
+					raise ValueError("tool_call_id is required for tool messages")
+				if self.is_error is None:
+					raise ValueError("is_error is required for tool messages")
+				if self.tool_calls:
+					raise ValueError("tool_calls is not valid for tool messages")
+				if self.usage is not None:
+					raise ValueError("usage is not valid for tool messages")
+			case MessageType.ASSISTANT:
+				if self.tool_call_id is not None:
+					raise ValueError("tool_call_id is only valid for tool messages")
+				if self.is_error is not None:
+					raise ValueError("is_error is only valid for tool messages")
+			case MessageType.USER | MessageType.SYSTEM:
+				if self.tool_call_id is not None:
+					raise ValueError("tool_call_id is only valid for tool messages")
+				if self.is_error is not None:
+					raise ValueError("is_error is only valid for tool messages")
+				if self.tool_calls:
+					raise ValueError("tool_calls is only valid for assistant messages")
+				if self.usage is not None:
+					raise ValueError("usage is only valid for assistant messages")
+		return self
 
 	@field_validator("content", mode="before")
 	@classmethod
@@ -105,13 +144,12 @@ class MessageCreate(MetadataModel):
 				)
 			case "tool":
 				assert isinstance(sdk_msg, SDKToolMessage)
-				meta = dict(sdk_msg.metadata or {})
-				meta["tool_call_id"] = sdk_msg.tool_call_id
-				meta["is_error"] = sdk_msg.is_error
 				return cls(
 					type=MessageType.TOOL,
 					content=[TextContent(text=sdk_msg.tool_output).model_dump()],
-					metadata_=meta,
+					tool_call_id=sdk_msg.tool_call_id,
+					is_error=sdk_msg.is_error,
+					metadata_=dict(sdk_msg.metadata or {}),
 				)
 			case _:
 				raise ValueError(f"unknown sdk message role: {sdk_msg.role}")

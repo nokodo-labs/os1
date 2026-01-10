@@ -376,12 +376,16 @@ async def test_thread_messages_group_task_runs(
 	tool_payload_1 = {
 		"content": "tool out 1",
 		"type": "tool",
-		"metadata_": {"run_id": run_id, "tool_call_id": tool_call_id_1},
+		"tool_call_id": tool_call_id_1,
+		"is_error": False,
+		"metadata_": {"run_id": run_id},
 	}
 	tool_payload_2 = {
 		"content": "tool out 2",
 		"type": "tool",
-		"metadata_": {"run_id": run_id, "tool_call_id": tool_call_id_2},
+		"tool_call_id": tool_call_id_2,
+		"is_error": False,
+		"metadata_": {"run_id": run_id},
 	}
 	tool_resp_1 = await client.post(
 		f"/v1/threads/{thread_id}/messages",
@@ -1074,7 +1078,13 @@ async def test_create_message_types_service(
 	# Tool
 	msg_tool = await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="T", type=MessageType.TOOL, sender_user_id=user.id),
+		MessageCreate(
+			content="T",
+			type=MessageType.TOOL,
+			tool_call_id=TypeID(new_typeid("tool_call")),
+			is_error=False,
+			sender_user_id=user.id,
+		),
 		db_session,
 		principal=principal,
 	)

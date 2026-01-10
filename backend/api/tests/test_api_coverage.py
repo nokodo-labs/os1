@@ -555,7 +555,8 @@ async def test_chat_service_conversions():
 	assert str(user_create.sender_user_id).startswith("user_")
 	assert system_create.type.name == "SYSTEM"
 	assert assistant_create.usage["total_tokens"] == 3
-	assert tool_create.metadata["tool_call_id"] == "t"
+	assert tool_create.tool_call_id == "t"
+	assert tool_create.is_error is False
 
 	class _Provider:
 		def __init__(
@@ -653,12 +654,16 @@ def test_chat_service_orm_to_sdk_variants():
 	tool_orm = MagicMock(spec=ToolMessageORM)
 	tool_orm.type = MessageTypeORM.TOOL
 	tool_orm.content = [{"type": "text", "text": "out"}]
-	tool_orm.metadata_ = {"tool_call_id": "tc", "is_error": True}
+	tool_orm.tool_call_id = "tc"
+	tool_orm.is_error = True
+	tool_orm.metadata_ = {}
 	tool_orm.to_sdk = lambda: ToolMessageORM.to_sdk(tool_orm)
 
 	tool_orm_empty = MagicMock(spec=ToolMessageORM)
 	tool_orm_empty.type = MessageTypeORM.TOOL
 	tool_orm_empty.content = []
+	tool_orm_empty.tool_call_id = "tc_empty"
+	tool_orm_empty.is_error = False
 	tool_orm_empty.metadata_ = {}
 	tool_orm_empty.to_sdk = lambda: ToolMessageORM.to_sdk(tool_orm_empty)
 
@@ -681,7 +686,7 @@ def test_chat_service_orm_to_sdk_variants():
 	assert tool_sdk.is_error is True
 	assert tool_sdk.tool_output == "out"
 	assert tool_sdk_empty.tool_output == ""
-	assert tool_sdk_empty.tool_call_id == ""
+	assert tool_sdk_empty.tool_call_id == "tc_empty"
 	assert tool_sdk_empty.is_error is False
 	assert fallback_sdk.role == "user"
 

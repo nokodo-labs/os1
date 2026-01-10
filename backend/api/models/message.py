@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import JSON, Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -90,6 +90,9 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	# Ordered list of content parts (TextContent, ImageContent, etc.)
 	# Each part is a dict with "type" discriminator matching api.schemas.content
 	content: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+	# Tool-specific fields. Nullable for non-tool messages.
+	tool_call_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH), index=True)
+	is_error: Mapped[bool | None] = mapped_column(Boolean)
 	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 	# Token usage from LLM response (matches SDK Usage model)
 	usage: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -192,15 +195,14 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 					metadata=self.metadata_,
 				)
 			case MessageType.TOOL:
-				meta = self.metadata_ or {}
 				output = ""
 				if self.content:
 					part = SDKTextContent.model_validate(self.content[0])
 					output = part.text
 				return SDKToolMessage(
-					tool_call_id=meta.get("tool_call_id", ""),
+					tool_call_id=self.tool_call_id or "",
 					tool_output=output,
-					is_error=meta.get("is_error", False),
+					is_error=self.is_error or False,
 					metadata=self.metadata_,
 				)
 			case _:
@@ -244,15 +246,14 @@ class ToolMessage(Message):
 	__mapper_args__ = {"polymorphic_identity": MessageType.TOOL}
 
 	def to_sdk(self) -> SDKToolMessage:
-		meta = self.metadata_ or {}
 		output = ""
 		if self.content:
 			part = SDKTextContent.model_validate(self.content[0])
 			output = part.text
 		return SDKToolMessage(
-			tool_call_id=meta.get("tool_call_id", ""),
+			tool_call_id=self.tool_call_id or "",
 			tool_output=output,
-			is_error=meta.get("is_error", False),
+			is_error=self.is_error or False,
 			metadata=self.metadata_,
 		)
 

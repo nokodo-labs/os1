@@ -24,6 +24,8 @@ def _make_message(
 		sender_user_id=None,
 		type=msg_type,
 		content=content_value,
+		tool_call_id=None,
+		is_error=None,
 		tool_calls=[],
 		usage=None,
 		read_by=[],
@@ -47,7 +49,8 @@ def test_message_to_sdk_all_types() -> None:
 		msg_type=MessageType.TOOL,
 		content=[{"type": "text", "text": "tool output"}],
 	)
-	tool.metadata_ = {"tool_call_id": "tc_1", "is_error": True}
+	tool.tool_call_id = "tc_1"
+	tool.is_error = True
 
 	unknown = _make_message(
 		msg_type="other",
@@ -73,11 +76,12 @@ def test_message_to_sdk_all_types() -> None:
 
 def test_message_to_sdk_tool_without_content() -> None:
 	tool = _make_message(msg_type=MessageType.TOOL, content=[])
-	tool.metadata_ = {}
+	tool.tool_call_id = "tc_1"
+	tool.is_error = False
 	tool_sdk = tool.to_sdk()
 	assert tool_sdk.role == "tool"
 	assert tool_sdk.tool_output == ""
-	assert tool_sdk.tool_call_id == ""
+	assert tool_sdk.tool_call_id == "tc_1"
 	assert tool_sdk.is_error is False
 
 

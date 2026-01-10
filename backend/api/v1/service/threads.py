@@ -15,14 +15,7 @@ from sqlalchemy.orm import selectinload
 from api.models.acl import AccessRole
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.models.message import (
-	AssistantMessage,
-	Message,
-	MessageType,
-	SystemMessage,
-	ToolMessage,
-	UserMessage,
-)
+from api.models.message import Message, MessageType
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
@@ -528,9 +521,7 @@ async def list_messages(
 		return items
 
 	tool_call_ids = {
-		tid
-		for m in tool_block
-		if isinstance(tid := m.metadata_.get("tool_call_id"), str)
+		tid for m in tool_block if isinstance(tid := m.tool_call_id, str) and tid != ""
 	}
 	if not tool_call_ids:
 		return items
@@ -747,42 +738,18 @@ async def create_message(
 
 	pk: dict[str, object] = {"id": message_id} if message_id is not None else {}
 
-	match message_in.type:
-		case MessageType.USER:
-			message = UserMessage(
-				thread_id=thread_id,
-				parent_id=parent_id,
-				**pk,
-				**data,
-			)
-		case MessageType.ASSISTANT:
-			message = AssistantMessage(
-				thread_id=thread_id,
-				parent_id=parent_id,
-				**pk,
-				**data,
-			)
-		case MessageType.TOOL:
-			message = ToolMessage(
-				thread_id=thread_id,
-				parent_id=parent_id,
-				**pk,
-				**data,
-			)
-		case MessageType.SYSTEM:
-			message = SystemMessage(
-				thread_id=thread_id,
-				parent_id=parent_id,
-				**pk,
-				**data,
-			)
-		case _:
-			message = UserMessage(
-				thread_id=thread_id,
-				parent_id=parent_id,
-				**pk,
-				**data,
-			)
+	polymorphic_entry = Message.__mapper__.polymorphic_map.get(message_in.type)
+	if polymorphic_entry is None:
+		message_cls = Message.__mapper__.polymorphic_map[MessageType.USER].class_
+	else:
+		message_cls = polymorphic_entry.class_
+
+	message = message_cls(
+		thread_id=thread_id,
+		parent_id=parent_id,
+		**pk,
+		**data,
+	)
 
 	thread.last_activity_at = datetime.now(tz=UTC)
 	session.add(message)

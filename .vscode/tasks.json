@@ -55,7 +55,7 @@
 			},
 			"presentation": {
 				"reveal": "always",
-				"panel": "new", // temporarily set to new for AI compat.
+				"panel": "dedicated",
 				"showReuseMessage": false
 			},
 			"problemMatcher": []
