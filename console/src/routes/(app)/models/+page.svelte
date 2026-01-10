@@ -25,6 +25,8 @@
 	import { Pencil, Plus, Trash2 } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
+	type ModelCreateForm = ModelCreate & { adapter?: string | null }
+
 	let models = $state<Model[]>([])
 	let providers = $state<Provider[]>([])
 	let showModal = $state(false)
@@ -34,6 +36,7 @@
 	let editingId = $state<string | null>(null)
 	let error = $state<string | null>(null)
 	let submitError = $state<string | null>(null)
+	let searchQuery = $state('')
 
 	const hasProviders = $derived(providers.length > 0)
 	const addModelDisabledReason = 'add a provider to enable model creation.'
@@ -41,11 +44,23 @@
 	const emptyStateNoProvidersHint = 'add a provider first to create models.'
 	const emptyStateNoModelsMessage = 'no models configured yet.'
 
+	const filteredModels = $derived(
+		models.filter((m) => {
+			const q = searchQuery.toLowerCase()
+			return (
+				m.name.toLowerCase().includes(q) ||
+				(m.display_name && m.display_name.toLowerCase().includes(q)) ||
+				m.id.toLowerCase().includes(q)
+			)
+		})
+	)
+
 	// Form state
-	let formState = $state<ModelCreate>({
+	let formState = $state<ModelCreateForm>({
 		name: '',
 		display_name: '',
 		model_type: 'llm',
+		adapter: null,
 		provider_id: '',
 		enabled: true,
 		is_autofetched: false,
@@ -55,6 +70,25 @@
 	let contextWindowInput = $state<string>('')
 	let inputCostInput = $state<string>('')
 	let outputCostInput = $state<string>('')
+
+	let providerKey = $derived(formState.provider_id ? getProviderKey(formState.provider_id) : null)
+	let adapterOptions = $derived(getAdapterOptions(providerKey, formState.model_type))
+
+	$effect(() => {
+		if (showModal && modalMode === 'create') {
+			// Auto-select adapter if only one option exists, or clear it if current is invalid
+			if (adapterOptions.length === 1) {
+				formState.adapter = adapterOptions[0].value
+			} else if (!formState.adapter && adapterOptions.length > 0 && modalMode === 'create') {
+				formState.adapter = adapterOptions[0].value
+			} else if (
+				formState.adapter &&
+				!adapterOptions.find((o) => o.value === formState.adapter)
+			) {
+				formState.adapter = null
+			}
+		}
+	})
 
 	async function fetchData() {
 		isFetching = true
@@ -77,6 +111,22 @@
 		fetchData()
 	})
 
+	$effect(() => {
+		if (showModal && modalMode === 'create') {
+			// Auto-select adapter if only one option exists, or clear it if current is invalid
+			if (adapterOptions.length === 1) {
+				formState.adapter = adapterOptions[0].value
+			} else if (!formState.adapter && adapterOptions.length > 0 && modalMode === 'create') {
+				formState.adapter = adapterOptions[0].value
+			} else if (
+				formState.adapter &&
+				!adapterOptions.find((o) => o.value === formState.adapter)
+			) {
+				formState.adapter = null
+			}
+		}
+	})
+
 	function openCreateModal() {
 		if (!hasProviders) return
 		modalMode = 'create'
@@ -84,6 +134,7 @@
 			name: '',
 			display_name: '',
 			model_type: 'llm',
+			adapter: null,
 			provider_id: providers.length > 0 ? providers[0].id : '',
 			enabled: true,
 			is_autofetched: false,
@@ -98,10 +149,12 @@
 	function openEditModal(model: Model) {
 		modalMode = 'edit'
 		editingId = model.id
+		const adapter = (model as unknown as { adapter?: string | null }).adapter ?? null
 		formState = {
 			name: model.name,
 			display_name: model.display_name || '',
 			model_type: model.model_type,
+			adapter,
 			provider_id: model.provider_id,
 			enabled: model.enabled,
 			is_autofetched: model.is_autofetched,
@@ -142,9 +195,7 @@
 
 		try {
 			if (modalMode === 'create') {
-				const createPayload: ModelCreate = {
-					...formState,
-				}
+				const createPayload = { ...formState } as unknown as ModelCreate
 				const contextWindow = parseOptionalNumber(contextWindowInput)
 				const inputCost = parseOptionalNumber(inputCostInput)
 				const outputCost = parseOptionalNumber(outputCostInput)
@@ -155,12 +206,12 @@
 			} else if (editingId) {
 				// Exclude provider_id from update
 				const { provider_id, ...rest } = formState
-				const updatePayload: ModelUpdate = {
+				const updatePayload = {
 					...rest,
 					context_window: parseOptionalNumber(contextWindowInput),
 					input_cost: parseOptionalNumber(inputCostInput),
 					output_cost: parseOptionalNumber(outputCostInput),
-				}
+				} as unknown as ModelUpdate
 				await ModelsService.updateModelModelsModelIdPatch(editingId, updatePayload)
 			}
 			showModal = false
@@ -204,6 +255,38 @@
 		const p = providers.find((p) => p.id === id)
 		return p ? p.name : id
 	}
+
+	function getProviderKey(providerId: string): string | null {
+		const p = providers.find((p) => p.id === providerId)
+		if (!p) return null
+		const raw = p.adapter_type || ''
+		const key = raw.split('.', 1)[0].trim()
+		return key || null
+	}
+
+	function getAdapterOptions(providerKey: string | null, modelType: Model['model_type']) {
+		if (!providerKey) return []
+		if (modelType === 'llm') {
+			if (providerKey === 'openai') {
+				return [
+					{ value: 'chat_completions', label: 'chat completions' },
+					{ value: 'responses', label: 'responses api' },
+				]
+			}
+			if (providerKey === 'anthropic') {
+				return [{ value: 'messages', label: 'messages' }]
+			}
+			if (providerKey === 'ollama') {
+				return [{ value: 'chat', label: 'chat' }]
+			}
+		}
+		if (modelType === 'embedding') {
+			if (providerKey === 'openai' || providerKey === 'ollama') {
+				return [{ value: 'embedding', label: 'embedding' }]
+			}
+		}
+		return []
+	}
 </script>
 
 <div class="space-y-6">
@@ -235,6 +318,15 @@
 		{/if}
 	</div>
 
+	<div class="flex w-full items-center space-x-2">
+		<Input
+			type="search"
+			placeholder="search models..."
+			bind:value={searchQuery}
+			class="h-9 max-w-sm"
+		/>
+	</div>
+
 	{#if isFetching}
 		<div class="flex h-64 items-center justify-center">
 			<NokodoLoader />
@@ -245,7 +337,7 @@
 		</div>
 	{:else}
 		<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-			{#each models as model}
+			{#each filteredModels as model}
 				<Card class="border-zinc-800 bg-zinc-900 text-zinc-100">
 					<CardHeader class="flex flex-row items-start justify-between space-y-0 pb-2">
 						<CardTitle class="text-base font-medium">
@@ -385,6 +477,31 @@
 								<SelectItem value="video">video</SelectItem>
 							</SelectContent>
 						</Select>
+					</div>
+
+					{@const providerKey = getProviderKey(formState.provider_id)}
+					{@const adapterOptions = getAdapterOptions(providerKey, formState.model_type)}
+					<div class="space-y-2">
+						<Label for="adapter">adapter</Label>
+						<Select
+							value={formState.adapter ?? undefined}
+							onValueChange={(value: string) => (formState.adapter = value)}
+							disabled={!providerKey || adapterOptions.length === 0}
+						>
+							<SelectTrigger class="rounded-xl">
+								<span class="truncate text-left">
+									{formState.adapter || 'select adapter'}
+								</span>
+							</SelectTrigger>
+							<SelectContent>
+								{#each adapterOptions as opt}
+									<SelectItem value={opt.value}>{opt.label}</SelectItem>
+								{/each}
+							</SelectContent>
+						</Select>
+						<p class="text-xs text-zinc-500">
+							select which sdk adapter is used for this model.
+						</p>
 					</div>
 
 					<div class="grid gap-4 sm:grid-cols-2">

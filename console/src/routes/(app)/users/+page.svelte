@@ -14,6 +14,7 @@
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
+	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { ArrowDown, ArrowUp, Plus } from '@lucide/svelte'
 
@@ -53,9 +54,21 @@
 	const SORT_DIR_PARAM = 'sort_dir'
 
 	let users = $state<User[]>([])
+	let searchQuery = $state('')
 	let isLoading = $state(false)
 	let hasNext = $state(false)
 	let error = $state<string | null>(null)
+
+	const filteredUsers = $derived(
+		users.filter((u) => {
+			const q = searchQuery.toLowerCase()
+			return (
+				u.email.toLowerCase().includes(q) ||
+				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
+				u.id.toLowerCase().includes(q)
+			)
+		})
+	)
 
 	let isCreateUserOpen = $state(false)
 	let isUserDetailsOpen = $state(false)
@@ -151,6 +164,12 @@
 			<p class="text-zinc-400">manage users and access.</p>
 		</div>
 		<div class="flex items-center gap-2">
+			<Input
+				type="search"
+				placeholder="search users..."
+				bind:value={searchQuery}
+				class="h-9 w-[200px] lg:w-[300px]"
+			/>
 			<Button class="gap-2 rounded-xl" onclick={() => (isCreateUserOpen = true)}>
 				<Plus class="h-4 w-4" />
 				add user
@@ -177,7 +196,7 @@
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
-					page {pageIndex + 1} · showing {users.length}{hasNext ? '+' : ''}
+					page {pageIndex + 1} · showing {filteredUsers.length}{hasNext ? '+' : ''}
 				</CardDescription>
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
@@ -238,7 +257,7 @@
 				</div>
 			{/if}
 
-			{#if users.length === 0 && !isLoading}
+			{#if filteredUsers.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
@@ -246,7 +265,7 @@
 				</div>
 			{/if}
 
-			{#each users as u (u.id)}
+			{#each filteredUsers as u (u.id)}
 				<div
 					role="button"
 					tabindex="0"
