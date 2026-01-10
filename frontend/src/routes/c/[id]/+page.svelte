@@ -17,6 +17,7 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agentsList, loadAgents } from '$lib/stores/agents'
 	import { consumePendingChatStart, pendingChatStart } from '$lib/stores/session'
+	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
 
@@ -49,29 +50,31 @@
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		const threadId = page.params.id
-		if (!threadId) {
-			chat.clearThread()
-			return
-		}
-
-		let cancelled = false
-		chat.isThreadLoading = true
-		chat.hasLoadedBranch = false
-
-		void (async () => {
-			try {
-				const loaded = await chat.loadTree(threadId)
-				if (cancelled) return
-				chat.hasLoadedBranch = loaded
-			} finally {
-				if (!cancelled) chat.isThreadLoading = false
+		return untrack(() => {
+			if (!threadId) {
+				chat.clearThread()
+				return
 			}
-		})()
 
-		return () => {
-			cancelled = true
-			chat.clearThread()
-		}
+			let cancelled = false
+			chat.isThreadLoading = true
+			chat.hasLoadedBranch = false
+
+			void (async () => {
+				try {
+					const loaded = await chat.loadTree(threadId)
+					if (cancelled) return
+					chat.hasLoadedBranch = loaded
+				} finally {
+					if (!cancelled) chat.isThreadLoading = false
+				}
+			})()
+
+			return () => {
+				cancelled = true
+				chat.clearThread()
+			}
+		})
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -241,6 +244,14 @@
 				</div>
 			{:else if chat.hasLoadedBranch}
 				<div class="flex flex-1 flex-col gap-6 py-4">
+					{#if chat.isLoadingOlderMessages}
+						<div class="flex justify-center py-4">
+							<NokodoLoader className="opacity-70" shimmer />
+						</div>
+					{:else if chat.hasMoreMessages}
+						<!-- Spacer for scroll trigger area -->
+						<div class="h-1"></div>
+					{/if}
 					{#each chat.runBlocks as block (block.runId)}
 						<div class="space-y-3">
 							<!-- user messages for this run -->

@@ -9,6 +9,12 @@ import { v1Client } from '$lib/api/v1/client'
 import { agentsList } from '$lib/stores/agents'
 import { currentUser, setActiveThread, type Thread } from '$lib/stores/session'
 import {
+	cacheMessages,
+	cacheThread,
+	getCachedMessages,
+	getCachedThread,
+} from '$lib/stores/threadCache.svelte'
+import {
 	ToolExecutionTracker,
 	parseToolCalls,
 	parseToolEvent,
@@ -77,6 +83,11 @@ export function createChatState() {
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
 
+	// Message paging (latest-first from backend)
+	let messageSkip = $state(0)
+	let hasMoreMessages = $state(true)
+	let isLoadingOlderMessages = $state(false)
+
 	// Message tree (for branching)
 	const messageTree = new SvelteMap<string, ApiMessage>()
 	let currentLeafId = $state<string | null>(null)
@@ -93,6 +104,9 @@ export function createChatState() {
 	// Tool tracking
 	const toolTracker = new ToolExecutionTracker()
 	let toolTick = $state(0)
+	const fetchedToolEventMessageIds = new SvelteSet<string>()
+	const toolEventsPendingIds = new SvelteSet<string>()
+	let toolEventsInFlight = $state(false)
 
 	function getToolExecution(toolCallId: string) {
 		if (toolTick < 0) return null
@@ -361,6 +375,16 @@ export function createChatState() {
 		if (!scrollContainer) return
 		const atBottom = computeIsAtBottom(scrollContainer)
 		if (atBottom !== autoScroll) autoScroll = atBottom
+		// avoid runaway paging during initial mount/auto-scroll.
+		// initialScrollDone is set once we have loaded and pinned to bottom.
+		if (!initialScrollDone) return
+		if (scrollContainer.scrollTop <= 80) {
+			const threadId = thread?.id
+			if (!threadId) return
+			if (!hasMoreMessages) return
+			if (isLoadingOlderMessages) return
+			void loadOlderMessages(threadId)
+		}
 	}
 
 	function scrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
@@ -384,67 +408,51 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	async function fetchToolEventsForThread(threadId: string, msgIds: string[]): Promise<void> {
 		if (msgIds.length === 0) return
-		const { data, error } = await v1Client().POST(
-			'/threads/{thread_id}/events/by-message-ids',
-			{
-				params: { path: { thread_id: threadId } },
-				body: { message_ids: msgIds },
+
+		// Queue IDs that haven't been fetched yet
+		for (const id of msgIds) {
+			if (!fetchedToolEventMessageIds.has(id)) {
+				toolEventsPendingIds.add(id)
 			}
-		)
-		if (error || !data) return
-		for (const ev of data as ApiEvent[]) {
-			const toolEv = parseToolEvent({
-				type: ev.type,
-				data: (ev.data ?? {}) as Record<string, unknown>,
-				created_at: ev.created_at ?? undefined,
-				message_id: ev.message_id ?? undefined,
-			})
-			if (toolEv) toolTracker.processEvent(toolEv)
 		}
-		toolTick++
+
+		// If already fetching, the current fetch will pick up queued IDs on completion
+		if (toolEventsInFlight) return
+
+		// Process all pending IDs
+		while (toolEventsPendingIds.size > 0) {
+			const batch = Array.from(toolEventsPendingIds)
+			toolEventsPendingIds.clear()
+
+			toolEventsInFlight = true
+			try {
+				const { data, error } = await v1Client().POST(
+					'/threads/{thread_id}/events/by-message-ids',
+					{
+						params: { path: { thread_id: threadId } },
+						body: { message_ids: batch },
+					}
+				)
+				if (!error && data) {
+					for (const ev of data as ApiEvent[]) {
+						const toolEv = parseToolEvent({
+							type: ev.type,
+							data: (ev.data ?? {}) as Record<string, unknown>,
+							created_at: ev.created_at ?? undefined,
+							message_id: ev.message_id ?? undefined,
+						})
+						if (toolEv) toolTracker.processEvent(toolEv)
+					}
+					toolTick++
+				}
+				for (const id of batch) fetchedToolEventMessageIds.add(id)
+			} finally {
+				toolEventsInFlight = false
+			}
+		}
 	}
 
-	async function loadTree(threadId: string): Promise<boolean> {
-		// Load the thread first so we have the current leaf and can render the active branch.
-		const { data: threadData, error: threadError } = await v1Client().GET(
-			'/threads/{thread_id}',
-			{ params: { path: { thread_id: threadId } } }
-		)
-		if (threadError) {
-			console.error('failed to load thread', threadError)
-			thread = null
-			setActiveThread(null)
-			toolTracker.clear()
-			messageTree.clear()
-			currentLeafId = null
-			rebuildRunBlocks()
-			return false
-		}
-		if (!threadData) {
-			thread = null
-			setActiveThread(null)
-			toolTracker.clear()
-			messageTree.clear()
-			currentLeafId = null
-			rebuildRunBlocks()
-			return true
-		}
-
-		thread = threadData
-		setActiveThread(threadData)
-
-		const { data, error } = await v1Client().GET('/threads/{thread_id}/tree', {
-			params: { path: { thread_id: threadId } },
-		})
-		if (error) {
-			console.error('failed to load thread tree', error)
-			messageTree.clear()
-			currentLeafId = null
-			return false
-		}
-		toolTracker.clear()
-		const msgs = (data ?? []) as ApiMessage[]
-		messageTree.clear()
+	function ingestMessages(msgs: ApiMessage[]): void {
 		for (const msg of msgs) {
 			messageTree.set(msg.id, msg)
 			if (msg.type === 'assistant') {
@@ -455,14 +463,124 @@ export function createChatState() {
 				if (result) toolTracker.registerResult(result)
 			}
 		}
+	}
+
+	async function loadOlderMessages(threadId: string): Promise<void> {
+		if (!scrollContainer) return
+		if (isLoadingOlderMessages) return
+		if (!hasMoreMessages) return
+
+		isLoadingOlderMessages = true
+		const prevScrollHeight = scrollContainer.scrollHeight
+		const prevScrollTop = scrollContainer.scrollTop
+
+		try {
+			const { data, error } = await v1Client().GET('/threads/{thread_id}/messages', {
+				params: {
+					path: { thread_id: threadId },
+					query: { skip: messageSkip, limit: 120 },
+				},
+			})
+			if (error) return
+			const page = (data ?? []) as ApiMessage[]
+			if (page.length === 0) {
+				hasMoreMessages = false
+				return
+			}
+			messageSkip += page.length
+			ingestMessages(page)
+
+			await fetchToolEventsForThread(
+				threadId,
+				page.filter((m) => m.type === 'assistant').map((m) => m.id)
+			)
+
+			await tick()
+			const newScrollHeight = scrollContainer.scrollHeight
+			scrollContainer.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight)
+		} finally {
+			isLoadingOlderMessages = false
+		}
+	}
+
+	async function loadTree(threadId: string): Promise<boolean> {
+		// Try cache first for instant load
+		const cachedThread = getCachedThread(threadId)
+		const cachedMessages = getCachedMessages(threadId)
+
+		let threadData: typeof cachedThread
+		let messagesPage: ApiMessage[]
+
+		if (cachedThread && cachedMessages) {
+			// Use cached data for instant render
+			threadData = cachedThread
+			messagesPage = cachedMessages
+		} else {
+			// Fetch from API
+			const { data, error: threadError } = await v1Client().GET('/threads/{thread_id}', {
+				params: { path: { thread_id: threadId } },
+			})
+			if (threadError) {
+				console.error('failed to load thread', threadError)
+				thread = null
+				setActiveThread(null)
+				toolTracker.clear()
+				messageTree.clear()
+				currentLeafId = null
+				rebuildRunBlocks()
+				return false
+			}
+			if (!data) {
+				thread = null
+				setActiveThread(null)
+				toolTracker.clear()
+				messageTree.clear()
+				currentLeafId = null
+				rebuildRunBlocks()
+				return true
+			}
+			threadData = data
+
+			const { data: msgData, error: msgError } = await v1Client().GET(
+				'/threads/{thread_id}/messages',
+				{ params: { path: { thread_id: threadId }, query: { skip: 0, limit: 120 } } }
+			)
+			if (msgError) {
+				console.error('failed to load messages', msgError)
+				currentLeafId = null
+				return false
+			}
+			messagesPage = (msgData ?? []) as ApiMessage[]
+
+			// Cache for future instant loads
+			cacheThread(threadData)
+			cacheMessages(threadId, messagesPage, messagesPage.length < 120)
+		}
+
+		thread = threadData
+		setActiveThread(threadData)
+
+		toolTracker.clear()
+		messageTree.clear()
+		messageSkip = messagesPage.length
+		// More messages exist if we got a full page (limit is 120)
+		hasMoreMessages = messagesPage.length >= 120
+		ingestMessages(messagesPage)
+
 		const preferredLeaf = threadData.current_message_id
 		if (preferredLeaf && messageTree.has(preferredLeaf)) {
 			currentLeafId = preferredLeaf
-		} else if (msgs.length > 0) {
-			const latest = msgs
-				.slice()
-				.sort((a, b) => getMessageCreatedAt(a).getTime() - getMessageCreatedAt(b).getTime())
-				.at(-1)
+		} else if (messageTree.size > 0) {
+			let latest: ApiMessage | null = null
+			for (const msg of messageTree.values()) {
+				if (!latest) {
+					latest = msg
+					continue
+				}
+				if (getMessageCreatedAt(msg).getTime() >= getMessageCreatedAt(latest).getTime()) {
+					latest = msg
+				}
+			}
 			currentLeafId = latest?.id ?? null
 		} else {
 			currentLeafId = null
@@ -470,7 +588,9 @@ export function createChatState() {
 
 		await fetchToolEventsForThread(
 			threadId,
-			msgs.filter((m) => m.type === 'assistant').map((m) => m.id)
+			Array.from(messageTree.values())
+				.filter((m) => m.type === 'assistant')
+				.map((m) => m.id)
 		)
 		rebuildRunBlocks()
 		return true
@@ -613,7 +733,9 @@ export function createChatState() {
 									name: tc.name,
 									arguments: tc.arguments,
 								})),
-								metadata_: streaming.runId ? { run_id: streaming.runId } : {},
+								metadata_: streaming.runId
+									? { run_id: streaming.runId }
+									: undefined,
 								sender_agent_id: streaming.senderAgentId,
 								sender_user_id: null,
 								created_at: now,
@@ -849,6 +971,10 @@ export function createChatState() {
 		currentLeafId = null
 		isThreadLoading = false
 		hasLoadedBranch = false
+		// Clear tool event tracking for previous thread
+		fetchedToolEventMessageIds.clear()
+		toolEventsPendingIds.clear()
+		toolTracker.clear()
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -934,6 +1060,12 @@ export function createChatState() {
 		},
 		get messages() {
 			return messages
+		},
+		get hasMoreMessages() {
+			return hasMoreMessages
+		},
+		get isLoadingOlderMessages() {
+			return isLoadingOlderMessages
 		},
 		get scrollContainer() {
 			return scrollContainer

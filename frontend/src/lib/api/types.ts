@@ -181,7 +181,7 @@ export interface paths {
         };
         /**
          * Get Thread
-         * @description Fetch a single thread with messages.
+         * @description Fetch a single thread.
          */
         get: operations["get_thread_threads__thread_id__get"];
         put?: never;
@@ -959,7 +959,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -982,7 +982,7 @@ export interface components {
          * @description payload for setting acl entries on a resource.
          */
         AccessControlEntryCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** User Id */
             user_id?: string | null;
             /** Group Id */
@@ -1003,7 +1003,7 @@ export interface components {
          * @description Response schema.
          */
         Agent: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Description */
@@ -1046,7 +1046,7 @@ export interface components {
          * @description Payload for agent creation.
          */
         AgentCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Description */
@@ -1073,7 +1073,7 @@ export interface components {
          * @description Payload for agent update.
          */
         AgentUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1100,6 +1100,9 @@ export interface components {
          * @enum {string}
          */
         AgentVisibility: "public" | "private" | "admin-only";
+        ApiJSONObject: {
+            [key: string]: unknown;
+        };
         /** Body_login_access_token_auth_login_access_token_post */
         Body_login_access_token_auth_login_access_token_post: {
             /** Grant Type */
@@ -1124,12 +1127,14 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /** @enum {string} */
+        CommonSortBy: "created_at" | "updated_at";
         /**
          * Event
          * @description Event response.
          */
         Event: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1176,7 +1181,7 @@ export interface components {
          * @description Payload to emit a new event.
          */
         EventCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1214,7 +1219,7 @@ export interface components {
          * @description Request payload to fetch events for a set of messages.
          */
         EventsByMessageIDsRequest: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Message Ids */
             message_ids?: string[];
         };
@@ -1270,18 +1275,6 @@ export interface components {
             /** Media Type */
             media_type?: string | null;
         };
-        "JSONObject-Input": {
-            [key: string]: components["schemas"]["JSONValue-Input"];
-        };
-        "JSONObject-Output": {
-            [key: string]: components["schemas"]["JSONValue-Output"];
-        };
-        "JSONValue-Input": boolean | number | string | {
-            [key: string]: components["schemas"]["JSONValue-Input"];
-        } | components["schemas"]["JSONValue-Input"][] | null;
-        "JSONValue-Output": boolean | number | string | {
-            [key: string]: components["schemas"]["JSONValue-Output"];
-        } | components["schemas"]["JSONValue-Output"][] | null;
         /**
          * JsonContent
          * @description structured JSON content (for structured outputs).
@@ -1306,7 +1299,7 @@ export interface components {
          * @description Response schema.
          */
         Memory: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1346,7 +1339,7 @@ export interface components {
          * @description Payload to capture a memory.
          */
         MemoryCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1366,7 +1359,7 @@ export interface components {
          * @description Response schema.
          */
         Message: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /** Content */
@@ -1419,7 +1412,7 @@ export interface components {
          *     - A list of content part dicts or ContentPart objects
          */
         MessageCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /**
@@ -1459,7 +1452,7 @@ export interface components {
          * @description Response schema.
          */
         Model: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Display Name */
@@ -1506,7 +1499,7 @@ export interface components {
          * @description Payload to register a model.
          */
         ModelCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Display Name */
@@ -1547,7 +1540,7 @@ export interface components {
          * @description Payload to update a model.
          */
         ModelUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name?: string | null;
             /** Display Name */
@@ -1704,7 +1697,7 @@ export interface components {
          * @description Response schema.
          */
         Plugin: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -1753,7 +1746,7 @@ export interface components {
          * @description Payload for plugin creation.
          */
         PluginCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -1826,7 +1819,7 @@ export interface components {
          * @description Payload for plugin update.
          */
         PluginUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1892,7 +1885,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Description */
@@ -1915,7 +1908,7 @@ export interface components {
          * @description Response schema.
          */
         Prompt: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -1941,7 +1934,7 @@ export interface components {
          * @description Payload for prompt creation.
          */
         PromptCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -1955,7 +1948,7 @@ export interface components {
          * @description Payload for prompt update.
          */
         PromptUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Command */
             command?: string | null;
             /** Content */
@@ -1966,7 +1959,7 @@ export interface components {
          * @description Response schema.
          */
         Provider: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2010,7 +2003,7 @@ export interface components {
          * @description Payload to create a provider.
          */
         ProviderCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2056,7 +2049,7 @@ export interface components {
          * @description Partial provider update payload.
          */
         ProviderUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -2108,12 +2101,14 @@ export interface components {
             /** Cdn Origin */
             cdn_origin?: string | null;
         };
+        /** @enum {string} */
+        SortDir: "asc" | "desc";
         /**
          * Task
          * @description Response model.
          */
         Task: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -2162,7 +2157,7 @@ export interface components {
          * @description Payload to start a task.
          */
         TaskCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -2200,7 +2195,7 @@ export interface components {
          * @description Mutable task fields for PATCH operations.
          */
         TaskUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             status?: components["schemas"]["TaskStatus"] | null;
             /** Progress */
             progress?: number | null;
@@ -2236,7 +2231,7 @@ export interface components {
          * @description Detailed response schema.
          */
         Thread: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -2281,8 +2276,6 @@ export interface components {
              */
             updated_at: string;
             owner?: components["schemas"]["User"] | null;
-            /** Messages */
-            messages?: components["schemas"]["Message"][];
             /** Projects */
             projects?: components["schemas"]["Project"][];
         };
@@ -2291,7 +2284,7 @@ export interface components {
          * @description Payload for creating a thread.
          */
         ThreadCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -2361,7 +2354,7 @@ export interface components {
          * @description Payload for updating a thread.
          */
         ThreadUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["ApiJSONObject"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -3020,6 +3013,8 @@ export interface operations {
             query?: {
                 skip?: number;
                 limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | ("email" | "display_name" | "is_active" | "is_superuser");
+                sort_dir?: components["schemas"]["SortDir"];
             };
             header?: never;
             path?: never;
@@ -3306,6 +3301,8 @@ export interface operations {
                 owner_id?: string | null;
                 skip?: number;
                 limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | ("last_activity_at" | "title");
+                sort_dir?: components["schemas"]["SortDir"];
                 include_hidden?: boolean;
             };
             header?: never;
@@ -3784,6 +3781,9 @@ export interface operations {
             query?: {
                 skip?: number;
                 limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"];
+                sort_dir?: components["schemas"]["SortDir"];
+                group_task_runs?: boolean;
                 include_hidden?: boolean;
             };
             header?: never;
@@ -4755,6 +4755,8 @@ export interface operations {
                 status_filter?: components["schemas"]["TaskStatus"] | null;
                 skip?: number;
                 limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | ("status" | "task_type" | "stage" | "last_event_at");
+                sort_dir?: components["schemas"]["SortDir"];
             };
             header?: never;
             path?: never;
@@ -5805,6 +5807,8 @@ export interface operations {
                 user_id: string;
                 skip?: number;
                 limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | ("category" | "last_accessed_at" | "confidence");
+                sort_dir?: components["schemas"]["SortDir"];
             };
             header?: never;
             path?: never;
@@ -7513,7 +7517,12 @@ export interface operations {
     };
     list_prompts_prompts_get: {
         parameters: {
-            query?: never;
+            query?: {
+                skip?: number;
+                limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | "command";
+                sort_dir?: components["schemas"]["SortDir"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

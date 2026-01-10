@@ -18,6 +18,10 @@
 	import { openModal } from '$lib/stores/modals'
 	import { onThreadEvent } from '$lib/stores/notifications'
 	import { isLoggedIn, recentThreads, refreshThreads, type Thread } from '$lib/stores/session'
+	import {
+		invalidateAll as invalidateThreadCache,
+		prefetchThread,
+	} from '$lib/stores/threadCache.svelte'
 
 	type SidebarContext = {
 		readonly isOpen: boolean
@@ -64,6 +68,9 @@
 		} | null
 
 		if (eventType === 'thread.deleted' && threadId) {
+			// invalidate cache
+			invalidateThreadCache(threadId)
+
 			// remove from list
 			recentThreads.update((threads) => threads.filter((t) => t.id !== threadId))
 
@@ -73,6 +80,9 @@
 				void goto(resolve('/' as never), { replaceState: true })
 			}
 		} else if (eventType === 'thread.updated' && threadId) {
+			// invalidate cache on updates
+			invalidateThreadCache(threadId)
+
 			// move thread to top and update title if available
 			const rawTitle =
 				(typeof patch?.title === 'string' ? patch.title : null) ??
@@ -442,7 +452,11 @@
 							</div>
 						{:else}
 							{#each $recentThreads as thread (thread.id)}
-								<div class="group/chat relative min-w-0">
+								<div
+									class="group/chat relative min-w-0"
+									role="listitem"
+									onmouseenter={() => prefetchThread(thread.id)}
+								>
 									<div
 										class="rounded-container relative flex cursor-pointer items-center justify-between gap-2 border border-transparent bg-transparent px-4 py-2 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {sidebar.selectedChatId ===
 										thread.id

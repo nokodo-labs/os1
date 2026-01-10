@@ -12,24 +12,24 @@ export type ApiMessage = components['schemas']['Message']
 export function contentPartsToText(parts: ApiMessage['content']): string {
 	if (!parts || parts.length === 0) return ''
 	return parts
-		.map((part) => {
-			if (!part) return ''
+		.map((part): string | null => {
+			if (!part) return null
 			if (part.type === 'text') {
-				return 'text' in part && typeof part.text === 'string' ? part.text : ''
+				return 'text' in part && typeof part.text === 'string' ? part.text : null
 			}
 			if (part.type === 'refusal') {
-				return 'reason' in part && typeof part.reason === 'string' ? part.reason : ''
+				return 'reason' in part && typeof part.reason === 'string' ? part.reason : null
 			}
 			if (part.type === 'json') {
 				try {
 					return 'data' in part ? JSON.stringify(part.data) : ''
 				} catch {
-					return ''
+					return null
 				}
 			}
-			return ''
+			return null
 		})
-		.filter(Boolean)
+		.filter((v): v is string => v !== null)
 		.join('\n')
 }
 
@@ -39,8 +39,8 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 export function sdkPartsToText(parts: unknown): string {
 	if (!Array.isArray(parts)) return ''
 	return parts
-		.map((p) => {
-			if (!p || typeof p !== 'object') return ''
+		.map((p): string | null => {
+			if (!p || typeof p !== 'object') return null
 			const part = p as Record<string, unknown>
 			const type = typeof part.type === 'string' ? part.type : ''
 			if (type === 'text' && typeof part.text === 'string') return part.text
@@ -49,12 +49,12 @@ export function sdkPartsToText(parts: unknown): string {
 				try {
 					return JSON.stringify(part.data)
 				} catch {
-					return ''
+					return null
 				}
 			}
-			return ''
+			return null
 		})
-		.filter(Boolean)
+		.filter((v): v is string => v !== null)
 		.join('\n')
 }
 
