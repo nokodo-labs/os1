@@ -35,7 +35,7 @@ from nokodo_ai.deltas import AgentDelta
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
-from nokodo_ai.thread import Thread as SDKThread
+from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.tool import Tool
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 

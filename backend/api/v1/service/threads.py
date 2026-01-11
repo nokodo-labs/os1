@@ -34,7 +34,7 @@ from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
-from nokodo_ai.thread import Thread as SDKThread
+from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 

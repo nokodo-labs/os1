@@ -13,10 +13,10 @@ from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from nokodo_ai.adapters.chat import resolve_chat_adapter
-from nokodo_ai.adapters.embedding import resolve_embedding_adapter
+from nokodo_ai.adapters.embeddings import resolve_embedding_adapter
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
-from nokodo_ai.thread import Thread as SDKThread
+from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 

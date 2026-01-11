@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import ConfigDict, model_validator
 
 from .adapter_enabled import AdapterEnabledMixin, split_model_identifier
-from .adapters.embedding import (
+from .adapters.embeddings import (
 	EmbeddingAdapter,
 	resolve_embedding_adapter,
 )

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from pydantic import Field
 
 from .base import Base
-from .thread import Thread
+from .threads import Thread
 
 
 class Filter[AppContextT](Base, ABC):

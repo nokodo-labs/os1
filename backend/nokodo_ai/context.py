@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from .chat_models import ChatModel
-	from .thread import Thread
+	from .threads import Thread
 	from .types import JSONObject
 
 

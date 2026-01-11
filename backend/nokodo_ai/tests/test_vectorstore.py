@@ -1,7 +1,7 @@
 import pytest
 
 from nokodo_ai import JSONObject, Vectorstore
-from nokodo_ai.adapters.base.vectorstore import BaseVectorstoreAdapter, SearchResult
+from nokodo_ai.adapters.base.vectorstores import BaseVectorstoreAdapter, SearchResult
 
 
 AddCall = tuple[list[str], list[list[float]], list[str], list[JSONObject] | None]

@@ -9,7 +9,7 @@ from nokodo_ai.adapters.base.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
 )
-from nokodo_ai.thread import Thread
+from nokodo_ai.threads import Thread
 from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
 

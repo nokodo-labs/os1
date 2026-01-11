@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from ..base.embedding import BaseEmbeddingAdapter
+from ..base.embeddings import BaseEmbeddingAdapter
 from .base import BaseOpenAIAdapter
 
 

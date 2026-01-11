@@ -22,7 +22,7 @@ from .messages import (
 	ToolCall,
 	ToolMessage,
 )
-from .thread import Thread
+from .threads import Thread
 from .tool import Tool, ToolDefinition
 from .types.json import JSONObject
 from .utils.dicts import deep_merge

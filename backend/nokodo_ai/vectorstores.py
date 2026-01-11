@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .adapters.base.vectorstore import BaseVectorstoreAdapter, SearchResult
+from .adapters.base.vectorstores import BaseVectorstoreAdapter, SearchResult
 from .types.json import JSONObject
 
 

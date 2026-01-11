@@ -48,7 +48,7 @@ from .messages import (
 	Usage,
 	UserMessage,
 )
-from .thread import Thread
+from .threads import Thread
 from .tool import Tool, ToolDefinition, tool
 from .types import JSONArray, JSONObject, JSONValue
 from .vectorstores import Vectorstore

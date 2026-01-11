@@ -23,7 +23,7 @@ from api.models.mixins import (
 	TypeIDPrimaryKeyMixin,
 )
 from nokodo_ai.messages import Message as SDKMessage
-from nokodo_ai.thread import Thread as SDKThread
+from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 

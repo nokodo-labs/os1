@@ -15,7 +15,7 @@ from nokodo_ai import (
 	tool,
 )
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.adapters.embedding import BaseEmbeddingAdapter
+from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter
 from nokodo_ai.context import AgentContext
 
 

@@ -22,7 +22,7 @@ from nokodo_ai.adapters.anthropic.messages import (
 from nokodo_ai.adapters.base.api import BaseApiAdapter
 from nokodo_ai.adapters.base.chat import BaseChatAdapter
 from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
-from nokodo_ai.adapters.ollama.embedding import OllamaEmbeddingAdapter
+from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingAdapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.chat_completions import (
 	OpenAIChatCompletionsAdapter,
@@ -36,7 +36,7 @@ from nokodo_ai.adapters.openai.chat_completions import (
 	_tool_choice_to_openai_chatcompletions,
 	_tools_to_openai_chatcompletions,
 )
-from nokodo_ai.adapters.openai.embedding import OpenAIEmbeddingAdapter
+from nokodo_ai.adapters.openai.embeddings import OpenAIEmbeddingAdapter
 from nokodo_ai.adapters.openai.responses import (
 	OpenAIResponsesAdapter,
 	_messages_to_openai_responses_input,

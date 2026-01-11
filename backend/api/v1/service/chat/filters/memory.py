@@ -10,7 +10,7 @@ from sqlalchemy import select
 from api.models.memory import Memory
 from api.v1.service.chat.filters.base import Filter
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
-from nokodo_ai.thread import Thread as SDKThread
+from nokodo_ai.threads import Thread as SDKThread
 
 
 if TYPE_CHECKING:

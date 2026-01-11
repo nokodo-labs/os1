@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .base import BaseOllamaAdapter
 from .chat import OllamaChatAdapter
-from .embedding import OllamaEmbeddingAdapter
+from .embeddings import OllamaEmbeddingAdapter
 
 
 __all__ = [

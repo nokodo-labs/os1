@@ -2,8 +2,8 @@
 
 from .base import BaseAdapter
 from .base.chat import BaseChatAdapter
-from .base.embedding import BaseEmbeddingAdapter
-from .base.vectorstore import BaseVectorstoreAdapter
+from .base.embeddings import BaseEmbeddingAdapter
+from .base.vectorstores import BaseVectorstoreAdapter
 
 
 __all__ = [

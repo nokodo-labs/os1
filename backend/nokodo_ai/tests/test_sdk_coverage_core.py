@@ -24,7 +24,7 @@ from nokodo_ai.messages import (
 	Usage,
 	UserMessage,
 )
-from nokodo_ai.thread import Thread
+from nokodo_ai.threads import Thread
 from nokodo_ai.utils.json_schema import schema_from_callable
 from nokodo_ai.utils.validators import (
 	types_compatible,

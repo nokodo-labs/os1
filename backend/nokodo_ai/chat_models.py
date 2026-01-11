@@ -12,7 +12,7 @@ from .adapters.base.chat import ChatGenerationParams
 from .adapters.chat import ChatAdapter, resolve_chat_adapter
 from .deltas import ChatModelDelta, stream_chat_model_deltas
 from .messages import AssistantMessage, Message
-from .thread import Thread
+from .threads import Thread
 from .tool import ToolDefinition
 
 

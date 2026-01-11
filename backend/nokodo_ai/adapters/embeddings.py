@@ -6,9 +6,9 @@ from typing import Annotated
 
 from pydantic import Field
 
-from .base.embedding import BaseEmbeddingAdapter
-from .ollama.embedding import OllamaEmbeddingAdapter
-from .openai.embedding import OpenAIEmbeddingAdapter
+from .base.embeddings import BaseEmbeddingAdapter
+from .ollama.embeddings import OllamaEmbeddingAdapter
+from .openai.embeddings import OpenAIEmbeddingAdapter
 
 
 EmbeddingAdapter = Annotated[
