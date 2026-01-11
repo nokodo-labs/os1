@@ -30,6 +30,14 @@ html.dark #nokodo-splash-screen {
 	text-align: center;
 }
 
+#nokodo-splash-brand {
+	visibility: hidden;
+}
+
+#nokodo-splash-brand[data-font='1'] {
+	visibility: visible;
+}
+
 /* shared loader (used by both pre-hydration HTML + Svelte component) */
 .nokodo-loader {
 	font-family:
@@ -41,7 +49,7 @@ html.dark #nokodo-splash-screen {
 		'Helvetica Neue',
 		Arial,
 		sans-serif;
-	font-size: clamp(2.25rem, 6vw, 3.25rem);
+	font-size: var(--nokodo-loader-font-size, clamp(2.25rem, 6vw, 3.25rem));
 	font-weight: 600;
 	line-height: 1.1;
 	color: rgb(255 255 255 / 0.92);
@@ -54,44 +62,12 @@ html.dark #nokodo-splash-screen {
 	transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+html:not(.dark) .nokodo-loader {
+	color: rgb(0 0 0 / 0.86);
+}
+
 .nokodo-loader[data-expanded='1'] {
 	transform: translateX(0);
-}
-
-.nokodo-loader__solid,
-.nokodo-loader__shimmer {
-	display: inline-block;
-}
-
-.nokodo-loader__shimmer {
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-	z-index: 1;
-
-	color: transparent;
-	background-image: linear-gradient(
-		90deg,
-		transparent 0%,
-		rgb(255 255 255 / 0) 20%,
-		rgb(255 255 255 / 0.35) 40%,
-		rgb(255 255 255 / 0.75) 50%,
-		rgb(255 255 255 / 0.35) 60%,
-		rgb(255 255 255 / 0) 80%,
-		transparent 100%
-	);
-	background-repeat: no-repeat;
-	background-size: 300% 100%;
-	background-position: 150% 0;
-	animation: nokodo-splash-shimmer 2s linear infinite;
-
-	-webkit-background-clip: text;
-	background-clip: text;
-	display: none;
-}
-
-.nokodo-loader[data-shimmer='1'] .nokodo-loader__shimmer {
-	display: inline-block;
 }
 
 .nokodo-loader__visible {
@@ -109,23 +85,11 @@ html.dark #nokodo-splash-screen {
 	opacity: 1;
 }
 
-@keyframes nokodo-splash-shimmer {
-	0% {
-		background-position: 150% 0;
-	}
-	100% {
-		background-position: -50% 0;
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.nokodo-loader {
 		transition: transform 0.2s ease;
 	}
 	.nokodo-loader__hidden {
 		transition: opacity 0.2s ease;
-	}
-	.nokodo-loader__shimmer {
-		animation: none;
 	}
 }

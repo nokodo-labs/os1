@@ -110,6 +110,7 @@
 	})
 
 	const sidebarSpacerWidthClass = $derived.by(() => {
+		if (!isChatSwipeEligibleRoute) return 'w-0'
 		if (isMobileViewport) return 'w-0'
 		return sidebar.isChatSidebarOpen ? 'w-72' : 'w-18'
 	})
@@ -258,11 +259,13 @@
 			</div>
 		{:else}
 			<div class="relative z-1 flex h-screen">
-				<!-- Sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
-				<ChatSidebar />
-				<div
-					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
-				></div>
+				{#if isChatSwipeEligibleRoute}
+					<!-- Sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
+					<ChatSidebar />
+					<div
+						class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
+					></div>
+				{/if}
 
 				{#if isMobileViewport && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
 					<div
@@ -278,7 +281,7 @@
 
 				<!-- Main Content -->
 				<div
-					class="relative flex min-w-0 flex-1 flex-col"
+					class="relative flex min-w-0 flex-1 flex-col pt-[calc(var(--chrome-island-offset)+16px)]"
 					style={`touch-action: pan-y; --chrome-island-offset: ${islandOffsetPx}px;`}
 					bind:this={mainContentShell}
 					onpointerdown={onMainPointerDown}
