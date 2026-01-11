@@ -2,6 +2,7 @@
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Notification } from '$lib/stores/notifications'
 
 	interface Props {
@@ -9,7 +10,7 @@
 		iconUrl?: string | null
 		title: string
 		body: string
-		formattedTime: string
+		timestamp: Date
 		isUnread: boolean
 		onMarkRead?: (id: string) => void
 		onDismiss?: (id: string) => void
@@ -20,7 +21,7 @@
 		iconUrl = null,
 		title,
 		body,
-		formattedTime,
+		timestamp,
 		isUnread,
 		onMarkRead,
 		onDismiss,
@@ -55,9 +56,12 @@
 		<div class="truncate text-[0.8125rem] {isUnread ? 'text-white/60' : 'text-white/45'}">
 			{body}
 		</div>
-		<div class="mt-1 text-[0.6875rem] text-white/40">
-			{formattedTime}
-		</div>
+		<Timestamp
+			{timestamp}
+			mode="relative"
+			minUnit="minute"
+			className="mt-1 block text-[0.6875rem] text-white/40"
+		/>
 	</div>
 	<div
 		class="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100"

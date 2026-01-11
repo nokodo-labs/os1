@@ -9,6 +9,7 @@
 :root {
 	--text-color: rgb(0 0 0 / 1);
 	--shimmer-wave-color: rgb(0 0 0 / 0.3);
+	--shimmer-duration: 1.8s;
 }
 
 .dark {
@@ -24,7 +25,7 @@
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 	will-change: background-position;
-	animation: shimmer var(--shimmer-duration) linear infinite;
+	animation: shimmer var(--shimmer-duration, 1.8s) linear infinite;
 	background-image: linear-gradient(
 		90deg,
 		var(--text-color) 40%,

@@ -45,7 +45,7 @@
 				iconUrl={notificationPreview.iconUrl}
 				title={notificationPreview.title}
 				body={notificationPreview.body}
-				formattedTime="preview"
+				timestamp={new Date()}
 				isUnread={true}
 			/>
 		{/if}

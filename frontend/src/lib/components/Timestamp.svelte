@@ -3,10 +3,12 @@
 
 	interface Props {
 		timestamp: TimestampLike
+		mode?: 'calendar' | 'relative'
+		minUnit?: 'minute' | 'hour'
 		className?: string
 	}
 
-	let { timestamp, className = '' }: Props = $props()
+	let { timestamp, mode = 'calendar', minUnit = 'minute', className = '' }: Props = $props()
 
 	function toDate(value: TimestampLike): Date {
 		return value instanceof Date ? value : new Date(value.getTime())
@@ -20,6 +22,26 @@
 
 	let label = $derived.by((): string => {
 		if (Number.isNaN(date.getTime())) return ''
+
+		if (mode === 'relative') {
+			const nowMs = Date.now()
+			const diffMs = nowMs - date.getTime()
+			if (diffMs < 0) return ''
+
+			const minutes = Math.floor(diffMs / 60_000)
+			const hours = Math.floor(diffMs / 3_600_000)
+
+			if (minUnit === 'hour') {
+				if (hours < 1) return 'just now'
+				if (hours < 24) return `${hours}h ago`
+				return date.toLocaleDateString()
+			}
+
+			if (minutes < 1) return 'just now'
+			if (minutes < 60) return `${minutes}m ago`
+			if (hours < 24) return `${hours}h ago`
+			return date.toLocaleDateString()
+		}
 
 		const now = new Date()
 		const dayDiff = Math.floor(

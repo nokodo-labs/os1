@@ -72,19 +72,6 @@
 		return $agentsById[agentId]?.profile_image_url ?? null
 	}
 
-	function formatTime(iso: string): string {
-		const date = new Date(iso)
-		if (Number.isNaN(date.getTime())) return ''
-		const now = Date.now()
-		const diff = now - date.getTime()
-		const minutes = Math.floor(diff / 60000)
-		if (minutes < 1) return 'just now'
-		if (minutes < 60) return `${minutes}m ago`
-		const hours = Math.floor(minutes / 60)
-		if (hours < 24) return `${hours}h ago`
-		return date.toLocaleDateString()
-	}
-
 	function handleMarkRead(notifId: string): void {
 		void markNotificationRead(notifId)
 	}
@@ -150,7 +137,7 @@
 								iconUrl={getNotificationIcon(notif)}
 								title={getNotificationTitle(notif)}
 								body={getNotificationBody(notif)}
-								formattedTime={formatTime(notif.created_at)}
+								timestamp={new Date(notif.created_at)}
 								isUnread={!notif.read_at}
 								onMarkRead={handleMarkRead}
 								onDismiss={handleDismiss}

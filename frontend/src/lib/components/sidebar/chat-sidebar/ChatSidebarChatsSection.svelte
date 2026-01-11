@@ -15,8 +15,6 @@
 
 	export let openThreadMenuId: string | null
 	export let generatingMetadataThreadId: string | null
-
-	export let formatTime: (iso: string) => string
 	export let onPrefetchThread: (threadId: string) => void
 	export let onOpenThread: (threadId: string) => void | Promise<void>
 
@@ -28,9 +26,9 @@
 
 <!-- Chats Section -->
 <div
-	class="flex min-h-0 w-full flex-1 flex-col transition-[opacity,transform] duration-200 ease-out {expandedContentVisible
-		? 'translate-x-0 opacity-100'
-		: 'pointer-events-none -translate-x-1 opacity-0'}"
+	class="flex min-h-0 w-full flex-1 flex-col transition-opacity duration-200 ease-out {expandedContentVisible
+		? 'opacity-100'
+		: 'pointer-events-none opacity-0'}"
 	aria-hidden={!expandedContentVisible}
 >
 	<Separator.Root class="my-2 bg-white/10" />
@@ -62,7 +60,6 @@
 						<ChatSidebarThreadRow
 							{thread}
 							selected={selectedChatId === thread.id}
-							{formatTime}
 							onPrefetch={onPrefetchThread}
 							{onOpenThread}
 							{openThreadMenuId}

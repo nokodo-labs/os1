@@ -10,7 +10,7 @@
 </script>
 
 <!-- Logo / Brand with Close Button -->
-<div class="relative grid w-full grid-cols-[auto_auto_auto] items-center">
+<div class="relative grid w-full grid-cols-[auto_1fr_auto] items-center">
 	<button
 		class="group relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:text-white"
 		onclick={onHomeClick}
@@ -32,7 +32,7 @@
 	</button>
 
 	<div
-		class="flex flex-none items-center justify-center overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-out {showTopLabels
+		class="flex min-w-0 items-center justify-center overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-out {showTopLabels
 			? 'translate-y-0 opacity-100'
 			: '-translate-y-0.5 opacity-0'}"
 		aria-hidden={!showTopLabels}
@@ -46,7 +46,7 @@
 
 	<!-- Close button -->
 	<button
-		class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/50 transition-all duration-200 hover:text-white active:scale-[0.97] {!isCompactLayout
+		class="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white active:scale-[0.99] {!isCompactLayout
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'}"
 		onclick={(e) => {

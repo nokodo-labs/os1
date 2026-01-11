@@ -215,6 +215,7 @@
 			label: 'archived chats',
 			action: () => {
 				openModal('archived-chats')
+				if (isMobile) sidebar.closeChatSidebar()
 			},
 		},
 	]
@@ -233,12 +234,14 @@
 
 	async function openThread(threadId: string): Promise<void> {
 		sidebar.selectChat(threadId)
-		if (page.url.pathname === `/c/${threadId}`) return
-		// @ts-expect-error resolve typing is narrower than our constructed URL
-		void goto(resolve(`/c/${threadId}` as never), {
-			keepFocus: true,
-			noScroll: true,
-		})
+		if (page.url.pathname !== `/c/${threadId}`) {
+			// @ts-expect-error resolve typing is narrower than our constructed URL
+			void goto(resolve(`/c/${threadId}` as never), {
+				keepFocus: true,
+				noScroll: true,
+			})
+		}
+		if (isMobile) sidebar.closeChatSidebar()
 	}
 
 	function requestDeleteThread(thread: Thread) {
@@ -351,17 +354,6 @@
 		if (error || !data) return null
 		return data
 	}
-
-	function formatTime(iso: string): string {
-		const date = new Date(iso)
-		if (Number.isNaN(date.getTime())) return ''
-		const now = Date.now()
-		const diff = now - date.getTime()
-		const hours = Math.floor(diff / 3_600_000)
-		if (hours < 1) return 'just now'
-		if (hours < 24) return `${hours}h ago`
-		return date.toLocaleDateString()
-	}
 </script>
 
 {#if isMobile && sidebar.isChatSidebarOpen}
@@ -392,9 +384,11 @@
 			: 'translate-x-0'}"
 	style="background-color: var(--accent-bg);"
 	aria-hidden={isMobile ? !sidebar.isChatSidebarOpen : false}
-	onclick={() => {
+	onclick={(event) => {
 		if (isMobile) return
 		if (sidebar.isChatSidebarOpen) return
+		const target = event.target as HTMLElement | null
+		if (target?.closest('button, [role="button"], a')) return
 		// Allow clicking anywhere in the collapsed sidebar to open it.
 		// Buttons will still run their own actions.
 		sidebar.openChatSidebar()
@@ -439,7 +433,6 @@
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
 				{generatingMetadataThreadId}
-				{formatTime}
 				onPrefetchThread={(threadId) => prefetchThread(threadId)}
 				onOpenThread={openThread}
 				onToggleMenu={toggleThreadMenu}

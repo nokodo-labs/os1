@@ -15,6 +15,12 @@
 	export let showTopLabels: boolean
 	export let items: SidebarItem[]
 	export let onSearchClick: () => void
+
+	const iconClass = 'h-5 w-5 -translate-x-[0.5px]'
+
+	function stop(event: MouseEvent): void {
+		event.stopPropagation()
+	}
 </script>
 
 <!-- Search -->
@@ -24,16 +30,19 @@
 			<button
 				{...props}
 				class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
-				onclick={onSearchClick}
+				onclick={(e) => {
+					stop(e)
+					onSearchClick()
+				}}
 				aria-label="Search"
 			>
 				<div class="flex h-12 w-12 shrink-0 items-center justify-center">
-					<Search className="h-5 w-5" />
+					<Search className={iconClass} />
 				</div>
 				<span
-					class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,transform,max-width] duration-200 ease-out {showTopLabels
-						? 'max-w-40 translate-x-0 opacity-100'
-						: 'max-w-0 -translate-x-1 opacity-0'}"
+					class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
+						? 'max-w-40 opacity-100'
+						: 'max-w-0 opacity-0'}"
 					aria-hidden={!showTopLabels}
 				>
 					search
@@ -60,16 +69,19 @@
 				<button
 					{...props}
 					class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
-					onclick={item.action}
+					onclick={(e) => {
+						stop(e)
+						void item.action()
+					}}
 					aria-label={item.label}
 				>
 					<div class="flex h-12 w-12 shrink-0 items-center justify-center">
-						<Icon className="h-5 w-5" />
+						<Icon className={iconClass} />
 					</div>
 					<span
-						class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,transform,max-width] duration-200 ease-out {showTopLabels
-							? 'max-w-44 translate-x-0 opacity-100'
-							: 'max-w-0 -translate-x-1 opacity-0'}"
+						class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
+							? 'max-w-44 opacity-100'
+							: 'max-w-0 opacity-0'}"
 						aria-hidden={!showTopLabels}
 					>
 						{item.label}

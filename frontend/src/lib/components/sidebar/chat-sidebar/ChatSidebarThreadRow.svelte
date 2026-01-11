@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Thread } from '$lib/stores/session'
 
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
@@ -6,7 +7,6 @@
 
 	export let thread: Thread
 	export let selected: boolean
-	export let formatTime: (iso: string) => string
 	export let onOpenThread: (threadId: string) => void | Promise<void>
 	export let onPrefetch: (threadId: string) => void
 
@@ -55,9 +55,12 @@
 						{thread.tags.join(' · ')}
 					</span>
 				{/if}
-				<span class="shrink-0 text-xs text-white/50">
-					{formatTime(thread.last_activity_at ?? '')}
-				</span>
+				<Timestamp
+					timestamp={new Date(thread.last_activity_at ?? '')}
+					mode="relative"
+					minUnit="hour"
+					className="shrink-0 text-xs text-white/50"
+				/>
 			</div>
 		</div>
 
