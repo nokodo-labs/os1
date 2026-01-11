@@ -367,19 +367,23 @@
 														/>
 													</div>
 												{:else if item.kind === 'tool'}
-													{@const exec = chat.getToolExecution(
-														item.toolCallId
-													)}
-													{#if exec}
-														<ToolExecutionCard execution={exec} />
-													{/if}
+													{#key chat.toolTick}
+														{@const exec = chat.getToolExecution(
+															item.toolCallId
+														)}
+														{#if exec}
+															<ToolExecutionCard execution={exec} />
+														{/if}
+													{/key}
 												{:else if item.kind === 'streaming_tool'}
-													{@const exec = chat.getToolExecution(
-														item.toolCallId
-													)}
-													{#if exec}
-														<ToolExecutionCard execution={exec} />
-													{/if}
+													{#key chat.toolTick}
+														{@const exec = chat.getToolExecution(
+															item.toolCallId
+														)}
+														{#if exec}
+															<ToolExecutionCard execution={exec} />
+														{/if}
+													{/key}
 												{:else if item.kind === 'streaming_assistant' && chat.streamingAssistant}
 													{#if chat.streamingAssistant.content.trim()}
 														<div
