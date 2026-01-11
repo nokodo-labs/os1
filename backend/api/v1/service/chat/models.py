@@ -79,8 +79,6 @@ async def run_chat_model_json_schema(
 	*,
 	thread: SDKThread,
 	json_schema: dict[str, object],
-	temperature: float | None = 0.2,
-	max_tokens: int | None = 200,
 ) -> dict[str, object]:
 	"""run a chat model with a structured json schema response.
 
@@ -89,13 +87,7 @@ async def run_chat_model_json_schema(
 	assistant = await chat_model.generate(
 		thread,
 		stream=False,
-		tools=[],
-		tool_choice="none",
-		params={
-			"response_model": json_schema,
-			"temperature": temperature,
-			"max_tokens": max_tokens,
-		},
+		params={"response_model": json_schema},
 	)
 	data = assistant.json
 	if data is None:

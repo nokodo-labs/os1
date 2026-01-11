@@ -141,7 +141,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			messages=_messages_to_openai_chatcompletions(messages),
 			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,
 			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
-			if params and params.tool_choice is not None
+			if tools and params and params.tool_choice is not None
 			else openai.omit,
 			max_completion_tokens=params.max_tokens
 			if params and params.max_tokens is not None
@@ -276,7 +276,7 @@ def _response_format_to_openai_chatcompletions(
 		type="json_schema",
 		json_schema=OpenAIJSONSchema(
 			name="response",
-			strict=True,
+			strict=False,
 			schema=dict[str, object](response_model),
 		),
 	)
