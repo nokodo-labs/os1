@@ -16,7 +16,7 @@
 	import Star from '$lib/components/icons/Star.svelte'
 	import Terminal from '$lib/components/icons/Terminal.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
-	import { onDestroy } from 'svelte'
+	import { onDestroy, tick } from 'svelte'
 
 	type IconComponent = typeof Document
 
@@ -60,49 +60,62 @@
 	let gridGapXPx = $state(30)
 	let gridGapYPx = $state(35)
 	let iconPx = $state(32)
-	const INDICATOR_SPACE_PX = 28
-	const BOTTOM_PADDING_PX = 12
+	const INDICATOR_SPACE_PX = 48
+	const SIDE_PADDING_PX = 24
+	const BOTTOM_VIEWPORT_PADDING_PX = 8
+	// Fixed offset from bottom of viewport where the grid lives (accounts for input + padding).
+	// This avoids depending on rect.top which changes during slide animations.
+	const GRID_TOP_OFFSET_VH = 0.45
 
 	let rootEl: HTMLDivElement
 	let scrollerEl: HTMLDivElement
-	let trackEl: HTMLDivElement
 	let cols = $state(5)
 	let rows = $state(2)
 	let currentPage = $state(0)
-	let isDragging = $state(false)
-	let suppressClick = $state(false)
-	let dragPointerId: number | null = null
-	let dragStartX = 0
-	let dragStartScrollLeft = 0
-	let elasticOffsetPx = $state(0)
-	let rubberbandAnimation: Animation | null = null
-	let hasPassedDragThreshold = $state(false)
-	const DRAG_THRESHOLD_PX = 6
-	const ELASTIC_CONSTANT = 0.55
-	const ELASTIC_MAX_PX = 96
-
-	function rubberband(distance: number) {
-		const abs = Math.abs(distance)
-		if (abs <= 0) return 0
-		// iOS-like rubberband: asymptotically approaches ELASTIC_MAX_PX.
-		const band =
-			(abs * ELASTIC_CONSTANT * ELASTIC_MAX_PX) / (ELASTIC_MAX_PX + ELASTIC_CONSTANT * abs)
-		return Math.sign(distance) * band
-	}
+	let wheelAccum = 0
+	let wheelResetTimeout: number | null = null
 
 	function clamp(value: number, min: number, max: number) {
 		return Math.max(min, Math.min(max, value))
 	}
 
 	let recalcRaf: number | null = null
+	let fitToken = 0
+
+	async function ensureFitsViewport(token: number) {
+		if (typeof window === 'undefined') return
+		if (!rootEl) return
+
+		await tick()
+		if (token !== fitToken) return
+
+		const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+		const bottomLimit = viewportHeight - BOTTOM_VIEWPORT_PADDING_PX
+
+		let attempts = 0
+		while (attempts < 6) {
+			const bottom = rootEl.getBoundingClientRect().bottom
+			if (bottom <= bottomLimit) break
+			if (rows <= 1) break
+
+			rows -= 1
+			attempts += 1
+			await tick()
+			if (token !== fitToken) return
+		}
+
+		const appsPerPage = Math.max(1, cols * rows)
+		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
+		currentPage = clamp(currentPage, 0, pageCount - 1)
+		scrollToPage(currentPage, 'auto')
+	}
+
 	function scheduleRecalc() {
 		if (typeof window === 'undefined') return
 		if (recalcRaf !== null) cancelAnimationFrame(recalcRaf)
 		recalcRaf = requestAnimationFrame(() => {
 			recalcRaf = null
 			recalcLayout()
-			// One extra frame helps when the viewport is mid-transition (mobile URL bar / orientation).
-			requestAnimationFrame(recalcLayout)
 		})
 	}
 
@@ -110,21 +123,25 @@
 		if (!rootEl) return
 
 		const rect = rootEl.getBoundingClientRect()
-		const width = rect.width
+		// Account for side padding when calculating columns
+		const availableWidth = rect.width - SIDE_PADDING_PX * 2
 
 		// Scale tile sizing down on small viewports.
-		const scale = clamp(width / 560, 0.78, 1)
+		const scale = clamp(rect.width / 560, 0.78, 1)
 		tilePx = Math.round(76 * scale)
 		gridGapXPx = Math.round(30 * scale)
 		gridGapYPx = Math.round(35 * scale)
 		tileToLabelGapPx = Math.max(6, Math.round(8 * scale))
 		labelPx = Math.max(16, Math.round(18 * scale))
 		iconPx = clamp(Math.round(tilePx * 0.42), 22, 32)
+
+		// Use a fixed fraction of viewport height for available space.
+		// This prevents layout recalc jank during slide-up animations.
 		const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-		const availableHeight = Math.max(0, viewportHeight - rect.top - BOTTOM_PADDING_PX)
+		const availableHeight = Math.max(0, viewportHeight * GRID_TOP_OFFSET_VH)
 
 		const tileBlockWidth = tilePx + gridGapXPx
-		const nextCols = clamp(Math.floor((width + gridGapXPx) / tileBlockWidth), 3, 7)
+		const nextCols = clamp(Math.floor((availableWidth + gridGapXPx) / tileBlockWidth), 3, 7)
 
 		const cellHeight = tilePx + tileToLabelGapPx + labelPx
 		const tileBlockHeight = cellHeight + gridGapYPx
@@ -138,6 +155,9 @@
 		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
 		currentPage = clamp(currentPage, 0, pageCount - 1)
 		scrollToPage(currentPage, 'auto')
+
+		const token = ++fitToken
+		void ensureFitsViewport(token)
 	}
 
 	function scrollToPage(pageIndex: number, behavior: 'smooth' | 'auto' = 'smooth') {
@@ -147,128 +167,51 @@
 		scrollerEl.scrollTo({ left: pageIndex * width, behavior })
 	}
 
+	function pageBy(delta: number) {
+		const next = clamp(currentPage + delta, 0, pages.length - 1)
+		if (next === currentPage) return
+		currentPage = next
+		scrollToPage(next)
+	}
+
+	function onScrollerWheel(event: WheelEvent) {
+		// Keep native behavior for trackpads and horizontal wheel/shift-scroll.
+		if (event.ctrlKey) return
+		if (!scrollerEl) return
+		if (pages.length <= 1) return
+
+		const dx = event.deltaX
+		const dy = event.deltaY
+		const absDx = Math.abs(dx)
+		const absDy = Math.abs(dy)
+		if (event.shiftKey || absDx > absDy) return
+
+		// Treat vertical wheel as a paging intent on desktop mice.
+		event.preventDefault()
+		wheelAccum += dy
+
+		if (wheelResetTimeout !== null) window.clearTimeout(wheelResetTimeout)
+		wheelResetTimeout = window.setTimeout(() => {
+			wheelAccum = 0
+			wheelResetTimeout = null
+		}, 160)
+
+		const threshold = 70
+		if (wheelAccum >= threshold) {
+			wheelAccum = 0
+			pageBy(1)
+		} else if (wheelAccum <= -threshold) {
+			wheelAccum = 0
+			pageBy(-1)
+		}
+	}
+
 	function syncPageFromScroll() {
-		if (isDragging) return
 		if (!scrollerEl) return
 		const width = scrollerEl.clientWidth
 		if (width <= 0) return
 		const next = clamp(Math.round(scrollerEl.scrollLeft / width), 0, pages.length - 1)
 		if (next !== currentPage) currentPage = next
-	}
-
-	function applyDragScroll(desiredScrollLeft: number) {
-		if (!scrollerEl) return
-		rubberbandAnimation?.cancel()
-		rubberbandAnimation = null
-		const maxScroll = Math.max(0, scrollerEl.scrollWidth - scrollerEl.clientWidth)
-
-		if (desiredScrollLeft < 0) {
-			scrollerEl.scrollLeft = 0
-			const overshoot = -desiredScrollLeft
-			elasticOffsetPx = clamp(rubberband(overshoot), 0, ELASTIC_MAX_PX)
-			return
-		}
-
-		if (desiredScrollLeft > maxScroll) {
-			scrollerEl.scrollLeft = maxScroll
-			const overshoot = desiredScrollLeft - maxScroll
-			elasticOffsetPx = -clamp(rubberband(overshoot), 0, ELASTIC_MAX_PX)
-			return
-		}
-
-		elasticOffsetPx = 0
-		scrollerEl.scrollLeft = desiredScrollLeft
-	}
-
-	function handleClickCapture(event: MouseEvent) {
-		if (!suppressClick) return
-		event.preventDefault()
-		event.stopPropagation()
-		suppressClick = false
-	}
-
-	function handlePointerDown(event: PointerEvent) {
-		if (!scrollerEl) return
-		if (event.pointerType === 'mouse' && event.button !== 0) return
-		rubberbandAnimation?.cancel()
-		rubberbandAnimation = null
-		isDragging = false
-		hasPassedDragThreshold = false
-		suppressClick = false
-		dragPointerId = event.pointerId
-		dragStartX = event.clientX
-		dragStartScrollLeft = scrollerEl.scrollLeft
-	}
-
-	function animateElasticReturn() {
-		if (!trackEl) {
-			elasticOffsetPx = 0
-			return
-		}
-		const start = elasticOffsetPx
-		if (start === 0) return
-		rubberbandAnimation?.cancel()
-		rubberbandAnimation = trackEl.animate(
-			[{ transform: `translateX(${start}px)` }, { transform: 'translateX(0px)' }],
-			{
-				duration: 280,
-				easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-				fill: 'forwards',
-			}
-		)
-		rubberbandAnimation.onfinish = () => {
-			rubberbandAnimation = null
-			elasticOffsetPx = 0
-		}
-		rubberbandAnimation.oncancel = () => {
-			rubberbandAnimation = null
-		}
-	}
-
-	function handlePointerMove(event: PointerEvent) {
-		if (!scrollerEl) return
-		if (dragPointerId !== event.pointerId) return
-		const dx = event.clientX - dragStartX
-		if (!hasPassedDragThreshold) {
-			if (Math.abs(dx) < DRAG_THRESHOLD_PX) return
-			hasPassedDragThreshold = true
-			isDragging = true
-			suppressClick = true
-			scrollerEl.setPointerCapture(event.pointerId)
-		}
-
-		// From here on, we are dragging. Prevent text selection and keep it feeling native.
-		event.preventDefault()
-		applyDragScroll(dragStartScrollLeft - dx)
-	}
-
-	function handlePointerUp(event: PointerEvent) {
-		if (dragPointerId !== event.pointerId) return
-		const didDrag = hasPassedDragThreshold
-		isDragging = false
-		hasPassedDragThreshold = false
-		dragPointerId = null
-		if (!scrollerEl) return
-		const width = scrollerEl.clientWidth
-		if (width <= 0) return
-		animateElasticReturn()
-		if (didDrag) {
-			currentPage = clamp(Math.round(scrollerEl.scrollLeft / width), 0, pages.length - 1)
-			scrollToPage(currentPage)
-			// If the browser doesn't emit a click after a drag (e.g. release outside), don't
-			// leave click suppression enabled.
-			setTimeout(() => {
-				suppressClick = false
-			}, 0)
-		}
-	}
-
-	function handlePointerCancel(event: PointerEvent) {
-		if (dragPointerId !== event.pointerId) return
-		isDragging = false
-		hasPassedDragThreshold = false
-		animateElasticReturn()
-		dragPointerId = null
 	}
 
 	const resizeObserver =
@@ -281,16 +224,19 @@
 		window.addEventListener('orientationchange', scheduleRecalc, { passive: true })
 		window.visualViewport?.addEventListener('resize', scheduleRecalc, { passive: true })
 		window.visualViewport?.addEventListener('scroll', scheduleRecalc, { passive: true })
+		window.addEventListener('scroll', scheduleRecalc, { passive: true })
 
-		// Ensure we measure after layout (especially because this grid is positioned under the input)
+		// Ensure we measure after layout.
 		scheduleRecalc()
 
 		return () => {
 			if (recalcRaf !== null) cancelAnimationFrame(recalcRaf)
+			if (wheelResetTimeout !== null) window.clearTimeout(wheelResetTimeout)
 			window.removeEventListener('resize', scheduleRecalc)
 			window.removeEventListener('orientationchange', scheduleRecalc)
 			window.visualViewport?.removeEventListener('resize', scheduleRecalc)
 			window.visualViewport?.removeEventListener('scroll', scheduleRecalc)
+			window.removeEventListener('scroll', scheduleRecalc)
 			resizeObserver?.unobserve(rootEl)
 		}
 	})
@@ -310,64 +256,51 @@
 </script>
 
 <div bind:this={rootEl} class="w-full">
+	<!-- Native CSS scroll-snap + overscroll handles paging and rubberband on iOS/Safari. -->
 	<div
 		bind:this={scrollerEl}
-		class="no-scrollbar relative flex w-full overflow-x-scroll overscroll-x-contain select-none {isDragging
-			? 'cursor-grabbing snap-none'
-			: 'cursor-grab snap-x snap-mandatory'}"
-		style="touch-action: pan-x;"
-		onclickcapture={handleClickCapture}
+		class="no-scrollbar relative flex w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain select-none"
+		style="touch-action: pan-x; -webkit-overflow-scrolling: touch;"
 		onscroll={syncPageFromScroll}
-		onpointerdowncapture={handlePointerDown}
-		onpointermovecapture={handlePointerMove}
-		onpointerup={handlePointerUp}
-		onpointercancel={handlePointerCancel}
+		onwheel={onScrollerWheel}
 	>
-		<div
-			bind:this={trackEl}
-			class="flex w-full"
-			style="transform: translateX({elasticOffsetPx}px);"
-		>
-			{#each pages as pageApps, pageIndex (pageIndex)}
-				<div class="w-full shrink-0 snap-start">
-					<div
-						class="grid w-full justify-center"
-						style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px;"
-					>
-						{#each pageApps as app (app.id)}
-							{@const Icon = app.icon}
-							<button
-								type="button"
-								class="group flex flex-col items-center border-none bg-transparent"
-								style="height: {tilePx + tileToLabelGapPx + labelPx}px;"
-								aria-label={app.title}
+		{#each pages as pageApps, pageIndex (pageIndex)}
+			<div class="w-full shrink-0 snap-center">
+				<div
+					class="grid w-full justify-center"
+					style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px; padding-left: {SIDE_PADDING_PX}px; padding-right: {SIDE_PADDING_PX}px;"
+				>
+					{#each pageApps as app (app.id)}
+						{@const Icon = app.icon}
+						<button
+							type="button"
+							class="group flex flex-col items-center border-none bg-transparent"
+							style="height: {tilePx + tileToLabelGapPx + labelPx}px;"
+							aria-label={app.title}
+						>
+							<div
+								class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[transform,box-shadow] duration-150 group-hover:scale-[1.03] group-hover:ring-white/10 group-active:scale-[0.99] group-active:ring-white/20 {iconShape ===
+								'circle'
+									? 'rounded-full'
+									: 'rounded-container'}"
+								style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
 							>
-								<div
-									class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[transform,box-shadow] duration-150 group-hover:scale-[1.03] group-hover:ring-white/10 group-active:scale-[0.99] group-active:ring-white/20 {iconShape ===
-									'circle'
-										? 'rounded-full'
-										: 'rounded-container'}"
-									style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
-								>
-									<span class="liquid-glass__highlight" aria-hidden="true"></span>
-									<div class="liquid-glass__content">
-										<Icon
-											className="h-(--icon-px) w-(--icon-px) text-white/90"
-										/>
-									</div>
+								<span class="liquid-glass__highlight" aria-hidden="true"></span>
+								<div class="liquid-glass__content">
+									<Icon className="h-(--icon-px) w-(--icon-px) text-white/90" />
 								</div>
-								<div
-									class="text-center text-xs font-medium text-white/70"
-									style="margin-top: {tileToLabelGapPx}px; line-height: {labelPx}px; height: {labelPx}px;"
-								>
-									{app.title}
-								</div>
-							</button>
-						{/each}
-					</div>
+							</div>
+							<div
+								class="text-center text-xs font-medium text-white/70"
+								style="margin-top: {tileToLabelGapPx}px; line-height: {labelPx}px; height: {labelPx}px;"
+							>
+								{app.title}
+							</div>
+						</button>
+					{/each}
 				</div>
-			{/each}
-		</div>
+			</div>
+		{/each}
 	</div>
 
 	<div class="mt-6 flex items-center justify-center gap-2" aria-label="apps pages">

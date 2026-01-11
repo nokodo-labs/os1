@@ -155,10 +155,10 @@
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>
 
 		<div
-			class="liquid-glass__content grid grid-cols-[1fr_auto_1fr] items-center gap-[clamp(6px,2.5vw,16px)]"
+			class="liquid-glass__content grid grid-cols-[1fr_auto_1fr] items-center gap-0 sm:gap-[clamp(6px,2.5vw,16px)]"
 		>
 			<!-- left: adaptive controls -->
-			<div class="flex min-w-0 items-center gap-[clamp(6px,2.2vw,12px)]">
+			<div class="flex min-w-0 items-center gap-0 sm:gap-[clamp(6px,2.2vw,12px)]">
 				{#if chrome.island.agentSelector}
 					<div class="agent-selector relative flex min-w-0 items-center gap-2">
 						<button
@@ -222,7 +222,7 @@
 
 					{#if isMobileViewport}
 						<button
-							class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+							class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
 							onclick={() => sidebar?.toggleChatSidebar?.()}
 							aria-label={sidebar?.isChatSidebarOpen
 								? 'close sidebar'
@@ -234,7 +234,7 @@
 					{/if}
 
 					<button
-						class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
 						onclick={handleTemporaryChatToggle}
 						aria-label="temporary chat"
 					>
@@ -257,14 +257,14 @@
 			</div>
 
 			<!-- right: controls + user -->
-			<div class="flex items-center justify-end gap-2">
+			<div class="flex items-center justify-end gap-0 sm:gap-2">
 				<div
 					class="overflow-hidden transition-[max-width,opacity,transform] duration-200 ease-out {isHomeLayout
 						? 'pointer-events-none max-w-0 -translate-x-1 opacity-0'
 						: 'max-w-12 translate-x-0 opacity-100'}"
 				>
 					<button
-						class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
 						onclick={handleHome}
 						aria-label="home"
 					>
@@ -273,7 +273,7 @@
 				</div>
 
 				<button
-					class="flex h-12 w-12 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
 					onclick={() => chrome.toggleDock()}
 					aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 					aria-expanded={chrome.isDockOpen}
