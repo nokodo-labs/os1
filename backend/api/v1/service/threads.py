@@ -65,15 +65,36 @@ async def generate_thread_metadata(
 	*,
 	thread_id: TypeID,
 	chat_model: ChatModel,
+	principal: Principal | None = None,
+	replace: bool = False,
 	emit_event: bool = True,
-) -> ThreadUpdate | None:
-	"""generate thread metadata and persist via update_thread."""
+) -> Thread | None:
+	"""generate thread metadata and persist via update_thread.
+
+	when replace is false, only fills missing fields (title/tags).
+	"""
+	if principal is not None:
+		await require_thread_access(
+			str(thread_id),
+			session,
+			principal,
+			required_role=AccessRole.EDITOR,
+		)
+
 	thread = await session.get(
 		Thread,
 		thread_id,
 		options=[selectinload(Thread.messages), selectinload(Thread.owner)],
 	)
 	if not thread or thread.deleted_at or thread.is_temporary:
+		return None
+
+	existing_title = (thread.title or "").strip()
+	has_title = existing_title != ""
+	has_tags = bool(thread.tags) and len(thread.tags) > 0
+	should_update_title = replace or not has_title
+	should_update_tags = replace or not has_tags
+	if not should_update_title and not should_update_tags:
 		return None
 
 	messages = sorted(thread.messages or [], key=lambda m: m.created_at)
@@ -117,26 +138,35 @@ async def generate_thread_metadata(
 
 	desired_title = out.title.strip().lower() or None
 	desired_tags = out.tags[:6]
+
 	update_in = ThreadUpdate(
-		title=desired_title if desired_title != thread.title else None,
-		tags=desired_tags if desired_tags != (thread.tags or []) else None,
+		title=(
+			desired_title
+			if should_update_title and desired_title != thread.title
+			else None
+		),
+		tags=(
+			desired_tags
+			if should_update_tags and desired_tags != (thread.tags or [])
+			else None
+		),
 	)
 	if update_in.title is None and update_in.tags is None:
 		return None
 
-	owner = thread.owner or await session.get(User, thread.owner_id)
-	if owner is None:
-		return None
+	if principal is None:
+		owner = thread.owner or await session.get(User, thread.owner_id)
+		if owner is None:
+			return None
+		principal = Principal(user=owner, group_ids=(), permissions=frozenset())
 
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
-	await update_thread(
+	return await update_thread(
 		thread_id,
 		update_in,
 		session,
 		principal=principal,
 		emit_event=emit_event,
 	)
-	return update_in
 
 
 async def list_thread_recipient_user_ids(

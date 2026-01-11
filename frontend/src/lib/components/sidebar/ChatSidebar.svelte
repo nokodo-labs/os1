@@ -11,6 +11,7 @@
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import * as ScrollArea from '$lib/components/ui/scroll-area'
 	import * as Separator from '$lib/components/ui/separator'
 	import * as Tooltip from '$lib/components/ui/tooltip'
@@ -42,6 +43,7 @@
 	let confirmDeleteThread = $state<{ id: string; title: string } | null>(null)
 	let isDeleting = $state(false)
 	let deleteError = $state<string | null>(null)
+	let generatingMetadataThreadId = $state<string | null>(null)
 
 	type TriggerProps = Record<string, unknown>
 
@@ -297,6 +299,17 @@
 		return response.status
 	}
 
+	async function generateThreadMetadata(threadId: string): Promise<Thread | null> {
+		const { data, error } = await v1Client().POST('/threads/{thread_id}/metadata/generate', {
+			params: {
+				path: { thread_id: threadId },
+			},
+			body: { replace: false, model_id: null },
+		})
+		if (error || !data) return null
+		return data
+	}
+
 	function formatTime(iso: string): string {
 		const date = new Date(iso)
 		if (Number.isNaN(date.getTime())) return ''
@@ -355,7 +368,7 @@
 
 	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-1.5 px-3 py-4">
 		<!-- Logo / Brand with Close Button -->
-		<div class="relative grid w-full grid-cols-[auto_1fr_auto] items-center">
+		<div class="relative grid w-full grid-cols-[auto_auto_auto] items-center">
 			<button
 				class="group relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:text-white"
 				onclick={() => {
@@ -382,7 +395,7 @@
 			</button>
 
 			<div
-				class="flex w-full items-center justify-center overflow-hidden transition-[opacity,transform] duration-200 ease-out {showTopLabels
+				class="flex flex-none items-center justify-center overflow-hidden px-2 transition-[opacity,transform] duration-200 ease-out {showTopLabels
 					? 'translate-y-0 opacity-100'
 					: '-translate-y-0.5 opacity-0'}"
 				aria-hidden={!showTopLabels}
@@ -597,6 +610,79 @@
 													data-thread-menu
 													class="liquid-metal rounded-container absolute top-full right-2 z-50 mt-2 w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
 												>
+													{#if !thread.title || thread.title.trim() === '' || !thread.tags || thread.tags.length === 0}
+														<button
+															type="button"
+															class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+															disabled={generatingMetadataThreadId ===
+																thread.id}
+															onclick={(e) => {
+																e.stopPropagation()
+																openThreadMenuId = null
+																void (async () => {
+																	generatingMetadataThreadId =
+																		thread.id
+																	try {
+																		const updated =
+																			await generateThreadMetadata(
+																				thread.id
+																			)
+																		if (!updated) return
+
+																		invalidateThreadCache(
+																			thread.id
+																		)
+																		recentThreads.update(
+																			(threads) => {
+																				const idx =
+																					threads.findIndex(
+																						(t) =>
+																							t.id ===
+																							thread.id
+																					)
+																				if (idx === -1)
+																					return threads
+																				const current =
+																					threads[idx]
+																				const next: Thread =
+																					{
+																						...current,
+																						title:
+																							updated.title ??
+																							current.title,
+																						tags:
+																							updated.tags ??
+																							current.tags,
+																						last_activity_at:
+																							updated.last_activity_at ||
+																							new Date().toISOString(),
+																					}
+																				return [
+																					next,
+																					...threads.slice(
+																						0,
+																						idx
+																					),
+																					...threads.slice(
+																						idx + 1
+																					),
+																				]
+																			}
+																		)
+																	} finally {
+																		generatingMetadataThreadId =
+																			null
+																	}
+																})()
+															}}
+														>
+															<Sparkles className="h-4 w-4" />
+															generate data
+														</button>
+														<div
+															class="my-1 h-px w-full bg-white/10"
+														></div>
+													{/if}
 													{#each ['share', 'download', 'rename', 'clone', 'move', 'archive'] as action (action)}
 														<button
 															type="button"

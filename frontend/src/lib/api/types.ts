@@ -200,6 +200,28 @@ export interface paths {
         patch: operations["update_thread_threads__thread_id__patch"];
         trace?: never;
     };
+    "/threads/{thread_id}/metadata/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Thread Metadata
+         * @description Generate thread title/tags using an LLM.
+         *
+         *     When replace is false, only fills in missing metadata.
+         */
+        post: operations["generate_thread_metadata_threads__thread_id__metadata_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}/messages": {
         parameters: {
             query?: never;
@@ -2324,6 +2346,19 @@ export interface components {
             owner_id: string;
         };
         /**
+         * ThreadMetadataGenerateRequest
+         * @description Request body for generating thread metadata.
+         */
+        ThreadMetadataGenerateRequest: {
+            /**
+             * Replace
+             * @default false
+             */
+            replace: boolean;
+            /** Model Id */
+            model_id?: string | null;
+        };
+        /**
          * ThreadRunRequest
          * @description Payload to run a thread with an agent, optionally appending a new user message.
          */
@@ -3706,6 +3741,104 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ThreadUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    generate_thread_metadata_threads__thread_id__metadata_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ThreadMetadataGenerateRequest"] | null;
             };
         };
         responses: {

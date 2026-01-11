@@ -108,3 +108,10 @@ class ThreadSwitchResponse(ORMModel):
 
 	ok: bool
 	current_message_id: TypeID | None = None
+
+
+class ThreadMetadataGenerateRequest(ORMModel):
+	"""Request body for generating thread metadata."""
+
+	replace: bool = False
+	model_id: TypeID | None = None

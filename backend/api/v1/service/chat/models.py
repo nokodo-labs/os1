@@ -202,7 +202,7 @@ async def resolve_model_for_run(
 	)
 
 
-async def resolve_chat_model_for_run(
+async def resolve_chat_model(
 	session: AsyncSession,
 	*,
 	agent_id: TypeID | None = None,

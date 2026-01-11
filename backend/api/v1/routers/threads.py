@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
 from api.models.acl import AccessControlEntry
+from api.models.agent import Agent, AgentVisibility
 from api.models.event import Event
 from api.models.message import Message
+from api.models.model import Model
 from api.models.thread import Thread
 from api.schemas.acl import AccessControlEntry as AccessControlEntrySchema
 from api.schemas.acl import AccessControlEntryCreate
@@ -26,6 +30,7 @@ from api.schemas.thread import (
 )
 from api.schemas.thread import (
 	ThreadCreate,
+	ThreadMetadataGenerateRequest,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
 	ThreadUpdate,
@@ -34,6 +39,10 @@ from api.v1.service import acl as acl_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.chat import run_agent as chat_run_agent
+from api.v1.service.chat.models import (
+	build_chat_model,
+	resolve_chat_model,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -110,6 +119,54 @@ async def update_thread(
 		db,
 		principal=principal,
 	)
+
+
+@router.post("/{thread_id}/metadata/generate", response_model=ThreadSchema)
+async def generate_thread_metadata(
+	thread_id: TypeID,
+	req: ThreadMetadataGenerateRequest | None = None,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> Thread:
+	"""Generate thread title/tags using an LLM.
+
+	When replace is false, only fills in missing metadata.
+	"""
+	request = req or ThreadMetadataGenerateRequest()
+
+	if request.model_id is not None:
+		chat_model = await resolve_chat_model(
+			db,
+			model_id=request.model_id,
+		)
+	else:
+		stmt = (
+			select(Agent)
+			.options(selectinload(Agent.model).selectinload(Model.provider))
+			.where(Agent.model_id.isnot(None))
+			.order_by(Agent.created_at.desc())
+		)
+		if not principal.is_admin:
+			stmt = stmt.where(Agent.visibility == AgentVisibility.PUBLIC)
+		result = await db.execute(stmt)
+		agent = result.scalars().first()
+		if agent is None or agent.model is None:
+			raise HTTPException(
+				status_code=status.HTTP_409_CONFLICT,
+				detail="no agent with a configured model",
+			)
+		chat_model = build_chat_model(agent.model)
+
+	updated = await thread_service.generate_thread_metadata(
+		db,
+		thread_id=thread_id,
+		chat_model=chat_model,
+		principal=principal,
+		replace=request.replace,
+	)
+	if updated is not None:
+		return updated
+	return await thread_service.get_thread(thread_id, db, principal=principal)
 
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
