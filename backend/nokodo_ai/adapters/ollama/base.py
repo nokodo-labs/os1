@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pydantic import Field, PrivateAttr
 
-from ..base import BaseAdapter
+from ...base import Base
 
 
-class BaseOllamaAdapter(BaseAdapter):
+class BaseOllamaAdapter(Base):
 	"""shared infrastructure for all ollama adapters.
 
 	provides:

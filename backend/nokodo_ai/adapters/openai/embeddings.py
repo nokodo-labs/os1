@@ -8,7 +8,7 @@ from ..base.embeddings import BaseEmbeddingAdapter
 from .base import BaseOpenAIAdapter
 
 
-class OpenAIEmbeddingAdapter(BaseOpenAIAdapter, BaseEmbeddingAdapter):
+class OpenAIEmbeddingsAdapter(BaseOpenAIAdapter, BaseEmbeddingAdapter):
 	"""adapter for openai's embedding API."""
 
 	type: Literal["openai.embedding"] = "openai.embedding"

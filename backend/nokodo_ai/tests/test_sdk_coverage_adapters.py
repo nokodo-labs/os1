@@ -19,10 +19,10 @@ from nokodo_ai.adapters.anthropic.messages import (
 	_tool_choice_to_anthropic,
 	_tools_to_anthropic,
 )
-from nokodo_ai.adapters.base.api import BaseApiAdapter
 from nokodo_ai.adapters.base.chat import BaseChatAdapter
+from nokodo_ai.adapters.base.client import BaseClientAdapter
 from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
-from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingAdapter
+from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingsAdapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.chat_completions import (
 	OpenAIChatCompletionsAdapter,
@@ -36,7 +36,7 @@ from nokodo_ai.adapters.openai.chat_completions import (
 	_tool_choice_to_openai_chatcompletions,
 	_tools_to_openai_chatcompletions,
 )
-from nokodo_ai.adapters.openai.embeddings import OpenAIEmbeddingAdapter
+from nokodo_ai.adapters.openai.embeddings import OpenAIEmbeddingsAdapter
 from nokodo_ai.adapters.openai.responses import (
 	OpenAIResponsesAdapter,
 	_messages_to_openai_responses_input,
@@ -69,10 +69,13 @@ class _DummyAsyncIterator:
 
 
 def test_base_api_adapter_not_implemented_get_client_is_covered() -> None:
-	class _CallsSuperApi(BaseApiAdapter[object]):
+	class _CallsSuperApi(BaseClientAdapter[object]):
 		def _get_client(self) -> object:
 			# explicitly call super to cover the NotImplementedError branch
 			return super()._get_client()
+
+		async def close(self) -> None:
+			return None
 
 	with pytest.raises(NotImplementedError, match="subclasses must implement"):
 		_CallsSuperApi()
@@ -158,7 +161,7 @@ async def test_ollama_adapters_raise_not_implemented_paths() -> None:
 
 @pytest.mark.asyncio
 async def test_ollama_embedding_adapter_raises_not_implemented() -> None:
-	embed = OllamaEmbeddingAdapter()
+	embed = OllamaEmbeddingsAdapter()
 	with pytest.raises(NotImplementedError, match="not yet implemented"):
 		await embed.embed(["a"], model="m")
 
@@ -808,7 +811,7 @@ async def test_openai_adapters_generate_and_embedding(
 	assert any("z" in t for t in seen)
 
 	# embedding
-	emb = OpenAIEmbeddingAdapter()
+	emb = OpenAIEmbeddingsAdapter()
 	vectors = await emb.embed(["a"], model="text-embedding-3-small")
 	assert vectors == [[0.1, 0.2]]
 

@@ -8,7 +8,7 @@ from ..base.embeddings import BaseEmbeddingAdapter
 from .base import BaseOllamaAdapter
 
 
-class OllamaEmbeddingAdapter(BaseOllamaAdapter, BaseEmbeddingAdapter):
+class OllamaEmbeddingsAdapter(BaseOllamaAdapter, BaseEmbeddingAdapter):
 	"""adapter for ollama's embedding API."""
 
 	type: Literal["ollama.embedding"] = "ollama.embedding"

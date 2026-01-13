@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Annotated, Any, Literal, cast
+from collections.abc import AsyncIterator, Callable
+from typing import Annotated, Any, ClassVar, Literal, cast
 
 import pytest
 
@@ -330,12 +330,16 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 	with pytest.raises(Exception):
 		ChatModel.model_validate({"model_name": ""})
 
-	# cover the shorthand-adapter unknown provider branch (chat_models.py line 62)
-	import nokodo_ai.chat_models as cm
+	# cover the shorthand-adapter unknown provider branch
+	# (resolver is a ClassVar on AdapterEnabledBase, so patch via a test subclass)
 
-	monkeypatch.setattr(cm, "resolve_chat_adapter", lambda provider, adapter: None)
+	class NoResolveChatModel(ChatModel):
+		_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]] = (
+			lambda provider, variant: None
+		)
+
 	with pytest.raises(ValueError, match="unknown provider"):
-		ChatModel.model_validate(
+		NoResolveChatModel.model_validate(
 			{
 				"model_name": "gpt-4o",
 				"adapter": {"type": "openai"},
@@ -344,7 +348,7 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 
 
 def test_embedding_model_resolve_adapter_config_unknown_and_ok() -> None:
-	with pytest.raises(ValueError, match="unknown embedding provider"):
+	with pytest.raises(ValueError, match="unknown provider"):
 		EmbeddingModel.model_validate({"model": "weird:thing"})
 
 	emb = EmbeddingModel.model_validate({"model": "ollama:embed"})
@@ -362,8 +366,9 @@ def test_embedding_model_resolve_adapter_config_unknown_and_ok() -> None:
 	with pytest.raises(Exception):
 		EmbeddingModel.model_validate({"provider": "", "model_name": "m"})
 
-	# non-dict input passes through unchanged
-	assert cast(Any, EmbeddingModel).resolve_adapter_config("x") == "x"
+	# non-dict input passes through unchanged and then fails model parsing
+	with pytest.raises(Exception):
+		EmbeddingModel.model_validate("x")
 
 
 @pytest.mark.asyncio

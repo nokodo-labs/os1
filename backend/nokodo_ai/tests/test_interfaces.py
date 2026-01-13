@@ -25,28 +25,40 @@ def test_llm_requires_model() -> None:
 
 
 def test_llm_resolves_openai_model() -> None:
-	llm = ChatModel("gpt-4o")
+	llm = ChatModel(
+		"gpt-4o",
+		adapter={"type": "openai", "api_key": "test"},
+	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
 
 def test_llm_resolves_openai_explicit() -> None:
-	llm = ChatModel("openai:gpt-4o-mini")
+	llm = ChatModel(
+		"openai:gpt-4o-mini",
+		adapter={"type": "openai", "api_key": "test"},
+	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
 
 def test_llm_resolves_openai_responses_api() -> None:
-	llm = ChatModel("openai.responses:gpt-4o")
+	llm = ChatModel(
+		"openai.responses:gpt-4o",
+		adapter={"type": "openai.responses", "api_key": "test"},
+	)
 	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
 	assert isinstance(llm.adapter, OpenAIResponsesAdapter)
 
 
 def test_llm_resolves_anthropic() -> None:
-	llm = ChatModel("anthropic:claude-sonnet-4-20250514")
+	llm = ChatModel(
+		"anthropic:claude-sonnet-4-20250514",
+		adapter={"type": "anthropic", "api_key": "test"},
+	)
 	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
 	assert isinstance(llm.adapter, AnthropicMessagesAdapter)
@@ -57,6 +69,16 @@ def test_llm_resolves_ollama() -> None:
 	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
 	assert isinstance(llm.adapter, OllamaChatAdapter)
+
+
+def test_llm_resolves_google() -> None:
+	llm = ChatModel(
+		"google:gemini-2.0-flash-001",
+		adapter={"type": "google", "api_key": "test"},
+	)
+	from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
+
+	assert isinstance(llm.adapter, GoogleGenerateContentAdapter)
 
 
 def test_llm_unknown_provider_raises() -> None:
@@ -71,20 +93,20 @@ def test_embedding_requires_model_or_adapter() -> None:
 
 def test_embedding_resolves_openai() -> None:
 	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
-	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
 
-	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)
+	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
 
 
 def test_embedding_resolves_ollama() -> None:
 	embedder = EmbeddingModel(model="ollama:nomic-embed-text")
-	from nokodo_ai.adapters.ollama import OllamaEmbeddingAdapter
+	from nokodo_ai.adapters.ollama import OllamaEmbeddingsAdapter
 
-	assert isinstance(embedder.adapter, OllamaEmbeddingAdapter)
+	assert isinstance(embedder.adapter, OllamaEmbeddingsAdapter)
 
 
 def test_embedding_unknown_provider_raises() -> None:
-	with pytest.raises(ValueError, match="unknown embedding provider"):
+	with pytest.raises(ValueError, match="unknown provider"):
 		EmbeddingModel(model="unknownprovider:model")
 
 
@@ -247,7 +269,10 @@ async def test_chat_model_resolves_default_provider(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	_ = monkeypatch
-	llm = ChatModel("gpt-4o")
+	llm = ChatModel(
+		"gpt-4o",
+		adapter={"type": "openai", "api_key": "test"},
+	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert llm.provider == "openai"
@@ -276,22 +301,28 @@ async def test_embedding_resolves_default_provider(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	_ = monkeypatch
-	embedder = EmbeddingModel("text-embedding-3-small")
-	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
+	embedder = EmbeddingModel(
+		"text-embedding-3-small",
+		adapter={"type": "openai.embedding", "api_key": "test"},
+	)
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
 
 	assert embedder.provider == "openai"
 	assert embedder.variant is None
 	assert embedder.model_name == "text-embedding-3-small"
-	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)
+	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
 
 
 @pytest.mark.asyncio
 async def test_embedding_variant_is_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
 	_ = monkeypatch
-	embedder = EmbeddingModel("openai.beta:text-embedding-3-large")
-	from nokodo_ai.adapters.openai import OpenAIEmbeddingAdapter
+	embedder = EmbeddingModel(
+		"openai.beta:text-embedding-3-large",
+		adapter={"type": "openai.embedding", "api_key": "test"},
+	)
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
 
 	assert embedder.provider == "openai"
 	assert embedder.variant == "beta"
 	assert embedder.model_name == "text-embedding-3-large"
-	assert isinstance(embedder.adapter, OpenAIEmbeddingAdapter)
+	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)

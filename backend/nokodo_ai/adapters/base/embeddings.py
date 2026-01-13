@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from .adapter import BaseAdapter
 
-class BaseEmbeddingAdapter(ABC):
+
+class BaseEmbeddingAdapter(BaseAdapter, ABC):
 	"""capability ABC for embedding APIs.
 
 	adapters implementing this interface provide:

@@ -7,17 +7,17 @@ from typing import Annotated
 from pydantic import Field
 
 from .base.embeddings import BaseEmbeddingAdapter
-from .ollama.embeddings import OllamaEmbeddingAdapter
-from .openai.embeddings import OpenAIEmbeddingAdapter
+from .ollama.embeddings import OllamaEmbeddingsAdapter
+from .openai.embeddings import OpenAIEmbeddingsAdapter
 
 
-EmbeddingAdapter = Annotated[
-	OpenAIEmbeddingAdapter | OllamaEmbeddingAdapter,
+EmbeddingsAdapter = Annotated[
+	OpenAIEmbeddingsAdapter | OllamaEmbeddingsAdapter,
 	Field(discriminator="type"),
 ]
 
 
-def resolve_embedding_adapter(provider: str, adapter: str | None) -> str | None:
+def resolve_embeddings_adapter(provider: str, adapter: str | None) -> str | None:
 	"""resolve the adapter type string from provider and api."""
 	if provider == "openai":
 		return "openai.embedding"
@@ -28,6 +28,6 @@ def resolve_embedding_adapter(provider: str, adapter: str | None) -> str | None:
 
 __all__ = [
 	"BaseEmbeddingAdapter",
-	"EmbeddingAdapter",
-	"resolve_embedding_adapter",
+	"EmbeddingsAdapter",
+	"resolve_embeddings_adapter",
 ]

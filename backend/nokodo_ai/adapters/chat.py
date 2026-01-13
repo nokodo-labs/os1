@@ -11,6 +11,7 @@ from .base.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
 )
+from .google.generate_content import GoogleGenerateContentAdapter
 from .ollama.chat import OllamaChatAdapter
 from .openai.chat_completions import OpenAIChatCompletionsAdapter
 from .openai.responses import OpenAIResponsesAdapter
@@ -20,6 +21,7 @@ ChatAdapter = Annotated[
 	OpenAIChatCompletionsAdapter
 	| OpenAIResponsesAdapter
 	| AnthropicMessagesAdapter
+	| GoogleGenerateContentAdapter
 	| OllamaChatAdapter,
 	Field(discriminator="type"),
 ]
@@ -34,6 +36,8 @@ def resolve_chat_adapter(provider: str, adapter: str | None) -> str | None:
 			return "openai.chat_completions"
 		case "anthropic":
 			return "anthropic.messages"
+		case "google":
+			return "google.generate_content"
 		case "ollama":
 			return "ollama.chat"
 	return None

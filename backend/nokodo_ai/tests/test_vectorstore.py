@@ -1,64 +1,50 @@
 import pytest
 
 from nokodo_ai import JSONObject, Vectorstore
-from nokodo_ai.adapters.base.vectorstores import BaseVectorstoreAdapter, SearchResult
-
-
-AddCall = tuple[list[str], list[list[float]], list[str], list[JSONObject] | None]
-
-
-class _StubVectorstoreAdapter(BaseVectorstoreAdapter):
-	def __init__(self) -> None:
-		self.add_calls: list[AddCall] = []
-		self.search_calls: list[tuple[list[float], int]] = []
-		self.delete_calls: list[list[str]] = []
-
-	async def add(
-		self,
-		ids: list[str],
-		embeddings: list[list[float]],
-		contents: list[str],
-		metadata: list[JSONObject] | None = None,
-	) -> None:
-		self.add_calls.append((ids, embeddings, contents, metadata))
-
-	async def search(
-		self,
-		embedding: list[float],
-		*,
-		limit: int = 10,
-	) -> list[SearchResult]:
-		self.search_calls.append((embedding, limit))
-		return [
-			SearchResult(
-				id="doc1",
-				content="hello",
-				score=0.9,
-				metadata={"rank": 1},
-			)
-		]
-
-	async def delete(self, ids: list[str]) -> None:
-		self.delete_calls.append(ids)
+from nokodo_ai.adapters.base.vectorstores import Chunk
 
 
 @pytest.mark.asyncio
 async def test_vectorstore_forwards_adapter_calls() -> None:
-	adapter = _StubVectorstoreAdapter()
-	store = Vectorstore(adapter=adapter)
+	store = Vectorstore(
+		"qdrant",
+		collection="test-collection",
+		adapter={"type": "qdrant.vectorstore", "location": ":memory:"},
+	)
 
 	ids = ["a1", "a2"]
-	embeddings = [[0.1, 0.2], [0.3, 0.4]]
-	contents = ["hello", "world"]
 	metadata: list[JSONObject] = [{"lang": "en"}, {"lang": "fr"}]
+	chunks = [
+		Chunk(id=ids[0], content="hello", embedding=[0.1, 0.2], metadata=metadata[0]),
+		Chunk(id=ids[1], content="world", embedding=[0.3, 0.4], metadata=metadata[1]),
+	]
 
-	await store.add(ids, embeddings, contents, metadata)
+	await store.add(chunks)
 	results = await store.search([0.5, 0.6], limit=5)
-	await store.delete(ids)
+	await store.delete(chunks)
+	assert results
+	assert all(r.id in {"a1", "a2"} for r in results)
+	assert any(r.metadata in metadata for r in results)
+	assert all(0.0 <= r.score <= 1.0 for r in results)
+	assert all(isinstance(r.embedding, list) for r in results)
 
-	assert adapter.add_calls == [(ids, embeddings, contents, metadata)]
-	assert adapter.search_calls == [([0.5, 0.6], 5)]
-	assert adapter.delete_calls == [ids]
 
-	assert results[0].id == "doc1"
-	assert results[0].metadata == {"rank": 1}
+@pytest.mark.asyncio
+async def test_vectorstore_collection_field() -> None:
+	store = Vectorstore(
+		"qdrant",
+		collection="my-namespace",
+		adapter={"type": "qdrant.vectorstore", "location": ":memory:"},
+	)
+
+	assert store.collection == "my-namespace"
+	await store.add(
+		[
+			Chunk(
+				id="id1",
+				content="content",
+				embedding=[0.1],
+				metadata={"k": "v"},
+			)
+		]
+	)

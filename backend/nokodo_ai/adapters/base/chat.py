@@ -10,13 +10,12 @@ from pydantic import ConfigDict
 
 from ...base import Base
 from ...tool import ToolDefinition
+from ...types.json import JSONObject
+from .adapter import BaseAdapter
 
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import AssistantMessage, Message
-
-
-from nokodo_ai.types.json import JSONObject
 
 
 class ChatGenerationParams(Base):
@@ -42,7 +41,7 @@ class ChatGenerationParams(Base):
 	repeat_penalty: float | None = None
 
 
-class BaseChatAdapter(Base, ABC):
+class BaseChatAdapter(BaseAdapter, Base, ABC):
 	"""capability ABC for chat completion APIs.
 
 	adapters implementing this interface provide:

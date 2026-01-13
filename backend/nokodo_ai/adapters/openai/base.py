@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from openai import AsyncOpenAI
 
-from ..base import BaseApiAdapter
+from ..base import BaseClientAdapter
 
 
-class BaseOpenAIAdapter(BaseApiAdapter[AsyncOpenAI]):
+class BaseOpenAIAdapter(BaseClientAdapter[AsyncOpenAI]):
 	"""shared infrastructure for all openai adapters.
 
 	provides:
@@ -27,3 +27,6 @@ class BaseOpenAIAdapter(BaseApiAdapter[AsyncOpenAI]):
 			args["base_url"] = self.base_url
 
 		return AsyncOpenAI(**args)
+
+	async def close(self) -> None:
+		await self._client.close()

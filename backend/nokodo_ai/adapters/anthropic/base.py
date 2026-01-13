@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from anthropic import AsyncAnthropic
 
-from ..base import BaseApiAdapter
+from ..base import BaseClientAdapter
 
 
 def _normalize_anthropic_base_url(base_url: str) -> str:
@@ -14,7 +14,7 @@ def _normalize_anthropic_base_url(base_url: str) -> str:
 	return url
 
 
-class BaseAnthropicAdapter(BaseApiAdapter[AsyncAnthropic]):
+class BaseAnthropicAdapter(BaseClientAdapter[AsyncAnthropic]):
 	"""shared infrastructure for all anthropic adapters.
 
 	provides:
@@ -33,3 +33,6 @@ class BaseAnthropicAdapter(BaseApiAdapter[AsyncAnthropic]):
 			args["base_url"] = _normalize_anthropic_base_url(self.base_url)
 
 		return AsyncAnthropic(**args)
+
+	async def close(self) -> None:
+		await self._client.close()
