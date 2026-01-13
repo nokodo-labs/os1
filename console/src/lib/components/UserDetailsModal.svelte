@@ -108,7 +108,7 @@
 							</div>
 							<div class="mt-2 flex justify-between gap-3">
 								<span class="text-zinc-400">display name</span>
-								<span class="truncate">{user.display_name ?? '—'}</span>
+								<span class="truncate">{user.display_name ?? '-'}</span>
 							</div>
 							<div class="mt-2 flex justify-between gap-3">
 								<span class="text-zinc-400">active</span>

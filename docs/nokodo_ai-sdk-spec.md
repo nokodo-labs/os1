@@ -2,20 +2,20 @@
 
 ## Overview
 
-The SDK is a **publishable, standalone library** for AI execution abstractions. It provides unified interfaces for LLMs, embeddings, vector stores, tools, and agents — with pluggable adapters for different providers and APIs.
+The SDK is a **publishable, standalone library** for AI execution abstractions. It provides unified interfaces for LLMs, embeddings, vector stores, tools, and agents - with pluggable adapters for different providers and APIs.
 
 **Core principle:** magic by default, explicitly customizable if needed.
 
 ## Domain Models
 
-The SDK still defines **Thread** and **Message** types — but these are:
+The SDK still defines **Thread** and **Message** types - but these are:
 
 -   pure domain models (pydantic)
 -   completely decoupled from ORM
 -   simpler than API schemas (only what's needed for execution)
 
 ```python
-# example — minimal, execution-focused
+# example - minimal, execution-focused
 @dataclass
 class UserMessage:
     content: str

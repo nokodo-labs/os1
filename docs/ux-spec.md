@@ -1,4 +1,4 @@
-# nokodo AI — UX specification
+# nokodo AI - UX specification
 
 > the universal AI interface: clean, fluid, futuristic
 
@@ -6,7 +6,7 @@
 
 ## 🧭 design philosophy
 
-nokodo AI is not just an AI chat app — it's evolving toward a **personal AI operating system**.
+nokodo AI is not just an AI chat app - it's evolving toward a **personal AI operating system**.
 
 every design decision follows these principles:
 
@@ -21,7 +21,7 @@ every design decision follows these principles:
 
 ## 🏝️ system chrome
 
-the **system chrome** is the persistent UI shell that anchors the entire experience — like the macOS menu bar or Windows taskbar.
+the **system chrome** is the persistent UI shell that anchors the entire experience - like the macOS menu bar or Windows taskbar.
 
 nokodo AI's chrome consists of two elements:
 
@@ -34,7 +34,7 @@ a floating, semi-transparent header bar with **liquid glass** styling.
 | zone                          | behavior                                                                |
 | ----------------------------- | ----------------------------------------------------------------------- |
 | **activity actions** (left)   | contextual controls for the current activity (if any)                   |
-| 📡 **activity area** (center) | contextual — shows what’s going on in the system (music, uploads, etc.) |
+| 📡 **activity area** (center) | contextual - shows what’s going on in the system (music, uploads, etc.) |
 | **stable controls** (right)   | mostly fixed controls like home, show dock, and user                    |
 
 **activity area examples:**
@@ -93,7 +93,7 @@ a single text input, front and center, that serves dual purpose:
 **UX clarity rule:**
 to prevent accidental searches when user just wants to chat, **non-chat actions require explicit selection** of a suggestion. keyboard shortcuts (↑↓ navigate, Enter select) enable speed for power users.
 
-**inspiration:** Google Pixel launcher search bar — always present, searches everything, opens apps instantly.
+**inspiration:** Google Pixel launcher search bar - always present, searches everything, opens apps instantly.
 
 ---
 
@@ -104,13 +104,13 @@ to prevent accidental searches when user just wants to chat, **non-chat actions 
 the signature visual style across all surfaces:
 
 -   **semi-transparent** elements with blur/frosted effects
--   **depth and layering** — UI feels like floating glass panels
+-   **depth and layering** - UI feels like floating glass panels
 -   **subtle reflections** and gradient shifts
--   **premium, futuristic feel** — inspired by Apple's design language
+-   **premium, futuristic feel** - inspired by Apple's design language
 
 ### motion & transitions
 
--   **physics-based animations** — elements feel weighty and natural
+-   **physics-based animations** - elements feel weighty and natural
 -   **View Transitions API** for seamless page-to-page morphing
 -   graceful degradation: no transition (or unsupported browser) if API unavailable
 
@@ -141,13 +141,13 @@ nokodo AI is designed to expand into a **universal access point**:
 
 ### future: phone launcher mode
 
-nokodo AI becomes the **home screen itself** — the primary interface to your device.
+nokodo AI becomes the **home screen itself** - the primary interface to your device.
 
 user behavior insight (from Pixel launcher usage):
 
--   ~60% — tap AI-suggested apps
--   ~30% — search for app by name
--   ~10% — manually scroll through apps
+-   ~60% - tap AI-suggested apps
+-   ~30% - search for app by name
+-   ~10% - manually scroll through apps
 
 → nokodo can own that 90% with smart suggestions + unified search.
 
@@ -185,4 +185,4 @@ user behavior insight (from Pixel launcher usage):
 ---
 
 _fluid · intelligent · universal_
-_nokodo AI — your interface to everything_ ✨
+_nokodo AI - your interface to everything_ ✨

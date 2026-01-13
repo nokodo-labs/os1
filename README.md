@@ -1,13 +1,8 @@
 <div align="center">
 
-<img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo logo" width="320" />
-<div style="height:32px"></div>
+<img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo" width="320" />
 
----
-
-<h1>nokodo AI</h1>
-
-**Modern AI platform with agentic coding support, built for seamless developer experience and beautiful user interfaces.**
+**open-source AI platform with agentic coding, liquid UI, and full-stack type safety**
 
 [![License](https://img.shields.io/github/license/nokodo-labs/nokodo-ai)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/nokodo-ai?style=social)](https://github.com/nokodo-labs/nokodo-ai/stargazers)
@@ -18,156 +13,60 @@
 
 </div>
 
-## 🛠️ Stack
+---
 
--   **Backend**: FastAPI (Python 3.13+), Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17, Alembic
--   **Frontend**: Svelte 5, Vite 6, Vercel AI SDK, shadcn-svelte, Tailwind 4, PostCSS, TypeScript
--   **Admin Console**: TBD
--   **Dev**: VS Code (tasks, debugger, extensions), Ruff, pytest, AI instructions
--   **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, Release Please
+## ✨ features
 
-## ✨ Features
+-   🤖 **agentic AI** - multi-turn agent sessions with tool use, delegation, and async task execution
+-   🎨 **liquid UI** - apple-inspired glassmorphism with physics-based animations
+-   🔧 **built-in tools** - web search, memory, code execution, file handling, and more
+-   🧵 **unified threads** - one abstraction for user↔agent, user↔user, and agent↔agent conversations
+-   🔒 **full-stack type safety** - python type hints → openapi → auto-generated typescript client
+-   🏗️ **production-ready** - postgres, docker, nginx, CI/CD, migrations out of the box
 
--   🤖 **AI Agentic Coding**: Heavy AI agent support baked directly into the platform
--   🎨 **Liquid Glass UI**: Apple-inspired aesthetic with physics-based animations
--   🔧 **Built-in Tools**: Web search, webpage fetch, memory system, code execution, file handling
--   🧠 **Smart Memory**: Asynchronous memory manager with high-accuracy context retrieval
--   🔄 **Async Task System**: Multi-turn agentic sessions for deep research and complex workflows
--   🔐 **Enterprise Auth**: OIDC authentication with federated users and groups
--   ⚡ **Rate Limiting**: Granular controls per user, global, by time period
--   🔔 **Notifications**: Multi-backend support (PWA, email, Telegram)
--   🏗️ **Production Infrastructure**: PostgreSQL 17, multi-stage Docker builds, Nginx configs
--   🔒 **End-to-end Type Safety**: Python type hints → OpenAPI → auto-generated TypeScript types
+## 🛠️ stack
 
-## 🚀 Quick Start
+| layer        | technologies                                                                |
+| ------------ | --------------------------------------------------------------------------- |
+| **backend**  | FastAPI, Python 3.13+, Pydantic AI, SQLAlchemy 2.0+, PostgreSQL 17, Alembic |
+| **frontend** | Svelte 5, Vite, Vercel AI SDK, shadcn-svelte, Tailwind 4, TypeScript        |
+| **console**  | Svelte 5, Vite, shadcn-svelte, Tailwind 4, TypeScript                       |
+| **infra**    | Docker Compose, Nginx, GitHub Actions, Release Please                       |
 
-### 1️⃣ Start Dependencies (Postgres only)
+## 🚀 quick start
+
+### 1. start dependencies
 
 ```bash
-cd .docker
-docker compose --profile deps up -d
+cd .docker && docker compose --profile deps up -d
 ```
 
-This brings up Postgres (and any other infra-only services) on `localhost:5432` while leaving the app code on your host for instant reloads and debugger support.
-
-### 2️⃣ Run the backend from your IDE
+### 2. run the backend
 
 ```bash
 cd backend
-python -m venv .venv
-.venv\\Scripts\\Activate.ps1  # or source .venv/bin/activate
-pip install -e .[api,dev]
+uv sync --all-extras
 cp .env.example .env
-uvicorn api.main:app --reload
+uv run uvicorn api.main:app --reload
 ```
 
-### 3️⃣ Run the frontends
+### 3. run the frontends
 
 ```bash
 cd frontend && npm install && npm run dev
 cd console && npm install && npm run dev -- --host --port 8383
 ```
 
-> 💡 **Need full containers?** `docker compose --profile local up -d` from `.docker/` builds and runs backend + frontends entirely inside Docker for parity checks.
+> 💡 **VS Code**: open the workspace for tasks, debugger configs, and recommended extensions.
 
-> 💡 **VS Code users**: Open the workspace to get tasks, debugger configs, and recommended extensions automatically.
+> 💡 **full containers**: `docker compose --profile local up -d` from `.docker/` for parity checks.
 
-### 2️⃣ Deploy to Production
+See [docs/setup.md](docs/setup.md) for detailed setup, production deployment, and environment configuration.
 
-CI/CD automatically builds and pushes Docker images to **GitHub Container Registry (GHCR)** on every commit. Images are tagged as:
+## 🤝 contributing
 
--   `ghcr.io/nokodo-labs/nokodo-ai:latest` → production branch
--   `ghcr.io/nokodo-labs/nokodo-ai:dev` → dev branch
--   `ghcr.io/nokodo-labs/nokodo-ai:v1.2.3` → releases
+contributions are welcome! please check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-**Deploy with Docker:**
+## 📄 license
 
-```bash
-# Pull pre-built images and deploy
-cd .docker
-docker compose -f docker-compose.production.yml pull
-docker compose -f docker-compose.production.yml up -d
-```
-
-> 💡 **Tip**: See [docs/setup.md](docs/setup.md#production-deployment) for full deployment instructions and environment configuration.
-
-## 📁 Structure
-
-```
-backend/
-├── api/                    # FastAPI app
-│   ├── v1/                 # API version 1
-│   │   ├── routers/        # Route handlers
-│   │   ├── service/	    # v1 service layer
-│   │   ├── router.py       # v1 router
-│   │   └── schemas/        # DTOs for v1-specific routes
-│   ├── core/               # Config, database
-│   ├── clients/            # External API clients
-│   │   ├── redis.py        # Redis client
-│   │   ├── smtp.py         # SMTP email client
-│   │   └── taskiq.py	    # Taskiq client
-│   ├── tasks/              # Background tasks
-│   ├── models/             # SQLAlchemy models. These are ORM as well as Domain Models.
-│   ├── schemas/            # Common Pydantic schema DTOs across API versions
-│   ├── migrations/         # Alembic setup & migrations
-│   └── tests/              # API & ORM tests
-├── nokodo_ai/              # SDK - fully independent service layer
-│   └── tests/              # SDK unit tests
-└── tests/                  # E2E integration tests
-
-frontend/
-├── src/
-│   ├── lib/
-│   │   ├── api/                # type-safe API client
-│   │   ├── contexts/           # Svelte contexts
-│   │   ├── styles/             # TailwindCSS styles
-│   │   └── components/         # Svelte components
-│   │       ├── backgrounds/	# background components
-│   │       │   └── webgl/      # WebGL background components
-│   │       ├── chats/          # chat UI components
-│   │       ├── common/         # common reusable components
-│   │       ├── debug/          # debugging components
-│   │       ├── icons/          # icon components
-│   │       ├── sidebar/        # sidebar components
-│   │       └── primitives/     # shadcn-svelte / Bits UI primitives
-│   ├── tests/                  # frontend vitest tests
-│   ├── main.ts                 # entrypoint
-│   ├── App.svelte              # main Svelte app
-│   └── app.css                 # global styles (TailwindCSS)
-└── nginx.conf                  # Production server
-
-admin-console/
-├── src/
-│   ├── lib/               # Admin-only components & utilities
-│   └── main.ts            # Entry point
-└── tailwind.config.js     # Minimal styling configuration
-
-.docker/                   # Docker configs
-├── Dockerfile.backend     # Backend build
-├── Dockerfile.frontend    # Frontend build
-├── docker-compose.yml     # DX profiles (deps/local)
-└── docker-compose.production.yml # Production / registry images
-
-.github/                   # CI/CD, Dependabot, CODEOWNERS
-.vscode/                   # Editor config, tasks, debugger
-tools/release_please/      # Release automation config
-```
-
-### 🏗️ Architecture
-
-**Backend:**
-
--   **`api/`**: FastAPI app, routes, ORM, database setup
--   **`nokodo_ai/`**: Business logic SDK that can be packaged separately for pip distribution
--   **Testing**: 3 tiers (API tests in `api/tests/`, SDK tests in `project_slug/tests/`, E2E in `tests/`)
--   **URLs**: `/v1/users` (no `/api` prefix - deploy on `api.yourdomain.com`)
-
-**Frontend:**
-
--   **Native fetch** - Zero HTTP library dependencies, uses web standards
--   **OpenAPI types** - Auto-generated TypeScript types from FastAPI schema
--   **Type safety** - Backend changes = compile errors in frontend if incompatible
-
-## 📄 License
-
-BSD 3-Clause - See [LICENSE](LICENSE) for details.
+BSD 3-Clause - see [LICENSE](LICENSE) for details.

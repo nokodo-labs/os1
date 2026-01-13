@@ -15,7 +15,7 @@ Each message knows its parent; the "current conversation" is one root→leaf pat
   [asst-2]      [asst-3]
 ```
 
-Forking isn't special — you just insert a new message whose `parent_id` points to any existing node.
+Forking isn't special - you just insert a new message whose `parent_id` points to any existing node.
 
 ---
 
@@ -109,8 +109,8 @@ def switch_branch(db, chat_id: UUID, target_id: UUID):
 | method | route                  | body / params            | returns               |
 | ------ | ---------------------- | ------------------------ | --------------------- |
 | `POST` | `/chats/{id}/messages` | `{ parent_id, content }` | new assistant message |
-| `GET`  | `/chats/{id}/messages` | —                        | current branch (list) |
-| `GET`  | `/chats/{id}/tree`     | —                        | all messages (flat)   |
+| `GET`  | `/chats/{id}/messages` | -                        | current branch (list) |
+| `GET`  | `/chats/{id}/tree`     | -                        | all messages (flat)   |
 | `POST` | `/chats/{id}/switch`   | `{ message_id }`         | ok                    |
 
 ---

@@ -8,7 +8,7 @@
 
 ### frontend
 
--   **svelte 5** — fully static build served via **nginx**
+-   **svelte 5** - fully static build served via **nginx**
 -   **vercel AI SDK** (latest) for AI integration
 -   **shadcn-svelte** component library
     -   built on **Bits UI** primitives
@@ -23,15 +23,15 @@
 ### architecture
 
 -   **monorepo** structure for unified codebase management
--   **admin UI** — separately hosted on different port
+-   **admin UI** - separately hosted on different port
 
 ### design system
 
--   **liquid UI** — a next-gen aesthetic with liquid elements, made of two styles:
-    -   **liquid glass** — glassmorphism with refractions, distortions, etc.
-    -   **liquid mercury** — shiny, reflective fluid metal look
--   **motion & transitions** — physics-based motion with View Transitions API
--   **all lowercase** — following nokodo branding style
+-   **liquid UI** - a next-gen aesthetic with liquid elements, made of two styles:
+    -   **liquid glass** - glassmorphism with refractions, distortions, etc.
+    -   **liquid mercury** - shiny, reflective fluid metal look
+-   **motion & transitions** - physics-based motion with View Transitions API
+-   **all lowercase** - following nokodo branding style
 
 ---
 
@@ -54,7 +54,7 @@ a **thread** is the fundamental unit of interaction. displayed as "chats" to use
 -   multi-party rooms (multiple users and/or agents)
 -   agent ↔ agent delegation (isolated sub-threads)
 
-there is no separate "DM system" or "chat system" — everything is a thread.
+there is no separate "DM system" or "chat system" - everything is a thread.
 
 ### thread properties
 
@@ -79,9 +79,9 @@ this unified model means features built for threads (search, memory, sharing, et
 
 ### core concepts
 
--   **curated selection** — only a few high-quality agents
--   **zero setup required** — works out of the box
--   **multi-functional** — each agent handles diverse tasks
+-   **curated selection** - only a few high-quality agents
+-   **zero setup required** - works out of the box
+-   **multi-functional** - each agent handles diverse tasks
 
 **model & agent architecture:**
 
@@ -104,10 +104,10 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 **key properties:**
 | aspect | behavior |
 |--------|----------|
-| **isolation** | sub-thread is separate — nested chaos stays contained |
+| **isolation** | sub-thread is separate - nested chaos stays contained |
 | **recursion** | delegated agents can delegate further (each spawns new sub-thread) |
 | **visibility** | user sees one tool result bubble in main thread |
-| **persistence** | ephemeral — delegated agent leaves after task completion |
+| **persistence** | ephemeral - delegated agent leaves after task completion |
 
 **UX feedback during delegation:**
 
@@ -132,19 +132,19 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 
 ## 🧠 memory system
 
-> ⚠️ **memory system is critical** — must be highly accurate and reliable
+> ⚠️ **memory system is critical** - must be highly accurate and reliable
 
 ### core functionality
 
--   **high accuracy relevant memory detection** — intelligent context matching
--   **asynchronous memory manager** — detects, updates, and deletes memory intelligently
+-   **high accuracy relevant memory detection** - intelligent context matching
+-   **asynchronous memory manager** - detects, updates, and deletes memory intelligently
 -   reuse logic from OWUI extension auto-memory functionality
 
 ### implementation options
 
 -   [ ] evaluate **mem0.ai** for intelligent memory management
     -   ⚠️ closed source, API-only access
-    -   test token: `m0-S67dQyPWc6AHmSYqzshXFh2zW7AKCUzbnxjHedZx`
+    -   test token: [REVOKED]
 -   [ ] evaluate if benefits outweigh closed-source limitations
 -   [ ] compare with open-source alternatives
 -   [ ] **alternative approach** (if not using mem0):
@@ -154,7 +154,7 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 
 ### chat recall system
 
--   **efficient chat retrieval** — fetch relevant OR recent chats, inject select info into context
+-   **efficient chat retrieval** - fetch relevant OR recent chats, inject select info into context
 -   **initial implementation:** simple "top 3 most recent chats"
 -   **future enhancement:** relevance scoring + context-aware selection
 
@@ -168,7 +168,7 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
     -   instantly detects required intelligence level for each query
     -   automatically deploys appropriate LLM (cheap vs expensive)
     -   **goal:** use cheaper models for simple queries → significant cost savings
-    -   transparent to users — they just get great responses
+    -   transparent to users - they just get great responses
     -   factors: query complexity, context requirements, tool needs
 
 ### core tools
@@ -190,9 +190,9 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 
 ### content handling
 
--   **native artifacts support** — render and interact with generated content
--   **native file retrieval** — access and process uploaded files
--   **native file creation/editing** — modify files via built-in tools
+-   **native artifacts support** - render and interact with generated content
+-   **native file retrieval** - access and process uploaded files
+-   **native file creation/editing** - modify files via built-in tools
 
 ---
 
@@ -203,7 +203,7 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
     -   start with custom OIDC providers (self-hosted, enterprise)
     -   later expand to standard providers (Google, Apple, etc.)
 -   [ ] support **federated users and groups**
--   [ ] **user groups** — let users band together and consolidate resource access
+-   [ ] **user groups** - let users band together and consolidate resource access
     -   shared threads, files, projects among group members
     -   group-level quotas and permissions
 -   [ ] **user roles** (admin-managed, invisible to users)
@@ -243,14 +243,14 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 > generic multi-turn agentic session framework
 
 -   supports any long-running AI task with multiple iterations
--   AI can iterate — decides when task is complete
+-   AI can iterate - decides when task is complete
 -   produces custom output (document, results, artifacts, etc.)
 
 ### session types
 
 #### 🔥 copilot coding sessions (killer feature)
 
-> **unique selling point** — no competitor offers this level of autonomy in OSS
+> **unique selling point** - no competitor offers this level of autonomy in OSS
 
 1. user provides task/feature request
 2. spawns isolated sandbox environment (Docker/Coder integration)
@@ -275,8 +275,8 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 
 #### other session types
 
--   **creative projects** — multi-step generation with refinement
--   **data analysis** — fetch → process → visualize workflows
+-   **creative projects** - multi-step generation with refinement
+-   **data analysis** - fetch → process → visualize workflows
 
 ### architecture
 
@@ -297,27 +297,27 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 
 ### UI/UX architecture
 
--   [ ] **top header/island** — persistent UI anchor
+-   [ ] **top header/island** - persistent UI anchor
     -   always-present element (like Windows taskbar or macOS menu bar)
     -   ties together all pages and apps
     -   adapts content dynamically based on current view
     -   central navigation and quick actions hub
--   [ ] **design team need** — dedicated UI designer
+-   [ ] **design team need** - dedicated UI designer
     -   liquid glass/mercury aesthetic requires specialized skills
     -   consistent design language across all components
     -   focus engineering time on functionality
 
 ### user messaging
 
--   [ ] **user ↔ user threads** — leverages existing thread infrastructure
+-   [ ] **user ↔ user threads** - leverages existing thread infrastructure
     -   WhatsApp/iMessage-style direct messaging
     -   group threads with mixed human/AI participants
     -   AI can assist, summarize, translate in real-time
-    -   no separate system — just threads with only-user participants
+    -   no separate system - just threads with only-user participants
 
 ### reminders
 
--   [ ] **reminders app** — AI-enhanced timed reminders
+-   [ ] **reminders app** - AI-enhanced timed reminders
     -   natural language reminder creation
     -   integration with Google/Apple calendar ecosystems
     -   smart reminder suggestions from context
@@ -352,9 +352,9 @@ agents can delegate tasks to specialized agents via isolated sub-threads (see [t
 
 ### universal access point
 
--   phone launcher — type app names, AI-suggested apps to open
+-   phone launcher - type app names, AI-suggested apps to open
 -   calendar, alarms, reminders integration
 -   music control and recommendations
 -   phone contacts and communications
 -   email management and triage
--   **infinite extensibility** — integrate with anything via plugins
+-   **infinite extensibility** - integrate with anything via plugins

@@ -313,7 +313,7 @@
 											{t.owner_id}
 										</button>
 									{:else}
-										<span class="ml-1">—</span>
+										<span class="ml-1">-</span>
 									{/if}
 								</div>
 								<div class={t.is_archived ? 'text-amber-300' : 'text-zinc-500'}>

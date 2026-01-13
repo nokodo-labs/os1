@@ -2,7 +2,7 @@
 nokodo_ai SDK - AI execution abstractions.
 
 a publishable, standalone library providing unified interfaces for LLMs, embeddings,
-vector stores, tools, and agents — with pluggable adapters for different providers.
+vector stores, tools, and agents - with pluggable adapters for different providers.
 
 core principle: magic by default, explicitly customizable if needed.
 

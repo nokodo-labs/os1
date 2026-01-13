@@ -32,7 +32,7 @@
 - **system chrome**: the UI shell is anchored by two persistent elements:
     - the island (top header): floating, semi-transparent, liquid glass header.
         - activity actions (left): contextual controls for the current activity (if any)
-        - activity area (center): contextual system activity (music, uploads, generation, etc) — not page/experience-dependent
+        - activity area (center): contextual system activity (music, uploads, generation, etc) - not page/experience-dependent
         - stable controls (right): mostly fixed buttons like home, show dock, user
     - the dock (right sidebar): notifications + quick controls hub; status + control lives here.
 - **home is a home screen**: the front page is not just a chat landing page.

@@ -577,7 +577,7 @@ generic sharing primitive that grants principals access to resources
 **notes:**
 
 -   partial-unique constraints ensure exactly one resource + one principal per row
--   ownership is **not** stored here—resources retain `owner_id` pointing to a **User**
+-   ownership is **not** stored here-resources retain `owner_id` pointing to a **User**
 -   adding new resource/principal types means adding new nullable columns + constraints, keeping queries simple and performant
 
 ---
