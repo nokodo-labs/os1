@@ -200,6 +200,28 @@ export interface paths {
         patch: operations["update_thread_threads__thread_id__patch"];
         trace?: never;
     };
+    "/threads/{thread_id}/metadata/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Thread Metadata
+         * @description Generate thread title/tags using an LLM.
+         *
+         *     When replace is false, only fills in missing metadata.
+         */
+        post: operations["generate_thread_metadata_threads__thread_id__metadata_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}/messages": {
         parameters: {
             query?: never;
@@ -596,9 +618,17 @@ export interface paths {
          * @description Fetch a single memory.
          */
         get: operations["get_memory_memories__memory_id__get"];
-        put?: never;
+        /**
+         * Update Memory
+         * @description Update a memory.
+         */
+        put: operations["update_memory_memories__memory_id__put"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Memory
+         * @description Delete a memory.
+         */
+        delete: operations["delete_memory_memories__memory_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1353,6 +1383,19 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             user_id: string;
+        };
+        /**
+         * MemoryUpdate
+         * @description Payload to update a memory.
+         */
+        MemoryUpdate: {
+            metadata_?: components["schemas"]["ApiJSONObject"];
+            /** Content */
+            content?: string | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Category */
+            category?: string | null;
         };
         /**
          * Message
@@ -2322,6 +2365,19 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+        };
+        /**
+         * ThreadMetadataGenerateRequest
+         * @description Request body for generating thread metadata.
+         */
+        ThreadMetadataGenerateRequest: {
+            /**
+             * Replace
+             * @default false
+             */
+            replace: boolean;
+            /** Model Id */
+            model_id?: string | null;
         };
         /**
          * ThreadRunRequest
@@ -3706,6 +3762,104 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ThreadUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    generate_thread_metadata_threads__thread_id__metadata_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ThreadMetadataGenerateRequest"] | null;
             };
         };
         responses: {
@@ -5917,7 +6071,9 @@ export interface operations {
     };
     create_memory_memories_post: {
         parameters: {
-            query?: never;
+            query?: {
+                embedding_model_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6030,6 +6186,198 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Memory"];
                 };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_memory_memories__memory_id__put: {
+        parameters: {
+            query?: {
+                embedding_model_id?: string | null;
+            };
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Memory"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_memory_memories__memory_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description bad request */
             400: {

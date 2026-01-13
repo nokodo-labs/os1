@@ -264,6 +264,11 @@
 		return key || null
 	}
 
+	function getModelTypeLabel(modelType: Model['model_type']) {
+		if (modelType === 'llm') return 'chat model'
+		return modelType
+	}
+
 	function getAdapterOptions(providerKey: string | null, modelType: Model['model_type']) {
 		if (!providerKey) return []
 		if (modelType === 'llm') {
@@ -272,6 +277,9 @@
 					{ value: 'chat_completions', label: 'chat completions' },
 					{ value: 'responses', label: 'responses api' },
 				]
+			}
+			if (providerKey === 'google') {
+				return [{ value: 'generate_content', label: 'generate content' }]
 			}
 			if (providerKey === 'anthropic') {
 				return [{ value: 'messages', label: 'messages' }]
@@ -364,7 +372,9 @@
 					</CardHeader>
 					<CardContent>
 						<div class="mb-4 text-sm text-zinc-400">
-							{getProviderName(model.provider_id)} • {model.model_type}
+							{getProviderName(model.provider_id)} • {getModelTypeLabel(
+								model.model_type
+							)}
 						</div>
 						<div class="flex items-center gap-2">
 							<div
@@ -466,11 +476,11 @@
 						>
 							<SelectTrigger class="rounded-xl">
 								<span class="truncate text-left">
-									{formState.model_type}
+									{getModelTypeLabel(formState.model_type)}
 								</span>
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="llm">LLM</SelectItem>
+								<SelectItem value="llm">chat model</SelectItem>
 								<SelectItem value="embedding">embedding</SelectItem>
 								<SelectItem value="image_generation">image generation</SelectItem>
 								<SelectItem value="audio">audio</SelectItem>

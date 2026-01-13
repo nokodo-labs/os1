@@ -69,6 +69,15 @@
 			icon: Sparkles,
 		},
 		{
+			id: 'google',
+			name: 'Google',
+			type: 'google',
+			provider_type: 'external',
+			url: '',
+			prefix: 'google',
+			icon: Sparkles,
+		},
+		{
 			id: 'anthropic',
 			name: 'Anthropic',
 			type: 'anthropic',
@@ -381,15 +390,18 @@
 										<span class="truncate text-left">
 											{formState.adapter_type === 'openai'
 												? 'OpenAI'
-												: formState.adapter_type === 'anthropic'
-													? 'Anthropic'
-													: formState.adapter_type === 'ollama'
-														? 'Ollama'
-														: formState.adapter_type}
+												: formState.adapter_type === 'google'
+													? 'Google'
+													: formState.adapter_type === 'anthropic'
+														? 'Anthropic'
+														: formState.adapter_type === 'ollama'
+															? 'Ollama'
+															: formState.adapter_type}
 										</span>
 									</SelectTrigger>
 									<SelectContent>
 										<SelectItem value="openai">OpenAI</SelectItem>
+										<SelectItem value="google">Google</SelectItem>
 										<SelectItem value="anthropic">Anthropic</SelectItem>
 										<SelectItem value="ollama">Ollama</SelectItem>
 									</SelectContent>

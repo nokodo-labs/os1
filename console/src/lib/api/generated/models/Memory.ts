@@ -15,7 +15,7 @@ export type Memory = {
     category?: (string | null);
     id: string;
     user_id: string;
-    embedding?: (Blob | null);
+    embedding?: (string | null);
     last_accessed_at?: (string | null);
     created_at: string;
     updated_at: string;

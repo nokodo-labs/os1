@@ -40,6 +40,8 @@ def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
 				return "chat_completions"
 			case "anthropic":
 				return "messages"
+			case "google":
+				return "generate_content"
 			case "ollama":
 				return "chat"
 	if model_type == "embedding":
@@ -350,6 +352,8 @@ def _check_valid_adapter(
 			valid = adapter in ("chat_completions", "responses")
 		elif provider_type == "anthropic":
 			valid = adapter == "messages"
+		elif provider_type == "google":
+			valid = adapter == "generate_content"
 		elif provider_type == "ollama":
 			valid = adapter == "chat"
 	elif model_type == "embedding":
@@ -357,9 +361,10 @@ def _check_valid_adapter(
 			valid = adapter == "embedding"
 
 	if not valid:
+		display_model_type = "chat model" if model_type == "llm" else model_type
 		msg = (
 			f"Invalid adapter '{adapter}' for provider type '{provider_type}' "
-			f"and model type '{model_type}'."
+			f"and model type '{display_model_type}'."
 		)
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,

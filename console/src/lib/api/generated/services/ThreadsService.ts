@@ -12,6 +12,7 @@ import type { MessageCreate } from '../models/MessageCreate';
 import type { SortDir } from '../models/SortDir';
 import type { Thread } from '../models/Thread';
 import type { ThreadCreate } from '../models/ThreadCreate';
+import type { ThreadMetadataGenerateRequest } from '../models/ThreadMetadataGenerateRequest';
 import type { ThreadRunRequest } from '../models/ThreadRunRequest';
 import type { ThreadSwitchRequest } from '../models/ThreadSwitchRequest';
 import type { ThreadSwitchResponse } from '../models/ThreadSwitchResponse';
@@ -171,6 +172,40 @@ export class ThreadsService {
             path: {
                 'thread_id': threadId,
             },
+            errors: {
+                400: `bad request`,
+                401: `unauthorized`,
+                403: `forbidden`,
+                404: `not found`,
+                409: `conflict`,
+                422: `validation error`,
+                429: `too many requests`,
+                500: `internal server error`,
+            },
+        });
+    }
+    /**
+     * Generate Thread Metadata
+     * Generate thread title/tags using an LLM.
+     *
+     * When replace is false, only fills in missing metadata.
+     * @param threadId
+     * @param requestBody
+     * @returns Thread Successful Response
+     * @throws ApiError
+     */
+    public static generateThreadMetadataThreadsThreadIdMetadataGeneratePost(
+        threadId: string,
+        requestBody?: (ThreadMetadataGenerateRequest | null),
+    ): CancelablePromise<Thread> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/threads/{thread_id}/metadata/generate',
+            path: {
+                'thread_id': threadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 400: `bad request`,
                 401: `unauthorized`,
