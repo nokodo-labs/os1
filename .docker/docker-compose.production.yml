@@ -17,6 +17,16 @@ services:
       timeout: 5s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:v1.16.2
+    container_name: nokodo-ai-prod-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
   backend:
     image: ghcr.io/nokodo-labs/nokodo-ai-backend:latest
     container_name: nokodo-ai-prod-backend
@@ -32,6 +42,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     volumes:
       - ../backend/data:/app/data
 
@@ -57,6 +69,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  qdrant_data:
     driver: local
 
 networks:
