@@ -101,8 +101,8 @@ class TestConsoleFormatter:
 			)
 			output = self.formatter.format(record)
 
-			# should show first 8 chars of request_id (may have ansi codes)
-			assert "abc12345" in output
+			# should show a shortened request id (may have ansi codes)
+			assert "789-0000" in output
 		finally:
 			request_id_ctx.reset(token)
 

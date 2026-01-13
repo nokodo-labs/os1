@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.models.memory import Memory
 from api.schemas.memory import Memory as MemorySchema
-from api.schemas.memory import MemoryCreate
+from api.schemas.memory import MemoryCreate, MemoryUpdate
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -30,11 +30,17 @@ MemorySortBy = Literal[
 @router.post("", response_model=MemorySchema, status_code=status.HTTP_201_CREATED)
 async def create_memory(
 	memory_in: MemoryCreate,
+	embedding_model_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
 	"""Capture a new memory."""
-	return await memory_service.create_memory(memory_in, db, principal=principal)
+	return await memory_service.create_memory(
+		memory_in,
+		db,
+		principal=principal,
+		embedding_model_id=embedding_model_id,
+	)
 
 
 @router.get("", response_model=list[MemorySchema])
@@ -67,3 +73,31 @@ async def get_memory(
 ) -> Memory:
 	"""Fetch a single memory."""
 	return await memory_service.get_memory(memory_id, db, principal=principal)
+
+
+@router.put("/{memory_id}", response_model=MemorySchema)
+async def update_memory(
+	memory_id: TypeID,
+	memory_in: MemoryUpdate,
+	embedding_model_id: TypeID | None = None,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> Memory:
+	"""Update a memory."""
+	return await memory_service.update_memory(
+		memory_id,
+		memory_in,
+		db,
+		principal=principal,
+		embedding_model_id=embedding_model_id,
+	)
+
+
+@router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_memory(
+	memory_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""Delete a memory."""
+	await memory_service.delete_memory(memory_id, db, principal=principal)

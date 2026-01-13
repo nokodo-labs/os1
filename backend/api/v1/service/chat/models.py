@@ -13,7 +13,7 @@ from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from nokodo_ai.adapters.chat import resolve_chat_adapter
-from nokodo_ai.adapters.embeddings import resolve_embedding_adapter
+from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.threads import Thread as SDKThread
@@ -114,7 +114,7 @@ def build_embedding_model(model: Model) -> EmbeddingModel:
 		raise ValueError("provider adapter_type is empty")
 
 	variant = model.adapter
-	adapter_type = resolve_embedding_adapter(provider_key, variant)
+	adapter_type = resolve_embeddings_adapter(provider_key, variant)
 	if adapter_type is None:
 		raise ValueError(f"unknown embedding provider: {provider_key}")
 

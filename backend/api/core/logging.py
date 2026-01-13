@@ -82,7 +82,9 @@ class ConsoleFormatter(logging.Formatter):
 		parts = [f"[{ts}]", f"[{level_str}]", f"[{logger_name}]"]
 
 		if req_id:
-			parts.append(f"[{Colors.DIM}{req_id[:8]}{Colors.RESET}]")
+			parts.append(
+				f"[{Colors.DIM}{self._short_request_id(req_id)}{Colors.RESET}]"
+			)
 
 		parts.append(message)
 
@@ -98,6 +100,19 @@ class ConsoleFormatter(logging.Formatter):
 			result = f"{result}\n{record.exc_text}"
 
 		return result
+
+	def _short_request_id(self, request_id: str) -> str:
+		"""Return a compact request id string for console logs.
+
+		TypeIDs (e.g. req_...) are time-ordered, so their leading characters can look
+		stable across many requests. Showing the tail avoids the false impression
+		that every request shares the same id.
+		"""
+		if "_" in request_id:
+			request_id = request_id.rsplit("_", 1)[-1]
+		if len(request_id) <= 8:
+			return request_id
+		return request_id[-8:]
 
 	def _shorten_name(self, name: str) -> str:
 		"""shorten logger name: api.core.database -> a.c.database"""
