@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { onNavigate } from '$app/navigation'
-	import { page } from '$app/stores'
+	import { browser } from '$app/environment'
+	import { goto, onNavigate } from '$app/navigation'
+	import { page } from '$app/state'
 	import { eventStreamClient } from '$lib/api/streaming'
+	import { refreshV1AccessToken } from '$lib/api/v1/client'
 	import { getAccessToken } from '$lib/auth/session'
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
@@ -11,7 +13,6 @@
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
 	import Island from '$lib/components/system/Island.svelte'
-	import * as Tooltip from '$lib/components/ui/tooltip'
 	import { createDebugUiContext } from '$lib/contexts/debugUiContext.svelte'
 	import { createSidebarContext, useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
@@ -23,6 +24,8 @@
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
+
+	const PUBLIC_PATHS = new Set(['/login', '/signup'])
 
 	type ViewTransitionCapableDocument = Document & {
 		startViewTransition?: (cb: () => Promise<void> | void) => void
@@ -55,8 +58,8 @@
 		eventStreamClient.connect(existingToken)
 	}
 
-	// SPA mode (ssr=false): safe to init synchronously at module eval time.
-	if (typeof window !== 'undefined') initDevice()
+	// SSG: safe to init synchronously at module eval time when in browser.
+	if (browser) initDevice()
 
 	// Initialize sidebar context
 	createSidebarContext()
@@ -94,15 +97,30 @@
 		await tick()
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 		appReadiness.markShellReady()
+
+		// Client-side auth guard (SSG: auth logic must run in browser, not during prerender)
+		const token = getAccessToken()
+		const isPublic = PUBLIC_PATHS.has(page.url.pathname)
+
+		if (!token && !isPublic) {
+			const refreshed = await refreshV1AccessToken()
+			if (!refreshed) {
+				const next = `${page.url.pathname}${page.url.search}`
+				void goto(`/login?next=${encodeURIComponent(next)}`, { replaceState: true })
+			}
+		} else if (token && isPublic) {
+			const next = page.url.searchParams.get('next') ?? '/'
+			void goto(next, { replaceState: true })
+		}
 	})
 
 	const isAuthRoute = $derived.by(() => {
-		const path = $page.url.pathname
+		const path = page.url.pathname
 		return path === '/login' || path === '/signup'
 	})
 
 	const isChatSwipeEligibleRoute = $derived.by(() => {
-		const path = $page.url.pathname
+		const path = page.url.pathname
 		return path === '/' || path.startsWith('/c/')
 	})
 
@@ -241,108 +259,106 @@
 
 <SplashController />
 
-<Tooltip.Provider>
-	<!-- Background Manager handles all backgrounds with smooth transitions -->
-	<BackgroundManager
-		type={currentBackground}
-		config={{ color: '#0a0a0a' }}
-		onReady={handleBackgroundReady}
-	>
-		{#if isAuthRoute}
-			<div class="relative z-1 flex h-screen">
-				<div class="relative flex min-w-0 flex-1 flex-col">
-					{@render children()}
-				</div>
+<!-- Background Manager handles all backgrounds with smooth transitions -->
+<BackgroundManager
+	type={currentBackground}
+	config={{ color: '#0a0a0a' }}
+	onReady={handleBackgroundReady}
+>
+	{#if isAuthRoute}
+		<div class="relative z-1 flex h-screen">
+			<div class="relative flex min-w-0 flex-1 flex-col">
+				{@render children()}
 			</div>
-		{:else}
-			<div class="relative z-1 flex h-screen">
-				{#if isChatSwipeEligibleRoute}
-					<!-- Sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
-					<ChatSidebar />
-					<div
-						class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
-					></div>
-				{/if}
-
-				{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
-					<div
-						class="fixed inset-y-0 left-0 z-20 w-6"
-						role="presentation"
-						style="touch-action: pan-y;"
-						onpointerdown={onMainPointerDown}
-						onpointermove={onMainPointerMove}
-						onpointerup={onMainPointerUp}
-						onpointercancel={onMainPointerCancel}
-					></div>
-				{/if}
-
-				<!-- Main Content -->
+		</div>
+	{:else}
+		<div class="relative z-1 flex h-screen">
+			{#if isChatSwipeEligibleRoute}
+				<!-- Sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
+				<ChatSidebar />
 				<div
-					class="relative flex min-w-0 flex-1 flex-col pt-[calc(var(--chrome-island-offset)+16px)]"
-					style={`touch-action: pan-y; --chrome-island-offset: ${islandOffsetPx}px;`}
-					bind:this={mainContentShell}
+					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
+				></div>
+			{/if}
+
+			{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
+				<div
+					class="fixed inset-y-0 left-0 z-20 w-6"
+					role="presentation"
+					style="touch-action: pan-y;"
 					onpointerdown={onMainPointerDown}
 					onpointermove={onMainPointerMove}
 					onpointerup={onMainPointerUp}
 					onpointercancel={onMainPointerCancel}
-				>
-					<!-- System chrome: island (top header) -->
-					<div
-						class="pointer-events-none absolute top-0 right-0 left-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
-						bind:this={islandShell}
-					>
-						<div class="pointer-events-auto">
-							<Island />
-						</div>
-					</div>
+				></div>
+			{/if}
 
-					{@render children()}
-				</div>
-
-				<!-- System chrome: dock (right sidebar overlay) -->
-				{#if chrome.isDockOpen && !device.isMobile}
-					<div
-						class="fixed inset-0 z-20"
-						role="presentation"
-						aria-hidden="true"
-						onclick={() => chrome.closeDock()}
-					></div>
-				{/if}
+			<!-- Main Content -->
+			<div
+				class="relative flex min-w-0 flex-1 flex-col pt-[calc(var(--chrome-island-offset)+16px)]"
+				style={`touch-action: pan-y; --chrome-island-offset: ${islandOffsetPx}px;`}
+				bind:this={mainContentShell}
+				onpointerdown={onMainPointerDown}
+				onpointermove={onMainPointerMove}
+				onpointerup={onMainPointerUp}
+				onpointercancel={onMainPointerCancel}
+			>
+				<!-- System chrome: island (top header) -->
 				<div
-					class="dock-shell fixed top-0 right-0 bottom-0 z-30 w-[min(31rem,calc(100vw-3rem))] px-6 pt-8 pb-8 {chrome.isDockOpen
-						? 'pointer-events-auto'
-						: 'pointer-events-none'}"
-					role="presentation"
-					style="touch-action: pan-y;"
-					onclick={maybeCloseDockFromMobileShellClick}
-					onpointerdown={onDockPointerDown}
-					onpointermove={onDockPointerMove}
-					onpointerup={onDockPointerUp}
-					onpointercancel={onDockPointerCancel}
+					class="pointer-events-none absolute top-0 right-0 left-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
+					bind:this={islandShell}
 				>
-					<div
-						class="relative h-full w-full transition-all duration-300 ease-out {chrome.isDockOpen
-							? 'translate-x-0 opacity-100'
-							: 'translate-x-full opacity-0'}"
-					>
-						<Dock />
+					<div class="pointer-events-auto">
+						<Island />
 					</div>
 				</div>
 
-				<SettingsModal
-					open={$activeModal === 'settings'}
-					onClose={() => closeModal()}
-					{theme}
-					bind:currentBackground
-				/>
-				<ArchivedChatsModal
-					open={$activeModal === 'archived-chats'}
-					onClose={() => closeModal()}
-				/>
+				{@render children()}
 			</div>
-		{/if}
-	</BackgroundManager>
-</Tooltip.Provider>
+
+			<!-- System chrome: dock (right sidebar overlay) -->
+			{#if chrome.isDockOpen && !device.isMobile}
+				<div
+					class="fixed inset-0 z-20"
+					role="presentation"
+					aria-hidden="true"
+					onclick={() => chrome.closeDock()}
+				></div>
+			{/if}
+			<div
+				class="dock-shell fixed top-0 right-0 bottom-0 z-30 w-[min(31rem,calc(100vw-3rem))] px-6 pt-8 pb-8 {chrome.isDockOpen
+					? 'pointer-events-auto'
+					: 'pointer-events-none'}"
+				role="presentation"
+				style="touch-action: pan-y;"
+				onclick={maybeCloseDockFromMobileShellClick}
+				onpointerdown={onDockPointerDown}
+				onpointermove={onDockPointerMove}
+				onpointerup={onDockPointerUp}
+				onpointercancel={onDockPointerCancel}
+			>
+				<div
+					class="relative h-full w-full transition-all duration-300 ease-out {chrome.isDockOpen
+						? 'translate-x-0 opacity-100'
+						: 'translate-x-full opacity-0'}"
+				>
+					<Dock />
+				</div>
+			</div>
+
+			<SettingsModal
+				open={$activeModal === 'settings'}
+				onClose={() => closeModal()}
+				{theme}
+				bind:currentBackground
+			/>
+			<ArchivedChatsModal
+				open={$activeModal === 'archived-chats'}
+				onClose={() => closeModal()}
+			/>
+		</div>
+	{/if}
+</BackgroundManager>
 
 <style>
 	@media (max-width: 888px) {

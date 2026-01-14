@@ -1,3 +1,4 @@
+import { browser } from '$app/environment'
 import { derived, get, writable } from 'svelte/store'
 
 import { eventStreamClient } from '$lib/api/streaming'
@@ -17,7 +18,7 @@ export type Thread = components['schemas']['Thread']
 export const accessToken = writable<string | null>(getAccessToken())
 export const isLoggedIn = derived(accessToken, (token) => Boolean(token))
 
-if (typeof window !== 'undefined') {
+if (browser) {
 	onAccessTokenChanged((token) => {
 		accessToken.set(token)
 		if (token) eventStreamClient.connect(token)

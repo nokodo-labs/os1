@@ -1,3 +1,5 @@
+import { browser } from '$app/environment'
+
 export const DEVICE_MOBILE_BREAKPOINT_PX = 888
 
 export const device = $state({
@@ -92,7 +94,7 @@ function setupDprListener(onChange: () => void) {
 
 export function initDevice(): void {
 	if (didInit) return
-	if (typeof window === 'undefined') return
+	if (!browser) return
 
 	didInit = true
 

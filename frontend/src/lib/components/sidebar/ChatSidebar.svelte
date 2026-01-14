@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
@@ -9,7 +10,6 @@
 	import ChatSidebarChatsSection from '$lib/components/sidebar/chat-sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/sidebar/chat-sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
-	import * as Separator from '$lib/components/ui/separator'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { openModal } from '$lib/stores/modals'
@@ -19,6 +19,9 @@
 		invalidateAll as invalidateThreadCache,
 		prefetchThread,
 	} from '$lib/stores/threadCache.svelte'
+
+	// SSG-safe query param access
+	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
 
 	type SidebarContext = {
 		readonly isOpen: boolean
@@ -70,7 +73,7 @@
 		if (isOpen) {
 			isCompactLayout = false
 			renderExpandedContent = true
-			if (typeof window !== 'undefined') {
+			if (browser) {
 				window.requestAnimationFrame(() => {
 					expandedContentVisible = true
 					showTopLabels = true
@@ -83,7 +86,7 @@
 			showTopLabels = false
 			expandedContentVisible = false
 
-			if (typeof window !== 'undefined') {
+			if (browser) {
 				compactTimeout = window.setTimeout(() => {
 					isCompactLayout = true
 				}, sidebarTransitionMs)
@@ -97,7 +100,7 @@
 		}
 
 		return () => {
-			if (typeof window === 'undefined') return
+			if (!browser) return
 			if (compactTimeout !== null) window.clearTimeout(compactTimeout)
 			if (unmountTimeout !== null) window.clearTimeout(unmountTimeout)
 		}
@@ -172,9 +175,8 @@
 
 	function handleSearchClick() {
 		sidebar.selectChat(null)
-		const isAlreadyHome =
-			page.url.pathname === '/' && page.url.searchParams.get('chat') === null
-		if (isAlreadyHome && typeof window !== 'undefined') {
+		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
+		if (isAlreadyHome && browser) {
 			window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
 		} else {
 			// @ts-expect-error resolve typing is narrower than our constructed URL
@@ -190,9 +192,8 @@
 			label: 'new chat',
 			action: async () => {
 				sidebar.selectChat(null)
-				const isAlreadyNew =
-					page.url.pathname === '/' && page.url.searchParams.get('chat') === 'new'
-				if (isAlreadyNew && typeof window !== 'undefined') {
+				const isAlreadyNew = page.url.pathname === '/' && chatParam === 'new'
+				if (isAlreadyNew && browser) {
 					window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
 				} else {
 					// @ts-expect-error resolve typing is narrower than our constructed URL
@@ -408,10 +409,9 @@
 			onCloseClick={() => sidebar.closeChatSidebar()}
 		/>
 
-		<Separator.Root class="bg-white/10" />
+		<hr class="border-white/10" />
 
 		<ChatSidebarTopActions
-			{isCompactLayout}
 			{showTopLabels}
 			{items}
 			onSearchClick={handleSearchClick}
