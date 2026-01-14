@@ -98,6 +98,10 @@
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 		appReadiness.markShellReady()
 
+		// Don't run auth redirects on not-found routes.
+		// This keeps 404s visible even when the user is logged out.
+		if (page.status === 404) return
+
 		// Client-side auth guard (SSG: auth logic must run in browser, not during prerender)
 		const token = getAccessToken()
 		const isPublic = PUBLIC_PATHS.has(page.url.pathname)
