@@ -18,6 +18,7 @@
 	import { createThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { activeModal, closeModal } from '$lib/stores/modals'
+	import { startPreferencesSync } from '$lib/stores/preferences'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -66,6 +67,10 @@
 	createDebugUiContext()
 	// Initialize theme context
 	const theme = createThemeContext()
+
+	$effect(() => {
+		return startPreferencesSync()
+	})
 
 	// DEV ONLY: Background switcher
 	let currentBackground = $state<BackgroundType>('darkveil')
