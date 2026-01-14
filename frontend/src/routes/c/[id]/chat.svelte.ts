@@ -7,6 +7,7 @@ import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/str
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
 import { agentsList } from '$lib/stores/agents'
+import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent'
 import { currentUser, setActiveThread, type Thread } from '$lib/stores/session'
 import {
 	cacheMessages,
@@ -70,7 +71,7 @@ export function createChatState() {
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
-	let selectedAgent = $state('')
+	let selectedAgent = $state(get(selectedAgentId))
 	let optimisticUserMessage = $state<{ content: string; timestamp: Date } | null>(null)
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
@@ -1018,6 +1019,7 @@ export function createChatState() {
 		},
 		set selectedAgent(v: string) {
 			selectedAgent = v
+			setSelectedAgentId(v)
 		},
 		get optimisticUserMessage() {
 			return optimisticUserMessage

@@ -19,12 +19,12 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { openModal } from '$lib/stores/modals'
+	import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent'
 	import { setActiveThread, setPendingChatStart, userDisplay } from '$lib/stores/session'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state('')
 	let isGenerating = $state(false)
-	let selectedModel = $state('gpt-4')
 	let focusToken = $state(0)
 
 	let showSuggestions = $state(false)
@@ -140,8 +140,8 @@
 
 	$effect(() => {
 		chrome.setAgentSelector({
-			selectedAgent: selectedModel,
-			onAgentChange: (agentId: string) => (selectedModel = agentId),
+			selectedAgent: $selectedAgentId,
+			onAgentChange: (agentId: string) => setSelectedAgentId(agentId),
 		})
 	})
 
