@@ -11,6 +11,7 @@
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agentsList, loadAgents } from '$lib/stores/agents'
+	import { device } from '$lib/stores/device.svelte'
 	import { activeThread, refreshSession, userDisplay } from '$lib/stores/session'
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
 
@@ -24,19 +25,6 @@
 
 	const chrome = useSystemChrome()
 	const sidebar = useSidebar() as SidebarContext | null
-
-	let isMobileViewport = $state(false)
-
-	$effect(() => {
-		if (typeof window === 'undefined') return
-		const mq = window.matchMedia('(max-width: 888px)')
-		const update = () => {
-			isMobileViewport = mq.matches
-		}
-		update()
-		mq.addEventListener('change', update)
-		return () => mq.removeEventListener('change', update)
-	})
 
 	$effect(() => {
 		void refreshSession()
@@ -220,7 +208,7 @@
 						{/if}
 					</div>
 
-					{#if isMobileViewport}
+					{#if device.isMobile}
 						<button
 							class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
 							onclick={() => sidebar?.toggleChatSidebar?.()}
