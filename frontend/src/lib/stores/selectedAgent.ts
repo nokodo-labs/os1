@@ -2,6 +2,8 @@ import { get, writable } from 'svelte/store'
 
 const STORAGE_KEY = 'selected-agent-id'
 
+/** persisted agent selection used across routes. */
+
 function readStoredSelectedAgentId(): string {
 	if (typeof window === 'undefined') return ''
 	try {
@@ -20,7 +22,7 @@ if (typeof window !== 'undefined') {
 			if (value) window.localStorage.setItem(STORAGE_KEY, value)
 			else window.localStorage.removeItem(STORAGE_KEY)
 		} catch {
-			// ignore storage failures (private mode, blocked storage)
+			void 0
 		}
 	})
 }

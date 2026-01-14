@@ -11,7 +11,7 @@ from api.core.database import get_db
 from api.models.user import User
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.user import User as UserSchema
-from api.schemas.user import UserCreate
+from api.schemas.user import UserCreate, UserUpdate
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal, get_current_principal, get_optional_user
 from nokodo_ai.utils.typeid import TypeID
@@ -66,3 +66,14 @@ async def create_user(
 ) -> User:
 	"""Create new user."""
 	return await user_service.create_user(user_in, db, actor=current_user)
+
+
+@router.patch("/{user_id}", response_model=UserSchema)
+async def update_user(
+	user_id: TypeID,
+	body: UserUpdate,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> User:
+	"""Update user."""
+	return await user_service.update_user(user_id, body, db, principal=principal)
