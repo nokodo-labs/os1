@@ -36,7 +36,7 @@
 			<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
-			<div class="flex flex-col space-y-0.5">
+			<div class="flex min-h-full flex-col space-y-0.5">
 				{#if !isLoggedIn}
 					<div class="flex flex-1 flex-col items-center justify-center">
 						<div
