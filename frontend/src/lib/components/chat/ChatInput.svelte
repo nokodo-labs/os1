@@ -3,7 +3,6 @@
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Stop from '$lib/components/icons/Stop.svelte'
-	import * as Tooltip from '$lib/components/ui/tooltip'
 
 	interface ChatInputProps {
 		value?: string
@@ -139,24 +138,17 @@
 		<div class="relative z-10 px-1 py-1">
 			<div class="flex items-center gap-2 px-2.5 py-2.5">
 				<div class="ml-1 flex shrink-0 items-center" data-chat-add-menu-root>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							<button
-								type="button"
-								aria-label="Add attachment"
-								aria-haspopup="menu"
-								aria-expanded={isAddMenuOpen}
-								class="flex items-center justify-center bg-transparent p-0 text-black/65 transition-colors duration-200 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white dark:hover:text-white"
-								{disabled}
-								onclick={toggleAddMenu}
-							>
-								<Plus className="h-5.5 w-5.5" strokeWidth="2" />
-							</button>
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p>add attachment</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
+					<button
+						type="button"
+						aria-label="Add attachment"
+						aria-haspopup="menu"
+						aria-expanded={isAddMenuOpen}
+						class="flex items-center justify-center bg-transparent p-0 text-black/65 transition-colors duration-200 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white dark:hover:text-white"
+						{disabled}
+						onclick={toggleAddMenu}
+					>
+						<Plus className="h-5.5 w-5.5" strokeWidth="2" />
+					</button>
 
 					<input
 						bind:this={fileInput}
@@ -215,36 +207,29 @@
 				</div>
 
 				<div class="mr-1 flex shrink-0 items-center space-x-1">
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#if isGenerating}
-								<button
-									type="button"
-									aria-label="stop generating"
-									class="flex h-8 w-8 items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
-									onclick={onStop}
-								>
-									<Stop className="h-3.5 w-3.5" />
-								</button>
-							{:else}
-								<button
-									type="submit"
-									aria-label="send message"
-									class="send-btn flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
-										value.trim() === '' || disabled
-									)
-										? 'hover:brightness-110'
-										: 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
-									disabled={value.trim() === '' || disabled}
-								>
-									<ArrowUp className="h-5 w-5" strokeWidth="2" />
-								</button>
-							{/if}
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p>{isGenerating ? 'stop generating' : 'send message'}</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
+					{#if isGenerating}
+						<button
+							type="button"
+							aria-label="stop generating"
+							class="flex h-8 w-8 items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
+							onclick={onStop}
+						>
+							<Stop className="h-3.5 w-3.5" />
+						</button>
+					{:else}
+						<button
+							type="submit"
+							aria-label="send message"
+							class="send-btn flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+								value.trim() === '' || disabled
+							)
+								? 'hover:brightness-110'
+								: 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
+							disabled={value.trim() === '' || disabled}
+						>
+							<ArrowUp className="h-5 w-5" strokeWidth="2" />
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>

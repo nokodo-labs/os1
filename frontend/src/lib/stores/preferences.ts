@@ -1,3 +1,4 @@
+import { browser } from '$app/environment'
 import { v1Client } from '$lib/api/v1/client'
 import { currentUser } from '$lib/stores/session'
 import { get, writable } from 'svelte/store'
@@ -43,7 +44,7 @@ function normalizePreferences(value: unknown): Preferences {
 }
 
 function readStoredPreferences(userId: string): Preferences {
-	if (typeof window === 'undefined') return {}
+	if (!browser) return {}
 	try {
 		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${userId}`)
 		if (!raw) return {}
@@ -54,7 +55,7 @@ function readStoredPreferences(userId: string): Preferences {
 }
 
 function writeStoredPreferences(userId: string, prefs: Preferences): void {
-	if (typeof window === 'undefined') return
+	if (!browser) return
 	try {
 		window.localStorage.setItem(`${STORAGE_PREFIX}${userId}`, JSON.stringify(prefs))
 	} catch {

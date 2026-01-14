@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/index'
-	import * as Button from '$lib/components/ui/button'
 
 	let email = $state('')
 	let displayName = $state('')
@@ -134,13 +133,13 @@
 								</div>
 							{/if}
 
-							<Button.Root
+							<button
 								type="submit"
 								disabled={!canSubmit || isSubmitting}
-								class="h-11 w-full rounded-full"
+								class="h-11 w-full rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{isSubmitting ? 'creating account…' : 'sign up'}
-							</Button.Root>
+							</button>
 						</form>
 
 						<div class="mt-6 text-center text-sm text-white/55">

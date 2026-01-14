@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
 	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
 	import { tryUseDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { Streamdown, type Extension } from 'svelte-streamdown'
@@ -27,7 +28,7 @@
 			: { enabled: false }
 	)
 
-	const defaultOrigin = typeof window !== 'undefined' ? window.location.origin : undefined
+	const defaultOrigin = browser ? window.location.origin : undefined
 
 	// Allow all http/https links, plus relative links via defaultOrigin.
 	// Streamdown's wildcard intentionally blocks non-http(s) schemes.

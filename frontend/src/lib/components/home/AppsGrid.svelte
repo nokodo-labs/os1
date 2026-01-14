@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
 	import Bolt from '$lib/components/icons/Bolt.svelte'
 	import Bookmark from '$lib/components/icons/Bookmark.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
@@ -83,7 +84,7 @@
 	let fitToken = 0
 
 	async function ensureFitsViewport(token: number) {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		if (!rootEl) return
 
 		await tick()
@@ -111,7 +112,7 @@
 	}
 
 	function scheduleRecalc() {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		if (recalcRaf !== null) cancelAnimationFrame(recalcRaf)
 		recalcRaf = requestAnimationFrame(() => {
 			recalcRaf = null

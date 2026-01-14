@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths'
 	import { logoutV1 } from '$lib/api/v1/client'
 	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
-	import * as Separator from '$lib/components/ui/separator'
 	import { openModal } from '$lib/stores/modals'
 	import { clearSession, isLoggedIn } from '$lib/stores/session'
 
@@ -139,7 +138,7 @@
 		{/if}
 	</div>
 
-	<Separator.Root class="my-2 bg-white/10" />
+	<hr class="my-2 border-white/10" />
 
 	{#if $isLoggedIn}
 		<!-- Menu Items -->
@@ -166,7 +165,7 @@
 		</div>
 	{/if}
 
-	<Separator.Root class="my-2 bg-white/10" />
+	<hr class="my-2 border-white/10" />
 
 	{#if $isLoggedIn}
 		<!-- Logout Button -->

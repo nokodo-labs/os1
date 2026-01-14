@@ -1,31 +1,18 @@
-// This file is used to configure the static adapter for SPA mode
+/**
+ * Root layout configuration for SSG (adapter-static).
+ *
+ * Architecture notes:
+ * - ssr=true allows SvelteKit to render HTML during the build (prerender).
+ * - prerender=true prerenders all routes by default; dynamic routes opt-out individually.
+ * - Auth redirects are handled CLIENT-SIDE (in +layout.svelte) to keep prerendered pages deterministic.
+ * - This load function only initializes runtime config; it must be SSR/prerender-safe.
+ */
 import { initRuntimeConfig } from '$lib/config/runtime'
 
-import { redirect } from '@sveltejs/kit'
+export const ssr = true
+export const prerender = true
 
-import { refreshV1AccessToken } from '$lib/api/v1/client'
-import { getAccessToken } from '$lib/auth/session'
-
-export const ssr = false
-
-const PUBLIC_PATHS = new Set(['/login', '/signup'])
-
-export const load = async ({ url }) => {
+export const load = async () => {
 	const config = await initRuntimeConfig()
-
-	const token = getAccessToken()
-	const isPublic = PUBLIC_PATHS.has(url.pathname)
-
-	if (!token && !isPublic) {
-		const refreshed = await refreshV1AccessToken()
-		if (refreshed) return { config }
-		const next = `${url.pathname}${url.search}`
-		throw redirect(307, `/login?next=${encodeURIComponent(next)}`)
-	}
-
-	if (token && isPublic) {
-		throw redirect(307, url.searchParams.get('next') ?? '/')
-	}
-
 	return { config }
 }

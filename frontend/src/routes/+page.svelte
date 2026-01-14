@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
@@ -36,13 +37,18 @@
 
 	type ChatMode = 'new' | 'temp' | null
 
-	const chatMode = $derived((page.url.searchParams.get('chat') as ChatMode) ?? null)
+	const chatMode = $derived.by((): ChatMode => {
+		if (!browser) return null
+		const chat = page.url.searchParams.get('chat')
+		if (chat === 'new' || chat === 'temp') return chat
+		return null
+	})
 	const isChatMode = $derived(chatMode === 'new' || chatMode === 'temp')
 	const isTemporaryChatMode = $derived(chatMode === 'temp')
 	let showChatBanner = $state(false)
 
 	$effect(() => {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		const handleRequestFocus = () => {
 			focusToken += 1
 		}
@@ -52,7 +58,7 @@
 
 	let lastAutoFocusKey = $state<string | null>(null)
 	$effect(() => {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		if (page.url.pathname !== '/') return
 		const chat = page.url.searchParams.get('chat')
 		if (chat !== null && chat !== 'new' && chat !== 'temp') return
