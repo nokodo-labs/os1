@@ -1,9 +1,9 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { page } from '$app/stores'
+	import { page } from '$app/state'
 	import { v1Client } from '$lib/api/v1/client'
-	import * as Button from '$lib/components/ui/button'
 	import { refreshSession, setSessionToken } from '$lib/stores/session'
 
 	let email = $state('')
@@ -11,10 +11,12 @@
 	let isSubmitting = $state(false)
 	let errorMessage = $state<string | null>(null)
 
-	const next = $derived($page.url.searchParams.get('next') ?? '/')
+	// NOTE: searchParams access must be guarded for SSG/prerender compatibility
+	const next = $derived(browser ? (page.url.searchParams.get('next') ?? '/') : '/')
 
 	$effect(() => {
-		const fromQuery = $page.url.searchParams.get('email')
+		if (!browser) return
+		const fromQuery = page.url.searchParams.get('email')
 		if (fromQuery && !email) email = fromQuery
 	})
 
@@ -117,13 +119,13 @@
 								</div>
 							{/if}
 
-							<Button.Root
+							<button
 								type="submit"
 								disabled={isSubmitting}
-								class="h-11 w-full rounded-full"
+								class="h-11 w-full rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{isSubmitting ? 'signing in…' : 'sign in'}
-							</Button.Root>
+							</button>
 						</form>
 
 						<div class="mt-6 text-center text-sm text-white/55">

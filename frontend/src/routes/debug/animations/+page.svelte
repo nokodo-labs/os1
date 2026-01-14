@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { dev } from '$app/environment'
+	import { browser, dev } from '$app/environment'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { onDestroy } from 'svelte'
 
@@ -35,12 +35,12 @@
 	let splashIframe = $state<HTMLIFrameElement | null>(null)
 	let splashPreviewSrc = $state('/splash-preview.html')
 	$effect(() => {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		splashPreviewSrc = new URL('/splash-preview.html', window.location.origin).toString()
 	})
 
 	function openSplashPreviewStandalone() {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		window.open(splashPreviewSrc, '_blank', 'noopener,noreferrer')
 	}
 

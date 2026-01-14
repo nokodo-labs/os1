@@ -1,3 +1,4 @@
+import { browser } from '$app/environment'
 import { getContext, setContext } from 'svelte'
 
 const DEBUG_UI_KEY = Symbol('debug-ui')
@@ -31,18 +32,18 @@ const STREAMDOWN_ANIMATION_TOKENIZE_KEY = 'nokodo.debug.streamdown.animation.tok
 const STREAMDOWN_ANIMATION_DURATION_KEY = 'nokodo.debug.streamdown.animation.duration'
 
 function readStoredShape(): AppsGridIconShape {
-	if (typeof window === 'undefined') return 'default'
+	if (!browser) return 'default'
 	const value = window.localStorage.getItem(STORAGE_KEY)
 	return value === 'circle' ? 'circle' : 'default'
 }
 
 function writeStoredShape(shape: AppsGridIconShape) {
-	if (typeof window === 'undefined') return
+	if (!browser) return
 	window.localStorage.setItem(STORAGE_KEY, shape)
 }
 
 function readStreamdownAnimation(): StreamdownAnimationOptions {
-	if (typeof window === 'undefined') {
+	if (!browser) {
 		return { enabled: true, type: 'fade', tokenize: 'word', duration: 450 }
 	}
 
@@ -67,7 +68,7 @@ function readStreamdownAnimation(): StreamdownAnimationOptions {
 }
 
 function writeStreamdownAnimation(next: StreamdownAnimationOptions) {
-	if (typeof window === 'undefined') return
+	if (!browser) return
 	window.localStorage.setItem(STREAMDOWN_ANIMATION_ENABLED_KEY, String(next.enabled))
 	window.localStorage.setItem(STREAMDOWN_ANIMATION_TYPE_KEY, next.type)
 	window.localStorage.setItem(STREAMDOWN_ANIMATION_TOKENIZE_KEY, next.tokenize)

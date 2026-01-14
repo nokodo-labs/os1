@@ -2,8 +2,6 @@
 	import type { Thread } from '$lib/stores/session'
 
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
-	import * as ScrollArea from '$lib/components/ui/scroll-area'
-	import * as Separator from '$lib/components/ui/separator'
 
 	import ChatSidebarThreadRow from './ChatSidebarThreadRow.svelte'
 
@@ -31,13 +29,13 @@
 		: 'pointer-events-none opacity-0'}"
 	aria-hidden={!expandedContentVisible}
 >
-	<Separator.Root class="my-2 bg-white/10" />
+	<hr class="my-2 border-white/10" />
 	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden px-2">
 		<div class="mb-1 flex items-center gap-2 px-3">
 			<ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
 			<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 		</div>
-		<ScrollArea.Root class="min-h-0 flex-1">
+		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div class="flex flex-col space-y-0.5">
 				{#if !isLoggedIn}
 					<div class="flex flex-1 flex-col items-center justify-center">
@@ -72,6 +70,6 @@
 					{/each}
 				{/if}
 			</div>
-		</ScrollArea.Root>
+		</div>
 	</div>
 </div>

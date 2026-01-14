@@ -1,3 +1,4 @@
+import { browser } from '$app/environment'
 import { get, writable } from 'svelte/store'
 
 const STORAGE_KEY = 'selected-agent-id'
@@ -5,7 +6,7 @@ const STORAGE_KEY = 'selected-agent-id'
 /** persisted agent selection used across routes. */
 
 function readStoredSelectedAgentId(): string {
-	if (typeof window === 'undefined') return ''
+	if (!browser) return ''
 	try {
 		const raw = window.localStorage.getItem(STORAGE_KEY)
 		return typeof raw === 'string' ? raw : ''
@@ -16,7 +17,7 @@ function readStoredSelectedAgentId(): string {
 
 export const selectedAgentId = writable<string>(readStoredSelectedAgentId())
 
-if (typeof window !== 'undefined') {
+if (browser) {
 	selectedAgentId.subscribe((value) => {
 		try {
 			if (value) window.localStorage.setItem(STORAGE_KEY, value)

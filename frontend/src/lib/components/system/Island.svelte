@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
@@ -7,7 +8,7 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Home from '$lib/components/icons/Home.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
-	import UserProfileTrigger from '$lib/components/sidebar/UserProfileTrigger.svelte'
+	import UserProfileTrigger from '$lib/components/system/UserProfileTrigger.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agentsList, loadAgents } from '$lib/stores/agents'
@@ -27,8 +28,11 @@
 	const sidebar = useSidebar() as SidebarContext | null
 
 	$effect(() => {
+		if (!browser) return
 		void refreshSession()
 	})
+
+	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
 
 	let didLoadAgents = $state(false)
 	let didAutoSelectAgent = $state(false)
@@ -78,14 +82,13 @@
 	}
 
 	function requestHomeInputFocus() {
-		if (typeof window === 'undefined') return
+		if (!browser) return
 		window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
 	}
 
 	function handleHome() {
 		sidebar?.selectChat?.(null)
-		const isAlreadyHome =
-			page.url.pathname === '/' && page.url.searchParams.get('chat') === null
+		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
 		if (isAlreadyHome) {
 			requestHomeInputFocus()
 			return
@@ -96,8 +99,7 @@
 
 	function handleTemporaryChat() {
 		sidebar?.selectChat?.(null)
-		const isAlreadyTemp =
-			page.url.pathname === '/' && page.url.searchParams.get('chat') === 'temp'
+		const isAlreadyTemp = page.url.pathname === '/' && chatParam === 'temp'
 		if (isAlreadyTemp) {
 			requestHomeInputFocus()
 			return
@@ -107,11 +109,9 @@
 	}
 
 	const isTemporaryChatActive = $derived(
-		page.url.searchParams.get('chat') === 'temp' || ($activeThread?.is_temporary ?? false)
+		chatParam === 'temp' || ($activeThread?.is_temporary ?? false)
 	)
-	const isHomeLayout = $derived(
-		page.url.pathname === '/' && page.url.searchParams.get('chat') === null
-	)
+	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null)
 
 	function handleTemporaryChatToggle() {
 		if (isTemporaryChatActive) {
