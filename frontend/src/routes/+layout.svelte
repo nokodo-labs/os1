@@ -17,6 +17,7 @@
 	import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
 	import { createThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
+	import { device, initDevice } from '$lib/stores/device.svelte'
 	import { activeModal, closeModal } from '$lib/stores/modals'
 	import { startPreferencesSync } from '$lib/stores/preferences'
 	import '$lib/styles/liquid-glass.css'
@@ -53,6 +54,9 @@
 	if (existingToken) {
 		eventStreamClient.connect(existingToken)
 	}
+
+	// SPA mode (ssr=false): safe to init synchronously at module eval time.
+	if (typeof window !== 'undefined') initDevice()
 
 	// Initialize sidebar context
 	createSidebarContext()
@@ -97,18 +101,6 @@
 		return path === '/login' || path === '/signup'
 	})
 
-	let isMobileViewport = $state(false)
-	$effect(() => {
-		if (typeof window === 'undefined') return
-		const mq = window.matchMedia('(max-width: 888px)')
-		const update = () => {
-			isMobileViewport = mq.matches
-		}
-		update()
-		mq.addEventListener('change', update)
-		return () => mq.removeEventListener('change', update)
-	})
-
 	const isChatSwipeEligibleRoute = $derived.by(() => {
 		const path = $page.url.pathname
 		return path === '/' || path.startsWith('/c/')
@@ -116,12 +108,12 @@
 
 	const sidebarSpacerWidthClass = $derived.by(() => {
 		if (!isChatSwipeEligibleRoute) return 'w-0'
-		if (isMobileViewport) return 'w-0'
+		if (device.isMobile) return 'w-0'
 		return sidebar.isChatSidebarOpen ? 'w-72' : 'w-18'
 	})
 
 	function maybeCloseDockFromMobileShellClick(event: MouseEvent) {
-		if (!isMobileViewport) return
+		if (!device.isMobile) return
 		if (!chrome.isDockOpen) return
 		const target = event.target as HTMLElement | null
 		if (!target) return
@@ -135,7 +127,7 @@
 	let dockSwipeActive = $state(false)
 
 	function onDockPointerDown(event: PointerEvent) {
-		if (!isMobileViewport) return
+		if (!device.isMobile) return
 		if (!chrome.isDockOpen) return
 		const target = event.target as HTMLElement | null
 		if (!target) return
@@ -205,7 +197,7 @@
 	})
 
 	function onMainPointerDown(event: PointerEvent) {
-		if (!isMobileViewport) return
+		if (!device.isMobile) return
 		if (!isChatSwipeEligibleRoute) return
 		if (chrome.isDockOpen) return
 		if (sidebar.isChatSidebarOpen) return
@@ -272,7 +264,7 @@
 					></div>
 				{/if}
 
-				{#if isMobileViewport && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
+				{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
 					<div
 						class="fixed inset-y-0 left-0 z-20 w-6"
 						role="presentation"
@@ -308,7 +300,7 @@
 				</div>
 
 				<!-- System chrome: dock (right sidebar overlay) -->
-				{#if chrome.isDockOpen && !isMobileViewport}
+				{#if chrome.isDockOpen && !device.isMobile}
 					<div
 						class="fixed inset-0 z-20"
 						role="presentation"

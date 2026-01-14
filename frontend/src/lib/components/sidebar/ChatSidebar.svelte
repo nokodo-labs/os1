@@ -11,6 +11,7 @@
 	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
 	import * as Separator from '$lib/components/ui/separator'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { openModal } from '$lib/stores/modals'
 	import { onThreadEvent } from '$lib/stores/notifications'
 	import { isLoggedIn, recentThreads, refreshThreads, type Thread } from '$lib/stores/session'
@@ -47,7 +48,6 @@
 	let deleteError = $state<string | null>(null)
 	let generatingMetadataThreadId = $state<string | null>(null)
 
-	let isMobile = $state(false)
 	let closeSwipePointerId = $state<number | null>(null)
 	let closeSwipeStartX = $state(0)
 	let closeSwipeStartY = $state(0)
@@ -167,15 +167,7 @@
 	}
 
 	$effect(() => {
-		if (typeof window === 'undefined') return
-		const mq = window.matchMedia('(max-width: 888px)')
-		const update = () => {
-			isMobile = mq.matches
-			if (isMobile) sidebar.closeChatSidebar()
-		}
-		update()
-		mq.addEventListener('change', update)
-		return () => mq.removeEventListener('change', update)
+		if (device.isMobile) sidebar.closeChatSidebar()
 	})
 
 	function handleSearchClick() {
@@ -188,7 +180,7 @@
 			// @ts-expect-error resolve typing is narrower than our constructed URL
 			void goto(resolve('/' as never), { keepFocus: true, noScroll: true })
 		}
-		if (isMobile) sidebar.closeChatSidebar()
+		if (device.isMobile) sidebar.closeChatSidebar()
 	}
 
 	const items: SidebarItem[] = [
@@ -206,7 +198,7 @@
 					// @ts-expect-error resolve typing is narrower than our constructed URL
 					void goto(resolve('/?chat=new' as never), { keepFocus: true, noScroll: true })
 				}
-				if (isMobile) sidebar.closeChatSidebar()
+				if (device.isMobile) sidebar.closeChatSidebar()
 			},
 		},
 		{
@@ -215,7 +207,7 @@
 			label: 'archived chats',
 			action: () => {
 				openModal('archived-chats')
-				if (isMobile) sidebar.closeChatSidebar()
+				if (device.isMobile) sidebar.closeChatSidebar()
 			},
 		},
 	]
@@ -241,7 +233,7 @@
 				noScroll: true,
 			})
 		}
-		if (isMobile) sidebar.closeChatSidebar()
+		if (device.isMobile) sidebar.closeChatSidebar()
 	}
 
 	function requestDeleteThread(thread: Thread) {
@@ -297,7 +289,7 @@
 	})
 
 	function onCloseSwipePointerDown(event: PointerEvent) {
-		if (!isMobile) return
+		if (!device.isMobile) return
 		if (!sidebar.isChatSidebarOpen) return
 		closeSwipePointerId = event.pointerId
 		closeSwipeStartX = event.clientX
@@ -356,7 +348,7 @@
 	}
 </script>
 
-{#if isMobile && sidebar.isChatSidebarOpen}
+{#if device.isMobile && sidebar.isChatSidebarOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="fixed inset-0 z-40 bg-black/40" onclick={() => sidebar.closeChatSidebar()}></div>
@@ -373,19 +365,19 @@
 {/if}
 
 <aside
-	class="chat-sidebar group fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-[width,transform] duration-300 ease-in-out {isMobile
+	class="chat-sidebar group fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-[width,transform] duration-300 ease-in-out {device.isMobile
 		? 'w-full'
 		: sidebar.isChatSidebarOpen
 			? 'w-72'
 			: 'w-18'} {sidebar.isChatSidebarOpen
 		? 'translate-x-0'
-		: isMobile
+		: device.isMobile
 			? 'pointer-events-none -translate-x-full'
 			: 'translate-x-0'}"
 	style="background-color: var(--accent-bg);"
-	aria-hidden={isMobile ? !sidebar.isChatSidebarOpen : false}
+	aria-hidden={device.isMobile ? !sidebar.isChatSidebarOpen : false}
 	onclick={(event) => {
-		if (isMobile) return
+		if (device.isMobile) return
 		if (sidebar.isChatSidebarOpen) return
 		const target = event.target as HTMLElement | null
 		if (target?.closest('button, [role="button"], a')) return
