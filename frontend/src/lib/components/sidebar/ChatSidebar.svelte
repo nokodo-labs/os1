@@ -366,7 +366,9 @@
 {/if}
 
 <aside
-	class="chat-sidebar group fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-[width,transform] duration-300 ease-in-out {device.isMobile
+	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-[width,transform] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+		? ''
+		: 'group'} {device.isMobile
 		? 'w-full'
 		: sidebar.isChatSidebarOpen
 			? 'w-72'
@@ -411,11 +413,7 @@
 
 		<hr class="border-white/10" />
 
-		<ChatSidebarTopActions
-			{showTopLabels}
-			{items}
-			onSearchClick={handleSearchClick}
-		/>
+		<ChatSidebarTopActions {showTopLabels} {items} onSearchClick={handleSearchClick} />
 
 		{#if renderExpandedContent}
 			<ChatSidebarChatsSection
