@@ -63,10 +63,6 @@
 	let iconPx = $state(32)
 	const INDICATOR_SPACE_PX = 48
 	const SIDE_PADDING_PX = 24
-	const BOTTOM_VIEWPORT_PADDING_PX = 8
-	// Fixed offset from bottom of viewport where the grid lives (accounts for input + padding).
-	// This avoids depending on rect.top which changes during slide animations.
-	const GRID_TOP_OFFSET_VH = 0.45
 
 	let rootEl: HTMLDivElement
 	let scrollerEl: HTMLDivElement
@@ -90,13 +86,17 @@
 		await tick()
 		if (token !== fitToken) return
 
-		const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-		const bottomLimit = viewportHeight - BOTTOM_VIEWPORT_PADDING_PX
+		// Use the component's actual height from its parent flex container
+		const rootHeight = rootEl.clientHeight
 
 		let attempts = 0
 		while (attempts < 6) {
-			const bottom = rootEl.getBoundingClientRect().bottom
-			if (bottom <= bottomLimit) break
+			// Calculate current content height
+			const cellHeight = tilePx + tileToLabelGapPx + labelPx
+			const gridHeight = rows * (cellHeight + gridGapYPx) - gridGapYPx
+			const totalHeight = gridHeight + INDICATOR_SPACE_PX
+
+			if (totalHeight <= rootHeight) break
 			if (rows <= 1) break
 
 			rows -= 1
@@ -136,10 +136,8 @@
 		labelPx = Math.max(16, Math.round(18 * scale))
 		iconPx = clamp(Math.round(tilePx * 0.42), 22, 32)
 
-		// Use a fixed fraction of viewport height for available space.
-		// This prevents layout recalc jank during slide-up animations.
-		const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-		const availableHeight = Math.max(0, viewportHeight * GRID_TOP_OFFSET_VH)
+		// Use the component's actual height from its parent flex container
+		const availableHeight = rootEl.clientHeight
 
 		const tileBlockWidth = tilePx + gridGapXPx
 		const nextCols = clamp(Math.floor((availableWidth + gridGapXPx) / tileBlockWidth), 3, 7)
@@ -256,11 +254,11 @@
 	})
 </script>
 
-<div bind:this={rootEl} class="w-full">
-	<!-- Native CSS scroll-snap + overscroll handles paging and rubberband on iOS/Safari. -->
+<div bind:this={rootEl} class="flex h-full w-full flex-col">
+	<!-- scroller takes all available space -->
 	<div
 		bind:this={scrollerEl}
-		class="no-scrollbar relative flex w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain select-none"
+		class="no-scrollbar relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain select-none"
 		style="touch-action: pan-x; -webkit-overflow-scrolling: touch;"
 		onscroll={syncPageFromScroll}
 		onwheel={onScrollerWheel}
@@ -304,7 +302,10 @@
 		{/each}
 	</div>
 
-	<div class="mt-6 flex items-center justify-center gap-2" aria-label="apps pages">
+	<div
+		class="mt-auto flex shrink-0 items-center justify-center gap-2 py-4"
+		aria-label="apps pages"
+	>
 		{#each pages as _page, index (index)}
 			<button
 				type="button"
