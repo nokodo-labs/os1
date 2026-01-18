@@ -6,9 +6,9 @@
 import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
-import { agentsList } from '$lib/stores/agents'
-import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent'
-import { currentUser, setActiveThread, type Thread } from '$lib/stores/session'
+import { agentsList } from '$lib/stores/agents.svelte'
+import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent.svelte'
+import { currentUser, setActiveThread, type Thread } from '$lib/stores/session.svelte'
 import {
 	cacheMessages,
 	cacheThread,
@@ -24,7 +24,6 @@ import {
 } from '$lib/tools'
 import { tick } from 'svelte'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
-import { get } from 'svelte/store'
 import {
 	computeIsAtBottom,
 	contentPartsToText,
@@ -71,13 +70,18 @@ export function createChatState() {
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
-	let selectedAgent = $state(get(selectedAgentId))
+	let selectedAgent = $state(selectedAgentId)
 	let optimisticUserMessage = $state<{ content: string; timestamp: Date } | null>(null)
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
 	let runError = $state(false)
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
+
+	$effect(() => {
+		const id = selectedAgentId
+		if (selectedAgent !== id) selectedAgent = id
+	})
 
 	// Thread state
 	let thread = $state<Thread | null>(null)
@@ -127,7 +131,7 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
-	const currentUserId = $derived(get(currentUser)?.id ?? null)
+	const currentUserId = $derived(currentUser?.id ?? null)
 
 	const messageChildren = $derived.by(() => {
 		const map = new SvelteMap<string | null, string[]>()
@@ -167,12 +171,12 @@ export function createChatState() {
 		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null || runError
 	)
 
-	const agentNameById = $derived(new SvelteMap(get(agentsList).map((a) => [a.id, a.name])))
+	const agentNameById = $derived(new SvelteMap(agentsList.map((a) => [a.id, a.name])))
 	const agentAvatarById = $derived(
-		new SvelteMap(get(agentsList).map((a) => [a.id, a.profile_image_url ?? null]))
+		new SvelteMap(agentsList.map((a) => [a.id, a.profile_image_url ?? null]))
 	)
 	const selectedAgentName = $derived(
-		get(agentsList).find((a) => a.id === selectedAgent)?.name ?? 'assistant'
+		agentsList.find((a) => a.id === selectedAgent)?.name ?? 'assistant'
 	)
 
 	// ─────────────────────────────────────────────────────────────────────────────

@@ -19,9 +19,9 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { openModal } from '$lib/stores/modals'
-	import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent'
-	import { setActiveThread, setPendingChatStart, userDisplay } from '$lib/stores/session'
+	import { openModal } from '$lib/stores/modals.svelte'
+	import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent.svelte'
+	import { setActiveThread, setPendingChatStart, userDisplay } from '$lib/stores/session.svelte'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state('')
@@ -153,7 +153,7 @@
 
 	$effect(() => {
 		chrome.setAgentSelector({
-			selectedAgent: $selectedAgentId,
+			selectedAgent: selectedAgentId,
 			onAgentChange: (agentId: string) => setSelectedAgentId(agentId),
 		})
 	})
@@ -367,7 +367,7 @@
 					hi <span
 						class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 						style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
-						>{$userDisplay.name}</span
+						>{userDisplay.name}</span
 					>
 				</h1>
 				<p class="text-xl text-white/60">good afternoon</p>

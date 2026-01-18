@@ -3,8 +3,8 @@
 	import { resolve } from '$app/paths'
 	import { logoutV1 } from '$lib/api/v1/client'
 	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
-	import { openModal } from '$lib/stores/modals'
-	import { clearSession, isLoggedIn } from '$lib/stores/session'
+	import { openModal } from '$lib/stores/modals.svelte'
+	import { clearSession, isLoggedIn } from '$lib/stores/session.svelte'
 
 	interface UserProfilePanelProps {
 		user: {
@@ -89,7 +89,7 @@
 <div class="w-80 p-4">
 	<!-- User Info Section -->
 	<div class="flex items-center gap-3 p-3">
-		{#if $isLoggedIn && user}
+		{#if isLoggedIn && user}
 			{#if user.avatar}
 				<img
 					src={user.avatar}
@@ -140,7 +140,7 @@
 
 	<hr class="my-2 border-white/10" />
 
-	{#if $isLoggedIn}
+	{#if isLoggedIn}
 		<!-- Menu Items -->
 		<div class="flex flex-col gap-1">
 			{#each menuItems as item (item.id)}
@@ -167,7 +167,7 @@
 
 	<hr class="my-2 border-white/10" />
 
-	{#if $isLoggedIn}
+	{#if isLoggedIn}
 		<!-- Logout Button -->
 		<button
 			class="flex w-full items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
