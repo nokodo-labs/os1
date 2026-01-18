@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.core.database import get_db
 from api.models.user import User
+from api.settings import settings
 from api.v1.schemas.system import RuntimeConfigOut
 
 
@@ -25,6 +25,6 @@ async def get_system_status(db: AsyncSession = Depends(get_db)) -> dict[str, boo
 async def get_runtime_config() -> RuntimeConfigOut:
 	"""Return runtime configuration values safe for clients."""
 	return RuntimeConfigOut(
-		frontend_origin=settings.PUBLIC_FRONTEND_ORIGIN,
-		cdn_origin=settings.PUBLIC_CDN_ORIGIN,
+		frontend_origin=settings.branding.public_frontend_origin,
+		cdn_origin=settings.branding.public_cdn_origin,
 	)

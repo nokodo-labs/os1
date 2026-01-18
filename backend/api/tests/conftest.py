@@ -42,9 +42,9 @@ def _derive_test_database_template_url() -> URL:
 		try:
 			database_url = make_url(os.environ["DATABASE_URL"])
 		except KeyError:
-			from api.core.config import settings
+			from api.boot_settings import boot_settings
 
-			database_url = make_url(str(settings.DATABASE_URL))
+			database_url = make_url(boot_settings.DATABASE_URL)
 		if not database_url.database:
 			raise RuntimeError("DATABASE_URL must include a database name for tests")
 		template_url = database_url
@@ -680,9 +680,10 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
-	from api.core.config import settings
+	from api.boot_settings import boot_settings
 
-	settings.TESTING = True
+	previous_testing = boot_settings.TESTING
+	boot_settings.TESTING = True
 
 	from api.core.database import get_db
 	from api.main import app
@@ -702,6 +703,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 	app.dependency_overrides.clear()
 	v1_app.dependency_overrides.clear()
+	boot_settings.TESTING = previous_testing
 
 
 @pytest_asyncio.fixture(scope="function")

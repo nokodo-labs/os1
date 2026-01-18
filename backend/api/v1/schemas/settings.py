@@ -1,0 +1,151 @@
+"""settings API schemas.
+
+reads return the full Settings schema.
+
+updates accept a patch schema where all fields are optional and only writable
+fields are included.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from api.settings import Settings
+
+
+class UISettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	default_theme: str | None = Field(
+		default=None,
+		description="'light', 'dark', or 'system'",
+	)
+	sidebar_collapsed: bool | None = Field(default=None, description="collapse sidebar")
+
+
+class FeaturesSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enable_plugins: bool | None = Field(default=None, description="enable plugins")
+	enable_memories: bool | None = Field(default=None, description="enable memories")
+	enable_file_uploads: bool | None = Field(
+		default=None,
+		description="enable file uploads",
+	)
+	enable_web_search: bool | None = Field(
+		default=None,
+		description="enable web search",
+	)
+	enable_code_execution: bool | None = Field(
+		default=None,
+		description="enable code execution",
+	)
+
+
+class BrandingSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	site_name: str | None = Field(default=None, description="site name")
+	logo_url: str | None = Field(default=None, description="logo url")
+	favicon_url: str | None = Field(default=None, description="favicon url")
+	primary_color: str | None = Field(default=None, description="primary color hex")
+	public_frontend_origin: str | None = Field(
+		default=None,
+		description="public frontend origin",
+	)
+	public_cdn_origin: str | None = Field(
+		default=None,
+		description="public cdn origin",
+	)
+
+
+class LimitsSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	max_threads_per_user: int | None = Field(
+		default=None,
+		ge=1,
+		description="max threads per user",
+	)
+	max_messages_per_thread: int | None = Field(
+		default=None,
+		ge=1,
+		description="max messages per thread",
+	)
+	max_file_size_mb: int | None = Field(
+		default=None,
+		ge=1,
+		description="max file size mb",
+	)
+	rate_limit_requests_per_minute: int | None = Field(
+		default=None,
+		ge=1,
+		description="rate limit/min",
+	)
+
+
+class SecuritySettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	access_token_expire_minutes: int | None = Field(
+		default=None,
+		ge=1,
+		description="access token expire minutes",
+	)
+	refresh_token_expire_days: int | None = Field(
+		default=None,
+		ge=1,
+		description="refresh token expire days",
+	)
+	auth_cookie_secure: bool | None = Field(
+		default=None,
+		description="set secure cookies",
+	)
+
+	session_timeout_minutes: int | None = Field(
+		default=None,
+		ge=5,
+		description="session timeout",
+	)
+	require_email_verification: bool | None = Field(
+		default=None,
+		description="require email verification",
+	)
+	allowed_email_domains: list[str] | None = Field(
+		default=None,
+		description="allowed domains",
+	)
+
+
+class SettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	ui: UISettingsPatch | None = None
+	features: FeaturesSettingsPatch | None = None
+	branding: BrandingSettingsPatch | None = None
+	limits: LimitsSettingsPatch | None = None
+	security: SecuritySettingsPatch | None = None
+
+
+class SettingsVersions(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	ui: int = 0
+	features: int = 0
+	branding: int = 0
+	limits: int = 0
+	security: int = 0
+
+
+class SettingsUpdateRequest(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	data: SettingsPatch
+	expected_versions: SettingsVersions | None = None
+
+
+class SettingsResponse(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	versions: SettingsVersions
+	data: Settings

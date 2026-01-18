@@ -83,15 +83,15 @@ async def test_refresh_token_for_user_rejects_bad_sub_prefix(
 async def test_refresh_token_for_user_signals_clear_cookie_for_missing_user(
 	db_session: AsyncSession,
 ) -> None:
-	from api.core.config import settings
+	from api.settings import settings
 	from api.v1.service import auth as auth_service
 	from nokodo_ai.utils.security import create_jwt_token
 
 	missing_user_id = new_typeid("user")
 	refresh_token = create_jwt_token(
 		subject=missing_user_id,
-		secret_key=settings.SECRET_KEY,
-		algorithm=settings.ALGORITHM,
+		secret_key=settings.security.secret_key,
+		algorithm=settings.security.jwt_algorithm,
 		additional_claims={"typ": "refresh"},
 	)
 

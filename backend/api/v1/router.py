@@ -15,6 +15,7 @@ from api.v1.routers import (
 	projects,
 	prompts,
 	providers,
+	settings,
 	system,
 	tasks,
 	threads,
@@ -40,3 +41,4 @@ api_router.include_router(agents.router)
 api_router.include_router(prompts.router)
 api_router.include_router(openai.router)
 api_router.include_router(plugins.router)
+api_router.include_router(settings.router)
