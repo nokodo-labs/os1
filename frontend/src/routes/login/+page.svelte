@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { v1Client } from '$lib/api/v1/client'
-	import { refreshSession, setSessionToken } from '$lib/stores/session.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	let email = $state('')
 	let password = $state('')
@@ -55,8 +55,8 @@
 				throw new Error(response.statusText || 'failed to sign in')
 			}
 
-			setSessionToken(data.access_token)
-			void refreshSession()
+			session.setToken(data.access_token)
+			void session.refresh()
 			// @ts-expect-error resolve typing is narrower than our constructed URL
 			await goto(resolve(next as never))
 		} catch (err) {

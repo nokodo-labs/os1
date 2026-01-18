@@ -19,8 +19,8 @@
 	import { createThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device, initDevice } from '$lib/stores/device.svelte'
-	import { activeModal, closeModal } from '$lib/stores/modals.svelte'
-	import { startPreferencesSync } from '$lib/stores/preferences.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -76,7 +76,7 @@
 	const theme = createThemeContext()
 
 	$effect(() => {
-		return startPreferencesSync()
+		return preferences.startSync()
 	})
 
 	// DEV ONLY: Background switcher
@@ -351,15 +351,12 @@
 			</div>
 
 			<SettingsModal
-				open={activeModal === 'settings'}
-				onClose={() => closeModal()}
+				open={modals.isOpen('settings')}
+				onClose={modals.close}
 				{theme}
 				bind:currentBackground
 			/>
-			<ArchivedChatsModal
-				open={activeModal === 'archived-chats'}
-				onClose={() => closeModal()}
-			/>
+			<ArchivedChatsModal open={modals.isOpen('archived-chats')} onClose={modals.close} />
 		</div>
 	{/if}
 </BackgroundManager>

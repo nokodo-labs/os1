@@ -19,9 +19,9 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { openModal } from '$lib/stores/modals.svelte'
-	import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent.svelte'
-	import { setActiveThread, setPendingChatStart, userDisplay } from '$lib/stores/session.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
+	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state('')
@@ -153,8 +153,8 @@
 
 	$effect(() => {
 		chrome.setAgentSelector({
-			selectedAgent: selectedAgentId,
-			onAgentChange: (agentId: string) => setSelectedAgentId(agentId),
+			selectedAgent: selectedAgent.id,
+			onAgentChange: (agentId: string) => selectedAgent.set(agentId),
 		})
 	})
 
@@ -202,8 +202,8 @@
 			inputValue = content
 			return
 		}
-		setActiveThread(data)
-		setPendingChatStart({ threadId: data.id, content })
+		session.activeThread = data
+		session.pendingChatStart = { threadId: data.id, content }
 		await navigateToChat(data.id)
 	}
 
@@ -227,12 +227,12 @@
 		isSuggestionNavigationActive = false
 		if (suggestion.id === 'settings') {
 			inputValue = ''
-			openModal('settings')
+			modals.open('settings')
 			return
 		}
 		if (suggestion.id === 'archived-chats') {
 			inputValue = ''
-			openModal('archived-chats')
+			modals.open('archived-chats')
 			return
 		}
 		if (suggestion.id === 'dock') {
@@ -367,7 +367,7 @@
 					hi <span
 						class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 						style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
-						>{userDisplay.name}</span
+						>{session.userDisplay.name}</span
 					>
 				</h1>
 				<p class="text-xl text-white/60">good afternoon</p>

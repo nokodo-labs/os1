@@ -3,7 +3,7 @@
 	import DebugMenu from '$lib/components/debug/DebugMenu.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import type { createThemeContext } from '$lib/contexts/themeContext.svelte'
-	import { currentUser } from '$lib/stores/session.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	type ThemeContext = ReturnType<typeof createThemeContext>
 
@@ -16,7 +16,7 @@
 
 	let { open, onClose, theme, currentBackground = $bindable() }: SettingsModalProps = $props()
 
-	let showAdminDebug = $derived(Boolean(currentUser?.is_superuser))
+	let showAdminDebug = $derived(Boolean(session.currentUser?.is_superuser))
 </script>
 
 <BaseModal

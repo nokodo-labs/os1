@@ -1,11 +1,10 @@
 export type ModalId = 'settings' | 'archived-chats'
 
-export let activeModal = $state<ModalId | null>(null)
-
-export function openModal(modal: ModalId) {
-	activeModal = modal
+class ModalStore {
+	active = $state<ModalId | null>(null)
+	isOpen = (id: ModalId) => this.active === id
+	open = (id: ModalId) => (this.active = id)
+	close = () => (this.active = null)
 }
 
-export function closeModal() {
-	activeModal = null
-}
+export const modals = new ModalStore()

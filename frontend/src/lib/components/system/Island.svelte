@@ -11,9 +11,9 @@
 	import UserProfileTrigger from '$lib/components/system/UserProfileTrigger.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { agentsList, loadAgents } from '$lib/stores/agents.svelte'
+	import { agents } from '$lib/stores/agents.svelte'
 	import { device } from '$lib/stores/device.svelte'
-	import { activeThread, refreshSession, userDisplay } from '$lib/stores/session.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
 
 	type SidebarContext = {
@@ -29,7 +29,7 @@
 
 	$effect(() => {
 		if (!browser) return
-		void refreshSession()
+		void session.refresh()
 	})
 
 	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
@@ -40,27 +40,27 @@
 	let isAgentDropdownOpen = $state(false)
 
 	let currentAgent = $derived(
-		agentsList.length === 0
+		agents.list.length === 0
 			? null
-			: agentsList.find((a) => a.id === chrome.island.agentSelector?.selectedAgent) ||
-					agentsList[0]
+			: agents.list.find((a) => a.id === chrome.island.agentSelector?.selectedAgent) ||
+					agents.list[0]
 	)
 
 	$effect(() => {
 		if (didLoadAgents) return
 		didLoadAgents = true
-		void loadAgents()
+		void agents.load()
 	})
 
 	$effect(() => {
 		if (didAutoSelectAgent) return
 		if (!chrome.island.agentSelector) return
-		if (agentsList.length === 0) return
+		if (agents.list.length === 0) return
 		const selected = chrome.island.agentSelector.selectedAgent
-		const hasSelected = selected && agentsList.some((a) => a.id === selected)
+		const hasSelected = selected && agents.list.some((a) => a.id === selected)
 		if (!hasSelected) {
 			didAutoSelectAgent = true
-			chrome.island.agentSelector.onAgentChange(agentsList[0].id)
+			chrome.island.agentSelector.onAgentChange(agents.list[0].id)
 		}
 	})
 
@@ -72,7 +72,7 @@
 	}
 
 	function toggleAgentDropdown() {
-		if (agentsList.length === 0) return
+		if (agents.list.length === 0) return
 		isAgentDropdownOpen = !isAgentDropdownOpen
 	}
 
@@ -109,7 +109,7 @@
 	}
 
 	const isTemporaryChatActive = $derived(
-		chatParam === 'temp' || (activeThread?.is_temporary ?? false)
+		chatParam === 'temp' || (session.activeThread?.is_temporary ?? false)
 	)
 	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null)
 
@@ -176,7 +176,7 @@
 								style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
 							>
 								<ul class="m-0 list-none p-0" role="listbox">
-									{#each agentsList as agent (agent.id)}
+									{#each agents.list as agent (agent.id)}
 										<li
 											role="option"
 											aria-selected={agent.id ===
@@ -269,7 +269,11 @@
 					<AppNotification className="h-6 w-6" />
 				</button>
 
-				<UserProfileTrigger user={userDisplay} placement="header" isExpanded={false} />
+				<UserProfileTrigger
+					user={session.userDisplay}
+					placement="header"
+					isExpanded={false}
+				/>
 			</div>
 		</div>
 	</header>

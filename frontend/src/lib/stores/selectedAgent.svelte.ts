@@ -2,7 +2,7 @@ import { browser } from '$app/environment'
 
 const STORAGE_KEY = 'selected-agent-id'
 
-function readStoredSelectedAgentId(): string {
+function readStored(): string {
 	if (!browser) return ''
 	try {
 		const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -12,22 +12,21 @@ function readStoredSelectedAgentId(): string {
 	}
 }
 
-export let selectedAgentId = $state<string>(readStoredSelectedAgentId())
+class SelectedAgentStore {
+	id = $state<string>(readStored())
 
-$effect(() => {
-	if (!browser) return
-	try {
-		if (selectedAgentId) window.localStorage.setItem(STORAGE_KEY, selectedAgentId)
-		else window.localStorage.removeItem(STORAGE_KEY)
-	} catch {
-		void 0
+	set = (agentId: string) => {
+		this.id = agentId
+		if (!browser) return
+		try {
+			if (agentId) window.localStorage.setItem(STORAGE_KEY, agentId)
+			else window.localStorage.removeItem(STORAGE_KEY)
+		} catch {
+			// ignore
+		}
 	}
-})
 
-export function setSelectedAgentId(agentId: string): void {
-	selectedAgentId = agentId
+	clear = () => this.set('')
 }
 
-export function getSelectedAgentId(): string {
-	return selectedAgentId
-}
+export const selectedAgent = new SelectedAgentStore()

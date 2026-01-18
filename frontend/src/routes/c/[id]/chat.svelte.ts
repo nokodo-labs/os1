@@ -6,9 +6,9 @@
 import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
-import { agentsList } from '$lib/stores/agents.svelte'
-import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent.svelte'
-import { currentUser, setActiveThread, type Thread } from '$lib/stores/session.svelte'
+import { agents } from '$lib/stores/agents.svelte'
+import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
+import { session, type Thread } from '$lib/stores/session.svelte'
 import {
 	cacheMessages,
 	cacheThread,
@@ -70,18 +70,12 @@ export function createChatState() {
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
-	let selectedAgent = $state(selectedAgentId)
 	let optimisticUserMessage = $state<{ content: string; timestamp: Date } | null>(null)
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
 	let runError = $state(false)
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
-
-	$effect(() => {
-		const id = selectedAgentId
-		if (selectedAgent !== id) selectedAgent = id
-	})
 
 	// Thread state
 	let thread = $state<Thread | null>(null)
@@ -131,7 +125,7 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
-	const currentUserId = $derived(currentUser?.id ?? null)
+	const currentUserId = $derived(session.currentUser?.id ?? null)
 
 	const messageChildren = $derived.by(() => {
 		const map = new SvelteMap<string | null, string[]>()
@@ -171,12 +165,12 @@ export function createChatState() {
 		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null || runError
 	)
 
-	const agentNameById = $derived(new SvelteMap(agentsList.map((a) => [a.id, a.name])))
+	const agentNameById = $derived(new SvelteMap(agents.list.map((a) => [a.id, a.name])))
 	const agentAvatarById = $derived(
-		new SvelteMap(agentsList.map((a) => [a.id, a.profile_image_url ?? null]))
+		new SvelteMap(agents.list.map((a) => [a.id, a.profile_image_url ?? null]))
 	)
 	const selectedAgentName = $derived(
-		agentsList.find((a) => a.id === selectedAgent)?.name ?? 'assistant'
+		agents.list.find((a) => a.id === selectedAgent.id)?.name ?? 'assistant'
 	)
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -528,7 +522,7 @@ export function createChatState() {
 			if (threadError) {
 				console.error('failed to load thread', threadError)
 				thread = null
-				setActiveThread(null)
+				session.activeThread = null
 				toolTracker.clear()
 				messageTree.clear()
 				currentLeafId = null
@@ -537,7 +531,7 @@ export function createChatState() {
 			}
 			if (!data) {
 				thread = null
-				setActiveThread(null)
+				session.activeThread = null
 				toolTracker.clear()
 				messageTree.clear()
 				currentLeafId = null
@@ -563,7 +557,7 @@ export function createChatState() {
 		}
 
 		thread = threadData
-		setActiveThread(threadData)
+		session.activeThread = threadData
 
 		toolTracker.clear()
 		messageTree.clear()
@@ -690,7 +684,7 @@ export function createChatState() {
 								messageId,
 								content: '',
 								timestamp: new SvelteDate(),
-								senderAgentId: selectedAgent,
+								senderAgentId: selectedAgent.id,
 								toolCalls: [],
 							}
 						}
@@ -787,7 +781,7 @@ export function createChatState() {
 			messageId: `pending-${activeRun + 1}`,
 			content: '',
 			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent,
+			senderAgentId: selectedAgent.id,
 			toolCalls: [],
 		}
 		const runId = ++activeRun
@@ -800,7 +794,7 @@ export function createChatState() {
 		try {
 			await runThreadStream({
 				threadId: thread.id,
-				agentId: selectedAgent,
+				agentId: selectedAgent.id,
 				input: runBaseMessage,
 				runId,
 			})
@@ -821,7 +815,7 @@ export function createChatState() {
 
 	async function handleRegenerateMessage(parentId: string | null = null) {
 		if (!thread) return
-		if (!selectedAgent) return
+		if (!selectedAgent.id) return
 		runError = false
 		isGenerating = true
 
@@ -831,7 +825,7 @@ export function createChatState() {
 			messageId: `pending-${activeRun + 1}`,
 			content: '',
 			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent,
+			senderAgentId: selectedAgent.id,
 			toolCalls: [],
 		}
 		const runId = ++activeRun
@@ -840,7 +834,7 @@ export function createChatState() {
 		try {
 			await runThreadStream({
 				threadId: thread.id,
-				agentId: selectedAgent,
+				agentId: selectedAgent.id,
 				input: optimisticUserMessage ? lastRunInput : null,
 				runId,
 				parentId,
@@ -966,12 +960,12 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	function setThread(t: Thread | null) {
 		thread = t
-		setActiveThread(t)
+		session.activeThread = t
 	}
 
 	function clearThread() {
 		thread = null
-		setActiveThread(null)
+		session.activeThread = null
 		messageTree.clear()
 		currentLeafId = null
 		isThreadLoading = false
@@ -1019,11 +1013,10 @@ export function createChatState() {
 			return isGenerating
 		},
 		get selectedAgent() {
-			return selectedAgent
+			return selectedAgent.id
 		},
 		set selectedAgent(v: string) {
-			selectedAgent = v
-			setSelectedAgentId(v)
+			selectedAgent.set(v)
 		},
 		get optimisticUserMessage() {
 			return optimisticUserMessage
