@@ -1,6 +1,6 @@
 import { browser } from '$app/environment'
 import { v1Client } from '$lib/api/v1/client'
-import { currentUser, setCurrentUser, updateCurrentUser } from '$lib/stores/session.svelte'
+import { session } from '$lib/stores/session.svelte'
 
 export type JsonValue =
 	| string
@@ -37,7 +37,7 @@ function normalizePreferences(value: unknown): Preferences {
 	return out
 }
 
-function readStoredPreferences(userId: string): Preferences {
+function readStored(userId: string): Preferences {
 	if (!browser) return {}
 	try {
 		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${userId}`)
@@ -48,7 +48,7 @@ function readStoredPreferences(userId: string): Preferences {
 	}
 }
 
-function writeStoredPreferences(userId: string, prefs: Preferences): void {
+function writeStored(userId: string, prefs: Preferences): void {
 	if (!browser) return
 	try {
 		window.localStorage.setItem(`${STORAGE_PREFIX}${userId}`, JSON.stringify(prefs))
@@ -57,103 +57,97 @@ function writeStoredPreferences(userId: string, prefs: Preferences): void {
 	}
 }
 
-export let preferences = $state<Preferences>({})
-export let preferencesLoading = $state(false)
-export let preferencesError = $state<string | null>(null)
+class PreferencesStore {
+	data = $state<Preferences>({})
+	loading = $state(false)
+	error = $state<string | null>(null)
 
-let lastUserId: string | null = null
-let didHydrateFromStorage = false
+	#lastUserId: string | null = null
 
-let preferencesSyncEnabled = $state(false)
-
-$effect(() => {
-	if (!preferencesSyncEnabled) return
-	const user = currentUser
-	const userId = user?.id ?? null
-	if (!userId) {
-		lastUserId = null
-		didHydrateFromStorage = false
-		preferences = {}
-		preferencesLoading = false
-		preferencesError = null
-		return
+	startSync = (): (() => void) => {
+		// Hydrate on start and whenever user changes
+		const user = session.currentUser
+		if (user && this.#lastUserId !== user.id) {
+			this.#lastUserId = user.id
+			this.data = readStored(user.id)
+			void this.refresh()
+		} else if (!user) {
+			this.#lastUserId = null
+			this.data = {}
+			this.loading = false
+			this.error = null
+		}
+		return () => {
+			// cleanup if needed
+		}
 	}
 
-	if (lastUserId !== userId) {
-		lastUserId = userId
-		didHydrateFromStorage = false
+	refresh = async (): Promise<void> => {
+		const user = session.currentUser
+		if (!user) return
+		this.loading = true
+		this.error = null
+		try {
+			const { data, error } = await v1Client().GET('/users/{user_id}', {
+				params: { path: { user_id: user.id } },
+			})
+			if (error || !data) {
+				this.error = 'could not load preferences'
+				return
+			}
+			const next = normalizePreferences(data.preferences)
+			this.data = next
+			session.currentUser = { ...data }
+			writeStored(user.id, next)
+		} finally {
+			this.loading = false
+		}
 	}
 
-	if (!didHydrateFromStorage) {
-		didHydrateFromStorage = true
-		preferences = readStoredPreferences(userId)
-		void refreshPreferences()
-		return
-	}
+	save = async (next: Preferences): Promise<boolean> => {
+		const user = session.currentUser
+		if (!user) return false
+		this.error = null
+		this.data = next
+		writeStored(user.id, next)
+		session.currentUser = user ? { ...user, preferences: next } : null
 
-	if (user?.preferences) {
-		const next = normalizePreferences(user.preferences)
-		preferences = next
-		writeStoredPreferences(userId, next)
-	}
-})
-
-export function startPreferencesSync(): () => void {
-	preferencesSyncEnabled = true
-	return () => {
-		preferencesSyncEnabled = false
-	}
-}
-
-export async function refreshPreferences(): Promise<void> {
-	const user = currentUser
-	if (!user) return
-	preferencesLoading = true
-	preferencesError = null
-	try {
-		const { data, error } = await v1Client().GET('/users/{user_id}', {
+		const { data, error } = await v1Client().PATCH('/users/{user_id}', {
 			params: { path: { user_id: user.id } },
+			body: { preferences: next },
 		})
+
 		if (error || !data) {
-			preferencesError = 'could not load preferences'
+			this.error = 'could not save preferences'
+			return false
+		}
+
+		const normalized = normalizePreferences(data.preferences)
+		this.data = normalized
+		session.currentUser = { ...data, preferences: normalized }
+		writeStored(user.id, normalized)
+		return true
+	}
+
+	set = async (key: string, value: JsonValue): Promise<boolean> => {
+		const next = { ...this.data, [key]: value }
+		return await this.save(next)
+	}
+
+	hydrateFromUser = (user: { id: string; preferences?: unknown } | null): void => {
+		if (!user) {
+			this.data = {}
+			this.loading = false
+			this.error = null
 			return
 		}
-		const next = normalizePreferences(data.preferences)
-		preferences = next
-		setCurrentUser({ ...data })
-		writeStoredPreferences(user.id, next)
-	} finally {
-		preferencesLoading = false
+		this.data = readStored(user.id)
+		if (user.preferences) {
+			const next = normalizePreferences(user.preferences)
+			this.data = next
+			writeStored(user.id, next)
+		}
 	}
 }
 
-export async function savePreferences(next: Preferences): Promise<boolean> {
-	const user = currentUser
-	if (!user) return false
-	preferencesError = null
-	preferences = next
-	writeStoredPreferences(user.id, next)
-	updateCurrentUser((u) => (u ? { ...u, preferences: next } : u))
-
-	const { data, error } = await v1Client().PATCH('/users/{user_id}', {
-		params: { path: { user_id: user.id } },
-		body: { preferences: next },
-	})
-
-	if (error || !data) {
-		preferencesError = 'could not save preferences'
-		return false
-	}
-
-	const normalized = normalizePreferences(data.preferences)
-	preferences = normalized
-	setCurrentUser({ ...data, preferences: normalized })
-	writeStoredPreferences(user.id, normalized)
-	return true
-}
-
-export async function setPreference(key: string, value: JsonValue): Promise<boolean> {
-	const current = preferences
-	const next = { ...current, [key]: value }
-	return await savePreferences(next)
-}
+export const preferences = new PreferencesStore()
