@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { v1Client } from '$lib/api/v1/client'
-	import { refreshSession, setSessionToken } from '$lib/stores/session'
+	import { refreshSession, setSessionToken } from '$lib/stores/session.svelte'
 
 	let email = $state('')
 	let password = $state('')

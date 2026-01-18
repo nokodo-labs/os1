@@ -1,18 +1,16 @@
-import { get, writable } from 'svelte/store'
-
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
 
 export type Agent = components['schemas']['Agent']
 
-export const agentsList = writable<Agent[]>([])
-export const agentsById = writable<Record<string, Agent>>({})
+export let agentsList = $state<Agent[]>([])
+export let agentsById = $state<Record<string, Agent>>({})
 
 let isLoadingAgents = false
 const pendingAgentIds: string[] = []
 
 export function getAgentFromCache(agentId: string): Agent | null {
-	const byId = get(agentsById)
+	const byId = agentsById
 	return byId[agentId] ?? null
 }
 
@@ -23,8 +21,8 @@ export async function loadAgents(): Promise<void> {
 		const { data, error } = await v1Client().GET('/agents')
 		if (error || !data) return
 
-		agentsList.set(data)
-		agentsById.set(Object.fromEntries(data.map((a) => [a.id, a])))
+		agentsList = data
+		agentsById = Object.fromEntries(data.map((a) => [a.id, a]))
 	} finally {
 		isLoadingAgents = false
 	}
@@ -43,7 +41,7 @@ export async function ensureAgent(agentId: string): Promise<Agent | null> {
 		})
 		if (error || !data) return null
 
-		agentsById.update((current) => ({ ...current, [agentId]: data }))
+		agentsById = { ...agentsById, [agentId]: data }
 		return data
 	} finally {
 		const idx = pendingAgentIds.indexOf(agentId)
@@ -52,6 +50,13 @@ export async function ensureAgent(agentId: string): Promise<Agent | null> {
 }
 
 export async function ensureAgents(agentIds: string[]): Promise<void> {
-	const unique = Array.from(new Set(agentIds.filter(Boolean)))
+	const seen: Record<string, true> = {}
+	const unique: string[] = []
+	for (const id of agentIds) {
+		if (!id) continue
+		if (seen[id]) continue
+		seen[id] = true
+		unique.push(id)
+	}
 	await Promise.all(unique.map((id) => ensureAgent(id)))
 }

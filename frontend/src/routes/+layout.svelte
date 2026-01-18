@@ -19,8 +19,8 @@
 	import { createThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device, initDevice } from '$lib/stores/device.svelte'
-	import { activeModal, closeModal } from '$lib/stores/modals'
-	import { startPreferencesSync } from '$lib/stores/preferences'
+	import { activeModal, closeModal } from '$lib/stores/modals.svelte'
+	import { startPreferencesSync } from '$lib/stores/preferences.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -351,13 +351,13 @@
 			</div>
 
 			<SettingsModal
-				open={$activeModal === 'settings'}
+				open={activeModal === 'settings'}
 				onClose={() => closeModal()}
 				{theme}
 				bind:currentBackground
 			/>
 			<ArchivedChatsModal
-				open={$activeModal === 'archived-chats'}
+				open={activeModal === 'archived-chats'}
 				onClose={() => closeModal()}
 			/>
 		</div>

@@ -3,27 +3,20 @@
  * Manages notification state, integrates with event stream for real-time updates.
  */
 
-import { derived, get, writable } from 'svelte/store'
-
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { v1Client } from '$lib/api/v1/client'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken } from '$lib/auth/session'
+import { SvelteDate, SvelteSet } from 'svelte/reactivity'
 
 export type Notification = components['schemas']['Notification']
 export type Event = components['schemas']['Event']
 
-// event types that generate notifications
 const NOTIFICATION_EVENT_TYPES = ['notification.custom', 'notification.agent']
-
-// event types related to threads
 const THREAD_EVENT_TYPES = ['thread.created', 'thread.updated', 'thread.deleted']
-
-// all event types related to messages
 const MESSAGE_EVENT_TYPES = ['message.created', 'message.updated', 'message.deleted']
 
-// typing indicators
 const TYPING_EVENT_TYPES = [
 	'typing.user.start',
 	'typing.user.stop',
@@ -31,20 +24,14 @@ const TYPING_EVENT_TYPES = [
 	'typing.agent.stop',
 ]
 
-export const notifications = writable<Notification[]>([])
-export const isLoadingNotifications = writable(false)
-export const notificationError = writable<string | null>(null)
+export let notifications = $state<Notification[]>([])
+export let isLoadingNotifications = $state(false)
+export let notificationError = $state<string | null>(null)
 
-export const unreadCount = derived(
-	notifications,
-	($notifications) => $notifications.filter((n) => !n.read_at).length
-)
+export const unreadCount = $derived.by(() => notifications.filter((n) => !n.read_at).length)
 
-export const unreadNotifications = derived(notifications, ($notifications) =>
-	$notifications.filter((n) => !n.read_at)
-)
+export const unreadNotifications = $derived.by(() => notifications.filter((n) => !n.read_at))
 
-// typing indicators state
 export interface TypingIndicator {
 	threadId: string
 	userId?: string
@@ -53,16 +40,15 @@ export interface TypingIndicator {
 	startedAt: number
 }
 
-export const typingIndicators = writable<TypingIndicator[]>([])
+export let typingIndicators = $state<TypingIndicator[]>([])
 
-// event handlers registry for components to subscribe
 type ThreadEventHandler = (event: StreamMessage) => void
 type MessageEventHandler = (event: StreamMessage) => void
 type NotificationEventHandler = (event: StreamMessage) => void
 
-const threadEventHandlers = new Set<ThreadEventHandler>()
-const messageEventHandlers = new Set<MessageEventHandler>()
-const notificationEventHandlers = new Set<NotificationEventHandler>()
+const threadEventHandlers = new SvelteSet<ThreadEventHandler>()
+const messageEventHandlers = new SvelteSet<MessageEventHandler>()
+const notificationEventHandlers = new SvelteSet<NotificationEventHandler>()
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -92,53 +78,48 @@ export function onNotificationEvent(handler: NotificationEventHandler): () => vo
 function handleStreamEvent(message: StreamMessage): void {
 	const eventType = message.type
 
-	// handle notification events
 	if (NOTIFICATION_EVENT_TYPES.includes(eventType)) {
-		// notifications are persisted records; refresh to get real ids/state
 		scheduleNotificationsRefresh()
-
-		// notify handlers
-		notificationEventHandlers.forEach((h) => h(message))
+		for (const handler of notificationEventHandlers) handler(message)
 	}
 
-	// handle thread events
 	if (THREAD_EVENT_TYPES.includes(eventType)) {
-		threadEventHandlers.forEach((h) => h(message))
+		for (const handler of threadEventHandlers) handler(message)
 	}
 
-	// handle message events
 	if (MESSAGE_EVENT_TYPES.includes(eventType)) {
-		messageEventHandlers.forEach((h) => h(message))
+		for (const handler of messageEventHandlers) handler(message)
 	}
 
-	// handle typing indicators
 	if (TYPING_EVENT_TYPES.includes(eventType)) {
 		const data = message.data as Record<string, unknown> | undefined
 		const threadId = (message.thread_id as string) || (data?.thread_id as string) || ''
 
 		if (eventType === 'typing.user.start') {
 			const userId = (data?.user_id as string) || ''
-			typingIndicators.update((list) => {
+			typingIndicators = (() => {
+				const list = typingIndicators
 				const existing = list.find((t) => t.threadId === threadId && t.userId === userId)
 				if (existing) return list
 				return [...list, { threadId, userId, isAgent: false, startedAt: Date.now() }]
-			})
+			})()
 		} else if (eventType === 'typing.user.stop') {
 			const userId = (data?.user_id as string) || ''
-			typingIndicators.update((list) =>
-				list.filter((t) => !(t.threadId === threadId && t.userId === userId))
+			typingIndicators = typingIndicators.filter(
+				(t) => !(t.threadId === threadId && t.userId === userId)
 			)
 		} else if (eventType === 'typing.agent.start') {
 			const agentId = (data?.agent_id as string) || ''
-			typingIndicators.update((list) => {
+			typingIndicators = (() => {
+				const list = typingIndicators
 				const existing = list.find((t) => t.threadId === threadId && t.agentId === agentId)
 				if (existing) return list
 				return [...list, { threadId, agentId, isAgent: true, startedAt: Date.now() }]
-			})
+			})()
 		} else if (eventType === 'typing.agent.stop') {
 			const agentId = (data?.agent_id as string) || ''
-			typingIndicators.update((list) =>
-				list.filter((t) => !(t.threadId === threadId && t.agentId === agentId))
+			typingIndicators = typingIndicators.filter(
+				(t) => !(t.threadId === threadId && t.agentId === agentId)
 			)
 		}
 	}
@@ -147,12 +128,9 @@ function handleStreamEvent(message: StreamMessage): void {
 let eventStreamUnsubscribe: (() => void) | null = null
 
 export function initNotifications(): void {
-	// subscribe to event stream
 	if (!eventStreamUnsubscribe) {
 		eventStreamUnsubscribe = eventStreamClient.subscribe(handleStreamEvent)
 	}
-
-	// fetch existing notifications
 	void refreshNotifications()
 }
 
@@ -161,25 +139,25 @@ export function cleanupNotifications(): void {
 		eventStreamUnsubscribe()
 		eventStreamUnsubscribe = null
 	}
-	notifications.set([])
-	typingIndicators.set([])
+	notifications = []
+	typingIndicators = []
 }
 
 export async function refreshNotifications(): Promise<void> {
 	const token = getAccessToken()
 	if (!token) {
-		notifications.set([])
+		notifications = []
 		return
 	}
 
 	const userId = getJwtUserId(token)
 	if (!userId) {
-		notifications.set([])
+		notifications = []
 		return
 	}
 
-	isLoadingNotifications.set(true)
-	notificationError.set(null)
+	isLoadingNotifications = true
+	notificationError = null
 
 	try {
 		const { data, error } = await v1Client().GET('/notifications/users/{user_id}', {
@@ -190,22 +168,21 @@ export async function refreshNotifications(): Promise<void> {
 		})
 
 		if (error) {
-			notificationError.set('failed to load notifications')
+			notificationError = 'failed to load notifications'
 			return
 		}
 
-		notifications.set(data ?? [])
+		notifications = data ?? []
 	} catch {
-		notificationError.set('failed to load notifications')
+		notificationError = 'failed to load notifications'
 	} finally {
-		isLoadingNotifications.set(false)
+		isLoadingNotifications = false
 	}
 }
 
 export async function markNotificationRead(notificationId: string): Promise<void> {
-	// optimistic update
-	notifications.update((list) =>
-		list.map((n) => (n.id === notificationId ? { ...n, read_at: new Date().toISOString() } : n))
+	notifications = notifications.map((n) =>
+		n.id === notificationId ? { ...n, read_at: new SvelteDate().toISOString() } : n
 	)
 
 	try {
@@ -213,19 +190,19 @@ export async function markNotificationRead(notificationId: string): Promise<void
 			params: { path: { notification_id: notificationId } },
 		})
 	} catch {
-		// revert on error
 		await refreshNotifications()
 	}
 }
 
 export async function dismissNotification(notificationId: string): Promise<void> {
-	// optimistic update
-	notifications.update((list) =>
-		list.map((n) =>
-			n.id === notificationId
-				? { ...n, dismissed: true, read_at: n.read_at ?? new Date().toISOString() }
-				: n
-		)
+	notifications = notifications.map((n) =>
+		n.id === notificationId
+			? {
+					...n,
+					dismissed: true,
+					read_at: n.read_at ?? new SvelteDate().toISOString(),
+				}
+			: n
 	)
 
 	try {
@@ -233,7 +210,6 @@ export async function dismissNotification(notificationId: string): Promise<void>
 			params: { path: { notification_id: notificationId } },
 		})
 	} catch {
-		// revert on error
 		await refreshNotifications()
 	}
 }
@@ -245,14 +221,11 @@ export async function markAllNotificationsRead(): Promise<void> {
 	const userId = getJwtUserId(token)
 	if (!userId) return
 
-	// optimistic update
-	const now = new Date().toISOString()
-	notifications.update((list) => list.map((n) => ({ ...n, read_at: n.read_at ?? now })))
+	const now = new SvelteDate().toISOString()
+	notifications = notifications.map((n) => ({ ...n, read_at: n.read_at ?? now }))
 
 	try {
-		// TODO: use /notifications/users/{user_id}/read-all when API types are regenerated
-		// for now we mark each individually (will be replaced once types are updated)
-		const currentNotifications = get(notifications)
+		const currentNotifications = notifications
 		const unread = currentNotifications.filter((n) => !n.read_at)
 		await Promise.all(
 			unread.slice(0, 10).map((n) =>
@@ -262,27 +235,22 @@ export async function markAllNotificationsRead(): Promise<void> {
 			)
 		)
 	} catch {
-		// revert on error
 		await refreshNotifications()
 	}
 }
 
 export async function deleteNotification(notificationId: string): Promise<void> {
-	// use dismiss instead of delete (until API types are regenerated)
-	// optimistic update - remove from local list
-	notifications.update((list) => list.filter((n) => n.id !== notificationId))
+	notifications = notifications.filter((n) => n.id !== notificationId)
 
 	try {
 		await v1Client().POST('/notifications/{notification_id}/dismiss', {
 			params: { path: { notification_id: notificationId } },
 		})
 	} catch {
-		// revert on error
 		await refreshNotifications()
 	}
 }
 
-// helper to get thread typing indicators
 export function getThreadTypingIndicators(threadId: string): TypingIndicator[] {
-	return get(typingIndicators).filter((t) => t.threadId === threadId)
+	return typingIndicators.filter((t) => t.threadId === threadId)
 }

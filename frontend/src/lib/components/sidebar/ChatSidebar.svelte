@@ -12,9 +12,15 @@
 	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
-	import { openModal } from '$lib/stores/modals'
-	import { onThreadEvent } from '$lib/stores/notifications'
-	import { isLoggedIn, recentThreads, refreshThreads, type Thread } from '$lib/stores/session'
+	import { openModal } from '$lib/stores/modals.svelte'
+	import { onThreadEvent } from '$lib/stores/notifications.svelte'
+	import {
+		isLoggedIn,
+		recentThreads,
+		refreshThreads,
+		updateRecentThreads,
+		type Thread,
+	} from '$lib/stores/session.svelte'
 	import {
 		invalidateAll as invalidateThreadCache,
 		prefetchThread,
@@ -127,7 +133,7 @@
 			invalidateThreadCache(threadId)
 
 			// remove from list
-			recentThreads.update((threads) => threads.filter((t) => t.id !== threadId))
+			updateRecentThreads((threads) => threads.filter((t) => t.id !== threadId))
 
 			// if we're viewing this thread, navigate away
 			if (page.url.pathname === `/c/${threadId}`) {
@@ -145,7 +151,7 @@
 			const rawTags =
 				(Array.isArray(patch?.tags) ? patch.tags : null) ??
 				(Array.isArray(data?.tags) ? data.tags : null)
-			recentThreads.update((threads) => {
+			updateRecentThreads((threads) => {
 				const idx = threads.findIndex((t) => t.id === threadId)
 				if (idx === -1) return threads
 
@@ -214,7 +220,7 @@
 	]
 
 	$effect(() => {
-		if ($isLoggedIn) void refreshThreads({ limit: 25 })
+		if (isLoggedIn) void refreshThreads({ limit: 25 })
 	})
 
 	function toggleThreadMenu(threadId: string) {
@@ -251,7 +257,7 @@
 			if (!updated) return
 
 			invalidateThreadCache(threadId)
-			recentThreads.update((threads) => {
+			updateRecentThreads((threads) => {
 				const idx = threads.findIndex((t) => t.id === threadId)
 				if (idx === -1) return threads
 				const current = threads[idx]
@@ -275,7 +281,7 @@
 
 	let routeChatIsInSidebar = $derived.by((): boolean => {
 		if (!routeChatId) return false
-		return $recentThreads.some((t) => t.id === routeChatId)
+		return recentThreads.some((t) => t.id === routeChatId)
 	})
 
 	// Keep selection synced with the current route.
@@ -418,8 +424,8 @@
 		{#if renderExpandedContent}
 			<ChatSidebarChatsSection
 				{expandedContentVisible}
-				isLoggedIn={$isLoggedIn}
-				threads={$recentThreads}
+				{isLoggedIn}
+				threads={recentThreads}
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
 				{generatingMetadataThreadId}

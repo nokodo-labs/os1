@@ -15,8 +15,8 @@
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { agentsList, loadAgents } from '$lib/stores/agents'
-	import { consumePendingChatStart, pendingChatStart } from '$lib/stores/session'
+	import { agentsList, loadAgents } from '$lib/stores/agents.svelte'
+	import { consumePendingChatStart, pendingChatStart } from '$lib/stores/session.svelte'
 	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
@@ -41,8 +41,8 @@
 
 	$effect(() => {
 		if (chat.selectedAgent !== '') return
-		if ($agentsList.length === 0) return
-		chat.selectedAgent = $agentsList[0].id
+		if (agentsList.length === 0) return
+		chat.selectedAgent = agentsList[0].id
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.thread) return
-		const pending = $pendingChatStart
+		const pending = pendingChatStart
 		if (!pending || pending.threadId !== chat.thread.id) return
 		if (chat.messages.length !== 0) {
 			consumePendingChatStart(chat.thread.id)

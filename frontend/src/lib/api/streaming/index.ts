@@ -18,4 +18,4 @@ export {
 	eventStreamClient,
 	type StreamEvent,
 	type StreamMessage,
-} from './eventStream'
+} from './eventStream.svelte'

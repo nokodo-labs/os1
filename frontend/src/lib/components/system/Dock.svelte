@@ -3,7 +3,7 @@
 
 	import Notification from '$lib/components/system/Notification.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { agentsById, ensureAgents } from '$lib/stores/agents'
+	import { agentsById, ensureAgents } from '$lib/stores/agents.svelte'
 	import {
 		deleteNotification,
 		initNotifications,
@@ -12,8 +12,8 @@
 		notifications,
 		unreadCount,
 		type Notification as NotificationType,
-	} from '$lib/stores/notifications'
-	import { isLoggedIn } from '$lib/stores/session'
+	} from '$lib/stores/notifications.svelte'
+	import { isLoggedIn } from '$lib/stores/session.svelte'
 
 	const chrome = useSystemChrome()
 
@@ -25,7 +25,7 @@
 	}
 
 	onMount(() => {
-		if ($isLoggedIn) {
+		if (isLoggedIn) {
 			initNotifications()
 		}
 
@@ -37,14 +37,14 @@
 	})
 
 	$effect(() => {
-		if ($isLoggedIn) {
+		if (isLoggedIn) {
 			initNotifications()
 		}
 	})
 
 	$effect(() => {
 		const agentIds: string[] = []
-		for (const notif of $notifications) {
+		for (const notif of notifications) {
 			const data = notif.event?.data as Record<string, unknown> | undefined
 			const agentId = data && typeof data.agent_id === 'string' ? data.agent_id : null
 			if (agentId) agentIds.push(agentId)
@@ -69,7 +69,7 @@
 
 		const agentId = data && typeof data.agent_id === 'string' ? data.agent_id : null
 		if (!agentId) return null
-		return $agentsById[agentId]?.profile_image_url ?? null
+		return agentsById[agentId]?.profile_image_url ?? null
 	}
 
 	function handleMarkRead(notifId: string): void {
@@ -99,15 +99,15 @@
 				<div class="mb-2 flex items-center justify-between">
 					<div class="text-xs font-semibold tracking-wide text-white/60">
 						notifications
-						{#if $unreadCount > 0}
+						{#if unreadCount > 0}
 							<span
 								class="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/15 px-1.5 text-[0.6875rem] font-bold text-white/80"
 							>
-								{$unreadCount}
+								{unreadCount}
 							</span>
 						{/if}
 					</div>
-					{#if $unreadCount > 0}
+					{#if unreadCount > 0}
 						<button
 							type="button"
 							class="text-xs text-white/50 transition-colors hover:text-white/80"
@@ -118,20 +118,20 @@
 					{/if}
 				</div>
 				<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-					{#if !$isLoggedIn}
+					{#if !isLoggedIn}
 						<div
 							class="rounded-2xl bg-white/5 px-3 py-3 text-center text-sm text-white/50"
 						>
 							log in to see notifications
 						</div>
-					{:else if $notifications.length === 0}
+					{:else if notifications.length === 0}
 						<div
 							class="rounded-2xl bg-white/5 px-3 py-3 text-center text-sm text-white/50"
 						>
 							no notifications
 						</div>
 					{:else}
-						{#each $notifications as notif (notif.id)}
+						{#each notifications as notif (notif.id)}
 							<Notification
 								notification={notif}
 								iconUrl={getNotificationIcon(notif)}

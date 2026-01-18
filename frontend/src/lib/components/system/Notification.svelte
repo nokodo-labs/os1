@@ -3,7 +3,7 @@
 	import Check from '$lib/components/icons/Check.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
-	import type { Notification } from '$lib/stores/notifications'
+	import type { Notification } from '$lib/stores/notifications.svelte'
 
 	interface Props {
 		notification: Notification
