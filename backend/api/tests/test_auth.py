@@ -5,10 +5,10 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.models.role import Role
 from api.models.user import User
 from api.schemas.user import UserCreate
+from api.settings import settings
 from api.v1.service import auth as auth_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import (
@@ -168,8 +168,8 @@ async def test_service_get_current_user(db_session: AsyncSession) -> None:
 	# Generate token
 	token = create_jwt_token(
 		subject=user.id,
-		secret_key=settings.SECRET_KEY,
-		algorithm=settings.ALGORITHM,
+		secret_key=settings.security.secret_key,
+		algorithm=settings.security.jwt_algorithm,
 	)
 
 	# Success
@@ -186,8 +186,8 @@ async def test_service_get_current_user(db_session: AsyncSession) -> None:
 		missing_user_id = new_typeid("user")
 	token_deleted = create_jwt_token(
 		subject=missing_user_id,
-		secret_key=settings.SECRET_KEY,
-		algorithm=settings.ALGORITHM,
+		secret_key=settings.security.secret_key,
+		algorithm=settings.security.jwt_algorithm,
 	)
 	with pytest.raises(HTTPException):
 		await auth_service.get_current_user(token_deleted, db_session)
@@ -201,8 +201,8 @@ async def test_service_get_current_user_no_sub(db_session: AsyncSession) -> None
 	from authlib.jose import jwt
 
 	payload = {"exp": int(datetime.now(UTC).timestamp()) + 3600}
-	headers = {"alg": settings.ALGORITHM, "typ": "JWT"}
-	token = jwt.encode(headers, payload, settings.SECRET_KEY)
+	headers = {"alg": settings.security.jwt_algorithm, "typ": "JWT"}
+	token = jwt.encode(headers, payload, settings.security.secret_key)
 	token_str = token.decode("utf-8") if isinstance(token, bytes) else token
 
 	with pytest.raises(HTTPException):

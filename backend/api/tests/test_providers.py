@@ -7,11 +7,11 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.models.model import Model
 from api.models.provider import Provider, ProviderStatus, ProviderType
 from api.models.user import User
 from api.schemas.provider import ProviderCreate, ProviderUpdate
+from api.settings import settings
 from api.v1.service import providers as provider_service
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.security import decrypt_string
@@ -166,7 +166,10 @@ async def test_create_provider_with_api_key(db_session: AsyncSession) -> None:
 
 	assert provider.encrypted_api_key is not None
 	assert provider.encrypted_api_key != api_key
-	assert decrypt_string(provider.encrypted_api_key, settings.SECRET_KEY) == api_key
+	assert (
+		decrypt_string(provider.encrypted_api_key, settings.security.secret_key)
+		== api_key
+	)
 
 
 @pytest.mark.asyncio
@@ -196,7 +199,10 @@ async def test_update_provider_api_key(db_session: AsyncSession) -> None:
 	)
 
 	assert updated.encrypted_api_key is not None
-	assert decrypt_string(updated.encrypted_api_key, settings.SECRET_KEY) == api_key
+	assert (
+		decrypt_string(updated.encrypted_api_key, settings.security.secret_key)
+		== api_key
+	)
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from api.core.config import settings
+from api.boot_settings import boot_settings
 
 from ._utils import append_header
 
@@ -32,7 +32,7 @@ class SecurityHeadersMiddleware:
 			if message["type"] == "http.response.start":
 				for header, value in DEFAULT_HEADERS.items():
 					append_header(message, header, value)
-				if settings.APP_ENV != "dev":
+				if boot_settings.APP_ENV != "dev":
 					append_header(
 						message,
 						b"strict-transport-security",

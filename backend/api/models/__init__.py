@@ -15,6 +15,7 @@ from api.models.prompt import Prompt
 from api.models.provider import Provider
 from api.models.reminder import Reminder
 from api.models.role import Role
+from api.models.setting import SettingsDocument
 from api.models.task import Task
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
@@ -37,6 +38,7 @@ __all__ = [
 	"Prompt",
 	"Reminder",
 	"Role",
+	"SettingsDocument",
 	"Task",
 	"Thread",
 	"ThreadParticipant",

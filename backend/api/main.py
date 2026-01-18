@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.boot_settings import boot_settings
 from api.constants import API_V1_MOUNT_PATH
-from api.core.config import settings
 from api.core.database import init_db
 from api.core.exceptions import (
 	unhandled_exception_handler,
@@ -21,6 +21,7 @@ from api.middleware import (
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
 )
+from api.settings import settings
 from api.v1.app import v1_app
 
 
@@ -36,13 +37,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	"""application lifespan events."""
 	logger.info(
 		"starting %s v%s [%s]",
-		settings.PROJECT_NAME,
-		settings.VERSION,
-		settings.APP_ENV,
+		settings.branding.site_name,
+		settings.branding.app_version,
+		boot_settings.APP_ENV,
 	)
 
 	# startup: skip db init during tests
-	if not settings.TESTING:
+	if not boot_settings.TESTING:
 		await init_db()
 
 	logger.info("startup complete")
@@ -53,8 +54,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(
-	title=settings.PROJECT_NAME,
-	version=settings.VERSION,
+	title=settings.branding.site_name,
+	version=settings.branding.app_version,
 	lifespan=lifespan,
 )
 
@@ -71,7 +72,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # 1. cors (closest to app)
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=settings.CORS_ORIGINS,
+	allow_origins=settings.security.cors_origins,
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
@@ -86,8 +87,8 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 async def root() -> dict[str, str]:
 	"""API root with information and links."""
 	return {
-		"name": settings.PROJECT_NAME,
-		"version": settings.VERSION,
+		"name": settings.branding.site_name,
+		"version": settings.branding.app_version,
 		"api_version": "v1",
 		"docs": "/v1/docs",
 		"openapi": "/v1/openapi.json",

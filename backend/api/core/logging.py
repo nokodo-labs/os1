@@ -16,7 +16,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
-from api.core.config import settings
+from api.boot_settings import boot_settings
 
 
 # context variable for request-scoped data
@@ -227,9 +227,9 @@ class JSONFormatter(logging.Formatter):
 
 def get_log_level() -> int:
 	"""determine log level based on settings."""
-	if settings.DEBUG:
+	if boot_settings.DEBUG:
 		return logging.DEBUG
-	if settings.APP_ENV == "dev":
+	if boot_settings.APP_ENV == "dev":
 		return logging.DEBUG
 	return logging.INFO
 
@@ -251,7 +251,7 @@ def configure_logging(
 		level = get_log_level()
 
 	if json_logs is None:
-		json_logs = settings.JSON_LOGS
+		json_logs = boot_settings.JSON_LOGS
 
 	# select formatter
 	formatter: logging.Formatter
@@ -282,7 +282,7 @@ def configure_logging(
 
 	# sqlalchemy - only warnings unless DEBUG
 	sa = logging.getLogger("sqlalchemy.engine")
-	sa.setLevel(logging.INFO if settings.DEBUG else logging.WARNING)
+	sa.setLevel(logging.INFO if boot_settings.DEBUG else logging.WARNING)
 
 	# suppress noisy third-party loggers
 	for name in ("httpcore", "httpx", "watchfiles"):

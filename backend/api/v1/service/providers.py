@@ -6,9 +6,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.models.provider import Provider
 from api.schemas.provider import ProviderCreate, ProviderUpdate
+from api.settings import settings
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 from nokodo_ai.utils.security import encrypt_string
@@ -39,7 +39,8 @@ async def create_provider(
 	data = provider_in.model_dump(by_alias=True, exclude={"api_key"})
 	if provider_in.api_key:
 		data["encrypted_api_key"] = encrypt_string(
-			provider_in.api_key, settings.SECRET_KEY
+			provider_in.api_key,
+			settings.security.secret_key,
 		)
 
 	provider = Provider(**data)
@@ -82,7 +83,8 @@ async def update_provider(
 
 	if provider_in.api_key:
 		updates["encrypted_api_key"] = encrypt_string(
-			provider_in.api_key, settings.SECRET_KEY
+			provider_in.api_key,
+			settings.security.secret_key,
 		)
 
 	for field, value in updates.items():

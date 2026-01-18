@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from api import models  # noqa: F401
-from api.core.config import settings
+from api.boot_settings import boot_settings
 from api.core.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.models.base import Base
 
@@ -34,7 +34,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Override sqlalchemy.url with the one from settings
-config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
+config.set_main_option("sqlalchemy.url", boot_settings.DATABASE_URL)
 
 
 def run_migrations_offline() -> None:

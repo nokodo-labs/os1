@@ -1,0 +1,43 @@
+"""boot-time settings.
+
+these settings are loaded from env + .env only and are intended for values that
+require a server restart to take effect.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class BootSettings(BaseSettings):
+	model_config = SettingsConfigDict(
+		env_file=".env",
+		env_file_encoding="utf-8",
+		case_sensitive=True,
+		extra="ignore",
+	)
+
+	APP_ENV: Literal["dev", "staging", "production"] = "dev"
+	DEBUG: bool = False
+	JSON_LOGS: bool = False
+	TESTING: bool = False
+
+	DATABASE_URL: str = (
+		"postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev"
+	)
+
+	@field_validator("DATABASE_URL")
+	@classmethod
+	def validate_database_url(cls, v: str) -> str:
+		"""ensure supported db url schemes only."""
+		allowed = {"postgresql", "postgresql+psycopg"}
+		scheme = v.split(":", 1)[0]
+		if scheme not in allowed:
+			raise ValueError(f"Unsupported DATABASE_URL scheme: {scheme}")
+		return v
+
+
+boot_settings = BootSettings()
