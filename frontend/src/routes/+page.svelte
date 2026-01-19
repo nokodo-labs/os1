@@ -20,6 +20,7 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { fade } from 'svelte/transition'
@@ -45,6 +46,10 @@
 
 	const isChatMode = $derived(chatMode === 'new' || chatMode === 'temp')
 	const isTemporaryChatMode = $derived(chatMode === 'temp')
+
+	$effect(() => {
+		pageTitleStore.pageTitle = isChatMode ? 'new chat' : 'homepage'
+	})
 
 	let showChatBanner = $state(false)
 

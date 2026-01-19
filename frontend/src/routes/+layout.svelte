@@ -20,7 +20,9 @@
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device, initDevice } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
+	import { loadSettings } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -93,6 +95,7 @@
 	})
 
 	onMount(async () => {
+		void loadSettings()
 		// Ensure the first route has had a chance to render + paint.
 		await tick()
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -260,6 +263,10 @@
 		sidebarSwipePointerId = null
 	}
 </script>
+
+<svelte:head>
+	<title>{pageTitleStore.pageFullTitle}</title>
+</svelte:head>
 
 <SplashController />
 

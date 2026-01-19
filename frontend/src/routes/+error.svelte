@@ -2,12 +2,13 @@
 	import { goto } from '$app/navigation'
 	import { page } from '$app/state'
 	import Home from '$lib/components/icons/Home.svelte'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
 	let { status: statusProp, error } = $props<{ status?: number; error: App.Error }>()
 
 	const status = $derived.by(() => statusProp ?? page.status ?? 500)
 
-	const title = $derived.by(() => {
+	const errorTitle = $derived.by(() => {
 		if (status === 404) return 'page not found'
 		if (status >= 500) return 'something went wrong'
 		return 'something went wrong'
@@ -16,6 +17,10 @@
 	const message = $derived.by(() => {
 		if (status === 404) return "the page you're looking for doesn't exist"
 		return error?.message || 'an unexpected error happened'
+	})
+
+	$effect(() => {
+		pageTitleStore.pageTitle = status === 404 ? 'page not found' : 'error'
 	})
 </script>
 
@@ -29,7 +34,7 @@
 				<div class="text-[4.75rem] leading-none font-semibold tracking-tight text-white/90">
 					{status}
 				</div>
-				<div class="mt-3 text-xl font-semibold text-white/85">{title}</div>
+				<div class="mt-3 text-xl font-semibold text-white/85">{errorTitle}</div>
 				<div class="mt-2 text-sm text-white/60">{message}</div>
 			</div>
 
