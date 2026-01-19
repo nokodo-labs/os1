@@ -26,19 +26,9 @@ class UISettingsPatch(BaseModel):
 class FeaturesSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	enable_plugins: bool | None = Field(default=None, description="enable plugins")
-	enable_memories: bool | None = Field(default=None, description="enable memories")
 	enable_file_uploads: bool | None = Field(
 		default=None,
 		description="enable file uploads",
-	)
-	enable_web_search: bool | None = Field(
-		default=None,
-		description="enable web search",
-	)
-	enable_code_execution: bool | None = Field(
-		default=None,
-		description="enable code execution",
 	)
 
 
@@ -117,11 +107,56 @@ class SecuritySettingsPatch(BaseModel):
 	)
 
 
+class AIMemorySettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enable_memory: bool | None = Field(default=None, description="enable memory")
+	similarity_threshold: float | None = Field(
+		default=None,
+		ge=0.0,
+		le=1.0,
+		description="similarity minimum threshold for memory retrieval",
+	)
+	top_k: int | None = Field(
+		default=None,
+		ge=1,
+		description="number of relevant memories to retrieve",
+	)
+	messages_to_consider: int | None = Field(
+		default=None,
+		ge=1,
+		description="number of recent messages to consider",
+	)
+
+
+class AIChatContextSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	mode: str | None = Field(
+		default=None,
+		description="how chats are selected for Agent context enrichment",
+	)
+	top_k: int | None = Field(
+		default=None,
+		ge=1,
+		description="number of chats to use for context enrichment",
+	)
+
+
+class AISettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	default_agent_id: str | None = Field(default=None, description="default agent id")
+	memory: AIMemorySettingsPatch | None = None
+	chat_context: AIChatContextSettingsPatch | None = None
+
+
 class SettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	ui: UISettingsPatch | None = None
 	features: FeaturesSettingsPatch | None = None
+	ai: AISettingsPatch | None = None
 	branding: BrandingSettingsPatch | None = None
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
@@ -132,6 +167,7 @@ class SettingsVersions(BaseModel):
 
 	ui: int = 0
 	features: int = 0
+	ai: int = 0
 	branding: int = 0
 	limits: int = 0
 	security: int = 0
