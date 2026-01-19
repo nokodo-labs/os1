@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { v1Client } from '$lib/api/v1/client'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
 	let email = $state('')
@@ -13,6 +14,8 @@
 
 	// NOTE: searchParams access must be guarded for SSG/prerender compatibility
 	const next = $derived(browser ? (page.url.searchParams.get('next') ?? '/') : '/')
+
+	pageTitleStore.pageTitle = 'login'
 
 	$effect(() => {
 		if (!browser) return

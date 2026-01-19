@@ -18,6 +18,7 @@
 	import { agents } from '$lib/stores/agents.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { untrack } from 'svelte'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
 
@@ -33,6 +34,11 @@
 	// ─────────────────────────────────────────────────────────────────────────────
 	// Effects: Agents loading
 	// ─────────────────────────────────────────────────────────────────────────────
+	$effect(() => {
+		const t = chat.thread?.title
+		pageTitleStore.pageTitle = t && t.trim() ? t : 'untitled chat'
+	})
+
 	$effect(() => {
 		if (didLoadAgents) return
 		didLoadAgents = true
@@ -55,7 +61,7 @@
 				chat.clearThread()
 				return
 			}
-
+			pageTitleStore
 			let cancelled = false
 			chat.isThreadLoading = true
 			chat.hasLoadedBranch = false

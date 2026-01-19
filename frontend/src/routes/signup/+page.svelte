@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/index'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
 	let email = $state('')
 	let displayName = $state('')
@@ -9,6 +10,8 @@
 	let passwordConfirm = $state('')
 	let isSubmitting = $state(false)
 	let errorMessage = $state<string | null>(null)
+
+	pageTitleStore.pageTitle = 'sign up'
 
 	const canSubmit = $derived(
 		email.trim().length > 0 &&
