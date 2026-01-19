@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import cache
 from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 from pydantic_settings import (
 	BaseSettings,
 	PydanticBaseSettingsSource,
@@ -20,11 +20,6 @@ FieldFlag = Literal["private", "write_locked"]
 
 ENV_PREFIX: Final[str] = "NOKODO__"
 ENV_NESTED_DELIMITER: Final[str] = "__"
-
-
-# ---------------------------------------------------------------------------
-# field helper
-# ---------------------------------------------------------------------------
 
 
 def settings_field(
@@ -57,11 +52,6 @@ def settings_field(
 	return Field(default, **field_kwargs)
 
 
-# ---------------------------------------------------------------------------
-# field introspection
-# ---------------------------------------------------------------------------
-
-
 def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag, bool]:
 	"""get access flags for a field."""
 	info = schema.model_fields.get(field_name)
@@ -90,30 +80,69 @@ class UISettings(BaseModel):
 
 
 class FeaturesSettings(BaseModel):
-	enable_plugins: bool = Field(default=True, description="enable plugins")
-	enable_memories: bool = Field(default=True, description="enable memories")
 	enable_file_uploads: bool = Field(default=True, description="enable file uploads")
-	enable_web_search: bool = Field(default=False, description="enable web search")
-	enable_code_execution: bool = Field(
-		default=False, description="enable code execution"
+
+
+class AIMemorySettings(BaseModel):
+	enable_memory: bool = Field(default=True, description="enable memory")
+	similarity_threshold: float = Field(
+		default=0.65,
+		ge=0.0,
+		le=1.0,
+		description="similarity minimum threshold for memory retrieval. "
+		"how similar a memory must be to be considered relevant. "
+		"0.0 = all memories, 1.0 = exact match",
+	)
+	top_k: int = Field(
+		default=15,
+		ge=1,
+		description="number of relevant memories to retrieve",
+	)
+	messages_to_consider: int = Field(
+		default=4,
+		ge=1,
+		description="number of recent messages to consider when retrieving "
+		"relevant memories for the agent and for consolidation work",
+	)
+
+
+class AIChatContextSettings(BaseModel):
+	mode: Literal["recent", "relevant", "pinned"] = Field(
+		default="recent",
+		description="how chats are selected for Agent context enrichment",
+	)
+	top_k: int = Field(
+		default=3,
+		ge=1,
+		description="number of chats to use for context enrichment",
+	)
+
+
+class AISettings(BaseModel):
+	default_agent_id: str | None = Field(default=None, description="default agent id")
+	memory: AIMemorySettings = Field(
+		default_factory=AIMemorySettings, description="AI memory settings"
+	)
+	chat_context: AIChatContextSettings = Field(
+		default_factory=AIChatContextSettings, description="chat context settings"
 	)
 
 
 class BrandingSettings(BaseModel):
-	site_name: str = Field(default="nokodo AI", description="site name")
+	site_name: str = Field(default="nokodo", description="site name")
 	app_version: str = settings_field(
 		default="0.1.0",
 		write_locked=True,
 		description="backend version",
 	)
-	logo_url: str | None = Field(default=None, description="logo url")
-	favicon_url: str | None = Field(default=None, description="favicon url")
+	logo_url: HttpUrl | None = Field(default=None, description="logo url")
+	favicon_url: HttpUrl | None = Field(default=None, description="favicon url")
 	primary_color: str = Field(default="#6366f1", description="primary color hex")
-	public_frontend_origin: str | None = Field(
+	public_frontend_origin: HttpUrl | None = Field(
 		default=None,
 		description="public frontend origin",
 	)
-	public_cdn_origin: str | None = Field(
+	public_cdn_origin: HttpUrl | None = Field(
 		default=None,
 		description="public cdn origin",
 	)
@@ -161,7 +190,7 @@ class SecuritySettings(BaseModel):
 		description="refresh token expire days",
 	)
 	auth_cookie_secure: bool = Field(
-		default=False,
+		default=True,
 		description="set secure cookies",
 	)
 
@@ -212,6 +241,7 @@ class Settings(BaseSettings):
 	)
 	ui: UISettings = Field(default_factory=UISettings)
 	features: FeaturesSettings = Field(default_factory=FeaturesSettings)
+	ai: AISettings = Field(default_factory=AISettings)
 	branding: BrandingSettings = Field(default_factory=BrandingSettings)
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)

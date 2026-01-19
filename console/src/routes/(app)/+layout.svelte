@@ -11,15 +11,16 @@
 		Plug,
 		ScrollText,
 		Server,
+		Settings,
 		Users,
 	} from '@lucide/svelte'
 
 	let { children } = $props()
 </script>
 
-<div class="flex min-h-screen bg-zinc-950 text-zinc-100">
+<div class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
 	<!-- Sidebar -->
-	<aside class="flex w-64 flex-col border-r border-zinc-800 p-6">
+	<aside class="flex h-screen w-64 flex-col overflow-y-auto border-r border-zinc-800 p-6">
 		<div class="mb-8">
 			<img
 				src="https://nokodo.net/media/images/logo_full.svg"
@@ -139,6 +140,17 @@
 				<Users class="h-4 w-4" />
 				users
 			</a>
+			<a
+				href="/settings"
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/settings'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Settings class="h-4 w-4" />
+				settings
+			</a>
 		</nav>
 
 		<button
@@ -150,7 +162,7 @@
 	</aside>
 
 	<!-- Main Content -->
-	<main class="flex-1 p-8">
+	<main class="flex-1 overflow-y-auto p-8">
 		{@render children()}
 	</main>
 </div>
