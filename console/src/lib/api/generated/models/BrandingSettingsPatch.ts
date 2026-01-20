@@ -27,5 +27,9 @@ export type BrandingSettingsPatch = {
      * public cdn origin
      */
     public_cdn_origin?: (string | null);
+    /**
+     * public console origin
+     */
+    public_console_origin?: (string | null);
 };
 

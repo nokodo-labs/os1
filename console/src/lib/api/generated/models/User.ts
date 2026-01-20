@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Schema for user response.
+ * schema for user response.
  */
 export type User = {
     email: string;

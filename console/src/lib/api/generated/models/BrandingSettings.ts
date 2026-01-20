@@ -32,6 +32,10 @@ export type BrandingSettings = {
      */
     public_cdn_origin?: (string | null);
     /**
+     * public admin console origin
+     */
+    public_console_origin?: (string | null);
+    /**
      * analytics key (env-only)
      */
     analytics_key?: (string | null);
