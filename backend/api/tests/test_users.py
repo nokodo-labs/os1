@@ -276,7 +276,8 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 	assert bootstrap.is_superuser is True
 	assert bootstrap.is_active is True
 
-	# unauthenticated create: even if is_superuser=True is passed, result is regular user
+	# unauthenticated create: even if is_superuser=True is passed,
+	# result is a regular user
 	sneaky = await user_service.create_user(
 		UserCreate(email="sneaky@example.com", password="pw", is_superuser=True),
 		db_session,

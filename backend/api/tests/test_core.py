@@ -169,7 +169,7 @@ async def test_init_db_runs_alembic_upgrade(monkeypatch: pytest.MonkeyPatch) -> 
 async def test_init_db_runs_alembic_upgrade_heads_when_branching_enabled(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""init_db should run alembic upgrade heads when branching migrations are enabled."""
+	"""init_db should run alembic upgrade heads when branching is enabled."""
 	mock_upgrade = MagicMock()
 	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
 

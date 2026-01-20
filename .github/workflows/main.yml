@@ -109,7 +109,7 @@ jobs:
       contents: read
       packages: write
     # Only publish on push to core branches (dev or stable), not PRs
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && ((needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.github_actions == 'true') || needs.release.outputs.version != '') }}
+    if: ${{ !cancelled() && (needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && ((needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.github_actions == 'true') || needs.release.outputs.version != '') }}
     uses: ./.github/workflows/docker-publish.yml
     secrets: inherit
     with:

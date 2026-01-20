@@ -419,8 +419,8 @@ def _template_url() -> URL:
 			print(f"[tests] started embedded Postgres cluster on port {port}")
 		except RuntimeError as exc:  # pragma: no cover
 			raise RuntimeError(
-				"Unable to connect to TEST_DATABASE_URL and failed to start an embedded "
-				"Postgres instance."
+				"Unable to connect to TEST_DATABASE_URL and failed to start "
+				"an embedded Postgres instance."
 			) from exc
 
 	TEST_DATABASE_TEMPLATE_URL = template_url
@@ -498,7 +498,9 @@ def _admin_connection() -> Generator[Connection]:
 				conn = raw_conn.execution_options(isolation_level="AUTOCOMMIT")
 				if not _connection_has_admin_rights(conn):
 					last_error = RuntimeError(
-						f"Admin connection '{masked_url}' lacks CREATEDB and CREATEROLE privileges"
+						f"Admin connection '{masked_url}' lacks "
+						"CREATEDB and CREATEROLE "
+						"privileges"
 					)
 					continue
 				_ADMIN_CONNECTION_URL_IN_USE = admin_url
@@ -589,7 +591,8 @@ def _ensure_template_role_exists() -> None:
 						except ProgrammingError as exc:
 							raise RuntimeError(
 								f"Unable to update Postgres role '{role}'. "
-								"Provide TEST_DATABASE_ADMIN_URL with a superuser connection."
+								"Provide TEST_DATABASE_ADMIN_URL with a superuser "
+								"connection."
 							) from exc
 				finally:
 					conn.execute(

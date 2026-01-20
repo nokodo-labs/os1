@@ -251,7 +251,6 @@ async def test_thread_update_owner_and_create_message(db_session: AsyncSession) 
 	new_owner = _user()
 	db_session.add_all([owner, new_owner])
 	await db_session.commit()
-	principal = _principal(owner)
 	thread = Thread(
 		id=TypeID(new_typeid("thread")),
 		owner_id=owner.id,
