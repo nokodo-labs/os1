@@ -1,5 +1,5 @@
 import { browser } from '$app/environment'
-import { v1Client } from '$lib/api/v1/client'
+import { apiClient } from '$lib/api/client'
 import { session } from '$lib/stores/session.svelte'
 
 export type JsonValue =
@@ -88,7 +88,7 @@ class PreferencesStore {
 		this.loading = true
 		this.error = null
 		try {
-			const { data, error } = await v1Client().GET('/users/{user_id}', {
+			const { data, error } = await apiClient().GET('/v1/users/{user_id}', {
 				params: { path: { user_id: user.id } },
 			})
 			if (error || !data) {
@@ -112,7 +112,7 @@ class PreferencesStore {
 		writeStored(user.id, next)
 		session.currentUser = user ? { ...user, preferences: next } : null
 
-		const { data, error } = await v1Client().PATCH('/users/{user_id}', {
+		const { data, error } = await apiClient().PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: user.id } },
 			body: { preferences: next },
 		})

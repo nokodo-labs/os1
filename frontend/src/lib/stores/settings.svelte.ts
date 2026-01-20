@@ -1,5 +1,5 @@
+import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
 
 type Settings = components['schemas']['Settings']
 type SettingsPatch = components['schemas']['SettingsPatch']
@@ -127,7 +127,7 @@ export async function loadSettings(options?: {
 		settingsState.error = null
 
 		try {
-			const { data, error, response } = await v1Client().GET('/settings', {})
+			const { data, error, response } = await apiClient().GET('/v1/settings', {})
 			if (error || !response.ok || !data) {
 				settingsState.error = 'could not load settings'
 				settingsState.stale = true

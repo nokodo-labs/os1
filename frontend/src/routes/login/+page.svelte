@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { v1Client } from '$lib/api/v1/client'
+	import { apiClient } from '$lib/api/client'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
@@ -31,16 +31,19 @@
 		isSubmitting = true
 
 		try {
-			const { data, error, response } = await v1Client().POST('/auth/login/access-token', {
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: {
-					username: email.trim(),
-					password,
-					scope: '',
-				},
-			})
+			const { data, error, response } = await apiClient().POST(
+				'/v1/auth/login/access-token',
+				{
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					body: {
+						username: email.trim(),
+						password,
+						scope: '',
+					},
+				}
+			)
 
 			if (error || !data) {
 				const detail = (error as { detail?: unknown } | undefined)?.detail

@@ -1,8 +1,8 @@
 import { browser } from '$app/environment'
 
+import { apiClient } from '$lib/api/client'
 import { eventStreamClient } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
 import { getJwtEmail, getJwtUserId } from '$lib/auth/jwt'
 import {
 	clearAccessToken,
@@ -88,7 +88,7 @@ class SessionStore {
 
 		this.isLoadingUser = true
 		try {
-			const { data } = await v1Client().GET('/users/{user_id}', {
+			const { data } = await apiClient().GET('/v1/users/{user_id}', {
 				params: { path: { user_id: userId } },
 			})
 			this.currentUser = data ?? null
@@ -108,7 +108,7 @@ class SessionStore {
 
 		this.isLoadingThreads = true
 		try {
-			const { data } = await v1Client().GET('/threads', {
+			const { data } = await apiClient().GET('/v1/threads', {
 				params: {
 					query: {
 						owner_id: userId,

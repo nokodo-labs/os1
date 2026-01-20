@@ -3,8 +3,8 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import { apiClient } from '$lib/api/client'
 	import type { StreamMessage } from '$lib/api/streaming'
-	import { v1Client } from '$lib/api/v1/client'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
 	import ChatSidebarChatsSection from '$lib/components/sidebar/chat-sidebar/ChatSidebarChatsSection.svelte'
@@ -320,19 +320,22 @@
 	})
 
 	async function deleteThread(threadId: string): Promise<number | null> {
-		const { response } = await v1Client().DELETE('/threads/{thread_id}', {
+		const { response } = await apiClient().DELETE('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 		})
 		return response.status
 	}
 
 	async function generateThreadMetadata(threadId: string): Promise<Thread | null> {
-		const { data, error } = await v1Client().POST('/threads/{thread_id}/metadata/generate', {
-			params: {
-				path: { thread_id: threadId },
-			},
-			body: { replace: false, model_id: null },
-		})
+		const { data, error } = await apiClient().POST(
+			'/v1/threads/{thread_id}/metadata/generate',
+			{
+				params: {
+					path: { thread_id: threadId },
+				},
+				body: { replace: false, model_id: null },
+			}
+		)
 		if (error || !data) return null
 		return data
 	}
