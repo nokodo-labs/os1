@@ -97,12 +97,14 @@ async def init_db() -> None:
 
 	logger.info("initializing database", extra={"url": safe_url})
 
+	migration_target = "heads" if boot_settings.BRANCHING_MIGRATIONS else "head"
+
 	try:
 		alembic_cfg = _build_alembic_config()
 		loop = asyncio.get_running_loop()
 		await loop.run_in_executor(
 			None,
-			partial(command.upgrade, alembic_cfg, "head"),
+			partial(command.upgrade, alembic_cfg, migration_target),
 		)
 	except Exception as exc:
 		logger.error(f"error running migrations: {exc}")

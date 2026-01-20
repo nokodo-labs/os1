@@ -25,6 +25,8 @@ class BootSettings(BaseSettings):
 	JSON_LOGS: bool = False
 	TESTING: bool = False
 
+	BRANCHING_MIGRATIONS: bool = False
+
 	DATABASE_URL: str = (
 		"postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev"
 	)
