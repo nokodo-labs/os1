@@ -3,9 +3,9 @@
  * Encapsulates all chat page state and business logic.
  */
 
+import { apiClient } from '$lib/api/client'
 import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
 import { agents } from '$lib/stores/agents.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { session, type Thread } from '$lib/stores/session.svelte'
@@ -425,8 +425,8 @@ export function createChatState() {
 
 			toolEventsInFlight = true
 			try {
-				const { data, error } = await v1Client().POST(
-					'/threads/{thread_id}/events/by-message-ids',
+				const { data, error } = await apiClient().POST(
+					'/v1/threads/{thread_id}/events/by-message-ids',
 					{
 						params: { path: { thread_id: threadId } },
 						body: { message_ids: batch },
@@ -474,7 +474,7 @@ export function createChatState() {
 		const prevScrollTop = scrollContainer.scrollTop
 
 		try {
-			const { data, error } = await v1Client().GET('/threads/{thread_id}/messages', {
+			const { data, error } = await apiClient().GET('/v1/threads/{thread_id}/messages', {
 				params: {
 					path: { thread_id: threadId },
 					query: { skip: messageSkip, limit: 120 },
@@ -516,7 +516,7 @@ export function createChatState() {
 			messagesPage = cachedMessages
 		} else {
 			// Fetch from API
-			const { data, error: threadError } = await v1Client().GET('/threads/{thread_id}', {
+			const { data, error: threadError } = await apiClient().GET('/v1/threads/{thread_id}', {
 				params: { path: { thread_id: threadId } },
 			})
 			if (threadError) {
@@ -540,8 +540,8 @@ export function createChatState() {
 			}
 			threadData = data
 
-			const { data: msgData, error: msgError } = await v1Client().GET(
-				'/threads/{thread_id}/messages',
+			const { data: msgData, error: msgError } = await apiClient().GET(
+				'/v1/threads/{thread_id}/messages',
 				{ params: { path: { thread_id: threadId }, query: { skip: 0, limit: 120 } } }
 			)
 			if (msgError) {
@@ -880,10 +880,13 @@ export function createChatState() {
 			parent_id: msg.parent_id ?? null,
 		} satisfies components['schemas']['MessageCreate']
 
-		const { data: newMessage, error } = await v1Client().POST('/threads/{thread_id}/messages', {
-			params: { path: { thread_id: thread.id } },
-			body,
-		})
+		const { data: newMessage, error } = await apiClient().POST(
+			'/v1/threads/{thread_id}/messages',
+			{
+				params: { path: { thread_id: thread.id } },
+				body,
+			}
+		)
 
 		if (error || !newMessage) {
 			console.error('failed to create edited message', error)
@@ -932,8 +935,8 @@ export function createChatState() {
 			return true
 		}
 
-		const { response, error } = await v1Client().DELETE(
-			'/threads/{thread_id}/messages/{message_id}',
+		const { response, error } = await apiClient().DELETE(
+			'/v1/threads/{thread_id}/messages/{message_id}',
 			{
 				params: {
 					path: {

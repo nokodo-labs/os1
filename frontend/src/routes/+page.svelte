@@ -3,7 +3,7 @@
 	import { goto, onNavigate } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { v1Client } from '$lib/api/v1/client'
+	import { apiClient } from '$lib/api/client'
 	import { getJwtUserId } from '$lib/auth/jwt'
 	import { getAccessToken } from '$lib/auth/session'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
@@ -193,7 +193,7 @@
 			inputValue = content
 			return
 		}
-		const { data, error } = await v1Client().POST('/threads', {
+		const { data, error } = await apiClient().POST('/v1/threads', {
 			body: {
 				owner_id: userId,
 				is_archived: false,

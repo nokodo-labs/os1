@@ -1,5 +1,5 @@
+import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
 
 export type Agent = components['schemas']['Agent']
 
@@ -16,7 +16,7 @@ class AgentsStore {
 		if (this.#loading) return
 		this.#loading = true
 		try {
-			const { data, error } = await v1Client().GET('/agents')
+			const { data, error } = await apiClient().GET('/v1/agents')
 			if (error || !data) return
 			this.list = data
 			this.byId = Object.fromEntries(data.map((a) => [a.id, a]))
@@ -33,7 +33,7 @@ class AgentsStore {
 
 		this.#pending.push(agentId)
 		try {
-			const { data, error } = await v1Client().GET('/agents/{agent_id}', {
+			const { data, error } = await apiClient().GET('/v1/agents/{agent_id}', {
 				params: { path: { agent_id: agentId } },
 			})
 			if (error || !data) return null

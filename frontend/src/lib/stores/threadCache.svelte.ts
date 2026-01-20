@@ -6,8 +6,8 @@
  * - Hover-triggered prefetch for instant page loads
  */
 
+import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 type ApiThread = components['schemas']['Thread']
@@ -128,10 +128,10 @@ export async function prefetchThread(threadId: string): Promise<void> {
 	try {
 		// fetch thread and messages in parallel
 		const [threadRes, messagesRes] = await Promise.all([
-			v1Client().GET('/threads/{thread_id}', {
+			apiClient().GET('/v1/threads/{thread_id}', {
 				params: { path: { thread_id: threadId } },
 			}),
-			v1Client().GET('/threads/{thread_id}/messages', {
+			apiClient().GET('/v1/threads/{thread_id}/messages', {
 				params: {
 					path: { thread_id: threadId },
 					query: { skip: 0, limit: 120 },
@@ -160,7 +160,7 @@ export async function getThread(threadId: string): Promise<ApiThread | null> {
 	const cached = getCachedThread(threadId)
 	if (cached) return cached
 
-	const { data, error } = await v1Client().GET('/threads/{thread_id}', {
+	const { data, error } = await apiClient().GET('/v1/threads/{thread_id}', {
 		params: { path: { thread_id: threadId } },
 	})
 	if (error || !data) return null
@@ -184,7 +184,7 @@ export async function getMessages(
 		if (cached) return { messages: cached, fromCache: true }
 	}
 
-	const { data, error } = await v1Client().GET('/threads/{thread_id}/messages', {
+	const { data, error } = await apiClient().GET('/v1/threads/{thread_id}/messages', {
 		params: {
 			path: { thread_id: threadId },
 			query: { skip, limit },

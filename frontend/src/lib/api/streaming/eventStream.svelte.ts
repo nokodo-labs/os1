@@ -1,12 +1,12 @@
 /**
  * WebSocket client for real-time event streaming.
- * WS /events/stream?token=<jwt>
+ * WS /v1/events/stream?token=<jwt>
  *
  * Native Svelte 5 rune-based state (no svelte/store).
  */
 
 import { SvelteSet } from 'svelte/reactivity'
-import { getV1BaseUrl } from '../v1/client'
+import { getApiBaseUrl } from '../client'
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
@@ -58,9 +58,10 @@ export class EventStreamClient {
 	})
 
 	private buildWsUrl(token: string): string {
-		const baseUrl = getV1BaseUrl()
-		const wsBase = baseUrl.replace(/^http/, 'ws')
-		return `${wsBase}/events/stream?token=${encodeURIComponent(token)}`
+		const configuredBaseUrl = getApiBaseUrl()
+		const httpBase = configuredBaseUrl || window.location.origin
+		const wsBase = httpBase.replace(/^http/, 'ws')
+		return `${wsBase}/v1/events/stream?token=${encodeURIComponent(token)}`
 	}
 
 	connect(token: string): void {

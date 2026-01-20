@@ -3,9 +3,9 @@
  * Manages notification state, integrates with event stream for real-time updates.
  */
 
+import { apiClient } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken } from '$lib/auth/session'
 import { SvelteDate, SvelteSet } from 'svelte/reactivity'
@@ -148,7 +148,7 @@ class NotificationsStore {
 		this.error = null
 
 		try {
-			const { data, error } = await v1Client().GET('/notifications/users/{user_id}', {
+			const { data, error } = await apiClient().GET('/v1/notifications/users/{user_id}', {
 				params: {
 					path: { user_id: userId },
 					query: { only_unread: false },
@@ -174,7 +174,7 @@ class NotificationsStore {
 		)
 
 		try {
-			await v1Client().POST('/notifications/{notification_id}/read', {
+			await apiClient().POST('/v1/notifications/{notification_id}/read', {
 				params: { path: { notification_id: notificationId } },
 			})
 		} catch {
@@ -190,7 +190,7 @@ class NotificationsStore {
 		)
 
 		try {
-			await v1Client().POST('/notifications/{notification_id}/dismiss', {
+			await apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
 				params: { path: { notification_id: notificationId } },
 			})
 		} catch {
@@ -212,7 +212,7 @@ class NotificationsStore {
 		try {
 			await Promise.all(
 				unread.slice(0, 10).map((n) =>
-					v1Client().POST('/notifications/{notification_id}/read', {
+					apiClient().POST('/v1/notifications/{notification_id}/read', {
 						params: { path: { notification_id: n.id } },
 					})
 				)
@@ -226,7 +226,7 @@ class NotificationsStore {
 		this.list = this.list.filter((n) => n.id !== notificationId)
 
 		try {
-			await v1Client().POST('/notifications/{notification_id}/dismiss', {
+			await apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
 				params: { path: { notification_id: notificationId } },
 			})
 		} catch {

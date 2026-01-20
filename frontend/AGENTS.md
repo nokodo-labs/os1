@@ -106,8 +106,7 @@ frontend/
 
 ## testing instructions
 
-- unit/component tests: `npm run test` (Vitest + @testing-library/svelte, happy-dom)
-- coverage: `npm run test:coverage`
-- type/lint: `npm run check`, `npm run lint`
-- formatting: `npm run format` (prettier)
-- api codegen: ensure backend is running, then use the single task `Frontend: Generate API (types + client)` (runs `npm run generate:api`).
+- unit/component tests: `Frontend: Test Coverage`
+- type/lint: `Frontend: Check`, `Frontend: Lint`
+- formatting: `Frontend: Format`
+- api codegen: ensure backend is running, then use the single task `Frontend: Generate API`.

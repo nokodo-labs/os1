@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { logoutV1 } from '$lib/api/v1/client'
+	import { logout } from '$lib/api/client'
 	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -36,7 +36,7 @@
 
 	function handleLogout() {
 		onClose?.()
-		void logoutV1()
+		void logout()
 		session.clear()
 		void goto(resolve('/login'))
 	}
