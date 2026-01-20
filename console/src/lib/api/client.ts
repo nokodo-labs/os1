@@ -16,7 +16,7 @@ class APIError extends Error {
 class APIClient {
 	private baseURL: string
 
-	constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1') {
+	constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:1383/v1') {
 		this.baseURL = baseURL
 	}
 

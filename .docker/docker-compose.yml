@@ -36,7 +36,7 @@ services:
     container_name: nokodo-ai-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "1383:1383"
     environment:
       DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-dev
       APP_ENV: dev
@@ -52,7 +52,7 @@ services:
       - ../backend:/app
       - ../backend/data:/app/data
       - /app/__pycache__
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload
     profiles: ["local"]
 
   frontend:
@@ -64,7 +64,7 @@ services:
     ports:
       - "888:80"
     environment:
-      API_ORIGIN: ${API_ORIGIN:-http://localhost:8000}
+      API_ORIGIN: ${API_ORIGIN:-http://localhost:1383}
     depends_on:
       backend:
         condition: service_started
