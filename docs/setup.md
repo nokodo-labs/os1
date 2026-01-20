@@ -4,10 +4,10 @@ development and deployment guide for nokodo.
 
 ## prerequisites
 
--   **python 3.13+** with [uv](https://docs.astral.sh/uv/)
--   **node.js 24+** with npm
--   **docker** with docker compose
--   **postgres 17** (provided via docker)
+- **python 3.13+** with [uv](https://docs.astral.sh/uv/)
+- **node.js 24+** with npm
+- **docker** with docker compose
+- **postgres 17** (provided via docker)
 
 ## quick start
 
@@ -50,10 +50,10 @@ npm run dev -- --host --port 8383
 
 after backend API changes, regenerate the TypeScript client using VS Code tasks:
 
--   **Frontend: Generate API Types** - runs `npm run generate:api-types`
--   **Console: Generate API** - runs `npm run generate:api`
+- **Frontend: Generate API Types** - runs `npm run generate:api-types`
+- **Console: Generate API** - runs `npm run generate:api`
 
-> requires backend running at `http://localhost:8000`
+> requires backend running at `http://localhost:1383`
 
 ## VS Code setup
 
@@ -61,16 +61,16 @@ the project includes comprehensive VS Code integration.
 
 **tasks** (`Ctrl+Shift+P` → "Tasks: Run Task"):
 
--   **Backend**: Install Dependencies, Run Server, Run Tests
--   **Frontend**: Install Dependencies, Dev Server, Build, Generate API Types
--   **Console**: Install Dependencies, Dev Server, Build, Generate API
--   **Docker**: Ensure Dev Deps, Build All, Up, Down
+- **Backend**: Install Dependencies, Run Server, Run Tests
+- **Frontend**: Install Dependencies, Dev Server, Build, Generate API Types
+- **Console**: Install Dependencies, Dev Server, Build, Generate API
+- **Docker**: Ensure Dev Deps, Build All, Up, Down
 
 **debug configurations** (press `F5`):
 
--   **Python: FastAPI** - debug backend server
--   **Python: Pytest** - debug current test file
--   **Full Stack** (compound) - runs backend + frontend together
+- **Python: FastAPI** - debug backend server
+- **Python: Pytest** - debug current test file
+- **Full Stack** (compound) - runs backend + frontend together
 
 ### quick start
 
@@ -139,9 +139,9 @@ CI/CD automatically builds and publishes docker images to GitHub Container Regis
 
 **image tags:**
 
--   `ghcr.io/nokodo-labs/nokodo-ai:latest` - latest release
--   `ghcr.io/nokodo-labs/nokodo-ai:dev` - latest dev branch
--   `ghcr.io/nokodo-labs/nokodo-ai:v1.2.3` - specific version
+- `ghcr.io/nokodo-labs/nokodo-ai:latest` - latest release
+- `ghcr.io/nokodo-labs/nokodo-ai:dev` - latest dev branch
+- `ghcr.io/nokodo-labs/nokodo-ai:v1.2.3` - specific version
 
 **deploy:**
 

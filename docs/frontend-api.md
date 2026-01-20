@@ -10,11 +10,11 @@ FastAPI OpenAPI Schema → openapi-typescript → TypeScript Types → openapi-t
 
 ## Benefits
 
--   **Zero Dependencies**: Native fetch, no axios or HTTP libraries
--   **Full Type Safety**: Compile-time errors for invalid API calls
--   **Auto-sync**: Backend changes automatically reflected in frontend types and client
--   **Modern**: Built on web standards (fetch, async/await)
--   **Future-proof**: No external HTTP library to become outdated
+- **Zero Dependencies**: Native fetch, no axios or HTTP libraries
+- **Full Type Safety**: Compile-time errors for invalid API calls
+- **Auto-sync**: Backend changes automatically reflected in frontend types and client
+- **Modern**: Built on web standards (fetch, async/await)
+- **Future-proof**: No external HTTP library to become outdated
 
 ## Setup
 
@@ -25,7 +25,7 @@ cd backend
 uvicorn api.main:app --reload
 ```
 
-Backend serves OpenAPI schema at: `http://localhost:8000/v1/openapi.json`
+Backend serves OpenAPI schema at: `http://localhost:1383/v1/openapi.json`
 
 ### 2. Generate Types & Client
 
@@ -150,10 +150,10 @@ const items = await api.getItems(); // Fully typed!
 
 ## Files
 
--   `src/lib/api/client.ts` - Base fetch client with error handling
--   `src/lib/api/types.ts` - **Auto-generated** (DO NOT EDIT MANUALLY)
--   `src/lib/api/generated/` - **Auto-generated client** (DO NOT EDIT MANUALLY)
--   `src/lib/api/index.ts` - Typed API functions for all endpoints
+- `src/lib/api/client.ts` - Base fetch client with error handling
+- `src/lib/api/types.ts` - **Auto-generated** (DO NOT EDIT MANUALLY)
+- `src/lib/api/generated/` - **Auto-generated client** (DO NOT EDIT MANUALLY)
+- `src/lib/api/index.ts` - Typed API functions for all endpoints
 
 ## Troubleshooting
 
@@ -177,8 +177,8 @@ Regenerate: `npm run generate:api`
 
 Check that:
 
--   Backend is running on `http://localhost:8000`
--   OpenAPI endpoint is accessible: `http://localhost:8000/v1/openapi.json`
--   `openapi-typescript` is installed: `npm install`
+- Backend is running on `http://localhost:1383`
+- OpenAPI endpoint is accessible: `http://localhost:1383/v1/openapi.json`
+- `openapi-typescript` is installed: `npm install`
 
 Modern approach: Let OpenAPI handle types, let fetch handle requests.

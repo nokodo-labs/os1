@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 // Example API client test
 describe('API Client', () => {
 	it('can construct API URLs', () => {
-		const baseUrl = 'http://localhost:8000'
+		const baseUrl = 'http://localhost:1383'
 		const endpoint = '/v1/users'
 		const fullUrl = `${baseUrl}${endpoint}`
 
-		expect(fullUrl).toBe('http://localhost:8000/v1/users')
+		expect(fullUrl).toBe('http://localhost:1383/v1/users')
 	})
 
 	it('can handle query parameters', () => {
