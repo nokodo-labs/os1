@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Schema for updating a user.
+ * schema for updating a user.
  */
 export type UserUpdate = {
     email?: (string | null);

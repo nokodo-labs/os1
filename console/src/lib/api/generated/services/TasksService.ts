@@ -14,7 +14,7 @@ import { request as __request } from '../core/request';
 export class TasksService {
     /**
      * Create Task
-     * Create a new task.
+     * create a new task.
      * @param requestBody
      * @returns Task Successful Response
      * @throws ApiError
@@ -41,7 +41,7 @@ export class TasksService {
     }
     /**
      * List Tasks
-     * List tasks with optional filters.
+     * list tasks with optional filters.
      * @param userId
      * @param statusFilter
      * @param skip
@@ -84,7 +84,7 @@ export class TasksService {
     }
     /**
      * Update Task
-     * Update mutable task fields.
+     * update mutable task fields.
      * @param taskId
      * @param requestBody
      * @returns Task Successful Response

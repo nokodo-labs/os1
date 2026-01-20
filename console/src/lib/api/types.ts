@@ -4,46 +4,6 @@
  */
 
 export interface paths {
-    "/system/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get System Status
-         * @description Check system initialization status.
-         */
-        get: operations["get_system_status_system_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/system/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Runtime Config
-         * @description Return runtime configuration values safe for clients.
-         */
-        get: operations["get_runtime_config_system_config_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/login/access-token": {
         parameters: {
             query?: never;
@@ -406,13 +366,13 @@ export interface paths {
         };
         /**
          * List Tasks
-         * @description List tasks with optional filters.
+         * @description list tasks with optional filters.
          */
         get: operations["list_tasks_tasks_get"];
         put?: never;
         /**
          * Create Task
-         * @description Create a new task.
+         * @description create a new task.
          */
         post: operations["create_task_tasks_post"];
         delete?: never;
@@ -436,7 +396,7 @@ export interface paths {
         head?: never;
         /**
          * Update Task
-         * @description Update mutable task fields.
+         * @description update mutable task fields.
          */
         patch: operations["update_task_tasks__task_id__patch"];
         trace?: never;
@@ -1327,6 +1287,11 @@ export interface components {
              */
             public_cdn_origin?: string | null;
             /**
+             * Public Console Origin
+             * @description public admin console origin
+             */
+            public_console_origin?: string | null;
+            /**
              * Analytics Key
              * @description analytics key (env-only)
              */
@@ -1364,6 +1329,11 @@ export interface components {
              * @description public cdn origin
              */
             public_cdn_origin?: string | null;
+            /**
+             * Public Console Origin
+             * @description public console origin
+             */
+            public_console_origin?: string | null;
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
@@ -2423,16 +2393,6 @@ export interface components {
              */
             reason: string;
         };
-        /**
-         * RuntimeConfigOut
-         * @description Runtime configuration values safe for clients.
-         */
-        RuntimeConfigOut: {
-            /** Frontend Origin */
-            frontend_origin?: string | null;
-            /** Cdn Origin */
-            cdn_origin?: string | null;
-        };
         /** SecuritySettings */
         SecuritySettings: {
             /**
@@ -2909,7 +2869,7 @@ export interface components {
         };
         /**
          * User
-         * @description Schema for user response.
+         * @description schema for user response.
          */
         User: {
             /**
@@ -2963,7 +2923,13 @@ export interface components {
         };
         /**
          * UserCreate
-         * @description Schema for creating a user.
+         * @description schema for creating a user.
+         *
+         *     note: is_active and is_superuser are optional.
+         *     the server decides final values:
+         *     - bootstrap (first user): may be superuser only if explicitly requested
+         *     - unauthenticated: regular user only (is_active=True, is_superuser=False)
+         *     - authenticated superuser: can set privileges
          */
         UserCreate: {
             /**
@@ -2971,38 +2937,18 @@ export interface components {
              * Format: email
              */
             email: string;
-            /** Display Name */
-            display_name?: string | null;
-            /** Avatar Url */
-            avatar_url?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
-            /**
-             * Is Superuser
-             * @default false
-             */
-            is_superuser: boolean;
-            /** Preferences */
-            preferences?: {
-                [key: string]: unknown;
-            };
-            /** Integration Tokens */
-            integration_tokens?: {
-                [key: string]: unknown;
-            };
-            /** Usage Quotas */
-            usage_quotas?: {
-                [key: string]: unknown;
-            };
             /** Password */
             password: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Is Superuser */
+            is_superuser?: boolean | null;
         };
         /**
          * UserUpdate
-         * @description Schema for updating a user.
+         * @description schema for updating a user.
          */
         UserUpdate: {
             /** Email */
@@ -3100,192 +3046,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    get_system_status_system_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    get_runtime_config_system_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RuntimeConfigOut"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
     login_access_token_auth_login_access_token_post: {
         parameters: {
             query?: never;
