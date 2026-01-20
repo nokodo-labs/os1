@@ -712,7 +712,7 @@ async def admin_auth(client: AsyncClient) -> dict[str, object]:
 	password = "password"
 	user_resp = await client.post(
 		"/v1/users",
-		json={"email": email, "password": password},
+		json={"email": email, "password": password, "is_superuser": True},
 	)
 	assert user_resp.status_code == 201
 	user = user_resp.json()

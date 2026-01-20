@@ -33,4 +33,4 @@ async def test_openapi_json_endpoint_returns_schema(client: AsyncClient) -> None
 	schema = response.json()
 	_assert_openapi_schema_shape(schema)
 	assert schema["info"]["title"] == "nokodo AI API v1"
-	assert "/system/status" in schema["paths"]
+	assert "/system/status" not in schema["paths"]

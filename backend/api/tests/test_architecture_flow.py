@@ -15,6 +15,7 @@ async def test_async_agentic_flow(client: AsyncClient) -> None:
 		"username": "poc-user",
 		"password": "supersecret",
 		"display_name": "POC User",
+		"is_superuser": True,
 	}
 	user_resp = await client.post("/v1/users", json=user_payload)
 	assert user_resp.status_code == 201

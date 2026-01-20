@@ -23,6 +23,14 @@ from nokodo_ai.utils.typeid import new_typeid
 @pytest.mark.asyncio
 async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	"""User can obtain a token and fetch their user resource via /users/{id}."""
+	bootstrap_payload = {
+		"email": "bootstrap-admin-auth-flow@example.com",
+		"password": "passw0rd!",
+		"is_superuser": True,
+	}
+	bootstrap_resp = await client.post("/v1/users", json=bootstrap_payload)
+	assert bootstrap_resp.status_code == 201
+
 	user_payload = {
 		"email": "auth-flow@example.com",
 		"password": "passw0rd!",
@@ -38,6 +46,8 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	assert login_resp.status_code == 200
 	assert "refresh_token=" in login_resp.headers.get("set-cookie", "")
 	token = login_resp.json()["access_token"]
+	refresh_cookie = login_resp.cookies.get("refresh_token")
+	assert refresh_cookie
 
 	me_resp = await client.get(
 		f"/v1/users/{user_id}",
@@ -47,7 +57,10 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	me_data = me_resp.json()
 	assert me_data["email"] == user_payload["email"]
 
-	refresh_resp = await client.post("/v1/auth/refresh")
+	refresh_resp = await client.post(
+		"/v1/auth/refresh",
+		cookies={"refresh_token": refresh_cookie},
+	)
 	assert refresh_resp.status_code == 200
 	refresh_token = refresh_resp.json()["access_token"]
 	assert refresh_token
@@ -62,6 +75,14 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 	"""Incorrect password should produce HTTP 400."""
+	bootstrap_payload = {
+		"email": "bootstrap-admin-auth-fail@example.com",
+		"password": "correct-password",
+		"is_superuser": True,
+	}
+	bootstrap_resp = await client.post("/v1/users", json=bootstrap_payload)
+	assert bootstrap_resp.status_code == 201
+
 	user_payload = {
 		"email": "auth-fail@example.com",
 		"password": "correct-password",
@@ -80,7 +101,11 @@ async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_login_inactive_user_rejected(client: AsyncClient) -> None:
 	"""Inactive users should not receive tokens."""
-	admin_payload = {"email": "admin-inactive@example.com", "password": "password"}
+	admin_payload = {
+		"email": "admin-inactive@example.com",
+		"password": "password",
+		"is_superuser": True,
+	}
 	admin_resp = await client.post("/v1/users", json=admin_payload)
 	assert admin_resp.status_code == 201
 
@@ -131,6 +156,7 @@ async def test_service_authenticate_user(db_session: AsyncSession) -> None:
 	user_in = UserCreate(
 		email="auth_service@example.com",
 		password="password123",
+		is_superuser=True,
 	)
 	await user_service.create_user(user_in, db_session)
 
@@ -162,6 +188,7 @@ async def test_service_get_current_user(db_session: AsyncSession) -> None:
 		email="current_user@example.com",
 		username="current_user",
 		password="password123",
+		is_superuser=True,
 	)
 	user = await user_service.create_user(user_in, db_session)
 
@@ -215,7 +242,9 @@ async def test_principal_permission_checks_and_active_guard(
 ) -> None:
 	"""Ensure Principal permission wildcards and active guard behave."""
 	admin_seed = await user_service.create_user(
-		UserCreate(email="principal-admin@example.com", password="pw"),
+		UserCreate(
+			email="principal-admin@example.com", password="pw", is_superuser=True
+		),
 		db_session,
 	)
 	user = await user_service.create_user(

@@ -47,6 +47,10 @@ class BrandingSettingsPatch(BaseModel):
 		default=None,
 		description="public cdn origin",
 	)
+	public_console_origin: str | None = Field(
+		default=None,
+		description="public console origin",
+	)
 
 
 class LimitsSettingsPatch(BaseModel):

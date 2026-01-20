@@ -146,6 +146,10 @@ class BrandingSettings(BaseModel):
 		default=None,
 		description="public cdn origin",
 	)
+	public_console_origin: HttpUrl | None = Field(
+		default=None,
+		description="public admin console origin",
+	)
 	analytics_key: str | None = settings_field(
 		default=None,
 		private=True,

@@ -21,6 +21,7 @@ from api.middleware import (
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
 )
+from api.routers import system as system_router
 from api.settings import settings
 from api.v1.app import v1_app
 
@@ -100,6 +101,10 @@ async def root() -> dict[str, str]:
 async def health_check() -> dict[str, str]:
 	"""Health check endpoint."""
 	return {"status": "healthy"}
+
+
+# Non-versioned routes
+app.include_router(system_router.router)
 
 
 # Mount API v1

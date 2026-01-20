@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.models.user import User
 from api.settings import Settings, settings
 from api.v1.schemas.settings import (
 	SettingsResponse,
 	SettingsUpdateRequest,
 )
 from api.v1.service import settings as svc
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.auth import Principal, get_current_principal, get_optional_user
 from api.v1.service.authorization import require_permission
 
 
@@ -21,12 +22,13 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 @router.get("", response_model=SettingsResponse, response_model_exclude_unset=True)
 async def get_settings(
-	principal: Principal = Depends(get_current_principal),
+	user: User | None = Depends(get_optional_user),
 	db: AsyncSession = Depends(get_db),
 ) -> SettingsResponse:
 	"""get all settings."""
+	is_admin = bool(user is not None and user.is_active and user.is_superuser)
 	versions = await svc.get_versions(db)
-	data = settings.custom_dump(exclude_private=not principal.is_admin)
+	data = settings.custom_dump(exclude_private=not is_admin)
 	data_model = Settings.model_validate(data)
 	return SettingsResponse.model_validate(
 		{
