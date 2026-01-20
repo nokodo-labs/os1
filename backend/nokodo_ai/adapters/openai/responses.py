@@ -45,9 +45,7 @@ if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
 
 
-def _provider_tool_call_metadata(
-	*, provider: str, tool_call_id: str
-) -> JSONObject:
+def _provider_tool_call_metadata(*, provider: str, tool_call_id: str) -> JSONObject:
 	return {
 		PROVIDER_DATA_KEY: {
 			provider: {

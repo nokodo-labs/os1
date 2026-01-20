@@ -15,20 +15,20 @@ def deep_merge(
 	recursively merge overlay into base dictionary.
 
 	args:
-        base: base dictionary
+		base: base dictionary
 		overlay: dictionary to merge into base
 		overwrite: if True, overlay values replace base values when keys collide.
 			if False, existing base values are preserved and only missing keys are
 			added.
 
 	returns:
-        new dictionary with merged contents
+		new dictionary with merged contents
 
 	examples:
-        >>> base = {"a": {"b": 1, "c": 2}, "d": 3}
-        >>> overlay = {"a": {"b": 10, "e": 4}, "f": 5}
-        >>> deep_merge(base, overlay)
-        {"a": {"b": 10, "c": 2, "e": 4}, "d": 3, "f": 5}
+		>>> base = {"a": {"b": 1, "c": 2}, "d": 3}
+		>>> overlay = {"a": {"b": 10, "e": 4}, "f": 5}
+		>>> deep_merge(base, overlay)
+		{"a": {"b": 10, "c": 2, "e": 4}, "d": 3, "f": 5}
 	"""
 	result = base.copy()
 
@@ -58,16 +58,16 @@ def flatten(d: dict[str, Any], parent_key: str = "", sep: str = ".") -> dict[str
 	flatten a nested dictionary.
 
 	args:
-        d: dictionary to flatten
-        parent_key: parent key for recursion
-        sep: separator between keys
+		d: dictionary to flatten
+		parent_key: parent key for recursion
+		sep: separator between keys
 
 	returns:
-        flattened dictionary with dotted keys
+		flattened dictionary with dotted keys
 
 	examples:
-        >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
-        {"a.b": 1, "a.c": 2, "d": 3}
+		>>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
+		{"a.b": 1, "a.c": 2, "d": 3}
 	"""
 	items: list[tuple[str, Any]] = []
 
@@ -86,14 +86,14 @@ def unflatten(d: dict[str, Any], sep: str = ".") -> dict[str, Any]:
 	unflatten a dictionary with dotted keys.
 
 	args:
-        d: flattened dictionary
-        sep: separator used between keys
+		d: flattened dictionary
+		sep: separator used between keys
 
 	returns:
-        nested dictionary
+		nested dictionary
 	examples:
-        >>> unflatten({"a.b": 1, "a.c": 2, "d": 3})
-        {"a": {"b": 1, "c": 2}, "d": 3}
+		>>> unflatten({"a.b": 1, "a.c": 2, "d": 3})
+		{"a": {"b": 1, "c": 2}, "d": 3}
 	"""
 	result: dict[str, Any] = {}
 
