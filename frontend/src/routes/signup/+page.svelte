@@ -83,8 +83,7 @@
 				}
 				throw new Error(response.statusText || 'failed to create account')
 			}
-			// @ts-expect-error resolve typing is narrower than our constructed URL
-			await goto(resolve(`/login?email=${encodeURIComponent(email.trim())}` as never))
+			await goto(resolve('/login'), { state: { email: email.trim() } })
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : 'failed to create account'
 		} finally {
@@ -113,14 +112,25 @@
 								>
 									setup is required before accounts can be created.
 									{#if consoleOrigin}
-										<a
-											href={consoleOrigin}
-											target="_blank"
-											rel="noreferrer"
-											class="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
-										>
-											go to console
-										</a>
+										{#if consoleOrigin.startsWith('http:')}
+											<a
+												href={`http://${consoleOrigin.replace(/^https?:\/\//, '')}`}
+												target="_blank"
+												rel="noreferrer"
+												class="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
+											>
+												go to console
+											</a>
+										{:else}
+											<a
+												href={`https://${consoleOrigin.replace(/^https?:\/\//, '')}`}
+												target="_blank"
+												rel="noreferrer"
+												class="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
+											>
+												go to console
+											</a>
+										{/if}
 									{/if}
 								</div>
 							{/if}

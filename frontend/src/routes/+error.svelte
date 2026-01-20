@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import Home from '$lib/components/icons/Home.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
-	let { status: statusProp, error } = $props<{ status?: number; error: App.Error }>()
-
-	const status = $derived.by(() => statusProp ?? page.status ?? 500)
+	const status = $derived.by(() => page.status ?? 500)
+	const currentError = $derived.by(() => page.error)
 
 	const errorTitle = $derived.by(() => {
 		if (status === 404) return 'page not found'
@@ -16,7 +16,15 @@
 
 	const message = $derived.by(() => {
 		if (status === 404) return "the page you're looking for doesn't exist"
-		return error?.message || 'an unexpected error happened'
+		const err = currentError
+		if (
+			err &&
+			typeof err === 'object' &&
+			'message' in err &&
+			typeof (err as { message?: unknown }).message === 'string'
+		)
+			return (err as { message: string }).message
+		return 'an unexpected error happened'
 	})
 
 	$effect(() => {
@@ -42,7 +50,7 @@
 				<button
 					type="button"
 					class="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/85 transition-colors duration-150 hover:bg-white/12 hover:text-white active:scale-[0.99]"
-					onclick={() => void goto('/', { keepFocus: true, noScroll: true })}
+					onclick={() => void goto(resolve('/'), { keepFocus: true, noScroll: true })}
 					aria-label="go home"
 				>
 					<Home

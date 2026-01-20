@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable
 from typing import Literal, overload
 
-from pydantic import PrivateAttr
-
 from .adapter_enabled import AdapterEnabledBase
 from .adapters.base.chat import ChatGenerationParams
 from .adapters.chat import ChatAdapter, resolve_chat_adapter

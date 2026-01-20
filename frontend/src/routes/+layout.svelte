@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { goto, onNavigate } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { refreshAccessToken } from '$lib/api/client'
 	import { apiOriginReady } from '$lib/api/init'
@@ -112,12 +113,11 @@
 		if (!token && !isPublic) {
 			const refreshed = await refreshAccessToken()
 			if (!refreshed) {
-				const next = `${page.url.pathname}${page.url.search}`
-				void goto(`/login?next=${encodeURIComponent(next)}`, { replaceState: true })
+				const next = page.url.pathname
+				void goto(resolve('/login'), { replaceState: true, state: { next } })
 			}
 		} else if (token && isPublic) {
-			const next = page.url.searchParams.get('next') ?? '/'
-			void goto(next, { replaceState: true })
+			void goto(resolve('/'), { replaceState: true })
 		}
 	})
 

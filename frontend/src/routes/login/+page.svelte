@@ -13,15 +13,33 @@
 	let errorMessage = $state<string | null>(null)
 
 	// NOTE: searchParams access must be guarded for SSG/prerender compatibility
-	const next = $derived(browser ? (page.url.searchParams.get('next') ?? '/') : '/')
+	const next = $derived(
+		browser
+			? typeof page.state.next === 'string'
+				? page.state.next
+				: (page.url.searchParams.get('next') ?? '/')
+			: '/'
+	)
 
 	pageTitleStore.pageTitle = 'login'
 
 	$effect(() => {
 		if (!browser) return
+		const fromState = page.state.email
+		if (fromState && !email) email = fromState
 		const fromQuery = page.url.searchParams.get('email')
 		if (fromQuery && !email) email = fromQuery
 	})
+
+	function nextTargetFromNextValue(
+		nextValue: string
+	): { type: 'home' } | { type: 'chat'; id: string } {
+		if (nextValue.startsWith('/c/')) {
+			const id = nextValue.slice(3).split(/[/?#]/)[0]
+			if (id) return { type: 'chat', id }
+		}
+		return { type: 'home' }
+	}
 
 	async function onSubmit(event: SubmitEvent) {
 		event.preventDefault()
@@ -63,8 +81,12 @@
 
 			session.setToken(data.access_token)
 			void session.refresh()
-			// @ts-expect-error resolve typing is narrower than our constructed URL
-			await goto(resolve(next as never))
+			const target = nextTargetFromNextValue(next)
+			if (target.type === 'chat') {
+				await goto(resolve('/c/[id]', { id: target.id }))
+			} else {
+				await goto(resolve('/'))
+			}
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : 'failed to sign in'
 		} finally {
