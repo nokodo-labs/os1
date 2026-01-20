@@ -77,7 +77,7 @@ async def test_lifespan_skips_db_init_when_testing(
 
 @pytest.mark.asyncio
 async def test_system_status_endpoint(client):
-	response = await client.get("/v1/system/status")
+	response = await client.get("/system/status")
 	assert response.status_code == 200
 	data = response.json()
 	assert "initialized" in data
@@ -85,9 +85,12 @@ async def test_system_status_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_system_config_endpoint(client):
-	response = await client.get("/v1/system/config")
+async def test_public_settings_endpoint(client):
+	response = await client.get("/v1/settings")
 	assert response.status_code == 200
 	data = response.json()
-	assert "frontend_origin" in data
-	assert "cdn_origin" in data
+	assert "data" in data
+	assert "branding" in data["data"]
+	assert "public_frontend_origin" in data["data"]["branding"]
+	assert "public_cdn_origin" in data["data"]["branding"]
+	assert "public_console_origin" in data["data"]["branding"]

@@ -19,6 +19,7 @@ async def memory_user(db_session: AsyncSession):
 	user_in = UserCreate(
 		email="memory_test@example.com",
 		password="password123",
+		is_superuser=True,
 	)
 	return await user_service.create_user(user_in, db_session)
 
@@ -87,7 +88,9 @@ async def test_get_memory(db_session: AsyncSession, memory_user) -> None:
 async def test_get_memory_not_found(db_session: AsyncSession) -> None:
 	"""Test getting a non-existent memory."""
 	user = await user_service.create_user(
-		UserCreate(email="memory_nf@example.com", password="password123"),
+		UserCreate(
+			email="memory_nf@example.com", password="password123", is_superuser=True
+		),
 		db_session,
 	)
 	principal = Principal(user=user, group_ids=(), permissions=frozenset())
