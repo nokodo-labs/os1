@@ -30,14 +30,22 @@ from sqlalchemy.ext.asyncio import (
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _api_test_runtime_defaults() -> Generator[None]:
+def _api_test_env_defaults() -> Generator[None]:
 	"""Make api tests self-contained (no external OpenAI/Qdrant required)."""
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
 	if not os.getenv("QDRANT_URL"):
 		monkeypatch.setenv("QDRANT_URL", ":memory:")
+	try:
+		yield
+	finally:
+		monkeypatch.undo()
 
+
+@pytest.fixture(autouse=True)
+def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""Stub embeddings per-test so SDK tests aren't affected."""
 	from api.v1.service import vectorstores as vectorstores_service
 	from nokodo_ai.embeddings import EmbeddingModel
 
@@ -48,10 +56,6 @@ def _api_test_runtime_defaults() -> Generator[None]:
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
 
 	monkeypatch.setattr(EmbeddingModel, "embed", _fake_embed)
-	try:
-		yield
-	finally:
-		monkeypatch.undo()
 
 
 _CI_TRUE_VALUES = {"1", "true", "yes", "on"}
