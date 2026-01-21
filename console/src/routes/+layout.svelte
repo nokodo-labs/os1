@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { SystemService } from '$lib/api'
 	import { auth } from '$lib/auth.svelte'
@@ -13,7 +14,7 @@
 
 	onMount(async () => {
 		try {
-			const status = await SystemService.getSystemStatusSystemStatusGet()
+			const status = await SystemService.getSystemStatus()
 			isInitialized = status.initialized
 		} catch (e) {
 			console.error('Failed to check system status', e)
@@ -28,12 +29,14 @@
 		const path = page.url.pathname
 
 		if (!isInitialized) {
-			if (path !== '/welcome') goto('/welcome')
+			if (path !== '/welcome') void goto(resolve('/welcome'))
 		} else if (!auth.isAuthenticated) {
-			if (path !== '/login' && path !== '/welcome') goto('/login')
+			if (path !== '/login' && path !== '/welcome') void goto(resolve('/login'))
 		} else {
 			// Authenticated
-			if (path === '/login' || path === '/welcome' || path === '/') goto('/dashboard')
+			if (path === '/login' || path === '/welcome' || path === '/') {
+				void goto(resolve('/dashboard'))
+			}
 		}
 	})
 </script>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { auth } from '$lib/auth.svelte'
 	import {
@@ -32,7 +33,7 @@
 
 		<nav class="flex-1 space-y-2">
 			<a
-				href="/dashboard"
+				href={resolve('/dashboard')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page
 					.url.pathname === '/dashboard'
 					? 'bg-zinc-800 text-white'
@@ -42,7 +43,7 @@
 				dashboard
 			</a>
 			<a
-				href="/providers"
+				href={resolve('/providers')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/providers'
 				)
@@ -53,7 +54,7 @@
 				providers
 			</a>
 			<a
-				href="/models"
+				href={resolve('/models')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/models'
 				)
@@ -64,7 +65,7 @@
 				models
 			</a>
 			<a
-				href="/agents"
+				href={resolve('/agents')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/agents'
 				)
@@ -75,7 +76,7 @@
 				agents
 			</a>
 			<a
-				href="/plugins"
+				href={resolve('/plugins')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/plugins'
 				)
@@ -86,7 +87,7 @@
 				plugins
 			</a>
 			<a
-				href="/playground"
+				href={resolve('/playground')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/playground'
 				)
@@ -97,7 +98,7 @@
 				playground
 			</a>
 			<a
-				href="/prompts"
+				href={resolve('/prompts')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/prompts'
 				)
@@ -108,7 +109,7 @@
 				prompts
 			</a>
 			<a
-				href="/threads"
+				href={resolve('/threads')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/threads'
 				)
@@ -119,7 +120,7 @@
 				threads
 			</a>
 			<a
-				href="/memories"
+				href={resolve('/memories')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/memories'
 				)
@@ -130,7 +131,7 @@
 				memories
 			</a>
 			<a
-				href="/users"
+				href={resolve('/users')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/users'
 				)
@@ -141,7 +142,7 @@
 				users
 			</a>
 			<a
-				href="/settings"
+				href={resolve('/settings')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/settings'
 				)

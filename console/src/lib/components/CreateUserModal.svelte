@@ -68,8 +68,8 @@
 			onCreated?.(created)
 			reset()
 			close()
-		} catch (e: any) {
-			error = e?.message ?? 'failed to create user'
+		} catch (e: unknown) {
+			error = e instanceof Error ? e.message : String(e)
 		} finally {
 			isCreating = false
 		}

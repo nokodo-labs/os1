@@ -97,9 +97,9 @@
 			thread = await ThreadsService.createThreadThreadsPost(payload)
 			messages = []
 			await refreshMessages()
-		} catch (e: any) {
+		} catch (e: unknown) {
 			console.error('Failed to create thread', e)
-			actionError = e?.message || 'Failed to create thread'
+			actionError = e instanceof Error ? e.message : String(e)
 		} finally {
 			isWorking = false
 		}
@@ -119,7 +119,7 @@
 
 		isWorking = true
 		try {
-			const metadata: Record<string, any> = {}
+			const metadata: Record<string, unknown> = {}
 			if (selectedModelId) metadata.model_id = selectedModelId
 			if (selectedAgentId) metadata.agent_id = selectedAgentId
 
@@ -127,15 +127,18 @@
 				content: messageContent.trim(),
 				sender_user_id: auth.user.id,
 				sender_agent_id: selectedAgentId || null,
-				metadata_: Object.keys(metadata).length ? metadata : undefined,
+				metadata_:
+					Object.keys(metadata).length > 0
+						? (metadata as unknown as MessageCreate['metadata_'])
+						: undefined,
 			}
 
 			await ThreadsService.createMessageThreadsThreadIdMessagesPost(thread.id, payload)
 			messageContent = ''
 			await refreshMessages()
-		} catch (e: any) {
+		} catch (e: unknown) {
 			console.error('Failed to send message', e)
-			actionError = e?.message || 'Failed to send message'
+			actionError = e instanceof Error ? e.message : String(e)
 		} finally {
 			isWorking = false
 		}
@@ -241,7 +244,7 @@
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="">none</SelectItem>
-								{#each models as model}
+								{#each models as model (model.id)}
 									<SelectItem value={model.id}
 										>{model.display_name || model.name}</SelectItem
 									>
@@ -263,7 +266,7 @@
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="">none</SelectItem>
-								{#each agents as agent}
+								{#each agents as agent (agent.id)}
 									<SelectItem value={agent.id}>{agent.name}</SelectItem>
 								{/each}
 							</SelectContent>
@@ -311,7 +314,7 @@
 							no messages yet.
 						</div>
 					{:else}
-						{#each messages as msg}
+						{#each messages as msg (msg.id)}
 							<div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
 								<div
 									class="mb-2 flex items-center justify-between text-xs text-zinc-500"

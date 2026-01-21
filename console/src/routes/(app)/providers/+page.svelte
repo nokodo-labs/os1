@@ -271,7 +271,7 @@
 		</div>
 	{:else}
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each providers as provider}
+			{#each providers as provider (provider.id)}
 				<Card class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
 					<CardHeader>
 						<div class="flex items-start justify-between">
@@ -360,7 +360,7 @@
 
 			{#if modalMode === 'create' && modalStep === 'select'}
 				<CardContent class="grid grid-cols-2 gap-4">
-					{#each presets as preset}
+					{#each presets as preset (preset.name)}
 						<button
 							class="flex flex-col items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
 							onclick={() => selectPreset(preset)}
@@ -493,7 +493,7 @@
 								<p class="text-xs text-zinc-500 italic">no additional headers.</p>
 							{:else}
 								<div class="space-y-2">
-									{#each headerEntries as entry, i}
+									{#each headerEntries as entry, i (i)}
 										<div class="flex gap-2">
 											<Input
 												placeholder="Key"

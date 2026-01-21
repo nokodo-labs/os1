@@ -15,6 +15,7 @@
 	},
 	"include": [
 		".svelte-kit/ambient.d.ts",
+		".svelte-kit/non-ambient.d.ts",
 		".svelte-kit/generated",
 		".svelte-kit/types/**/*.d.ts",
 		"src/**/*.d.ts",

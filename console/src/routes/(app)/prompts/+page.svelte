@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { goto } from '$app/navigation'
-	import { page } from '$app/stores'
+	import { replaceState } from '$app/navigation'
+	import { page } from '$app/state'
 	import { PromptsService, type Prompt } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -16,6 +16,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from '@lucide/svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'command'
 	type SortDir = 'asc' | 'desc'
@@ -54,20 +55,22 @@
 	let formCommand = $state('')
 	let formContent = $state('')
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		window.history.replaceState(window.history.state, '', target)
+		replaceState('', {})
+	}
+
 	function updateQueryParams(updates: Record<string, string | null>) {
 		if (!browser) return
-		const url = $page.url
-		const params = new URLSearchParams(url.searchParams)
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
 		for (const [key, value] of Object.entries(updates)) {
 			if (!value) params.delete(key)
 			else params.set(key, value)
 		}
 		const qs = params.toString()
-		goto(qs ? `${url.pathname}?${qs}` : url.pathname, {
-			replaceState: true,
-			keepFocus: true,
-			noScroll: true,
-		})
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
 	}
 
 	function setSort(next: SortKey) {
@@ -92,7 +95,7 @@
 	$effect(() => {
 		if (!browser) return
 
-		const sp = $page.url.searchParams
+		const sp = page.url.searchParams
 		const sort = sp.get(SORT_PARAM)
 		const nextSort =
 			sort && sortOptions.some((o) => o.value === sort) ? (sort as SortKey) : DEFAULT_SORT
@@ -110,10 +113,7 @@
 	$effect(() => {
 		if (!browser) return
 
-		const skip = pageIndex * limit
-		sortKey
-		sortDir
-		refreshToken
+		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
@@ -122,8 +122,8 @@
 				prompts = result
 				hasNext = result.length === limit
 			})
-			.catch((e: any) => {
-				error = e?.message ?? 'failed to load prompts'
+			.catch((e: unknown) => {
+				error = e instanceof Error ? e.message : 'failed to load prompts'
 				prompts = []
 				hasNext = false
 			})
@@ -179,8 +179,8 @@
 			}
 			refresh()
 			closeModal()
-		} catch (e: any) {
-			error = e?.message ?? 'failed to save prompt'
+		} catch (e: unknown) {
+			error = e instanceof Error ? e.message : 'failed to save prompt'
 		} finally {
 			isSaving = false
 		}
@@ -195,8 +195,8 @@
 		try {
 			await PromptsService.deletePromptPromptsPromptIdDelete(promptId)
 			refresh()
-		} catch (e: any) {
-			error = e?.message ?? 'failed to delete prompt'
+		} catch (e: unknown) {
+			error = e instanceof Error ? e.message : 'failed to delete prompt'
 		} finally {
 			isDeleting = false
 		}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { goto } from '$app/navigation'
-	import { page } from '$app/stores'
+	import { replaceState } from '$app/navigation'
+	import { page } from '$app/state'
 	import { MemoriesService, type Memory } from '$lib/api'
 	import MemoryDetailsModal from '$lib/components/MemoryDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -16,6 +16,7 @@
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { ArrowDown, ArrowUp } from '@lucide/svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'last_accessed_at' | 'confidence' | 'category'
 	type SortDir = 'asc' | 'desc'
@@ -55,6 +56,12 @@
 	let isMemoryDetailsOpen = $state(false)
 	let selectedMemoryId = $state<string | null>(null)
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		window.history.replaceState(window.history.state, '', target)
+		replaceState('', {})
+	}
+
 	function openUser(userId: string) {
 		selectedUserId = userId
 		isUserDetailsOpen = true
@@ -71,18 +78,14 @@
 
 	function updateQueryParams(updates: Record<string, string | null>) {
 		if (!browser) return
-		const url = $page.url
-		const params = new URLSearchParams(url.searchParams)
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
 		for (const [key, value] of Object.entries(updates)) {
 			if (!value) params.delete(key)
 			else params.set(key, value)
 		}
 		const qs = params.toString()
-		goto(qs ? `${url.pathname}?${qs}` : url.pathname, {
-			replaceState: true,
-			keepFocus: true,
-			noScroll: true,
-		})
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
 	}
 
 	function setSort(next: SortKey) {
@@ -116,7 +119,7 @@
 	$effect(() => {
 		if (!browser) return
 
-		const sp = $page.url.searchParams
+		const sp = page.url.searchParams
 		const sort = sp.get(SORT_PARAM)
 		const nextSort =
 			sort && sortOptions.some((o) => o.value === sort) ? (sort as SortKey) : DEFAULT_SORT
@@ -145,10 +148,7 @@
 			return
 		}
 
-		const skip = pageIndex * limit
-		sortKey
-		sortDir
-		refreshToken
+		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
@@ -157,8 +157,8 @@
 				memories = result
 				hasNext = result.length === limit
 			})
-			.catch((e: any) => {
-				error = e?.message ?? 'failed to load memories'
+			.catch((e: unknown) => {
+				error = e instanceof Error ? e.message : 'failed to load memories'
 				memories = []
 				hasNext = false
 			})

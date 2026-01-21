@@ -13,8 +13,8 @@
 
 <script lang="ts" generics="T, SortKey extends string = string">
 	import { browser } from '$app/environment'
-	import { goto } from '$app/navigation'
-	import { page } from '$app/stores'
+	import { replaceState } from '$app/navigation'
+	import { page } from '$app/state'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -26,6 +26,7 @@
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import type { Snippet } from 'svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type Props = {
 		title: string
@@ -76,20 +77,22 @@
 	let sortKey = $state<SortKey | undefined>(defaultSort)
 	let filterValue = $state<string | null>(null)
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		window.history.replaceState(window.history.state, '', target)
+		replaceState('', {})
+	}
+
 	function updateQueryParams(updates: Record<string, string | null>) {
 		if (!browser) return
-		const url = $page.url
-		const params = new URLSearchParams(url.searchParams)
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
 		for (const [key, value] of Object.entries(updates)) {
 			if (!value) params.delete(key)
 			else params.set(key, value)
 		}
 		const qs = params.toString()
-		goto(qs ? `${url.pathname}?${qs}` : url.pathname, {
-			replaceState: true,
-			keepFocus: true,
-			noScroll: true,
-		})
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
 	}
 
 	function setSort(next: SortKey) {
@@ -109,7 +112,7 @@
 	$effect(() => {
 		if (!browser) return
 
-		const sp = $page.url.searchParams
+		const sp = page.url.searchParams
 		const sort = sp.get(sortParam)
 		const nextSort =
 			sort && sortOptions.some((o) => o.value === sort) ? (sort as SortKey) : defaultSort

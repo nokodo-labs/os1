@@ -248,7 +248,7 @@
 		</div>
 	{:else}
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each agents as agent}
+			{#each agents as agent (agent.id)}
 				<Card class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
 					<CardHeader>
 						<div class="flex items-start justify-between">
@@ -384,7 +384,7 @@
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="">none</SelectItem>
-								{#each models as model}
+								{#each models as model (model.id)}
 									<SelectItem value={model.id}
 										>{model.display_name || model.name}</SelectItem
 									>
@@ -434,7 +434,7 @@
 							<div
 								class="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3"
 							>
-								{#each availableToolPlugins as tool}
+								{#each availableToolPlugins as tool (tool.id)}
 									<label
 										class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800"
 									>
@@ -463,7 +463,7 @@
 							<div
 								class="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3"
 							>
-								{#each availableFilterPlugins as filter}
+								{#each availableFilterPlugins as filter (filter.id)}
 									<label
 										class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800"
 									>

@@ -60,9 +60,9 @@
 				resourceType === 'thread'
 					? await ThreadsService.listThreadAclThreadsThreadIdAclGet(resourceId)
 					: await ProjectsService.listProjectAclProjectsProjectIdAclGet(resourceId)
-		} catch (e: any) {
+		} catch (e: unknown) {
 			console.error('Failed to load acl', e)
-			error = e?.message || 'Failed to load permissions'
+			error = e instanceof Error ? e.message : String(e)
 		} finally {
 			isLoading = false
 		}
@@ -134,9 +134,9 @@
 							entries.map(toCreate)
 						)
 			open = false
-		} catch (e: any) {
+		} catch (e: unknown) {
 			console.error('Failed to save acl', e)
-			error = e?.message || 'Failed to save permissions'
+			error = e instanceof Error ? e.message : String(e)
 		} finally {
 			isSaving = false
 		}

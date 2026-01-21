@@ -63,7 +63,14 @@
 	function initNokodoSplash() {
 		if (document.documentElement.classList.contains('her')) return
 		const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-		const timing = {
+		type Timing = {
+			okHold: number
+			expansion: number
+			pause: number
+			fadeOut: number
+		}
+
+		const timing: Timing = {
 			okHold: 500,
 			expansion: 800,
 			pause: 200,
@@ -83,7 +90,7 @@
 		}, timing.okHold)
 	}
 
-	async function startSplashSequence(timing: any) {
+	async function startSplashSequence(timing: { expansion: number; fadeOut: number }) {
 		try {
 			await expandBrand(timing.expansion)
 			await new Promise((resolve) => setTimeout(resolve, 200))

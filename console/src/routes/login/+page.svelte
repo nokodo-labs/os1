@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { auth } from '$lib/auth.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -24,9 +25,9 @@
 
 		try {
 			await auth.login(email, password)
-			goto('/dashboard')
-		} catch (e: any) {
-			error = e.message
+			void goto(resolve('/dashboard'))
+		} catch (e: unknown) {
+			error = e instanceof Error ? e.message : 'failed to sign in'
 		} finally {
 			isLoading = false
 		}

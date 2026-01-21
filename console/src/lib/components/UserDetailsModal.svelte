@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { UsersService, type User } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -30,13 +31,19 @@
 	}
 
 	function openThreads(userId: string) {
-		goto(`/threads?user=${encodeURIComponent(userId)}`)
+		void goto(resolve('/threads'), { state: { user: userId } })
 		close()
 	}
 
 	function openMemories(userId: string) {
-		goto(`/memories?user=${encodeURIComponent(userId)}`)
+		void goto(resolve('/memories'), { state: { user: userId } })
 		close()
+	}
+
+	function errorMessage(error: unknown): string {
+		if (error instanceof Error) return error.message
+		if (typeof error === 'string') return error
+		return 'failed to load user'
 	}
 
 	$effect(() => {
@@ -52,8 +59,8 @@
 			.then((u) => {
 				user = u
 			})
-			.catch((e: any) => {
-				error = e?.message ?? 'failed to load user'
+			.catch((e: unknown) => {
+				error = errorMessage(e)
 			})
 			.finally(() => {
 				isLoading = false

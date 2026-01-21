@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { goto } from '$app/navigation'
-	import { page } from '$app/stores'
+	import { replaceState } from '$app/navigation'
+	import { page } from '$app/state'
 	import { ThreadsService, type Thread } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadDetailsModal from '$lib/components/ThreadDetailsModal.svelte'
@@ -16,6 +16,7 @@
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { ArrowDown, ArrowUp } from '@lucide/svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'last_activity_at' | 'updated_at' | 'created_at' | 'title'
 	type SortDir = 'asc' | 'desc'
@@ -82,20 +83,22 @@
 		refreshToken += 1
 	}
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		window.history.replaceState(window.history.state, '', target)
+		replaceState('', {})
+	}
+
 	function updateQueryParams(updates: Record<string, string | null>) {
 		if (!browser) return
-		const url = $page.url
-		const params = new URLSearchParams(url.searchParams)
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
 		for (const [key, value] of Object.entries(updates)) {
 			if (!value) params.delete(key)
 			else params.set(key, value)
 		}
 		const qs = params.toString()
-		goto(qs ? `${url.pathname}?${qs}` : url.pathname, {
-			replaceState: true,
-			keepFocus: true,
-			noScroll: true,
-		})
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
 	}
 
 	function setSort(next: SortKey) {
@@ -121,14 +124,18 @@
 	$effect(() => {
 		if (!browser) return
 
-		const sp = $page.url.searchParams
+		const sp = page.url.searchParams
 		const sort = sp.get(SORT_PARAM)
 		const nextSort =
 			sort && sortOrder.includes(sort as SortKey) ? (sort as SortKey) : DEFAULT_SORT
 		const dir = sp.get(SORT_DIR_PARAM)
 		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
-		const nextOwner = user?.trim() ? user : null
+		const stateUser =
+			typeof (page.state as { user?: unknown } | undefined)?.user === 'string'
+				? ((page.state as { user?: unknown }).user as string)
+				: null
+		const nextOwner = user?.trim() ? user : stateUser?.trim() ? stateUser : null
 
 		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== nextOwner) {
 			pageIndex = 0
@@ -137,15 +144,15 @@
 		sortKey = nextSort
 		sortDir = nextDir
 		ownerIdFilter = nextOwner
+		if (!user && nextOwner) {
+			updateQueryParams({ [USER_PARAM]: nextOwner })
+		}
 	})
 
 	$effect(() => {
 		if (!browser) return
 
-		const skip = pageIndex * limit
-		sortKey
-		sortDir
-		refreshToken
+		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
@@ -162,8 +169,8 @@
 				threads = result
 				hasNext = result.length === limit
 			})
-			.catch((e: any) => {
-				error = e?.message ?? 'failed to load threads'
+			.catch((e: unknown) => {
+				error = e instanceof Error ? e.message : 'failed to load threads'
 				threads = []
 				hasNext = false
 			})

@@ -53,8 +53,8 @@
 			.then((m) => {
 				memory = m
 			})
-			.catch((e: any) => {
-				error = e?.message ?? 'failed to load memory'
+			.catch((e: unknown) => {
+				error = e instanceof Error ? e.message : String(e)
 			})
 			.finally(() => {
 				isLoading = false

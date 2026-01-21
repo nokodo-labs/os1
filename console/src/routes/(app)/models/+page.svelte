@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths'
 	import {
 		ModelsService,
 		ProvidersService,
@@ -205,9 +206,11 @@
 				await ModelsService.createModelModelsPost(createPayload)
 			} else if (editingId) {
 				// Exclude provider_id from update
-				const { provider_id, ...rest } = formState
+				const rest = Object.fromEntries(
+					Object.entries(formState).filter(([k]) => k !== 'provider_id')
+				)
 				const updatePayload = {
-					...rest,
+					...(rest as unknown as Record<string, unknown>),
 					context_window: parseOptionalNumber(contextWindowInput),
 					input_cost: parseOptionalNumber(inputCostInput),
 					output_cost: parseOptionalNumber(outputCostInput),
@@ -216,9 +219,9 @@
 			}
 			showModal = false
 			await fetchData()
-		} catch (e: any) {
+		} catch (e: unknown) {
 			console.error('Failed to save model', e)
-			submitError = e.message || 'Failed to save model'
+			submitError = e instanceof Error ? e.message : String(e)
 		} finally {
 			isLoading = false
 		}
@@ -317,7 +320,7 @@
 					</Button>
 				</span>
 				<a
-					href="/providers"
+					href={resolve('/providers')}
 					class="text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
 				>
 					{addModelDisabledReason}
@@ -345,7 +348,7 @@
 		</div>
 	{:else}
 		<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-			{#each filteredModels as model}
+			{#each filteredModels as model (model.id)}
 				<Card class="border-zinc-800 bg-zinc-900 text-zinc-100">
 					<CardHeader class="flex flex-row items-start justify-between space-y-0 pb-2">
 						<CardTitle class="text-base font-medium">
@@ -436,7 +439,7 @@
 								</span>
 							</SelectTrigger>
 							<SelectContent>
-								{#each providers as provider}
+								{#each providers as provider (provider.id)}
 									<SelectItem value={provider.id}>{provider.name}</SelectItem>
 								{/each}
 							</SelectContent>
@@ -504,7 +507,7 @@
 								</span>
 							</SelectTrigger>
 							<SelectContent>
-								{#each adapterOptions as opt}
+								{#each adapterOptions as opt (opt.value)}
 									<SelectItem value={opt.value}>{opt.label}</SelectItem>
 								{/each}
 							</SelectContent>

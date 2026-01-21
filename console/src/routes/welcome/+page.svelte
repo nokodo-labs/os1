@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths'
 	import { auth } from '$lib/auth.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -30,9 +31,9 @@
 			// Since we are now authenticated, the layout should let us through to /
 			// BUT isInitialized might still be false in the layout's state until we reload.
 			// We might need to reload the page to reset the layout state.
-			window.location.href = '/dashboard'
-		} catch (e: any) {
-			error = e.message
+			window.location.href = resolve('/dashboard')
+		} catch (e: unknown) {
+			error = e instanceof Error ? e.message : 'failed to create account'
 			isLoading = false
 		}
 	}

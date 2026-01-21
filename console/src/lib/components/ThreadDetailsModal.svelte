@@ -56,19 +56,23 @@
 			.replace(/\t/g, '→\t')
 	}
 
+	function errorMessage(e: unknown): string {
+		return e instanceof Error ? e.message : String(e)
+	}
+
 	function contentToText(message: Message) {
 		const parts = message.content ?? []
 		const rendered = parts
 			.map((part) => {
-				if (typeof (part as any)?.text === 'string') return (part as any).text
-				if ((part as any)?.data) return JSON.stringify((part as any).data, null, 2)
-				if (typeof (part as any)?.reason === 'string')
-					return `refusal: ${(part as any).reason}`
-				if ((part as any)?.url) return `attachment: ${(part as any).url}`
-				if ((part as any)?.filename) return `attachment: ${(part as any).filename}`
+				if ('text' in part && typeof part.text === 'string') return part.text
+				if ('data' in part && part.data) return JSON.stringify(part.data, null, 2)
+				if ('reason' in part && typeof part.reason === 'string')
+					return `refusal: ${part.reason}`
+				if ('url' in part && part.url) return `attachment: ${part.url}`
+				if ('filename' in part && part.filename) return `attachment: ${part.filename}`
 				return ''
 			})
-			.filter(Boolean)
+			.filter((s): s is string => Boolean(s))
 		// Join with newlines and apply debug rendering
 		const raw = rendered.join('\n\n')
 		return renderDebugText(raw)
@@ -100,8 +104,8 @@
 			messages = [...page].reverse()
 			await tick()
 			messagesEl?.scrollTo({ top: messagesEl.scrollHeight })
-		} catch (e: any) {
-			messageError = e?.message ?? 'failed to load messages'
+		} catch (e: unknown) {
+			messageError = errorMessage(e) || 'failed to load messages'
 			messageHasMore = false
 		} finally {
 			isLoadingMessages = false
@@ -139,8 +143,8 @@
 			await tick()
 			const newScrollHeight = messagesEl.scrollHeight
 			messagesEl.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight)
-		} catch (e: any) {
-			messageError = e?.message ?? 'failed to load older messages'
+		} catch (e: unknown) {
+			messageError = errorMessage(e) || 'failed to load older messages'
 		} finally {
 			isLoadingMessages = false
 		}
@@ -166,8 +170,8 @@
 		messageError = null
 
 		Promise.all([loadThreadMeta(threadId), loadLatestMessages(threadId)])
-			.catch((e: any) => {
-				error = e?.message ?? 'failed to load thread'
+			.catch((e: unknown) => {
+				error = errorMessage(e) || 'failed to load thread'
 			})
 			.finally(() => {
 				isLoading = false
