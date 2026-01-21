@@ -13,6 +13,8 @@ import {
 	UsersService,
 } from './generated'
 
+export { SystemService } from './system'
+
 const DEFAULT_API_BASE = 'http://localhost:1383/v1'
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL || DEFAULT_API_BASE
