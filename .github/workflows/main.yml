@@ -87,22 +87,40 @@ jobs:
             exit 0
           fi
 
-          branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          current_run_id="${GITHUB_RUN_ID}"
-          repo="${GITHUB_REPOSITORY}"
+          # GitHub intentionally restricts access to the Actions API for `pull_request` workflows
+          # coming from forks, and returns 404 even with correct requests.
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            is_fork_pr=$(jq -r '.pull_request.head.repo.full_name != .repository.full_name' "${GITHUB_EVENT_PATH}" 2>/dev/null || echo "false")
+            if [ "${is_fork_pr}" = "true" ]; then
+              echo "force_backend=false" >> "$GITHUB_OUTPUT"
+              echo "force_frontend=false" >> "$GITHUB_OUTPUT"
+              echo "force_console=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
 
-          previous_run_id=$(gh api "repos/${repo}/actions/workflows/main.yml/runs" \
+          branch=$(printf "%s" "${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}" | tr -d '\r')
+          current_run_id=$(printf "%s" "${GITHUB_RUN_ID}" | tr -d '\r')
+          repo=$(printf "%s" "${GITHUB_REPOSITORY}" | tr -d '\r')
+
+          previous_run_id_raw=$(gh api "repos/${repo}/actions/workflows/main.yml/runs" \
             -f branch="${branch}" \
             -f status=completed \
             -f per_page=10 \
-            --jq ".workflow_runs[] | select(.id != ${current_run_id}) | .id" \
-            | head -n 1 || true)
+            --jq ".workflow_runs[] | select(.id != ${current_run_id}) | .id")
+
+          previous_run_id=$(printf "%s" "${previous_run_id_raw}" | head -n 1 | tr -d '\r')
 
           if [ -z "${previous_run_id}" ]; then
             echo "force_backend=false" >> "$GITHUB_OUTPUT"
             echo "force_frontend=false" >> "$GITHUB_OUTPUT"
             echo "force_console=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          if ! echo "${previous_run_id}" | grep -Eq '^[0-9]+$'; then
+            echo "unexpected previous_run_id: ${previous_run_id}" >&2
+            exit 1
           fi
 
           job_conclusion() {

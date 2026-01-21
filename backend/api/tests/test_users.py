@@ -53,33 +53,27 @@ async def test_get_users_sorting(
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 
-	resp_a = await client.post(
-		"/v1/users",
-		json={"email": "a_sort@example.com", "password": "pw"},
-		headers=headers,
-	)
-	assert resp_a.status_code == 201
+	# Use lowercase alnum-only local parts so ordering is stable across DB collations.
+	created_emails = [
+		"asort1@example.com",
+		"asort2@example.com",
+		"bsort1@example.com",
+		"bsort2@example.com",
+	]
 
-	resp_b = await client.post(
-		"/v1/users",
-		json={"email": "b_sort@example.com", "password": "pw"},
-		headers=headers,
-	)
-	assert resp_b.status_code == 201
-
-	# Create a second pair in reverse order so the test catches missing sorting.
-	resp_b2 = await client.post(
-		"/v1/users",
-		json={"email": "b_sort_2@example.com", "password": "pw"},
-		headers=headers,
-	)
-	assert resp_b2.status_code == 201
-	resp_a2 = await client.post(
-		"/v1/users",
-		json={"email": "a_sort_2@example.com", "password": "pw"},
-		headers=headers,
-	)
-	assert resp_a2.status_code == 201
+	# Create out-of-order so the test catches missing sorting.
+	for email in [
+		"bsort2@example.com",
+		"asort1@example.com",
+		"bsort1@example.com",
+		"asort2@example.com",
+	]:
+		resp = await client.post(
+			"/v1/users",
+			json={"email": email, "password": "pw"},
+			headers=headers,
+		)
+		assert resp.status_code == 201
 
 	response = await client.get(
 		"/v1/users",
@@ -90,19 +84,9 @@ async def test_get_users_sorting(
 	emails = [u["email"] for u in response.json()]
 
 	# Compare only the emails created in this test.
-	created = {
-		"a_sort@example.com",
-		"b_sort@example.com",
-		"a_sort_2@example.com",
-		"b_sort_2@example.com",
-	}
+	created = set(created_emails)
 	filtered = [email for email in emails if email in created]
-	assert filtered == [
-		"a_sort@example.com",
-		"a_sort_2@example.com",
-		"b_sort@example.com",
-		"b_sort_2@example.com",
-	]
+	assert filtered == sorted(created_emails)
 
 
 @pytest.mark.asyncio
