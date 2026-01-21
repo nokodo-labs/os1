@@ -43,17 +43,14 @@ def _api_test_runtime_defaults() -> Generator[None]:
 
 	vectorstores_service._qdrant_adapter.cache_clear()
 
-	original_embed = EmbeddingModel.embed
-
 	async def _fake_embed(self: EmbeddingModel, texts: list[str]) -> list[list[float]]:
 		_ = self
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
 
-	EmbeddingModel.embed = _fake_embed
+	monkeypatch.setattr(EmbeddingModel, "embed", _fake_embed)
 	try:
 		yield
 	finally:
-		EmbeddingModel.embed = original_embed
 		monkeypatch.undo()
 
 

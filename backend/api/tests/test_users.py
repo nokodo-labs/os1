@@ -59,12 +59,27 @@ async def test_get_users_sorting(
 		headers=headers,
 	)
 	assert resp_a.status_code == 201
+
 	resp_b = await client.post(
 		"/v1/users",
 		json={"email": "b_sort@example.com", "password": "pw"},
 		headers=headers,
 	)
 	assert resp_b.status_code == 201
+
+	# Create a second pair in reverse order so the test catches missing sorting.
+	resp_b2 = await client.post(
+		"/v1/users",
+		json={"email": "b_sort_2@example.com", "password": "pw"},
+		headers=headers,
+	)
+	assert resp_b2.status_code == 201
+	resp_a2 = await client.post(
+		"/v1/users",
+		json={"email": "a_sort_2@example.com", "password": "pw"},
+		headers=headers,
+	)
+	assert resp_a2.status_code == 201
 
 	response = await client.get(
 		"/v1/users",
@@ -73,7 +88,21 @@ async def test_get_users_sorting(
 	)
 	assert response.status_code == 200
 	emails = [u["email"] for u in response.json()]
-	assert emails == sorted(emails)
+
+	# Compare only the emails created in this test.
+	created = {
+		"a_sort@example.com",
+		"b_sort@example.com",
+		"a_sort_2@example.com",
+		"b_sort_2@example.com",
+	}
+	filtered = [email for email in emails if email in created]
+	assert filtered == [
+		"a_sort@example.com",
+		"a_sort_2@example.com",
+		"b_sort@example.com",
+		"b_sort_2@example.com",
+	]
 
 
 @pytest.mark.asyncio
