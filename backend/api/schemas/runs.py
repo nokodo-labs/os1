@@ -11,7 +11,10 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 class ThreadRunRequest(BaseModel):
-	"""Payload to run a thread with an agent, optionally appending a new user message."""
+	"""
+	payload to run a thread with an agent,
+	optionally appending a new user message.
+	"""
 
 	agent_id: TypeID
 	stream: Literal[True] = True
@@ -20,7 +23,8 @@ class ThreadRunRequest(BaseModel):
 
 
 class ThreadRunResponse(BaseModel):
-	"""response containing all messages produced by a run.
+	"""
+	response containing all messages produced by a run.
 
 	an agent run can produce multiple messages:
 	- assistant message with tool calls
