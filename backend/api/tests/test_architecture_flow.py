@@ -5,10 +5,30 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from nokodo_ai.embeddings import EmbeddingModel
+
 
 @pytest.mark.asyncio
-async def test_async_agentic_flow(client: AsyncClient) -> None:
+async def test_async_agentic_flow(
+	client: AsyncClient,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
 	"""Exercise the primary architecture entities in a single flow."""
+	from api.v1.service import vectorstores as vectorstores_service
+
+	monkeypatch.setenv("QDRANT_URL", ":memory:")
+	monkeypatch.setenv("OPENAI_API_KEY", "test")
+	vectorstores_service._qdrant_adapter.cache_clear()
+
+	async def _fake_embed(
+		self: EmbeddingModel,
+		texts: list[str],
+	) -> list[list[float]]:
+		_ = self
+		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
+
+	monkeypatch.setattr(EmbeddingModel, "embed", _fake_embed)
+
 	# Create a baseline user
 	user_payload = {
 		"email": "poc@example.com",
