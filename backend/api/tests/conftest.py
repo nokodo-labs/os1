@@ -29,6 +29,16 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
+_CI_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _is_ci_run() -> bool:
+	value = os.getenv("CI")
+	if not value:
+		return False
+	return value.strip().lower() in _CI_TRUE_VALUES
+
+
 class AdminConnectionUnavailableError(RuntimeError):
 	"""Raised when a privileged Postgres connection cannot be established."""
 
@@ -180,6 +190,8 @@ WHERE datname LIKE :pattern
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 	_ = (session, exitstatus)
 	if os.getenv("PYTEST_XDIST_WORKER"):
+		return
+	if _is_ci_run():
 		return
 	_cleanup_leftover_test_databases()
 
