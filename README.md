@@ -18,7 +18,9 @@
 
 nokodo is a next-gen AI platform that goes beyond chat. it combines powerful agentic capabilities with a unified workspace for conversations, autonomous coding, deep research, and life management - all wrapped in a stunning UI designed for the future.
 
-![demo](https://nokodo.net/media/nokodo-ai/demo-1.gif)
+
+https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
+
 
 > [!WARNING]
 > 🚧 this project is in **prototype stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
