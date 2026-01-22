@@ -35,7 +35,7 @@ jobs:
         shell: bash
         working-directory: backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -90,7 +90,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
       QDRANT_URL: ":memory:"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python (from file)
         if: ${{ matrix.python == 'file' }}

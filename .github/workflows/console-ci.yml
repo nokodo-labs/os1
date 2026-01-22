@@ -36,7 +36,7 @@ jobs:
         working-directory: console
     steps:
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: setup Node
         uses: actions/setup-node@v6
@@ -69,7 +69,7 @@ jobs:
         working-directory: console
     steps:
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: setup Node from .nvmrc
         if: ${{ matrix.node == 'file' }}

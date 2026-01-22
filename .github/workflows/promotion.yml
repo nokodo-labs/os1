@@ -67,7 +67,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
