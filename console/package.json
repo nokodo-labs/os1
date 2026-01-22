@@ -22,7 +22,7 @@
 	"devDependencies": {
 		"@eslint/js": "^9.39.1",
 		"@internationalized/date": "^3.10.1",
-		"@lucide/svelte": "^0.556.0",
+		"@lucide/svelte": "^0.562.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.50.0",
 		"@tailwindcss/postcss": "^4.1.16",
