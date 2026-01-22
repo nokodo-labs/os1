@@ -103,16 +103,15 @@ jobs:
           current_run_id=$(printf "%s" "${GITHUB_RUN_ID}" | tr -d '\r')
           repo=$(printf "%s" "${GITHUB_REPOSITORY}" | tr -d '\r')
 
+          branch_q=$(jq -rn --arg v "${branch}" '$v|@uri')
+
           workflow_id=$(gh api "repos/${repo}/actions/runs/${current_run_id}" --jq '.workflow_id' | tr -d '\r') 
           if ! echo "${workflow_id}" | grep -Eq '^[0-9]+$'; then
             echo "unexpected workflow_id: ${workflow_id}" >&2
             exit 1
           fi
 
-          previous_run_id=$(gh api "repos/${repo}/actions/workflows/${workflow_id}/runs" \
-            -f branch="${branch}" \
-            -f status=completed \
-            -f per_page=10 \
+          previous_run_id=$(gh api "repos/${repo}/actions/workflows/${workflow_id}/runs?branch=${branch_q}&status=completed&per_page=10" \
             --jq ".workflow_runs | map(select(.id != ${current_run_id})) | first | .id // empty" \
             | tr -d '\r')
 
@@ -130,8 +129,7 @@ jobs:
 
           job_conclusion() {
             local job_name="$1"
-            gh api "repos/${repo}/actions/runs/${previous_run_id}/jobs" \
-              -f per_page=100 \
+            gh api "repos/${repo}/actions/runs/${previous_run_id}/jobs?per_page=100" \
               --jq ".jobs[] | select((.name | ascii_downcase) == (\"${job_name}\" | ascii_downcase)) | .conclusion" \
               | head -n 1 || true
           }
