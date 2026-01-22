@@ -24,7 +24,7 @@
 		"@internationalized/date": "^3.10.1",
 		"@lucide/svelte": "^0.556.0",
 		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.49.1",
+		"@sveltejs/kit": "^2.50.0",
 		"@tailwindcss/postcss": "^4.1.16",
 		"@tsconfig/svelte": "^5.0.4",
 		"@types/node": "^25.0.0",
