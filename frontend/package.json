@@ -37,7 +37,7 @@
 		"@types/three": "^0.182.0",
 		"@vitest/coverage-v8": "^4.0.15",
 		"@vitest/ui": "^4.0.15",
-		"autoprefixer": "^10.4.22",
+		"autoprefixer": "^10.4.23",
 		"clsx": "^2.1.1",
 		"eslint": "^9.39.1",
 		"eslint-config-prettier": "^10.1.8",
