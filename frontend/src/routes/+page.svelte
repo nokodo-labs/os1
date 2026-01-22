@@ -48,7 +48,7 @@
 	const isTemporaryChatMode = $derived(chatMode === 'temp')
 
 	$effect(() => {
-		pageTitleStore.pageTitle = isChatMode ? 'new chat' : 'homepage'
+		pageTitleStore.pageTitle = isChatMode ? 'new chat' : 'home'
 	})
 
 	let showChatBanner = $state(false)
