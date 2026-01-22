@@ -56,7 +56,7 @@
 		"npm": ">=10.0.0"
 	},
 	"dependencies": {
-		"bits-ui": "^2.14.4",
+		"bits-ui": "^2.15.4",
 		"clsx": "^2.1.1",
 		"tailwind-merge": "^3.4.0",
 		"tailwindcss-animate": "^1.0.7"
