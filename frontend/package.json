@@ -33,7 +33,7 @@
 		"@tailwindcss/postcss": "^4.1.17",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.2.9",
-		"@types/node": "^25.0.0",
+		"@types/node": "^25.0.10",
 		"@types/three": "^0.182.0",
 		"@vitest/coverage-v8": "^4.0.15",
 		"@vitest/ui": "^4.0.15",
