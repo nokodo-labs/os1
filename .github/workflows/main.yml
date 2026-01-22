@@ -103,13 +103,18 @@ jobs:
           current_run_id=$(printf "%s" "${GITHUB_RUN_ID}" | tr -d '\r')
           repo=$(printf "%s" "${GITHUB_REPOSITORY}" | tr -d '\r')
 
-          previous_run_id_raw=$(gh api "repos/${repo}/actions/workflows/main.yml/runs" \
+          workflow_id=$(gh api "repos/${repo}/actions/runs/${current_run_id}" --jq '.workflow_id' | tr -d '\r') 
+          if ! echo "${workflow_id}" | grep -Eq '^[0-9]+$'; then
+            echo "unexpected workflow_id: ${workflow_id}" >&2
+            exit 1
+          fi
+
+          previous_run_id=$(gh api "repos/${repo}/actions/workflows/${workflow_id}/runs" \
             -f branch="${branch}" \
             -f status=completed \
             -f per_page=10 \
-            --jq ".workflow_runs[] | select(.id != ${current_run_id}) | .id")
-
-          previous_run_id=$(printf "%s" "${previous_run_id_raw}" | head -n 1 | tr -d '\r')
+            --jq ".workflow_runs | map(select(.id != ${current_run_id})) | first | .id // empty" \
+            | tr -d '\r')
 
           if [ -z "${previous_run_id}" ]; then
             echo "force_backend=false" >> "$GITHUB_OUTPUT"

@@ -5,26 +5,26 @@ on:
     inputs:
       run_tests:
         type: boolean
-        description: "whether to run tests"
+        description: "run tests"
         required: false
         default: true
       run_lint:
         type: boolean
-        description: "whether to run linting"
+        description: "run linting"
         required: false
-        default: false
+        default: true
   workflow_dispatch:
     inputs:
       run_tests:
-        description: "whether to run tests"
+        description: "run tests"
         type: boolean
         required: false
         default: true
       run_lint:
-        description: "whether to run linting"
+        description: "run linting"
         type: boolean
         required: false
-        default: false
+        default: true
 
 jobs:
   format:
