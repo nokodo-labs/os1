@@ -74,7 +74,7 @@ jobs:
       - name: Build promotion changelog
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@v5
+        uses: mikepenz/release-changelog-builder-action@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fromTag: ${{ steps.config.outputs.target_branch }}
