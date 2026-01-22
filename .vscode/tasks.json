@@ -24,7 +24,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
-			"dependsOn": "Docker: Ensure Dev Deps",
+			"dependsOn": "Docker: ensure dev deps",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
@@ -48,7 +48,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
-			"dependsOn": "Docker: Ensure Dev Deps",
+			"dependsOn": "Docker: ensure dev deps",
 			"group": {
 				"kind": "test",
 				"isDefault": true

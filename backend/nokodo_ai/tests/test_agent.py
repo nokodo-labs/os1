@@ -82,7 +82,6 @@ class _QueuedChatAdapter(BaseChatAdapter):
 
 def _make_chat_model(adapter: BaseChatAdapter) -> ChatModel:
 	return ChatModel.model_construct(
-		provider="openai",
 		api=None,
 		model_name="stub",
 		adapter=adapter,

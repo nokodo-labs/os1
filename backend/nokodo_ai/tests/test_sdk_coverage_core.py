@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Any, ClassVar, Literal, cast
 
 import pytest
+from pydantic import ValidationError
 
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.deltas import (
@@ -282,14 +283,9 @@ def test_assistant_message_merge_skips_empty_delta_name_and_args() -> None:
 def test_chat_model_resolve_adapter_config_and_init_branches(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	# unknown provider
-	with pytest.raises(ValueError, match="unknown provider"):
+	# adapter is now required - no magic inference from model_name alone
+	with pytest.raises(ValidationError):
 		ChatModel.model_validate({"model_name": "weird:thing"})
-
-	# no adapter specified -> auto config (use ollama to avoid client initialization)
-	m = ChatModel.model_validate({"model_name": "ollama:llama"})
-	assert m.provider == "ollama"
-	assert m.adapter.type == "ollama.chat"
 
 	# adapter shorthand expanded to fully qualified type
 	from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
@@ -348,11 +344,14 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 
 
 def test_embedding_model_resolve_adapter_config_unknown_and_ok() -> None:
-	with pytest.raises(ValueError, match="unknown provider"):
-		EmbeddingModel.model_validate({"model": "weird:thing"})
+	# adapter is now required - no magic inference
+	with pytest.raises(ValidationError):
+		EmbeddingModel.model_validate({"model_name": "weird:thing"})
 
-	emb = EmbeddingModel.model_validate({"model": "ollama:embed"})
-	assert emb.provider == "ollama"
+	# explicit adapter with ollama
+	emb = EmbeddingModel.model_validate(
+		{"model_name": "embed", "adapter": {"type": "ollama.embedding"}}
+	)
 	assert emb.adapter.type == "ollama.embedding"
 
 	emb2 = EmbeddingModel.model_validate(
@@ -363,8 +362,9 @@ def test_embedding_model_resolve_adapter_config_unknown_and_ok() -> None:
 	)
 	assert emb2.adapter.type == "ollama.embedding"
 
-	with pytest.raises(Exception):
-		EmbeddingModel.model_validate({"provider": "", "model_name": "m"})
+	# missing adapter should fail
+	with pytest.raises(ValidationError):
+		EmbeddingModel.model_validate({"model_name": "m"})
 
 	# non-dict input passes through unchanged and then fails model parsing
 	with pytest.raises(Exception):

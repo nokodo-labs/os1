@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable
-from typing import Literal, overload
+from typing import Any, Literal, overload
+
+from pydantic import Field
 
 from .adapter_enabled import AdapterEnabledBase
 from .adapters.base.chat import ChatGenerationParams
@@ -17,18 +19,33 @@ from .tool import ToolDefinition
 class ChatModel(ChatGenerationParams, AdapterEnabledBase[ChatAdapter]):
 	"""high-level unified interface for LLM chat models.
 
-	usage (defaults):
-		llm = ChatModel("gpt-4o")
-		response = await llm.generate(messages)
-
-	usage (explicit adapter config):
-		llm = ChatModel(
-			"openai:gpt-4o",
-			adapter={"api_key": "..."}
+	usage:
+		llm = ChatModel.create(
+			"gpt-4o",
+			adapter={"type": "openai", "api_key": "..."},
 		)
+		response = await llm.generate(messages)
 	"""
 
+	model_name: str = Field(..., description="model identifier")
+
 	_adapter_resolver: ... = resolve_chat_adapter
+
+	@classmethod
+	def create(
+		cls,
+		model_name: str,
+		*,
+		adapter: ChatAdapter | dict[str, Any],
+		**fields: Any,
+	) -> ChatModel:
+		"""Create a chat model with explicit adapter configuration.
+
+		- `model_name` is positional for minimal call sites.
+		- `adapter` can be a dict (recommended) or an adapter instance.
+		- `adapter.type` may be a shorthand provider name like `openai`.
+		"""
+		return super()._create(("model_name", model_name), adapter=adapter, **fields)
 
 	@overload
 	def generate(

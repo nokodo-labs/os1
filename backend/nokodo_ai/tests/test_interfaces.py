@@ -25,19 +25,35 @@ def test_llm_requires_model() -> None:
 
 
 def test_llm_resolves_openai_model() -> None:
-	llm = ChatModel(
-		"gpt-4o",
-		adapter={"type": "openai", "api_key": "test"},
+	llm = ChatModel.model_validate(
+		{
+			"model_name": "gpt-4o",
+			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
+		}
 	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
 
 
-def test_llm_resolves_openai_explicit() -> None:
-	llm = ChatModel(
-		"openai:gpt-4o-mini",
+def test_llm_adapter_shorthand_resolves_to_full_type() -> None:
+	"""shorthand provider name in adapter type resolves to default adapter."""
+	llm = ChatModel.create(
+		"gpt-4o",
 		adapter={"type": "openai", "api_key": "test"},
+	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
+
+	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
+	assert llm.adapter.type.startswith("openai.")
+
+
+def test_llm_resolves_openai_explicit() -> None:
+	llm = ChatModel.model_validate(
+		{
+			"model_name": "gpt-4o-mini",
+			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
+		}
 	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
@@ -45,9 +61,11 @@ def test_llm_resolves_openai_explicit() -> None:
 
 
 def test_llm_resolves_openai_responses_api() -> None:
-	llm = ChatModel(
-		"openai.responses:gpt-4o",
-		adapter={"type": "openai.responses", "api_key": "test"},
+	llm = ChatModel.model_validate(
+		{
+			"model_name": "gpt-4o",
+			"adapter": {"type": "openai.responses", "api_key": "test"},
+		}
 	)
 	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
@@ -55,9 +73,11 @@ def test_llm_resolves_openai_responses_api() -> None:
 
 
 def test_llm_resolves_anthropic() -> None:
-	llm = ChatModel(
-		"anthropic:claude-sonnet-4-20250514",
-		adapter={"type": "anthropic", "api_key": "test"},
+	llm = ChatModel.model_validate(
+		{
+			"model_name": "claude-sonnet-4-20250514",
+			"adapter": {"type": "anthropic.messages", "api_key": "test"},
+		}
 	)
 	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
@@ -65,16 +85,20 @@ def test_llm_resolves_anthropic() -> None:
 
 
 def test_llm_resolves_ollama() -> None:
-	llm = ChatModel("ollama:llama3.2")
+	llm = ChatModel.model_validate(
+		{"model_name": "llama3.2", "adapter": {"type": "ollama.chat"}}
+	)
 	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
 	assert isinstance(llm.adapter, OllamaChatAdapter)
 
 
 def test_llm_resolves_google() -> None:
-	llm = ChatModel(
-		"google:gemini-2.0-flash-001",
-		adapter={"type": "google", "api_key": "test"},
+	llm = ChatModel.model_validate(
+		{
+			"model_name": "gemini-2.0-flash-001",
+			"adapter": {"type": "google.generate_content", "api_key": "test"},
+		}
 	)
 	from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
 
@@ -82,8 +106,13 @@ def test_llm_resolves_google() -> None:
 
 
 def test_llm_unknown_provider_raises() -> None:
-	with pytest.raises(ValueError, match="unknown provider"):
-		ChatModel("unknownprovider:model")
+	with pytest.raises(ValidationError):
+		ChatModel.model_validate(
+			{
+				"model_name": "model",
+				"adapter": {"type": "unknownprovider.model"},
+			}
+		)
 
 
 def test_embedding_requires_model_or_adapter() -> None:
@@ -92,22 +121,34 @@ def test_embedding_requires_model_or_adapter() -> None:
 
 
 def test_embedding_resolves_openai() -> None:
-	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
+	embedder = EmbeddingModel.model_validate(
+		{
+			"model_name": "text-embedding-3-large",
+			"adapter": {"type": "openai.embedding", "api_key": "test"},
+		}
+	)
 	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
 
 	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
 
 
 def test_embedding_resolves_ollama() -> None:
-	embedder = EmbeddingModel(model="ollama:nomic-embed-text")
+	embedder = EmbeddingModel.model_validate(
+		{"model_name": "nomic-embed-text", "adapter": {"type": "ollama.embedding"}}
+	)
 	from nokodo_ai.adapters.ollama import OllamaEmbeddingsAdapter
 
 	assert isinstance(embedder.adapter, OllamaEmbeddingsAdapter)
 
 
 def test_embedding_unknown_provider_raises() -> None:
-	with pytest.raises(ValueError, match="unknown provider"):
-		EmbeddingModel(model="unknownprovider:model")
+	with pytest.raises(ValidationError):
+		EmbeddingModel.model_validate(
+			{
+				"model_name": "model",
+				"adapter": {"type": "unknownprovider.embedding"},
+			}
+		)
 
 
 class _StubChatAdapter(BaseChatAdapter):
@@ -176,8 +217,6 @@ class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 async def test_chat_model_generate_with_thread(monkeypatch: pytest.MonkeyPatch) -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
 	llm = ChatModel.model_construct(
-		provider="openai",
-		api=None,
 		model_name="stub",
 		adapter=adapter,
 	)
@@ -206,8 +245,6 @@ async def test_chat_model_streaming_with_tools() -> None:
 		],
 	)
 	llm = ChatModel.model_construct(
-		provider="openai",
-		api=None,
 		model_name="stub",
 		adapter=adapter,
 	)
@@ -246,8 +283,6 @@ async def test_chat_model_streaming_with_tools() -> None:
 async def test_chat_model_parses_params_dict() -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
 	llm = ChatModel.model_construct(
-		provider="openai",
-		api=None,
 		model_name="stub",
 		adapter=adapter,
 	)
@@ -265,28 +300,22 @@ async def test_chat_model_parses_params_dict() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_model_resolves_default_provider(
-	monkeypatch: pytest.MonkeyPatch,
-) -> None:
-	_ = monkeypatch
-	llm = ChatModel(
-		"gpt-4o",
-		adapter={"type": "openai", "api_key": "test"},
-	)
-	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
-
-	assert llm.provider == "openai"
-	assert llm.variant is None
-	assert llm.model_name == "gpt-4o"
-	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
+async def test_chat_model_rejects_provider_fields() -> None:
+	with pytest.raises(ValidationError):
+		ChatModel.model_validate(
+			{
+				"provider": "openai",
+				"variant": None,
+				"model_name": "gpt-4o",
+				"adapter": {"type": "openai.chat_completions", "api_key": "test"},
+			}
+		)
 
 
 @pytest.mark.asyncio
 async def test_embedding_uses_provided_adapter() -> None:
 	adapter = _StubEmbeddingAdapter()
 	embedder = EmbeddingModel.model_construct(
-		provider="openai",
-		variant=None,
 		model_name="custom",
 		adapter=adapter,
 	)
@@ -297,32 +326,25 @@ async def test_embedding_uses_provided_adapter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_embedding_resolves_default_provider(
-	monkeypatch: pytest.MonkeyPatch,
-) -> None:
-	_ = monkeypatch
-	embedder = EmbeddingModel(
-		"text-embedding-3-small",
-		adapter={"type": "openai.embedding", "api_key": "test"},
-	)
-	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
-
-	assert embedder.provider == "openai"
-	assert embedder.variant is None
-	assert embedder.model_name == "text-embedding-3-small"
-	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
+async def test_embedding_rejects_provider_fields() -> None:
+	with pytest.raises(ValidationError):
+		EmbeddingModel.model_validate(
+			{
+				"provider": "openai",
+				"variant": None,
+				"model_name": "text-embedding-3-small",
+				"adapter": {"type": "openai.embedding", "api_key": "test"},
+			}
+		)
 
 
 @pytest.mark.asyncio
-async def test_embedding_variant_is_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
-	_ = monkeypatch
-	embedder = EmbeddingModel(
-		"openai.beta:text-embedding-3-large",
-		adapter={"type": "openai.embedding", "api_key": "test"},
-	)
-	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
-
-	assert embedder.provider == "openai"
-	assert embedder.variant == "beta"
-	assert embedder.model_name == "text-embedding-3-large"
-	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
+async def test_embedding_rejects_variant_field() -> None:
+	with pytest.raises(ValidationError):
+		EmbeddingModel.model_validate(
+			{
+				"variant": "beta",
+				"model_name": "text-embedding-3-large",
+				"adapter": {"type": "openai.embedding", "api_key": "test"},
+			}
+		)

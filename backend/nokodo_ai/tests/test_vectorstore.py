@@ -2,14 +2,14 @@ import pytest
 
 from nokodo_ai import JSONObject, Vectorstore
 from nokodo_ai.adapters.base.vectorstores import Chunk
+from nokodo_ai.adapters.qdrant.vectorstores import QdrantVectorstoreAdapter
 
 
 @pytest.mark.asyncio
 async def test_vectorstore_forwards_adapter_calls() -> None:
 	store = Vectorstore(
-		"qdrant",
 		collection="test-collection",
-		adapter={"type": "qdrant.vectorstore", "location": ":memory:"},
+		adapter=QdrantVectorstoreAdapter(location=":memory:"),
 	)
 
 	ids = ["a1", "a2"]
@@ -32,12 +32,33 @@ async def test_vectorstore_forwards_adapter_calls() -> None:
 @pytest.mark.asyncio
 async def test_vectorstore_collection_field() -> None:
 	store = Vectorstore(
-		"qdrant",
 		collection="my-namespace",
-		adapter={"type": "qdrant.vectorstore", "location": ":memory:"},
+		adapter=QdrantVectorstoreAdapter(location=":memory:"),
 	)
 
 	assert store.collection == "my-namespace"
+	await store.add(
+		[
+			Chunk(
+				id="id1",
+				content="content",
+				embedding=[0.1],
+				metadata={"k": "v"},
+			)
+		]
+	)
+
+
+@pytest.mark.asyncio
+async def test_vectorstore_create_supports_adapter_dict_shorthand() -> None:
+	store = Vectorstore.create(
+		"my-namespace",
+		adapter={"type": "qdrant", "location": ":memory:"},
+	)
+
+	assert store.collection == "my-namespace"
+	assert store.adapter.type == "qdrant.vectorstore"
+
 	await store.add(
 		[
 			Chunk(

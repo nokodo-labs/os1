@@ -32,7 +32,6 @@ def _make_agent_context(
 	metadata: JSONObject | None = None,
 ) -> AgentContext:
 	chat_model = ChatModel.model_construct(
-		provider="openai",
 		api=None,
 		model_name="stub",
 		adapter=_NoopChatAdapter(),

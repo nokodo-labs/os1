@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import Field
 
 from .adapter_enabled import AdapterEnabledBase
@@ -12,19 +14,13 @@ from .adapters.vectorstores import VectorstoreAdapter, resolve_vectorstore_adapt
 class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 	"""high-level unified interface for vector databases.
 
-	usage (magic - auto-selects adapter):
-		store = Vectorstore("qdrant", collection="my-docs")
-		await store.add(ids, embeddings, contents)
-		results = await store.search(query_embedding)
-
-	usage (explicit adapter):
-		from nokodo_ai.adapters.qdrant.vectorstores import QdrantVectorstoreAdapter
-		adapter = QdrantVectorstoreAdapter(url="http://localhost:6333")
-		store = Vectorstore(
-			"qdrant",
-			collection="my-docs",
-			adapter=adapter,
+	usage:
+		store = Vectorstore.create(
+			"my-docs",
+			adapter={"type": "qdrant", "base_url": "http://localhost:6333"},
 		)
+		await store.add(chunks)
+		results = await store.search(query_embedding)
 	"""
 
 	collection: str = Field(
@@ -32,6 +28,17 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 	)
 
 	_adapter_resolver: ... = resolve_vectorstore_adapter
+
+	@classmethod
+	def create(
+		cls,
+		collection: str,
+		*,
+		adapter: VectorstoreAdapter | dict[str, Any],
+		**fields: Any,
+	) -> Vectorstore:
+		"""Create a vectorstore with explicit adapter configuration."""
+		return super()._create(("collection", collection), adapter=adapter, **fields)
 
 	async def add(
 		self,

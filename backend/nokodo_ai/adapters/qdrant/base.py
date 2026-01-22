@@ -27,11 +27,11 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 				timeout=timeout,
 			)
 
-		# remote mode - need both api_key AND base_url
-		if self.api_key is None or self.base_url is None:
+		# remote mode - base_url required, api_key optional (self-hosted)
+		if self.base_url is None:
 			raise ValueError(
 				"must provide either 'location' for local mode, "
-				"or both 'api_key' and 'base_url' for remote mode"
+				"or 'base_url' for remote mode"
 			)
 
 		return AsyncQdrantClient(
