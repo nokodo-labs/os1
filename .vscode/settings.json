@@ -1,5 +1,5 @@
 {
-	// Editor
+	// editor
 	"editor.formatOnSave": true,
 	"editor.codeActionsOnSave": {
 		"source.fixAll": "explicit",
@@ -10,7 +10,7 @@
 	"editor.tabSize": 4,
 	"files.eol": "\n",
 
-	// Files
+	// files
 	"files.exclude": {
 		"**/__pycache__": true,
 		"**/.pytest_cache": true,
@@ -88,12 +88,12 @@
 	"containers.commands.build": "${containerCommand} build --pull --rm -f \"${dockerfile}\" -t ${tag} \"${context}\"",
 	"containers.commands.composeUp": [
 		{
-			"label": "Compose Up",
+			"label": "compose up",
 			"template": "${composeCommand} ${configurationFile} up ${detached} ${build}"
 		}
 	],
 
-	// Search
+	// search
 	"search.useIgnoreFiles": true,
 	"search.exclude": {
 		"**/node_modules": true,

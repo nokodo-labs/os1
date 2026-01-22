@@ -20,6 +20,16 @@ updates:
       - "dependencies"
       - "frontend"
 
+  # console dependencies
+  - package-ecosystem: "npm"
+    directory: "/console"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 30
+    labels:
+      - "dependencies"
+      - "console"
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

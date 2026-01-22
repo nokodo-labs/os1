@@ -2,10 +2,10 @@
 	"version": "2.0.0",
 	"tasks": [
 		// ═══════════════════════════════════════
-		// BACKEND
+		// backend
 		// ═══════════════════════════════════════
 		{
-			"label": "Backend: Install Dependencies",
+			"label": "backend: install dependencies",
 			"type": "shell",
 			"command": "uv sync --all-extras",
 			"options": {
@@ -18,7 +18,7 @@
 			}
 		},
 		{
-			"label": "Backend: Run Server",
+			"label": "backend: run server",
 			"type": "shell",
 			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop api.core.runtime:selector_loop_factory",
 			"options": {
@@ -42,7 +42,7 @@
 			}
 		},
 		{
-			"label": "Backend: Run Tests",
+			"label": "backend: run tests",
 			"type": "shell",
 			"command": "uv run pytest -q --tb=short --cov-report=term-missing:skip-covered",
 			"options": {
@@ -61,7 +61,7 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Backend: Check API Alive",
+			"label": "backend: check API alive",
 			"type": "process",
 			"command": "node",
 			"args": [
@@ -77,10 +77,10 @@
 		},
 
 		// ═══════════════════════════════════════
-		// FRONTEND
+		// frontend
 		// ═══════════════════════════════════════
 		{
-			"label": "Frontend: Install Dependencies",
+			"label": "frontend: install dependencies",
 			"type": "shell",
 			"command": "npm install",
 			"options": {
@@ -93,7 +93,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Dev Server",
+			"label": "frontend: dev server",
 			"type": "shell",
 			"command": "npm run dev",
 			"options": {
@@ -116,7 +116,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Build",
+			"label": "frontend: build",
 			"type": "shell",
 			"command": "npm run build",
 			"options": {
@@ -129,7 +129,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Lint",
+			"label": "frontend: lint",
 			"type": "shell",
 			"command": "npm run lint",
 			"options": {
@@ -142,7 +142,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Format",
+			"label": "frontend: format",
 			"type": "shell",
 			"command": "npm run format",
 			"options": {
@@ -154,7 +154,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Check",
+			"label": "frontend: check",
 			"type": "shell",
 			"command": "npm run check",
 			"options": {
@@ -168,7 +168,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Test",
+			"label": "frontend: test",
 			"type": "shell",
 			"command": "npm run test",
 			"options": {
@@ -182,7 +182,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Test Coverage",
+			"label": "frontend: test coverage",
 			"type": "shell",
 			"command": "npm run test:coverage",
 			"options": {
@@ -196,7 +196,7 @@
 			}
 		},
 		{
-			"label": "Frontend: Generate API Types",
+			"label": "frontend: generate API types",
 			"type": "shell",
 			"command": "npm run generate:api-types",
 			"options": {
@@ -212,10 +212,10 @@
 		},
 
 		// ═══════════════════════════════════════
-		// CONSOLE
+		// console
 		// ═══════════════════════════════════════
 		{
-			"label": "Console: Install Dependencies",
+			"label": "console: install dependencies",
 			"type": "shell",
 			"command": "npm install",
 			"options": {
@@ -228,7 +228,7 @@
 			}
 		},
 		{
-			"label": "Console: Dev Server",
+			"label": "console: dev server",
 			"type": "shell",
 			"command": "npm run dev -- --host --port 8383",
 			"options": {
@@ -251,7 +251,7 @@
 			}
 		},
 		{
-			"label": "Console: Build",
+			"label": "console: build",
 			"type": "shell",
 			"command": "npm run build",
 			"options": {
@@ -264,7 +264,7 @@
 			}
 		},
 		{
-			"label": "Console: Format",
+			"label": "console: format",
 			"type": "shell",
 			"command": "npm run format",
 			"options": {
@@ -276,7 +276,7 @@
 			}
 		},
 		{
-			"label": "Console: Check",
+			"label": "console: check",
 			"type": "shell",
 			"command": "npm run check",
 			"options": {
@@ -290,7 +290,7 @@
 			}
 		},
 		{
-			"label": "Console: Generate API",
+			"label": "console: generate API",
 			"type": "shell",
 			"command": "npm run generate:api",
 			"options": {
@@ -306,10 +306,10 @@
 		},
 
 		// ═══════════════════════════════════════
-		// DOCKER
+		// Docker
 		// ═══════════════════════════════════════
 		{
-			"label": "Docker: Ensure Dev Deps",
+			"label": "Docker: ensure dev deps",
 			"type": "shell",
 			"command": "docker compose --profile deps up -d",
 			"options": {
@@ -324,7 +324,7 @@
 			}
 		},
 		{
-			"label": "Docker: Build All",
+			"label": "Docker: build all",
 			"type": "shell",
 			"command": "docker compose build",
 			"options": {
@@ -337,7 +337,7 @@
 			}
 		},
 		{
-			"label": "Docker: Up",
+			"label": "Docker: up",
 			"type": "shell",
 			"command": "docker compose --profile local up -d",
 			"options": {
@@ -350,7 +350,7 @@
 			}
 		},
 		{
-			"label": "Docker: Down",
+			"label": "Docker: down",
 			"type": "shell",
 			"command": "docker compose down",
 			"options": {
@@ -362,7 +362,7 @@
 			}
 		},
 		{
-			"label": "Docker: Dev Mode",
+			"label": "Docker: dev mode",
 			"type": "shell",
 			"command": "docker compose --profile local up -d --build",
 			"options": {

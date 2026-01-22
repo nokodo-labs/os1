@@ -2,11 +2,11 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Backend: FastAPI Uvicorn Server",
+			"name": "backend: FastAPI Uvicorn server",
 			"type": "debugpy",
 			"request": "launch",
 			"module": "uvicorn",
-			"preLaunchTask": "Docker: Ensure Dev Deps",
+			"preLaunchTask": "Docker: ensure dev deps",
 			"args": [
 				"api.main:app",
 				"--host",
@@ -26,7 +26,7 @@
 			"purpose": ["debug-in-terminal"]
 		},
 		{
-			"name": "Python: Current File",
+			"name": "Python: current file",
 			"type": "debugpy",
 			"request": "launch",
 			"program": "${file}",
@@ -37,7 +37,7 @@
 			}
 		},
 		{
-			"name": "Backend: Pytest",
+			"name": "backend: Pytest",
 			"type": "debugpy",
 			"request": "launch",
 			"module": "pytest",
@@ -49,7 +49,7 @@
 			}
 		},
 		{
-			"name": "Frontend: Vite Dev Server",
+			"name": "frontend: Vite dev server",
 			"type": "node",
 			"request": "launch",
 			"runtimeExecutable": "npm",
@@ -59,7 +59,7 @@
 			"skipFiles": ["<node_internals>/**"]
 		},
 		{
-			"name": "Frontend: Chrome",
+			"name": "frontend: Chrome",
 			"type": "chrome",
 			"request": "launch",
 			"url": "http://localhost:888",
@@ -69,7 +69,7 @@
 			}
 		},
 		{
-			"name": "Console: Vite Dev Server",
+			"name": "console: Vite dev server",
 			"type": "node",
 			"request": "launch",
 			"runtimeExecutable": "npm",
@@ -87,7 +87,7 @@
 			"skipFiles": ["<node_internals>/**"]
 		},
 		{
-			"name": "Console: Chrome",
+			"name": "console: Chrome",
 			"type": "chrome",
 			"request": "launch",
 			"url": "http://localhost:8383",
@@ -97,7 +97,7 @@
 			}
 		},
 		{
-			"name": "Docker: Attach to Backend",
+			"name": "Docker: attach to backend",
 			"type": "debugpy",
 			"request": "attach",
 			"connect": {
@@ -114,13 +114,13 @@
 	],
 	"compounds": [
 		{
-			"name": "Full Stack",
+			"name": "full stack",
 			"configurations": [
-				"Backend: FastAPI Uvicorn Server",
-				"Frontend: Vite Dev Server",
-				"Frontend: Chrome",
-				"Console: Vite Dev Server",
-				"Console: Chrome"
+				"backend: FastAPI Uvicorn server",
+				"frontend: Vite dev server",
+				"frontend: Chrome",
+				"console: Vite dev server",
+				"console: Chrome"
 			],
 			"stopAll": true,
 			"presentation": {
@@ -130,11 +130,11 @@
 			}
 		},
 		{
-			"name": "API + Frontend",
+			"name": "API + frontend",
 			"configurations": [
-				"Backend: FastAPI Uvicorn Server",
-				"Frontend: Vite Dev Server",
-				"Frontend: Chrome"
+				"backend: FastAPI Uvicorn server",
+				"frontend: Vite dev server",
+				"frontend: Chrome"
 			],
 			"stopAll": true,
 			"presentation": {
@@ -144,11 +144,11 @@
 			}
 		},
 		{
-			"name": "API + Console",
+			"name": "API + console",
 			"configurations": [
-				"Backend: FastAPI Uvicorn Server",
-				"Console: Vite Dev Server",
-				"Console: Chrome"
+				"backend: FastAPI Uvicorn server",
+				"console: Vite dev server",
+				"console: Chrome"
 			],
 			"stopAll": true,
 			"presentation": {
