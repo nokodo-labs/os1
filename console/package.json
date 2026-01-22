@@ -27,7 +27,7 @@
 		"@sveltejs/kit": "^2.50.0",
 		"@tailwindcss/postcss": "^4.1.16",
 		"@tsconfig/svelte": "^5.0.4",
-		"@types/node": "^25.0.0",
+		"@types/node": "^25.0.10",
 		"@vitest/coverage-v8": "^4.0.15",
 		"autoprefixer": "^10.4.23",
 		"eslint": "^9.39.1",
