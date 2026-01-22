@@ -1,56 +1,56 @@
-## Description
+## description
 
-<!-- Provide a clear description of what this PR does and why -->
+<!-- provide a clear description of what this PR does and why -->
 
-## Type of Change
+## type of change
 
--   [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
--   [ ] ✨ New feature (non-breaking change which adds functionality)
--   [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
--   [ ] 📚 Documentation update
--   [ ] ♻️ Code refactor (no functional changes)
--   [ ] 🎨 Style/formatting changes
--   [ ] ⚡ Performance improvement
--   [ ] 🔧 Configuration change
+- [ ] 🐛 bug fix (non-breaking change which fixes an issue)
+- [ ] ✨ new feature (non-breaking change which adds functionality)
+- [ ] 💥 breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] 📚 documentation update
+- [ ] ♻️ code refactor (no functional changes)
+- [ ] 🎨 style/formatting changes
+- [ ] ⚡ performance improvement
+- [ ] 🔧 configuration change
 
-## Changelog
+## changelog
 
 <!--
-Provide a clear changelog with proper sections. This will be used for release notes.
-Use semantic commit prefixes: feat, fix, docs, style, refactor, perf, test, chore, etc.
+provide a clear changelog with proper sections. this will be used for release notes.
+use semantic commit prefixes: feat, fix, docs, style, refactor, perf, test, chore, etc.
 -->
 
-### Added
+### added
 
-<!-- New features or capabilities -->
+<!-- new features or capabilities -->
 
-### Changed
+### changed
 
-<!-- Changes to existing functionality -->
+<!-- changes to existing functionality -->
 
-### Fixed
+### fixed
 
-<!-- Bug fixes -->
+<!-- bug fixes -->
 
-### Removed
+### removed
 
-<!-- Deprecated or removed features -->
+<!-- deprecated or removed features -->
 
-## Testing
+## testing
 
--   [ ] I have added/updated tests to cover my changes
--   [ ] I have run all tests locally and they pass
+- [ ] i have added/updated tests to cover my changes
+- [ ] i have run all tests locally and they pass
 
-## Checklist
+## checklist
 
--   [ ] **Target branch is `dev`**
--   [ ] PR title follows [Semantic Commit format](https://www.conventionalcommits.org/) (e.g., `feat: add user authentication`, `fix: resolve CORS issue`)
--   [ ] Code follows the project's style guidelines
--   [ ] Self-review completed
--   [ ] Documentation updated (if applicable)
--   [ ] No breaking changes (or clearly documented if unavoidable)
--   [ ] Related issues linked (e.g., `Closes #123`, `Fixes #456`)
+- [ ] **target branch is `dev`**
+- [ ] PR title follows [semantic commit format](https://www.conventionalcommits.org/) (e.g., `feat: add user authentication`, `fix: resolve CORS issue`)
+- [ ] code follows the project's style guidelines
+- [ ] self-review completed
+- [ ] documentation updated (if applicable)
+- [ ] no breaking changes (or clearly documented if unavoidable)
+- [ ] related issues linked (e.g., `closes #123`, `fixes #456`)
 
-## Additional Notes
+## additional notes
 
-<!-- Any additional information, screenshots, or context -->
+<!-- any additional information, screenshots, or context -->

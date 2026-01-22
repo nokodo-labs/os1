@@ -1,4 +1,4 @@
-name: Code Promotion
+name: code promotion
 
 on:
   workflow_call:
@@ -22,10 +22,10 @@ concurrency:
 
 jobs:
   promote:
-    name: Maintain Promotion PR
+    name: maintain promotion PR
     runs-on: ubuntu-latest
     steps:
-      - name: Parse promotion configuration
+      - name: parse promotion configuration
         id: config
         run: |
           PATHS='${{ env.PROMOTION_PATHS }}'
@@ -33,7 +33,7 @@ jobs:
           TARGET_BRANCH=$(echo "$PATHS" | jq -r --arg sb "$SOURCE_BRANCH" '.[$sb] // empty')
 
           if [ -z "$TARGET_BRANCH" ]; then
-            echo "No promotion path configured for branch: $SOURCE_BRANCH"
+            echo "no promotion path configured for branch: $SOURCE_BRANCH"
             echo "has_config=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -42,11 +42,11 @@ jobs:
           echo "target_branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
           echo "has_config=true" >> $GITHUB_OUTPUT
 
-      - name: Exit if no promotion path
+      - name: exit if no promotion path
         if: steps.config.outputs.has_config != 'true'
-        run: echo "No promotion path configured for this branch."
+        run: echo "no promotion path configured for this branch."
 
-      - name: Check for differences between branches
+      - name: check for differences between branches
         id: diff
         if: steps.config.outputs.has_config == 'true'
         uses: actions/github-script@v8
@@ -61,17 +61,17 @@ jobs:
             const hasDiff = data.status !== 'identical' && data.ahead_by > 0;
             core.setOutput('has_diff', hasDiff);
 
-      - name: Exit if no diff
+      - name: exit if no diff
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff != 'true'
-        run: echo "No differences to promote."
+        run: echo "no differences to promote."
 
-      - name: Checkout repository
+      - name: checkout repository
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Build promotion changelog
+      - name: build promotion changelog
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v6
@@ -84,31 +84,31 @@ jobs:
             {
               "categories": [
                 {
-                  "title": "## ✨ New Features",
+                  "title": "## ✨ new features",
                   "labels": ["feat"]
                 },
                 {
-                  "title": "## 🐛 Bug Fixes",
+                  "title": "## 🐛 bug fixes",
                   "labels": ["fix"]
                 },
                 {
-                  "title": "## 🔧 Improvements",
+                  "title": "## 🔧 improvements",
                   "labels": ["perf", "refactor"]
                 },
                 {
-                  "title": "## 📚 Documentation",
+                  "title": "## 📚 documentation",
                   "labels": ["docs"]
                 },
                 {
-                  "title": "## ♻️ Ops",
+                  "title": "## ♻️ ops",
                   "labels": ["ci", "ops", "build", "test"]
                 },
                 {
-                  "title": "## 🧹 Miscellaneous",
+                  "title": "## 🧹 miscellaneous",
                   "labels": ["chore", "style", "deps"]
                 },
                 {
-                  "title": "## ⏪ Reverts",
+                  "title": "## ⏪ reverts",
                   "labels": ["revert"]
                 }
               ],
@@ -119,12 +119,12 @@ jobs:
                   "target": "$1"
                 }
               ],
-              "template": "#{{CHANGELOG}}\n\n## Full Changelog\n- Compare changes: https://github.com/${{ github.repository }}/compare/${{ steps.config.outputs.target_branch }}...${{ steps.config.outputs.source_branch }}",
-              "empty_template": "## What's Changed\n\nNo user-facing changes were detected.\n\n## Full Changelog\n- Compare changes: https://github.com/${{ github.repository }}/compare/${{ steps.config.outputs.target_branch }}...${{ steps.config.outputs.source_branch }}",
+              "template": "#{{CHANGELOG}}\n\n## full changelog\n- compare changes: https://github.com/${{ github.repository }}/compare/${{ steps.config.outputs.target_branch }}...${{ steps.config.outputs.source_branch }}",
+              "empty_template": "## what's changed\n\nno user-facing changes were detected.\n\n## full changelog\n- compare changes: https://github.com/${{ github.repository }}/compare/${{ steps.config.outputs.target_branch }}...${{ steps.config.outputs.source_branch }}",
               "pr_template": "- #{{TITLE}} by @#{{AUTHOR}} in ##{{NUMBER}}"
             }
 
-      - name: Ensure labels exist
+      - name: ensure labels exist
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -132,7 +132,7 @@ jobs:
           gh label create "bot" --color "000000" --description "managed by an automated system" --force
           gh label create "promotion" --color "ff69b4" --description "related to a code promotion" --force
 
-      - name: Create or update promotion PR
+      - name: create or update promotion PR
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -140,21 +140,21 @@ jobs:
           TARGET_BRANCH: ${{ steps.config.outputs.target_branch }}
           PR_TITLE: "chore(promotion): promote ${{ steps.config.outputs.source_branch }} to ${{ steps.config.outputs.target_branch }}"
           PR_BODY: |
-            ## 🤖 Automated Promotion
+            ## 🤖 automated promotion
 
             ${{ steps.changelog.outputs.changelog }}
 
             ---
-            - Generated by workflow run [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            - Trigger: `${{ github.event_name }}`
-            - Merge strategy expectation: **merge commit** (no squash) to preserve history
+            - generated by workflow run [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - trigger: `${{ github.event_name }}`
+            - merge strategy expectation: **merge commit** (no squash) to preserve history
         run: |
           set +e
           pr_exists=$(gh pr list --head "$SOURCE_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
           set -e
 
           if [ -n "$pr_exists" ]; then
-            echo "Updating existing PR #$pr_exists"
+            echo "updating existing PR #$pr_exists"
             gh pr edit "$pr_exists" \
               --title "$PR_TITLE" \
               --body "$PR_BODY"
@@ -163,7 +163,7 @@ jobs:
             gh pr edit "$pr_exists" --add-label bot || true
             gh pr edit "$pr_exists" --add-label promotion || true
           else
-            echo "Creating new promotion PR"
+            echo "creating new promotion PR"
             gh pr create \
               --title "$PR_TITLE" \
               --body "$PR_BODY" \

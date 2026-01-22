@@ -38,7 +38,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
 
-      - name: setup Node
+      - name: set up Node
         uses: actions/setup-node@v6
         with:
           node-version-file: frontend/.nvmrc
@@ -71,7 +71,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
 
-      - name: setup Node from .nvmrc
+      - name: set up Node from .nvmrc
         if: ${{ matrix.node == 'file' }}
         uses: actions/setup-node@v6
         with:
@@ -80,7 +80,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: setup Node ${{ matrix.node }}
+      - name: set up Node ${{ matrix.node }}
         if: ${{ matrix.node != 'file' }}
         uses: actions/setup-node@v6
         with:

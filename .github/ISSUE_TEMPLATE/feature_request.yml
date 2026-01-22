@@ -1,82 +1,82 @@
-name: Feature Request
-description: Suggest a new feature or enhancement
-title: "[Feature]: "
+name: feature request
+description: suggest a new feature or enhancement
+title: "[feature]: "
 labels: ["enhancement", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a feature! Please describe your idea below.
+        thanks for suggesting a feature! please describe your idea below.
 
   - type: textarea
     id: problem
     attributes:
-      label: Problem Statement
-      description: What problem does this feature solve? Is your feature request related to a problem?
-      placeholder: I'm frustrated when...
+      label: problem statement
+      description: what problem does this feature solve? is your feature request related to a problem?
+      placeholder: i'm frustrated when...
     validations:
       required: true
 
   - type: textarea
     id: solution
     attributes:
-      label: Proposed Solution
-      description: Describe the solution you'd like
-      placeholder: I would like to see...
+      label: proposed solution
+      description: describe the solution you'd like
+      placeholder: i'd like to see...
     validations:
       required: true
 
   - type: dropdown
     id: component
     attributes:
-      label: Component
-      description: Which part of the stack would this affect?
+      label: component
+      description: which part of the stack would this affect?
       options:
-        - Backend (FastAPI)
-        - Frontend (Svelte)
-        - Docker/Infrastructure
-        - VS Code Configuration
-        - Documentation
-        - Developer Experience
-        - Other
+        - backend (FastAPI)
+        - frontend (Svelte)
+        - Docker/infrastructure
+        - VS Code configuration
+        - documentation
+        - developer experience
+        - other
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives Considered
-      description: Describe any alternative solutions or features you've considered
-      placeholder: I also considered...
+      label: alternatives considered
+      description: describe any alternative solutions or features you've considered
+      placeholder: i also considered...
     validations:
       required: false
 
   - type: textarea
     id: examples
     attributes:
-      label: Examples
-      description: Provide examples of similar features in other projects or mockups
-      placeholder: Links, code snippets, or screenshots
+      label: examples
+      description: provide examples of similar features in other projects or mockups
+      placeholder: links, code snippets, or screenshots
     validations:
       required: false
 
   - type: dropdown
     id: priority
     attributes:
-      label: Priority
-      description: How important is this feature to you?
+      label: priority
+      description: how important is this feature to you?
       options:
-        - Nice to have
-        - Would be helpful
-        - Important
-        - Critical
+        - nice to have
+        - would be helpful
+        - important
+        - critical
     validations:
       required: false
 
   - type: checkboxes
     id: contribution
     attributes:
-      label: Contribution
-      description: Would you be willing to contribute this feature?
+      label: contribution
+      description: would you be willing to contribute this feature?
       options:
-        - label: I'd be willing to submit a PR for this feature
+        - label: i'd be willing to submit a PR for this feature

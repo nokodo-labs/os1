@@ -1,4 +1,4 @@
-name: Semantic PR Title
+name: semantic PR title
 
 on:
   pull_request_target:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   lint-pr-title:
-    name: Lint PR Title
+    name: lint PR title
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read

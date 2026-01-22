@@ -1,4 +1,4 @@
-name: Backend CI
+name: backend CI
 
 on:
   workflow_call:
@@ -28,7 +28,7 @@ on:
 
 jobs:
   format:
-    name: Check Formatting
+    name: check formatting
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,27 +37,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python
+      - name: set up Python
         uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
-      - name: Set up uv
+      - name: set up uv
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
 
-      - name: Install Dependencies
+      - name: install dependencies
         run: uv sync --frozen --extra dev
 
-      - name: Check Code Formatting
+      - name: check code formatting
         run: uv run ruff format --check .
 
-      - name: Check Import Sorting
+      - name: check import sorting
         run: uv run ruff check . --select I --no-fix --output-format=github
 
   quality:
-    name: Lint and Test on Python ${{ matrix.python }}
+    name: lint and test on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     needs: format
     services:
@@ -92,32 +92,32 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python (from file)
+      - name: set up Python (from file)
         if: ${{ matrix.python == 'file' }}
         uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
-      - name: Set up Python (explicit)
+      - name: set up Python (explicit)
         if: ${{ matrix.python != 'file' }}
         uses: actions/setup-python@v6
         with:
           python-version: "${{ matrix.python }}"
 
-      - name: Set up uv
+      - name: set up uv
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
 
-      - name: Install Dependencies
+      - name: install dependencies
         run: |
-          echo "Running on Python ${{ matrix.python }}"
+          echo "running on Python ${{ matrix.python }}"
           uv sync --frozen --all-extras
 
-      - name: Lint Code
+      - name: lint code
         if: ${{ inputs.run_lint }}
         run: uv run ruff check . --output-format=github
 
-      - name: Run Tests
+      - name: run tests
         if: ${{ inputs.run_tests }}
         run: uv run pytest -v

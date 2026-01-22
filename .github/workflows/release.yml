@@ -1,4 +1,4 @@
-name: Release
+name: release
 
 on:
   workflow_call:
@@ -30,7 +30,7 @@ jobs:
       version: ${{ steps.release.outputs.version || steps.pre-release.outputs.version }}
 
     steps:
-      - name: Manage Prerelease
+      - name: manage prerelease
         if: ${{ github.ref_name == 'dev' }}
         id: pre-release
         uses: googleapis/release-please-action@v4
@@ -40,7 +40,7 @@ jobs:
           manifest-file: tools/release_please/release-please-manifest.json
           target-branch: dev
 
-      - name: Manage Full Release
+      - name: manage full release
         if: ${{ github.ref_name == 'stable' }}
         id: release
         uses: googleapis/release-please-action@v4
@@ -51,7 +51,7 @@ jobs:
           target-branch: stable
 
   docker-publish:
-    name: Build and Publish Docker Image
+    name: build and publish Docker image
     needs: release-please
     if: needs.release-please.outputs.version != ''
     uses: ./.github/workflows/docker-publish.yml

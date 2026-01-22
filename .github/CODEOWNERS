@@ -1,18 +1,23 @@
-# CODEOWNERS - Define code ownership for pull request reviews
-# Syntax: path/pattern @github-username @github-team
+# codeowners - define code ownership for pull request reviews
 
-# Root files
-* @nokodo-dev
+# syntax: path/pattern @github-username @github-team
 
-# Backend
+# root files
+
+- @nokodo-dev
+
+# backend
+
 /backend/ @nokodo-dev
 /backend/api/ @nokodo-dev
 /backend/nokodo_ai/ @nokodo-dev
 
-# Frontend
+# frontend
+
 /frontend/ @nokodo-dev
 
-# Infrastructure & DevOps
+# infrastructure & devops
+
 /.docker/ @nokodo-dev
 /.github/ @nokodo-dev
 /tools/ @nokodo-dev

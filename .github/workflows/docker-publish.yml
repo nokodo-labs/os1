@@ -1,17 +1,17 @@
-name: Build and Publish Docker Image
+name: build and publish Docker image
 
 on:
   workflow_call:
     inputs:
       release_version:
         type: string
-        description: "Release version if a release happened (empty = no release)"
+        description: "release version if a release happened (empty = no release)"
         required: false
         default: ""
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "The tag of the release"
+        description: "the tag of the release"
         required: false
         default: "test-release"
       python-version:
@@ -22,7 +22,7 @@ on:
 
 jobs:
   build-and-push:
-    name: Build and push container image
+    name: build and push container image
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set python version
+      - name: set Python version
         id: set_python_version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -41,7 +41,7 @@ jobs:
               ver=$(cat backend/.python-version | tr -d '\r' | head -n1)
               echo "PYTHON_VERSION=$ver" >> $GITHUB_OUTPUT
             else
-              echo "Error: backend/.python-version not found and no input provided" >&2
+              echo "error: backend/.python-version not found and no input provided" >&2
               exit 1
             fi
           else
@@ -49,12 +49,12 @@ jobs:
               ver=$(cat backend/.python-version | tr -d '\r' | head -n1)
               echo "PYTHON_VERSION=$ver" >> $GITHUB_OUTPUT
             else
-              echo "Error: backend/.python-version not found" >&2
+              echo "error: backend/.python-version not found" >&2
               exit 1
             fi
           fi
 
-      - name: Set branch and commit info
+      - name: set branch and commit info
         id: set_branch_info
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -67,23 +67,23 @@ jobs:
             echo "COMMIT_SHA=${short_sha:0:7}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build image
+      - name: build image
         run: docker build backend --file .docker/Dockerfile.backend --tag ${{ github.event.repository.name }} --build-arg PYTHON_VERSION=${{ steps.set_python_version.outputs.PYTHON_VERSION }}
 
-      - name: Log in to GHCR
+      - name: log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set image name
+      - name: set image name
         id: set_image_name
         run: |
           IMAGE_ID=ghcr.io/${{ github.repository }}
           echo "IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')" >> $GITHUB_OUTPUT
 
-      - name: Determine Docker tags
+      - name: determine Docker tags
         id: determine_tags
         run: |
           BRANCH_NAME="${{ steps.set_branch_info.outputs.BRANCH_NAME }}"
@@ -109,7 +109,7 @@ jobs:
           # If a release happened in this CI run (non-empty version), also tag with version
           if [ -n "$RELEASE_VERSION" ] && [ "$RELEASE_VERSION" != "" ]; then
             TAGS="$TAGS ${{ steps.set_image_name.outputs.IMAGE_ID }}:$RELEASE_VERSION"
-            echo "🎉 Adding release tag: $RELEASE_VERSION"
+            echo "🎉 adding release tag: $RELEASE_VERSION"
           fi
 
           # For manual dispatch, use the legacy tag
@@ -120,16 +120,16 @@ jobs:
           echo "Docker tags to apply: $TAGS"
           echo "TAGS=$TAGS" >> $GITHUB_OUTPUT
 
-      - name: Tag the Docker image
+      - name: tag the Docker image
         run: |
           for tag in ${{ steps.determine_tags.outputs.TAGS }}; do
-            echo "Tagging with: $tag"
+            echo "tagging with: $tag"
             docker tag ${{ github.event.repository.name }} $tag
           done
 
-      - name: Push the Docker image
+      - name: push the Docker image
         run: |
           for tag in ${{ steps.determine_tags.outputs.TAGS }}; do
-            echo "Pushing: $tag"
+            echo "pushing: $tag"
             docker push $tag
           done
