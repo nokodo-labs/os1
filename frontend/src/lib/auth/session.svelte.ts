@@ -18,7 +18,7 @@ function emitAccessTokenChanged(token: string | null): void {
 }
 
 /** In-memory access token. Cleared on page refresh (by design). */
-export let accessToken = $state<string | null>(null)
+let accessToken = $state<string | null>(null)
 
 export function onAccessTokenChanged(handler: (token: string | null) => void): () => void {
 	if (!browser) return () => {}
