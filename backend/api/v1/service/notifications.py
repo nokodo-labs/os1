@@ -13,7 +13,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.v1.service.auth import Principal
-from api.v1.service.connection_manager import event_connections
+from api.v1.service.events import event_connections
 from nokodo_ai.utils.typeid import new_typeid
 
 

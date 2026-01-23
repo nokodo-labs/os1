@@ -9,12 +9,39 @@ from httpx import AsyncClient
 from api.v1.schemas.token import Token
 
 
+# All cookie-auth endpoints require Origin header for CSRF protection.
+# Use an allowed origin from default cors_origins setting.
+ALLOWED_ORIGIN = "http://localhost:888"
+
+
 @pytest.mark.asyncio
 async def test_refresh_missing_cookie_401(
 	client: AsyncClient,
 ) -> None:
-	resp = await client.post("/v1/auth/refresh")
+	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_rejects_missing_origin(
+	client: AsyncClient,
+) -> None:
+	"""Requests without Origin header should be rejected (CSRF protection)."""
+	client.cookies.set("refresh_token", "r")
+	resp = await client.post("/v1/auth/refresh")
+	assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_refresh_rejects_invalid_origin(
+	client: AsyncClient,
+) -> None:
+	"""Requests with non-whitelisted Origin should be rejected."""
+	client.cookies.set("refresh_token", "r")
+	resp = await client.post(
+		"/v1/auth/refresh", headers={"Origin": "https://evil.example.com"}
+	)
+	assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -46,7 +73,7 @@ async def test_refresh_clears_cookie_on_flag(
 
 	client.cookies.set("refresh_token", "r")
 
-	resp = await client.post("/v1/auth/refresh")
+	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 401
 	assert cleared["called"] is True
 
@@ -66,7 +93,7 @@ async def test_refresh_sets_cookie_on_success(
 
 	client.cookies.set("refresh_token", "r")
 
-	resp = await client.post("/v1/auth/refresh")
+	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 200
 	assert resp.json()["access_token"] == "a"
 	assert "set-cookie" in resp.headers
@@ -98,7 +125,7 @@ async def test_refresh_does_not_clear_cookie_without_header(
 
 	client.cookies.set("refresh_token", "r")
 
-	resp = await client.post("/v1/auth/refresh")
+	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 401
 	assert cleared["called"] is False
 
@@ -118,7 +145,7 @@ async def test_refresh_does_not_set_cookie_when_refresh_token_missing(
 
 	client.cookies.set("refresh_token", "r")
 
-	resp = await client.post("/v1/auth/refresh")
+	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 200
 	assert "set-cookie" not in resp.headers
 
@@ -165,14 +192,21 @@ async def test_logout_clears_cookie(
 		_mark_cleared,
 	)
 
-	resp = await client.post("/v1/auth/logout")
+	resp = await client.post("/v1/auth/logout", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 204
 	assert cleared["called"] is True
 
 
 @pytest.mark.asyncio
 async def test_logout_sets_clear_cookie_header(client: AsyncClient) -> None:
-	resp = await client.post("/v1/auth/logout")
+	resp = await client.post("/v1/auth/logout", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 204
 	assert "set-cookie" in resp.headers
 	assert "refresh_token" in resp.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_logout_rejects_missing_origin(client: AsyncClient) -> None:
+	"""Logout without Origin header should be rejected (CSRF protection)."""
+	resp = await client.post("/v1/auth/logout")
+	assert resp.status_code == 403

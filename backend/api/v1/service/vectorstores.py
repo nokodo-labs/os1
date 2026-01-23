@@ -2,35 +2,34 @@
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 
+from api.settings import settings
 from nokodo_ai.adapters.base.vectorstores import Chunk
-from nokodo_ai.adapters.qdrant.vectorstores import QdrantVectorstoreAdapter
+from nokodo_ai.adapters.vectorstores import VectorstoreAdapter
 from nokodo_ai.vectorstores import Vectorstore
 
 
-def _qdrant_url() -> str:
-	url = os.environ.get("QDRANT_URL")
-	return url if url else "http://localhost:6333"
+def _qdrant_adapter_config() -> dict[str, object]:
+	value = settings.assets.qdrant_url
+	if value == ":memory:" or "://" not in value:
+		return {"type": "qdrant.vectorstore", "location": value}
+	return {"type": "qdrant.vectorstore", "base_url": value}
 
 
 @lru_cache(maxsize=1)
-def _qdrant_adapter() -> QdrantVectorstoreAdapter:
-	# qdrant sdk adapter supports using `location` as a url string
-	return QdrantVectorstoreAdapter(location=_qdrant_url())
+def _qdrant_adapter() -> VectorstoreAdapter:
+	"""get the process-wide qdrant adapter.
+
+	this exists primarily to support `settings.assets.qdrant_url=":memory:"`, where we
+	must reuse a single in-memory qdrant instance across all calls within a test.
+	"""
+	return Vectorstore.create("_adapter_init", adapter=_qdrant_adapter_config()).adapter
 
 
 def get_vectorstore(*, collection: str) -> Vectorstore:
-	"""get a qdrant-backed vectorstore for a given collection.
-
-	vectorstore connection details are intentionally hardcoded here for now.
-	"""
-	return Vectorstore(
-		model_name="qdrant",
-		collection=collection,
-		adapter=_qdrant_adapter(),
-	)
+	"""get a qdrant-backed vectorstore for a given collection."""
+	return Vectorstore.create(collection, adapter=_qdrant_adapter())
 
 
 async def add_chunks(*, collection: str, chunks: list[Chunk]) -> None:

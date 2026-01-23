@@ -32,6 +32,19 @@ class FeaturesSettingsPatch(BaseModel):
 	)
 
 
+class AssetsSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	default_embedding_model_id: str | None = Field(
+		default=None,
+		description="default embedding model id (Model.id)",
+	)
+	qdrant_url: str | None = Field(
+		default=None,
+		description="qdrant url or ':memory:' for in-process testing",
+	)
+
+
 class BrandingSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -162,6 +175,7 @@ class SettingsPatch(BaseModel):
 	features: FeaturesSettingsPatch | None = None
 	ai: AISettingsPatch | None = None
 	branding: BrandingSettingsPatch | None = None
+	assets: AssetsSettingsPatch | None = None
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
 
@@ -173,6 +187,7 @@ class SettingsVersions(BaseModel):
 	features: int = 0
 	ai: int = 0
 	branding: int = 0
+	assets: int = 0
 	limits: int = 0
 	security: int = 0
 

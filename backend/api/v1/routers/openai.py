@@ -9,9 +9,10 @@ currently implemented:
 
 from __future__ import annotations
 
+import os
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,12 +80,28 @@ async def chat_completions(
 			case _:
 				sdk_messages.append(UserMessage.from_text(m.content))
 
-	llm = ChatModel(req.model)
+	api_key = os.environ.get("OPENAI_API_KEY")
+	if api_key is None or api_key.strip() == "":
+		raise HTTPException(
+			status_code=400,
+			detail="OPENAI_API_KEY is required for openai-compatible chat completions",
+		)
+
+	llm = ChatModel.create(
+		req.model,
+		adapter={"type": "openai.chat_completions", "api_key": api_key},
+	)
+
+	params: dict[str, object] = {}
+	if req.temperature is not None:
+		params["temperature"] = req.temperature
+	if req.max_tokens is not None:
+		params["max_tokens"] = req.max_tokens
+	params_value = params if params else None
 	assistant = await llm.generate(
 		sdk_messages,
 		stream=False,
-		temperature=req.temperature,
-		max_tokens=req.max_tokens,
+		params=params_value,
 	)
 
 	usage = OpenAIChatCompletionUsage()

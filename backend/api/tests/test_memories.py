@@ -1,6 +1,7 @@
 """Tests for memory service."""
 
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def memory_user(db_session: AsyncSession):
 	"""Create a user for memory tests."""
 	user_in = UserCreate(

@@ -13,8 +13,6 @@ from api.v1.service import auth as auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
-REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = f"{API_V1_MOUNT_PATH}/auth"
 
 
@@ -24,11 +22,11 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 		timedelta(days=settings.security.refresh_token_expire_days).total_seconds()
 	)
 	response.set_cookie(
-		key=REFRESH_COOKIE_NAME,
+		key=auth_service.REFRESH_COOKIE_NAME,
 		value=refresh_token,
 		httponly=True,
 		secure=settings.security.auth_cookie_secure,
-		samesite="lax",
+		samesite="none",
 		path=REFRESH_COOKIE_PATH,
 		max_age=max_age,
 	)
@@ -37,9 +35,10 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 def _clear_refresh_cookie(response: Response) -> None:
 	"""Clear refresh token cookie."""
 	response.delete_cookie(
-		key=REFRESH_COOKIE_NAME,
+		key=auth_service.REFRESH_COOKIE_NAME,
 		path=REFRESH_COOKIE_PATH,
-		samesite="lax",
+		samesite="none",
+		secure=settings.security.auth_cookie_secure,
 	)
 
 
@@ -67,11 +66,17 @@ async def login_access_token(
 	return Token(access_token=token_pair.access_token, token_type=token_pair.token_type)
 
 
-@router.post("/refresh", response_model=Token)
+@router.post(
+	"/refresh",
+	response_model=Token,
+	dependencies=[Depends(auth_service.require_csrf_origin)],
+)
 async def refresh_access_token(
 	response: Response,
 	session: AsyncSession = Depends(get_db),
-	refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+	refresh_token: str | None = Cookie(
+		default=None, alias=auth_service.REFRESH_COOKIE_NAME
+	),
 ) -> Token:
 	"""Exchange refresh token for new access token (sliding refresh)."""
 	if not refresh_token:
@@ -94,7 +99,11 @@ async def refresh_access_token(
 	return Token(access_token=token_pair.access_token, token_type=token_pair.token_type)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+	"/logout",
+	status_code=status.HTTP_204_NO_CONTENT,
+	dependencies=[Depends(auth_service.require_csrf_origin)],
+)
 async def logout(response: Response) -> None:
 	"""Clear refresh token cookie to log out."""
 	_clear_refresh_cookie(response)

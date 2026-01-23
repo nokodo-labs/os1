@@ -102,6 +102,7 @@ async def _resolved_model(*_args, **_kwargs):
 	return "local:model"
 
 
+@pytest.mark.asyncio
 async def test_openai_router_uses_chat_model(monkeypatch):
 	captured = {}
 
@@ -111,21 +112,21 @@ async def test_openai_router_uses_chat_model(monkeypatch):
 			self.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
 
 	class FakeChatModel:
-		def __init__(self, model: str, *_, **__) -> None:
-			captured["model"] = model
+		@classmethod
+		def create(cls, model_name: str, *_, **__) -> FakeChatModel:
+			captured["model"] = model_name
+			return cls()
 
 		async def generate(
 			self,
 			messages,
 			*,
 			stream: bool,
-			temperature=None,
-			max_tokens=None,
+			params=None,
 		):
 			captured["messages"] = messages
 			captured["stream"] = stream
-			captured["temperature"] = temperature
-			captured["max_tokens"] = max_tokens
+			captured["params"] = params
 			return FakeAssistant()
 
 	monkeypatch.setattr(openai_router, "ChatModel", FakeChatModel)
@@ -142,11 +143,11 @@ async def test_openai_router_uses_chat_model(monkeypatch):
 
 	assert resp.model == "gpt"
 	assert captured["stream"] is False
-	assert captured["temperature"] == 0.1
-	assert captured["max_tokens"] == 5
+	assert captured["params"] == {"temperature": 0.1, "max_tokens": 5}
 	assert resp.usage.total_tokens == 3
 
 
+@pytest.mark.asyncio
 async def test_openai_router_handles_all_roles(monkeypatch):
 	captured = {}
 
@@ -156,21 +157,20 @@ async def test_openai_router_handles_all_roles(monkeypatch):
 			self.usage = None
 
 	class FakeChatModel:
-		def __init__(self, *_args, **_kwargs):
-			pass
+		@classmethod
+		def create(cls, *_args, **_kwargs) -> FakeChatModel:
+			return cls()
 
 		async def generate(
 			self,
 			messages,
 			*,
 			stream: bool,
-			temperature=None,
-			max_tokens=None,
+			params=None,
 		):
 			captured["messages"] = messages
 			captured["stream"] = stream
-			captured["temperature"] = temperature
-			captured["max_tokens"] = max_tokens
+			captured["params"] = params
 			return FakeAssistant()
 
 	monkeypatch.setattr(openai_router, "ChatModel", FakeChatModel)
@@ -192,6 +192,7 @@ async def test_openai_router_handles_all_roles(monkeypatch):
 	assert resp.usage.total_tokens == 0
 
 
+@pytest.mark.asyncio
 async def test_prompts_router_delegates(monkeypatch):
 	fake_prompt = SimpleNamespace(id="1", command="/a", content="hi")
 
@@ -236,6 +237,7 @@ async def test_prompts_router_delegates(monkeypatch):
 	assert fake_delete.called == "1"  # type: ignore[attr-defined]
 
 
+@pytest.mark.asyncio
 async def test_threads_router_delegates(monkeypatch):
 	principal = _FakePrincipal()
 	fake_thread = SimpleNamespace(id=new_typeid("thread"))
@@ -361,6 +363,7 @@ async def test_threads_router_delegates(monkeypatch):
 	assert acl_set == ["acl"]
 
 
+@pytest.mark.asyncio
 async def test_authorization_require_thread_access():
 	principal = _FakePrincipal(is_admin=True)
 	fake_session = _FakeSession("ok")
@@ -422,6 +425,7 @@ def test_prompt_runtime_template_not_found(monkeypatch):
 		prompt_runtime.render_prompt_from_map({"a": "hi"}, command="/a")
 
 
+@pytest.mark.asyncio
 async def test_prompt_runtime_render_from_db(monkeypatch):
 	async def exec_prompts(_stmt):
 		return _FakeResult([("/cmd", "body")])
@@ -433,6 +437,7 @@ async def test_prompt_runtime_render_from_db(monkeypatch):
 	assert rendered == "body"
 
 
+@pytest.mark.asyncio
 async def test_prompts_service_validation_paths(monkeypatch):
 	existing = SimpleNamespace(id="2", command="/dup", content="hi")
 
@@ -470,6 +475,7 @@ async def test_prompts_service_validation_paths(monkeypatch):
 	assert result is prompt_obj
 
 
+@pytest.mark.asyncio
 async def test_prompts_service_unique_exclude() -> None:
 	session = _FakeSession()
 	await prompt_service._ensure_unique_command(
@@ -477,11 +483,13 @@ async def test_prompts_service_unique_exclude() -> None:
 	)
 
 
+@pytest.mark.asyncio
 async def test_prompts_service_get_prompt_not_found() -> None:
 	with pytest.raises(HTTPException):
 		await prompt_service._get_prompt("missing", _FakeSession(None))
 
 
+@pytest.mark.asyncio
 async def test_prompts_service_list_and_get(monkeypatch):
 	prompt_obj = SimpleNamespace(id="1", command="/p", content="hi")
 
@@ -503,6 +511,7 @@ async def test_prompts_service_list_and_get(monkeypatch):
 	assert fetched is prompt_obj
 
 
+@pytest.mark.asyncio
 async def test_prompts_service_update_and_delete(monkeypatch):
 	prompt_obj = SimpleNamespace(id="1", command="/p", content="hi")
 	calls = {}
@@ -534,6 +543,7 @@ async def test_prompts_service_update_and_delete(monkeypatch):
 	assert session.deleted == [prompt_obj]
 
 
+@pytest.mark.asyncio
 async def test_chat_service_conversions():
 	user_sdk = UserMessage.from_text("hi")
 	system_sdk = SystemMessage.from_text("sys")
@@ -588,8 +598,6 @@ async def test_chat_service_conversions():
 			_Provider("ollama", base_url="http://example.test:11434"), adapter="chat"
 		)
 	)
-	assert llm.provider == "ollama"
-	assert llm.variant == "chat"
 	assert llm.model_name == "chat"
 	assert llm.adapter.type == "ollama.chat"
 	assert llm.adapter.base_url == "http://example.test:11434"
@@ -711,6 +719,7 @@ def test_chat_service_orm_to_sdk_variants():
 		MessageCreate.from_sdk_message(_BadMessage())
 
 
+@pytest.mark.asyncio
 async def test_chat_service_agent_resolution_paths():
 	class _Provider:
 		def __init__(
@@ -758,6 +767,7 @@ async def test_chat_service_agent_resolution_paths():
 		)
 
 
+@pytest.mark.asyncio
 async def test_chat_runner_load_agent_not_found(monkeypatch):
 	"""Test that _load_agent raises HTTPException when agent not found."""
 	from api.v1.service.chat import agents as chat_runner
@@ -779,6 +789,7 @@ async def test_chat_runner_load_agent_not_found(monkeypatch):
 	assert exc_info.value.status_code == 404
 
 
+@pytest.mark.asyncio
 async def test_chat_runner_load_agent_no_model(monkeypatch):
 	"""Test that _load_agent raises HTTPException when agent has no model."""
 	from api.v1.service.chat import agents as chat_runner
@@ -809,6 +820,7 @@ def test_threads_helper_admin_guard():
 		thread_service._ensure_admin_for_hidden(True, _FakePrincipal(is_admin=False))
 
 
+@pytest.mark.asyncio
 async def test_prompt_runtime_render_inline(monkeypatch):
 	async def exec_prompts(stmt):
 		return _FakeResult([("/a", "hi")])

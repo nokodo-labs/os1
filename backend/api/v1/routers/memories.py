@@ -30,7 +30,6 @@ MemorySortBy = Literal[
 @router.post("", response_model=MemorySchema, status_code=status.HTTP_201_CREATED)
 async def create_memory(
 	memory_in: MemoryCreate,
-	embedding_model_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
@@ -39,7 +38,6 @@ async def create_memory(
 		memory_in,
 		db,
 		principal=principal,
-		embedding_model_id=embedding_model_id,
 	)
 
 
@@ -79,7 +77,6 @@ async def get_memory(
 async def update_memory(
 	memory_id: TypeID,
 	memory_in: MemoryUpdate,
-	embedding_model_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
@@ -89,7 +86,6 @@ async def update_memory(
 		memory_in,
 		db,
 		principal=principal,
-		embedding_model_id=embedding_model_id,
 	)
 
 

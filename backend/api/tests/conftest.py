@@ -35,8 +35,12 @@ def _api_test_env_defaults() -> Generator[None]:
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
-	if not os.getenv("QDRANT_URL"):
-		monkeypatch.setenv("QDRANT_URL", ":memory:")
+	if not os.getenv("NOKODO__ASSETS__QDRANT_URL"):
+		monkeypatch.setenv("NOKODO__ASSETS__QDRANT_URL", ":memory:")
+
+	from api.settings import settings
+
+	settings.reload()
 	try:
 		yield
 	finally:
@@ -56,6 +60,54 @@ def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
 
 	monkeypatch.setattr(EmbeddingModel, "embed", _fake_embed)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _api_test_seed_default_embedding_model(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Ensure a usable default embedding model exists for memory flows."""
+	from api.models.model import ModelType
+	from api.models.user import User
+	from api.schemas.model import ModelCreate
+	from api.schemas.provider import ProviderCreate
+	from api.settings import settings
+	from api.v1.service import models as model_service
+	from api.v1.service import providers as provider_service
+	from api.v1.service.auth import Principal
+
+	principal = Principal(
+		user=User(email="seed@example.com", hashed_password="x", is_superuser=True),
+		group_ids=(),
+		permissions=frozenset({"providers:manage", "models:manage"}),
+	)
+
+	provider = await provider_service.create_provider(
+		ProviderCreate(
+			name="seed-openai",
+			adapter_type="openai",
+			api_key="test",
+		),
+		db_session,
+		principal=principal,
+	)
+
+	model = await model_service.create_model(
+		ModelCreate(
+			provider_id=str(provider.id),
+			name="seed-embedding",
+			model_type=ModelType.EMBEDDING,
+		),
+		db_session,
+		principal=principal,
+	)
+
+	monkeypatch.setenv(
+		"NOKODO__ASSETS__DEFAULT_EMBEDDING_MODEL_ID",
+		str(model.id),
+	)
+	settings.reload()
 
 
 _CI_TRUE_VALUES = {"1", "true", "yes", "on"}

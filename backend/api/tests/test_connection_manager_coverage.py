@@ -8,7 +8,7 @@ import pytest
 from fastapi import WebSocket
 
 from api.models.event import Event, EventScope
-from api.v1.service.connection_manager import ConnectionManager
+from api.v1.service.events import ConnectionManager
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 

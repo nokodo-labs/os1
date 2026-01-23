@@ -62,15 +62,11 @@ def build_chat_model(
 		raise ValueError(f"unknown provider: {provider_key}")
 
 	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
-	return ChatModel.model_validate(
-		{
-			"provider": provider_key,
-			"variant": variant,
-			"model_name": model.name,
-			"adapter": adapter_config,
-			"temperature": temperature,
-			"max_tokens": max_tokens,
-		}
+	return ChatModel.create(
+		model.name,
+		adapter=adapter_config,
+		temperature=temperature,
+		max_tokens=max_tokens,
 	)
 
 
@@ -119,13 +115,9 @@ def build_embedding_model(model: Model) -> EmbeddingModel:
 		raise ValueError(f"unknown embedding provider: {provider_key}")
 
 	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
-	return EmbeddingModel.model_validate(
-		{
-			"provider": provider_key,
-			"variant": variant,
-			"model_name": model.name,
-			"adapter": adapter_config,
-		}
+	return EmbeddingModel.create(
+		model.name,
+		adapter=adapter_config,
 	)
 
 

@@ -60,6 +60,7 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	refresh_resp = await client.post(
 		"/v1/auth/refresh",
 		cookies={"refresh_token": refresh_cookie},
+		headers={"Origin": "http://localhost:888"},
 	)
 	assert refresh_resp.status_code == 200
 	refresh_token = refresh_resp.json()["access_token"]

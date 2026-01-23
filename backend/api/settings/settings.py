@@ -171,6 +171,17 @@ class LimitsSettings(BaseModel):
 	)
 
 
+class AssetsSettings(BaseModel):
+	default_embedding_model_id: str | None = Field(
+		default=None,
+		description="default embedding model id (Model.id)",
+	)
+	qdrant_url: str = Field(
+		default="http://localhost:6333",
+		description="qdrant url or ':memory:' for in-process testing",
+	)
+
+
 class SecuritySettings(BaseModel):
 	secret_key: str = settings_field(
 		default="changeme",
@@ -247,6 +258,7 @@ class Settings(BaseSettings):
 	features: FeaturesSettings = Field(default_factory=FeaturesSettings)
 	ai: AISettings = Field(default_factory=AISettings)
 	branding: BrandingSettings = Field(default_factory=BrandingSettings)
+	assets: AssetsSettings = Field(default_factory=AssetsSettings)
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)
 

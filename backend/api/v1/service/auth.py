@@ -5,14 +5,14 @@ from datetime import timedelta
 from typing import Annotated
 
 from authlib.jose import JoseError
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.constants import API_V1_MOUNT_PATH
-from api.core.database import get_db
+from api.core.database import AsyncSessionLocal, get_db
 from api.models.group import GroupMembership
 from api.models.user import User
 from api.settings import settings
@@ -23,6 +23,64 @@ from nokodo_ai.utils.security import (
 	verify_password,
 )
 from nokodo_ai.utils.typeid import TypeID, assert_typeid
+
+
+REFRESH_COOKIE_NAME = "refresh_token"
+
+
+def _is_origin_allowed(origin: str | None) -> bool:
+	allowed = settings.security.cors_origins
+	return (
+		origin is not None and origin != "" and origin != "null" and origin in allowed
+	)
+
+
+def require_csrf_origin(origin: str | None = Header(default=None)) -> None:
+	"""CSRF guard for cookie-authenticated HTTP endpoints."""
+	if not _is_origin_allowed(origin):
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="origin not allowed",
+		)
+
+
+def is_websocket_origin_allowed(websocket: WebSocket) -> bool:
+	"""Return True if WebSocket Origin header passes CSRF validation."""
+	origin = websocket.headers.get("origin")
+	return _is_origin_allowed(origin)
+
+
+async def authenticate_websocket_refresh_cookie(websocket: WebSocket) -> User | None:
+	"""Authenticate a WebSocket connection using refresh token cookie."""
+	refresh_token = websocket.cookies.get(REFRESH_COOKIE_NAME)
+	if not refresh_token:
+		return None
+
+	try:
+		payload = decode_jwt_token(
+			refresh_token,
+			secret_key=settings.security.secret_key,
+			algorithms=[settings.security.jwt_algorithm],
+		)
+		if payload.get("typ") != "refresh":
+			return None
+		user_id_str = payload.get("sub")
+		if not user_id_str:
+			return None
+		user_id = TypeID(assert_typeid(str(user_id_str), prefix="user"))
+	except (JoseError, ValueError):
+		return None
+
+	async with AsyncSessionLocal() as session:
+		result = await session.execute(
+			select(User).options(selectinload(User.role)).where(User.id == user_id)
+		)
+		user = result.scalar_one_or_none()
+
+	if user and not user.is_active:
+		return None
+
+	return user
 
 
 oauth2_scheme = OAuth2PasswordBearer(
