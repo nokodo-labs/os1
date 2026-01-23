@@ -47,11 +47,11 @@
 		"vitest": "^4.0.15"
 	},
 	"dependencies": {
-		"@internationalized/date": "^3.10.0",
+		"@internationalized/date": "^3.10.1",
 		"clsx": "^2.1.1",
 		"mermaid": "^11.11.0",
 		"openapi-fetch": "^0.15.0",
-		"marked": "^12.0.2",
+		"marked": "^17.0.1",
 		"svelte-streamdown": "^3.0.0",
 		"tailwind-merge": "^3.4.0",
 		"tailwind-variants": "^3.2.2",
