@@ -1,6 +1,6 @@
 import createClient from 'openapi-fetch'
 
-import { clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth/session'
+import { clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth/session.svelte'
 import type { paths } from './types'
 
 type PrefixedPaths<P, Prefix extends string> = {

@@ -6,7 +6,7 @@
 	import { refreshAccessToken } from '$lib/api/client'
 	import { apiOriginReady } from '$lib/api/init'
 	import { eventStreamClient } from '$lib/api/streaming'
-	import { getAccessToken } from '$lib/auth/session'
+	import { getAccessToken } from '$lib/auth/session.svelte'
 	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
@@ -95,7 +95,7 @@
 		void loadSettings()
 		// Initialize event stream if already logged in (page load/refresh)
 		const existingToken = getAccessToken()
-		if (existingToken) eventStreamClient.connect(existingToken)
+		if (existingToken) eventStreamClient.connect()
 
 		// Ensure the first route has had a chance to render + paint.
 		await tick()

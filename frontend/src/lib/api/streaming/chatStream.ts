@@ -5,7 +5,7 @@
  * These types mirror backend schemas and SSE event payloads.
  */
 
-import { getAccessToken } from '$lib/auth/session'
+import { getAccessToken } from '$lib/auth/session.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
 
 /** Content part in a message. */

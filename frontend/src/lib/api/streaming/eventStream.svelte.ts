@@ -1,6 +1,9 @@
 /**
  * WebSocket client for real-time event streaming.
- * WS /v1/events/stream?token=<jwt>
+ * WS /v1/events/stream
+ *
+ * Authentication: uses httpOnly refresh_token cookie (auto-sent by browser).
+ * No token in URL for security (avoids logging/history exposure).
  *
  * Native Svelte 5 rune-based state (no svelte/store).
  */
@@ -44,7 +47,7 @@ type EventHandler = (message: StreamMessage) => void
 
 export class EventStreamClient {
 	private ws: WebSocket | null = null
-	private token: string | null = null
+	private isConnected = false
 	private reconnectAttempts = 0
 	private maxReconnectAttempts = 10
 	private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null
@@ -57,23 +60,27 @@ export class EventStreamClient {
 		lastEvent: null as StreamMessage | null,
 	})
 
-	private buildWsUrl(token: string): string {
+	private buildWsUrl(): string {
 		const configuredBaseUrl = getApiBaseUrl()
 		const httpBase = configuredBaseUrl || window.location.origin
 		const wsBase = httpBase.replace(/^http/, 'ws')
-		return `${wsBase}/v1/events/stream?token=${encodeURIComponent(token)}`
+		// No token in URL \u2014 auth uses httpOnly cookie
+		return `${wsBase}/v1/events/stream`
 	}
 
-	connect(token: string): void {
+	/**
+	 * Connect to the event stream.
+	 * Authentication is handled via httpOnly cookie (auto-sent by browser).
+	 */
+	connect(): void {
 		if (
 			this.ws?.readyState === WebSocket.OPEN ||
 			this.ws?.readyState === WebSocket.CONNECTING
 		) {
-			if (this.token === token) return
-			this.disconnect()
+			return
 		}
 
-		this.token = token
+		this.isConnected = true
 		this.intentionalDisconnect = false
 		this.reconnectAttempts = 0
 		this.doConnect()
@@ -82,7 +89,7 @@ export class EventStreamClient {
 	disconnect(): void {
 		this.intentionalDisconnect = true
 		this.cleanup()
-		this.token = null
+		this.isConnected = false
 		this.state.status = 'disconnected'
 	}
 
@@ -92,12 +99,12 @@ export class EventStreamClient {
 	}
 
 	private doConnect(): void {
-		if (!this.token) return
+		if (!this.isConnected) return
 
 		this.state.status = this.state.status === 'disconnected' ? 'connecting' : 'reconnecting'
 
 		try {
-			this.ws = new WebSocket(this.buildWsUrl(this.token))
+			this.ws = new WebSocket(this.buildWsUrl())
 		} catch {
 			this.scheduleReconnect()
 			return
@@ -121,9 +128,10 @@ export class EventStreamClient {
 
 		this.ws.onclose = (event) => {
 			this.stopPing()
-			if (event.code === 4001) {
+			if (event.code === 4001 || event.code === 4003) {
+				// 4001 = unauthorized, 4003 = origin not allowed
 				this.state.status = 'disconnected'
-				this.token = null
+				this.isConnected = false
 				return
 			}
 			if (!this.intentionalDisconnect) {

@@ -7,7 +7,7 @@ import { apiClient } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
-import { getAccessToken } from '$lib/auth/session'
+import { getAccessToken } from '$lib/auth/session.svelte'
 import { SvelteDate, SvelteSet } from 'svelte/reactivity'
 
 export type Notification = components['schemas']['Notification']

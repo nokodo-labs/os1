@@ -9,7 +9,7 @@ import {
 	getAccessToken,
 	onAccessTokenChanged,
 	setAccessToken,
-} from '$lib/auth/session'
+} from '$lib/auth/session.svelte'
 
 export type User = components['schemas']['User']
 export type Thread = components['schemas']['Thread']
@@ -39,7 +39,7 @@ class SessionStore {
 	setToken = (token: string) => {
 		setAccessToken(token)
 		this.accessToken = token
-		eventStreamClient.connect(token)
+		eventStreamClient.connect()
 	}
 
 	clear = () => {
@@ -138,7 +138,7 @@ export const session = new SessionStore()
 if (browser) {
 	onAccessTokenChanged((token) => {
 		session.accessToken = token
-		if (token) eventStreamClient.connect(token)
+		if (token) eventStreamClient.connect()
 		else eventStreamClient.disconnect()
 	})
 }

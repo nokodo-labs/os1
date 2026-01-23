@@ -1,6 +1,10 @@
 import { browser } from '$app/environment'
 
-const ACCESS_TOKEN_KEY = 'access_token'
+/**
+ * Access token is stored in memory only (not localStorage).
+ * This is intentional for security — the token lives only for the session lifetime.
+ * Refresh token is stored in an httpOnly cookie managed by the backend.
+ */
 
 const ACCESS_TOKEN_CHANGED_EVENT = 'auth:token-changed'
 
@@ -13,6 +17,9 @@ function emitAccessTokenChanged(token: string | null): void {
 	)
 }
 
+/** In-memory access token. Cleared on page refresh (by design). */
+export let accessToken = $state<string | null>(null)
+
 export function onAccessTokenChanged(handler: (token: string | null) => void): () => void {
 	if (!browser) return () => {}
 	const listener = (event: Event) => {
@@ -24,22 +31,23 @@ export function onAccessTokenChanged(handler: (token: string | null) => void): (
 }
 
 export function getAccessToken(): string | null {
-	if (!browser) return null
-	return window.localStorage.getItem(ACCESS_TOKEN_KEY)
+	return accessToken
 }
 
 export function setAccessToken(token: string): void {
 	if (!browser) return
-	window.localStorage.setItem(ACCESS_TOKEN_KEY, token)
+	if (token === accessToken) return
+	accessToken = token
 	emitAccessTokenChanged(token)
 }
 
 export function clearAccessToken(): void {
 	if (!browser) return
-	window.localStorage.removeItem(ACCESS_TOKEN_KEY)
+	if (accessToken === null) return
+	accessToken = null
 	emitAccessTokenChanged(null)
 }
 
 export function isLoggedIn(): boolean {
-	return Boolean(getAccessToken())
+	return Boolean(accessToken)
 }

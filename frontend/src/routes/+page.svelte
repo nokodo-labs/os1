@@ -5,7 +5,7 @@
 	import { page } from '$app/state'
 	import { apiClient } from '$lib/api/client'
 	import { getJwtUserId } from '$lib/auth/jwt'
-	import { getAccessToken } from '$lib/auth/session'
+	import { getAccessToken } from '$lib/auth/session.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
