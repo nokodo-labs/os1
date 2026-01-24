@@ -12,17 +12,11 @@ import {
 } from '$lib/auth/session.svelte'
 
 export type User = components['schemas']['User']
-export type Thread = components['schemas']['Thread']
-export type PendingChatStart = { threadId: string; content: string }
 
 class SessionStore {
 	accessToken = $state<string | null>(getAccessToken())
 	currentUser = $state<User | null>(null)
-	recentThreads = $state<Thread[]>([])
-	activeThread = $state<Thread | null>(null)
-	pendingChatStart = $state<PendingChatStart | null>(null)
 	isLoadingUser = $state(false)
-	isLoadingThreads = $state(false)
 
 	readonly isLoggedIn = $derived(Boolean(this.accessToken))
 	readonly userDisplay = $derived.by(() => {
@@ -47,30 +41,6 @@ class SessionStore {
 		clearAccessToken()
 		this.accessToken = null
 		this.currentUser = null
-		this.recentThreads = []
-		this.activeThread = null
-		this.pendingChatStart = null
-	}
-
-	consumePendingChatStart = (threadId: string): string | null => {
-		const value = this.pendingChatStart
-		if (!value || value.threadId !== threadId) return null
-		this.pendingChatStart = null
-		return value.content
-	}
-
-	removeRecentThread = (threadId: string) => {
-		if (!threadId) return
-		this.recentThreads = this.recentThreads.filter((t) => t.id !== threadId)
-	}
-
-	updateRecentThread = (threadId: string, update: (thread: Thread) => Thread) => {
-		if (!threadId) return
-		const threads = this.recentThreads
-		const idx = threads.findIndex((t) => t.id === threadId)
-		if (idx === -1) return
-		const updated = update(threads[idx])
-		this.recentThreads = [updated, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
 	}
 
 	refreshUser = async (): Promise<void> => {
@@ -97,39 +67,8 @@ class SessionStore {
 		}
 	}
 
-	refreshThreads = async (options?: { limit?: number }): Promise<void> => {
-		const token = getAccessToken()
-		if (!token) {
-			this.recentThreads = []
-			return
-		}
-
-		const userId = getJwtUserId(token)
-
-		this.isLoadingThreads = true
-		try {
-			const { data } = await apiClient().GET('/v1/threads', {
-				params: {
-					query: {
-						owner_id: userId,
-						limit: options?.limit ?? 20,
-						skip: 0,
-					},
-				},
-			})
-
-			const threads = (data ?? []).slice().sort((a, b) => {
-				return b.last_activity_at.localeCompare(a.last_activity_at)
-			})
-
-			this.recentThreads = threads
-		} finally {
-			this.isLoadingThreads = false
-		}
-	}
-
 	refresh = async (): Promise<void> => {
-		await Promise.all([this.refreshUser(), this.refreshThreads()])
+		await this.refreshUser()
 	}
 }
 

@@ -7,14 +7,9 @@ import { apiClient } from '$lib/api/client'
 import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { agents } from '$lib/stores/agents.svelte'
+import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
-import { session, type Thread } from '$lib/stores/session.svelte'
-import {
-	cacheMessages,
-	cacheThread,
-	getCachedMessages,
-	getCachedThread,
-} from '$lib/stores/threadCache.svelte'
+import { session } from '$lib/stores/session.svelte'
 import {
 	ToolExecutionTracker,
 	parseToolCalls,
@@ -504,8 +499,8 @@ export function createChatState() {
 
 	async function loadTree(threadId: string): Promise<boolean> {
 		// Try cache first for instant load
-		const cachedThread = getCachedThread(threadId)
-		const cachedMessages = getCachedMessages(threadId)
+		const cachedThread = chatStore.threadCache.get(threadId)
+		const cachedMessages = chatStore.threadCache.getCachedMessages(threadId)
 
 		let threadData: typeof cachedThread
 		let messagesPage: ApiMessage[]
@@ -522,7 +517,7 @@ export function createChatState() {
 			if (threadError) {
 				console.error('failed to load thread', threadError)
 				thread = null
-				session.activeThread = null
+				chatStore.activeThread = null
 				toolTracker.clear()
 				messageTree.clear()
 				currentLeafId = null
@@ -531,7 +526,7 @@ export function createChatState() {
 			}
 			if (!data) {
 				thread = null
-				session.activeThread = null
+				chatStore.activeThread = null
 				toolTracker.clear()
 				messageTree.clear()
 				currentLeafId = null
@@ -552,12 +547,12 @@ export function createChatState() {
 			messagesPage = (msgData ?? []) as ApiMessage[]
 
 			// Cache for future instant loads
-			cacheThread(threadData)
-			cacheMessages(threadId, messagesPage, messagesPage.length < 120)
+			chatStore.threadCache.set(threadData)
+			chatStore.threadCache.setMessages(threadId, messagesPage, messagesPage.length < 120)
 		}
 
 		thread = threadData
-		session.activeThread = threadData
+		chatStore.activeThread = threadData
 
 		toolTracker.clear()
 		messageTree.clear()
@@ -963,12 +958,12 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	function setThread(t: Thread | null) {
 		thread = t
-		session.activeThread = t
+		chatStore.activeThread = t
 	}
 
 	function clearThread() {
 		thread = null
-		session.activeThread = null
+		chatStore.activeThread = null
 		messageTree.clear()
 		currentLeafId = null
 		isThreadLoading = false

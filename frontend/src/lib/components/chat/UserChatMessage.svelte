@@ -87,7 +87,7 @@
 		<div
 			class="flex items-center gap-1 px-1 transition-opacity duration-200 {showActions
 				? 'opacity-100'
-				: 'opacity-0'}"
+				: 'pointer-events-none opacity-0'}"
 		>
 			{#if siblingCount > 1}
 				<div

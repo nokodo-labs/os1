@@ -19,6 +19,7 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { chat } from '$lib/stores/chat.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
@@ -207,8 +208,8 @@
 			inputValue = content
 			return
 		}
-		session.activeThread = data
-		session.pendingChatStart = { threadId: data.id, content }
+		chat.activeThread = data
+		chat.pendingChatStart = { threadId: data.id, content }
 		await navigateToChat(data.id)
 	}
 

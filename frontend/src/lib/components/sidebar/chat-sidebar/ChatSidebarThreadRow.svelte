@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Timestamp from '$lib/components/Timestamp.svelte'
-	import type { Thread } from '$lib/stores/session.svelte'
+	import type { Thread } from '$lib/stores/chat.svelte'
 
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'

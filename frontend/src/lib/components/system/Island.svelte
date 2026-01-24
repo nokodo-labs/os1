@@ -12,6 +12,7 @@
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
+	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte'
@@ -109,7 +110,7 @@
 	}
 
 	const isTemporaryChatActive = $derived(
-		chatParam === 'temp' || (session.activeThread?.is_temporary ?? false)
+		chatParam === 'temp' || (chat.activeThread?.is_temporary ?? false)
 	)
 	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null)
 
@@ -137,7 +138,7 @@
 
 <div>
 	<header
-		class="liquid-glass mt-5 mb-0 max-h-[88px] overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+		class="liquid-glass mt-5 mb-0 max-h-22 overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 		style="view-transition-name: chat-header;"
 	>
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>

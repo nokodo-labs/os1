@@ -135,10 +135,10 @@
 
 		<!-- Actions -->
 		<div
-			class="flex items-center gap-2 transition-opacity duration-200 {isLastMessage ||
-			showActions
+			class="flex items-center gap-2 transition-opacity duration-200 {!isStreaming &&
+			(isLastMessage || showActions)
 				? 'opacity-100'
-				: 'opacity-0'}"
+				: 'pointer-events-none opacity-0'}"
 		>
 			{#if siblingCount > 1}
 				<div

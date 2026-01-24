@@ -11,14 +11,11 @@
 	import ChatSidebarHeader from '$lib/components/sidebar/chat-sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
+	import { chat, type Thread } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { onThreadEvent } from '$lib/stores/notifications.svelte'
-	import { session, type Thread } from '$lib/stores/session.svelte'
-	import {
-		invalidateAll as invalidateThreadCache,
-		prefetchThread,
-	} from '$lib/stores/threadCache.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	// SSG-safe query param access
 	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
@@ -124,10 +121,10 @@
 
 		if (eventType === 'thread.deleted' && threadId) {
 			// invalidate cache
-			invalidateThreadCache(threadId)
+			chat.threadCache.invalidateAll(threadId)
 
 			// remove from list
-			session.removeRecentThread(threadId)
+			chat.removeRecentThread(threadId)
 
 			// if we're viewing this thread, navigate away
 			if (page.url.pathname === `/c/${threadId}`) {
@@ -136,7 +133,7 @@
 			}
 		} else if (eventType === 'thread.updated' && threadId) {
 			// invalidate cache on updates
-			invalidateThreadCache(threadId)
+			chat.threadCache.invalidateAll(threadId)
 
 			// move thread to top and update title if available
 			const rawTitle =
@@ -145,7 +142,7 @@
 			const rawTags =
 				(Array.isArray(patch?.tags) ? patch.tags : null) ??
 				(Array.isArray(data?.tags) ? data.tags : null)
-			session.updateRecentThread(threadId, (thread) => {
+			chat.updateRecentThread(threadId, (thread) => {
 				const nextTags = rawTags
 					? rawTags.filter((t): t is string => typeof t === 'string')
 					: null
@@ -158,7 +155,7 @@
 			})
 		} else if (eventType === 'thread.created') {
 			// refresh to get the new thread (or we could add it directly)
-			void session.refreshThreads({ limit: 25 })
+			void chat.refreshThreads({ limit: 25 })
 		}
 	}
 
@@ -207,7 +204,7 @@
 	]
 
 	$effect(() => {
-		if (session.isLoggedIn) void session.refreshThreads({ limit: 25 })
+		if (session.isLoggedIn) void chat.refreshThreads({ limit: 25 })
 	})
 
 	function toggleThreadMenu(threadId: string) {
@@ -243,8 +240,8 @@
 			const updated = await generateThreadMetadata(threadId)
 			if (!updated) return
 
-			invalidateThreadCache(threadId)
-			session.updateRecentThread(threadId, (current) => {
+			chat.threadCache.invalidateAll(threadId)
+			chat.updateRecentThread(threadId, (current) => {
 				return {
 					...current,
 					title: updated.title ?? current.title,
@@ -264,7 +261,7 @@
 
 	let routeChatIsInSidebar = $derived.by((): boolean => {
 		if (!routeChatId) return false
-		return session.recentThreads.some((t) => t.id === routeChatId)
+		return chat.recentThreads.some((t) => t.id === routeChatId)
 	})
 
 	// Keep selection synced with the current route.
@@ -411,11 +408,11 @@
 			<ChatSidebarChatsSection
 				{expandedContentVisible}
 				isLoggedIn={session.isLoggedIn}
-				threads={session.recentThreads}
+				threads={chat.recentThreads}
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
 				{generatingMetadataThreadId}
-				onPrefetchThread={(threadId) => prefetchThread(threadId)}
+				onPrefetchThread={(threadId) => chat.threadCache.prefetchThread(threadId)}
 				onOpenThread={openThread}
 				onToggleMenu={toggleThreadMenu}
 				onCloseMenu={closeThreadMenu}
@@ -484,7 +481,7 @@
 									}
 
 									sidebar.selectChat(null)
-									await session.refreshThreads({ limit: 25 })
+									await chat.refreshThreads({ limit: 25 })
 
 									if (page.url.pathname === `/c/${confirmDeleteThread.id}`) {
 										// @ts-expect-error resolve typing is narrower than our constructed URL

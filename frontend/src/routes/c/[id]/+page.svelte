@@ -16,8 +16,8 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
+	import { chat as chatStore } from '$lib/stores/chat.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
-	import { session } from '$lib/stores/session.svelte'
 	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
@@ -109,10 +109,10 @@
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.thread) return
-		const pending = session.pendingChatStart
+		const pending = chatStore.pendingChatStart
 		if (!pending || pending.threadId !== chat.thread.id) return
 		if (chat.messages.length !== 0) {
-			session.consumePendingChatStart(chat.thread.id)
+			chatStore.consumePendingChatStart(chat.thread.id)
 			return
 		}
 		if (
@@ -122,7 +122,7 @@
 			chat.selectedAgent === ''
 		)
 			return
-		const content = session.consumePendingChatStart(chat.thread.id)
+		const content = chatStore.consumePendingChatStart(chat.thread.id)
 		if (!content) return
 		chat.handleSendMessage(content)
 	})
@@ -257,7 +257,7 @@
 						<!-- Spacer for scroll trigger area -->
 						<div class="h-1"></div>
 					{/if}
-					{#each chat.runBlocks as block (block.runId)}
+					{#each chat.runBlocks as block, i (block.runId)}
 						<div class="space-y-3">
 							<!-- user messages for this run -->
 							{#each block.items.filter((item) => item.kind === 'user') as item (item.message.id)}
@@ -338,6 +338,9 @@
 										null}
 
 									<AssistantChatMessage
+										isLastMessage={i === chat.runBlocks.length - 1 &&
+											!chat.optimisticUserMessage &&
+											!chat.runError}
 										{siblingCount}
 										{currentSiblingIndex}
 										onPrevious={() =>
