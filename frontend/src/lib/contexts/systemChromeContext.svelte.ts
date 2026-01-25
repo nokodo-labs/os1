@@ -7,9 +7,20 @@ export interface IslandAgentSelectorConfig {
 	onAgentChange: (agentId: string) => void
 }
 
+export type IslandActionIcon = 'plus' | 'list'
+
+export interface IslandAction {
+	id: string
+	label: string
+	ariaLabel?: string
+	icon: IslandActionIcon
+	onClick: () => void
+}
+
 export interface IslandConfig {
 	agentSelector: IslandAgentSelectorConfig | null
 	activityText: string | null
+	actions: IslandAction[] | null
 }
 
 export interface SystemChromeContext {
@@ -27,6 +38,7 @@ export interface SystemChromeContext {
 export function createSystemChromeContext(): SystemChromeContext {
 	let agentSelector = $state<IslandAgentSelectorConfig | null>(null)
 	let activityText = $state<string | null>(null)
+	let actions = $state<IslandAction[] | null>(null)
 	let isDockOpen = $state(false)
 
 	const context: SystemChromeContext = {
@@ -34,6 +46,7 @@ export function createSystemChromeContext(): SystemChromeContext {
 			return {
 				agentSelector,
 				activityText,
+				actions,
 			}
 		},
 		get isDockOpen() {
@@ -42,10 +55,12 @@ export function createSystemChromeContext(): SystemChromeContext {
 		setIsland(config) {
 			if ('agentSelector' in config) agentSelector = config.agentSelector ?? null
 			if ('activityText' in config) activityText = config.activityText ?? null
+			if ('actions' in config) actions = config.actions ?? null
 		},
 		clearIsland() {
 			agentSelector = null
 			activityText = null
+			actions = null
 		},
 		setAgentSelector(config) {
 			agentSelector = config

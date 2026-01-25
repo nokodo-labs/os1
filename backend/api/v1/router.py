@@ -14,6 +14,7 @@ from api.v1.routers import (
 	projects,
 	prompts,
 	providers,
+	reminders,
 	settings,
 	tasks,
 	threads,
@@ -31,6 +32,7 @@ api_router.include_router(events.router)
 api_router.include_router(notifications.router)
 api_router.include_router(memories.router)
 api_router.include_router(projects.router)
+api_router.include_router(reminders.router)
 api_router.include_router(providers.router)
 api_router.include_router(models.router)
 api_router.include_router(agents.router)

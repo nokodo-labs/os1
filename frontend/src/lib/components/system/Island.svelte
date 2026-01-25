@@ -7,6 +7,8 @@
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Home from '$lib/components/icons/Home.svelte'
+	import ListBullet from '$lib/components/icons/ListBullet.svelte'
+	import Plus from '$lib/components/icons/Plus.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
 	import UserProfileTrigger from '$lib/components/system/UserProfileTrigger.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
@@ -94,8 +96,7 @@
 			requestHomeInputFocus()
 			return
 		}
-		// @ts-expect-error resolve typing is narrower than our constructed URL
-		void goto(resolve('/' as never), { keepFocus: true, noScroll: true })
+		void goto(resolve('/'), { keepFocus: true, noScroll: true })
 	}
 
 	function handleTemporaryChat() {
@@ -148,6 +149,28 @@
 		>
 			<!-- left: adaptive controls -->
 			<div class="flex min-w-0 items-center gap-0 sm:gap-[clamp(6px,2.2vw,12px)]">
+				{#if chrome.island.actions && chrome.island.actions.length > 0}
+					<div class="flex items-center gap-1 sm:gap-2">
+						{#each chrome.island.actions as action (action.id)}
+							<button
+								class="group flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center gap-2 rounded-2xl border-none bg-transparent px-2 text-white/80 transition-transform duration-150 hover:scale-[1.03] hover:bg-white/5 hover:text-white active:scale-[0.98] sm:px-3"
+								onclick={action.onClick}
+								aria-label={action.ariaLabel ?? action.label}
+								type="button"
+							>
+								{#if action.icon === 'plus'}
+									<Plus className="h-5 w-5" />
+								{:else if action.icon === 'list'}
+									<ListBullet className="h-5 w-5" />
+								{/if}
+								<span class="hidden text-sm font-medium text-white/85 sm:inline">
+									{action.label}
+								</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
 				{#if chrome.island.agentSelector}
 					<div class="agent-selector relative flex min-w-0 items-center gap-2">
 						<button

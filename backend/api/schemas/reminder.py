@@ -1,45 +1,108 @@
-"""Reminder schemas."""
+"""reminder schemas."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from pydantic import Field
 
 from api.models.reminder import ReminderStatus
-from api.schemas.common import MetadataModel, ORMModel
+from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
-class ReminderBase(MetadataModel):
-	"""Base reminder schema."""
-
-	content: str
-	due_at: datetime
-	recurrence: str | None = None
-	status: ReminderStatus = ReminderStatus.PENDING
-	notification_channels: list[str] = Field(default_factory=list)
-	source_thread_id: TypeID | None = None
-	external_sync: dict[str, Any] | None = None
+# --- ReminderList schemas ---
 
 
-class ReminderCreate(ReminderBase):
-	"""Schema for creating a reminder."""
+class ReminderListBase(MetadataModel):
+	"""base reminder list schema."""
+
+	name: str = Field(max_length=100)
+	description: str | None = Field(default=None, max_length=500)
+	color: str | None = Field(default=None, max_length=7)
+	icon: str | None = Field(default=None, max_length=50)
+	position: float = 0.0
+
+
+class ReminderListCreate(ReminderListBase):
+	"""schema for creating a reminder list."""
 
 	pass
 
 
-class ReminderUpdate(ReminderBase):
-	"""Schema for updating a reminder."""
+class ReminderListUpdate(MetadataModel):
+	"""schema for updating a reminder list."""
 
-	content: str | None = None
-	due_at: datetime | None = None
-	status: ReminderStatus | None = None
+	name: str | None = Field(default=None, max_length=100)
+	description: str | None = Field(default=None, max_length=500)
+	color: str | None = None
+	icon: str | None = None
+	position: float | None = None
 
 
-class Reminder(ReminderBase, ORMModel):
-	"""Reminder schema."""
+class ReminderList(ReminderListBase, TimestampedModel):
+	"""reminder list response schema."""
 
 	id: TypeID
 	owner_id: TypeID
+
+
+class ReminderListWithCounts(ReminderList):
+	"""reminder list with reminder counts."""
+
+	total_count: int = 0
+	pending_count: int = 0
+	completed_count: int = 0
+
+
+# --- Reminder schemas ---
+
+
+class ReminderBase(MetadataModel):
+	"""base reminder schema."""
+
+	title: str = Field(max_length=200)
+	description: str | None = None
+	due_at: datetime | None = None
+	remind_at: datetime | None = None
+	recurrence: str | None = Field(default=None, max_length=255)
+	status: ReminderStatus = ReminderStatus.PENDING
+	list_id: TypeID | None = None
+	parent_id: TypeID | None = None
+	source_thread_id: TypeID | None = None
+	position: float = 0.0
+
+
+class ReminderCreate(ReminderBase):
+	"""schema for creating a reminder."""
+
+	pass
+
+
+class ReminderUpdate(MetadataModel):
+	"""schema for updating a reminder."""
+
+	title: str | None = Field(default=None, max_length=200)
+	description: str | None = None
+	due_at: datetime | None = None
+	remind_at: datetime | None = None
+	recurrence: str | None = None
+	status: ReminderStatus | None = None
+	completed_at: datetime | None = None
+	list_id: TypeID | None = None
+	parent_id: TypeID | None = None
+	position: float | None = None
+
+
+class Reminder(ReminderBase, TimestampedModel):
+	"""reminder response schema."""
+
+	id: TypeID
+	owner_id: TypeID
+	completed_at: datetime | None = None
+
+
+class ReminderWithSubtasks(Reminder):
+	"""reminder with nested subtasks."""
+
+	subtasks: list[Reminder] = Field(default_factory=list)

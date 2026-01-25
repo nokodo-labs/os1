@@ -170,16 +170,13 @@
 
 	// ============ NAVIGATION HELPERS ============
 	async function navigateToChat(threadId: string) {
-		const target = `/c/${threadId}`
-		// @ts-expect-error resolve typing is narrower than our constructed URL
-		await goto(resolve(target as never), { keepFocus: true, noScroll: true })
+		await goto(resolve(`/c/${threadId}`), { keepFocus: true, noScroll: true })
 	}
 
 	async function setHomeChatMode(mode: Exclude<ChatMode, null>, opts?: { replace?: boolean }) {
 		chatStartError = null
-		const target = `/?chat=${mode}`
 		// @ts-expect-error resolve typing is narrower than our constructed URL
-		await goto(resolve(target as never), {
+		await goto(resolve(`/?chat=${mode}`), {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: opts?.replace ?? false,

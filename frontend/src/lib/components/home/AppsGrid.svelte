@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { goto } from '$app/navigation'
 	import Bolt from '$lib/components/icons/Bolt.svelte'
 	import Bookmark from '$lib/components/icons/Bookmark.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
@@ -17,6 +18,7 @@
 	import Star from '$lib/components/icons/Star.svelte'
 	import Terminal from '$lib/components/icons/Terminal.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
+	import { reminders } from '$lib/stores/reminders.svelte'
 	import { onDestroy, tick } from 'svelte'
 
 	type IconComponent = typeof Document
@@ -25,6 +27,7 @@
 		id: string
 		title: string
 		icon: IconComponent
+		action?: () => Promise<void>
 	}
 
 	type IconShape = 'default' | 'circle'
@@ -37,7 +40,14 @@
 
 	const apps: AppDefinition[] = [
 		{ id: 'notes', title: 'notes', icon: Document },
-		{ id: 'reminders', title: 'reminders', icon: CheckBox },
+		{
+			id: 'reminders',
+			title: 'reminders',
+			icon: CheckBox,
+			action: async () => {
+				await goto(reminders.remindersAppUrl)
+			},
+		},
 		{ id: 'calendar', title: 'calendar', icon: Calendar },
 		{ id: 'messages', title: 'messages', icon: ChatBubbles },
 		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
@@ -276,6 +286,10 @@
 							class="group flex flex-col items-center border-none bg-transparent"
 							style="height: {tilePx + tileToLabelGapPx + labelPx}px;"
 							aria-label={app.title}
+							onclick={async () => {
+								if (!app.action) return
+								await app.action()
+							}}
 						>
 							<div
 								class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[transform,box-shadow] duration-150 group-hover:scale-[1.03] group-hover:ring-white/10 group-active:scale-[0.99] group-active:ring-white/20 {iconShape ===

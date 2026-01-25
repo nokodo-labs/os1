@@ -11,6 +11,7 @@
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
 	import SettingsModal from '$lib/components/modals/SettingsModal.svelte'
+	import ReminderListsSidebar from '$lib/components/reminders/ReminderListsSidebar.svelte'
 	import ChatSidebar from '$lib/components/sidebar/ChatSidebar.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -24,6 +25,7 @@
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
+	import { reminders } from '$lib/stores/reminders.svelte'
 	import { loadSettings } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
@@ -32,12 +34,14 @@
 	const PUBLIC_PATHS = new Set(['/login', '/signup'])
 
 	type ViewTransitionCapableDocument = Document & {
-		startViewTransition?: (cb: () => Promise<void> | void) => void
+		startViewTransition?: (
+			cb: () => Promise<void> | void
+		) => { finished?: Promise<unknown> } | void
 	}
 
-	// Global View Transitions hook.
-	// This ensures transitions run for ALL navigations (links, goto(), back/forward popstate).
-	// We intentionally skip same-path navigations (e.g. / <-> /?chat=new) so in-page
+	// global View Transitions hook.
+	// this ensures transitions run for ALL navigations (links, goto(), back/forward popstate).
+	// we intentionally skip same-path navigations (e.g. / <-> /?chat=new) so in-page
 	// animations keep controls interactive without the ViewTransition overlay.
 	onNavigate((navigation) => {
 		const start = (document as ViewTransitionCapableDocument).startViewTransition
@@ -49,28 +53,43 @@
 		if (from.pathname === to.pathname) return
 
 		return new Promise<void>((resolve) => {
-			start.call(document, async () => {
+			const root = document.documentElement
+			root.dataset.vtActive = '1'
+
+			const transition = start.call(document, async () => {
 				resolve()
 				await navigation.complete
 			})
+
+			const done = () => {
+				delete root.dataset.vtActive
+			}
+
+			// prefer the ViewTransition lifecycle when available.
+			if (transition && typeof transition === 'object' && transition.finished) {
+				transition.finished.finally(done)
+				return
+			}
+			// fallback: at least remove after navigation completes.
+			navigation.complete.finally(done)
 		})
 	})
 
 	// SSG: safe to init synchronously at module eval time when in browser.
 	if (browser) initDevice()
 
-	// Initialize sidebar context
+	// initialize sidebar context
 	createSidebarContext()
 	const sidebar = useSidebar() as {
 		readonly isChatSidebarOpen: boolean
 		openChatSidebar: () => void
 		closeChatSidebar: () => void
 	}
-	// Initialize system chrome context
+	// initialize system chrome context
 	const chrome = createSystemChromeContext()
 	// DEV ONLY: Debug UI state (persisted locally)
 	createDebugUiContext()
-	// Initialize theme context
+	// initialize theme context
 	const theme = createThemeContext()
 
 	$effect(() => {
@@ -81,7 +100,7 @@
 	let currentBackground = $state<BackgroundType>('darkveil')
 	let { children } = $props()
 
-	// Gate initial page paint behind the splash.
+	// gate initial page paint behind the splash.
 	const backgroundBlocker = appReadiness.createBlocker()
 	function handleBackgroundReady() {
 		backgroundBlocker.done()
@@ -93,20 +112,20 @@
 	onMount(async () => {
 		await apiOriginReady
 		void loadSettings()
-		// Initialize event stream if already logged in (page load/refresh)
+		// initialize event stream if already logged in (page load/refresh)
 		const existingToken = getAccessToken()
 		if (existingToken) eventStreamClient.connect()
 
-		// Ensure the first route has had a chance to render + paint.
+		// ensure the first route has had a chance to render + paint.
 		await tick()
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 		appReadiness.markShellReady()
 
-		// Don't run auth redirects on not-found routes.
-		// This keeps 404s visible even when the user is logged out.
+		// don't run auth redirects on not-found routes.
+		// this keeps 404s visible even when the user is logged out.
 		if (page.status === 404) return
 
-		// Client-side auth guard (SSG: auth logic must run in browser, not during prerender)
+		// client-side auth guard (SSG: auth logic must run in browser, not during prerender)
 		const token = getAccessToken()
 		const isPublic = PUBLIC_PATHS.has(page.url.pathname)
 
@@ -129,6 +148,35 @@
 	const isChatSwipeEligibleRoute = $derived.by(() => {
 		const path = page.url.pathname
 		return path === '/' || path.startsWith('/c/')
+	})
+
+	const isRemindersRoute = $derived(page.url.pathname.startsWith('/reminders'))
+	const remindersSelectedListId = $derived.by(() => {
+		if (!isRemindersRoute) return null
+		return page.params.listId ?? null
+	})
+
+	const remindersSidebarWidthClass = 'w-[clamp(280px,30vw,520px)]'
+	let isLoadingRemindersLists = $state(false)
+
+	$effect(() => {
+		if (!browser) return
+		if (!isRemindersRoute) return
+
+		const path = page.url.pathname
+		if (path === '/reminders' || path.startsWith('/reminders/lists/')) {
+			reminders.lastVisitedPath = path
+		}
+
+		// keep last visited list for AppsGrid navigation continuity.
+		if (remindersSelectedListId) reminders.lastVisitedListId = remindersSelectedListId
+
+		// ensure the master sidebar has data.
+		if (device.isMobile) return
+		isLoadingRemindersLists = true
+		void reminders.loadListsAndCounts().finally(() => {
+			isLoadingRemindersLists = false
+		})
 	})
 
 	const sidebarSpacerWidthClass = $derived.by(() => {
@@ -168,7 +216,7 @@
 	function onDockPointerMove(event: PointerEvent) {
 		if (!dockSwipeActive) return
 		if (dockSwipePointerId !== event.pointerId) return
-		// Prevent the gesture from being consumed as a scroll.
+		// prevent the gesture from being consumed as a scroll.
 		event.preventDefault()
 	}
 
@@ -182,7 +230,7 @@
 
 		if (Math.abs(dx) <= 80) return
 		if (Math.abs(dx) <= Math.abs(dy)) return
-		// Mobile dock dismiss gesture: left-to-right
+		// mobile dock dismiss gesture: left-to-right
 		if (dx > 0) chrome.closeDock()
 	}
 
@@ -226,7 +274,7 @@
 		if (!isChatSwipeEligibleRoute) return
 		if (chrome.isDockOpen) return
 		if (sidebar.isChatSidebarOpen) return
-		// Only start from the left edge to avoid interfering with normal interactions
+		// only start from the left edge to avoid interfering with normal interactions
 		if (event.clientX > 24) return
 
 		sidebarSwipePointerId = event.pointerId
@@ -239,7 +287,7 @@
 	function onMainPointerMove(event: PointerEvent) {
 		if (!sidebarSwipeActive) return
 		if (sidebarSwipePointerId !== event.pointerId) return
-		// Keep the gesture from being consumed as a scroll when we intend a horizontal swipe.
+		// keep the gesture from being consumed as a scroll when we intend a horizontal swipe.
 		event.preventDefault()
 	}
 
@@ -253,7 +301,7 @@
 
 		if (Math.abs(dx) <= 80) return
 		if (Math.abs(dx) <= Math.abs(dy)) return
-		// Mobile sidebar reveal gesture: left-to-right
+		// mobile sidebar reveal gesture: left-to-right
 		if (dx > 0) sidebar.openChatSidebar()
 	}
 
@@ -270,7 +318,7 @@
 
 <SplashController />
 
-<!-- Background Manager handles all backgrounds with smooth transitions -->
+<!-- BackgroundManager handles all backgrounds with smooth transitions -->
 <BackgroundManager
 	type={currentBackground}
 	config={{ color: '#0a0a0a' }}
@@ -285,11 +333,35 @@
 	{:else}
 		<div class="relative z-1 flex h-screen">
 			{#if isChatSwipeEligibleRoute}
-				<!-- Sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
+				<!-- sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
 				<ChatSidebar />
 				<div
 					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
 				></div>
+			{/if}
+
+			{#if isRemindersRoute && !device.isMobile}
+				<!-- reminders master sidebar (fixed; desktop reserves width so Island recenters naturally) -->
+				<aside
+					class="fixed inset-y-0 left-0 z-40 {remindersSidebarWidthClass} overflow-hidden"
+					aria-label="reminder lists"
+					style="view-transition-name: reminders-master;"
+				>
+					<div
+						class="relative h-full px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)] pb-10"
+					>
+						<ReminderListsSidebar
+							selectedListId={remindersSelectedListId}
+							isLoading={isLoadingRemindersLists}
+						/>
+						<!-- separator (doesn't reach top/bottom) -->
+						<div
+							class="pointer-events-none absolute top-[clamp(28px,4vw,44px)] right-0 bottom-[clamp(28px,4vw,44px)] w-px bg-linear-to-b from-transparent via-white/10 to-transparent"
+							aria-hidden="true"
+						></div>
+					</div>
+				</aside>
+				<div class="h-screen shrink-0 {remindersSidebarWidthClass}"></div>
 			{/if}
 
 			{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
@@ -304,7 +376,7 @@
 				></div>
 			{/if}
 
-			<!-- Main Content -->
+			<!-- main content -->
 			<div
 				class="relative flex min-w-0 flex-1 flex-col pt-[calc(var(--chrome-island-offset)+16px)]"
 				style={`touch-action: pan-y; --chrome-island-offset: ${islandOffsetPx}px;`}
@@ -314,7 +386,7 @@
 				onpointerup={onMainPointerUp}
 				onpointercancel={onMainPointerCancel}
 			>
-				<!-- System chrome: island (top header) -->
+				<!-- system chrome: Island (top header) -->
 				<div
 					class="pointer-events-none absolute top-0 right-0 left-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
 					bind:this={islandShell}
@@ -327,7 +399,7 @@
 				{@render children()}
 			</div>
 
-			<!-- System chrome: dock (right sidebar overlay) -->
+			<!-- system chrome: Dock (right sidebar overlay) -->
 			{#if chrome.isDockOpen && !device.isMobile}
 				<div
 					class="fixed inset-0 z-20"

@@ -128,8 +128,7 @@
 
 			// if we're viewing this thread, navigate away
 			if (page.url.pathname === `/c/${threadId}`) {
-				// @ts-expect-error resolve typing is narrower than our constructed URL
-				void goto(resolve('/' as never), { replaceState: true })
+				void goto(resolve('/'), { replaceState: true })
 			}
 		} else if (eventType === 'thread.updated' && threadId) {
 			// invalidate cache on updates
@@ -169,8 +168,7 @@
 		if (isAlreadyHome && browser) {
 			window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
 		} else {
-			// @ts-expect-error resolve typing is narrower than our constructed URL
-			void goto(resolve('/' as never), { keepFocus: true, noScroll: true })
+			void goto(resolve('/'), { keepFocus: true, noScroll: true })
 		}
 		if (device.isMobile) sidebar.closeChatSidebar()
 	}
@@ -218,8 +216,7 @@
 	async function openThread(threadId: string): Promise<void> {
 		sidebar.selectChat(threadId)
 		if (page.url.pathname !== `/c/${threadId}`) {
-			// @ts-expect-error resolve typing is narrower than our constructed URL
-			void goto(resolve(`/c/${threadId}` as never), {
+			void goto(resolve(`/c/${threadId}`), {
 				keepFocus: true,
 				noScroll: true,
 			})
@@ -355,7 +352,7 @@
 {/if}
 
 <aside
-	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] backdrop-saturate-180 transition-[width,transform] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] transition-[width,transform] duration-300 ease-in-out {sidebar.isChatSidebarOpen
 		? ''
 		: 'group'} {device.isMobile
 		? 'w-full'
@@ -366,7 +363,7 @@
 		: device.isMobile
 			? 'pointer-events-none -translate-x-full'
 			: 'translate-x-0'}"
-	style="background-color: var(--accent-bg);"
+	style="background-color: var(--accent-bg); view-transition-name: chat-sidebar;"
 	aria-hidden={device.isMobile ? !sidebar.isChatSidebarOpen : false}
 	onclick={(event) => {
 		if (device.isMobile) return
@@ -484,8 +481,7 @@
 									await chat.refreshThreads({ limit: 25 })
 
 									if (page.url.pathname === `/c/${confirmDeleteThread.id}`) {
-										// @ts-expect-error resolve typing is narrower than our constructed URL
-										await goto(resolve('/' as never), {
+										await goto(resolve('/'), {
 											keepFocus: true,
 											noScroll: true,
 										})

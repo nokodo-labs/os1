@@ -13,7 +13,7 @@ from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
 from api.models.provider import Provider
-from api.models.reminder import Reminder
+from api.models.reminder import Reminder, ReminderList
 from api.models.role import Role
 from api.models.setting import SettingsDocument
 from api.models.task import Task
@@ -37,6 +37,7 @@ __all__ = [
 	"Provider",
 	"Prompt",
 	"Reminder",
+	"ReminderList",
 	"Role",
 	"SettingsDocument",
 	"Task",

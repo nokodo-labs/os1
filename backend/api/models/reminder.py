@@ -1,17 +1,18 @@
-"""Reminder model."""
+"""reminder models."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
 from api.models.mixins import (
 	MetadataJSONMixin,
+	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
 
@@ -22,16 +23,38 @@ if TYPE_CHECKING:
 
 
 class ReminderStatus(StrEnum):
-	"""Status of a reminder."""
+	"""status of a reminder."""
 
 	PENDING = "pending"
-	TRIGGERED = "triggered"
-	DISMISSED = "dismissed"
-	SNOOZED = "snoozed"
+	COMPLETED = "completed"
 
 
-class Reminder(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
-	"""Reminder model."""
+class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+	"""reminder list model for grouping reminders."""
+
+	__tablename__ = "reminder_lists"
+	__typeid_prefix__ = "reml"
+
+	owner_id: Mapped[str] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("users.id"),
+	)
+	name: Mapped[str] = mapped_column(String(100))
+	description: Mapped[str | None] = mapped_column(String(500))
+	color: Mapped[str | None] = mapped_column(String(7))  # hex color e.g. #FF5733
+	icon: Mapped[str | None] = mapped_column(String(50))  # emoji or icon name
+	position: Mapped[float] = mapped_column(Float, default=0.0)
+
+	owner: Mapped[User] = relationship("User", back_populates="reminder_lists")
+	reminders: Mapped[list[Reminder]] = relationship(
+		"Reminder",
+		back_populates="list",
+		cascade="all, delete-orphan",
+	)
+
+
+class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+	"""reminder model."""
 
 	__tablename__ = "reminders"
 	__typeid_prefix__ = "rem"
@@ -40,19 +63,44 @@ class Reminder(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)
-	content: Mapped[str] = mapped_column(String(500))
-	due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-	recurrence: Mapped[str | None] = mapped_column(String(50))
-	status: Mapped[ReminderStatus] = mapped_column(
-		StringEnum(ReminderStatus),
-		default=ReminderStatus.PENDING,
+	list_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("reminder_lists.id"),
 	)
-	notification_channels: Mapped[list[str]] = mapped_column(JSON, default=list)
+	parent_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("reminders.id"),
+	)
 	source_thread_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id"),
 	)
-	external_sync: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+	title: Mapped[str] = mapped_column(String(200))
+	description: Mapped[str | None] = mapped_column(Text)
+	due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+	remind_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+	recurrence: Mapped[str | None] = mapped_column(String(255))  # rrule string
+	status: Mapped[ReminderStatus] = mapped_column(
+		StringEnum(ReminderStatus),
+		default=ReminderStatus.PENDING,
+	)
+	completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+	position: Mapped[float] = mapped_column(Float, default=0.0)
 
 	owner: Mapped[User] = relationship("User", back_populates="reminders")
+	list: Mapped[ReminderList | None] = relationship(
+		"ReminderList",
+		back_populates="reminders",
+	)
 	thread: Mapped[Thread | None] = relationship("Thread")
+	parent: Mapped[Reminder | None] = relationship(
+		"Reminder",
+		back_populates="subtasks",
+		remote_side="Reminder.id",
+	)
+	subtasks: Mapped[list[Reminder]] = relationship(
+		"Reminder",
+		back_populates="parent",
+		cascade="all, delete-orphan",
+	)

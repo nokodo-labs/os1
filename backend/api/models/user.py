@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 	from api.models.memory import Memory
 	from api.models.notification import Notification
 	from api.models.project import Project
-	from api.models.reminder import Reminder
+	from api.models.reminder import Reminder, ReminderList
 	from api.models.role import Role
 	from api.models.task import Task
 	from api.models.thread import Thread
@@ -61,6 +61,11 @@ class User(TypeIDPrimaryKeyMixin, Base):
 		"GroupMembership", back_populates="user", cascade="all, delete-orphan"
 	)
 	reminders: Mapped[list[Reminder]] = relationship("Reminder", back_populates="owner")
+	reminder_lists: Mapped[list[ReminderList]] = relationship(
+		"ReminderList",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
 	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
 		"AccessControlEntry", back_populates="user", cascade="all, delete-orphan"
 	)

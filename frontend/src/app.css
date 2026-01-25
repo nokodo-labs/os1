@@ -205,6 +205,24 @@
 	}
 }
 
+@keyframes nokodo-vt-slide-out-left {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-55vw);
+	}
+}
+
+@keyframes nokodo-vt-slide-in-left {
+	from {
+		transform: translateX(-55vw);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
 ::view-transition-group(chat-header) {
 	animation-duration: 360ms;
 	/* Clean, non-overshooting ease-out */
@@ -244,4 +262,45 @@
 
 ::view-transition-old(apps-grid) {
 	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-down;
+}
+
+/* reminders master/content transitions */
+::view-transition-new(reminders-master) {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-left;
+}
+
+::view-transition-old(reminders-master) {
+	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-left;
+}
+
+/* chat sidebar transitions
+	- persisted across pages (shared element): no forced slide; allow hero-move/morph.
+	- not persisted (exists only in old or only in new): slide out/in.
+	`:only-child` matches when the snapshot has no counterpart.
+*/
+::view-transition-old(chat-sidebar):only-child {
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-left;
+}
+
+::view-transition-new(chat-sidebar):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-left;
+}
+
+/* chat input transitions
+	Same intent as sidebar: morph when shared, slide when not.
+*/
+::view-transition-old(chat-input):only-child {
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-down;
+}
+
+::view-transition-new(chat-input):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-up;
+}
+
+/* During ViewTransitions, keep live backdrop filters from affecting the new/old pages.
+	The snapshot should carry the visual instead of the live element lingering.
+*/
+html[data-vt-active='1'] .chat-sidebar {
+	-webkit-backdrop-filter: none !important;
+	backdrop-filter: none !important;
 }
