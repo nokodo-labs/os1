@@ -7,6 +7,13 @@ from api.schemas.memory import Memory, MemoryCreate
 from api.schemas.message import Message, MessageCreate
 from api.schemas.model import Model, ModelCreate
 from api.schemas.notification import Notification
+from api.schemas.preferences import (
+	AIPreferences,
+	AppearancePreferences,
+	NotificationPreferences,
+	PrivacyPreferences,
+	UserPreferences,
+)
 from api.schemas.project import Project, ProjectCreate, ProjectUpdate
 from api.schemas.provider import Provider, ProviderCreate, ProviderUpdate
 from api.schemas.reminder import Reminder, ReminderCreate, ReminderUpdate
@@ -18,6 +25,8 @@ from api.schemas.user import User, UserCreate, UserUpdate
 
 
 __all__ = [
+	"AIPreferences",
+	"AppearancePreferences",
 	"Agent",
 	"AgentCreate",
 	"Event",
@@ -52,7 +61,10 @@ __all__ = [
 	"ThreadUpdate",
 	"CommonSortBy",
 	"SortDir",
+	"NotificationPreferences",
+	"PrivacyPreferences",
 	"User",
 	"UserCreate",
+	"UserPreferences",
 	"UserUpdate",
 ]

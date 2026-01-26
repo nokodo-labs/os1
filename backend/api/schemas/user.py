@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from api.schemas.preferences import UserPreferences
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -16,7 +17,7 @@ class UserBase(BaseModel):
 	avatar_url: str | None = None
 	is_active: bool = True
 	is_superuser: bool = False
-	preferences: dict[str, Any] = Field(default_factory=dict)
+	preferences: UserPreferences = Field(default_factory=UserPreferences)
 	integration_tokens: dict[str, Any] = Field(default_factory=dict)
 	usage_quotas: dict[str, Any] = Field(default_factory=dict)
 
@@ -46,7 +47,7 @@ class UserUpdate(BaseModel):
 	is_active: bool | None = None
 	display_name: str | None = None
 	avatar_url: str | None = None
-	preferences: dict[str, Any] | None = None
+	preferences: UserPreferences | None = None
 	integration_tokens: dict[str, Any] | None = None
 	usage_quotas: dict[str, Any] | None = None
 

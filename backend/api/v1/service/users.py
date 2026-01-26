@@ -170,7 +170,11 @@ async def update_user(
 	user = await get_user(user_id, session, principal=principal)
 
 	if user_in.preferences is not None:
-		user.preferences = dict(user_in.preferences)
+		user.preferences = user_in.preferences.model_dump(
+			mode="json",
+			by_alias=True,
+			exclude_none=True,
+		)
 
 	if principal.is_admin:
 		if user_in.email is not None:
