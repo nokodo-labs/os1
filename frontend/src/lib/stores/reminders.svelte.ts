@@ -241,10 +241,10 @@ class RemindersCache {
 		}
 	}
 
-	get remindersAppUrl(): string {
+	get remindersAppUrl(): '/reminders' | `/reminders/lists/${string}` {
 		const path = this.lastVisitedPath
 		if (path && (path === '/reminders' || path.startsWith('/reminders/lists/'))) {
-			return path
+			return path as '/reminders' | `/reminders/lists/${string}`
 		}
 
 		const listId = this.lastVisitedListId

@@ -76,7 +76,8 @@
 		void goto(resolve(`/settings/${sectionId}`), { keepFocus: true, noScroll: true })
 	}
 
-	function prefetchSection(_sectionId: string): void {
+	function prefetchSection(sectionId: string): void {
+		void sectionId
 		// no-op for now; could prefetch section data if needed
 	}
 </script>

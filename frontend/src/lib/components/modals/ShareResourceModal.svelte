@@ -44,7 +44,11 @@
 	async function shareNative(): Promise<void> {
 		if (!shareUrl) return
 		if (!canNativeShare) return
-		const share = (navigator as Navigator & { share: (data: ShareData) => Promise<void> }).share
+		const share = (
+			navigator as Navigator & {
+				share: (data: { title?: string; text?: string; url?: string }) => Promise<void>
+			}
+		).share
 		await share({
 			title: payload?.title ?? undefined,
 			url: shareUrl,

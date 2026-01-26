@@ -88,12 +88,23 @@ def upgrade() -> None:
 			type_=sa.String(length=255),
 			existing_nullable=True,
 		)
-		batch_op.create_foreign_key(None, "reminders", ["parent_id"], ["id"])
-		batch_op.create_foreign_key(None, "reminder_lists", ["list_id"], ["id"])
+		batch_op.create_foreign_key(
+			"reminders_parent_id_fkey",
+			"reminders",
+			["parent_id"],
+			["id"],
+		)
+		batch_op.create_foreign_key(
+			"reminders_list_id_fkey",
+			"reminder_lists",
+			["list_id"],
+			["id"],
+		)
 
 	# migrate existing data: copy content to title (truncated to 200 chars)
 	op.execute(
-		"UPDATE reminders SET title = LEFT(content, 200) WHERE title IS NULL AND content IS NOT NULL"
+		"UPDATE reminders SET title = LEFT(content, 200) "
+		"WHERE title IS NULL AND content IS NOT NULL"
 	)
 	op.execute("UPDATE reminders SET title = 'untitled' WHERE title IS NULL")
 
@@ -131,8 +142,8 @@ def downgrade() -> None:
 				"content", sa.VARCHAR(length=500), autoincrement=False, nullable=False
 			)
 		)
-		batch_op.drop_constraint(None, type_="foreignkey")
-		batch_op.drop_constraint(None, type_="foreignkey")
+		batch_op.drop_constraint("reminders_parent_id_fkey", type_="foreignkey")
+		batch_op.drop_constraint("reminders_list_id_fkey", type_="foreignkey")
 		batch_op.alter_column(
 			"recurrence",
 			existing_type=sa.String(length=255),

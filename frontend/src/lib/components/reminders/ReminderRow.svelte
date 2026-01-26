@@ -9,6 +9,7 @@
 	import { device } from '$lib/stores/device.svelte'
 	import type { ReminderListWithCounts, ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
+	import { SvelteDate } from 'svelte/reactivity'
 
 	type Motion = 'in' | 'out-complete' | 'out-uncomplete' | null
 
@@ -57,17 +58,16 @@
 	const isMotionIn = $derived(props.motion === 'in')
 	const isMotionOutComplete = $derived(props.motion === 'out-complete')
 	const isMotionOutUncomplete = $derived(props.motion === 'out-uncomplete')
-	const isMotionOut = $derived(isMotionOutComplete || isMotionOutUncomplete)
 	const isMorphPlus = $derived(props.kind === 'edit' && props.iconMorph === 'plus-to-circle')
 	const hasDueDate = $derived(props.kind === 'edit' && props.reminder.due_at != null)
 	const formattedDueDate = $derived.by(() => {
 		if (props.kind !== 'edit') return null
 		if (!props.reminder.due_at) return null
 
-		const date = new Date(props.reminder.due_at)
-		const now = new Date()
+		const date = new SvelteDate(props.reminder.due_at)
+		const now = new SvelteDate()
 		const isToday = date.toDateString() === now.toDateString()
-		const tomorrow = new Date(now)
+		const tomorrow = new SvelteDate(now)
 		tomorrow.setDate(tomorrow.getDate() + 1)
 		const isTomorrow = date.toDateString() === tomorrow.toDateString()
 
@@ -83,7 +83,7 @@
 	const isOverdue = $derived.by(() => {
 		if (props.kind !== 'edit') return false
 		if (!props.reminder.due_at || props.reminder.status === 'completed') return false
-		return new Date(props.reminder.due_at) < new Date()
+		return new SvelteDate(props.reminder.due_at) < new SvelteDate()
 	})
 
 	async function focusTitle() {

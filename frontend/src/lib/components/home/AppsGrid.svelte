@@ -46,7 +46,7 @@
 			title: 'reminders',
 			icon: CheckBox,
 			action: async () => {
-				await goto(reminders.remindersAppUrl)
+				await goto(resolve(reminders.remindersAppUrl))
 			},
 		},
 		{ id: 'calendar', title: 'calendar', icon: Calendar },
