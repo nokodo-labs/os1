@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		"starting %s v%s [%s]",
 		settings.branding.site_name,
 		settings.branding.app_version,
-		boot_settings.APP_ENV,
+		boot_settings.ENV,
 	)
 
 	# startup: skip db init during tests
@@ -74,6 +74,9 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=settings.security.cors_origins,
+	allow_origin_regex="|".join(
+		f"({pattern})" for pattern in settings.security.cors_origins_regex
+	),
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],

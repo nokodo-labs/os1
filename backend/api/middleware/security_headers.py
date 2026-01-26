@@ -32,7 +32,7 @@ class SecurityHeadersMiddleware:
 			if message["type"] == "http.response.start":
 				for header, value in DEFAULT_HEADERS.items():
 					append_header(message, header, value)
-				if boot_settings.APP_ENV != "dev":
+				if boot_settings.ENV != "dev":
 					append_header(
 						message,
 						b"strict-transport-security",

@@ -229,7 +229,7 @@ def get_log_level() -> int:
 	"""determine log level based on settings."""
 	if boot_settings.DEBUG:
 		return logging.DEBUG
-	if boot_settings.APP_ENV == "dev":
+	if boot_settings.ENV == "dev":
 		return logging.DEBUG
 	return logging.INFO
 
@@ -244,7 +244,7 @@ def configure_logging(
 	call this once at startup, before any logging happens.
 
 	args:
-		level: log level override (default: auto from APP_ENV)
+		level: log level override (default: auto from ENV)
 		json_logs: force json format (default: settings.JSON_LOGS)
 	"""
 	if level is None:

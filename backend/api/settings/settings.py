@@ -22,15 +22,15 @@ ENV_PREFIX: Final[str] = "NOKODO__"
 ENV_NESTED_DELIMITER: Final[str] = "__"
 
 
-def settings_field(
-	default: Any = ...,
+def settings_field[T](
+	default: T,
 	*,
 	description: str | None = None,
 	default_factory: Any = None,
 	private: bool = False,
 	write_locked: bool = False,
 	**kwargs: Any,
-) -> Any:
+) -> T:
 	"""field with access flags.
 	args:
 		private: if True, excluded from non-admin API responses
@@ -224,20 +224,37 @@ class SecuritySettings(BaseModel):
 		description="enable oauth (env-only)",
 	)
 	cors_origins: list[str] = settings_field(
-		default_factory=lambda: [
+		default=[
 			"http://localhost:888",
 			"http://localhost:8383",
-			"http://localhost:3000",
 		],
 		write_locked=True,
 		description="cors origins (env-only)",
 	)
+	cors_origins_regex: list[str] = settings_field(
+		default=[r"^https?://.*\.local:888$", r"^https?://.*\.local:8383$"],
+		write_locked=True,
+		description="cors origins regex patterns (env-only). set as JSON array object.",
+	)
+	allowed_hosts: list[str] = settings_field(
+		default=[
+			"localhost",
+			"0.0.0.0",
+			"127.0.0.1",
+			".local",
+		],
+		write_locked=True,
+		description=(
+			"allowed host patterns for Origin validation (env-only). "
+			"supports '*', leading-dot domains like '.local', and exact hostnames"
+		),
+	)
 
-	@field_validator("cors_origins", mode="before")
+	@field_validator("cors_origins", "allowed_hosts", mode="before")
 	@classmethod
-	def _parse_cors_origins(cls, v: str | list[str]) -> list[str]:
+	def parse_comma_separated_strings(cls, v: str | list[str]) -> list[str]:
 		if isinstance(v, str):
-			return [origin.strip() for origin in v.split(",") if origin.strip()]
+			return [item.strip() for item in v.split(",") if item.strip()]
 		return v
 
 

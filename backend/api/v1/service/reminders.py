@@ -121,7 +121,9 @@ async def list_reminder_lists(
 
 	return [
 		ReminderListWithCounts(
-			**ReminderListWithCounts.model_validate(row.ReminderList).model_dump(),
+			**ReminderListWithCounts.model_validate(row.ReminderList).model_dump(
+				exclude={"total_count", "pending_count", "completed_count"}
+			),
 			total_count=row.total_count,
 			pending_count=row.pending_count,
 			completed_count=row.completed_count,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,10 @@ class BootSettings(BaseSettings):
 		extra="ignore",
 	)
 
-	APP_ENV: Literal["dev", "staging", "production"] = "dev"
+	ENV: Literal["dev", "production"] = Field(
+		default="production",
+		description="runtime environment profile",
+	)
 	DEBUG: bool = False
 	JSON_LOGS: bool = False
 	TESTING: bool = False

@@ -339,25 +339,19 @@ class TestGetLogLevel:
 	def test_debug_mode_returns_debug(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = True
-			mock_settings.APP_ENV = "production"
+			mock_settings.ENV = "production"
 			assert get_log_level() == logging.DEBUG
 
 	def test_dev_env_returns_debug(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			assert get_log_level() == logging.DEBUG
-
-	def test_staging_env_returns_info(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
-			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "staging"
-			assert get_log_level() == logging.INFO
 
 	def test_production_env_returns_info(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "production"
+			mock_settings.ENV = "production"
 			assert get_log_level() == logging.INFO
 
 
@@ -373,7 +367,7 @@ class TestConfigureLogging:
 	def test_configure_with_console_formatter(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
 
 		root = logging.getLogger()
@@ -383,7 +377,7 @@ class TestConfigureLogging:
 	def test_configure_with_json_formatter(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "production"
+			mock_settings.ENV = "production"
 			configure_logging(json_logs=True)
 
 		root = logging.getLogger()
@@ -393,7 +387,7 @@ class TestConfigureLogging:
 	def test_configure_with_custom_level(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			configure_logging(level=logging.ERROR, json_logs=False)
 
 		root = logging.getLogger()
@@ -412,7 +406,7 @@ class TestConfigureLogging:
 
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
 
 		# After configure_logging, our test handlers should be gone
@@ -431,7 +425,7 @@ class TestConfigureLogging:
 	def test_configure_suppresses_noisy_loggers(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
 
 		for name in ("httpcore", "httpx", "watchfiles"):
@@ -441,7 +435,7 @@ class TestConfigureLogging:
 	def test_configure_uvicorn_propagates(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
 
 		for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
@@ -452,7 +446,7 @@ class TestConfigureLogging:
 	def test_auto_json_in_production(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "production"
+			mock_settings.ENV = "production"
 			mock_settings.JSON_LOGS = True
 			configure_logging()
 
@@ -462,7 +456,7 @@ class TestConfigureLogging:
 	def test_auto_console_in_dev(self) -> None:
 		with patch("api.core.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
-			mock_settings.APP_ENV = "dev"
+			mock_settings.ENV = "dev"
 			mock_settings.JSON_LOGS = False
 			configure_logging()
 

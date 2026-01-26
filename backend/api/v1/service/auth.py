@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Annotated
+from urllib.parse import urlparse
 
 from authlib.jose import JoseError
 from fastapi import Depends, Header, HTTPException, WebSocket, status
@@ -28,16 +29,31 @@ from nokodo_ai.utils.typeid import TypeID, assert_typeid
 REFRESH_COOKIE_NAME = "refresh_token"
 
 
-def _is_origin_allowed(origin: str | None) -> bool:
-	allowed = settings.security.cors_origins
-	return (
-		origin is not None and origin != "" and origin != "null" and origin in allowed
-	)
+def origin_allowed(
+	origin: str | None, patterns: list[str] = settings.security.allowed_hosts
+) -> bool:
+	if origin is None or origin == "" or origin == "null":
+		return False
+
+	hostname = urlparse(origin).hostname or ""
+
+	for p in patterns:
+		if p == "*":
+			return True
+		if p.startswith("."):
+			# .local matches "local" and "*.local"
+			domain = p[1:]
+			if hostname == domain or hostname.endswith(p):
+				return True
+		elif hostname == p:
+			return True
+
+	return False
 
 
 def require_csrf_origin(origin: str | None = Header(default=None)) -> None:
 	"""CSRF guard for cookie-authenticated HTTP endpoints."""
-	if not _is_origin_allowed(origin):
+	if not origin_allowed(origin):
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="origin not allowed",
@@ -47,7 +63,7 @@ def require_csrf_origin(origin: str | None = Header(default=None)) -> None:
 def is_websocket_origin_allowed(websocket: WebSocket) -> bool:
 	"""Return True if WebSocket Origin header passes CSRF validation."""
 	origin = websocket.headers.get("origin")
-	return _is_origin_allowed(origin)
+	return origin_allowed(origin)
 
 
 async def authenticate_websocket_refresh_cookie(websocket: WebSocket) -> User | None:

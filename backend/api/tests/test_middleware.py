@@ -557,7 +557,7 @@ async def test_api_version_middleware_non_http() -> None:
 @pytest.mark.asyncio
 async def test_security_headers_default(monkeypatch: pytest.MonkeyPatch) -> None:
 	"""default security headers should always be present."""
-	monkeypatch.setattr(boot_settings, "APP_ENV", "dev")
+	monkeypatch.setattr(boot_settings, "ENV", "dev")
 	app = Starlette(routes=[Route("/secure", lambda request: JSONResponse({}))])
 	app.add_middleware(SecurityHeadersMiddleware)
 
@@ -576,7 +576,7 @@ async def test_security_headers_hsts_in_non_dev(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""HSTS should be emitted outside dev environments."""
-	monkeypatch.setattr(boot_settings, "APP_ENV", "production")
+	monkeypatch.setattr(boot_settings, "ENV", "production")
 	app = Starlette(routes=[Route("/secure", lambda request: JSONResponse({}))])
 	app.add_middleware(SecurityHeadersMiddleware)
 

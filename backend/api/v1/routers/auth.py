@@ -4,7 +4,6 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.constants import API_V1_MOUNT_PATH
 from api.core.database import get_db
 from api.settings import settings
 from api.v1.schemas.token import Token
@@ -13,7 +12,7 @@ from api.v1.service import auth as auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-REFRESH_COOKIE_PATH = f"{API_V1_MOUNT_PATH}/auth"
+REFRESH_COOKIE_PATH = "/"
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -21,12 +20,13 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 	max_age = int(
 		timedelta(days=settings.security.refresh_token_expire_days).total_seconds()
 	)
+	samesite = "none" if settings.security.auth_cookie_secure else "strict"
 	response.set_cookie(
 		key=auth_service.REFRESH_COOKIE_NAME,
 		value=refresh_token,
 		httponly=True,
 		secure=settings.security.auth_cookie_secure,
-		samesite="none",
+		samesite=samesite,
 		path=REFRESH_COOKIE_PATH,
 		max_age=max_age,
 	)
@@ -34,10 +34,11 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 def _clear_refresh_cookie(response: Response) -> None:
 	"""Clear refresh token cookie."""
+	samesite = "none" if settings.security.auth_cookie_secure else "strict"
 	response.delete_cookie(
 		key=auth_service.REFRESH_COOKIE_NAME,
 		path=REFRESH_COOKIE_PATH,
-		samesite="none",
+		samesite=samesite,
 		secure=settings.security.auth_cookie_secure,
 	)
 

@@ -48,7 +48,7 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 	owner: Mapped[User] = relationship("User", back_populates="reminder_lists")
 	reminders: Mapped[list[Reminder]] = relationship(
 		"Reminder",
-		back_populates="list",
+		back_populates="reminder_list",
 		cascade="all, delete-orphan",
 	)
 
@@ -89,7 +89,7 @@ class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	position: Mapped[float] = mapped_column(Float, default=0.0)
 
 	owner: Mapped[User] = relationship("User", back_populates="reminders")
-	list: Mapped[ReminderList | None] = relationship(
+	reminder_list: Mapped[ReminderList | None] = relationship(
 		"ReminderList",
 		back_populates="reminders",
 	)
@@ -102,5 +102,6 @@ class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	subtasks: Mapped[list[Reminder]] = relationship(
 		"Reminder",
 		back_populates="parent",
+		lazy="noload",
 		cascade="all, delete-orphan",
 	)
