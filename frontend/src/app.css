@@ -50,7 +50,7 @@
 }
 
 .dark {
-	--background: oklch(0.13 0.028 261.692);
+	--background: oklch(0 0 0);
 	--foreground: oklch(0.985 0.002 247.839);
 	--text-color: var(--foreground);
 	--shimmer-wave-color: color-mix(in oklch, var(--foreground) 25%, transparent);
@@ -238,12 +238,6 @@
 	}
 }
 
-::view-transition-group(chat-header) {
-	animation-duration: 360ms;
-	/* Clean, non-overshooting ease-out */
-	animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
 /* Match home input choreography (duration-500 ease-in-out) when crossing routes. */
 ::view-transition-group(chat-input) {
 	animation-duration: 500ms;
@@ -279,12 +273,15 @@
 	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-down;
 }
 
-/* reminders master/content transitions */
-::view-transition-new(reminders-master):only-child {
+/* master/detail sidebar transitions (generic for all master/detail apps)
+	- persisted across pages (shared element): no forced slide; allow hero-move/morph.
+	- not persisted (exists only in old or only in new): slide out/in.
+*/
+::view-transition-new(master-sidebar):only-child {
 	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-left;
 }
 
-::view-transition-old(reminders-master):only-child {
+::view-transition-old(master-sidebar):only-child {
 	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-left;
 }
 
@@ -312,10 +309,16 @@
 	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-up;
 }
 
+/* Island transitions - smooth morph between routes, no forced animations */
+::view-transition-group(island) {
+	animation-duration: 300ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* During ViewTransitions, keep live backdrop filters from affecting the new/old pages.
 	The snapshot should carry the visual instead of the live element lingering.
 */
 html[data-vt-active='1'] .chat-sidebar {
-	-webkit-backdrop-filter: none !important;
-	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
 }

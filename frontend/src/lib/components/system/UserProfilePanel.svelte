@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths'
 	import { logout } from '$lib/api/client'
 	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
-	import { modals } from '$lib/stores/modals.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
 	interface UserProfilePanelProps {
@@ -19,7 +18,7 @@
 
 	function handleSettingsClick() {
 		onClose?.()
-		modals.open('settings')
+		void goto(resolve('/settings'), { keepFocus: true, noScroll: true })
 	}
 
 	function handlePersonalizeClick() {

@@ -1,20 +1,14 @@
-import { onMount } from 'svelte'
-
-type ThemeMode = 'light' | 'dark' | 'system'
-type AccentColor = 'purple' | 'blue' | 'green' | 'orange' | 'pink' | 'red'
+import { browser } from '$app/environment'
+import { preferences, type AccentColor, type ThemeMode } from '$lib/stores/preferences.svelte'
+import { getContext, onMount, setContext } from 'svelte'
 
 export type { AccentColor, ThemeMode }
+const THEME_CONTEXT_KEY = Symbol('theme-context')
 
-const THEME_KEY = 'nokodo-theme-mode'
-const ACCENT_KEY = 'nokodo-theme-accent'
+let prefersDark = $state(false)
 
-// Default state
-let mode = $state<ThemeMode>('system')
-let accent = $state<AccentColor>('purple')
-let resolvedMode = $state<'light' | 'dark'>('dark')
-
-// Accent color maps for Tailwind classes
-// We'll use CSS variables for more flexibility, but these helpers can be useful
+// accent color maps for Tailwind classes
+// we'll use CSS variables for more flexibility, but these helpers can be useful
 export const accentColors = {
 	purple: {
 		primary: '#a855f7', // purple-500
@@ -60,13 +54,9 @@ export const accentColors = {
 	},
 }
 
-function updateDOM() {
+function updateDOM(nextResolvedMode: 'light' | 'dark', nextAccent: AccentColor) {
 	const root = document.documentElement
-	const isDark =
-		mode === 'dark' ||
-		(mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-
-	resolvedMode = isDark ? 'dark' : 'light'
+	const isDark = nextResolvedMode === 'dark'
 
 	if (isDark) {
 		root.classList.add('dark')
@@ -74,8 +64,8 @@ function updateDOM() {
 		root.classList.remove('dark')
 	}
 
-	// Update CSS variables for accent color
-	const colors = accentColors[accent]
+	// update CSS variables for accent color
+	const colors = accentColors[nextAccent]
 	root.style.setProperty('--accent-primary', colors.primary)
 	root.style.setProperty('--accent-secondary', colors.secondary)
 	root.style.setProperty('--accent-bg', colors.bg)
@@ -93,24 +83,33 @@ interface ThemeContext {
 }
 
 export function createThemeContext(): ThemeContext {
+	// keep preferences hydrated based on session state (tracked reactively)
+	$effect(() => {
+		return preferences.startSync()
+	})
+
+	const mode = $derived(preferences.themeMode)
+	const accent = $derived(preferences.accent)
+	const resolvedMode = $derived.by((): 'light' | 'dark' => {
+		if (mode === 'dark') return 'dark'
+		if (mode === 'light') return 'light'
+		return prefersDark ? 'dark' : 'light'
+	})
+
 	onMount(() => {
-		// Load saved preferences
-		const savedMode = localStorage.getItem(THEME_KEY) as ThemeMode | null
-		const savedAccent = localStorage.getItem(ACCENT_KEY) as AccentColor | null
+		if (!browser) return
 
-		if (savedMode) mode = savedMode
-		if (savedAccent && accentColors[savedAccent]) accent = savedAccent
-
-		updateDOM()
-
-		// Listen for system theme changes
+		// listen for system theme changes
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-		const handleChange = () => {
-			if (mode === 'system') updateDOM()
-		}
+		prefersDark = mediaQuery.matches
+		const handleChange = () => (prefersDark = mediaQuery.matches)
 		mediaQuery.addEventListener('change', handleChange)
-
 		return () => mediaQuery.removeEventListener('change', handleChange)
+	})
+
+	$effect(() => {
+		if (!browser) return
+		updateDOM(resolvedMode, accent)
 	})
 
 	return {
@@ -118,17 +117,13 @@ export function createThemeContext(): ThemeContext {
 			return mode
 		},
 		setMode(newMode: ThemeMode) {
-			mode = newMode
-			localStorage.setItem(THEME_KEY, newMode)
-			updateDOM()
+			void preferences.setAppearance({ themeMode: newMode })
 		},
 		get accent() {
 			return accent
 		},
 		setAccent(newAccent: AccentColor) {
-			accent = newAccent
-			localStorage.setItem(ACCENT_KEY, newAccent)
-			updateDOM()
+			void preferences.setAppearance({ accent: newAccent })
 		},
 		get resolvedMode() {
 			return resolvedMode
@@ -137,4 +132,22 @@ export function createThemeContext(): ThemeContext {
 			return accentColors
 		},
 	}
+}
+
+/**
+ * set the theme context. Call this in the root layout after creating the context.
+ */
+export function setThemeContext(ctx: ThemeContext): void {
+	setContext(THEME_CONTEXT_KEY, ctx)
+}
+
+/**
+ * get the theme context from a child component.
+ */
+export function useTheme(): ThemeContext {
+	const ctx = getContext<ThemeContext | undefined>(THEME_CONTEXT_KEY)
+	if (!ctx) {
+		throw new Error('useTheme must be used within a component tree that has setThemeContext')
+	}
+	return ctx
 }

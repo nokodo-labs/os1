@@ -4,14 +4,11 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { refreshAccessToken } from '$lib/api/client'
-	import { apiOriginReady } from '$lib/api/init'
 	import { eventStreamClient } from '$lib/api/streaming'
 	import { getAccessToken } from '$lib/auth/session.svelte'
-	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
-	import SettingsModal from '$lib/components/modals/SettingsModal.svelte'
-	import ReminderListsSidebar from '$lib/components/reminders/ReminderListsSidebar.svelte'
+	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import ChatSidebar from '$lib/components/sidebar/ChatSidebar.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -19,13 +16,12 @@
 	import { createDebugUiContext } from '$lib/contexts/debugUiContext.svelte'
 	import { createSidebarContext, useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
-	import { createThemeContext } from '$lib/contexts/themeContext.svelte'
+	import { createThemeContext, setThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device, initDevice } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
-	import { reminders } from '$lib/stores/reminders.svelte'
 	import { loadSettings } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
@@ -89,15 +85,13 @@
 	const chrome = createSystemChromeContext()
 	// DEV ONLY: Debug UI state (persisted locally)
 	createDebugUiContext()
-	// initialize theme context
+	// initialize theme context and make it available to child components
 	const theme = createThemeContext()
+	setThemeContext(theme)
 
-	$effect(() => {
-		return preferences.startSync()
-	})
+	// background is directly reactive from the store
+	const currentBackground = $derived(preferences.background)
 
-	// DEV ONLY: Background switcher
-	let currentBackground = $state<BackgroundType>('darkveil')
 	let { children } = $props()
 
 	// gate initial page paint behind the splash.
@@ -110,7 +104,6 @@
 	})
 
 	onMount(async () => {
-		await apiOriginReady
 		void loadSettings()
 		// initialize event stream if already logged in (page load/refresh)
 		const existingToken = getAccessToken()
@@ -150,34 +143,8 @@
 		return path === '/' || path.startsWith('/c/')
 	})
 
-	const isRemindersRoute = $derived(page.url.pathname.startsWith('/reminders'))
-	const remindersSelectedListId = $derived.by(() => {
-		if (!isRemindersRoute) return null
-		return page.params.listId ?? null
-	})
-
-	const remindersSidebarWidthClass = 'w-[clamp(280px,30vw,520px)]'
-	let isLoadingRemindersLists = $state(false)
-
-	$effect(() => {
-		if (!browser) return
-		if (!isRemindersRoute) return
-
-		const path = page.url.pathname
-		if (path === '/reminders' || path.startsWith('/reminders/lists/')) {
-			reminders.lastVisitedPath = path
-		}
-
-		// keep last visited list for AppsGrid navigation continuity.
-		if (remindersSelectedListId) reminders.lastVisitedListId = remindersSelectedListId
-
-		// ensure the master sidebar has data.
-		if (device.isMobile) return
-		isLoadingRemindersLists = true
-		void reminders.loadListsAndCounts().finally(() => {
-			isLoadingRemindersLists = false
-		})
-	})
+	// generic left layout inset (used by master/detail scaffolds like reminders, settings)
+	const hasLeftLayoutInset = $derived(chrome.layout.leftWidthClass !== null)
 
 	const sidebarSpacerWidthClass = $derived.by(() => {
 		if (!isChatSwipeEligibleRoute) return 'w-0'
@@ -244,30 +211,6 @@
 	let sidebarSwipeStartX = $state(0)
 	let sidebarSwipeStartY = $state(0)
 	let sidebarSwipeActive = $state(false)
-
-	let mainContentShell = $state<HTMLElement | null>(null)
-	let islandShell = $state<HTMLElement | null>(null)
-	let islandOffsetPx = $state(0)
-
-	$effect(() => {
-		const mainEl = mainContentShell
-		const islandEl = islandShell
-		if (!mainEl || !islandEl) return
-		const update = () => {
-			const mainRect = mainEl.getBoundingClientRect()
-			const islandRect = islandEl.getBoundingClientRect()
-			islandOffsetPx = Math.max(0, Math.round(islandRect.bottom - mainRect.top))
-		}
-		update()
-		const ro = new ResizeObserver(update)
-		ro.observe(mainEl)
-		ro.observe(islandEl)
-		window.addEventListener('resize', update)
-		return () => {
-			window.removeEventListener('resize', update)
-			ro.disconnect()
-		}
-	})
 
 	function onMainPointerDown(event: PointerEvent) {
 		if (!device.isMobile) return
@@ -340,28 +283,12 @@
 				></div>
 			{/if}
 
-			{#if isRemindersRoute && !device.isMobile}
-				<!-- reminders master sidebar (fixed; desktop reserves width so Island recenters naturally) -->
-				<aside
-					class="fixed inset-y-0 left-0 z-40 {remindersSidebarWidthClass} overflow-hidden"
-					aria-label="reminder lists"
-					style="view-transition-name: reminders-master;"
-				>
-					<div
-						class="relative h-full px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)] pb-10"
-					>
-						<ReminderListsSidebar
-							selectedListId={remindersSelectedListId}
-							isLoading={isLoadingRemindersLists}
-						/>
-						<!-- separator (doesn't reach top/bottom) -->
-						<div
-							class="pointer-events-none absolute top-[clamp(28px,4vw,44px)] right-0 bottom-[clamp(28px,4vw,44px)] w-px bg-linear-to-b from-transparent via-white/10 to-transparent"
-							aria-hidden="true"
-						></div>
-					</div>
-				</aside>
-				<div class="h-screen shrink-0 {remindersSidebarWidthClass}"></div>
+			{#if hasLeftLayoutInset && !device.isMobile && chrome.layout.leftWidthClass}
+				<!-- generic left layout inset spacer (master/detail scaffolds render the actual sidebar) -->
+				<div
+					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {chrome
+						.layout.leftWidthClass}"
+				></div>
 			{/if}
 
 			{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
@@ -378,22 +305,18 @@
 
 			<!-- main content -->
 			<div
-				class="relative flex min-w-0 flex-1 flex-col pt-[calc(var(--chrome-island-offset)+16px)]"
-				style={`touch-action: pan-y; --chrome-island-offset: ${islandOffsetPx}px;`}
-				bind:this={mainContentShell}
+				class="relative flex min-w-0 flex-1 flex-col overflow-y-auto"
+				style="touch-action: pan-y;"
 				onpointerdown={onMainPointerDown}
 				onpointermove={onMainPointerMove}
 				onpointerup={onMainPointerUp}
 				onpointercancel={onMainPointerCancel}
 			>
-				<!-- system chrome: Island (top header) -->
+				<!-- system chrome: Island (top header) - naturally positioned -->
 				<div
-					class="pointer-events-none absolute top-0 right-0 left-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
-					bind:this={islandShell}
+					class="island-container sticky top-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)] pb-4"
 				>
-					<div class="pointer-events-auto">
-						<Island />
-					</div>
+					<Island />
 				</div>
 
 				{@render children()}
@@ -429,13 +352,12 @@
 				</div>
 			</div>
 
-			<SettingsModal
-				open={modals.isOpen('settings')}
-				onClose={modals.close}
-				{theme}
-				bind:currentBackground
-			/>
 			<ArchivedChatsModal open={modals.isOpen('archived-chats')} onClose={modals.close} />
+			<ShareResourceModal
+				open={modals.isOpen('share-resource')}
+				payload={modals.shareResourcePayload}
+				onClose={modals.close}
+			/>
 		</div>
 	{/if}
 </BackgroundManager>

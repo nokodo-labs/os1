@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import Bolt from '$lib/components/icons/Bolt.svelte'
 	import Bookmark from '$lib/components/icons/Bookmark.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
@@ -53,7 +54,14 @@
 		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
 		{ id: 'automations', title: 'automations', icon: Bolt },
 		{ id: 'cloud', title: 'cloud', icon: Cloud },
-		{ id: 'settings', title: 'settings', icon: Cog6 },
+		{
+			id: 'settings',
+			title: 'settings',
+			icon: Cog6,
+			action: async () => {
+				await goto(resolve('/settings'))
+			},
+		},
 		{ id: 'database', title: 'database', icon: Database },
 		{ id: 'world', title: 'world', icon: GlobeAlt },
 		{ id: 'photos', title: 'photos', icon: Photo },
@@ -196,7 +204,6 @@
 		if (event.shiftKey || absDx > absDy) return
 
 		// Treat vertical wheel as a paging intent on desktop mice.
-		event.preventDefault()
 		wheelAccum += dy
 
 		if (wheelResetTimeout !== null) window.clearTimeout(wheelResetTimeout)
@@ -212,6 +219,20 @@
 		} else if (wheelAccum <= -threshold) {
 			wheelAccum = 0
 			pageBy(-1)
+		}
+	}
+
+	function passiveWheel(node: HTMLElement, handler: (event: WheelEvent) => void) {
+		let currentHandler = handler
+		const listener = (event: WheelEvent) => currentHandler(event)
+		node.addEventListener('wheel', listener, { passive: true })
+		return {
+			update(nextHandler: (event: WheelEvent) => void) {
+				currentHandler = nextHandler
+			},
+			destroy() {
+				node.removeEventListener('wheel', listener)
+			},
 		}
 	}
 
@@ -271,7 +292,7 @@
 		class="no-scrollbar relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain select-none"
 		style="touch-action: pan-x; -webkit-overflow-scrolling: touch;"
 		onscroll={syncPageFromScroll}
-		onwheel={onScrollerWheel}
+		use:passiveWheel={onScrollerWheel}
 	>
 		{#each pages as pageApps, pageIndex (pageIndex)}
 			<div class="w-full shrink-0 snap-center">

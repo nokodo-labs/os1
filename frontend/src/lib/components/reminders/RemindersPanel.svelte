@@ -138,11 +138,12 @@
 		expandedReminderId = null
 	}
 
-	async function deleteReminder(reminder: ReminderWithSubtasks) {
-		await reminders.deleteReminder(reminder)
-		if (expandedReminderId === reminder.id) {
+	async function deleteReminder(reminder: ReminderWithSubtasks): Promise<boolean> {
+		const ok = await reminders.deleteReminder(reminder)
+		if (ok && expandedReminderId === reminder.id) {
 			expandedReminderId = null
 		}
+		return ok
 	}
 
 	async function updateReminder(

@@ -10,8 +10,8 @@
 	let isLoadingLists = $state(false)
 
 	$effect(() => {
-		// On desktop, this route is redundant (sidebar is always visible).
-		// Redirect to main reminders page.
+		// on desktop, this route is redundant (sidebar is always visible).
+		// redirect to main reminders page.
 		if (!device.isMobile) {
 			void goto(resolve('/reminders'), { replaceState: true })
 			return
@@ -30,7 +30,7 @@
 	})
 </script>
 
-<!-- Only show on mobile (layout handles desktop sidebar) -->
+<!-- only show on mobile (layout handles desktop sidebar) -->
 {#if device.isMobile}
-	<ReminderListsSidebar selectedListId={undefined} isLoading={isLoadingLists} />
+	<ReminderListsSidebar selectedListId={undefined} isLoading={isLoadingLists} isMobile={true} />
 {/if}

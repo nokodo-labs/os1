@@ -1207,6 +1207,17 @@ export interface components {
              */
             messages_to_consider?: number | null;
         };
+        /**
+         * AIPreferences
+         * @description user AI preferences.
+         */
+        AIPreferences: {
+            /**
+             * Defaultagentid
+             * @description preferred default agent id
+             */
+            defaultAgentId?: string | null;
+        };
         /** AISettings */
         AISettings: {
             /**
@@ -1387,6 +1398,27 @@ export interface components {
         AgentVisibility: "public" | "private" | "admin-only";
         ApiJSONObject: {
             [key: string]: unknown;
+        };
+        /**
+         * AppearancePreferences
+         * @description user appearance preferences.
+         */
+        AppearancePreferences: {
+            /**
+             * Thememode
+             * @description theme mode preference
+             */
+            themeMode?: ("light" | "dark" | "system") | null;
+            /**
+             * Accent
+             * @description accent color preference
+             */
+            accent?: ("purple" | "blue" | "green" | "orange" | "pink" | "red") | null;
+            /**
+             * Background
+             * @description background wallpaper preference
+             */
+            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
         };
         /** AssetsSettings */
         AssetsSettings: {
@@ -2107,6 +2139,22 @@ export interface components {
             /** User Ids */
             user_ids: string[];
         };
+        /**
+         * NotificationPreferences
+         * @description user notification preferences.
+         */
+        NotificationPreferences: {
+            /**
+             * Enabled
+             * @description whether notifications are enabled
+             */
+            enabled?: boolean | null;
+            /**
+             * Sound
+             * @description whether notification sounds are enabled
+             */
+            sound?: boolean | null;
+        };
         /** OpenAIChatCompletionChoice */
         OpenAIChatCompletionChoice: {
             /**
@@ -2326,6 +2374,22 @@ export interface components {
             version?: string | null;
             /** Source Code */
             source_code?: string | null;
+        };
+        /**
+         * PrivacyPreferences
+         * @description user privacy preferences.
+         */
+        PrivacyPreferences: {
+            /**
+             * Savehistory
+             * @description whether to save chat history
+             */
+            saveHistory?: boolean | null;
+            /**
+             * Shareusagedata
+             * @description whether to share anonymous usage data
+             */
+            shareUsageData?: boolean | null;
         };
         /**
          * ProblemDetails
@@ -2944,8 +3008,32 @@ export interface components {
             /**
              * Cors Origins
              * @description cors origins (env-only)
+             * @default [
+             *       "http://localhost:888",
+             *       "http://localhost:8383"
+             *     ]
              */
-            cors_origins?: string[];
+            cors_origins: string[];
+            /**
+             * Cors Origins Regex
+             * @description cors origins regex patterns (env-only). set as JSON array object.
+             * @default [
+             *       "^https?://.*\\.local:888$",
+             *       "^https?://.*\\.local:8383$"
+             *     ]
+             */
+            cors_origins_regex: string[];
+            /**
+             * Allowed Hosts
+             * @description allowed host patterns for Origin validation (env-only). supports '*', leading-dot domains like '.local', and exact hostnames
+             * @default [
+             *       "localhost",
+             *       "0.0.0.0",
+             *       "127.0.0.1",
+             *       ".local"
+             *     ]
+             */
+            allowed_hosts: string[];
         };
         /** SecuritySettingsPatch */
         SecuritySettingsPatch: {
@@ -3392,10 +3480,7 @@ export interface components {
              * @default false
              */
             is_superuser: boolean;
-            /** Preferences */
-            preferences?: {
-                [key: string]: unknown;
-            };
+            preferences?: components["schemas"]["UserPreferences"];
             /** Integration Tokens */
             integration_tokens?: {
                 [key: string]: unknown;
@@ -3448,6 +3533,25 @@ export interface components {
             is_superuser?: boolean | null;
         };
         /**
+         * UserPreferences
+         * @description complete user preferences schema.
+         *
+         *     all fields are optional to support partial updates.
+         *     stored as JSONB in the user table.
+         */
+        UserPreferences: {
+            /** @description appearance preferences */
+            appearance?: components["schemas"]["AppearancePreferences"] | null;
+            /** @description AI preferences */
+            ai?: components["schemas"]["AIPreferences"] | null;
+            /** @description notification preferences */
+            notifications?: components["schemas"]["NotificationPreferences"] | null;
+            /** @description privacy preferences */
+            privacy?: components["schemas"]["PrivacyPreferences"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * UserUpdate
          * @description schema for updating a user.
          */
@@ -3462,10 +3566,7 @@ export interface components {
             display_name?: string | null;
             /** Avatar Url */
             avatar_url?: string | null;
-            /** Preferences */
-            preferences?: {
-                [key: string]: unknown;
-            } | null;
+            preferences?: components["schemas"]["UserPreferences"] | null;
             /** Integration Tokens */
             integration_tokens?: {
                 [key: string]: unknown;

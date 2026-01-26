@@ -1,16 +1,30 @@
 import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import type { components } from '$lib/api/types'
 import { session } from '$lib/stores/session.svelte'
+import { settingsState } from '$lib/stores/settings.svelte'
 
-export type JsonValue =
-	| string
-	| number
-	| boolean
-	| null
-	| JsonValue[]
-	| { [key: string]: JsonValue }
+type UserPreferences = components['schemas']['UserPreferences']
+type AppearancePreferences = components['schemas']['AppearancePreferences']
+type AIPreferences = components['schemas']['AIPreferences']
+type NotificationPreferences = components['schemas']['NotificationPreferences']
+type PrivacyPreferences = components['schemas']['PrivacyPreferences']
 
-export type Preferences = Record<string, JsonValue>
+export type {
+	AIPreferences,
+	AppearancePreferences,
+	NotificationPreferences,
+	PrivacyPreferences,
+	UserPreferences,
+}
+
+export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
+export type AccentColor = NonNullable<AppearancePreferences['accent']>
+export type BackgroundType = NonNullable<AppearancePreferences['background']>
+
+const DEFAULT_THEME_MODE: ThemeMode = 'system'
+const DEFAULT_ACCENT: AccentColor = 'purple'
+const DEFAULT_BACKGROUND: BackgroundType = 'darkveil'
 
 const STORAGE_PREFIX = 'user-preferences:'
 
@@ -18,26 +32,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isJsonValue(value: unknown, depth = 0): value is JsonValue {
-	if (depth > 20) return false
-	if (value === null) return true
-	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-		return true
-	if (Array.isArray(value)) return value.every((v) => isJsonValue(v, depth + 1))
-	if (isPlainObject(value)) return Object.values(value).every((v) => isJsonValue(v, depth + 1))
-	return false
-}
-
-function normalizePreferences(value: unknown): Preferences {
+function normalizePreferences(value: unknown): UserPreferences {
+	// backend validates shape; on the client we only need to ensure we don't
+	// hydrate from non-objects (e.g., corrupted localStorage)
 	if (!isPlainObject(value)) return {}
-	const out: Preferences = {}
-	for (const [key, v] of Object.entries(value)) {
-		if (isJsonValue(v)) out[key] = v
-	}
-	return out
+	return value as UserPreferences
 }
 
-function readStored(userId: string): Preferences {
+function readStored(userId: string): UserPreferences {
 	if (!browser) return {}
 	try {
 		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${userId}`)
@@ -48,7 +50,7 @@ function readStored(userId: string): Preferences {
 	}
 }
 
-function writeStored(userId: string, prefs: Preferences): void {
+function writeStored(userId: string, prefs: UserPreferences): void {
 	if (!browser) return
 	try {
 		window.localStorage.setItem(`${STORAGE_PREFIX}${userId}`, JSON.stringify(prefs))
@@ -58,22 +60,74 @@ function writeStored(userId: string, prefs: Preferences): void {
 }
 
 class PreferencesStore {
-	data = $state<Preferences>({})
+	#data = $state<UserPreferences>({})
 	loading = $state(false)
 	error = $state<string | null>(null)
 
 	#lastUserId: string | null = null
+
+	get data() {
+		return this.#data
+	}
+
+	// ------------------------------------------------------------
+	// derived getters (with settings fallback)
+	// ------------------------------------------------------------
+
+	get themeMode(): ThemeMode {
+		const pref = this.#data.appearance?.themeMode
+		if (pref) return pref
+		const settingsDefault = settingsState.data?.ui?.default_theme
+		if (
+			settingsDefault === 'light' ||
+			settingsDefault === 'dark' ||
+			settingsDefault === 'system'
+		) {
+			return settingsDefault
+		}
+		return DEFAULT_THEME_MODE
+	}
+
+	get accent(): AccentColor {
+		return this.#data.appearance?.accent ?? DEFAULT_ACCENT
+	}
+
+	get background(): BackgroundType {
+		return this.#data.appearance?.background ?? DEFAULT_BACKGROUND
+	}
+
+	get defaultAgentId(): string | null {
+		const pref = this.#data.ai?.defaultAgentId
+		if (pref) return pref
+		return settingsState.data?.ai?.default_agent_id ?? null
+	}
+
+	get notificationsEnabled(): boolean {
+		return this.#data.notifications?.enabled ?? true
+	}
+
+	get notificationSound(): boolean {
+		return this.#data.notifications?.sound ?? true
+	}
+
+	get saveHistory(): boolean {
+		return this.#data.privacy?.saveHistory ?? true
+	}
+
+	get shareUsageData(): boolean {
+		return this.#data.privacy?.shareUsageData ?? false
+	}
 
 	startSync = (): (() => void) => {
 		// Hydrate on start and whenever user changes
 		const user = session.currentUser
 		if (user && this.#lastUserId !== user.id) {
 			this.#lastUserId = user.id
-			this.data = readStored(user.id)
+			this.#data = readStored(user.id)
 			void this.refresh()
 		} else if (!user) {
 			this.#lastUserId = null
-			this.data = {}
+			this.#data = {}
 			this.loading = false
 			this.error = null
 		}
@@ -95,8 +149,8 @@ class PreferencesStore {
 				this.error = 'could not load preferences'
 				return
 			}
-			const next = normalizePreferences(data.preferences)
-			this.data = next
+			const next = (data.preferences ?? {}) as UserPreferences
+			this.#data = next
 			session.currentUser = { ...data }
 			writeStored(user.id, next)
 		} finally {
@@ -104,13 +158,45 @@ class PreferencesStore {
 		}
 	}
 
-	save = async (next: Preferences): Promise<boolean> => {
+	setAppearance = async (updates: Partial<AppearancePreferences>): Promise<boolean> => {
+		const next: UserPreferences = {
+			...this.#data,
+			appearance: { ...this.#data.appearance, ...updates },
+		}
+		return await this.#save(next)
+	}
+
+	setAI = async (updates: Partial<AIPreferences>): Promise<boolean> => {
+		const next: UserPreferences = {
+			...this.#data,
+			ai: { ...this.#data.ai, ...updates },
+		}
+		return await this.#save(next)
+	}
+
+	setNotifications = async (updates: Partial<NotificationPreferences>): Promise<boolean> => {
+		const next: UserPreferences = {
+			...this.#data,
+			notifications: { ...this.#data.notifications, ...updates },
+		}
+		return await this.#save(next)
+	}
+
+	setPrivacy = async (updates: Partial<PrivacyPreferences>): Promise<boolean> => {
+		const next: UserPreferences = {
+			...this.#data,
+			privacy: { ...this.#data.privacy, ...updates },
+		}
+		return await this.#save(next)
+	}
+
+	#save = async (next: UserPreferences): Promise<boolean> => {
 		const user = session.currentUser
 		if (!user) return false
 		this.error = null
-		this.data = next
+		this.#data = next
 		writeStored(user.id, next)
-		session.currentUser = user ? { ...user, preferences: next } : null
+		session.currentUser = { ...user, preferences: next }
 
 		const { data, error } = await apiClient().PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: user.id } },
@@ -122,30 +208,57 @@ class PreferencesStore {
 			return false
 		}
 
-		const normalized = normalizePreferences(data.preferences)
-		this.data = normalized
-		session.currentUser = { ...data, preferences: normalized }
-		writeStored(user.id, normalized)
+		const saved = (data.preferences ?? {}) as UserPreferences
+		this.#data = saved
+		session.currentUser = { ...data, preferences: saved }
+		writeStored(user.id, saved)
 		return true
 	}
 
-	set = async (key: string, value: JsonValue): Promise<boolean> => {
-		const next = { ...this.data, [key]: value }
-		return await this.save(next)
+	set(key: 'appearance.themeMode', value: ThemeMode): Promise<boolean>
+	set(key: 'appearance.accent', value: AccentColor): Promise<boolean>
+	set(key: 'appearance.background', value: AppearancePreferences['background']): Promise<boolean>
+	set(key: string, value: unknown): Promise<boolean>
+	async set(key: string, value: unknown): Promise<boolean> {
+		// compat shim for the old "dot key" style.
+		// only keep the keys that are used in-app.
+		switch (key) {
+			case 'appearance.themeMode': {
+				if (value === 'light' || value === 'dark' || value === 'system') {
+					return await this.setAppearance({ themeMode: value })
+				}
+				return false
+			}
+			case 'appearance.accent': {
+				if (typeof value === 'string') {
+					return await this.setAppearance({ accent: value as AccentColor })
+				}
+				return false
+			}
+			case 'appearance.background': {
+				if (typeof value === 'string' || value === null) {
+					return await this.setAppearance({
+						background: value as AppearancePreferences['background'],
+					})
+				}
+				return false
+			}
+			default:
+				return false
+		}
 	}
 
-	hydrateFromUser = (user: { id: string; preferences?: unknown } | null): void => {
+	hydrateFromUser = (user: { id: string; preferences?: UserPreferences | null } | null): void => {
 		if (!user) {
-			this.data = {}
+			this.#data = {}
 			this.loading = false
 			this.error = null
 			return
 		}
-		this.data = readStored(user.id)
+		this.#data = readStored(user.id)
 		if (user.preferences) {
-			const next = normalizePreferences(user.preferences)
-			this.data = next
-			writeStored(user.id, next)
+			this.#data = user.preferences
+			writeStored(user.id, user.preferences)
 		}
 	}
 }

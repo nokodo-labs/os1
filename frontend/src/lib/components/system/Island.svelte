@@ -115,6 +115,7 @@
 		chatParam === 'temp' || (chat.activeThread?.is_temporary ?? false)
 	)
 	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null)
+	const isHomeRoute = $derived(page.url.pathname === '/')
 
 	function handleTemporaryChatToggle() {
 		if (isTemporaryChatActive) {
@@ -138,10 +139,9 @@
 	})
 </script>
 
-<div>
+<div class="island-root" style="view-transition-name: island;">
 	<header
-		class="liquid-glass mt-5 mb-0 max-h-22 overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
-		style="view-transition-name: chat-header;"
+		class="liquid-glass max-h-22 overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
 		<span class="liquid-glass__highlight" aria-hidden="true"></span>
 
@@ -252,17 +252,19 @@
 						</button>
 					{/if}
 
-					<button
-						class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
-						onclick={handleTemporaryChatToggle}
-						aria-label="temporary chat"
-					>
-						{#if isTemporaryChatActive}
-							<ChatBubbleDottedChecked className="h-6 w-6" />
-						{:else}
-							<ChatBubbleDotted className="h-6 w-6" />
-						{/if}
-					</button>
+					{#if isHomeRoute}
+						<button
+							class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+							onclick={handleTemporaryChatToggle}
+							aria-label="temporary chat"
+						>
+							{#if isTemporaryChatActive}
+								<ChatBubbleDottedChecked className="h-6 w-6" />
+							{:else}
+								<ChatBubbleDotted className="h-6 w-6" />
+							{/if}
+						</button>
+					{/if}
 				{/if}
 			</div>
 

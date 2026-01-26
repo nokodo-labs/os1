@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
@@ -20,7 +21,7 @@
 		onDeselect: () => void
 		onToggleComplete: () => void | Promise<void>
 		onMove: (targetListId: string | null) => void | Promise<void>
-		onDelete: () => void
+		onDelete: () => void | boolean | Promise<void | boolean>
 		onUpdate: (updates: { title?: string; description?: string | null }) => void | Promise<void>
 		availableLists: ReminderListWithCounts[]
 		motion?: Motion
@@ -429,17 +430,20 @@
 				{/each}
 			</div>
 
-			<button
-				type="button"
-				class="rounded-pill mt-1 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
-				onclick={(event) => {
-					event.stopPropagation()
-					isMenuOpen = false
-					props.onDelete()
-				}}
-			>
-				delete
-			</button>
+			<div class="mt-1">
+				<DeleteButton
+					confirm={true}
+					stopPropagation={true}
+					modalText={{
+						title: 'delete reminder?',
+						description: props.kind === 'edit' ? props.reminder.title : '',
+					}}
+					onDelete={() => {
+						if (props.kind !== 'edit') return true
+						return props.onDelete()
+					}}
+				/>
+			</div>
 		</div>
 	{/if}
 </div>

@@ -6,7 +6,7 @@
 	import { apiClient } from '$lib/api/client'
 	import { getJwtUserId } from '$lib/auth/jwt'
 	import { getAccessToken } from '$lib/auth/session.svelte'
-	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
+	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
 		type HomeSuggestion,
@@ -55,11 +55,21 @@
 	let showChatBanner = $state(false)
 
 	// ============ VIEW TRANSITIONS FOR QUERY PARAM CHANGES ============
+	// the root layout intentionally skips same-path navigations.
+	// home uses query params for in-place mode switches (e.g. /?chat=new), so we
+	// enable VT only for same-path navigations.
 	onNavigate((navigation) => {
-		if (!document.startViewTransition) return
+		const start = document.startViewTransition
+		if (!start) return
 
-		return new Promise((resolve) => {
-			document.startViewTransition(async () => {
+		const from = navigation.from?.url
+		const to = navigation.to?.url
+		if (!from || !to) return
+		if (from.pathname !== to.pathname) return
+		if (from.search === to.search) return
+
+		return new Promise<void>((resolve) => {
+			start.call(document, async () => {
 				resolve()
 				await navigation.complete
 			})
@@ -230,7 +240,7 @@
 		isSuggestionNavigationActive = false
 		if (suggestion.id === 'settings') {
 			inputValue = ''
-			modals.open('settings')
+			void goto(resolve('/settings'), { keepFocus: true, noScroll: true })
 			return
 		}
 		if (suggestion.id === 'archived-chats') {
@@ -339,7 +349,7 @@
 					</div>
 				{/if}
 				<div style="view-transition-name: chat-input;">
-					<ChatInputLiquidGlass
+					<ChatInput
 						bind:value={inputValue}
 						onSubmit={handleSendMessage}
 						onStop={handleStopGeneration}
@@ -378,7 +388,7 @@
 
 			<!-- input -->
 			<div style="view-transition-name: chat-input;">
-				<ChatInputLiquidGlass
+				<ChatInput
 					bind:value={inputValue}
 					onSubmit={handleSendMessage}
 					onStop={handleStopGeneration}

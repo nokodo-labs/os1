@@ -12,14 +12,13 @@
 	export let selectedChatId: string | null
 
 	export let openThreadMenuId: string | null
-	export let generatingMetadataThreadId: string | null
 	export let onPrefetchThread: (threadId: string) => void
 	export let onOpenThread: (threadId: string) => void | Promise<void>
 
 	export let onToggleMenu: (threadId: string) => void
 	export let onCloseMenu: () => void
-	export let onGenerateMetadata: (threadId: string) => void | Promise<void>
-	export let onRequestDelete: (thread: Thread) => void
+	export let onRequestEdit: (thread: Thread) => void
+	export let onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
 </script>
 
 <!-- Chats Section -->
@@ -63,9 +62,8 @@
 							{openThreadMenuId}
 							{onToggleMenu}
 							{onCloseMenu}
-							{generatingMetadataThreadId}
-							{onGenerateMetadata}
-							{onRequestDelete}
+							{onRequestEdit}
+							{onDeleteThread}
 						/>
 					{/each}
 				{/if}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { portal } from '$lib/actions/portal'
+
 	interface AppModalProps {
 		open: boolean
 		title: string
@@ -36,6 +38,7 @@
 
 {#if open}
 	<div
+		use:portal
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
 		role="presentation"
 		onmousedown={onBackdropMouseDown}

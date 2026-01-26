@@ -7,6 +7,7 @@
 	import type { StreamMessage } from '$lib/api/streaming'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
+	import EditChatModal from '$lib/components/modals/EditChatModal.svelte'
 	import ChatSidebarChatsSection from '$lib/components/sidebar/chat-sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/sidebar/chat-sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
@@ -43,10 +44,11 @@
 	}
 
 	let openThreadMenuId = $state<string | null>(null)
-	let confirmDeleteThread = $state<{ id: string; title: string } | null>(null)
-	let isDeleting = $state(false)
-	let deleteError = $state<string | null>(null)
-	let generatingMetadataThreadId = $state<string | null>(null)
+	let editThread = $state<Thread | null>(null)
+	let editTitle = $state('')
+	let editTagsCsv = $state('')
+	let isSavingEdit = $state(false)
+	let editError = $state<string | null>(null)
 
 	let closeSwipePointerId = $state<number | null>(null)
 	let closeSwipeStartX = $state(0)
@@ -224,31 +226,67 @@
 		if (device.isMobile) sidebar.closeChatSidebar()
 	}
 
-	function requestDeleteThread(thread: Thread) {
-		confirmDeleteThread = {
-			id: thread.id,
-			title: thread.title || 'untitled chat',
+	function requestEditThread(thread: Thread) {
+		closeThreadMenu()
+		editError = null
+		editThread = thread
+	}
+
+	async function handleDeleteThread(thread: Thread): Promise<boolean> {
+		try {
+			const status = await deleteThread(thread.id)
+			if (status !== 204) return false
+
+			sidebar.selectChat(null)
+			await chat.refreshThreads({ limit: 25 })
+
+			if (page.url.pathname === `/c/${thread.id}`) {
+				await goto(resolve('/'), {
+					keepFocus: true,
+					noScroll: true,
+				})
+			}
+
+			return true
+		} catch {
+			return false
 		}
 	}
 
-	async function handleGenerateThreadMetadata(threadId: string): Promise<void> {
-		generatingMetadataThreadId = threadId
-		try {
-			const updated = await generateThreadMetadata(threadId)
-			if (!updated) return
+	$effect(() => {
+		if (!editThread) return
+		editTitle = editThread.title ?? ''
+		editTagsCsv = Array.isArray(editThread.tags) ? editThread.tags.join(', ') : ''
+	})
 
-			chat.threadCache.invalidateAll(threadId)
-			chat.updateRecentThread(threadId, (current) => {
-				return {
-					...current,
-					title: updated.title ?? current.title,
-					tags: updated.tags ?? current.tags,
-					last_activity_at: updated.last_activity_at || new Date().toISOString(),
-				}
-			})
-		} finally {
-			generatingMetadataThreadId = null
-		}
+	function closeEditModal(): void {
+		if (isSavingEdit) return
+		editThread = null
+		editError = null
+	}
+
+	function cancelEditModal(): void {
+		editThread = null
+		editError = null
+	}
+
+	function saveEditModal(): void {
+		void (async () => {
+			isSavingEdit = true
+			editError = null
+			try {
+				console.log('edit chat save', {
+					threadId: editThread?.id,
+					title: editTitle,
+					tagsCsv: editTagsCsv,
+				})
+				editThread = null
+			} catch {
+				editError = 'could not save changes'
+			} finally {
+				isSavingEdit = false
+			}
+		})()
 	}
 
 	let routeChatId = $derived.by((): string | null => {
@@ -318,20 +356,6 @@
 			params: { path: { thread_id: threadId } },
 		})
 		return response.status
-	}
-
-	async function generateThreadMetadata(threadId: string): Promise<Thread | null> {
-		const { data, error } = await apiClient().POST(
-			'/v1/threads/{thread_id}/metadata/generate',
-			{
-				params: {
-					path: { thread_id: threadId },
-				},
-				body: { replace: false, model_id: null },
-			}
-		)
-		if (error || !data) return null
-		return data
 	}
 </script>
 
@@ -408,98 +432,25 @@
 				threads={chat.recentThreads}
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
-				{generatingMetadataThreadId}
 				onPrefetchThread={(threadId) => chat.threadCache.prefetchThread(threadId)}
 				onOpenThread={openThread}
 				onToggleMenu={toggleThreadMenu}
 				onCloseMenu={closeThreadMenu}
-				onGenerateMetadata={handleGenerateThreadMetadata}
-				onRequestDelete={requestDeleteThread}
+				onRequestEdit={requestEditThread}
+				onDeleteThread={handleDeleteThread}
 			/>
 		{/if}
 	</div>
 </aside>
 
-{#if confirmDeleteThread}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-60 flex items-center justify-center bg-black/55 px-6"
-		onclick={() => {
-			if (!isDeleting) {
-				confirmDeleteThread = null
-				deleteError = null
-			}
-		}}
-	>
-		<div
-			class="liquid-glass rounded-container w-full max-w-sm px-6 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.6)]"
-			onclick={(e) => e.stopPropagation()}
-		>
-			<span class="liquid-glass__highlight" aria-hidden="true"></span>
-			<div class="liquid-glass__content">
-				<div class="text-lg font-semibold text-white/90">delete chat?</div>
-				<div class="mt-2 text-sm text-white/60">{confirmDeleteThread.title}</div>
-
-				{#if deleteError}
-					<div
-						class="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
-					>
-						{deleteError}
-					</div>
-				{/if}
-
-				<div class="mt-5 flex items-center justify-end gap-2">
-					<button
-						type="button"
-						class="rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
-						disabled={isDeleting}
-						onclick={() => {
-							confirmDeleteThread = null
-							deleteError = null
-						}}
-					>
-						cancel
-					</button>
-					<button
-						type="button"
-						class="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:opacity-60"
-						disabled={isDeleting}
-						onclick={() => {
-							void (async () => {
-								if (!confirmDeleteThread) return
-								isDeleting = true
-								deleteError = null
-								try {
-									const status = await deleteThread(confirmDeleteThread.id)
-									if (status !== 204) {
-										deleteError = 'could not delete chat'
-										return
-									}
-
-									sidebar.selectChat(null)
-									await chat.refreshThreads({ limit: 25 })
-
-									if (page.url.pathname === `/c/${confirmDeleteThread.id}`) {
-										await goto(resolve('/'), {
-											keepFocus: true,
-											noScroll: true,
-										})
-									}
-
-									confirmDeleteThread = null
-								} catch {
-									deleteError = 'could not delete chat'
-								} finally {
-									isDeleting = false
-								}
-							})()
-						}}
-					>
-						{isDeleting ? 'deleting…' : 'delete'}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+<EditChatModal
+	open={editThread !== null}
+	thread={editThread}
+	bind:title={editTitle}
+	bind:tagsCsv={editTagsCsv}
+	error={editError}
+	isSaving={isSavingEdit}
+	onClose={closeEditModal}
+	onCancel={cancelEditModal}
+	onSave={saveEditModal}
+/>

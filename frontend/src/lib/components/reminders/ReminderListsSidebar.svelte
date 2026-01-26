@@ -2,9 +2,10 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { apiClient } from '$lib/api/client'
+	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
-	import Trash from '$lib/components/icons/Trash.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
 	import { reminders } from '$lib/stores/reminders.svelte'
@@ -15,9 +16,10 @@
 	interface Props {
 		selectedListId: string | null | undefined
 		isLoading?: boolean
+		isMobile?: boolean
 	}
 
-	let { selectedListId, isLoading = false }: Props = $props()
+	let { selectedListId, isLoading = false, isMobile = false }: Props = $props()
 
 	const lists = $derived(reminders.lists)
 	const defaultCounts = $derived(reminders.defaultCounts)
@@ -79,6 +81,13 @@
 		listMenuButtonEl = null
 	}
 
+	async function deleteList(listId: string): Promise<number | null> {
+		const { response } = await apiClient().DELETE('/v1/reminders/lists/{list_id}', {
+			params: { path: { list_id: listId } },
+		})
+		return response.status
+	}
+
 	$effect(() => {
 		if (!openListMenuId) return
 
@@ -114,7 +123,11 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-8">
-	<header class="mt-7 flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6">
+	<header
+		class="{isMobile
+			? 'mt-0'
+			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
+	>
 		<div class="flex min-w-0 items-center gap-2">
 			<ListBullet className="h-5 w-5 text-white/60" />
 			<h2 class="min-w-0 truncate text-lg font-semibold tracking-wide text-white/85">
@@ -181,18 +194,26 @@
 									<Pencil className="h-4 w-4" />
 									&nbsp; edit
 								</button>
-								<button
-									type="button"
-									class="rounded-pill mt-1 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-									onclick={(event) => {
-										event.stopPropagation()
-										closeListMenu()
-										console.log('list action', 'delete', list.id)
-									}}
-								>
-									<Trash className="h-4 w-4 text-red-400" />
-									&nbsp; delete
-								</button>
+								<div class="mt-1">
+									<DeleteButton
+										confirm={true}
+										stopPropagation={true}
+										modalText={{
+											title: 'delete list?',
+											description: list.name,
+										}}
+										onDelete={async () => {
+											const status = await deleteList(list.id)
+											if (status !== 204) return false
+
+											await reminders.loadLists({ force: true })
+											if (selectedListId === list.id) {
+												selectList(null)
+											}
+											return true
+										}}
+									/>
+								</div>
 							</div>
 						{/if}
 					</div>

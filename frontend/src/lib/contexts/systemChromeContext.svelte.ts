@@ -23,9 +23,21 @@ export interface IslandConfig {
 	actions: IslandAction[] | null
 }
 
+/**
+ * layout insets configuration.
+ * used by master/detail scaffolds to reserve space in the root layout.
+ */
+export interface LayoutInsets {
+	/** tailwind width class for the left sidebar spacer (e.g. 'w-[clamp(280px,30vw,520px)]') */
+	leftWidthClass: string | null
+	/** view-transition-name for the left sidebar */
+	leftViewTransitionName: string | null
+}
+
 export interface SystemChromeContext {
 	readonly island: IslandConfig
 	readonly isDockOpen: boolean
+	readonly layout: LayoutInsets
 	setIsland(config: Partial<IslandConfig>): void
 	clearIsland(): void
 	setAgentSelector(config: IslandAgentSelectorConfig | null): void
@@ -33,6 +45,10 @@ export interface SystemChromeContext {
 	toggleDock(): void
 	openDock(): void
 	closeDock(): void
+	/** set layout insets (used by master/detail scaffolds) */
+	setLayoutInsets(insets: Partial<LayoutInsets>): void
+	/** clear layout insets */
+	clearLayoutInsets(): void
 }
 
 export function createSystemChromeContext(): SystemChromeContext {
@@ -40,6 +56,8 @@ export function createSystemChromeContext(): SystemChromeContext {
 	let activityText = $state<string | null>(null)
 	let actions = $state<IslandAction[] | null>(null)
 	let isDockOpen = $state(false)
+	let leftWidthClass = $state<string | null>(null)
+	let leftViewTransitionName = $state<string | null>(null)
 
 	const context: SystemChromeContext = {
 		get island() {
@@ -51,6 +69,12 @@ export function createSystemChromeContext(): SystemChromeContext {
 		},
 		get isDockOpen() {
 			return isDockOpen
+		},
+		get layout() {
+			return {
+				leftWidthClass,
+				leftViewTransitionName,
+			}
 		},
 		setIsland(config) {
 			if ('agentSelector' in config) agentSelector = config.agentSelector ?? null
@@ -76,6 +100,15 @@ export function createSystemChromeContext(): SystemChromeContext {
 		},
 		closeDock() {
 			isDockOpen = false
+		},
+		setLayoutInsets(insets) {
+			if ('leftWidthClass' in insets) leftWidthClass = insets.leftWidthClass ?? null
+			if ('leftViewTransitionName' in insets)
+				leftViewTransitionName = insets.leftViewTransitionName ?? null
+		},
+		clearLayoutInsets() {
+			leftWidthClass = null
+			leftViewTransitionName = null
 		},
 	}
 
