@@ -1,10 +1,18 @@
 /**
  * reminders store - caches lists, default counts, and reminders per list.
  * pattern follows chat.svelte.ts for consistency.
+ *
+ * cache strategy:
+ * - generous TTL (30 min) with automatic refresh on API calls
+ * - websocket events update cache in real-time
+ * - stale data is still displayed (no loading state) while fetching
+ * - if fetch fails, cache is cleared to force fresh load on next attempt
+ * - trust cache by default since websocket keeps it up to date
  */
 
 import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { SvelteMap } from 'svelte/reactivity'
@@ -21,8 +29,21 @@ export type Counts = {
 	completed_count: number
 }
 
-// cache TTL in milliseconds
-const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes
+// cache TTL - generous since websocket keeps cache fresh
+const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
+
+// reminder event types
+const REMINDER_EVENT_TYPES = [
+	'reminder.created',
+	'reminder.updated',
+	'reminder.completed',
+	'reminder.deleted',
+]
+const REMINDER_LIST_EVENT_TYPES = [
+	'reminder_list.created',
+	'reminder_list.updated',
+	'reminder_list.deleted',
+]
 
 interface ListsCacheEntry {
 	lists: ReminderListWithCounts[]
@@ -58,11 +79,167 @@ class RemindersCache {
 	#defaultCountsInFlight: Promise<Counts> | null = null
 	readonly #remindersInFlight = new SvelteMap<string, Promise<ReminderWithSubtasks[]>>()
 
+	/** event stream subscription cleanup */
+	#unsubscribe: (() => void) | null = null
+
 	/** state: last visited list id for navigation continuity */
 	lastVisitedListId = $state<string | null>(null)
 
 	/** state: last visited reminders pathname for navigation continuity */
 	lastVisitedPath = $state<string | null>(null)
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// event stream integration
+	// ─────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * initialize event stream subscription for real-time updates.
+	 */
+	init(): void {
+		if (!this.#unsubscribe) {
+			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+		}
+	}
+
+	/**
+	 * cleanup event stream subscription.
+	 */
+	cleanup(): void {
+		this.#unsubscribe?.()
+		this.#unsubscribe = null
+	}
+
+	/**
+	 * handle incoming stream events for reminders.
+	 */
+	#handleStreamEvent = (message: StreamMessage): void => {
+		const eventType = message.type
+
+		// handle reminder events
+		if (REMINDER_EVENT_TYPES.includes(eventType)) {
+			const data = message.data as Record<string, unknown> | undefined
+			if (!data) return
+
+			if (eventType === 'reminder.created' || eventType === 'reminder.updated') {
+				// upsert reminder in the appropriate list cache
+				const reminder = data as unknown as ReminderWithSubtasks
+				if (!reminder.id) return
+				const listKey = this.#listKey(reminder.list_id ?? null)
+				const entry = this.#remindersCache.get(listKey)
+				if (entry) {
+					const existing = entry.reminders.findIndex((r) => r.id === reminder.id)
+					if (existing >= 0) {
+						entry.reminders[existing] = reminder
+					} else {
+						entry.reminders = [...entry.reminders, reminder]
+					}
+					this.#remindersCache.set(listKey, { ...entry })
+				}
+				// update default counts if this is default list
+				if (reminder.list_id === null || reminder.list_id === undefined) {
+					this.#recalculateDefaultCounts()
+				}
+			} else if (eventType === 'reminder.completed') {
+				// update status in cache
+				const reminderId = data.reminder_id as string | undefined
+				const completedAt = data.completed_at as string | undefined
+				if (!reminderId) return
+				this.#updateReminderInAllCaches(reminderId, (r) => ({
+					...r,
+					status: 'completed' as const,
+					completed_at: completedAt ?? new Date().toISOString(),
+				}))
+				this.#recalculateDefaultCounts()
+			} else if (eventType === 'reminder.deleted') {
+				// remove from cache
+				const reminderId = data.reminder_id as string | undefined
+				if (!reminderId) return
+				this.#removeReminderFromAllCaches(reminderId)
+				this.#recalculateDefaultCounts()
+			}
+		}
+
+		// handle reminder list events
+		if (REMINDER_LIST_EVENT_TYPES.includes(eventType)) {
+			const data = message.data as Record<string, unknown> | undefined
+			if (!data) return
+
+			if (eventType === 'reminder_list.created' || eventType === 'reminder_list.updated') {
+				// upsert list in cache
+				const list = data as unknown as ReminderListWithCounts
+				if (!list.id) return
+				if (this.#listsCache) {
+					const existing = this.#listsCache.lists.findIndex((l) => l.id === list.id)
+					if (existing >= 0) {
+						this.#listsCache.lists[existing] = toListWithCounts(list)
+					} else {
+						this.#listsCache = {
+							lists: [...this.#listsCache.lists, toListWithCounts(list)],
+							fetchedAt: this.#listsCache.fetchedAt,
+						}
+					}
+				}
+			} else if (eventType === 'reminder_list.deleted') {
+				// remove list from cache
+				const listId = data.list_id as string | undefined
+				if (!listId) return
+				if (this.#listsCache) {
+					this.#listsCache = {
+						lists: this.#listsCache.lists.filter((l) => l.id !== listId),
+						fetchedAt: this.#listsCache.fetchedAt,
+					}
+				}
+				// also clear reminders cache for this list
+				this.#remindersCache.delete(listId)
+			}
+		}
+	}
+
+	/**
+	 * update a reminder across all list caches.
+	 */
+	#updateReminderInAllCaches(
+		reminderId: string,
+		updater: (r: ReminderWithSubtasks) => ReminderWithSubtasks
+	): void {
+		for (const [key, entry] of this.#remindersCache) {
+			const idx = entry.reminders.findIndex((r) => r.id === reminderId)
+			if (idx >= 0) {
+				entry.reminders[idx] = updater(entry.reminders[idx])
+				this.#remindersCache.set(key, { ...entry })
+			}
+		}
+	}
+
+	/**
+	 * remove a reminder from all list caches.
+	 */
+	#removeReminderFromAllCaches(reminderId: string): void {
+		for (const [key, entry] of this.#remindersCache) {
+			const filtered = entry.reminders.filter((r) => r.id !== reminderId)
+			if (filtered.length !== entry.reminders.length) {
+				this.#remindersCache.set(key, { reminders: filtered, fetchedAt: entry.fetchedAt })
+			}
+		}
+	}
+
+	/**
+	 * recalculate default counts from cached reminders.
+	 */
+	#recalculateDefaultCounts(): void {
+		const defaultEntry = this.#remindersCache.get('default')
+		if (defaultEntry) {
+			const reminders = defaultEntry.reminders
+			this.#defaultCountsCache = {
+				counts: {
+					total_count: reminders.length,
+					pending_count: reminders.filter((r) => r.status === 'pending').length,
+					completed_count: reminders.filter((r) => r.status === 'completed').length,
+				},
+				fetchedAt: Date.now(),
+			}
+		}
+	}
 
 	get remindersAppUrl(): string {
 		const path = this.lastVisitedPath
@@ -591,9 +768,14 @@ function toListWithCounts(list: ReminderListWithCounts | ReminderList): Reminder
 
 export const reminders = new RemindersCache()
 
-// clear on logout
+// initialize event stream and handle auth changes
 if (browser) {
 	onAccessTokenChanged((token) => {
-		if (!token) reminders.clear()
+		if (token) {
+			reminders.init()
+		} else {
+			reminders.cleanup()
+			reminders.clear()
+		}
 	})
 }

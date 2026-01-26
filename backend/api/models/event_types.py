@@ -37,6 +37,15 @@ class EventType(StrEnum):
 	NOTIFICATION_CUSTOM = "notification.custom"
 	NOTIFICATION_AGENT = "notification.agent"
 
+	# --- reminder events ---
+	REMINDER_CREATED = "reminder.created"
+	REMINDER_UPDATED = "reminder.updated"
+	REMINDER_COMPLETED = "reminder.completed"
+	REMINDER_DELETED = "reminder.deleted"
+	REMINDER_LIST_CREATED = "reminder_list.created"
+	REMINDER_LIST_UPDATED = "reminder_list.updated"
+	REMINDER_LIST_DELETED = "reminder_list.deleted"
+
 	# --- task events ---
 	TASK_CREATED = "task.created"
 	TASK_UPDATED = "task.updated"

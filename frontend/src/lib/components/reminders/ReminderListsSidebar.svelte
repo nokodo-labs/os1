@@ -39,6 +39,10 @@
 		void goto(resolve(url as never), { keepFocus: true, noScroll: true })
 	}
 
+	function prefetchList(listId: string | null): void {
+		void reminders.loadReminders(listId, { force: false })
+	}
+
 	async function startInlineAddList() {
 		isAddingList = true
 		newListName = ''
@@ -139,6 +143,7 @@
 					count={defaultCounts.pending_count}
 					selected={selectedListId === null}
 					leading={{ type: 'checkbox' }}
+					onPrefetch={() => prefetchList(null)}
 					onSelect={() => selectList(null)}
 				/>
 
@@ -149,6 +154,7 @@
 							count={list.pending_count}
 							selected={selectedListId === list.id}
 							leading={{ type: 'emoji', emoji: list.icon ?? '📋', color: list.color }}
+							onPrefetch={() => prefetchList(list.id)}
 							onSelect={() => selectList(list.id)}
 							onMenu={(event) => {
 								const el = event.currentTarget

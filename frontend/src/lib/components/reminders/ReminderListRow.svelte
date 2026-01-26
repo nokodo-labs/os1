@@ -20,10 +20,11 @@
 		selected: boolean
 		leading: Leading
 		onSelect: () => void
+		onPrefetch?: () => void
 		onMenu?: (event: MouseEvent) => void
 	}
 
-	let { title, count = null, selected, leading, onSelect, onMenu }: Props = $props()
+	let { title, count = null, selected, leading, onSelect, onPrefetch, onMenu }: Props = $props()
 </script>
 
 <div
@@ -35,6 +36,7 @@
 	style={selected
 		? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
 		: ''}
+	onmouseenter={() => onPrefetch?.()}
 	onclick={onSelect}
 	onkeydown={(event) => {
 		if (event.key !== 'Enter' && event.key !== ' ') return

@@ -9,6 +9,8 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.reminder import Reminder, ReminderList, ReminderStatus
 from api.schemas.reminder import (
 	ReminderCreate,
@@ -18,6 +20,7 @@ from api.schemas.reminder import (
 	ReminderUpdate,
 	ReminderWithSubtasks,
 )
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
@@ -57,6 +60,23 @@ async def create_reminder_list(
 	session.add(reminder_list)
 	await session.flush()
 	await session.refresh(reminder_list)
+
+	# emit reminder_list.created event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_LIST_CREATED,
+		data={
+			"list_id": str(reminder_list.id),
+			"name": reminder_list.name,
+			"icon": reminder_list.icon,
+			"color": reminder_list.color,
+			"position": reminder_list.position,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return reminder_list
 
 
@@ -195,6 +215,23 @@ async def update_reminder_list(
 		setattr(reminder_list, key, value)
 	await session.flush()
 	await session.refresh(reminder_list)
+
+	# emit reminder_list.updated event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_LIST_UPDATED,
+		data={
+			"list_id": str(reminder_list.id),
+			"name": reminder_list.name,
+			"icon": reminder_list.icon,
+			"color": reminder_list.color,
+			"position": reminder_list.position,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return reminder_list
 
 
@@ -206,8 +243,19 @@ async def delete_reminder_list(
 ) -> None:
 	"""delete a reminder list and all its reminders."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
+	list_id_str = str(reminder_list.id)
 	await session.delete(reminder_list)
 	await session.flush()
+
+	# emit reminder_list.deleted event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_LIST_DELETED,
+		data={"list_id": list_id_str},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
 
 
 # --- Reminder service ---
@@ -236,6 +284,26 @@ async def create_reminder(
 	session.add(reminder)
 	await session.flush()
 	await session.refresh(reminder)
+
+	# emit reminder.created event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_CREATED,
+		data={
+			"reminder_id": str(reminder.id),
+			"list_id": str(reminder.list_id) if reminder.list_id else None,
+			"title": reminder.title,
+			"description": reminder.description,
+			"status": reminder.status.value if reminder.status else None,
+			"position": reminder.position,
+			"due_at": reminder.due_at.isoformat() if reminder.due_at else None,
+			"remind_at": reminder.remind_at.isoformat() if reminder.remind_at else None,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return reminder
 
 
@@ -315,6 +383,7 @@ async def update_reminder(
 	"""update a reminder."""
 	reminder = await get_reminder(reminder_id, session, principal=principal)
 	update_data = data.model_dump(exclude_unset=True)
+	previous_list_id = reminder.list_id
 
 	# handle status changes
 	if "status" in update_data:
@@ -334,6 +403,31 @@ async def update_reminder(
 
 	await session.flush()
 	await session.refresh(reminder)
+
+	# emit reminder.updated event
+
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_UPDATED,
+		data={
+			"reminder_id": str(reminder.id),
+			"list_id": str(reminder.list_id) if reminder.list_id else None,
+			"previous_list_id": str(previous_list_id) if previous_list_id else None,
+			"title": reminder.title,
+			"description": reminder.description,
+			"status": reminder.status.value if reminder.status else None,
+			"position": reminder.position,
+			"due_at": reminder.due_at.isoformat() if reminder.due_at else None,
+			"remind_at": reminder.remind_at.isoformat() if reminder.remind_at else None,
+			"completed_at": (
+				reminder.completed_at.isoformat() if reminder.completed_at else None
+			),
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return reminder
 
 
@@ -361,6 +455,26 @@ async def complete_reminder(
 
 	await session.flush()
 	await session.refresh(reminder)
+
+	# emit reminder.completed event
+	completed_at = reminder.completed_at
+	completed_iso = completed_at.isoformat() if completed_at else None
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_COMPLETED,
+		data={
+			"reminder_id": str(reminder.id),
+			"list_id": str(reminder.list_id) if reminder.list_id else None,
+			"title": reminder.title,
+			"status": reminder.status.value,
+			"completed_at": completed_iso,
+			"cascade": cascade,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return reminder
 
 
@@ -372,8 +486,23 @@ async def delete_reminder(
 ) -> None:
 	"""delete a reminder and its subtasks."""
 	reminder = await get_reminder(reminder_id, session, principal=principal)
+	reminder_id_str = str(reminder.id)
+	list_id_str = str(reminder.list_id) if reminder.list_id else None
 	await session.delete(reminder)
 	await session.flush()
+
+	# emit reminder.deleted event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_DELETED,
+		data={
+			"reminder_id": reminder_id_str,
+			"list_id": list_id_str,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
 
 
 async def move_reminder(
@@ -386,6 +515,7 @@ async def move_reminder(
 ) -> Reminder:
 	"""move a reminder to a different list (or default list if null)."""
 	reminder = await get_reminder(reminder_id, session, principal=principal)
+	previous_list_id = reminder.list_id
 
 	if target_list_id is not None:
 		await get_reminder_list(target_list_id, session, principal=principal)
@@ -396,4 +526,22 @@ async def move_reminder(
 
 	await session.flush()
 	await session.refresh(reminder)
+
+	# emit reminder.updated event with move info
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.REMINDER_UPDATED,
+		data={
+			"reminder_id": str(reminder.id),
+			"list_id": str(reminder.list_id) if reminder.list_id else None,
+			"previous_list_id": str(previous_list_id) if previous_list_id else None,
+			"title": reminder.title,
+			"status": reminder.status.value if reminder.status else None,
+			"position": reminder.position,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+
 	return reminder
