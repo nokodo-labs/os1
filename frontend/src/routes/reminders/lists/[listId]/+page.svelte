@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import ReminderListPanel from '$lib/components/reminders/ReminderListPanel.svelte'
+	import RemindersPanel from '$lib/components/reminders/RemindersPanel.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
 
@@ -12,13 +11,6 @@
 	const selectedListId = $derived(page.params.listId ?? null)
 
 	$effect(() => {
-		const addReminder = () => {
-			if (!browser) return
-			window.dispatchEvent(
-				new CustomEvent('nokodo:reminders:add', { detail: { listId: selectedListId } })
-			)
-		}
-
 		const backToLists = async () => {
 			await goto(resolve('/reminders/lists'), { keepFocus: true, noScroll: true })
 		}
@@ -28,32 +20,17 @@
 				? [
 						{
 							id: 'lists',
-							label: 'lists',
-							ariaLabel: 'lists',
-							icon: 'list',
+							label: '',
+							ariaLabel: 'back to lists',
+							icon: 'chevron-left',
 							onClick: backToLists,
 						},
-						{
-							id: 'add',
-							label: 'add',
-							ariaLabel: 'add reminder',
-							icon: 'plus',
-							onClick: addReminder,
-						},
 					]
-				: [
-						{
-							id: 'add',
-							label: 'add',
-							ariaLabel: 'add reminder',
-							icon: 'plus',
-							onClick: addReminder,
-						},
-					],
+				: null,
 		})
 
 		return () => chrome.setIsland({ actions: null })
 	})
 </script>
 
-<ReminderListPanel listId={selectedListId} />
+<RemindersPanel listId={selectedListId} showListTitle={device.isMobile} />

@@ -136,7 +136,22 @@
 }
 
 @layer components {
-	/* (intentionally empty) */
+	/* standardized border-radius utilities for consistent UI */
+
+	/* circular buttons (e.g., icon-only action buttons) */
+	.rounded-circle {
+		@apply rounded-full;
+	}
+
+	/* pill-shaped single-line items (e.g., list rows, tags, badges) */
+	.rounded-pill {
+		border-radius: var(--radius-container);
+	}
+
+	/* boxes for multi-line expandable content (e.g., reminder items, cards) */
+	.rounded-box {
+		border-radius: var(--radius-container);
+	}
 }
 
 /* Custom Scrollbar */
@@ -265,11 +280,11 @@
 }
 
 /* reminders master/content transitions */
-::view-transition-new(reminders-master) {
+::view-transition-new(reminders-master):only-child {
 	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-left;
 }
 
-::view-transition-old(reminders-master) {
+::view-transition-old(reminders-master):only-child {
 	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-left;
 }
 

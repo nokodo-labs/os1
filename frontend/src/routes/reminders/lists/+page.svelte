@@ -24,7 +24,9 @@
 	})
 
 	$effect(() => {
+		if (!device.isMobile) return
 		chrome.setIsland({ actions: null })
+		return () => chrome.setIsland({ actions: null })
 	})
 </script>
 

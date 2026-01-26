@@ -255,6 +255,42 @@ class RemindersCache {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
+	 * create a new reminder list.
+	 * optimistically adds to cached lists (when present), then persists.
+	 */
+	async createList(params: {
+		name: string
+		icon?: string | null
+		color?: string | null
+	}): Promise<ReminderListWithCounts | null> {
+		const { data, error } = await apiClient().POST('/v1/reminders/lists', {
+			body: {
+				name: params.name,
+				icon: params.icon ?? null,
+				color: params.color ?? null,
+				position: 0,
+			},
+		})
+
+		if (error || !data) return null
+
+		const created = toListWithCounts(data as ReminderListWithCounts)
+
+		if (this.#listsCache) {
+			this.#listsCache = {
+				lists: [...this.#listsCache.lists, created],
+				fetchedAt: this.#listsCache.fetchedAt,
+			}
+		} else {
+			this.invalidateLists()
+		}
+
+		this.lastVisitedListId = created.id
+		this.lastVisitedPath = `/reminders/lists/${created.id}`
+		return created
+	}
+
+	/**
 	 * create a new reminder.
 	 * optimistically adds to cache, then persists.
 	 */
@@ -282,7 +318,7 @@ class RemindersCache {
 		const existing = this.#remindersCache.get(key)
 		if (existing) {
 			this.#remindersCache.set(key, {
-				reminders: [reminder, ...existing.reminders],
+				reminders: [...existing.reminders, reminder],
 				fetchedAt: existing.fetchedAt,
 			})
 		}
@@ -301,13 +337,27 @@ class RemindersCache {
 	 * complete a reminder.
 	 */
 	async completeReminder(reminder: ReminderWithSubtasks): Promise<ReminderWithSubtasks | null> {
+		const previous = this.#findReminderInCache(reminder.list_id, reminder.id) ?? reminder
+		this.#updateReminderInCache(reminder.list_id, {
+			...previous,
+			status: 'completed',
+		})
+
 		const { data, error } = await apiClient().POST('/v1/reminders/{reminder_id}/complete', {
 			params: { path: { reminder_id: reminder.id } },
 		})
 
-		if (error || !data) return null
+		if (error || !data) {
+			this.#updateReminderInCache(reminder.list_id, previous)
+			return null
+		}
 
-		const updated: ReminderWithSubtasks = { ...reminder, ...data, subtasks: reminder.subtasks }
+		const updated: ReminderWithSubtasks = {
+			...previous,
+			...data,
+			status: 'completed',
+			subtasks: previous.subtasks,
+		}
 		this.#updateReminderInCache(reminder.list_id, updated)
 
 		// invalidate counts
@@ -324,14 +374,28 @@ class RemindersCache {
 	 * uncomplete a reminder (set status back to pending).
 	 */
 	async uncompleteReminder(reminder: ReminderWithSubtasks): Promise<ReminderWithSubtasks | null> {
+		const previous = this.#findReminderInCache(reminder.list_id, reminder.id) ?? reminder
+		this.#updateReminderInCache(reminder.list_id, {
+			...previous,
+			status: 'pending',
+		})
+
 		const { data, error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
 			params: { path: { reminder_id: reminder.id } },
 			body: { status: 'pending' },
 		})
 
-		if (error || !data) return null
+		if (error || !data) {
+			this.#updateReminderInCache(reminder.list_id, previous)
+			return null
+		}
 
-		const updated: ReminderWithSubtasks = { ...reminder, ...data, subtasks: reminder.subtasks }
+		const updated: ReminderWithSubtasks = {
+			...previous,
+			...data,
+			status: 'pending',
+			subtasks: previous.subtasks,
+		}
 		this.#updateReminderInCache(reminder.list_id, updated)
 
 		// invalidate counts
@@ -341,6 +405,25 @@ class RemindersCache {
 			this.invalidateLists()
 		}
 
+		return updated
+	}
+
+	/**
+	 * update a reminder's title/description.
+	 */
+	async updateReminder(
+		reminder: ReminderWithSubtasks,
+		updates: { title?: string; description?: string | null }
+	): Promise<ReminderWithSubtasks | null> {
+		const { data, error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
+			params: { path: { reminder_id: reminder.id } },
+			body: updates,
+		})
+
+		if (error || !data) return null
+
+		const updated: ReminderWithSubtasks = { ...reminder, ...data, subtasks: reminder.subtasks }
+		this.#updateReminderInCache(reminder.list_id, updated)
 		return updated
 	}
 
@@ -374,6 +457,53 @@ class RemindersCache {
 		return true
 	}
 
+	/**
+	 * move a reminder to a different list.
+	 */
+	async moveReminder(
+		reminder: ReminderWithSubtasks,
+		targetListId: string | null
+	): Promise<ReminderWithSubtasks | null> {
+		const currentListId = reminder.list_id ?? null
+		if (currentListId === targetListId) return reminder
+
+		const previous = this.#findReminderInCache(currentListId, reminder.id) ?? reminder
+		const optimistic: ReminderWithSubtasks = {
+			...previous,
+			list_id: targetListId,
+		}
+
+		this.#removeReminderFromCache(currentListId, reminder.id)
+		this.#appendReminderToCache(targetListId, optimistic)
+
+		const { data, error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
+			params: { path: { reminder_id: reminder.id } },
+			body: { list_id: targetListId },
+		})
+
+		if (error || !data) {
+			this.#removeReminderFromCache(targetListId, reminder.id)
+			this.#appendReminderToCache(currentListId, previous)
+			return null
+		}
+
+		const updated: ReminderWithSubtasks = {
+			...optimistic,
+			...data,
+			list_id: targetListId,
+			subtasks: previous.subtasks,
+		}
+		this.#updateReminderInCache(targetListId, updated)
+
+		// invalidate counts
+		if (currentListId === null || targetListId === null) {
+			this.invalidateDefaultCounts()
+		}
+		this.invalidateLists()
+
+		return updated
+	}
+
 	#updateReminderInCache(listId: string | null | undefined, updated: ReminderWithSubtasks): void {
 		const key = this.#listKey(listId ?? null)
 		const existing = this.#remindersCache.get(key)
@@ -381,6 +511,39 @@ class RemindersCache {
 
 		this.#remindersCache.set(key, {
 			reminders: existing.reminders.map((r) => (r.id === updated.id ? updated : r)),
+			fetchedAt: existing.fetchedAt,
+		})
+	}
+
+	#findReminderInCache(
+		listId: string | null | undefined,
+		reminderId: string
+	): ReminderWithSubtasks | null {
+		const key = this.#listKey(listId ?? null)
+		const existing = this.#remindersCache.get(key)
+		if (!existing) return null
+		return existing.reminders.find((r) => r.id === reminderId) ?? null
+	}
+
+	#removeReminderFromCache(listId: string | null | undefined, reminderId: string): void {
+		const key = this.#listKey(listId ?? null)
+		const existing = this.#remindersCache.get(key)
+		if (!existing) return
+		this.#remindersCache.set(key, {
+			reminders: existing.reminders.filter((r) => r.id !== reminderId),
+			fetchedAt: existing.fetchedAt,
+		})
+	}
+
+	#appendReminderToCache(
+		listId: string | null | undefined,
+		reminder: ReminderWithSubtasks
+	): void {
+		const key = this.#listKey(listId ?? null)
+		const existing = this.#remindersCache.get(key)
+		if (!existing) return
+		this.#remindersCache.set(key, {
+			reminders: [...existing.reminders, reminder],
 			fetchedAt: existing.fetchedAt,
 		})
 	}

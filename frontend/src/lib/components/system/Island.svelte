@@ -6,6 +6,7 @@
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import Home from '$lib/components/icons/Home.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
@@ -153,7 +154,7 @@
 					<div class="flex items-center gap-1 sm:gap-2">
 						{#each chrome.island.actions as action (action.id)}
 							<button
-								class="group flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center gap-2 rounded-2xl border-none bg-transparent px-2 text-white/80 transition-transform duration-150 hover:scale-[1.03] hover:bg-white/5 hover:text-white active:scale-[0.98] sm:px-3"
+								class="group flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center gap-2 rounded-2xl border-none bg-transparent px-2 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] sm:px-3"
 								onclick={action.onClick}
 								aria-label={action.ariaLabel ?? action.label}
 								type="button"
@@ -162,10 +163,16 @@
 									<Plus className="h-5 w-5" />
 								{:else if action.icon === 'list'}
 									<ListBullet className="h-5 w-5" />
+								{:else if action.icon === 'chevron-left'}
+									<ChevronLeft className="h-5 w-5" strokeWidth="2" />
 								{/if}
-								<span class="hidden text-sm font-medium text-white/85 sm:inline">
-									{action.label}
-								</span>
+								{#if action.label}
+									<span
+										class="hidden text-sm font-medium text-white/85 sm:inline"
+									>
+										{action.label}
+									</span>
+								{/if}
 							</button>
 						{/each}
 					</div>

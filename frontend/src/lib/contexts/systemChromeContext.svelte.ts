@@ -7,7 +7,7 @@ export interface IslandAgentSelectorConfig {
 	onAgentChange: (agentId: string) => void
 }
 
-export type IslandActionIcon = 'plus' | 'list'
+export type IslandActionIcon = 'plus' | 'list' | 'chevron-left'
 
 export interface IslandAction {
 	id: string
