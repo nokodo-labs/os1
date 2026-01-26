@@ -1,29 +1,23 @@
-import { getApiBaseUrl } from './client'
-import { apiOriginReady } from './init'
+import { apiOriginReady, getApiOrigin } from './origin'
 
-export type SystemStatus = {
-	initialized: boolean
-}
+export type SystemStatus = { initialized: boolean }
 
 export async function getSystemStatus(): Promise<SystemStatus> {
 	await apiOriginReady
+	const base = getApiOrigin()
+	if (!base) throw new Error('api origin not initialized')
 
-	const configuredBaseUrl = getApiBaseUrl()
-	const httpBase = configuredBaseUrl || window.location.origin
-
-	const response = await fetch(`${httpBase}/system/status`, {
-		method: 'GET',
+	const res = await fetch(`${base}/system/status`, {
 		headers: { Accept: 'application/json' },
 		credentials: 'include',
 	})
 
-	if (!response.ok) throw new Error('failed to check system status')
+	if (!res.ok) throw new Error('failed to fetch system status')
 
-	const data: unknown = await response.json()
-	if (!data || typeof data !== 'object') throw new Error('failed to check system status')
+	const data = await res.json()
+	if (typeof data?.initialized !== 'boolean') {
+		throw new Error('invalid system status response')
+	}
 
-	const initialized = (data as { initialized?: unknown }).initialized
-	if (typeof initialized !== 'boolean') throw new Error('failed to check system status')
-
-	return { initialized }
+	return { initialized: data.initialized }
 }

@@ -60,10 +60,8 @@ export class EventStreamClient {
 		lastEvent: null as StreamMessage | null,
 	})
 
-	private buildWsUrl(): string {
-		const configuredBaseUrl = getApiBaseUrl()
-		const httpBase = configuredBaseUrl || window.location.origin
-		const wsBase = httpBase.replace(/^http/, 'ws')
+	private async buildWsUrl(): Promise<string> {
+		const wsBase = getApiBaseUrl().replace(/^http/, 'ws')
 		// No token in URL \u2014 auth uses httpOnly cookie
 		return `${wsBase}/v1/events/stream`
 	}
@@ -83,7 +81,7 @@ export class EventStreamClient {
 		this.isConnected = true
 		this.intentionalDisconnect = false
 		this.reconnectAttempts = 0
-		this.doConnect()
+		void this.doConnect()
 	}
 
 	disconnect(): void {
@@ -98,13 +96,13 @@ export class EventStreamClient {
 		return () => this.handlers.delete(handler)
 	}
 
-	private doConnect(): void {
+	private async doConnect(): Promise<void> {
 		if (!this.isConnected) return
 
 		this.state.status = this.state.status === 'disconnected' ? 'connecting' : 'reconnecting'
 
 		try {
-			this.ws = new WebSocket(this.buildWsUrl())
+			this.ws = new WebSocket(await this.buildWsUrl())
 		} catch {
 			this.scheduleReconnect()
 			return
