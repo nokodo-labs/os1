@@ -1,4 +1,9 @@
-import { clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth/session.svelte'
+import {
+	authReady,
+	clearAccessToken,
+	getAccessToken,
+	setAccessToken,
+} from '$lib/auth/session.svelte'
 import createClient from 'openapi-fetch'
 import { apiOriginReady, getApiOrigin } from './origin'
 import type { paths } from './types'
@@ -21,6 +26,8 @@ async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 
 async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	await apiOriginReady
+	// wait for auth flow to complete before making authenticated requests.
+	await authReady
 
 	const req = input instanceof Request ? input : new Request(input, init)
 	const retryReq = req.clone()

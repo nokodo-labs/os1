@@ -1,11 +1,7 @@
+import type { Snippet } from 'svelte'
 import { getContext, setContext } from 'svelte'
 
 const SYSTEM_CHROME_KEY = Symbol('system-chrome')
-
-export interface IslandAgentSelectorConfig {
-	selectedAgent: string
-	onAgentChange: (agentId: string) => void
-}
 
 export type IslandActionIcon = 'plus' | 'list' | 'chevron-left'
 
@@ -18,8 +14,11 @@ export interface IslandAction {
 }
 
 export interface IslandConfig {
-	agentSelector: IslandAgentSelectorConfig | null
-	activityText: string | null
+	/** context-specific action controls for the left section (pages inject their components here) */
+	contextActions: Snippet | null
+	/** pulse area content for the center section (future: rich activity indicators) */
+	pulse: string | null
+	/** action buttons to display on the left (before contextActions) */
 	actions: IslandAction[] | null
 }
 
@@ -40,8 +39,9 @@ export interface SystemChromeContext {
 	readonly layout: LayoutInsets
 	setIsland(config: Partial<IslandConfig>): void
 	clearIsland(): void
-	setAgentSelector(config: IslandAgentSelectorConfig | null): void
-	setActivityText(text: string | null): void
+	setContextActions(contextActions: Snippet | null): void
+	setPulse(text: string | null): void
+	setActions(actions: IslandAction[] | null): void
 	toggleDock(): void
 	openDock(): void
 	closeDock(): void
@@ -52,8 +52,8 @@ export interface SystemChromeContext {
 }
 
 export function createSystemChromeContext(): SystemChromeContext {
-	let agentSelector = $state<IslandAgentSelectorConfig | null>(null)
-	let activityText = $state<string | null>(null)
+	let contextActions = $state<Snippet | null>(null)
+	let pulse = $state<string | null>(null)
 	let actions = $state<IslandAction[] | null>(null)
 	let isDockOpen = $state(false)
 	let leftWidthClass = $state<string | null>(null)
@@ -62,8 +62,8 @@ export function createSystemChromeContext(): SystemChromeContext {
 	const context: SystemChromeContext = {
 		get island() {
 			return {
-				agentSelector,
-				activityText,
+				contextActions,
+				pulse,
 				actions,
 			}
 		},
@@ -77,20 +77,23 @@ export function createSystemChromeContext(): SystemChromeContext {
 			}
 		},
 		setIsland(config) {
-			if ('agentSelector' in config) agentSelector = config.agentSelector ?? null
-			if ('activityText' in config) activityText = config.activityText ?? null
+			if ('contextActions' in config) contextActions = config.contextActions ?? null
+			if ('pulse' in config) pulse = config.pulse ?? null
 			if ('actions' in config) actions = config.actions ?? null
 		},
 		clearIsland() {
-			agentSelector = null
-			activityText = null
+			contextActions = null
+			pulse = null
 			actions = null
 		},
-		setAgentSelector(config) {
-			agentSelector = config
+		setContextActions(ctx) {
+			contextActions = ctx
 		},
-		setActivityText(text) {
-			activityText = text
+		setPulse(text) {
+			pulse = text
+		},
+		setActions(acts) {
+			actions = acts
 		},
 		toggleDock() {
 			isDockOpen = !isDockOpen

@@ -6,7 +6,10 @@
 	import { apiClient } from '$lib/api/client'
 	import { getJwtUserId } from '$lib/auth/jwt'
 	import { getAccessToken } from '$lib/auth/session.svelte'
+	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
+	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
+	import TemporaryChatToggleButton from '$lib/components/chat/TemporaryChatToggleButton.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
 		type HomeSuggestion,
@@ -20,6 +23,7 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
@@ -167,15 +171,10 @@
 		if (highlightedIndex >= suggestions.length) highlightedIndex = -1
 	})
 
+	// inject Island context actions (agent selector, sidebar toggle, temp chat toggle)
 	$effect(() => {
-		chrome.setAgentSelector({
-			selectedAgent: selectedAgent.id,
-			onAgentChange: (agentId: string) => selectedAgent.set(agentId),
-		})
-	})
-
-	$effect(() => {
-		return () => chrome.setAgentSelector(null)
+		chrome.setContextActions(islandContextActions)
+		return () => chrome.setContextActions(null)
 	})
 
 	// ============ NAVIGATION HELPERS ============
@@ -254,8 +253,8 @@
 			return
 		}
 		if (suggestion.id === 'search') {
-			chrome.setActivityText(`search: ${inputValue.trim()}`)
-			window.setTimeout(() => chrome.setActivityText(null), 1800)
+			chrome.setPulse(`search: ${inputValue.trim()}`)
+			window.setTimeout(() => chrome.setPulse(null), 1800)
 			return
 		}
 	}
@@ -294,6 +293,17 @@
 		return false
 	}
 </script>
+
+{#snippet islandContextActions()}
+	<AgentSelector
+		selectedAgent={selectedAgent.id}
+		onAgentChange={(agentId) => selectedAgent.set(agentId)}
+	/>
+	{#if device.isMobile}
+		<ChatSidebarToggleButton />
+	{/if}
+	<TemporaryChatToggleButton />
+{/snippet}
 
 {#if isChatMode}
 	<!-- ═══════════════ CHAT MODE LAYOUT ═══════════════ -->

@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
+	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
@@ -17,6 +19,7 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
 	import { chat as chatStore } from '$lib/stores/chat.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
@@ -83,17 +86,11 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Agent selector in system chrome
+	// Effects: Island context actions for agent selector
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
-		chrome.setAgentSelector({
-			selectedAgent: chat.selectedAgent,
-			onAgentChange: (agentId: string) => (chat.selectedAgent = agentId),
-		})
-	})
-
-	$effect(() => {
-		return () => chrome.setAgentSelector(null)
+		chrome.setContextActions(islandContextActions)
+		return () => chrome.setContextActions(null)
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -188,6 +185,16 @@
 		chat.rebuildRunBlocks()
 	})
 </script>
+
+{#snippet islandContextActions()}
+	<AgentSelector
+		selectedAgent={chat.selectedAgent}
+		onAgentChange={(agentId) => (chat.selectedAgent = agentId)}
+	/>
+	{#if device.isMobile}
+		<ChatSidebarToggleButton />
+	{/if}
+{/snippet}
 
 <div class="absolute inset-0 flex flex-col">
 	{#if !chat.autoScroll && chat.hasRenderableMessages}

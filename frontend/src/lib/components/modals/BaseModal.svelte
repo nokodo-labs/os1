@@ -29,6 +29,14 @@
 		onClose()
 	}
 
+	/**
+	 * stop pointerdown from bubbling to global listeners (e.g., menu close handlers).
+	 * this ensures clicking inside the modal doesn't close menus that spawned it.
+	 */
+	function onPointerDown(event: PointerEvent) {
+		event.stopPropagation()
+	}
+
 	$effect(() => {
 		if (!open) return
 		document.addEventListener('keydown', onKeyDown)
@@ -42,6 +50,7 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
 		role="presentation"
 		onmousedown={onBackdropMouseDown}
+		onpointerdown={onPointerDown}
 	>
 		<div
 			class="liquid-glass w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.55)]"

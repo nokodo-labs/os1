@@ -5,7 +5,7 @@
 @import './lib/styles/liquid-glass.css';
 @import './lib/styles/liquid-metal.css';
 
-/* Ensure Streamdown's built-in Tailwind classes are included (Tailwind v4 @source). */
+/* ensure Streamdown's built-in Tailwind classes are included (Tailwind v4 @source). */
 @source '../node_modules/svelte-streamdown/**/*';
 
 @custom-variant dark (&:is(.dark *));
@@ -13,6 +13,9 @@
 :root {
 	--radius: 0.625rem;
 	--radius-container-base: 1.5rem;
+	/* Island chrome offset: container top padding + Island height + container bottom padding.
+	   used by pages that need content to clear the sticky Island (e.g., chat). */
+	--chrome-island-offset: calc(clamp(12px, 4vw, 32px) + 88px + 16px);
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.13 0.028 261.692);
 	--text-color: var(--foreground);
@@ -184,7 +187,7 @@
 }
 
 /* View Transitions (assume supported) */
-@keyframes nokodo-vt-fade-out {
+@keyframes vt-fade-out {
 	from {
 		opacity: 1;
 	}
@@ -193,7 +196,7 @@
 	}
 }
 
-@keyframes nokodo-vt-fade-in {
+@keyframes vt-fade-in {
 	from {
 		opacity: 0;
 	}
@@ -202,7 +205,7 @@
 	}
 }
 
-@keyframes nokodo-vt-slide-out-down {
+@keyframes vt-slide-out-down {
 	from {
 		transform: translateY(0);
 	}
@@ -211,7 +214,7 @@
 	}
 }
 
-@keyframes nokodo-vt-slide-in-up {
+@keyframes vt-slide-in-up {
 	from {
 		transform: translateY(60vh);
 	}
@@ -220,7 +223,7 @@
 	}
 }
 
-@keyframes nokodo-vt-slide-out-left {
+@keyframes vt-slide-out-left {
 	from {
 		transform: translateX(0);
 	}
@@ -229,32 +232,11 @@
 	}
 }
 
-@keyframes nokodo-vt-slide-in-left {
+@keyframes vt-slide-in-left {
 	from {
 		transform: translateX(-55vw);
 	}
 	to {
-		transform: translateX(0);
-	}
-}
-
-@keyframes nokodo-vt-slide-out-right {
-	from {
-		opacity: 1;
-		transform: translateX(0);
-	}
-	to {
-		opacity: 0;
-		transform: translateX(3rem);
-	}
-}
-@keyframes nokodo-vt-slide-in-right {
-	from {
-		opacity: 0;
-		transform: translateX(3rem);
-	}
-	to {
-		opacity: 1;
 		transform: translateX(0);
 	}
 }
@@ -267,31 +249,31 @@
 
 /* Landing greeting disappears when going to /c/[id] */
 ::view-transition-old(landing-greeting) {
-	animation: 200ms ease both nokodo-vt-fade-out;
+	animation: 200ms ease both vt-fade-out;
 }
 
 /* Landing greeting appears when returning home */
 ::view-transition-new(landing-greeting) {
-	animation: 260ms ease 80ms both nokodo-vt-fade-in;
+	animation: 260ms ease 80ms both vt-fade-in;
 }
 
 /* Thread body fades away when leaving /c/[id] */
 ::view-transition-old(thread-body) {
-	animation: 220ms ease both nokodo-vt-fade-out;
+	animation: 220ms ease both vt-fade-out;
 }
 
 /* Thread body fades in when entering /c/[id] (after input settles) */
 ::view-transition-new(thread-body) {
-	animation: 240ms ease 220ms both nokodo-vt-fade-in;
+	animation: 240ms ease 220ms both vt-fade-in;
 }
 
 /* Apps grid slides in/out from bottom when navigating to/from home */
 ::view-transition-new(apps-grid) {
-	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-up;
+	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-up;
 }
 
 ::view-transition-old(apps-grid) {
-	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-down;
+	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-down;
 }
 
 /* master/detail sidebar transitions (generic for all master/detail apps)
@@ -299,11 +281,11 @@
 	- not persisted (exists only in old or only in new): slide out/in.
 */
 ::view-transition-new(master-sidebar):only-child {
-	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-left;
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-left;
 }
 
 ::view-transition-old(master-sidebar):only-child {
-	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-left;
+	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
 }
 
 /* chat sidebar transitions
@@ -312,22 +294,22 @@
 	`:only-child` matches when the snapshot has no counterpart.
 */
 ::view-transition-old(chat-sidebar):only-child {
-	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-left;
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
 }
 
 ::view-transition-new(chat-sidebar):only-child {
-	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-left;
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-left;
 }
 
 /* chat input transitions
-	Same intent as sidebar: morph when shared, slide when not.
+	same intent as sidebar: morph when shared, slide when not.
 */
 ::view-transition-old(chat-input):only-child {
-	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-down;
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-down;
 }
 
 ::view-transition-new(chat-input):only-child {
-	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-up;
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-up;
 }
 
 /* Island transitions - smooth morph between routes, no forced animations */
@@ -336,20 +318,8 @@
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-::view-transition-old(home-button):only-child,
-::view-transition-new(home-button):only-child {
-	overflow: clip;
-	clip-path: inset(0 0 0 -100%);
-}
-::view-transition-old(home-button):only-child {
-	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-right;
-}
-::view-transition-new(home-button):only-child {
-	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-right;
-}
-
-/* During ViewTransitions, keep live backdrop filters from affecting the new/old pages.
-	The snapshot should carry the visual instead of the live element lingering.
+/* during ViewTransitions, force remove backdrop-filters on sidebars.
+	otherwise, it will not transition with the element but will linger for the duration of the transition then pop out
 */
 html[data-vt-active='1'] .chat-sidebar {
 	-webkit-backdrop-filter: none;

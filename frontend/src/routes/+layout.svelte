@@ -3,9 +3,7 @@
 	import { goto, onNavigate } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { refreshAccessToken } from '$lib/api/client'
-	import { eventStreamClient } from '$lib/api/streaming'
-	import { getAccessToken } from '$lib/auth/session.svelte'
+	import { markAuthReady } from '$lib/auth/session.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
@@ -17,12 +15,12 @@
 	import { createSidebarContext, useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
 	import { createThemeContext, setThemeContext } from '$lib/contexts/themeContext.svelte'
+	import { initApp } from '$lib/init'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device, initDevice } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
-	import { loadSettings } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -94,6 +92,33 @@
 
 	let { children } = $props()
 
+	// Island offset tracking for fixed positioning with blur effect
+	let mainContentShell = $state<HTMLElement | null>(null)
+	let islandShell = $state<HTMLElement | null>(null)
+
+	$effect(() => {
+		const mainEl = mainContentShell
+		const islandEl = islandShell
+		if (!mainEl || !islandEl) return
+		const update = () => {
+			const mainRect = mainEl.getBoundingClientRect()
+			const islandRect = islandEl.getBoundingClientRect()
+			const offset = Math.max(0, Math.round(islandRect.bottom - mainRect.top))
+			mainEl.style.setProperty('--chrome-island-offset', `${offset}px`)
+			// set the island's left position to align with main content
+			islandEl.style.setProperty('--island-left', `${mainRect.left}px`)
+		}
+		update()
+		const ro = new ResizeObserver(update)
+		ro.observe(mainEl)
+		ro.observe(islandEl)
+		window.addEventListener('resize', update)
+		return () => {
+			ro.disconnect()
+			window.removeEventListener('resize', update)
+		}
+	})
+
 	// gate initial page paint behind the splash.
 	const backgroundBlocker = appReadiness.createBlocker()
 	function handleBackgroundReady() {
@@ -104,11 +129,6 @@
 	})
 
 	onMount(async () => {
-		void loadSettings()
-		// initialize event stream if already logged in (page load/refresh)
-		const existingToken = getAccessToken()
-		if (existingToken) eventStreamClient.connect()
-
 		// ensure the first route has had a chance to render + paint.
 		await tick()
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -116,20 +136,26 @@
 
 		// don't run auth redirects on not-found routes.
 		// this keeps 404s visible even when the user is logged out.
-		if (page.status === 404) return
+		if (page.status === 404) {
+			markAuthReady()
+			return
+		}
 
-		// client-side auth guard (SSG: auth logic must run in browser, not during prerender)
-		const token = getAccessToken()
+		// initialize app (auth restoration, settings, event stream)
+		const { authenticated, token } = await initApp()
 		const isPublic = PUBLIC_PATHS.has(page.url.pathname)
 
-		if (!token && !isPublic) {
-			const refreshed = await refreshAccessToken()
-			if (!refreshed) {
-				const next = page.url.pathname
-				void goto(resolve('/login'), { replaceState: true, state: { next } })
-			}
-		} else if (token && isPublic) {
+		// auth guard: redirect unauthenticated users from private routes
+		if (!authenticated && !isPublic) {
+			const next = page.url.pathname
+			void goto(resolve('/login'), { replaceState: true, state: { next } })
+			return
+		}
+
+		// auth guard: redirect authenticated users away from auth routes
+		if (token && isPublic) {
 			void goto(resolve('/'), { replaceState: true })
+			return
 		}
 	})
 
@@ -305,21 +331,26 @@
 
 			<!-- main content -->
 			<div
-				class="relative flex min-w-0 flex-1 flex-col overflow-y-auto"
+				class="main-content-shell relative flex min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
 				style="touch-action: pan-y;"
+				bind:this={mainContentShell}
 				onpointerdown={onMainPointerDown}
 				onpointermove={onMainPointerMove}
 				onpointerup={onMainPointerUp}
 				onpointercancel={onMainPointerCancel}
 			>
-				<!-- system chrome: Island (top header) - naturally positioned -->
-				<div
-					class="island-container sticky top-0 z-30 mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)] pb-4"
-				>
+				{@render children()}
+			</div>
+
+			<!-- system chrome: Island (top header) - fixed overlay for blur effect -->
+			<div
+				class="pointer-events-none fixed top-0 z-30 mx-auto w-full px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
+				style="left: var(--island-left, 0); right: 0; max-width: min(1280px, calc(100% - var(--island-left, 0px)));"
+				bind:this={islandShell}
+			>
+				<div class="pointer-events-auto mx-auto max-w-7xl">
 					<Island />
 				</div>
-
-				{@render children()}
 			</div>
 
 			<!-- system chrome: Dock (right sidebar overlay) -->

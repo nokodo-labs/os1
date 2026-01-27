@@ -24,13 +24,13 @@
 	function handlePersonalizeClick() {
 		console.log('Open personalize')
 		onClose?.()
-		// TODO: Navigate to personalization page or open modal
+		// TODO: navigate to personalization page or open modal
 	}
 
 	function handleHelpClick() {
 		console.log('Open help')
 		onClose?.()
-		// TODO: Open help modal or navigate to help page
+		// TODO: open help modal or navigate to help page
 	}
 
 	function handleLogout() {
@@ -67,19 +67,19 @@
 		{
 			id: 'settings',
 			icon: Cog6,
-			label: 'Settings',
+			label: 'settings',
 			action: handleSettingsClick,
 		},
 		{
 			id: 'personalize',
 			icon: Sparkles,
-			label: 'Personalize',
+			label: 'personalize',
 			action: handlePersonalizeClick,
 		},
 		{
 			id: 'help',
 			icon: QuestionMarkCircle,
-			label: 'Help & Support',
+			label: 'help & support',
 			action: handleHelpClick,
 		},
 	]
@@ -140,12 +140,12 @@
 	<hr class="my-2 border-white/10" />
 
 	{#if session.isLoggedIn}
-		<!-- Menu Items -->
+		<!-- menu Items -->
 		<div class="flex flex-col gap-1">
 			{#each menuItems as item (item.id)}
 				{@const Icon = item.icon}
 				<button
-					class="flex w-full items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
+					class="flex w-full items-center gap-3 rounded-pill border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
 					onclick={item.action}
 				>
 					<Icon className="h-4.5 w-4.5 shrink-0" />
@@ -156,7 +156,7 @@
 	{:else}
 		<div class="flex flex-col gap-1">
 			<button
-				class="flex w-full items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
+				class="flex w-full items-center justify-center rounded-pill border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
 				onclick={handleLogin}
 			>
 				log in
@@ -167,9 +167,9 @@
 	<hr class="my-2 border-white/10" />
 
 	{#if session.isLoggedIn}
-		<!-- Logout Button -->
+		<!-- logout Button -->
 		<button
-			class="flex w-full items-center gap-3 rounded-lg border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
+			class="flex w-full items-center gap-3 rounded-pill border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
 			onclick={handleLogout}
 		>
 			<SignOut className="h-4.5 w-4.5 shrink-0" />

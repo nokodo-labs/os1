@@ -154,16 +154,42 @@
 			props.onDeselect()
 			return
 		}
+	}
 
-		if (props.kind === 'create' && event.key === 'Enter') {
-			if ((event.ctrlKey || event.metaKey) && editedTitle.trim() !== '') {
-				event.preventDefault()
-				void submitCreate()
+	function handleTitleKeyDown(event: KeyboardEvent) {
+		handleKeyDown(event)
+		// enter (without shift) submits/saves
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault()
+			if (props.kind === 'create') {
+				if (editedTitle.trim() !== '') {
+					void submitCreate()
+				}
+			} else {
+				titleInputEl?.blur()
 			}
 		}
 	}
 
+	function handleDescriptionKeyDown(event: KeyboardEvent) {
+		// escape handled by base handler
+		if (event.key === 'Escape') {
+			handleKeyDown(event)
+			return
+		}
+		// shift+enter: allow newline (default textarea behavior)
+		// enter without shift: blur to save
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault()
+			;(event.target as HTMLTextAreaElement | null)?.blur()
+		}
+	}
+
 	function handleRowKeyDown(event: KeyboardEvent) {
+		// ignore if the event came from an input or textarea (let them handle their own input)
+		const target = event.target as HTMLElement
+		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
 		if (event.key !== 'Enter' && event.key !== ' ') return
 		event.preventDefault()
 
@@ -301,7 +327,7 @@
 						autocomplete="off"
 						bind:value={editedTitle}
 						onblur={handleTitleBlur}
-						onkeydown={handleKeyDown}
+						onkeydown={handleTitleKeyDown}
 					/>
 					<span class="title-text title-overlay" aria-hidden="true">{editedTitle}</span>
 				</div>
@@ -344,7 +370,7 @@
 					rows="2"
 					bind:value={editedDescription}
 					onblur={handleDescriptionBlur}
-					onkeydown={handleKeyDown}
+					onkeydown={handleDescriptionKeyDown}
 				></textarea>
 
 				<div class="flex flex-wrap items-center gap-2 pl-8">

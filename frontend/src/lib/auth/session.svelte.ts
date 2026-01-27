@@ -1,9 +1,9 @@
 import { browser } from '$app/environment'
 
 /**
- * Access token is stored in memory only (not localStorage).
- * This is intentional for security — the token lives only for the session lifetime.
- * Refresh token is stored in an httpOnly cookie managed by the backend.
+ * access token is stored in memory only (not localStorage).
+ * this is intentional for security — the token lives only for the session lifetime.
+ * refresh token is stored in an httpOnly cookie managed by the backend.
  */
 
 const ACCESS_TOKEN_CHANGED_EVENT = 'auth:token-changed'
@@ -17,8 +17,25 @@ function emitAccessTokenChanged(token: string | null): void {
 	)
 }
 
-/** In-memory access token. Cleared on page refresh (by design). */
+/** in-memory access token. cleared on page refresh (by design). */
 let accessToken = $state<string | null>(null)
+
+/**
+ * auth readiness gate. the API client waits for this before making authenticated requests.
+ * this ensures we don't fire requests before the layout has had a chance to refresh the token.
+ */
+let authReadyResolve: (() => void) | null = null
+export const authReady: Promise<void> = browser
+	? new Promise<void>((resolve) => {
+			authReadyResolve = resolve
+		})
+	: Promise.resolve()
+
+/** called by the layout after auth flow completes (token refreshed or determined unnecessary). */
+export function markAuthReady(): void {
+	authReadyResolve?.()
+	authReadyResolve = null
+}
 
 export function onAccessTokenChanged(handler: (token: string | null) => void): () => void {
 	if (!browser) return () => {}
