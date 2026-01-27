@@ -238,6 +238,27 @@
 	}
 }
 
+@keyframes nokodo-vt-slide-out-right {
+	from {
+		opacity: 1;
+		transform: translateX(0);
+	}
+	to {
+		opacity: 0;
+		transform: translateX(3rem);
+	}
+}
+@keyframes nokodo-vt-slide-in-right {
+	from {
+		opacity: 0;
+		transform: translateX(3rem);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
 /* Match home input choreography (duration-500 ease-in-out) when crossing routes. */
 ::view-transition-group(chat-input) {
 	animation-duration: 500ms;
@@ -313,6 +334,18 @@
 ::view-transition-group(island) {
 	animation-duration: 300ms;
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::view-transition-old(home-button):only-child,
+::view-transition-new(home-button):only-child {
+	overflow: clip;
+	clip-path: inset(0 0 0 -100%);
+}
+::view-transition-old(home-button):only-child {
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-out-right;
+}
+::view-transition-new(home-button):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both nokodo-vt-slide-in-right;
 }
 
 /* During ViewTransitions, keep live backdrop filters from affecting the new/old pages.

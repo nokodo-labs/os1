@@ -181,7 +181,7 @@
 				{#if chrome.island.agentSelector}
 					<div class="agent-selector relative flex min-w-0 items-center gap-2">
 						<button
-							class="flex min-w-0 cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-[clamp(8px,2.5vw,16px)] py-2 transition-all duration-200 hover:bg-white/5 active:scale-[0.98]"
+							class="rounded-pill flex min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent px-[clamp(8px,2.5vw,16px)] py-2 transition-all duration-200 hover:bg-white/5 active:scale-[0.98]"
 							onclick={toggleAgentDropdown}
 							aria-expanded={isAgentDropdownOpen}
 							aria-haspopup="listbox"
@@ -214,7 +214,7 @@
 												chrome.island.agentSelector.selectedAgent}
 										>
 											<button
-												class="flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-2xl border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-white/8"
+												class="rounded-pill flex w-full cursor-pointer flex-col items-start gap-0.5 border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-white/8"
 												style={agent.id ===
 												chrome.island.agentSelector.selectedAgent
 													? 'background-color: var(--accent-bg);'
@@ -279,22 +279,19 @@
 
 			<!-- right: controls + user -->
 			<div class="flex items-center justify-end gap-0 sm:gap-2">
-				<div
-					class="overflow-hidden transition-[max-width,opacity,transform] duration-200 ease-out {isHomeLayout
-						? 'pointer-events-none max-w-0 -translate-x-1 opacity-0'
-						: 'max-w-12 translate-x-0 opacity-100'}"
-				>
+				{#if !isHomeLayout}
 					<button
-						class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+						class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+						style="view-transition-name: home-button"
 						onclick={handleHome}
 						aria-label="home"
 					>
 						<Home className="h-6 w-6" />
 					</button>
-				</div>
+				{/if}
 
 				<button
-					class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+					class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
 					onclick={() => chrome.toggleDock()}
 					aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 					aria-expanded={chrome.isDockOpen}
