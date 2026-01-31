@@ -10,7 +10,8 @@
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
 	import { reminders } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
-	import Pencil from '../icons/Pencil.svelte'
+	import { scale } from 'svelte/transition'
+	import PencilSolid from '../icons/PencilSolid.svelte'
 	import EditReminderListModal from './EditReminderListModal.svelte'
 
 	interface Props {
@@ -128,19 +129,19 @@
 			? 'mt-0'
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
-		<div class="flex min-w-0 items-center gap-2">
-			<ListBullet className="h-5 w-5 text-white/60" />
-			<h2 class="min-w-0 truncate text-lg font-semibold tracking-wide text-white/85">
+		<div class="flex min-w-0 items-center gap-3">
+			<ListBullet className="h-6 w-6 text-white/70" />
+			<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-white/90">
 				lists
 			</h2>
 		</div>
 		<button
 			type="button"
-			class="rounded-circle inline-flex h-9 w-9 items-center justify-center border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white"
+			class="rounded-circle inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white"
 			onclick={handleCreateList}
 			aria-label="create list"
 		>
-			<Plus className="h-5 w-5" />
+			<Plus className="h-6 w-6" />
 		</button>
 	</header>
 
@@ -178,9 +179,10 @@
 
 						{#if openListMenuId === list.id}
 							<div
+								transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 								bind:this={listMenuEl}
 								data-reminders-list-menu
-								class="rounded-box absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+								class="animate-popup-right rounded-box absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
 							>
 								<button
 									type="button"
@@ -191,7 +193,7 @@
 										editListId = list.id
 									}}
 								>
-									<Pencil className="h-4 w-4" />
+									<PencilSolid className="h-4 w-4" />
 									&nbsp; edit
 								</button>
 								<div class="mt-1">

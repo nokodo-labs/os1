@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths'
 	import { apiClient } from '$lib/api/client'
 	import { getSystemStatus } from '$lib/api/system'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import { onMount } from 'svelte'
@@ -108,7 +109,8 @@
 						<form class="space-y-4" onsubmit={onSubmit}>
 							{#if isInitialized === false}
 								<div
-									class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75"
+									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+									role="alert"
 								>
 									setup is required before accounts can be created.
 									{#if consoleOrigin}
@@ -117,7 +119,7 @@
 												href={`http://${consoleOrigin.replace(/^https?:\/\//, '')}`}
 												target="_blank"
 												rel="noreferrer"
-												class="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
+												class="mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
 											>
 												go to console
 											</a>
@@ -126,7 +128,7 @@
 												href={`https://${consoleOrigin.replace(/^https?:\/\//, '')}`}
 												target="_blank"
 												rel="noreferrer"
-												class="mt-2 inline-flex h-10 w-full items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
+												class="mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-full bg-white font-medium text-black hover:bg-white/90"
 											>
 												go to console
 											</a>
@@ -195,12 +197,13 @@
 							</div>
 
 							{#if passwordConfirm.length > 0 && password !== passwordConfirm}
-								<div class="text-sm text-white/55">passwords must match</div>
+								<div class="text-sm text-amber-300/80">passwords must match</div>
 							{/if}
 
 							{#if errorMessage}
 								<div
-									class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75"
+									class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+									role="alert"
 								>
 									{errorMessage}
 								</div>
@@ -209,9 +212,19 @@
 							<button
 								type="submit"
 								disabled={!canSubmit || isSubmitting}
-								class="h-11 w-full rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+								class="interactive inline-flex h-11 w-full items-center justify-center rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-black/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
 							>
-								{isSubmitting ? 'creating account…' : 'sign up'}
+								{#if isSubmitting}
+									<ShimmerText
+										className="inline-block"
+										textColor="rgb(0 0 0 / 1)"
+										waveColor="rgb(0 0 0 / 0.35)"
+									>
+										creating account
+									</ShimmerText>
+								{:else}
+									sign up
+								{/if}
 							</button>
 						</form>
 

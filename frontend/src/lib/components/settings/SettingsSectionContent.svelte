@@ -1,11 +1,13 @@
 <script lang="ts">
-	import AppNotification from '$lib/components/icons/AppNotification.svelte'
-	import Eye from '$lib/components/icons/Eye.svelte'
-	import Lock from '$lib/components/icons/Lock.svelte'
-	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import Terminal from '$lib/components/icons/Terminal.svelte'
-	import User from '$lib/components/icons/User.svelte'
-	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import AppNotificationSolid from '$lib/components/icons/AppNotificationSolid.svelte'
+	import CommandLineSolid from '$lib/components/icons/CommandLineSolid.svelte'
+	import EyeSolid from '$lib/components/icons/EyeSolid.svelte'
+	import LockSolid from '$lib/components/icons/LockSolid.svelte'
+	import SoundHighSolid from '$lib/components/icons/SoundHighSolid.svelte'
+	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
+	import UserCircleSolid from '$lib/components/icons/UserCircleSolid.svelte'
+	import WrenchSolid from '$lib/components/icons/WrenchSolid.svelte'
+	import AccessibilitySettings from '$lib/components/settings/sections/AccessibilitySettings.svelte'
 	import AccountSettings from '$lib/components/settings/sections/AccountSettings.svelte'
 	import AdvancedSettings from '$lib/components/settings/sections/AdvancedSettings.svelte'
 	import AiSettings from '$lib/components/settings/sections/AiSettings.svelte'
@@ -34,42 +36,49 @@
 		{
 			id: 'account',
 			label: 'account',
-			icon: User,
+			icon: UserCircleSolid,
 			description: 'manage your profile, email, and personal information',
 			content: AccountSettings,
 		},
 		{
 			id: 'appearance',
 			label: 'appearance',
-			icon: Eye,
+			icon: EyeSolid,
 			description: 'customize theme, colors, and visual preferences',
 			content: AppearanceSettings,
 		},
 		{
 			id: 'notifications',
 			label: 'notifications',
-			icon: AppNotification,
+			icon: AppNotificationSolid,
 			description: 'configure alerts, sounds, and reminder settings',
 			content: NotificationsSettings,
 		},
 		{
 			id: 'privacy',
 			label: 'privacy & security',
-			icon: Lock,
+			icon: LockSolid,
 			description: 'control your data, permissions, and access settings',
 			content: PrivacySettings,
 		},
 		{
+			id: 'accessibility',
+			label: 'accessibility',
+			icon: SoundHighSolid,
+			description: 'configure haptic feedback and assistive features',
+			content: AccessibilitySettings,
+		},
+		{
 			id: 'ai',
 			label: 'AI & models',
-			icon: Sparkles,
+			icon: SparklesSolid,
 			description: 'customize AI behavior and model preferences',
 			content: AiSettings,
 		},
 		{
 			id: 'advanced',
 			label: 'advanced',
-			icon: Wrench,
+			icon: WrenchSolid,
 			description: 'developer tools and experimental features',
 			content: AdvancedSettings,
 		},
@@ -84,7 +93,7 @@
 			{
 				id: 'debug',
 				label: 'debug',
-				icon: Terminal,
+				icon: CommandLineSolid,
 				description: 'debug-only UI toggles and diagnostics',
 				content: DebugSettings,
 			},

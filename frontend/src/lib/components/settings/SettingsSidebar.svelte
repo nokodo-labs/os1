@@ -2,23 +2,25 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
-	import Cog6 from '$lib/components/icons/Cog6.svelte'
+	import Cog6Solid from '$lib/components/icons/Cog6Solid.svelte'
 	import type { Component } from 'svelte'
 	// icon imports for settings sections
-	import AppNotification from '$lib/components/icons/AppNotification.svelte'
-	import Eye from '$lib/components/icons/Eye.svelte'
-	import Lock from '$lib/components/icons/Lock.svelte'
-	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import Terminal from '$lib/components/icons/Terminal.svelte'
-	import User from '$lib/components/icons/User.svelte'
-	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import AppNotificationSolid from '$lib/components/icons/AppNotificationSolid.svelte'
+	import CommandLineSolid from '$lib/components/icons/CommandLineSolid.svelte'
+	import EyeSolid from '$lib/components/icons/EyeSolid.svelte'
+	import LockSolid from '$lib/components/icons/LockSolid.svelte'
+	import SoundHighSolid from '$lib/components/icons/SoundHighSolid.svelte'
+	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
+	import UserCircleSolid from '$lib/components/icons/UserCircleSolid.svelte'
+	import WrenchSolid from '$lib/components/icons/WrenchSolid.svelte'
 
 	interface Props {
 		selectedSection: string | null
 		isMobile?: boolean
+		rowIconBackground?: boolean
 	}
 
-	let { selectedSection, isMobile = false }: Props = $props()
+	let { selectedSection, isMobile = false, rowIconBackground = false }: Props = $props()
 
 	interface SettingsSection {
 		id: string
@@ -31,43 +33,49 @@
 		{
 			id: 'account',
 			label: 'account',
-			icon: User,
+			icon: UserCircleSolid,
 			description: 'profile, email, and personal info',
 		},
 		{
 			id: 'appearance',
 			label: 'appearance',
-			icon: Eye,
+			icon: EyeSolid,
 			description: 'theme, colors, and visual preferences',
 		},
 		{
 			id: 'notifications',
 			label: 'notifications',
-			icon: AppNotification,
+			icon: AppNotificationSolid,
 			description: 'alerts, sounds, and reminders',
 		},
 		{
 			id: 'privacy',
 			label: 'privacy & security',
-			icon: Lock,
+			icon: LockSolid,
 			description: 'data, permissions, and access control',
+		},
+		{
+			id: 'accessibility',
+			label: 'accessibility',
+			icon: SoundHighSolid,
+			description: 'haptic feedback and assistive features',
 		},
 		{
 			id: 'ai',
 			label: 'AI & models',
-			icon: Sparkles,
+			icon: SparklesSolid,
 			description: 'model preferences and behavior',
 		},
 		{
 			id: 'advanced',
 			label: 'advanced',
-			icon: Wrench,
+			icon: WrenchSolid,
 			description: 'developer tools and experimental features',
 		},
 		{
 			id: 'debug',
 			label: 'debug',
-			icon: Terminal,
+			icon: CommandLineSolid,
 			description: 'debug-only UI toggles and diagnostics',
 		},
 	]
@@ -89,7 +97,7 @@
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
 		<div class="flex min-w-0 items-center gap-2">
-			<Cog6 className="h-5 w-5 text-white/60" />
+			<Cog6Solid className="h-5 w-5 text-white/60" />
 			<h2 class="min-w-0 truncate text-lg font-semibold tracking-wide text-white/85">
 				settings
 			</h2>
@@ -118,7 +126,9 @@
 					}}
 				>
 					<span
-						class="rounded-pill flex h-8 w-8 items-center justify-center bg-white/8 text-white/80"
+						class="rounded-pill flex h-8 w-8 items-center justify-center text-white/80 {rowIconBackground
+							? 'bg-white/8'
+							: ''}"
 					>
 						<section.icon className="h-5 w-5" />
 					</span>

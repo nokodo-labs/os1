@@ -1,7 +1,7 @@
 <script lang="ts">
-	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
+	import CheckBoxSolid from '$lib/components/icons/CheckBoxSolid.svelte'
 	import EllipsisVertical from '$lib/components/icons/EllipsisVertical.svelte'
+	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 
 	type Leading =
@@ -22,66 +22,67 @@
 		onSelect: () => void
 		onPrefetch?: () => void
 		onMenu?: (event: MouseEvent) => void
+		rowIconBackground?: boolean
 	}
 
-	let { title, count = null, selected, leading, onSelect, onPrefetch, onMenu }: Props = $props()
+	let {
+		title,
+		count = null,
+		selected,
+		leading: leadingInfo,
+		onSelect,
+		onPrefetch,
+		onMenu,
+		rowIconBackground = false,
+	}: Props = $props()
 </script>
 
-<div
-	role="button"
-	tabindex="0"
-	class="group rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-3 py-2.5 text-left transition-all duration-200 hover:border-white/10 hover:bg-white/5 {selected
-		? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
-		: ''}"
-	style={selected
-		? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
-		: ''}
-	onmouseenter={() => onPrefetch?.()}
-	onclick={onSelect}
-	onkeydown={(event) => {
-		if (event.key !== 'Enter' && event.key !== ' ') return
-		event.preventDefault()
-		onSelect()
-	}}
+<SidebarListItem
+	{selected}
+	{onSelect}
+	{onPrefetch}
+	actionsVisibility={device.isTouch ? 'always' : 'hover'}
+	showChevron={true}
 >
-	{#if leading.type === 'checkbox'}
-		<span
-			class="rounded-pill flex h-8 w-8 items-center justify-center bg-white/8 text-white/80"
-		>
-			<CheckBox className="h-5 w-5" />
-		</span>
-	{:else}
-		<span
-			class="rounded-pill flex h-8 w-8 items-center justify-center text-white"
-			style:background-color={leading.color ?? 'rgba(255,255,255,0.08)'}
-		>
-			<span class="text-sm">{leading.emoji}</span>
-		</span>
-	{/if}
+	{#snippet leading()}
+		{#if leadingInfo.type === 'checkbox'}
+			<span
+				class="rounded-pill flex h-8 w-8 items-center justify-center text-white/80 {rowIconBackground
+					? 'bg-white/8'
+					: ''}"
+			>
+				<CheckBoxSolid className="h-5 w-5" />
+			</span>
+		{:else}
+			<span
+				class="rounded-pill flex h-8 w-8 items-center justify-center text-white"
+				style:background-color={leadingInfo.color ?? 'rgba(255,255,255,0.08)'}
+			>
+				<span class="text-sm">{leadingInfo.emoji}</span>
+			</span>
+		{/if}
+	{/snippet}
 
-	<span class="flex min-w-0 flex-1 items-center gap-2">
+	<span class="flex min-w-0 items-center gap-2">
 		<span class="min-w-0 truncate text-[0.95rem] font-medium text-white/90">{title}</span>
 		{#if count !== null && count > 0}
 			<span class="text-xs text-white/55">{count}</span>
 		{/if}
 	</span>
 
-	{#if onMenu}
-		<button
-			type="button"
-			class="rounded-circle inline-flex h-8 w-8 items-center justify-center border border-transparent bg-transparent text-white/65 transition-all duration-150 hover:border-white/10 hover:bg-white/5 hover:text-white {device.isTouch ||
-			!device.hasHover
-				? 'opacity-100'
-				: 'opacity-0 group-hover:opacity-100'}"
-			aria-label="list options"
-			onclick={(event) => {
-				event.stopPropagation()
-				onMenu(event)
-			}}
-		>
-			<EllipsisVertical className="h-4 w-4" />
-		</button>
-	{/if}
-
-	<ChevronRight className="h-4 w-4 text-white/35 transition-colors group-hover:text-white/55" />
-</div>
+	{#snippet actions()}
+		{#if onMenu}
+			<button
+				type="button"
+				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/65 transition-all duration-150 hover:border-white/10 hover:bg-white/5 hover:text-white"
+				aria-label="list options"
+				onclick={(event) => {
+					event.stopPropagation()
+					onMenu(event)
+				}}
+			>
+				<EllipsisVertical className="h-4 w-4" />
+			</button>
+		{/if}
+	{/snippet}
+</SidebarListItem>

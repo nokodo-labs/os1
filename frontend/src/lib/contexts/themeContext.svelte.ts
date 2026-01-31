@@ -88,8 +88,8 @@ export function createThemeContext(): ThemeContext {
 		return preferences.startSync()
 	})
 
-	const mode = $derived(preferences.themeMode)
-	const accent = $derived(preferences.accent)
+	const mode = $derived(preferences.data.appearance.themeMode ?? 'system')
+	const accent = $derived(preferences.data.appearance.accent ?? 'blue')
 	const resolvedMode = $derived.by((): 'light' | 'dark' => {
 		if (mode === 'dark') return 'dark'
 		if (mode === 'light') return 'light'
@@ -117,13 +117,13 @@ export function createThemeContext(): ThemeContext {
 			return mode
 		},
 		setMode(newMode: ThemeMode) {
-			void preferences.setAppearance({ themeMode: newMode })
+			void preferences.update('appearance', { themeMode: newMode })
 		},
 		get accent() {
 			return accent
 		},
 		setAccent(newAccent: AccentColor) {
-			void preferences.setAppearance({ accent: newAccent })
+			void preferences.update('appearance', { accent: newAccent })
 		},
 		get resolvedMode() {
 			return resolvedMode

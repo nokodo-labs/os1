@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import Home from '$lib/components/icons/Home.svelte'
+	import HomeSolid from '$lib/components/icons/HomeSolid.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
 	const status = $derived.by(() => page.status ?? 500)
@@ -36,8 +36,7 @@
 	<div
 		class="liquid-glass liquid-glass--frosted rounded-container w-full max-w-lg overflow-hidden shadow-[0_30px_90px_rgba(0,0,0,0.45)]"
 	>
-		<span class="liquid-glass__highlight" aria-hidden="true"></span>
-		<div class="liquid-glass__content px-7 py-7">
+		<div class="relative z-10 px-7 py-7">
 			<div class="text-center">
 				<div class="text-[4.75rem] leading-none font-semibold tracking-tight text-white/90">
 					{status}
@@ -53,7 +52,7 @@
 					onclick={() => void goto(resolve('/'), { keepFocus: true, noScroll: true })}
 					aria-label="go home"
 				>
-					<Home
+					<HomeSolid
 						className="size-4 text-white/70 transition-colors duration-150 group-hover:text-white/85"
 					/>
 					go home

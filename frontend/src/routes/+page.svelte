@@ -17,7 +17,7 @@
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
-	import Cog6 from '$lib/components/icons/Cog6.svelte'
+	import Cog6Solid from '$lib/components/icons/Cog6Solid.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
@@ -132,7 +132,7 @@
 				id: 'settings',
 				title: 'settings',
 				subtitle: 'open preferences',
-				icon: Cog6,
+				icon: Cog6Solid,
 			},
 			{
 				id: 'archived-chats',

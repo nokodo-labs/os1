@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
 
@@ -79,7 +80,11 @@
 				disabled={isSaving}
 				onclick={onSave}
 			>
-				{isSaving ? 'saving…' : 'save'}
+				{#if isSaving}
+					<ShimmerText className="inline-block">saving</ShimmerText>
+				{:else}
+					save
+				{/if}
 			</button>
 		</div>
 	</div>

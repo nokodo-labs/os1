@@ -9,8 +9,10 @@ type AppearancePreferences = components['schemas']['AppearancePreferences']
 type AIPreferences = components['schemas']['AIPreferences']
 type NotificationPreferences = components['schemas']['NotificationPreferences']
 type PrivacyPreferences = components['schemas']['PrivacyPreferences']
+type AccessibilityPreferences = components['schemas']['AccessibilityPreferences']
 
 export type {
+	AccessibilityPreferences,
 	AIPreferences,
 	AppearancePreferences,
 	NotificationPreferences,
@@ -22,245 +24,225 @@ export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
 export type AccentColor = NonNullable<AppearancePreferences['accent']>
 export type BackgroundType = NonNullable<AppearancePreferences['background']>
 
-const DEFAULT_THEME_MODE: ThemeMode = 'system'
-const DEFAULT_ACCENT: AccentColor = 'purple'
-const DEFAULT_BACKGROUND: BackgroundType = 'darkveil'
-
-const STORAGE_PREFIX = 'user-preferences:'
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
+type Resolved = {
+	appearance: Required<AppearancePreferences>
+	ai: Required<AIPreferences>
+	notifications: Required<NotificationPreferences>
+	privacy: Required<PrivacyPreferences>
+	accessibility: Required<AccessibilityPreferences>
 }
 
-function normalizePreferences(value: unknown): UserPreferences {
-	// backend validates shape; on the client we only need to ensure we don't
-	// hydrate from non-objects (e.g., corrupted localStorage)
-	if (!isPlainObject(value)) return {}
-	return value as UserPreferences
+const STORAGE_KEY = 'user-preferences:'
+
+// ────────────────────────────────────────────────────────────
+// utils
+// ────────────────────────────────────────────────────────────
+
+function isObject(v: unknown): v is Record<string, unknown> {
+	return v !== null && typeof v === 'object' && !Array.isArray(v)
 }
 
-function readStored(userId: string): UserPreferences {
+function merge<T extends Record<string, unknown>>(a: T, b: Partial<T>): T {
+	const out = { ...a }
+	for (const k in b) {
+		const bVal = b[k]
+		if (bVal === undefined) continue
+		const aVal = a[k]
+		out[k] =
+			isObject(aVal) && isObject(bVal)
+				? merge(aVal, bVal as Partial<typeof aVal>)
+				: (bVal as T[typeof k])
+	}
+	return out
+}
+
+function readStorage(userId: string): UserPreferences {
 	if (!browser) return {}
 	try {
-		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${userId}`)
+		const raw = localStorage.getItem(`${STORAGE_KEY}${userId}`)
 		if (!raw) return {}
-		return normalizePreferences(JSON.parse(raw) as unknown)
+		const parsed = JSON.parse(raw)
+		return isObject(parsed) ? (parsed as UserPreferences) : {}
 	} catch {
 		return {}
 	}
 }
 
-function writeStored(userId: string, prefs: UserPreferences): void {
+function writeStorage(userId: string, prefs: UserPreferences): void {
 	if (!browser) return
 	try {
-		window.localStorage.setItem(`${STORAGE_PREFIX}${userId}`, JSON.stringify(prefs))
+		localStorage.setItem(`${STORAGE_KEY}${userId}`, JSON.stringify(prefs))
 	} catch {
-		// ignore
+		// ignore storage errors (quota, etc)
 	}
 }
 
-class PreferencesStore {
-	#data = $state<UserPreferences>({})
-	loading = $state(false)
-	error = $state<string | null>(null)
+// ────────────────────────────────────────────────────────────
+// store
+// ────────────────────────────────────────────────────────────
 
-	#lastUserId: string | null = null
+function createPreferencesStore() {
+	let raw = $state<UserPreferences>({})
+	let loading = $state(false)
+	let error = $state<string | null>(null)
+	let userId = $state<string | null>(null)
 
-	get data() {
-		return this.#data
-	}
+	// defaults: admin settings → hardcoded fallbacks
+	// only ui.default_theme and ai.default_agent_id have admin settings
+	const defaults: Resolved = $derived({
+		appearance: {
+			themeMode: (settingsState.data?.ui?.default_theme as ThemeMode) ?? 'system',
+			accent: 'purple',
+			background: 'darkveil',
+		},
+		ai: {
+			defaultAgentId: settingsState.data?.ai?.default_agent_id ?? null,
+		},
+		notifications: {
+			enabled: true,
+			sound: true,
+		},
+		privacy: {
+			saveHistory: true,
+			shareUsageData: false,
+		},
+		accessibility: {
+			hapticFeedback: true,
+		},
+	})
 
-	// ------------------------------------------------------------
-	// derived getters (with settings fallback)
-	// ------------------------------------------------------------
+	// user preferences → defaults (which already include admin settings)
+	const data: Resolved = $derived(merge(structuredClone(defaults), raw as Partial<Resolved>))
 
-	get themeMode(): ThemeMode {
-		const pref = this.#data.appearance?.themeMode
-		if (pref) return pref
-		const settingsDefault = settingsState.data?.ui?.default_theme
-		if (
-			settingsDefault === 'light' ||
-			settingsDefault === 'dark' ||
-			settingsDefault === 'system'
-		) {
-			return settingsDefault
-		}
-		return DEFAULT_THEME_MODE
-	}
+	// ──────────────────────────────────────────────────────
+	// auto-sync with session
+	// ──────────────────────────────────────────────────────
 
-	get accent(): AccentColor {
-		return this.#data.appearance?.accent ?? DEFAULT_ACCENT
-	}
+	function startSync(): () => void {
+		// $effect.root lets us run effects outside component context
+		const cleanup = $effect.root(() => {
+			$effect(() => {
+				const user = session.currentUser
 
-	get background(): BackgroundType {
-		return this.#data.appearance?.background ?? DEFAULT_BACKGROUND
-	}
+				if (!user) {
+					raw = {}
+					userId = null
+					error = null
+					return
+				}
 
-	get defaultAgentId(): string | null {
-		const pref = this.#data.ai?.defaultAgentId
-		if (pref) return pref
-		return settingsState.data?.ai?.default_agent_id ?? null
-	}
+				// user changed
+				if (userId !== user.id) {
+					userId = user.id
 
-	get notificationsEnabled(): boolean {
-		return this.#data.notifications?.enabled ?? true
-	}
+					// instant hydrate from localStorage
+					let stored = readStorage(user.id)
 
-	get notificationSound(): boolean {
-		return this.#data.notifications?.sound ?? true
-	}
+					// session preferences override
+					if (user.preferences) {
+						stored = user.preferences
+						writeStorage(user.id, stored)
+					}
 
-	get saveHistory(): boolean {
-		return this.#data.privacy?.saveHistory ?? true
-	}
+					raw = stored
 
-	get shareUsageData(): boolean {
-		return this.#data.privacy?.shareUsageData ?? false
-	}
-
-	startSync = (): (() => void) => {
-		// Hydrate on start and whenever user changes
-		const user = session.currentUser
-		if (user && this.#lastUserId !== user.id) {
-			this.#lastUserId = user.id
-			this.#data = readStored(user.id)
-			void this.refresh()
-		} else if (!user) {
-			this.#lastUserId = null
-			this.#data = {}
-			this.loading = false
-			this.error = null
-		}
-		return () => {
-			// cleanup if needed
-		}
-	}
-
-	refresh = async (): Promise<void> => {
-		const user = session.currentUser
-		if (!user) return
-		this.loading = true
-		this.error = null
-		try {
-			const { data, error } = await apiClient().GET('/v1/users/{user_id}', {
-				params: { path: { user_id: user.id } },
+					// then fetch fresh from API (no await, just fire)
+					refresh()
+				}
 			})
-			if (error || !data) {
-				this.error = 'could not load preferences'
-				return
-			}
-			const next = (data.preferences ?? {}) as UserPreferences
-			this.#data = next
-			session.currentUser = { ...data }
-			writeStored(user.id, next)
-		} finally {
-			this.loading = false
-		}
-	}
-
-	setAppearance = async (updates: Partial<AppearancePreferences>): Promise<boolean> => {
-		const next: UserPreferences = {
-			...this.#data,
-			appearance: { ...this.#data.appearance, ...updates },
-		}
-		return await this.#save(next)
-	}
-
-	setAI = async (updates: Partial<AIPreferences>): Promise<boolean> => {
-		const next: UserPreferences = {
-			...this.#data,
-			ai: { ...this.#data.ai, ...updates },
-		}
-		return await this.#save(next)
-	}
-
-	setNotifications = async (updates: Partial<NotificationPreferences>): Promise<boolean> => {
-		const next: UserPreferences = {
-			...this.#data,
-			notifications: { ...this.#data.notifications, ...updates },
-		}
-		return await this.#save(next)
-	}
-
-	setPrivacy = async (updates: Partial<PrivacyPreferences>): Promise<boolean> => {
-		const next: UserPreferences = {
-			...this.#data,
-			privacy: { ...this.#data.privacy, ...updates },
-		}
-		return await this.#save(next)
-	}
-
-	#save = async (next: UserPreferences): Promise<boolean> => {
-		const user = session.currentUser
-		if (!user) return false
-		this.error = null
-		this.#data = next
-		writeStored(user.id, next)
-		session.currentUser = { ...user, preferences: next }
-
-		const { data, error } = await apiClient().PATCH('/v1/users/{user_id}', {
-			params: { path: { user_id: user.id } },
-			body: { preferences: next },
 		})
 
-		if (error || !data) {
-			this.error = 'could not save preferences'
+		return cleanup
+	}
+
+	// ──────────────────────────────────────────────────────
+	// api
+	// ──────────────────────────────────────────────────────
+
+	async function refresh(): Promise<void> {
+		const uid = userId
+		if (!uid) return
+
+		loading = true
+		error = null
+
+		try {
+			const { data: res, error: err } = await apiClient().GET('/v1/users/{user_id}', {
+				params: { path: { user_id: uid } },
+			})
+
+			if (err || !res) {
+				error = 'could not load preferences'
+				return
+			}
+
+			const fetched = (res.preferences ?? {}) as UserPreferences
+			raw = fetched
+			writeStorage(uid, fetched)
+			session.currentUser = { ...res }
+		} finally {
+			loading = false
+		}
+	}
+
+	async function update<K extends keyof UserPreferences>(
+		section: K,
+		updates: Partial<NonNullable<UserPreferences[K]>>
+	): Promise<boolean> {
+		const uid = userId
+		if (!uid) return false
+
+		// snapshot for rollback
+		const prevRaw = raw
+
+		// optimistic
+		const nextRaw: UserPreferences = {
+			...raw,
+			[section]: { ...(raw[section] ?? {}), ...updates },
+		}
+		raw = nextRaw
+		writeStorage(uid, nextRaw)
+		error = null
+
+		const { data: res, error: err } = await apiClient().PATCH('/v1/users/{user_id}', {
+			params: { path: { user_id: uid } },
+			body: { preferences: nextRaw },
+		})
+
+		if (err || !res) {
+			// rollback
+			raw = prevRaw
+			writeStorage(uid, prevRaw)
+			error = 'could not save preferences'
 			return false
 		}
 
-		const saved = (data.preferences ?? {}) as UserPreferences
-		this.#data = saved
-		session.currentUser = { ...data, preferences: saved }
-		writeStored(user.id, saved)
+		// server is truth
+		const saved = (res.preferences ?? {}) as UserPreferences
+		raw = saved
+		writeStorage(uid, saved)
+		session.currentUser = { ...res }
+
 		return true
 	}
 
-	set(key: 'appearance.themeMode', value: ThemeMode): Promise<boolean>
-	set(key: 'appearance.accent', value: AccentColor): Promise<boolean>
-	set(key: 'appearance.background', value: AppearancePreferences['background']): Promise<boolean>
-	set(key: string, value: unknown): Promise<boolean>
-	async set(key: string, value: unknown): Promise<boolean> {
-		// compat shim for the old "dot key" style.
-		// only keep the keys that are used in-app.
-		switch (key) {
-			case 'appearance.themeMode': {
-				if (value === 'light' || value === 'dark' || value === 'system') {
-					return await this.setAppearance({ themeMode: value })
-				}
-				return false
-			}
-			case 'appearance.accent': {
-				if (typeof value === 'string') {
-					return await this.setAppearance({ accent: value as AccentColor })
-				}
-				return false
-			}
-			case 'appearance.background': {
-				if (typeof value === 'string' || value === null) {
-					return await this.setAppearance({
-						background: value as AppearancePreferences['background'],
-					})
-				}
-				return false
-			}
-			default:
-				return false
-		}
-	}
+	return {
+		// state (reactive getters)
+		get data() {
+			return data
+		},
+		get loading() {
+			return loading
+		},
+		get error() {
+			return error
+		},
 
-	hydrateFromUser = (user: { id: string; preferences?: UserPreferences | null } | null): void => {
-		if (!user) {
-			this.#data = {}
-			this.loading = false
-			this.error = null
-			return
-		}
-		this.#data = readStored(user.id)
-		if (user.preferences) {
-			this.#data = user.preferences
-			writeStored(user.id, user.preferences)
-		}
+		// methods
+		startSync,
+		refresh,
+		update,
 	}
 }
 
-export const preferences = new PreferencesStore()
+export const preferences = createPreferencesStore()

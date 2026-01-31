@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { browser } from '$app/environment'
 	import { goto, onNavigate } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
@@ -17,7 +16,7 @@
 	import { createThemeContext, setThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { initApp } from '$lib/init'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
-	import { device, initDevice } from '$lib/stores/device.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -69,8 +68,7 @@
 		})
 	})
 
-	// SSG: safe to init synchronously at module eval time when in browser.
-	if (browser) initDevice()
+	// device is initialized via initApp() onMount to avoid hydration mismatch
 
 	// initialize sidebar context
 	createSidebarContext()
@@ -88,7 +86,7 @@
 	setThemeContext(theme)
 
 	// background is directly reactive from the store
-	const currentBackground = $derived(preferences.background)
+	const currentBackground = $derived(preferences.data.appearance.background ?? 'lightrays')
 
 	let { children } = $props()
 

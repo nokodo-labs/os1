@@ -58,8 +58,7 @@
 			aria-modal="true"
 			aria-label={title}
 		>
-			<span class="liquid-glass__highlight" aria-hidden="true"></span>
-			<div class="liquid-glass__content flex max-h-[calc(100vh-2rem)] flex-col p-6">
+			<div class="relative z-10 flex max-h-[calc(100vh-2rem)] flex-col p-6">
 				<header class="mb-5">
 					<div class="text-lg font-semibold text-white/95">{title}</div>
 					{#if description}

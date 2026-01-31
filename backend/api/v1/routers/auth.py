@@ -56,7 +56,7 @@ async def login_access_token(
 	if not user:
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Incorrect email or password",
+			detail="incorrect email or password",
 		)
 
 	token_pair = await auth_service.create_token_pair(user)

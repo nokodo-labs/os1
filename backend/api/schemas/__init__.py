@@ -8,6 +8,7 @@ from api.schemas.message import Message, MessageCreate
 from api.schemas.model import Model, ModelCreate
 from api.schemas.notification import Notification
 from api.schemas.preferences import (
+	AccessibilityPreferences,
 	AIPreferences,
 	AppearancePreferences,
 	NotificationPreferences,
@@ -25,6 +26,7 @@ from api.schemas.user import User, UserCreate, UserUpdate
 
 
 __all__ = [
+	"AccessibilityPreferences",
 	"AIPreferences",
 	"AppearancePreferences",
 	"Agent",

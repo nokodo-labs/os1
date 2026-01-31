@@ -8,12 +8,13 @@
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
-	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import PencilSolid from '$lib/components/icons/PencilSolid.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -298,7 +299,7 @@
 													chat.handleEditMessage(item.message.id)}
 												ariaLabel="edit message"
 											>
-												<Pencil className="h-4 w-4" strokeWidth="2" />
+												<PencilSolid className="h-4 w-4" />
 											</MessageActionButton>
 											<MessageActionButton
 												onclick={() =>
@@ -585,8 +586,7 @@
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
-			<span class="liquid-glass__highlight" aria-hidden="true"></span>
-			<div class="liquid-glass__content">
+			<div class="relative z-10">
 				<div class="text-lg font-semibold text-white/90">delete message?</div>
 				<div class="mt-2 text-sm text-white/60">{chat.confirmDeleteMessage.preview}</div>
 
@@ -636,7 +636,11 @@
 							})()
 						}}
 					>
-						{chat.isDeletingMessage ? 'deleting…' : 'delete'}
+						{#if chat.isDeletingMessage}
+							<ShimmerText className="inline-block">deleting</ShimmerText>
+						{:else}
+							delete
+						{/if}
 					</button>
 				</div>
 			</div>

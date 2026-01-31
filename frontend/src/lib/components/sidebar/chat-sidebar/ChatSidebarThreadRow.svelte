@@ -1,13 +1,16 @@
 <script lang="ts">
+	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
 
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
-	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import PencilSolid from '$lib/components/icons/PencilSolid.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import { scale } from 'svelte/transition'
 
 	export let thread: Thread
 	export let selected: boolean
@@ -22,27 +25,19 @@
 	export let onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
 </script>
 
-<div class="group/chat relative min-w-0" role="listitem" onmouseenter={() => onPrefetch(thread.id)}>
-	<div
-		class="rounded-container relative flex cursor-pointer items-center justify-between gap-2 border border-transparent bg-transparent px-4 py-2 pr-12 text-left text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5 {selected
-			? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
-			: ''}"
-		style={selected
-			? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
-			: ''}
-		onclick={async () => {
+<div class="group/chat relative min-w-0" role="listitem">
+	<SidebarListItem
+		{selected}
+		radiusClass="rounded-container"
+		paddingClass="px-4 py-2"
+		className="gap-2 text-white"
+		onPrefetch={() => onPrefetch(thread.id)}
+		onSelect={async () => {
 			await onOpenThread(thread.id)
 		}}
-		role="button"
-		tabindex="0"
-		onkeydown={async (e) => {
-			if (e.key === 'Enter' || e.key === ' ') {
-				e.preventDefault()
-				await onOpenThread(thread.id)
-			}
-		}}
+		actionsVisibility={device.isTouch ? 'always' : 'hover'}
 	>
-		<div class="min-w-0 flex-1 overflow-hidden">
+		<div class="min-w-0 overflow-hidden">
 			<div class="flex items-center gap-2">
 				<span class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap">
 					{thread.title || 'untitled chat'}
@@ -66,76 +61,79 @@
 			</div>
 		</div>
 
-		<button
-			type="button"
-			class="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-transparent bg-transparent text-white/50 opacity-0 transition-all duration-200 group-hover/chat:opacity-100 hover:bg-white/10 hover:text-white"
-			onclick={(e) => {
-				e.stopPropagation()
-				onToggleMenu(thread.id)
-			}}
-			aria-label="thread actions"
-		>
-			<EllipsisHorizontal className="h-4 w-4" />
-		</button>
-
-		{#if openThreadMenuId === thread.id}
-			<div
-				data-thread-menu
-				class="liquid-metal rounded-container absolute top-full right-2 z-50 mt-2 w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+		{#snippet actions()}
+			<button
+				type="button"
+				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/50 transition-all duration-200 hover:bg-white/10 hover:text-white"
+				onclick={(e) => {
+					e.stopPropagation()
+					onToggleMenu(thread.id)
+				}}
+				aria-label="thread actions"
 			>
-				<button
-					type="button"
-					class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-					onclick={(e) => {
-						e.stopPropagation()
-						onCloseMenu()
-						modals.open('share-resource', {
-							resource: 'thread',
-							id: thread.id,
-							title: thread.title ?? null,
-						})
+				<EllipsisHorizontal className="h-4 w-4" />
+			</button>
+		{/snippet}
+	</SidebarListItem>
+
+	{#if openThreadMenuId === thread.id}
+		<div
+			transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+			data-thread-menu
+			class="animate-popup-right liquid-metal rounded-container absolute top-full right-2 z-50 mt-2 w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+		>
+			<button
+				type="button"
+				class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				onclick={(e) => {
+					e.stopPropagation()
+					onCloseMenu()
+					modals.open('share-resource', {
+						resource: 'thread',
+						id: thread.id,
+						title: thread.title ?? null,
+					})
+				}}
+			>
+				<Share className="h-4 w-4" />
+				share
+			</button>
+			<button
+				type="button"
+				class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				onclick={(e) => {
+					e.stopPropagation()
+					onCloseMenu()
+					onRequestEdit(thread)
+				}}
+			>
+				<PencilSolid className="h-4 w-4" />
+				edit
+			</button>
+			<button
+				type="button"
+				class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				onclick={(e) => {
+					e.stopPropagation()
+					onCloseMenu()
+					console.log('thread action', 'archive', thread.id)
+				}}
+			>
+				<ArchiveBox className="h-4 w-4" />
+				archive
+			</button>
+			<div class="my-1 h-px w-full bg-white/10"></div>
+			<div class="mt-1">
+				<DeleteButton
+					confirm={true}
+					stopPropagation={true}
+					modalText={{
+						title: 'delete chat?',
+						description: thread.title || 'untitled chat',
 					}}
-				>
-					<Share className="h-4 w-4" />
-					share
-				</button>
-				<button
-					type="button"
-					class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-					onclick={(e) => {
-						e.stopPropagation()
-						onCloseMenu()
-						onRequestEdit(thread)
-					}}
-				>
-					<Pencil className="h-4 w-4" />
-					edit
-				</button>
-				<button
-					type="button"
-					class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-					onclick={(e) => {
-						e.stopPropagation()
-						onCloseMenu()
-						console.log('thread action', 'archive', thread.id)
-					}}
-				>
-					<ArchiveBox className="h-4 w-4" />
-					archive
-				</button>
-				<div class="my-1 h-px w-full bg-white/10"></div>
-				<div class="mt-1">
-					<DeleteButton
-						confirm={true}
-						stopPropagation={true}
-						modalText={{
-							title: 'delete chat?',
-							description: thread.title || 'untitled chat',
-						}}
-						onDelete={() => onDeleteThread(thread)}
-					/>
-				</div>
+					onDelete={() => onDeleteThread(thread)}
+				/>
 			</div>
-		{/if}
-	</div>
+		</div>
+	{/if}
 </div>

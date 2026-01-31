@@ -1,10 +1,13 @@
 @theme {
+	/* canonical liquid glass - one set of values for all modes */
 	--lg-blur: 4px;
-	--lg-saturate: 1.05;
-	--lg-bg: rgba(255, 255, 255, 0.02);
-	--lg-border: rgba(255, 255, 255, 0.06);
-	--lg-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+	--lg-bg: rgba(255, 255, 255, 0.016);
 
+	/* gradient border colors */
+	--lg-border-start: rgba(57, 57, 57, 0.21);
+	--lg-border-end: rgba(151, 151, 151, 0.35);
+
+	/* frosted variant */
 	--lg-frost-blur: 24px;
 	--lg-frost-saturate: 1.15;
 	--lg-frost-bg-light: rgba(255, 255, 255, 0.55);
@@ -14,28 +17,94 @@
 	--lg-frost-shadow: 0 8px 40px rgba(0, 0, 0, 0.28);
 
 	--lg-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+	/* shadows - matching the website exactly */
+	--lg-box-shadow-1: 0 8px 32px rgba(0, 0, 0, 0.15);
+	--lg-box-shadow-2: 0 2px 8px rgba(0, 0, 0, 0.05);
+	--lg-box-shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.106);
+	--lg-box-shadow-inset-bottom: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+
+	/* top highlight gradient */
+	--lg-highlight-center: rgba(255, 255, 255, 0.18);
+	--lg-highlight: linear-gradient(90deg, transparent, var(--lg-highlight-center), transparent);
 }
 
 .liquid-glass {
 	position: relative;
-	isolation: isolate;
+	overflow: visible;
 	background: var(--lg-bg);
-	border: 1px solid var(--lg-border);
-	box-shadow: var(--lg-shadow);
-	backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
-	-webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+	border: none;
+	backdrop-filter: blur(var(--lg-blur));
+	-webkit-backdrop-filter: blur(var(--lg-blur));
+	box-shadow:
+		var(--lg-box-shadow-1), var(--lg-box-shadow-2), var(--lg-box-shadow-inset-top),
+		var(--lg-box-shadow-inset-bottom);
 	transition:
 		background var(--lg-transition),
-		border-color var(--lg-transition),
 		box-shadow var(--lg-transition);
+}
+
+.liquid-glass > * {
+	position: relative;
+	z-index: 1;
+}
+
+/* gradient border via mask-composite */
+.liquid-glass::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	border-radius: inherit;
+	padding: 1px;
+	background: linear-gradient(180deg, var(--lg-border-start) 1%, var(--lg-border-end) 100%);
+	mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	mask-composite: exclude;
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	pointer-events: none;
+}
+
+/* highlight (masked to the border so it works for circles/any radius) */
+.liquid-glass::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	border-radius: inherit;
+	padding: 1px;
+	background: var(--lg-highlight);
+	mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	mask-composite: exclude;
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	pointer-events: none;
+}
+
+.liquid-glass--clip {
+	overflow: hidden;
+}
+
+/* focus mode: stronger highlight + brighter borders */
+.liquid-glass--focus {
+	--lg-highlight-center: rgba(255, 255, 255, 0.42);
+	--lg-border-start: rgba(120, 120, 120, 0.35);
+	--lg-border-end: rgba(200, 200, 200, 0.5);
+	--lg-bg: rgba(255, 255, 255, 0.03);
 }
 
 .liquid-glass--frosted {
 	--lg-blur: var(--lg-frost-blur);
-	--lg-saturate: var(--lg-frost-saturate);
 	--lg-bg: var(--lg-frost-bg-light);
 	--lg-border: var(--lg-frost-border-light);
-	--lg-shadow: var(--lg-frost-shadow);
 	color: #1a1a1a;
 }
 
@@ -43,16 +112,27 @@
 	.liquid-glass--frosted {
 		--lg-bg: var(--lg-frost-bg-dark);
 		--lg-border: var(--lg-frost-border-dark);
-		--lg-shadow: 0 10px 52px rgba(0, 0, 0, 0.45);
 		color: #fff;
 	}
 }
 
 :is(.dark) .liquid-glass--frosted {
 	--lg-bg: var(--lg-frost-bg-dark);
-	--lg-border: var(--lg-frost-border-dark);
-	--lg-shadow: 0 10px 52px rgba(0, 0, 0, 0.45);
+	--lg-border: var(--lg-frost-border-light);
 	color: #fff;
+}
+
+/* frosted variant needs a solid border, not gradient */
+.liquid-glass--frosted::before {
+	background: none;
+	border: 1px solid var(--lg-border);
+	padding: 0;
+	mask: none;
+	-webkit-mask: none;
+}
+
+.liquid-glass--frosted::after {
+	content: none;
 }
 
 @supports not (backdrop-filter: blur(1px)) {

@@ -24,24 +24,24 @@
 
 	// reactive getters from the typed store
 	const selectedBackground = $derived.by((): BackgroundType => {
-		const bg = preferences.background
+		const bg = preferences.data.appearance.background
 		// background can be disabled via the admin debug toggle. keep the picker usable.
-		return bg === 'none' ? 'darkveil' : bg
+		return bg === 'none' || bg === null ? 'lightrays' : bg
 	})
 
-	const selectedMode = $derived(preferences.themeMode)
-	const selectedAccent = $derived(preferences.accent)
+	const selectedMode = $derived(preferences.data.appearance.themeMode ?? 'system')
+	const selectedAccent = $derived(preferences.data.appearance.accent)
 
 	function setThemeMode(next: ThemeMode): void {
-		void preferences.setAppearance({ themeMode: next })
+		void preferences.update('appearance', { themeMode: next })
 	}
 
 	function setAccent(next: AccentColor): void {
-		void preferences.setAppearance({ accent: next })
+		void preferences.update('appearance', { accent: next })
 	}
 
 	function setBackground(bg: BackgroundType): void {
-		void preferences.setAppearance({ background: bg })
+		void preferences.update('appearance', { background: bg })
 	}
 </script>
 

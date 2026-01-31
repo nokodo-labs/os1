@@ -155,6 +155,22 @@
 	.rounded-box {
 		border-radius: var(--radius-container);
 	}
+
+	/* interactive element base: use on any clickable element for consistent UX */
+	.interactive {
+		@apply cursor-pointer transition-all duration-150;
+		@apply focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none;
+		@apply active:scale-[0.97];
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	/* subtle variant: lighter active state for small elements */
+	.interactive-subtle {
+		@apply cursor-pointer transition-all duration-150;
+		@apply focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none;
+		@apply active:scale-[0.98];
+		-webkit-tap-highlight-color: transparent;
+	}
 }
 
 /* Custom Scrollbar */
@@ -184,6 +200,45 @@
 
 .no-scrollbar::-webkit-scrollbar {
 	display: none;
+}
+
+/* Popup/dropdown animations - animate from different origin corners */
+@keyframes popup-appear {
+	from {
+		opacity: 0;
+		transform: scale(0.92) translateY(-0.5rem);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+@keyframes popup-appear-up {
+	from {
+		opacity: 0;
+		transform: scale(0.92) translateY(0.5rem);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+.animate-popup {
+	transform-origin: top left;
+}
+
+.animate-popup-right {
+	transform-origin: top right;
+}
+
+.animate-popup-up {
+	transform-origin: bottom left;
+}
+
+.animate-popup-up-right {
+	transform-origin: bottom right;
 }
 
 /* View Transitions (assume supported) */

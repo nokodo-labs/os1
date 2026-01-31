@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { logout } from '$lib/api/client'
-	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
+	import { Cog6Solid, QuestionMarkCircle, SignOut, SparklesSolid } from '$lib/components/icons'
 	import { session } from '$lib/stores/session.svelte'
 
 	interface UserProfilePanelProps {
@@ -54,7 +54,7 @@
 			.slice(0, 2)
 	}
 
-	type IconComponent = typeof Cog6
+	type IconComponent = typeof Cog6Solid
 
 	interface MenuItem {
 		id: string
@@ -66,13 +66,13 @@
 	const menuItems: MenuItem[] = [
 		{
 			id: 'settings',
-			icon: Cog6,
+			icon: Cog6Solid,
 			label: 'settings',
 			action: handleSettingsClick,
 		},
 		{
 			id: 'personalize',
-			icon: Sparkles,
+			icon: SparklesSolid,
 			label: 'personalize',
 			action: handlePersonalizeClick,
 		},
@@ -145,7 +145,7 @@
 			{#each menuItems as item (item.id)}
 				{@const Icon = item.icon}
 				<button
-					class="flex w-full items-center gap-3 rounded-pill border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
+					class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
 					onclick={item.action}
 				>
 					<Icon className="h-4.5 w-4.5 shrink-0" />
@@ -156,7 +156,7 @@
 	{:else}
 		<div class="flex flex-col gap-1">
 			<button
-				class="flex w-full items-center justify-center rounded-pill border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
+				class="rounded-pill flex w-full cursor-pointer items-center justify-center border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
 				onclick={handleLogin}
 			>
 				log in
@@ -169,7 +169,7 @@
 	{#if session.isLoggedIn}
 		<!-- logout Button -->
 		<button
-			class="flex w-full items-center gap-3 rounded-pill border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
 			onclick={handleLogout}
 		>
 			<SignOut className="h-4.5 w-4.5 shrink-0" />

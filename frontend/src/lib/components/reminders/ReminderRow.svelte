@@ -1,7 +1,7 @@
 <script lang="ts">
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
-	import Calendar from '$lib/components/icons/Calendar.svelte'
+	import CalendarSolid from '$lib/components/icons/CalendarSolid.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Circle from '$lib/components/icons/Circle.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
@@ -10,6 +10,7 @@
 	import type { ReminderListWithCounts, ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import { SvelteDate } from 'svelte/reactivity'
+	import { scale } from 'svelte/transition'
 
 	type Motion = 'in' | 'out-complete' | 'out-uncomplete' | null
 
@@ -269,7 +270,7 @@
 		: undefined}
 	class="reminder-row group relative cursor-pointer overflow-visible transition-colors duration-150 {props.expanded
 		? 'rounded-box border border-white/10 bg-white/6'
-		: 'rounded-pill hover:bg-white/6'} {isCompleted
+		: 'rounded-pill border border-transparent hover:bg-white/6'} {isCompleted
 		? 'is-completed opacity-65'
 		: ''} {isMotionIn ? 'is-incoming' : ''} {isMotionOutComplete
 		? 'is-out is-out-complete'
@@ -283,7 +284,7 @@
 		<button
 			data-circle-button
 			type="button"
-			class="circle-btn flex h-6 w-6 shrink-0 items-center justify-center text-white/55 transition-colors duration-150 {props.kind ===
+			class="circle-btn flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center text-white/55 transition-colors duration-150 {props.kind ===
 			'edit'
 				? 'hover:text-white/80'
 				: ''} {isCompleted ? 'text-emerald-400' : ''}"
@@ -320,7 +321,7 @@
 					<input
 						bind:this={titleInputEl}
 						type="text"
-						class="title-input w-full bg-transparent text-[0.95rem] leading-6 text-white/90 outline-none placeholder:text-white/40 {isCompleted
+						class="title-input m-0 w-full appearance-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 text-white/90 outline-none placeholder:text-white/40 {isCompleted
 							? 'line-through'
 							: ''}"
 						placeholder={props.kind === 'create' ? 'new reminder' : 'reminder title'}
@@ -345,7 +346,7 @@
 				<button
 					bind:this={menuButtonEl}
 					type="button"
-					class="rounded-circle flex h-8 w-8 items-center justify-center text-white/55 transition-all duration-150 hover:bg-white/8 hover:text-white {device.isTouch ||
+					class="rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center text-white/55 transition-all duration-150 hover:bg-white/8 hover:text-white {device.isTouch ||
 					!device.hasHover
 						? 'opacity-100'
 						: 'opacity-0 group-hover:opacity-100'}"
@@ -365,7 +366,7 @@
 		<div class="details-inner">
 			<div class="space-y-3 px-3 pt-1 pb-3">
 				<textarea
-					class="w-full resize-none bg-transparent pl-8 text-sm leading-5 text-white/70 outline-none placeholder:text-white/35"
+					class="w-full resize-none bg-transparent pl-9 text-sm leading-5 text-white/70 outline-none placeholder:text-white/35"
 					placeholder="add details"
 					rows="2"
 					bind:value={editedDescription}
@@ -373,22 +374,22 @@
 					onkeydown={handleDescriptionKeyDown}
 				></textarea>
 
-				<div class="flex flex-wrap items-center gap-2 pl-8">
+				<div class="flex flex-wrap items-center gap-2 pl-9">
 					<button
 						type="button"
-						class="rounded-pill flex items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs transition-colors hover:bg-white/8 {hasDueDate
+						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs transition-colors hover:bg-white/8 {hasDueDate
 							? isOverdue
 								? 'text-red-400'
 								: 'text-white/70'
 							: 'text-white/45'}"
 					>
-						<Calendar className="h-3.5 w-3.5" />
+						<CalendarSolid className="h-3.5 w-3.5" />
 						<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
 					</button>
 
 					<button
 						type="button"
-						class="rounded-pill flex items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs text-white/45 transition-colors hover:bg-white/8"
+						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs text-white/45 transition-colors hover:bg-white/8"
 					>
 						<ArrowPath className="h-3.5 w-3.5" />
 						<span>repeat</span>
@@ -397,7 +398,7 @@
 					{#if props.kind === 'create'}
 						<button
 							type="button"
-							class="rounded-pill ml-auto border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-medium text-white/85 transition-colors hover:bg-white/12 disabled:opacity-45"
+							class="rounded-pill ml-auto cursor-pointer border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-medium text-white/85 transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-45"
 							onclick={(event) => {
 								event.stopPropagation()
 								void submitCreate()
@@ -424,8 +425,9 @@
 
 	{#if props.kind === 'edit' && isMenuOpen}
 		<div
+			transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 			bind:this={menuEl}
-			class="rounded-box absolute top-full right-2 z-50 mt-2 w-56 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+			class="animate-popup-right rounded-box absolute top-full right-2 z-50 mt-2 w-56 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
 		>
 			<div class="px-3 pt-2 pb-1 text-xs font-medium text-white/55">move</div>
 			<div class="max-h-44 overflow-auto">

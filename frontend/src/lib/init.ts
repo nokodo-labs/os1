@@ -17,6 +17,8 @@ import { refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
+import { initDevice } from '$lib/stores/device.svelte'
+import { preferences } from '$lib/stores/preferences.svelte'
 import { loadSettings } from '$lib/stores/settings.svelte'
 
 export interface InitResult {
@@ -36,6 +38,10 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		return { authenticated: false, token: null }
 	}
 
+	// keep any browser-derived reactive state in sync,
+	// but only after hydration (initApp is called from onMount).
+	initDevice()
+
 	// 1. ensure API origin is ready
 	await apiOriginReady
 
@@ -53,6 +59,8 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		void loadSettings()
 		eventStreamClient.connect()
 	}
+
+	preferences.startSync()
 
 	return {
 		authenticated: Boolean(token),

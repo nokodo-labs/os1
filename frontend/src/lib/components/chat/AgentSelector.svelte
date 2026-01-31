@@ -1,6 +1,8 @@
 <script lang="ts">
+	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
+	import { scale } from 'svelte/transition'
 
 	interface Props {
 		selectedAgent: string
@@ -83,26 +85,36 @@
 
 	{#if isOpen}
 		<div
-			class="liquid-metal rounded-container z-1000 min-w-64 animate-[dropdown-appear_0.2s_ease] p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
+			transition:scale={{ duration: 180, start: 0.96, opacity: 0 }}
+			class="animate-popup liquid-metal rounded-container z-1000 min-w-64 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
 			style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
 		>
 			<ul class="m-0 list-none p-0" role="listbox">
 				{#each agents.list as agent (agent.id)}
-					<li role="option" aria-selected={agent.id === selectedAgent}>
+					{@const isSelected = agent.id === selectedAgent}
+					<li role="option" aria-selected={isSelected}>
 						<button
-							class="rounded-pill flex w-full cursor-pointer flex-col items-start gap-0.5 border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-white/8"
-							style={agent.id === selectedAgent
-								? 'background-color: var(--accent-bg);'
-								: ''}
+							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-white/8 {isSelected
+								? 'ring-1 ring-white/20'
+								: ''}"
+							style={isSelected ? 'background-color: var(--accent-bg);' : ''}
 							onclick={() => select(agent.id)}
 						>
-							<span class="text-[0.9375rem] font-semibold text-white/95">
-								{agent.name}
-							</span>
-							{#if agent.description}
-								<span class="text-[0.8125rem] text-[rgba(225,225,255,0.6)]">
-									{agent.description}
+							<div class="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+								<span class="text-[0.9375rem] font-semibold text-white/95">
+									{agent.name}
 								</span>
+								{#if agent.description}
+									<span class="text-[0.8125rem] text-[rgba(225,225,255,0.6)]">
+										{agent.description}
+									</span>
+								{/if}
+							</div>
+							{#if isSelected}
+								<Check
+									className="h-4 w-4 shrink-0 text-white/80"
+									strokeWidth="2.5"
+								/>
 							{/if}
 						</button>
 					</li>
@@ -111,16 +123,3 @@
 		</div>
 	{/if}
 </div>
-
-<style>
-	@keyframes dropdown-appear {
-		from {
-			opacity: 0;
-			transform: translateY(-0.5rem);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-</style>

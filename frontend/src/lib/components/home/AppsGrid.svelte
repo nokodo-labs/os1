@@ -2,27 +2,27 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import Bolt from '$lib/components/icons/Bolt.svelte'
-	import Bookmark from '$lib/components/icons/Bookmark.svelte'
-	import Calendar from '$lib/components/icons/Calendar.svelte'
-	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import Cloud from '$lib/components/icons/Cloud.svelte'
-	import Cog6 from '$lib/components/icons/Cog6.svelte'
-	import Database from '$lib/components/icons/Database.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
-	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
-	import Heart from '$lib/components/icons/Heart.svelte'
-	import Map from '$lib/components/icons/Map.svelte'
-	import Photo from '$lib/components/icons/Photo.svelte'
-	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import Star from '$lib/components/icons/Star.svelte'
-	import Terminal from '$lib/components/icons/Terminal.svelte'
-	import Users from '$lib/components/icons/Users.svelte'
+	import BoltSolid from '$lib/components/icons/BoltSolid.svelte'
+	import BookmarkSolid from '$lib/components/icons/BookmarkSolid.svelte'
+	import CalendarSolid from '$lib/components/icons/CalendarSolid.svelte'
+	import ChatBubblesSolid from '$lib/components/icons/ChatBubblesSolid.svelte'
+	import CheckBoxSolid from '$lib/components/icons/CheckBoxSolid.svelte'
+	import CloudSolid from '$lib/components/icons/CloudSolid.svelte'
+	import Cog6Solid from '$lib/components/icons/Cog6Solid.svelte'
+	import CommandLineSolid from '$lib/components/icons/CommandLineSolid.svelte'
+	import DatabaseSolid from '$lib/components/icons/DatabaseSolid.svelte'
+	import DocumentSolid from '$lib/components/icons/DocumentSolid.svelte'
+	import GlobeAltSolid from '$lib/components/icons/GlobeAltSolid.svelte'
+	import HeartSolid from '$lib/components/icons/HeartSolid.svelte'
+	import MapSolid from '$lib/components/icons/MapSolid.svelte'
+	import PhotoSolid from '$lib/components/icons/PhotoSolid.svelte'
+	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
+	import StarSolid from '$lib/components/icons/StarSolid.svelte'
+	import UsersSolid from '$lib/components/icons/UsersSolid.svelte'
 	import { reminders } from '$lib/stores/reminders.svelte'
 	import { onDestroy, tick } from 'svelte'
 
-	type IconComponent = typeof Document
+	type IconComponent = typeof DocumentSolid
 
 	interface AppDefinition {
 		id: string
@@ -40,37 +40,37 @@
 	let { iconShape = 'circle' }: Props = $props()
 
 	const apps: AppDefinition[] = [
-		{ id: 'notes', title: 'notes', icon: Document },
+		{ id: 'notes', title: 'notes', icon: DocumentSolid },
 		{
 			id: 'reminders',
 			title: 'reminders',
-			icon: CheckBox,
+			icon: CheckBoxSolid,
 			action: async () => {
 				await goto(resolve(reminders.remindersAppUrl))
 			},
 		},
-		{ id: 'calendar', title: 'calendar', icon: Calendar },
-		{ id: 'messages', title: 'messages', icon: ChatBubbles },
-		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
-		{ id: 'automations', title: 'automations', icon: Bolt },
-		{ id: 'cloud', title: 'cloud', icon: Cloud },
+		{ id: 'calendar', title: 'calendar', icon: CalendarSolid },
+		{ id: 'messages', title: 'messages', icon: ChatBubblesSolid },
+		{ id: 'bookmarks', title: 'bookmarks', icon: BookmarkSolid },
+		{ id: 'automations', title: 'automations', icon: BoltSolid },
+		{ id: 'cloud', title: 'cloud', icon: CloudSolid },
 		{
 			id: 'settings',
 			title: 'settings',
-			icon: Cog6,
+			icon: Cog6Solid,
 			action: async () => {
 				await goto(resolve('/settings'))
 			},
 		},
-		{ id: 'database', title: 'database', icon: Database },
-		{ id: 'world', title: 'world', icon: GlobeAlt },
-		{ id: 'photos', title: 'photos', icon: Photo },
-		{ id: 'maps', title: 'maps', icon: Map },
-		{ id: 'spark', title: 'spark', icon: Sparkles },
-		{ id: 'favorites', title: 'favorites', icon: Star },
-		{ id: 'health', title: 'health', icon: Heart },
-		{ id: 'terminal', title: 'terminal', icon: Terminal },
-		{ id: 'teams', title: 'teams', icon: Users },
+		{ id: 'database', title: 'database', icon: DatabaseSolid },
+		{ id: 'world', title: 'world', icon: GlobeAltSolid },
+		{ id: 'photos', title: 'photos', icon: PhotoSolid },
+		{ id: 'maps', title: 'maps', icon: MapSolid },
+		{ id: 'spark', title: 'spark', icon: SparklesSolid },
+		{ id: 'favorites', title: 'favorites', icon: StarSolid },
+		{ id: 'health', title: 'health', icon: HeartSolid },
+		{ id: 'terminal', title: 'terminal', icon: CommandLineSolid },
+		{ id: 'teams', title: 'teams', icon: UsersSolid },
 	]
 
 	let tilePx = $state(76)
@@ -304,7 +304,7 @@
 						{@const Icon = app.icon}
 						<button
 							type="button"
-							class="group flex flex-col items-center border-none bg-transparent"
+							class="group flex cursor-pointer flex-col items-center border-none bg-transparent"
 							style="height: {tilePx + tileToLabelGapPx + labelPx}px;"
 							aria-label={app.title}
 							onclick={async () => {
@@ -313,19 +313,18 @@
 							}}
 						>
 							<div
-								class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[transform,box-shadow] duration-150 group-hover:scale-[1.03] group-hover:ring-white/10 group-active:scale-[0.99] group-active:ring-white/20 {iconShape ===
+								class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[box-shadow,ring-color] duration-150 group-hover:ring-white/15 group-active:scale-[0.96] {iconShape ===
 								'circle'
 									? 'rounded-full'
 									: 'rounded-container'}"
 								style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
 							>
-								<span class="liquid-glass__highlight" aria-hidden="true"></span>
-								<div class="liquid-glass__content">
+								<div class="relative z-10">
 									<Icon className="h-(--icon-px) w-(--icon-px) text-white/90" />
 								</div>
 							</div>
 							<div
-								class="text-center text-xs font-medium text-white/70"
+								class="text-center text-xs font-medium text-white/70 transition-colors duration-150 group-hover:text-white/85"
 								style="margin-top: {tileToLabelGapPx}px; line-height: {labelPx}px; height: {labelPx}px;"
 							>
 								{app.title}
@@ -344,7 +343,7 @@
 		{#each pages as _page, index (index)}
 			<button
 				type="button"
-				class="transition-all duration-200 {index === currentPage
+				class="cursor-pointer transition-all duration-200 {index === currentPage
 					? 'h-2 w-6 rounded-full bg-white/80'
 					: 'h-2 w-2 rounded-full bg-white/30 hover:bg-white/45'}"
 				aria-label={`page ${index + 1} (${_page.length})`}

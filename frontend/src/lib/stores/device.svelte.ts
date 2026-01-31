@@ -67,7 +67,7 @@ function syncFromWindow(
 	device.hasHover = mqHover?.matches ?? true
 
 	const maxTouchPoints = navigator.maxTouchPoints || 0
-	device.isTouch = maxTouchPoints > 0 || device.isCoarsePointer
+	device.isTouch = device.isCoarsePointer || (maxTouchPoints > 0 && !device.hasHover)
 	device.ready = true
 }
 

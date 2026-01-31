@@ -90,6 +90,19 @@ class PrivacyPreferences(BaseModel):
 	)
 
 
+# accessibility preferences
+class AccessibilityPreferences(BaseModel):
+	"""user accessibility preferences."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	haptic_feedback: bool | None = Field(
+		default=None,
+		alias="hapticFeedback",
+		description="whether haptic feedback is enabled on compatible devices",
+	)
+
+
 # the main preferences schema
 class UserPreferences(BaseModel):
 	"""complete user preferences schema.
@@ -118,4 +131,8 @@ class UserPreferences(BaseModel):
 	privacy: PrivacyPreferences | None = Field(
 		default=None,
 		description="privacy preferences",
+	)
+	accessibility: AccessibilityPreferences | None = Field(
+		default=None,
+		description="accessibility preferences",
 	)

@@ -7,7 +7,7 @@
 	const streamdownAnimationTypes = ['fade', 'blur', 'slideUp', 'slideDown'] as const
 	const streamdownTokenizeModes = ['word', 'char'] as const
 
-	const isBackgroundDisabled = $derived(preferences.background === 'none')
+	const isBackgroundDisabled = $derived(preferences.data.appearance.background === 'none')
 </script>
 
 <div class="space-y-4">
@@ -21,7 +21,7 @@
 				checked={isBackgroundDisabled}
 				onchange={(e) => {
 					const checked = (e.currentTarget as HTMLInputElement).checked
-					void preferences.setAppearance({ background: checked ? 'none' : null })
+					void preferences.update('appearance', { background: checked ? 'none' : null })
 				}}
 			/>
 		</label>

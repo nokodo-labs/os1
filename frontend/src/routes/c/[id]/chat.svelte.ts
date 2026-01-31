@@ -17,6 +17,7 @@ import {
 	parseToolResult,
 	type ToolCall,
 } from '$lib/tools'
+import { hapticFeedback } from '$lib/utils/haptics'
 import { tick } from 'svelte'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import {
@@ -674,6 +675,7 @@ export function createChatState() {
 						const isNewStreamingMessage =
 							!streamingAssistant || streamingAssistant.messageId !== messageId
 						if (isNewStreamingMessage) {
+							hapticFeedback()
 							streamingAssistant = {
 								runId: typeof env.run_id === 'string' ? env.run_id : null,
 								messageId,

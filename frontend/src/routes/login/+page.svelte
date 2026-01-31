@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { apiClient } from '$lib/api/client'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
@@ -141,7 +142,8 @@
 
 							{#if errorMessage}
 								<div
-									class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75"
+									class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+									role="alert"
 								>
 									{errorMessage}
 								</div>
@@ -150,9 +152,19 @@
 							<button
 								type="submit"
 								disabled={isSubmitting}
-								class="h-11 w-full rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+								class="interactive inline-flex h-11 w-full items-center justify-center rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-black/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
 							>
-								{isSubmitting ? 'signing in…' : 'sign in'}
+								{#if isSubmitting}
+									<ShimmerText
+										className="inline-block"
+										textColor="rgb(0 0 0 / 1)"
+										waveColor="rgb(0 0 0 / 0.35)"
+									>
+										signing in
+									</ShimmerText>
+								{:else}
+									sign in
+								{/if}
 							</button>
 						</form>
 

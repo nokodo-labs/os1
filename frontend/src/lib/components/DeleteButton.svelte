@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 
@@ -107,7 +108,13 @@
 				onclick={() => void runDelete()}
 			>
 				<Trash className="h-4 w-4" />
-				<span class="ml-2">{isDeleting ? 'deleting…' : 'delete'}</span>
+				<span class="ml-2">
+					{#if isDeleting}
+						<ShimmerText className="inline-block">deleting</ShimmerText>
+					{:else}
+						delete
+					{/if}
+				</span>
 			</button>
 		</div>
 	</div>

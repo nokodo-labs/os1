@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '$lib/styles/liquid-glass.css'
 	import { onMount } from 'svelte'
+	import { scale } from 'svelte/transition'
 	import UserProfilePanel from './UserProfilePanel.svelte'
 
 	interface UserProfileTriggerProps {
@@ -111,7 +112,10 @@
 	{#if isOpen}
 		<div
 			bind:this={panelElement}
-			class="profile-panel-wrapper liquid-metal {isHeaderPlacement ? 'header' : ''}"
+			transition:scale={{ duration: 180, start: 0.96, opacity: 0 }}
+			class="profile-panel-wrapper liquid-metal {isHeaderPlacement
+				? 'header animate-popup-right'
+				: 'animate-popup-up'}"
 		>
 			<UserProfilePanel {user} onClose={closePanel} />
 		</div>
@@ -129,7 +133,7 @@
 		left: calc(100% + 0.5rem);
 		z-index: 1000;
 		border-radius: var(--radius-container-base);
-		animation: fadeIn 0.15s ease-out;
+		will-change: transform, opacity;
 	}
 
 	.profile-panel-wrapper.header {
@@ -141,16 +145,5 @@
 
 	:global(.dark) .profile-panel-wrapper {
 		border-color: rgba(255, 255, 255, 0.1);
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(4px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 </style>

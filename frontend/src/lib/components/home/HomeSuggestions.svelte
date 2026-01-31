@@ -27,8 +27,7 @@
 	<div
 		class="liquid-glass rounded-container overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
-		<span class="liquid-glass__highlight" aria-hidden="true"></span>
-		<div class="liquid-glass__content">
+		<div class="relative z-10">
 			<div class="p-2" role="listbox" aria-label="suggestions">
 				{#each suggestions as suggestion, index (suggestion.id)}
 					{@const Icon = suggestion.icon}

@@ -3,6 +3,7 @@
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Stop from '$lib/components/icons/Stop.svelte'
+	import { scale } from 'svelte/transition'
 
 	interface ChatInputProps {
 		value?: string
@@ -30,7 +31,6 @@
 
 	let textarea: HTMLTextAreaElement
 	let isComposing = $state(false)
-	let isFocused = $state(false)
 	let isAddMenuOpen = $state(false)
 
 	let fileInput: HTMLInputElement
@@ -132,7 +132,6 @@
 <form class="w-full" onsubmit={handleFormSubmit}>
 	<div
 		class="liquid-glass chat-input relative w-full rounded-full transition-all duration-300"
-		class:liquid-glass--frosted={isFocused}
 		style={viewTransitionName ? `view-transition-name: ${viewTransitionName};` : undefined}
 	>
 		<div class="relative z-10 px-1 py-1">
@@ -143,7 +142,7 @@
 						aria-label="Add attachment"
 						aria-haspopup="menu"
 						aria-expanded={isAddMenuOpen}
-						class="flex items-center justify-center bg-transparent p-0 text-black/65 transition-colors duration-200 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white dark:hover:text-white"
+						class="flex cursor-pointer items-center justify-center bg-transparent p-0 text-black/65 transition-colors duration-200 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white dark:hover:text-white"
 						{disabled}
 						onclick={toggleAddMenu}
 					>
@@ -166,12 +165,13 @@
 
 					{#if isAddMenuOpen}
 						<div
-							class="rounded-container absolute bottom-full left-0 mb-3 w-56 overflow-hidden border border-white/10 bg-black/85 p-1 text-white/85 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
+							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+							class="animate-popup-up rounded-container absolute bottom-full left-0 mb-3 w-56 overflow-hidden border border-white/10 bg-black/85 p-1 text-white/85 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
 							role="menu"
 						>
 							<button
 								type="button"
-								class="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+								class="flex w-full cursor-pointer items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
 								role="menuitem"
 								onclick={() => fileInput?.click()}
 							>
@@ -179,7 +179,7 @@
 							</button>
 							<button
 								type="button"
-								class="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+								class="flex w-full cursor-pointer items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
 								role="menuitem"
 								onclick={() => imageInput?.click()}
 							>
@@ -199,8 +199,6 @@
 						onkeydown={handleKeyDown}
 						oncompositionstart={handleCompositionStart}
 						oncompositionend={handleCompositionEnd}
-						onfocus={() => (isFocused = true)}
-						onblur={() => (isFocused = false)}
 						rows="1"
 						class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/20 hover:scrollbar-thumb-black/30 dark:scrollbar-thumb-white/20 dark:hover:scrollbar-thumb-white/30 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 text-black/96 outline-none placeholder:text-black/40 dark:text-white/96 dark:placeholder:text-white/40"
 					></textarea>
@@ -211,7 +209,7 @@
 						<button
 							type="button"
 							aria-label="stop generating"
-							class="flex h-8 w-8 items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
+							class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
 							onclick={onStop}
 						>
 							<Stop className="h-3.5 w-3.5" />
@@ -220,7 +218,7 @@
 						<button
 							type="submit"
 							aria-label="send message"
-							class="send-btn flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+							class="send-btn flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
 								value.trim() === '' || disabled
 							)
 								? 'hover:brightness-110'
@@ -239,26 +237,45 @@
 <style>
 	.chat-input {
 		--lg-blur: 20px;
-		--lg-saturate: 1.3;
 		--lg-bg: rgba(255, 255, 255, 0.12);
-		--lg-border: rgba(255, 255, 255, 0.15);
+		transition:
+			--lg-blur 0.2s ease-out,
+			--lg-bg 0.2s ease-out,
+			--lg-highlight-center 0.2s ease-out,
+			--lg-border-start 0.2s ease-out,
+			--lg-border-end 0.2s ease-out,
+			box-shadow 0.2s ease-out;
 	}
 
 	:global(.dark) .chat-input {
 		--lg-bg: rgba(0, 0, 0, 0.35);
-		--lg-border: rgba(255, 255, 255, 0.1);
 	}
 
-	.chat-input.liquid-glass--frosted {
+	.chat-input:hover {
+		--lg-blur: 24px;
+		--lg-bg: rgba(255, 255, 255, 0.16);
+		--lg-highlight-center: rgba(255, 255, 255, 0.24);
+		--lg-border-start: rgba(80, 80, 80, 0.28);
+		--lg-border-end: rgba(170, 170, 170, 0.42);
+	}
+
+	:global(.dark) .chat-input:hover {
+		--lg-bg: rgba(0, 0, 0, 0.4);
+	}
+
+	.chat-input:has(textarea:focus) {
 		--lg-blur: 32px;
-		--lg-saturate: 1.35;
 		--lg-bg: rgba(255, 255, 255, 0.25);
-		--lg-border: rgba(255, 255, 255, 0.2);
+		--lg-highlight-center: rgba(255, 255, 255, 0.42);
+		--lg-border-start: rgba(120, 120, 120, 0.35);
+		--lg-border-end: rgba(200, 200, 200, 0.5);
 	}
 
-	:global(.dark) .chat-input.liquid-glass--frosted {
+	:global(.dark) .chat-input:has(textarea:focus) {
 		--lg-bg: rgba(0, 0, 0, 0.45);
-		--lg-border: rgba(255, 255, 255, 0.12);
+		--lg-highlight-center: rgba(255, 255, 255, 0.42);
+		--lg-border-start: rgba(120, 120, 120, 0.35);
+		--lg-border-end: rgba(200, 200, 200, 0.5);
 	}
 
 	.send-btn {

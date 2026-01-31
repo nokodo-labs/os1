@@ -1295,6 +1295,17 @@ export interface components {
          */
         AccessRole: "viewer" | "editor" | "admin";
         /**
+         * AccessibilityPreferences
+         * @description user accessibility preferences.
+         */
+        AccessibilityPreferences: {
+            /**
+             * Hapticfeedback
+             * @description whether haptic feedback is enabled on compatible devices
+             */
+            hapticFeedback?: boolean | null;
+        };
+        /**
          * Agent
          * @description Response schema.
          */
@@ -3548,6 +3559,8 @@ export interface components {
             notifications?: components["schemas"]["NotificationPreferences"] | null;
             /** @description privacy preferences */
             privacy?: components["schemas"]["PrivacyPreferences"] | null;
+            /** @description accessibility preferences */
+            accessibility?: components["schemas"]["AccessibilityPreferences"] | null;
         } & {
             [key: string]: unknown;
         };

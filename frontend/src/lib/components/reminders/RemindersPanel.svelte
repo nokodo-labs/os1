@@ -87,7 +87,6 @@
 			window.setTimeout(() => {
 				incoming = incoming.filter((x) => x.id !== created.id)
 			}, 280)
-			expandedReminderId = created.id
 		}
 	}
 
@@ -269,11 +268,11 @@
 				{:else}
 					<button
 						type="button"
-						class="rounded-pill flex w-full items-center gap-3 px-3 py-2.5 text-left text-[0.95rem] leading-6 text-white/70 transition-colors duration-150 hover:bg-white/6 hover:text-white/85"
+						class="rounded-pill flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-[0.95rem] leading-6 text-white/70 transition-colors duration-150 hover:bg-white/6 hover:text-white/85"
 						onclick={() => void startInlineAdd()}
 					>
 						<span class="flex h-6 w-6 items-center justify-center text-white/55">
-							<Plus className="h-5 w-5" strokeWidth="2" />
+							<Plus className="h-6 w-6" strokeWidth="2" />
 						</span>
 						<span>new reminder</span>
 					</button>
@@ -284,7 +283,7 @@
 				<div class="mt-3 px-2">
 					<button
 						type="button"
-						class="rounded-pill flex w-full items-center justify-between border border-white/10 bg-white/6 px-4 py-2 text-left text-[0.95rem] font-semibold text-white transition-colors duration-150 hover:bg-white/8"
+						class="rounded-pill flex w-full cursor-pointer items-center justify-between border border-white/10 bg-white/6 px-4 py-2 text-left text-[0.95rem] font-semibold text-white transition-colors duration-150 hover:bg-white/8"
 						onclick={() => (showCompleted = !showCompleted)}
 					>
 						<span>completed ({completedCount})</span>
