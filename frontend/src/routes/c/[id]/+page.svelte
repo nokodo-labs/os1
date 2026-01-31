@@ -18,6 +18,7 @@
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { accentStore } from '$lib/stores/accent.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
 	import { chat as chatStore } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -34,6 +35,11 @@
 
 	// System chrome for agent selector
 	const chrome = useSystemChrome()
+
+	// set accent color for auto accent colors feature
+	$effect(() => {
+		accentStore.set('green')
+	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
 	// Effects: Agents loading

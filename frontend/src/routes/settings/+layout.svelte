@@ -2,6 +2,7 @@
 	import { page } from '$app/state'
 	import MasterDetailScaffold from '$lib/components/layouts/MasterDetailScaffold.svelte'
 	import SettingsSidebar from '$lib/components/settings/SettingsSidebar.svelte'
+	import { accentStore } from '$lib/stores/accent.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import type { Snippet } from 'svelte'
 
@@ -10,6 +11,11 @@
 	// keep page title in sync
 	$effect(() => {
 		pageTitleStore.pageTitle = 'settings'
+	})
+
+	// set accent color for auto accent colors feature
+	$effect(() => {
+		accentStore.set('gray')
 	})
 
 	// track selected section from URL

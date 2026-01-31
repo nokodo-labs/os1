@@ -22,6 +22,7 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { accentStore } from '$lib/stores/accent.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -39,6 +40,11 @@
 
 	const chrome = useSystemChrome()
 	const debugUi = useDebugUi()
+
+	// set accent color for auto accent colors feature
+	$effect(() => {
+		accentStore.set('purple')
+	})
 
 	type ChatMode = 'new' | 'temp' | null
 

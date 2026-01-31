@@ -3,6 +3,7 @@
 	import { page } from '$app/state'
 	import MasterDetailScaffold from '$lib/components/layouts/MasterDetailScaffold.svelte'
 	import ReminderListsSidebar from '$lib/components/reminders/ReminderListsSidebar.svelte'
+	import { accentStore } from '$lib/stores/accent.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { reminders } from '$lib/stores/reminders.svelte'
@@ -13,6 +14,11 @@
 	// keep page title in sync
 	$effect(() => {
 		pageTitleStore.pageTitle = 'reminders'
+	})
+
+	// set accent color for auto accent colors feature
+	$effect(() => {
+		accentStore.set('blue')
 	})
 
 	// track selected list from URL

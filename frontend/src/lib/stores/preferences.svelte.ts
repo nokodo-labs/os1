@@ -94,6 +94,7 @@ function createPreferencesStore() {
 			themeMode: (settingsState.data?.ui?.default_theme as ThemeMode) ?? 'system',
 			accent: 'purple',
 			background: 'darkveil',
+			autoAccentColors: true,
 		},
 		ai: {
 			defaultAgentId: settingsState.data?.ai?.default_agent_id ?? null,

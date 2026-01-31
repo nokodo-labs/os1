@@ -26,6 +26,11 @@ class AppearancePreferences(BaseModel):
 		default=None,
 		description="accent color preference",
 	)
+	auto_accent_colors: bool | None = Field(
+		default=None,
+		alias="autoAccentColors",
+		description="when enabled, accent colors change automatically based on context",
+	)
 	background: (
 		Literal[
 			"galaxy",

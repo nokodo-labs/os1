@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { accentColors } from '$lib/contexts/themeContext.svelte'
+	import { Switch } from '$lib/components/primitives'
+	import { accentColors, selectableAccentColors } from '$lib/contexts/themeContext.svelte'
 	import {
 		preferences,
 		type AccentColor,
 		type BackgroundType,
 		type ThemeMode,
 	} from '$lib/stores/preferences.svelte'
+	import { slide } from 'svelte/transition'
 
 	const themeModes: { value: ThemeMode; label: string; description: string }[] = [
 		{ value: 'light', label: 'light', description: 'always use light mode' },
@@ -31,6 +33,7 @@
 
 	const selectedMode = $derived(preferences.data.appearance.themeMode ?? 'system')
 	const selectedAccent = $derived(preferences.data.appearance.accent)
+	const autoAccentColors = $derived(preferences.data.appearance.autoAccentColors ?? true)
 
 	function setThemeMode(next: ThemeMode): void {
 		void preferences.update('appearance', { themeMode: next })
@@ -38,6 +41,10 @@
 
 	function setAccent(next: AccentColor): void {
 		void preferences.update('appearance', { accent: next })
+	}
+
+	function setAutoAccentColors(enabled: boolean): void {
+		void preferences.update('appearance', { autoAccentColors: enabled })
 	}
 
 	function setBackground(bg: BackgroundType): void {
@@ -68,35 +75,48 @@
 	</div>
 
 	<div class="rounded-box bg-white/5 p-5">
-		<div class="text-sm font-semibold text-white/85">accent color</div>
-		<div class="mt-1 text-sm text-white/55">
-			customize the accent color used for highlights and selection states.
+		<div class="flex items-center justify-between">
+			<div>
+				<div class="text-sm font-semibold text-white/85">auto accent colors</div>
+				<div class="mt-1 text-sm text-white/55">
+					accent colors change automatically based on the current page.
+				</div>
+			</div>
+			<Switch checked={autoAccentColors} onchange={setAutoAccentColors} />
 		</div>
-		<div class="mt-4 flex flex-wrap gap-3">
-			{#each Object.keys(accentColors) as color (color)}
-				{@const colorKey = color as AccentColor}
-				{@const isSelected = selectedAccent === colorKey}
-				<button
-					type="button"
-					onclick={() => setAccent(colorKey)}
-					class="group rounded-pill flex items-center gap-2.5 border px-3 py-2 transition-all duration-200 {isSelected
-						? 'border-white/20 bg-white/12 shadow-[inset_0_2px_8px_rgba(255,255,255,0.08)]'
-						: 'border-transparent bg-white/5 hover:border-white/10 hover:bg-white/8'}"
-				>
-					<span
-						class="h-4 w-4 rounded-full ring-2 transition-all {isSelected
-							? 'ring-white/40 ring-offset-1 ring-offset-black/20'
-							: 'ring-white/10 group-hover:ring-white/20'}"
-						style="background-color: {accentColors[colorKey].primary}"
-					></span>
-					<span
-						class="text-sm font-medium {isSelected
-							? 'text-white'
-							: 'text-white/60 group-hover:text-white/80'}">{color}</span
-					>
-				</button>
-			{/each}
-		</div>
+
+		{#if !autoAccentColors}
+			<div class="mt-5 border-t border-white/10 pt-5" transition:slide={{ duration: 200 }}>
+				<div class="text-sm font-semibold text-white/85">accent color</div>
+				<div class="mt-1 text-sm text-white/55">
+					customize the accent color used for highlights and selection states.
+				</div>
+				<div class="mt-4 flex flex-wrap gap-3">
+					{#each selectableAccentColors as colorKey (colorKey)}
+						{@const isSelected = selectedAccent === colorKey}
+						<button
+							type="button"
+							onclick={() => setAccent(colorKey)}
+							class="group rounded-pill flex items-center gap-2.5 border px-3 py-2 transition-all duration-200 {isSelected
+								? 'border-white/20 bg-white/12 shadow-[inset_0_2px_8px_rgba(255,255,255,0.08)]'
+								: 'border-transparent bg-white/5 hover:border-white/10 hover:bg-white/8'}"
+						>
+							<span
+								class="h-4 w-4 rounded-full ring-2 transition-all {isSelected
+									? 'ring-white/40 ring-offset-1 ring-offset-black/20'
+									: 'ring-white/10 group-hover:ring-white/20'}"
+								style="background-color: {accentColors[colorKey].primary}"
+							></span>
+							<span
+								class="text-sm font-medium {isSelected
+									? 'text-white'
+									: 'text-white/60 group-hover:text-white/80'}">{colorKey}</span
+							>
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	<div class="rounded-box bg-white/5 p-5">

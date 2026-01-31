@@ -1,15 +1,19 @@
 import { browser } from '$app/environment'
+import { accentStore, type AccentColorKey } from '$lib/stores/accent.svelte'
 import { preferences, type AccentColor, type ThemeMode } from '$lib/stores/preferences.svelte'
 import { getContext, onMount, setContext } from 'svelte'
 
-export type { AccentColor, ThemeMode }
+export type { AccentColor, AccentColorKey, ThemeMode }
 const THEME_CONTEXT_KEY = Symbol('theme-context')
 
 let prefersDark = $state(false)
 
 // accent color maps for Tailwind classes
 // we'll use CSS variables for more flexibility, but these helpers can be useful
-export const accentColors = {
+export const accentColors: Record<
+	AccentColorKey,
+	{ primary: string; secondary: string; bg: string; border: string; shadow: string }
+> = {
 	purple: {
 		primary: '#a855f7', // purple-500
 		secondary: '#c084fc', // purple-400
@@ -52,9 +56,33 @@ export const accentColors = {
 		border: 'rgba(239, 68, 68, 0.2)',
 		shadow: 'rgba(239, 68, 68, 0.25)',
 	},
+	yellow: {
+		primary: '#d97706', // amber-600 (ocra-ish)
+		secondary: '#f59e0b', // amber-500
+		bg: 'rgba(217, 119, 6, 0.02)',
+		border: 'rgba(217, 119, 6, 0.2)',
+		shadow: 'rgba(217, 119, 6, 0.25)',
+	},
+	gray: {
+		primary: '#6b7280', // gray-500
+		secondary: '#9ca3af', // gray-400
+		bg: 'rgba(107, 114, 128, 0.02)',
+		border: 'rgba(107, 114, 128, 0.2)',
+		shadow: 'rgba(107, 114, 128, 0.25)',
+	},
 }
 
-function updateDOM(nextResolvedMode: 'light' | 'dark', nextAccent: AccentColor) {
+// selectable accent colors (user-choosable in settings, matches API schema)
+export const selectableAccentColors: AccentColor[] = [
+	'purple',
+	'blue',
+	'green',
+	'orange',
+	'pink',
+	'red',
+]
+
+function updateDOM(nextResolvedMode: 'light' | 'dark', nextAccent: AccentColorKey) {
 	const root = document.documentElement
 	const isDark = nextResolvedMode === 'dark'
 
@@ -78,6 +106,9 @@ interface ThemeContext {
 	setMode(newMode: ThemeMode): void
 	readonly accent: AccentColor
 	setAccent(newAccent: AccentColor): void
+	readonly autoAccentColors: boolean
+	setAutoAccentColors(enabled: boolean): void
+	readonly resolvedAccent: AccentColorKey
 	readonly resolvedMode: 'light' | 'dark'
 	readonly accentColors: typeof accentColors
 }
@@ -89,7 +120,17 @@ export function createThemeContext(): ThemeContext {
 	})
 
 	const mode = $derived(preferences.data.appearance.themeMode ?? 'system')
-	const accent = $derived(preferences.data.appearance.accent ?? 'blue')
+	const accent = $derived(preferences.data.appearance.accent ?? 'purple')
+	const autoAccentColors = $derived(preferences.data.appearance.autoAccentColors ?? true)
+
+	// resolved accent: if autoAccentColors is on, use accent store; otherwise use user preference
+	const resolvedAccent = $derived.by((): AccentColorKey => {
+		if (autoAccentColors) {
+			return accentStore.current
+		}
+		return accent
+	})
+
 	const resolvedMode = $derived.by((): 'light' | 'dark' => {
 		if (mode === 'dark') return 'dark'
 		if (mode === 'light') return 'light'
@@ -109,7 +150,7 @@ export function createThemeContext(): ThemeContext {
 
 	$effect(() => {
 		if (!browser) return
-		updateDOM(resolvedMode, accent)
+		updateDOM(resolvedMode, resolvedAccent)
 	})
 
 	return {
@@ -124,6 +165,15 @@ export function createThemeContext(): ThemeContext {
 		},
 		setAccent(newAccent: AccentColor) {
 			void preferences.update('appearance', { accent: newAccent })
+		},
+		get autoAccentColors() {
+			return autoAccentColors
+		},
+		setAutoAccentColors(enabled: boolean) {
+			void preferences.update('appearance', { autoAccentColors: enabled })
+		},
+		get resolvedAccent() {
+			return resolvedAccent
 		},
 		get resolvedMode() {
 			return resolvedMode
