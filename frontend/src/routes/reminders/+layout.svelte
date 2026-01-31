@@ -32,7 +32,7 @@
 		if (!browser) return
 
 		const path = page.url.pathname
-		if (path === '/reminders' || path.startsWith('/reminders/lists/')) {
+		if (path.startsWith('/reminders')) {
 			reminders.lastVisitedPath = path
 		}
 

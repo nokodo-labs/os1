@@ -1426,6 +1426,11 @@ export interface components {
              */
             accent?: ("purple" | "blue" | "green" | "orange" | "pink" | "red") | null;
             /**
+             * Autoaccentcolors
+             * @description when enabled, accent colors change automatically based on context
+             */
+            autoAccentColors?: boolean | null;
+            /**
              * Background
              * @description background wallpaper preference
              */
