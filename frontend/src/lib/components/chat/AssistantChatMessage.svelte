@@ -2,7 +2,7 @@
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
-	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import type { Snippet } from 'svelte'
 	import ChatGptLoadingIndicator from './ChatGptLoadingIndicator.svelte'
@@ -83,7 +83,7 @@
 				class="flex h-full w-full items-center justify-center"
 				style="background-color: var(--accent-primary);"
 			>
-				<SparklesSolid className="h-5 w-5 text-white/90" />
+				<Sparkles variant="solid" class="h-5 w-5 text-white/90" />
 			</div>
 		{/if}
 	</div>
@@ -150,7 +150,7 @@
 						onclick={onPrevious}
 						title="previous version"
 					>
-						<ChevronLeft className="size-4" strokeWidth="2" />
+						<ChevronLeft class="size-4" strokeWidth="2" />
 					</button>
 					<span class="mx-0.5 font-mono tabular-nums">
 						{currentSiblingIndex + 1}/{siblingCount}
@@ -161,7 +161,7 @@
 						onclick={onNext}
 						title="next version"
 					>
-						<ChevronRight className="size-4" strokeWidth="2" />
+						<ChevronRight class="size-4" strokeWidth="2" />
 					</button>
 				</div>
 			{/if}

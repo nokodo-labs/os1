@@ -1,7 +1,7 @@
 <script lang="ts">
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
-	import CalendarSolid from '$lib/components/icons/CalendarSolid.svelte'
+	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Circle from '$lib/components/icons/Circle.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
@@ -300,17 +300,17 @@
 		>
 			{#if props.kind === 'create'}
 				<span class="plus-icon" aria-hidden="true">
-					<Plus className="h-6 w-6" strokeWidth="2" />
+					<Plus class="h-6 w-6" strokeWidth="2" />
 				</span>
 			{:else}
 				<span class="plus-icon plus-overlay" aria-hidden="true">
-					<Plus className="h-6 w-6" strokeWidth="2" />
+					<Plus class="h-6 w-6" strokeWidth="2" />
 				</span>
 				<span class="circle-icon" aria-hidden="true">
-					<Circle className="h-6 w-6" />
+					<Circle class="h-6 w-6" />
 				</span>
 				<span class="check-icon" aria-hidden="true">
-					<Check className="h-6 w-6" strokeWidth="2" />
+					<Check class="h-6 w-6" strokeWidth="2" />
 				</span>
 			{/if}
 		</button>
@@ -356,7 +356,7 @@
 					}}
 					aria-label="reminder actions"
 				>
-					<EllipsisHorizontal className="h-4 w-4" />
+					<EllipsisHorizontal class="h-4 w-4" />
 				</button>
 			</div>
 		{/if}
@@ -383,7 +383,7 @@
 								: 'text-white/70'
 							: 'text-white/45'}"
 					>
-						<CalendarSolid className="h-3.5 w-3.5" />
+						<Calendar variant="solid" class="h-3.5 w-3.5" />
 						<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
 					</button>
 
@@ -391,7 +391,7 @@
 						type="button"
 						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs text-white/45 transition-colors hover:bg-white/8"
 					>
-						<ArrowPath className="h-3.5 w-3.5" />
+						<ArrowPath class="h-3.5 w-3.5" />
 						<span>repeat</span>
 					</button>
 

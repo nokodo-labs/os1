@@ -14,7 +14,7 @@
 	import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
-	import PencilSolid from '$lib/components/icons/PencilSolid.svelte'
+	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -218,7 +218,7 @@
 					chat.scrollToBottom('smooth')
 				}}
 			>
-				<ArrowUp className="h-4 w-4 rotate-180" />
+				<ArrowUp class="h-4 w-4 rotate-180" />
 			</button>
 		</div>
 	{/if}
@@ -239,7 +239,7 @@
 						<div
 							class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
 						>
-							<EyeSlash className="h-7 w-7" />
+							<EyeSlash class="h-7 w-7" />
 						</div>
 						<h2 class="text-2xl font-semibold text-white/90">temporary chat enabled</h2>
 						<p class="mt-2 text-sm text-white/60">
@@ -253,7 +253,7 @@
 						<div
 							class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
 						>
-							<EyeSlash className="h-7 w-7" />
+							<EyeSlash class="h-7 w-7" />
 						</div>
 						<h2 class="text-2xl font-semibold text-white/90">no messages yet</h2>
 						<p class="mt-2 text-sm text-white/60">
@@ -294,10 +294,7 @@
 												)}
 											ariaLabel="copy message"
 										>
-											<DocumentDuplicate
-												className="h-4 w-4"
-												strokeWidth="2"
-											/>
+											<DocumentDuplicate class="h-4 w-4" strokeWidth="2" />
 										</MessageActionButton>
 										{#if item.align === 'right'}
 											<MessageActionButton
@@ -305,14 +302,14 @@
 													chat.handleEditMessage(item.message.id)}
 												ariaLabel="edit message"
 											>
-												<PencilSolid className="h-4 w-4" />
+												<Pencil variant="solid" class="h-4 w-4" />
 											</MessageActionButton>
 											<MessageActionButton
 												onclick={() =>
 													chat.requestDeleteUserMessage(item.message.id)}
 												ariaLabel="delete message"
 											>
-												<GarbageBin className="h-4 w-4" strokeWidth="2" />
+												<GarbageBin class="h-4 w-4" strokeWidth="2" />
 											</MessageActionButton>
 										{/if}
 									{/snippet}
@@ -459,7 +456,7 @@
 												ariaLabel="copy message"
 											>
 												<DocumentDuplicate
-													className="h-4 w-4"
+													class="h-4 w-4"
 													strokeWidth="2"
 												/>
 											</MessageActionButton>
@@ -473,10 +470,7 @@
 													}}
 													ariaLabel="retry"
 												>
-													<ArrowPath
-														className="h-4 w-4"
-														strokeWidth="2"
-													/>
+													<ArrowPath class="h-4 w-4" strokeWidth="2" />
 												</MessageActionButton>
 											{/if}
 										{/snippet}
@@ -500,7 +494,7 @@
 											)}
 										ariaLabel="copy message"
 									>
-										<DocumentDuplicate className="h-4 w-4" strokeWidth="2" />
+										<DocumentDuplicate class="h-4 w-4" strokeWidth="2" />
 									</MessageActionButton>
 								{/snippet}
 							</UserChatMessage>

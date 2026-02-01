@@ -16,5 +16,5 @@
 	aria-label={sidebar?.isChatSidebarOpen ? 'close sidebar' : 'open sidebar'}
 	aria-expanded={sidebar?.isChatSidebarOpen}
 >
-	<Sidebar className="h-6 w-6" />
+	<Sidebar class="h-6 w-6" />
 </button>

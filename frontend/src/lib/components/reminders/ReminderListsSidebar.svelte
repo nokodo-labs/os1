@@ -11,7 +11,7 @@
 	import { reminders } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import { scale } from 'svelte/transition'
-	import PencilSolid from '../icons/PencilSolid.svelte'
+	import Pencil from '../icons/Pencil.svelte'
 	import EditReminderListModal from './EditReminderListModal.svelte'
 
 	interface Props {
@@ -130,7 +130,7 @@
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
 		<div class="flex min-w-0 items-center gap-3">
-			<ListBullet className="h-6 w-6 text-white/70" />
+			<ListBullet class="h-6 w-6 text-white/70" />
 			<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-white/90">
 				lists
 			</h2>
@@ -141,7 +141,7 @@
 			onclick={handleCreateList}
 			aria-label="create list"
 		>
-			<Plus className="h-6 w-6" />
+			<Plus class="h-6 w-6" />
 		</button>
 	</header>
 
@@ -193,7 +193,7 @@
 										editListId = list.id
 									}}
 								>
-									<PencilSolid className="h-4 w-4" />
+									<Pencil variant="solid" class="h-4 w-4" />
 									&nbsp; edit
 								</button>
 								<div class="mt-1">

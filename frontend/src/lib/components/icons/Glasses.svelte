@@ -1,5 +1,18 @@
 <script lang="ts">
-	const { className = 'w-4 h-4', strokeWidth = '1.5' } = $props()
+	import type { SVGAttributes } from 'svelte/elements'
+
+	interface IconProps extends Omit<SVGAttributes<SVGSVGElement>, 'class'> {
+		class?: string
+		color?: string
+		strokeWidth?: string | number
+	}
+
+	let {
+		class: className = 'size-4',
+		color = 'currentColor',
+		strokeWidth = '1.5',
+		...rest
+	}: IconProps = $props()
 </script>
 
 <svg
@@ -8,8 +21,9 @@
 	xmlns="http://www.w3.org/2000/svg"
 	stroke-width={strokeWidth}
 	fill="none"
-	stroke="currentColor"
+	stroke={color}
 	viewBox="0 0 24 24"
+	{...rest}
 	><path
 		d="M2 14C2 16.2091 3.79086 18 6 18C8.20914 18 10 16.2091 10 14C10 11.7909 8.20914 10 6 10C3.79086 10 2 11.7909 2 14ZM2 14V6"
 		stroke-linecap="round"

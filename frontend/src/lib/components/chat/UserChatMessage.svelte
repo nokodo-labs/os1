@@ -98,7 +98,7 @@
 						disabled={currentSiblingIndex === 0}
 						class="flex h-5 w-5 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.1] hover:text-black active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/50 dark:hover:text-white"
 					>
-						<ChevronLeft className="h-3 w-3" strokeWidth="2.5" />
+						<ChevronLeft class="h-3 w-3" strokeWidth="2.5" />
 					</button>
 					<span class="mx-0.5 tabular-nums">
 						{currentSiblingIndex + 1}/{siblingCount}
@@ -108,7 +108,7 @@
 						disabled={currentSiblingIndex === siblingCount - 1}
 						class="flex h-5 w-5 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.1] hover:text-black active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/50 dark:hover:text-white"
 					>
-						<ChevronRight className="h-3 w-3" strokeWidth="2.5" />
+						<ChevronRight class="h-3 w-3" strokeWidth="2.5" />
 					</button>
 				</div>
 			{/if}

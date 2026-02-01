@@ -17,7 +17,7 @@
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
-	import Cog6Solid from '$lib/components/icons/Cog6Solid.svelte'
+	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
@@ -138,7 +138,7 @@
 				id: 'settings',
 				title: 'settings',
 				subtitle: 'open preferences',
-				icon: Cog6Solid,
+				icon: Cog6,
 			},
 			{
 				id: 'archived-chats',
@@ -332,9 +332,9 @@
 								class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
 							>
 								{#if isTemporaryChatMode}
-									<EyeSlash className="h-7 w-7" />
+									<EyeSlash class="h-7 w-7" />
 								{:else}
-									<ChatPlus className="h-7 w-7" />
+									<ChatPlus class="h-7 w-7" />
 								{/if}
 							</div>
 							{#if isTemporaryChatMode}

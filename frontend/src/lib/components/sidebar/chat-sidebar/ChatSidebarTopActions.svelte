@@ -29,7 +29,7 @@
 	aria-label="Search"
 >
 	<div class="flex h-12 w-12 shrink-0 items-center justify-center">
-		<Search className={iconClass} />
+		<Search class={iconClass} />
 	</div>
 	<span
 		class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
@@ -53,7 +53,7 @@
 		aria-label={item.label}
 	>
 		<div class="flex h-12 w-12 shrink-0 items-center justify-center">
-			<Icon className={iconClass} />
+			<Icon class={iconClass} />
 		</div>
 		<span
 			class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels

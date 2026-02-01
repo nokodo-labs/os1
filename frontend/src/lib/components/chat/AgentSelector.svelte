@@ -77,7 +77,7 @@
 		</span>
 		<span style="color: var(--accent-secondary);">
 			<ChevronDown
-				className="transition-transform duration-200 w-4 h-4 {isOpen ? 'rotate-180' : ''}"
+				class="h-4 w-4 transition-transform duration-200 {isOpen ? 'rotate-180' : ''}"
 				strokeWidth="2"
 			/>
 		</span>
@@ -111,10 +111,7 @@
 								{/if}
 							</div>
 							{#if isSelected}
-								<Check
-									className="h-4 w-4 shrink-0 text-white/80"
-									strokeWidth="2.5"
-								/>
+								<Check class="h-4 w-4 shrink-0 text-white/80" strokeWidth="2.5" />
 							{/if}
 						</button>
 					</li>

@@ -1,18 +1,32 @@
 <script lang="ts">
-	const {
-		className = 'size-3.5',
-		strokeWidth = '2',
+	import type { Snippet } from 'svelte'
+	import type { SVGAttributes } from 'svelte/elements'
+
+	interface IconProps extends Omit<SVGAttributes<SVGSVGElement>, 'class'> {
+		class?: string
+		className?: string
+		color?: string
+		children?: Snippet
+	}
+
+	let {
+		class: classProp,
+		className,
+		color = 'currentColor',
 		children,
-	}: { className?: string; strokeWidth?: string; children?: import('svelte').Snippet } = $props()
+		...rest
+	}: IconProps = $props()
+
+	const computedClass = $derived.by(() => classProp ?? className ?? 'size-3.5')
 </script>
 
 <svg
 	xmlns="http://www.w3.org/2000/svg"
 	viewBox="0 0 20 20"
-	fill="currentColor"
+	fill={color}
 	aria-hidden="true"
-	stroke-width={strokeWidth}
-	class={className}
+	class={computedClass}
+	{...rest}
 >
 	{#if children}{@render children()}{/if}
 	<path

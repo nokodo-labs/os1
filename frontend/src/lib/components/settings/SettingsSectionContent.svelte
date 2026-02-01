@@ -1,12 +1,12 @@
 <script lang="ts">
-	import AppNotificationSolid from '$lib/components/icons/AppNotificationSolid.svelte'
-	import CommandLineSolid from '$lib/components/icons/CommandLineSolid.svelte'
-	import EyeSolid from '$lib/components/icons/EyeSolid.svelte'
-	import LockSolid from '$lib/components/icons/LockSolid.svelte'
-	import SoundHighSolid from '$lib/components/icons/SoundHighSolid.svelte'
-	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
-	import UserCircleSolid from '$lib/components/icons/UserCircleSolid.svelte'
-	import WrenchSolid from '$lib/components/icons/WrenchSolid.svelte'
+	import AppNotification from '$lib/components/icons/AppNotification.svelte'
+	import CommandLine from '$lib/components/icons/CommandLine.svelte'
+	import Eye from '$lib/components/icons/Eye.svelte'
+	import Lock from '$lib/components/icons/Lock.svelte'
+	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
+	import UserCircle from '$lib/components/icons/UserCircle.svelte'
+	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import AccessibilitySettings from '$lib/components/settings/sections/AccessibilitySettings.svelte'
 	import AccountSettings from '$lib/components/settings/sections/AccountSettings.svelte'
 	import AdvancedSettings from '$lib/components/settings/sections/AdvancedSettings.svelte'
@@ -36,49 +36,49 @@
 		{
 			id: 'account',
 			label: 'account',
-			icon: UserCircleSolid,
+			icon: UserCircle,
 			description: 'manage your profile, email, and personal information',
 			content: AccountSettings,
 		},
 		{
 			id: 'appearance',
 			label: 'appearance',
-			icon: EyeSolid,
+			icon: Eye,
 			description: 'customize theme, colors, and visual preferences',
 			content: AppearanceSettings,
 		},
 		{
 			id: 'notifications',
 			label: 'notifications',
-			icon: AppNotificationSolid,
+			icon: AppNotification,
 			description: 'configure alerts, sounds, and reminder settings',
 			content: NotificationsSettings,
 		},
 		{
 			id: 'privacy',
 			label: 'privacy & security',
-			icon: LockSolid,
+			icon: Lock,
 			description: 'control your data, permissions, and access settings',
 			content: PrivacySettings,
 		},
 		{
 			id: 'accessibility',
 			label: 'accessibility',
-			icon: SoundHighSolid,
+			icon: SoundHigh,
 			description: 'configure haptic feedback and assistive features',
 			content: AccessibilitySettings,
 		},
 		{
 			id: 'ai',
 			label: 'AI & models',
-			icon: SparklesSolid,
+			icon: Sparkles,
 			description: 'customize AI behavior and model preferences',
 			content: AiSettings,
 		},
 		{
 			id: 'advanced',
 			label: 'advanced',
-			icon: WrenchSolid,
+			icon: Wrench,
 			description: 'developer tools and experimental features',
 			content: AdvancedSettings,
 		},
@@ -93,7 +93,7 @@
 			{
 				id: 'debug',
 				label: 'debug',
-				icon: CommandLineSolid,
+				icon: CommandLine,
 				description: 'debug-only UI toggles and diagnostics',
 				content: DebugSettings,
 			},
@@ -111,7 +111,7 @@
 	<div class="mx-auto max-w-2xl py-6">
 		<header class="mb-8 flex items-center gap-4">
 			<div class="rounded-box flex h-12 w-12 items-center justify-center bg-white/10">
-				<CurrentIcon className="h-6 w-6 text-white/80" />
+				<CurrentIcon variant="solid" class="h-6 w-6 text-white/80" />
 			</div>
 			<div class="min-w-0">
 				<div class="text-2xl font-semibold text-white/90">{currentSection.label}</div>

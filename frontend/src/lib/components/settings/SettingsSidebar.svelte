@@ -1,18 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
-	import Cog6Solid from '$lib/components/icons/Cog6Solid.svelte'
+	import Cog6 from '$lib/components/icons/Cog6.svelte'
+	import CommandLine from '$lib/components/icons/CommandLine.svelte'
+	import Eye from '$lib/components/icons/Eye.svelte'
+	import Lock from '$lib/components/icons/Lock.svelte'
+	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
+	import UserCircle from '$lib/components/icons/UserCircle.svelte'
+	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import type { Component } from 'svelte'
-	// icon imports for settings sections
-	import AppNotificationSolid from '$lib/components/icons/AppNotificationSolid.svelte'
-	import CommandLineSolid from '$lib/components/icons/CommandLineSolid.svelte'
-	import EyeSolid from '$lib/components/icons/EyeSolid.svelte'
-	import LockSolid from '$lib/components/icons/LockSolid.svelte'
-	import SoundHighSolid from '$lib/components/icons/SoundHighSolid.svelte'
-	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
-	import UserCircleSolid from '$lib/components/icons/UserCircleSolid.svelte'
-	import WrenchSolid from '$lib/components/icons/WrenchSolid.svelte'
 
 	interface Props {
 		selectedSection: string | null
@@ -33,49 +32,49 @@
 		{
 			id: 'account',
 			label: 'account',
-			icon: UserCircleSolid,
+			icon: UserCircle,
 			description: 'profile, email, and personal info',
 		},
 		{
 			id: 'appearance',
 			label: 'appearance',
-			icon: EyeSolid,
+			icon: Eye,
 			description: 'theme, colors, and visual preferences',
 		},
 		{
 			id: 'notifications',
 			label: 'notifications',
-			icon: AppNotificationSolid,
+			icon: AppNotification,
 			description: 'alerts, sounds, and reminders',
 		},
 		{
 			id: 'privacy',
 			label: 'privacy & security',
-			icon: LockSolid,
+			icon: Lock,
 			description: 'data, permissions, and access control',
 		},
 		{
 			id: 'accessibility',
 			label: 'accessibility',
-			icon: SoundHighSolid,
+			icon: SoundHigh,
 			description: 'haptic feedback and assistive features',
 		},
 		{
 			id: 'ai',
 			label: 'AI & models',
-			icon: SparklesSolid,
+			icon: Sparkles,
 			description: 'model preferences and behavior',
 		},
 		{
 			id: 'advanced',
 			label: 'advanced',
-			icon: WrenchSolid,
+			icon: Wrench,
 			description: 'developer tools and experimental features',
 		},
 		{
 			id: 'debug',
 			label: 'debug',
-			icon: CommandLineSolid,
+			icon: CommandLine,
 			description: 'debug-only UI toggles and diagnostics',
 		},
 	]
@@ -97,7 +96,7 @@
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
 		<div class="flex min-w-0 items-center gap-2">
-			<Cog6Solid className="h-5 w-5 text-white/60" />
+			<Cog6 variant="solid" class="h-5 w-5 text-white/60" />
 			<h2 class="min-w-0 truncate text-lg font-semibold tracking-wide text-white/85">
 				settings
 			</h2>
@@ -130,7 +129,7 @@
 							? 'bg-white/8'
 							: ''}"
 					>
-						<section.icon className="h-5 w-5" />
+						<section.icon variant="solid" class="h-5 w-5" />
 					</span>
 
 					<span class="flex min-w-0 flex-1 items-center gap-2">
@@ -140,7 +139,7 @@
 					</span>
 
 					<ChevronRight
-						className="h-4 w-4 text-white/35 transition-colors group-hover:text-white/55"
+						class="h-4 w-4 text-white/35 transition-colors group-hover:text-white/55"
 					/>
 				</div>
 			{/each}

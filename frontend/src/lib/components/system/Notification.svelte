@@ -39,7 +39,7 @@
 		{#if iconUrl}
 			<img src={iconUrl} alt="" class="h-5 w-5 rounded-full object-cover" />
 		{:else}
-			<AppNotification className="h-5 w-5" />
+			<AppNotification class="h-5 w-5" />
 		{/if}
 	</div>
 	<div class="min-w-0 flex-1">
@@ -73,7 +73,7 @@
 				title="mark as read"
 				onclick={() => onMarkRead?.(notification.id)}
 			>
-				<Check className="h-3 w-3" />
+				<Check class="h-3 w-3" />
 			</button>
 		{/if}
 		{#if onDismiss}
@@ -83,7 +83,7 @@
 				title="dismiss"
 				onclick={() => onDismiss?.(notification.id)}
 			>
-				<XMark className="h-3 w-3" />
+				<XMark class="h-3 w-3" />
 			</button>
 		{/if}
 	</div>

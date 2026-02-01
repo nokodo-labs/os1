@@ -63,9 +63,7 @@
 	class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 	onclick={handleTriggerClick}
 >
-	<Trash
-		className="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300"
-	/>
+	<Trash class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300" />
 	<span class="ml-2">{label}</span>
 </button>
 
@@ -107,7 +105,7 @@
 				disabled={isDeleting}
 				onclick={() => void runDelete()}
 			>
-				<Trash className="h-4 w-4" />
+				<Trash class="h-4 w-4" />
 				<span class="ml-2">
 					{#if isDeleting}
 						<ShimmerText className="inline-block">deleting</ShimmerText>

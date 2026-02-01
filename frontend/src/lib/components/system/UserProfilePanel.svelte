@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { logout } from '$lib/api/client'
-	import { Cog6Solid, QuestionMarkCircle, SignOut, SparklesSolid } from '$lib/components/icons'
+	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import { session } from '$lib/stores/session.svelte'
 
 	interface UserProfilePanelProps {
@@ -54,27 +54,30 @@
 			.slice(0, 2)
 	}
 
-	type IconComponent = typeof Cog6Solid
+	type IconComponent = typeof Cog6
 
 	interface MenuItem {
 		id: string
 		icon: IconComponent
 		label: string
 		action: () => void
+		variant?: 'outline' | 'solid'
 	}
 
 	const menuItems: MenuItem[] = [
 		{
 			id: 'settings',
-			icon: Cog6Solid,
+			icon: Cog6,
 			label: 'settings',
 			action: handleSettingsClick,
+			variant: 'solid',
 		},
 		{
 			id: 'personalize',
-			icon: SparklesSolid,
+			icon: Sparkles,
 			label: 'personalize',
 			action: handlePersonalizeClick,
+			variant: 'solid',
 		},
 		{
 			id: 'help',
@@ -148,7 +151,7 @@
 					class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
 					onclick={item.action}
 				>
-					<Icon className="h-4.5 w-4.5 shrink-0" />
+					<Icon class="h-4.5 w-4.5 shrink-0" variant={item.variant} />
 					<span>{item.label}</span>
 				</button>
 			{/each}
@@ -172,7 +175,7 @@
 			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
 			onclick={handleLogout}
 		>
-			<SignOut className="h-4.5 w-4.5 shrink-0" />
+			<SignOut class="h-4.5 w-4.5 shrink-0" />
 			<span>log out</span>
 		</button>
 	{/if}

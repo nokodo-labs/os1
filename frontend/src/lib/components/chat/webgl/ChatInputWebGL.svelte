@@ -404,7 +404,7 @@ void main() {
 			class="send-button"
 			type="button"
 		>
-			<ArrowUp className="h-5 w-5" strokeWidth="2.5" />
+			<ArrowUp class="h-5 w-5" strokeWidth="2.5" />
 		</button>
 	</div>
 </div>

@@ -31,7 +31,7 @@
 	<hr class="my-2 border-white/10" />
 	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden px-2">
 		<div class="mb-1 flex items-center gap-2 px-3">
-			<ChatBubble className="h-4 w-4 shrink-0 text-white/60" />
+			<ChatBubble class="h-4 w-4 shrink-0 text-white/60" />
 			<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">

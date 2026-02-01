@@ -1,5 +1,5 @@
 <script lang="ts">
-	import CheckBoxSolid from '$lib/components/icons/CheckBoxSolid.svelte'
+	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import EllipsisVertical from '$lib/components/icons/EllipsisVertical.svelte'
 	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -51,7 +51,7 @@
 					? 'bg-white/8'
 					: ''}"
 			>
-				<CheckBoxSolid className="h-5 w-5" />
+				<CheckBox variant="solid" class="h-5 w-5" />
 			</span>
 		{:else}
 			<span
@@ -81,7 +81,7 @@
 					onMenu(event)
 				}}
 			>
-				<EllipsisVertical className="h-4 w-4" />
+				<EllipsisVertical class="h-4 w-4" />
 			</button>
 		{/if}
 	{/snippet}

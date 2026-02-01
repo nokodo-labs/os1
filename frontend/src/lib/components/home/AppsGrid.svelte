@@ -2,32 +2,34 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import BoltSolid from '$lib/components/icons/BoltSolid.svelte'
-	import BookmarkSolid from '$lib/components/icons/BookmarkSolid.svelte'
-	import CalendarSolid from '$lib/components/icons/CalendarSolid.svelte'
-	import ChatBubblesSolid from '$lib/components/icons/ChatBubblesSolid.svelte'
-	import CheckBoxSolid from '$lib/components/icons/CheckBoxSolid.svelte'
-	import CloudSolid from '$lib/components/icons/CloudSolid.svelte'
-	import Cog6Solid from '$lib/components/icons/Cog6Solid.svelte'
-	import CommandLineSolid from '$lib/components/icons/CommandLineSolid.svelte'
-	import DatabaseSolid from '$lib/components/icons/DatabaseSolid.svelte'
-	import DocumentSolid from '$lib/components/icons/DocumentSolid.svelte'
-	import GlobeAltSolid from '$lib/components/icons/GlobeAltSolid.svelte'
-	import HeartSolid from '$lib/components/icons/HeartSolid.svelte'
-	import MapSolid from '$lib/components/icons/MapSolid.svelte'
-	import PhotoSolid from '$lib/components/icons/PhotoSolid.svelte'
-	import SparklesSolid from '$lib/components/icons/SparklesSolid.svelte'
-	import StarSolid from '$lib/components/icons/StarSolid.svelte'
-	import UsersSolid from '$lib/components/icons/UsersSolid.svelte'
+	import Bolt from '$lib/components/icons/Bolt.svelte'
+	import Bookmark from '$lib/components/icons/Bookmark.svelte'
+	import Calendar from '$lib/components/icons/Calendar.svelte'
+	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
+	import CheckBox from '$lib/components/icons/CheckBox.svelte'
+	import Cloud from '$lib/components/icons/Cloud.svelte'
+	import Cog6 from '$lib/components/icons/Cog6.svelte'
+	import CommandLine from '$lib/components/icons/CommandLine.svelte'
+	import Database from '$lib/components/icons/Database.svelte'
+	import Document from '$lib/components/icons/Document.svelte'
+	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
+	import Heart from '$lib/components/icons/Heart.svelte'
+	import Map from '$lib/components/icons/Map.svelte'
+	import Photo from '$lib/components/icons/Photo.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
+	import Star from '$lib/components/icons/Star.svelte'
+	import Users from '$lib/components/icons/Users.svelte'
+	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
 	import { reminders } from '$lib/stores/reminders.svelte'
 	import { onDestroy, tick } from 'svelte'
 
-	type IconComponent = typeof DocumentSolid
+	type IconComponent = typeof Document
 
 	interface AppDefinition {
 		id: string
 		title: string
 		icon: IconComponent
+		accent?: AccentColorKey
 		action?: () => Promise<void>
 	}
 
@@ -40,37 +42,41 @@
 	let { iconShape = 'circle' }: Props = $props()
 
 	const apps: AppDefinition[] = [
-		{ id: 'notes', title: 'notes', icon: DocumentSolid },
+		{ id: 'notes', title: 'notes', icon: Document },
 		{
 			id: 'reminders',
 			title: 'reminders',
-			icon: CheckBoxSolid,
+			icon: CheckBox,
+			// keep in sync with the accent assigned in /reminders
+			accent: 'blue',
 			action: async () => {
 				await goto(resolve(reminders.remindersAppUrl))
 			},
 		},
-		{ id: 'calendar', title: 'calendar', icon: CalendarSolid },
-		{ id: 'messages', title: 'messages', icon: ChatBubblesSolid },
-		{ id: 'bookmarks', title: 'bookmarks', icon: BookmarkSolid },
-		{ id: 'automations', title: 'automations', icon: BoltSolid },
-		{ id: 'cloud', title: 'cloud', icon: CloudSolid },
+		{ id: 'calendar', title: 'calendar', icon: Calendar },
+		{ id: 'messages', title: 'messages', icon: ChatBubbles },
+		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
+		{ id: 'automations', title: 'automations', icon: Bolt },
+		{ id: 'cloud', title: 'cloud', icon: Cloud },
 		{
 			id: 'settings',
 			title: 'settings',
-			icon: Cog6Solid,
+			icon: Cog6,
+			// keep in sync with the accent assigned in /settings
+			accent: 'gray',
 			action: async () => {
 				await goto(resolve('/settings'))
 			},
 		},
-		{ id: 'database', title: 'database', icon: DatabaseSolid },
-		{ id: 'world', title: 'world', icon: GlobeAltSolid },
-		{ id: 'photos', title: 'photos', icon: PhotoSolid },
-		{ id: 'maps', title: 'maps', icon: MapSolid },
-		{ id: 'spark', title: 'spark', icon: SparklesSolid },
-		{ id: 'favorites', title: 'favorites', icon: StarSolid },
-		{ id: 'health', title: 'health', icon: HeartSolid },
-		{ id: 'terminal', title: 'terminal', icon: CommandLineSolid },
-		{ id: 'teams', title: 'teams', icon: UsersSolid },
+		{ id: 'database', title: 'database', icon: Database },
+		{ id: 'world', title: 'world', icon: GlobeAlt },
+		{ id: 'photos', title: 'photos', icon: Photo },
+		{ id: 'maps', title: 'maps', icon: Map },
+		{ id: 'spark', title: 'spark', icon: Sparkles },
+		{ id: 'favorites', title: 'favorites', icon: Star },
+		{ id: 'health', title: 'health', icon: Heart },
+		{ id: 'terminal', title: 'terminal', icon: CommandLine },
+		{ id: 'teams', title: 'teams', icon: Users },
 	]
 
 	let tilePx = $state(76)
@@ -283,6 +289,11 @@
 			apps.slice(pageIndex * appsPerPage, (pageIndex + 1) * appsPerPage)
 		)
 	})
+
+	const iconColorForApp = (app: AppDefinition): string | null => {
+		if (!app.accent) return null
+		return accentColors[app.accent]?.primary ?? null
+	}
 </script>
 
 <div bind:this={rootEl} class="flex h-full w-full flex-col">
@@ -319,8 +330,16 @@
 									: 'rounded-container'}"
 								style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
 							>
-								<div class="relative z-10">
-									<Icon className="h-(--icon-px) w-(--icon-px) text-white/90" />
+								<div
+									class="relative z-10"
+									style={(() => {
+										const color = iconColorForApp(app)
+										return color
+											? `color: ${color};`
+											: 'color: rgba(255,255,255,0.9);'
+									})()}
+								>
+									<Icon variant="solid" class="h-(--icon-px) w-(--icon-px)" />
 								</div>
 							</div>
 							<div

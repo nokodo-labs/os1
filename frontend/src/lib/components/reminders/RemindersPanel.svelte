@@ -272,7 +272,7 @@
 						onclick={() => void startInlineAdd()}
 					>
 						<span class="flex h-6 w-6 items-center justify-center text-white/55">
-							<Plus className="h-6 w-6" strokeWidth="2" />
+							<Plus class="h-6 w-6" strokeWidth="2" />
 						</span>
 						<span>new reminder</span>
 					</button>
@@ -292,7 +292,7 @@
 								? 'rotate-180'
 								: ''}"
 						>
-							<ChevronDown className="h-4 w-4" />
+							<ChevronDown class="h-4 w-4" />
 						</span>
 					</button>
 				</div>

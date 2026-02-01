@@ -146,7 +146,7 @@
 						{disabled}
 						onclick={toggleAddMenu}
 					>
-						<Plus className="h-5.5 w-5.5" strokeWidth="2" />
+						<Plus class="h-5.5 w-5.5" strokeWidth="2" />
 					</button>
 
 					<input
@@ -212,7 +212,7 @@
 							class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
 							onclick={onStop}
 						>
-							<Stop className="h-3.5 w-3.5" />
+							<Stop class="h-3.5 w-3.5" />
 						</button>
 					{:else}
 						<button
@@ -225,7 +225,7 @@
 								: 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
 							disabled={value.trim() === '' || disabled}
 						>
-							<ArrowUp className="h-5 w-5" strokeWidth="2" />
+							<ArrowUp class="h-5 w-5" strokeWidth="2" />
 						</button>
 					{/if}
 				</div>

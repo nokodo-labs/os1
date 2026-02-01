@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import HomeSolid from '$lib/components/icons/HomeSolid.svelte'
+	import Home from '$lib/components/icons/Home.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
 	const status = $derived.by(() => page.status ?? 500)
@@ -52,8 +52,9 @@
 					onclick={() => void goto(resolve('/'), { keepFocus: true, noScroll: true })}
 					aria-label="go home"
 				>
-					<HomeSolid
-						className="size-4 text-white/70 transition-colors duration-150 group-hover:text-white/85"
+					<Home
+						variant="solid"
+						class="size-4 text-white/70 transition-colors duration-150 group-hover:text-white/85"
 					/>
 					go home
 				</button>

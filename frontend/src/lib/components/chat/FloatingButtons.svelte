@@ -169,7 +169,7 @@
 					class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
 					onclick={handleAsk}
 				>
-					<ChatBubble className="size-3.5" />
+					<ChatBubble class="size-3.5" />
 					Ask
 				</button>
 				<div class="h-4 w-px bg-black/10 dark:bg-white/10"></div>
@@ -177,7 +177,7 @@
 					class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
 					onclick={handleExplain}
 				>
-					<LightBulb className="size-3.5" />
+					<LightBulb class="size-3.5" />
 					Explain
 				</button>
 			</div>
@@ -200,7 +200,7 @@
 					onclick={handleSubmitQuestion}
 					disabled={!inputValue.trim()}
 				>
-					<ArrowUp className="size-4" />
+					<ArrowUp class="size-4" />
 				</button>
 			</div>
 		{:else if mode === 'response'}
@@ -213,7 +213,7 @@
 				>
 					<span class="text-xs font-medium opacity-60">AI Response</span>
 					<button class="opacity-40 hover:opacity-100" onclick={close}>
-						<XMark className="size-3.5" />
+						<XMark class="size-3.5" />
 					</button>
 				</div>
 
@@ -236,7 +236,7 @@
 							style="background-color: var(--accent-primary);"
 							onclick={handleAdd}
 						>
-							<Plus className="size-3.5" />
+							<Plus class="size-3.5" />
 							Add to Chat
 						</button>
 					</div>

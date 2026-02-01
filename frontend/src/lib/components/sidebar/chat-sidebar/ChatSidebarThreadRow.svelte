@@ -6,7 +6,7 @@
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
-	import PencilSolid from '$lib/components/icons/PencilSolid.svelte'
+	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -71,7 +71,7 @@
 				}}
 				aria-label="thread actions"
 			>
-				<EllipsisHorizontal className="h-4 w-4" />
+				<EllipsisHorizontal class="h-4 w-4" />
 			</button>
 		{/snippet}
 	</SidebarListItem>
@@ -95,7 +95,7 @@
 					})
 				}}
 			>
-				<Share className="h-4 w-4" />
+				<Share class="h-4 w-4" />
 				share
 			</button>
 			<button
@@ -107,7 +107,7 @@
 					onRequestEdit(thread)
 				}}
 			>
-				<PencilSolid className="h-4 w-4" />
+				<Pencil variant="solid" class="h-4 w-4" />
 				edit
 			</button>
 			<button
@@ -119,7 +119,7 @@
 					console.log('thread action', 'archive', thread.id)
 				}}
 			>
-				<ArchiveBox className="h-4 w-4" />
+				<ArchiveBox class="h-4 w-4" />
 				archive
 			</button>
 			<div class="my-1 h-px w-full bg-white/10"></div>

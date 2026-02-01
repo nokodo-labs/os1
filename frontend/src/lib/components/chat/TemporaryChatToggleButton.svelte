@@ -59,8 +59,8 @@
 	aria-label="temporary chat"
 >
 	{#if isActive}
-		<ChatBubbleDottedChecked className="h-6 w-6" />
+		<ChatBubbleDottedChecked class="h-6 w-6" />
 	{:else}
-		<ChatBubbleDotted className="h-6 w-6" />
+		<ChatBubbleDotted class="h-6 w-6" />
 	{/if}
 </button>

@@ -1,16 +1,23 @@
 <script lang="ts">
-	const {
-		className = 'w-5 h-5',
-		strokeWidth = '1.5',
-	}: { className?: string; strokeWidth?: string } = $props()
+	import type { SVGAttributes } from 'svelte/elements'
+
+	interface IconProps extends Omit<SVGAttributes<SVGSVGElement>, 'class'> {
+		class?: string
+		className?: string
+		color?: string
+	}
+
+	let { class: classProp, className, color = 'currentColor', ...rest }: IconProps = $props()
+
+	const computedClass = $derived.by(() => classProp ?? className ?? 'w-5 h-5')
 </script>
 
 <svg
 	xmlns="http://www.w3.org/2000/svg"
 	viewBox="0 0 20 20"
-	fill="currentColor"
-	class={className}
-	stroke-width={strokeWidth}
+	fill={color}
+	class={computedClass}
+	{...rest}
 >
 	<path
 		fill-rule="evenodd"

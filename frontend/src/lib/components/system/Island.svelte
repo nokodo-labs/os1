@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
-	import HomeSolid from '$lib/components/icons/HomeSolid.svelte'
+	import Home from '$lib/components/icons/Home.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
@@ -64,11 +64,11 @@
 							type="button"
 						>
 							{#if action.icon === 'plus'}
-								<Plus className="h-5 w-5" />
+								<Plus class="h-5 w-5" />
 							{:else if action.icon === 'list'}
-								<ListBullet className="h-5 w-5" />
+								<ListBullet class="h-5 w-5" />
 							{:else if action.icon === 'chevron-left'}
-								<ChevronLeft className="h-5 w-5" strokeWidth="2" />
+								<ChevronLeft class="h-5 w-5" strokeWidth="2" />
 							{/if}
 							{#if action.label}
 								<span class="hidden text-sm font-medium text-white/85 sm:inline">
@@ -102,7 +102,7 @@
 					onclick={handleHome}
 					aria-label="home"
 				>
-					<HomeSolid className="h-6 w-6" />
+					<Home variant="solid" class="h-6 w-6" />
 				</button>
 			{/if}
 
@@ -112,7 +112,7 @@
 				aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 				aria-expanded={chrome.isDockOpen}
 			>
-				<Sidebar className="h-6 w-6 rotate-180" />
+				<Sidebar variant="solid" class="h-6 w-6 rotate-180" />
 			</button>
 
 			<UserProfileTrigger user={session.userDisplay} placement="header" isExpanded={false} />

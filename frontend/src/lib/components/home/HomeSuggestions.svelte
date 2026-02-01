@@ -45,7 +45,7 @@
 						<div
 							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/8 text-white/85"
 						>
-							<Icon className="h-5 w-5" strokeWidth="2" />
+							<Icon class="h-5 w-5" strokeWidth="2" />
 						</div>
 						<div class="min-w-0">
 							<div class="truncate text-sm font-semibold text-white/90">
