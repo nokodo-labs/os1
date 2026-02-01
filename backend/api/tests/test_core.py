@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
 
-from api.core import config as config_module
+from api.boot_settings import BootSettings
 from api.core import database as database_module
-from api.core.config import Settings
+from api.core import runtime as config_module
+from api.settings.settings import SecuritySettings
 
 
 class _DummySession:
@@ -69,17 +71,19 @@ class _DummyEngine:
 
 
 def test_settings_parse_cors_origins_from_string() -> None:
-	settings = Settings.model_validate({"CORS_ORIGINS": "https://a.com, https://b.com"})
-	assert settings.CORS_ORIGINS == ["https://a.com", "https://b.com"]
+	security = SecuritySettings.model_validate(
+		{"cors_origins": "https://a.com, https://b.com"}
+	)
+	assert security.cors_origins == ["https://a.com", "https://b.com"]
 
 
 def test_settings_validate_database_url_scheme() -> None:
 	with pytest.raises(ValueError):
-		Settings(DATABASE_URL="mysql://localhost/db")
+		BootSettings(DATABASE_URL="mysql://localhost/db")
 
 
 def test_settings_accepts_supported_database_url() -> None:
-	settings = Settings(DATABASE_URL="postgresql://user@localhost/db")
+	settings = BootSettings(DATABASE_URL="postgresql://user@localhost/db")
 	assert settings.DATABASE_URL.startswith("postgresql://")
 
 
@@ -162,21 +166,47 @@ async def test_init_db_runs_alembic_upgrade(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_init_db_runs_alembic_upgrade_heads_when_branching_enabled(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""init_db should run alembic upgrade heads when branching migrations are enabled."""
+	mock_upgrade = MagicMock()
+	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
+
+	class MockBootSettings:
+		DATABASE_URL = database_module.boot_settings.DATABASE_URL
+		DEBUG = False
+		BRANCHING_MIGRATIONS = True
+
+	monkeypatch.setattr(database_module, "boot_settings", MockBootSettings())
+
+	await database_module.init_db()
+
+	mock_upgrade.assert_called_once()
+	args, _ = mock_upgrade.call_args
+	assert isinstance(args[0], database_module.Config)
+	assert args[1] == "heads"
+
+
+@pytest.mark.asyncio
 async def test_init_db_masks_url_credentials(
 	monkeypatch: pytest.MonkeyPatch,
 	caplog: pytest.LogCaptureFixture,
 ) -> None:
 	"""Test that init_db masks credentials in URLs containing @ symbol."""
+	caplog.set_level(logging.INFO, logger=database_module.logger.name)
+
 	# Mock alembic command to avoid actual DB operations
 	mock_upgrade = MagicMock()
 	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
 
 	# mock settings with a URL that has credentials (contains @)
-	class MockSettings:
+	class MockBootSettings:
 		DATABASE_URL = "postgresql://user:secret@localhost:5432/db"
 		DEBUG = False
+		BRANCHING_MIGRATIONS = False
 
-	monkeypatch.setattr(database_module, "settings", MockSettings())
+	monkeypatch.setattr(database_module, "boot_settings", MockBootSettings())
 
 	await database_module.init_db()
 
@@ -197,14 +227,17 @@ async def test_init_db_logs_plain_url_when_no_credentials(
 	caplog: pytest.LogCaptureFixture,
 ) -> None:
 	"""init_db should log the URL unchanged when it contains no credentials."""
+	caplog.set_level(logging.INFO, logger=database_module.logger.name)
+
 	mock_upgrade = MagicMock()
 	monkeypatch.setattr(database_module.command, "upgrade", mock_upgrade)
 
-	class MockSettings:
+	class MockBootSettings:
 		DATABASE_URL = "postgresql://localhost:5432/db"
 		DEBUG = False
+		BRANCHING_MIGRATIONS = False
 
-	monkeypatch.setattr(database_module, "settings", MockSettings())
+	monkeypatch.setattr(database_module, "boot_settings", MockBootSettings())
 
 	await database_module.init_db()
 

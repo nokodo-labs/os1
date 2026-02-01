@@ -221,12 +221,13 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException):
 		await users.get_user(new_typeid("user"), db_session, principal=principal)
 
-	with pytest.raises(HTTPException):
-		await users.create_user(
-			user_in=UserCreate(email="x@example.com", password="pw"),
-			session=db_session,
-			actor=None,
-		)
+	created = await users.create_user(
+		user_in=UserCreate(email="x@example.com", password="pw", is_superuser=True),
+		session=db_session,
+		actor=None,
+	)
+	assert created.is_active is True
+	assert created.is_superuser is False
 
 	with pytest.raises(HTTPException):
 		await users.create_user(

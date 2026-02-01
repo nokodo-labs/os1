@@ -6,10 +6,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.logging import get_logger
 from api.models.user import User
+from api.settings import settings
 from api.v1.service.connection_manager import event_connections
 from nokodo_ai.utils.security import decode_jwt_token
 
@@ -27,8 +27,8 @@ async def _authenticate_websocket(token: str | None) -> User | None:
 	try:
 		payload = decode_jwt_token(
 			token,
-			secret_key=settings.SECRET_KEY,
-			algorithms=[settings.ALGORITHM],
+			secret_key=settings.security.secret_key,
+			algorithms=[settings.security.jwt_algorithm],
 		)
 		user_id = payload.get("sub")
 		if not user_id:

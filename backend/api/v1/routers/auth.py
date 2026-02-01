@@ -5,8 +5,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.constants import API_V1_MOUNT_PATH
-from api.core.config import settings
 from api.core.database import get_db
+from api.settings import settings
 from api.v1.schemas.token import Token
 from api.v1.service import auth as auth_service
 
@@ -20,12 +20,14 @@ REFRESH_COOKIE_PATH = f"{API_V1_MOUNT_PATH}/auth"
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 	"""Set refresh token as HttpOnly cookie."""
-	max_age = int(timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS).total_seconds())
+	max_age = int(
+		timedelta(days=settings.security.refresh_token_expire_days).total_seconds()
+	)
 	response.set_cookie(
 		key=REFRESH_COOKIE_NAME,
 		value=refresh_token,
 		httponly=True,
-		secure=settings.AUTH_COOKIE_SECURE,
+		secure=settings.security.auth_cookie_secure,
 		samesite="lax",
 		path=REFRESH_COOKIE_PATH,
 		max_age=max_age,

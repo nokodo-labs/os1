@@ -32,7 +32,7 @@ services:
     container_name: nokodo-ai-prod-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "1383:1383"
     environment:
       DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-production
       APP_ENV: production

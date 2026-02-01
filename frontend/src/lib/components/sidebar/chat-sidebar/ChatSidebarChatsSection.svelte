@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Thread } from '$lib/stores/session'
+	import type { Thread } from '$lib/stores/session.svelte'
 
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 

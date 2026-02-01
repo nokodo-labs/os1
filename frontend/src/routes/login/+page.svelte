@@ -3,8 +3,9 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { v1Client } from '$lib/api/v1/client'
-	import { refreshSession, setSessionToken } from '$lib/stores/session'
+	import { apiClient } from '$lib/api/client'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	let email = $state('')
 	let password = $state('')
@@ -13,6 +14,8 @@
 
 	// NOTE: searchParams access must be guarded for SSG/prerender compatibility
 	const next = $derived(browser ? (page.url.searchParams.get('next') ?? '/') : '/')
+
+	pageTitleStore.pageTitle = 'login'
 
 	$effect(() => {
 		if (!browser) return
@@ -28,16 +31,19 @@
 		isSubmitting = true
 
 		try {
-			const { data, error, response } = await v1Client().POST('/auth/login/access-token', {
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: {
-					username: email.trim(),
-					password,
-					scope: '',
-				},
-			})
+			const { data, error, response } = await apiClient().POST(
+				'/v1/auth/login/access-token',
+				{
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					body: {
+						username: email.trim(),
+						password,
+						scope: '',
+					},
+				}
+			)
 
 			if (error || !data) {
 				const detail = (error as { detail?: unknown } | undefined)?.detail
@@ -55,8 +61,8 @@
 				throw new Error(response.statusText || 'failed to sign in')
 			}
 
-			setSessionToken(data.access_token)
-			void refreshSession()
+			session.setToken(data.access_token)
+			void session.refresh()
 			// @ts-expect-error resolve typing is narrower than our constructed URL
 			await goto(resolve(next as never))
 		} catch (err) {

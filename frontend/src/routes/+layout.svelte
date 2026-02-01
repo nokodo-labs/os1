@@ -2,6 +2,8 @@
 	import { browser } from '$app/environment'
 	import { goto, onNavigate } from '$app/navigation'
 	import { page } from '$app/state'
+	import { refreshAccessToken } from '$lib/api/client'
+	import { apiOriginReady } from '$lib/api/init'
 	import { eventStreamClient } from '$lib/api/streaming'
 	import { refreshV1AccessToken } from '$lib/api/v1/client'
 	import { getAccessToken } from '$lib/auth/session'
@@ -19,8 +21,10 @@
 	import { createThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device, initDevice } from '$lib/stores/device.svelte'
-	import { activeModal, closeModal } from '$lib/stores/modals'
-	import { startPreferencesSync } from '$lib/stores/preferences'
+	import { modals } from '$lib/stores/modals.svelte'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
+	import { loadSettings } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -52,11 +56,8 @@
 		})
 	})
 
-	// Initialize event stream if already logged in (page load/refresh)
-	const existingToken = getAccessToken()
-	if (existingToken) {
-		eventStreamClient.connect(existingToken)
-	}
+	// SSG: safe to init synchronously at module eval time when in browser.
+	if (browser) initDevice()
 
 	// SSG: safe to init synchronously at module eval time when in browser.
 	if (browser) initDevice()
@@ -76,7 +77,7 @@
 	const theme = createThemeContext()
 
 	$effect(() => {
-		return startPreferencesSync()
+		return preferences.startSync()
 	})
 
 	// DEV ONLY: Background switcher
@@ -93,6 +94,12 @@
 	})
 
 	onMount(async () => {
+		await apiOriginReady
+		void loadSettings()
+		// Initialize event stream if already logged in (page load/refresh)
+		const existingToken = getAccessToken()
+		if (existingToken) eventStreamClient.connect(existingToken)
+
 		// Ensure the first route has had a chance to render + paint.
 		await tick()
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -107,7 +114,7 @@
 		const isPublic = PUBLIC_PATHS.has(page.url.pathname)
 
 		if (!token && !isPublic) {
-			const refreshed = await refreshV1AccessToken()
+			const refreshed = await refreshAccessToken()
 			if (!refreshed) {
 				const next = `${page.url.pathname}${page.url.search}`
 				void goto(`/login?next=${encodeURIComponent(next)}`, { replaceState: true })
@@ -261,6 +268,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>{pageTitleStore.pageFullTitle}</title>
+</svelte:head>
+
 <SplashController />
 
 <!-- Background Manager handles all backgrounds with smooth transitions -->
@@ -351,15 +362,12 @@
 			</div>
 
 			<SettingsModal
-				open={$activeModal === 'settings'}
-				onClose={() => closeModal()}
+				open={modals.isOpen('settings')}
+				onClose={modals.close}
 				{theme}
 				bind:currentBackground
 			/>
-			<ArchivedChatsModal
-				open={$activeModal === 'archived-chats'}
-				onClose={() => closeModal()}
-			/>
+			<ArchivedChatsModal open={modals.isOpen('archived-chats')} onClose={modals.close} />
 		</div>
 	{/if}
 </BackgroundManager>

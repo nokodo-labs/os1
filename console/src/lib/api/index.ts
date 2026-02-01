@@ -8,12 +8,12 @@ import {
 	ProjectsService,
 	PromptsService,
 	ProvidersService,
-	SystemService,
+	SettingsService,
 	ThreadsService,
 	UsersService,
 } from './generated'
 
-const DEFAULT_API_BASE = 'http://localhost:8000/v1'
+const DEFAULT_API_BASE = 'http://localhost:1383/v1'
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL || DEFAULT_API_BASE
 OpenAPI.TOKEN = async () => {
@@ -31,7 +31,7 @@ export {
 	ProjectsService,
 	PromptsService,
 	ProvidersService,
-	SystemService,
+	SettingsService,
 	ThreadsService,
 	UsersService,
 }
@@ -66,9 +66,13 @@ export type {
 	ProviderStatus,
 	ProviderType,
 	ProviderUpdate,
+	Settings,
+	SettingsResponse,
+	SettingsUpdateRequest,
 	Thread,
 	ThreadCreate,
 	Token,
+	UISettings,
 	User,
 	UserCreate,
 } from './generated'

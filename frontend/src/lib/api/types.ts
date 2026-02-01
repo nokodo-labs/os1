@@ -4,46 +4,6 @@
  */
 
 export interface paths {
-    "/system/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get System Status
-         * @description Check system initialization status.
-         */
-        get: operations["get_system_status_system_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/system/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Runtime Config
-         * @description Return runtime configuration values safe for clients.
-         */
-        get: operations["get_runtime_config_system_config_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/login/access-token": {
         parameters: {
             query?: never;
@@ -406,13 +366,13 @@ export interface paths {
         };
         /**
          * List Tasks
-         * @description List tasks with optional filters.
+         * @description list tasks with optional filters.
          */
         get: operations["list_tasks_tasks_get"];
         put?: never;
         /**
          * Create Task
-         * @description Create a new task.
+         * @description create a new task.
          */
         post: operations["create_task_tasks_post"];
         delete?: never;
@@ -436,7 +396,7 @@ export interface paths {
         head?: never;
         /**
          * Update Task
-         * @description Update mutable task fields.
+         * @description update mutable task fields.
          */
         patch: operations["update_task_tasks__task_id__patch"];
         trace?: never;
@@ -974,10 +934,135 @@ export interface paths {
         patch: operations["update_plugin_plugins__plugin_id__patch"];
         trace?: never;
     };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Settings
+         * @description get all settings.
+         */
+        get: operations["get_settings_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Settings
+         * @description partial update settings (admin only).
+         */
+        patch: operations["update_settings_settings_patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIChatContextSettings */
+        AIChatContextSettings: {
+            /**
+             * Mode
+             * @description how chats are selected for Agent context enrichment
+             * @default recent
+             * @enum {string}
+             */
+            mode: "recent" | "relevant" | "pinned";
+            /**
+             * Top K
+             * @description number of chats to use for context enrichment
+             * @default 3
+             */
+            top_k: number;
+        };
+        /** AIChatContextSettingsPatch */
+        AIChatContextSettingsPatch: {
+            /**
+             * Mode
+             * @description how chats are selected for Agent context enrichment
+             */
+            mode?: string | null;
+            /**
+             * Top K
+             * @description number of chats to use for context enrichment
+             */
+            top_k?: number | null;
+        };
+        /** AIMemorySettings */
+        AIMemorySettings: {
+            /**
+             * Enable Memory
+             * @description enable memory
+             * @default true
+             */
+            enable_memory: boolean;
+            /**
+             * Similarity Threshold
+             * @description similarity minimum threshold for memory retrieval. how similar a memory must be to be considered relevant. 0.0 = all memories, 1.0 = exact match
+             * @default 0.65
+             */
+            similarity_threshold: number;
+            /**
+             * Top K
+             * @description number of relevant memories to retrieve
+             * @default 15
+             */
+            top_k: number;
+            /**
+             * Messages To Consider
+             * @description number of recent messages to consider when retrieving relevant memories for the agent and for consolidation work
+             * @default 4
+             */
+            messages_to_consider: number;
+        };
+        /** AIMemorySettingsPatch */
+        AIMemorySettingsPatch: {
+            /**
+             * Enable Memory
+             * @description enable memory
+             */
+            enable_memory?: boolean | null;
+            /**
+             * Similarity Threshold
+             * @description similarity minimum threshold for memory retrieval
+             */
+            similarity_threshold?: number | null;
+            /**
+             * Top K
+             * @description number of relevant memories to retrieve
+             */
+            top_k?: number | null;
+            /**
+             * Messages To Consider
+             * @description number of recent messages to consider
+             */
+            messages_to_consider?: number | null;
+        };
+        /** AISettings */
+        AISettings: {
+            /**
+             * Default Agent Id
+             * @description default agent id
+             */
+            default_agent_id?: string | null;
+            /** @description AI memory settings */
+            memory?: components["schemas"]["AIMemorySettings"];
+            /** @description chat context settings */
+            chat_context?: components["schemas"]["AIChatContextSettings"];
+        };
+        /** AISettingsPatch */
+        AISettingsPatch: {
+            /**
+             * Default Agent Id
+             * @description default agent id
+             */
+            default_agent_id?: string | null;
+            memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
+            chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
+        };
         /**
          * AccessControlEntry
          * @description response schema for an ace.
@@ -1161,6 +1246,95 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /** BrandingSettings */
+        BrandingSettings: {
+            /**
+             * Site Name
+             * @description site name
+             * @default nokodo
+             */
+            site_name: string;
+            /**
+             * App Version
+             * @description backend version
+             * @default 0.1.0
+             */
+            app_version: string;
+            /**
+             * Logo Url
+             * @description logo url
+             */
+            logo_url?: string | null;
+            /**
+             * Favicon Url
+             * @description favicon url
+             */
+            favicon_url?: string | null;
+            /**
+             * Primary Color
+             * @description primary color hex
+             * @default #6366f1
+             */
+            primary_color: string;
+            /**
+             * Public Frontend Origin
+             * @description public frontend origin
+             */
+            public_frontend_origin?: string | null;
+            /**
+             * Public Cdn Origin
+             * @description public cdn origin
+             */
+            public_cdn_origin?: string | null;
+            /**
+             * Public Console Origin
+             * @description public admin console origin
+             */
+            public_console_origin?: string | null;
+            /**
+             * Analytics Key
+             * @description analytics key (env-only)
+             */
+            analytics_key?: string | null;
+        };
+        /** BrandingSettingsPatch */
+        BrandingSettingsPatch: {
+            /**
+             * Site Name
+             * @description site name
+             */
+            site_name?: string | null;
+            /**
+             * Logo Url
+             * @description logo url
+             */
+            logo_url?: string | null;
+            /**
+             * Favicon Url
+             * @description favicon url
+             */
+            favicon_url?: string | null;
+            /**
+             * Primary Color
+             * @description primary color hex
+             */
+            primary_color?: string | null;
+            /**
+             * Public Frontend Origin
+             * @description public frontend origin
+             */
+            public_frontend_origin?: string | null;
+            /**
+             * Public Cdn Origin
+             * @description public cdn origin
+             */
+            public_cdn_origin?: string | null;
+            /**
+             * Public Console Origin
+             * @description public console origin
+             */
+            public_console_origin?: string | null;
+        };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
         /**
@@ -1257,6 +1431,23 @@ export interface components {
             /** Message Ids */
             message_ids?: string[];
         };
+        /** FeaturesSettings */
+        FeaturesSettings: {
+            /**
+             * Enable File Uploads
+             * @description enable file uploads
+             * @default true
+             */
+            enable_file_uploads: boolean;
+        };
+        /** FeaturesSettingsPatch */
+        FeaturesSettingsPatch: {
+            /**
+             * Enable File Uploads
+             * @description enable file uploads
+             */
+            enable_file_uploads?: boolean | null;
+        };
         /**
          * FileContent
          * @description file attachment content.
@@ -1327,6 +1518,56 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** LimitsSettings */
+        LimitsSettings: {
+            /**
+             * Max Threads Per User
+             * @description max threads per user
+             * @default 100
+             */
+            max_threads_per_user: number;
+            /**
+             * Max Messages Per Thread
+             * @description max messages per thread
+             * @default 1000
+             */
+            max_messages_per_thread: number;
+            /**
+             * Max File Size Mb
+             * @description max file size mb
+             * @default 50
+             */
+            max_file_size_mb: number;
+            /**
+             * Rate Limit Requests Per Minute
+             * @description rate limit/min
+             * @default 60
+             */
+            rate_limit_requests_per_minute: number;
+        };
+        /** LimitsSettingsPatch */
+        LimitsSettingsPatch: {
+            /**
+             * Max Threads Per User
+             * @description max threads per user
+             */
+            max_threads_per_user?: number | null;
+            /**
+             * Max Messages Per Thread
+             * @description max messages per thread
+             */
+            max_messages_per_thread?: number | null;
+            /**
+             * Max File Size Mb
+             * @description max file size mb
+             */
+            max_file_size_mb?: number | null;
+            /**
+             * Rate Limit Requests Per Minute
+             * @description rate limit/min
+             */
+            rate_limit_requests_per_minute?: number | null;
         };
         /**
          * Memory
@@ -2152,15 +2393,160 @@ export interface components {
              */
             reason: string;
         };
-        /**
-         * RuntimeConfigOut
-         * @description Runtime configuration values safe for clients.
-         */
-        RuntimeConfigOut: {
-            /** Frontend Origin */
-            frontend_origin?: string | null;
-            /** Cdn Origin */
-            cdn_origin?: string | null;
+        /** SecuritySettings */
+        SecuritySettings: {
+            /**
+             * Secret Key
+             * @description application secret key (env-only)
+             * @default changeme
+             */
+            secret_key: string;
+            /**
+             * Jwt Algorithm
+             * @description jwt algorithm
+             * @default HS256
+             */
+            jwt_algorithm: string;
+            /**
+             * Access Token Expire Minutes
+             * @description access token expire minutes
+             * @default 30
+             */
+            access_token_expire_minutes: number;
+            /**
+             * Refresh Token Expire Days
+             * @description refresh token expire days
+             * @default 90
+             */
+            refresh_token_expire_days: number;
+            /**
+             * Auth Cookie Secure
+             * @description set secure cookies
+             * @default true
+             */
+            auth_cookie_secure: boolean;
+            /**
+             * Session Timeout Minutes
+             * @description session timeout
+             * @default 30
+             */
+            session_timeout_minutes: number;
+            /**
+             * Require Email Verification
+             * @description require email verification
+             * @default true
+             */
+            require_email_verification: boolean;
+            /**
+             * Allowed Email Domains
+             * @description allowed domains
+             */
+            allowed_email_domains?: string[];
+            /**
+             * Enable Oauth
+             * @description enable oauth (env-only)
+             * @default true
+             */
+            enable_oauth: boolean;
+            /**
+             * Cors Origins
+             * @description cors origins (env-only)
+             */
+            cors_origins?: string[];
+        };
+        /** SecuritySettingsPatch */
+        SecuritySettingsPatch: {
+            /**
+             * Access Token Expire Minutes
+             * @description access token expire minutes
+             */
+            access_token_expire_minutes?: number | null;
+            /**
+             * Refresh Token Expire Days
+             * @description refresh token expire days
+             */
+            refresh_token_expire_days?: number | null;
+            /**
+             * Auth Cookie Secure
+             * @description set secure cookies
+             */
+            auth_cookie_secure?: boolean | null;
+            /**
+             * Session Timeout Minutes
+             * @description session timeout
+             */
+            session_timeout_minutes?: number | null;
+            /**
+             * Require Email Verification
+             * @description require email verification
+             */
+            require_email_verification?: boolean | null;
+            /**
+             * Allowed Email Domains
+             * @description allowed domains
+             */
+            allowed_email_domains?: string[] | null;
+        };
+        /** Settings */
+        Settings: {
+            ui?: components["schemas"]["UISettings"];
+            features?: components["schemas"]["FeaturesSettings"];
+            ai?: components["schemas"]["AISettings"];
+            branding?: components["schemas"]["BrandingSettings"];
+            limits?: components["schemas"]["LimitsSettings"];
+            security?: components["schemas"]["SecuritySettings"];
+        };
+        /** SettingsPatch */
+        SettingsPatch: {
+            ui?: components["schemas"]["UISettingsPatch"] | null;
+            features?: components["schemas"]["FeaturesSettingsPatch"] | null;
+            ai?: components["schemas"]["AISettingsPatch"] | null;
+            branding?: components["schemas"]["BrandingSettingsPatch"] | null;
+            limits?: components["schemas"]["LimitsSettingsPatch"] | null;
+            security?: components["schemas"]["SecuritySettingsPatch"] | null;
+        };
+        /** SettingsResponse */
+        SettingsResponse: {
+            versions: components["schemas"]["SettingsVersions"];
+            data: components["schemas"]["Settings"];
+        };
+        /** SettingsUpdateRequest */
+        SettingsUpdateRequest: {
+            data: components["schemas"]["SettingsPatch"];
+            expected_versions?: components["schemas"]["SettingsVersions"] | null;
+        };
+        /** SettingsVersions */
+        SettingsVersions: {
+            /**
+             * Ui
+             * @default 0
+             */
+            ui: number;
+            /**
+             * Features
+             * @default 0
+             */
+            features: number;
+            /**
+             * Ai
+             * @default 0
+             */
+            ai: number;
+            /**
+             * Branding
+             * @default 0
+             */
+            branding: number;
+            /**
+             * Limits
+             * @default 0
+             */
+            limits: number;
+            /**
+             * Security
+             * @default 0
+             */
+            security: number;
         };
         /** @enum {string} */
         SortDir: "asc" | "desc";
@@ -2453,9 +2839,37 @@ export interface components {
             /** Refresh Token */
             refresh_token?: string | null;
         };
+        /** UISettings */
+        UISettings: {
+            /**
+             * Default Theme
+             * @description 'light', 'dark', or 'system'
+             * @default system
+             */
+            default_theme: string;
+            /**
+             * Sidebar Collapsed
+             * @description collapse sidebar
+             * @default false
+             */
+            sidebar_collapsed: boolean;
+        };
+        /** UISettingsPatch */
+        UISettingsPatch: {
+            /**
+             * Default Theme
+             * @description 'light', 'dark', or 'system'
+             */
+            default_theme?: string | null;
+            /**
+             * Sidebar Collapsed
+             * @description collapse sidebar
+             */
+            sidebar_collapsed?: boolean | null;
+        };
         /**
          * User
-         * @description Schema for user response.
+         * @description schema for user response.
          */
         User: {
             /**
@@ -2509,7 +2923,13 @@ export interface components {
         };
         /**
          * UserCreate
-         * @description Schema for creating a user.
+         * @description schema for creating a user.
+         *
+         *     note: is_active and is_superuser are optional.
+         *     the server decides final values:
+         *     - bootstrap (first user): may be superuser only if explicitly requested
+         *     - unauthenticated: regular user only (is_active=True, is_superuser=False)
+         *     - authenticated superuser: can set privileges
          */
         UserCreate: {
             /**
@@ -2517,34 +2937,42 @@ export interface components {
              * Format: email
              */
             email: string;
+            /** Password */
+            password: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Is Superuser */
+            is_superuser?: boolean | null;
+        };
+        /**
+         * UserUpdate
+         * @description schema for updating a user.
+         */
+        UserUpdate: {
+            /** Email */
+            email?: string | null;
+            /** Password */
+            password?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
             /** Display Name */
             display_name?: string | null;
             /** Avatar Url */
             avatar_url?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
-            /**
-             * Is Superuser
-             * @default false
-             */
-            is_superuser: boolean;
             /** Preferences */
             preferences?: {
                 [key: string]: unknown;
-            };
+            } | null;
             /** Integration Tokens */
             integration_tokens?: {
                 [key: string]: unknown;
-            };
+            } | null;
             /** Usage Quotas */
             usage_quotas?: {
                 [key: string]: unknown;
-            };
-            /** Password */
-            password: string;
+            } | null;
         };
         /**
          * UserUpdate
@@ -2646,192 +3074,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    get_system_status_system_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    get_runtime_config_system_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RuntimeConfigOut"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
     login_access_token_auth_login_access_token_post: {
         parameters: {
             query?: never;
@@ -9166,6 +9408,194 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Plugin"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_settings_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_settings_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
                 };
             };
             /** @description bad request */

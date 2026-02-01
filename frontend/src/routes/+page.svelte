@@ -3,7 +3,7 @@
 	import { goto, onNavigate } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { v1Client } from '$lib/api/v1/client'
+	import { apiClient } from '$lib/api/client'
 	import { getJwtUserId } from '$lib/auth/jwt'
 	import { getAccessToken } from '$lib/auth/session'
 	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
@@ -19,9 +19,10 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { openModal } from '$lib/stores/modals'
-	import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent'
-	import { setActiveThread, setPendingChatStart, userDisplay } from '$lib/stores/session'
+	import { modals } from '$lib/stores/modals.svelte'
+	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
+	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state('')
@@ -45,6 +46,23 @@
 
 	const isChatMode = $derived(chatMode === 'new' || chatMode === 'temp')
 	const isTemporaryChatMode = $derived(chatMode === 'temp')
+
+	// ============ VIEW TRANSITIONS FOR QUERY PARAM CHANGES ============
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return
+
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve()
+				await navigation.complete
+			})
+		})
+	})
+
+	// ============ EFFECTS ============
+	$effect(() => {
+		pageTitleStore.pageTitle = isChatMode ? 'new chat' : 'homepage'
+	})
 
 	let showChatBanner = $state(false)
 
@@ -153,8 +171,8 @@
 
 	$effect(() => {
 		chrome.setAgentSelector({
-			selectedAgent: $selectedAgentId,
-			onAgentChange: (agentId: string) => setSelectedAgentId(agentId),
+			selectedAgent: selectedAgent.id,
+			onAgentChange: (agentId: string) => selectedAgent.set(agentId),
 		})
 	})
 
@@ -188,7 +206,7 @@
 			inputValue = content
 			return
 		}
-		const { data, error } = await v1Client().POST('/threads', {
+		const { data, error } = await apiClient().POST('/v1/threads', {
 			body: {
 				owner_id: userId,
 				is_archived: false,
@@ -202,8 +220,8 @@
 			inputValue = content
 			return
 		}
-		setActiveThread(data)
-		setPendingChatStart({ threadId: data.id, content })
+		session.activeThread = data
+		session.pendingChatStart = { threadId: data.id, content }
 		await navigateToChat(data.id)
 	}
 
@@ -227,12 +245,12 @@
 		isSuggestionNavigationActive = false
 		if (suggestion.id === 'settings') {
 			inputValue = ''
-			openModal('settings')
+			modals.open('settings')
 			return
 		}
 		if (suggestion.id === 'archived-chats') {
 			inputValue = ''
-			openModal('archived-chats')
+			modals.open('archived-chats')
 			return
 		}
 		if (suggestion.id === 'dock') {
@@ -367,7 +385,7 @@
 					hi <span
 						class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 						style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
-						>{$userDisplay.name}</span
+						>{session.userDisplay.name}</span
 					>
 				</h1>
 				<p class="text-xl text-white/60">good afternoon</p>

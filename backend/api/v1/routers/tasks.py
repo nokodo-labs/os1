@@ -1,4 +1,4 @@
-"""Task routers."""
+"""task routers."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ async def create_task(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Task:
-	"""Create a new task."""
+	"""create a new task."""
 	return await task_service.create_task(task_in, db, principal=principal)
 
 
@@ -49,7 +49,7 @@ async def list_tasks(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Task]:
-	"""List tasks with optional filters."""
+	"""list tasks with optional filters."""
 	return await task_service.list_tasks(
 		db,
 		principal=principal,
@@ -69,5 +69,5 @@ async def update_task(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Task:
-	"""Update mutable task fields."""
+	"""update mutable task fields."""
 	return await task_service.update_task(task_id, task_in, db, principal=principal)

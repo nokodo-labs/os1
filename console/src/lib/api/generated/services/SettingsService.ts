@@ -2,21 +2,22 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { RuntimeConfigOut } from '../models/RuntimeConfigOut';
+import type { SettingsResponse } from '../models/SettingsResponse';
+import type { SettingsUpdateRequest } from '../models/SettingsUpdateRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
-export class SystemService {
+export class SettingsService {
     /**
-     * Get System Status
-     * Check system initialization status.
-     * @returns boolean Successful Response
+     * Get Settings
+     * get all settings.
+     * @returns SettingsResponse Successful Response
      * @throws ApiError
      */
-    public static getSystemStatusSystemStatusGet(): CancelablePromise<Record<string, boolean>> {
+    public static getSettingsSettingsGet(): CancelablePromise<SettingsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/system/status',
+            url: '/settings',
             errors: {
                 400: `bad request`,
                 401: `unauthorized`,
@@ -30,15 +31,20 @@ export class SystemService {
         });
     }
     /**
-     * Get Runtime Config
-     * Return runtime configuration values safe for clients.
-     * @returns RuntimeConfigOut Successful Response
+     * Update Settings
+     * partial update settings (admin only).
+     * @param requestBody
+     * @returns SettingsResponse Successful Response
      * @throws ApiError
      */
-    public static getRuntimeConfigSystemConfigGet(): CancelablePromise<RuntimeConfigOut> {
+    public static updateSettingsSettingsPatch(
+        requestBody: SettingsUpdateRequest,
+    ): CancelablePromise<SettingsResponse> {
         return __request(OpenAPI, {
-            method: 'GET',
-            url: '/system/config',
+            method: 'PATCH',
+            url: '/settings',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 400: `bad request`,
                 401: `unauthorized`,

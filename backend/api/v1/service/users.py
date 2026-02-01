@@ -1,4 +1,4 @@
-"""Service helpers for user operations."""
+"""service helpers for user operations."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.user import User
 from api.schemas.user import UserCreate, UserUpdate
+from api.settings import settings
 from api.v1.service.auth import Principal
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.security import hash_password
@@ -60,7 +61,7 @@ async def get_user(
 	if not user:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
-			detail="User not found",
+			detail="user not found",
 		)
 
 	return user
@@ -75,36 +76,60 @@ async def create_user(
 	user_count = await session.scalar(select(func.count()).select_from(User))
 	is_bootstrap = (user_count or 0) == 0
 
-	if not is_bootstrap:
-		if actor is None:
-			raise HTTPException(
-				status_code=status.HTTP_401_UNAUTHORIZED,
-				detail="not authenticated",
+	# determine what privilege level the new user can have:
+	# - bootstrap (first user): must request superuser explicitly (console setup)
+	# - unauthenticated: regular user only (is_active=True, is_superuser=False)
+	# - authenticated superuser: can set any privileges
+	if is_bootstrap:
+		if user_in.is_superuser is not True:
+			console_origin_value = settings.branding.public_console_origin
+			console_origin = (
+				str(console_origin_value) if console_origin_value is not None else None
 			)
-		if not actor.is_active:
+			detail: dict[str, str | None] = {
+				"code": "bootstrap_required",
+				"message": "this instance needs an admin created in the console first",
+				"console_origin": console_origin,
+			}
 			raise HTTPException(
-				status_code=status.HTTP_403_FORBIDDEN,
-				detail="inactive user",
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail=detail,
 			)
-		if not actor.is_superuser:
+
+		# first user requested to be superuser
+		is_active = True
+		is_superuser = True
+	elif actor is not None:
+		# authenticated user creation is admin-only
+		if not actor.is_active or not actor.is_superuser:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
 			)
 
+		# superuser can set values; default to True/False if not provided
+		is_active = user_in.is_active if user_in.is_active is not None else True
+		is_superuser = (
+			user_in.is_superuser if user_in.is_superuser is not None else False
+		)
+	else:
+		# unauthenticated: regular user only
+		is_active = True
+		is_superuser = False
+
 	result = await session.execute(select(User).where(User.email == user_in.email))
 	if result.scalar_one_or_none():
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Email already registered",
+			detail="email already registered",
 		)
 
 	user = User(
 		email=user_in.email,
 		hashed_password=hash_password(user_in.password),
 		display_name=user_in.display_name,
-		is_active=True if is_bootstrap else user_in.is_active,
-		is_superuser=True if is_bootstrap else user_in.is_superuser,
+		is_active=is_active,
+		is_superuser=is_superuser,
 	)
 	session.add(user)
 	await session.commit()

@@ -1,12 +1,12 @@
 /**
  * WebSocket client for real-time event streaming.
- * WS /events/stream?token=<jwt>
+ * WS /v1/events/stream?token=<jwt>
  *
- * Provides auto-reconnect, Svelte store integration, and event subscription.
+ * Native Svelte 5 rune-based state (no svelte/store).
  */
 
-import { get, writable } from 'svelte/store'
-import { getV1BaseUrl } from '../v1/client'
+import { SvelteSet } from 'svelte/reactivity'
+import { getApiBaseUrl } from '../client'
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
@@ -49,16 +49,19 @@ export class EventStreamClient {
 	private maxReconnectAttempts = 10
 	private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null
 	private pingIntervalId: ReturnType<typeof setInterval> | null = null
-	private handlers: Set<EventHandler> = new Set()
+	private handlers = new SvelteSet<EventHandler>()
 	private intentionalDisconnect = false
 
-	readonly status = writable<ConnectionStatus>('disconnected')
-	readonly lastEvent = writable<StreamMessage | null>(null)
+	readonly state = $state({
+		status: 'disconnected' as ConnectionStatus,
+		lastEvent: null as StreamMessage | null,
+	})
 
 	private buildWsUrl(token: string): string {
-		const baseUrl = getV1BaseUrl()
-		const wsBase = baseUrl.replace(/^http/, 'ws')
-		return `${wsBase}/events/stream?token=${encodeURIComponent(token)}`
+		const configuredBaseUrl = getApiBaseUrl()
+		const httpBase = configuredBaseUrl || window.location.origin
+		const wsBase = httpBase.replace(/^http/, 'ws')
+		return `${wsBase}/v1/events/stream?token=${encodeURIComponent(token)}`
 	}
 
 	connect(token: string): void {
@@ -80,7 +83,7 @@ export class EventStreamClient {
 		this.intentionalDisconnect = true
 		this.cleanup()
 		this.token = null
-		this.status.set('disconnected')
+		this.state.status = 'disconnected'
 	}
 
 	subscribe(handler: EventHandler): () => void {
@@ -91,8 +94,7 @@ export class EventStreamClient {
 	private doConnect(): void {
 		if (!this.token) return
 
-		const currentStatus = get(this.status)
-		this.status.set(currentStatus === 'disconnected' ? 'connecting' : 'reconnecting')
+		this.state.status = this.state.status === 'disconnected' ? 'connecting' : 'reconnecting'
 
 		try {
 			this.ws = new WebSocket(this.buildWsUrl(this.token))
@@ -102,7 +104,7 @@ export class EventStreamClient {
 		}
 
 		this.ws.onopen = () => {
-			this.status.set('connected')
+			this.state.status = 'connected'
 			this.reconnectAttempts = 0
 			this.startPing()
 		}
@@ -110,7 +112,7 @@ export class EventStreamClient {
 		this.ws.onmessage = (event) => {
 			try {
 				const message = JSON.parse(event.data) as StreamMessage
-				this.lastEvent.set(message)
+				this.state.lastEvent = message
 				this.handlers.forEach((h) => h(message))
 			} catch {
 				// ignore malformed
@@ -120,14 +122,14 @@ export class EventStreamClient {
 		this.ws.onclose = (event) => {
 			this.stopPing()
 			if (event.code === 4001) {
-				this.status.set('disconnected')
+				this.state.status = 'disconnected'
 				this.token = null
 				return
 			}
 			if (!this.intentionalDisconnect) {
 				this.scheduleReconnect()
 			} else {
-				this.status.set('disconnected')
+				this.state.status = 'disconnected'
 			}
 		}
 
@@ -137,11 +139,11 @@ export class EventStreamClient {
 	private scheduleReconnect(): void {
 		if (this.intentionalDisconnect) return
 		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-			this.status.set('disconnected')
+			this.state.status = 'disconnected'
 			return
 		}
 
-		this.status.set('reconnecting')
+		this.state.status = 'reconnecting'
 		this.reconnectAttempts++
 
 		const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000)

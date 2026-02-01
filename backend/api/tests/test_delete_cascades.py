@@ -31,7 +31,11 @@ async def test_soft_delete_thread_does_not_delete_messages(
 	db_session: AsyncSession,
 ) -> None:
 	user = await user_service.create_user(
-		UserCreate(email="cascade_thread@example.com", password="password123"),
+		UserCreate(
+			email="cascade_thread@example.com",
+			password="password123",
+			is_superuser=True,
+		),
 		db_session,
 	)
 	principal = Principal(user=user, group_ids=(), permissions=frozenset())
@@ -84,7 +88,11 @@ async def test_delete_message_also_deletes_attached_events(
 	db_session: AsyncSession,
 ) -> None:
 	user = await user_service.create_user(
-		UserCreate(email="cascade_message@example.com", password="password123"),
+		UserCreate(
+			email="cascade_message@example.com",
+			password="password123",
+			is_superuser=True,
+		),
 		db_session,
 	)
 	principal = Principal(user=user, group_ids=(), permissions=frozenset())
@@ -133,7 +141,11 @@ async def test_delete_notification_also_deletes_attached_event(
 	db_session: AsyncSession,
 ) -> None:
 	user = await user_service.create_user(
-		UserCreate(email="cascade_notif@example.com", password="password123"),
+		UserCreate(
+			email="cascade_notif@example.com",
+			password="password123",
+			is_superuser=True,
+		),
 		db_session,
 	)
 	principal = Principal(user=user, group_ids=(), permissions=frozenset())

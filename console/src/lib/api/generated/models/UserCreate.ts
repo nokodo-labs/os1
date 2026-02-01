@@ -3,17 +3,19 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Schema for creating a user.
+ * schema for creating a user.
+ *
+ * note: is_active and is_superuser are optional.
+ * the server decides final values:
+ * - bootstrap (first user): may be superuser only if explicitly requested
+ * - unauthenticated: regular user only (is_active=True, is_superuser=False)
+ * - authenticated superuser: can set privileges
  */
 export type UserCreate = {
     email: string;
-    display_name?: (string | null);
-    avatar_url?: (string | null);
-    is_active?: boolean;
-    is_superuser?: boolean;
-    preferences?: Record<string, any>;
-    integration_tokens?: Record<string, any>;
-    usage_quotas?: Record<string, any>;
     password: string;
+    display_name?: (string | null);
+    is_active?: (boolean | null);
+    is_superuser?: (boolean | null);
 };
 

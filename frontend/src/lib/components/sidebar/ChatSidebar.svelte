@@ -3,8 +3,8 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import { apiClient } from '$lib/api/client'
 	import type { StreamMessage } from '$lib/api/streaming'
-	import { v1Client } from '$lib/api/v1/client'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
 	import ChatSidebarChatsSection from '$lib/components/sidebar/chat-sidebar/ChatSidebarChatsSection.svelte'
@@ -12,9 +12,9 @@
 	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
-	import { openModal } from '$lib/stores/modals'
-	import { onThreadEvent } from '$lib/stores/notifications'
-	import { isLoggedIn, recentThreads, refreshThreads, type Thread } from '$lib/stores/session'
+	import { modals } from '$lib/stores/modals.svelte'
+	import { onThreadEvent } from '$lib/stores/notifications.svelte'
+	import { session, type Thread } from '$lib/stores/session.svelte'
 	import {
 		invalidateAll as invalidateThreadCache,
 		prefetchThread,
@@ -127,7 +127,7 @@
 			invalidateThreadCache(threadId)
 
 			// remove from list
-			recentThreads.update((threads) => threads.filter((t) => t.id !== threadId))
+			session.removeRecentThread(threadId)
 
 			// if we're viewing this thread, navigate away
 			if (page.url.pathname === `/c/${threadId}`) {
@@ -145,27 +145,20 @@
 			const rawTags =
 				(Array.isArray(patch?.tags) ? patch.tags : null) ??
 				(Array.isArray(data?.tags) ? data.tags : null)
-			recentThreads.update((threads) => {
-				const idx = threads.findIndex((t) => t.id === threadId)
-				if (idx === -1) return threads
-
-				const thread = threads[idx]
+			session.updateRecentThread(threadId, (thread) => {
 				const nextTags = rawTags
 					? rawTags.filter((t): t is string => typeof t === 'string')
 					: null
-				const updated: Thread = {
+				return {
 					...thread,
 					title: rawTitle ?? thread.title,
 					tags: nextTags ?? thread.tags,
 					last_activity_at: new Date().toISOString(),
 				}
-
-				// move to top
-				return [updated, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
 			})
 		} else if (eventType === 'thread.created') {
 			// refresh to get the new thread (or we could add it directly)
-			void refreshThreads({ limit: 25 })
+			void session.refreshThreads({ limit: 25 })
 		}
 	}
 
@@ -207,14 +200,14 @@
 			icon: ArchiveBox,
 			label: 'archived chats',
 			action: () => {
-				openModal('archived-chats')
+				modals.open('archived-chats')
 				if (device.isMobile) sidebar.closeChatSidebar()
 			},
 		},
 	]
 
 	$effect(() => {
-		if ($isLoggedIn) void refreshThreads({ limit: 25 })
+		if (session.isLoggedIn) void session.refreshThreads({ limit: 25 })
 	})
 
 	function toggleThreadMenu(threadId: string) {
@@ -251,17 +244,13 @@
 			if (!updated) return
 
 			invalidateThreadCache(threadId)
-			recentThreads.update((threads) => {
-				const idx = threads.findIndex((t) => t.id === threadId)
-				if (idx === -1) return threads
-				const current = threads[idx]
-				const next: Thread = {
+			session.updateRecentThread(threadId, (current) => {
+				return {
 					...current,
 					title: updated.title ?? current.title,
 					tags: updated.tags ?? current.tags,
 					last_activity_at: updated.last_activity_at || new Date().toISOString(),
 				}
-				return [next, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
 			})
 		} finally {
 			generatingMetadataThreadId = null
@@ -275,7 +264,7 @@
 
 	let routeChatIsInSidebar = $derived.by((): boolean => {
 		if (!routeChatId) return false
-		return $recentThreads.some((t) => t.id === routeChatId)
+		return session.recentThreads.some((t) => t.id === routeChatId)
 	})
 
 	// Keep selection synced with the current route.
@@ -331,19 +320,22 @@
 	})
 
 	async function deleteThread(threadId: string): Promise<number | null> {
-		const { response } = await v1Client().DELETE('/threads/{thread_id}', {
+		const { response } = await apiClient().DELETE('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 		})
 		return response.status
 	}
 
 	async function generateThreadMetadata(threadId: string): Promise<Thread | null> {
-		const { data, error } = await v1Client().POST('/threads/{thread_id}/metadata/generate', {
-			params: {
-				path: { thread_id: threadId },
-			},
-			body: { replace: false, model_id: null },
-		})
+		const { data, error } = await apiClient().POST(
+			'/v1/threads/{thread_id}/metadata/generate',
+			{
+				params: {
+					path: { thread_id: threadId },
+				},
+				body: { replace: false, model_id: null },
+			}
+		)
 		if (error || !data) return null
 		return data
 	}
@@ -418,8 +410,8 @@
 		{#if renderExpandedContent}
 			<ChatSidebarChatsSection
 				{expandedContentVisible}
-				isLoggedIn={$isLoggedIn}
-				threads={$recentThreads}
+				isLoggedIn={session.isLoggedIn}
+				threads={session.recentThreads}
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
 				{generatingMetadataThreadId}
@@ -492,7 +484,7 @@
 									}
 
 									sidebar.selectChat(null)
-									await refreshThreads({ limit: 25 })
+									await session.refreshThreads({ limit: 25 })
 
 									if (page.url.pathname === `/c/${confirmDeleteThread.id}`) {
 										// @ts-expect-error resolve typing is narrower than our constructed URL

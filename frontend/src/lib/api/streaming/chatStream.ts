@@ -6,7 +6,7 @@
  */
 
 import { getAccessToken } from '$lib/auth/session'
-import { getV1BaseUrl, refreshV1AccessToken } from '../v1/client'
+import { getApiBaseUrl, refreshAccessToken } from '../client'
 
 /** Content part in a message. */
 export interface ContentPart {
@@ -77,7 +77,7 @@ export interface ChatStreamOptions {
 export async function* runChatStream(
 	opts: ChatStreamOptions
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
-	const streamUrl = `${getV1BaseUrl()}/threads/${opts.threadId}/run`
+	const streamUrl = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/run`
 
 	const doRequest = async (token: string | null): Promise<Response> => {
 		return fetch(streamUrl, {
@@ -101,7 +101,7 @@ export async function* runChatStream(
 	let response = await doRequest(token)
 
 	if (response.status === 401) {
-		const refreshed = await refreshV1AccessToken()
+		const refreshed = await refreshAccessToken()
 		if (refreshed) {
 			token = refreshed
 			response = await doRequest(token)

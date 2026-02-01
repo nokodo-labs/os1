@@ -2,13 +2,13 @@
 
 ## code style
 
--   Python 3.13+ features, type hints everywhere
--   SQLAlchemy 2.0+ `Mapped` annotations
--   Pydantic v2.11+ for validation
--   tabs, unix line endings
--   Ruff for linting/formatting/imports
--   pytest for testing with fixtures and coverage
--   adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
+- Python 3.13+ features, type hints everywhere
+- SQLAlchemy 2.0+ `Mapped` annotations
+- Pydantic v2.11+ for validation
+- tabs, unix line endings
+- Ruff for linting/formatting/imports
+- pytest for testing with fixtures and coverage
+- adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
 
 > **reminder** - CLEAN code means:
 >
@@ -55,30 +55,20 @@ backend/
 
 ## patterns
 
--   SDK separation: `api/` imports from `nokodo_ai/`, not vice versa
--   REST conventions, proper HTTP codes
--   validate inputs (Pydantic)
--   type everything
--   three-tier testing: API tests, SDK tests, E2E tests
--   API changes: update backend → run the VS Code tasks `Frontend: Generate API` / `Console: Generate API`
-
-## openapi + codegen
-
--   keep the backend running at `http://localhost:8000`; use VS Code tasks `Frontend: Generate API (types + client)` and `Console: Generate API (types + client)` to sync consumers directly from the live schema.
+- SDK separation: `api/` imports from `nokodo_ai/`, not vice versa
+- REST conventions, proper HTTP codes
+- validate inputs (Pydantic)
+- type everything
+- three-tier testing: API tests, SDK tests, E2E tests
+- API changes: update backend → run the VS Code tasks `Frontend: Generate API` / `Console: Generate API`
 
 ## running backend code
 
-### **about dev servers**:
-
--   always assume the user is already running a dev server with hot reload.
--   always assume the user is monitoring changes live.
--   never manually run dev servers like `uv run uvicorn` or `npm run dev` yourself - unless explicitly asked.
-
 ### to run backend:
 
--   always remember to cd into `backend/`
--   always enable the virtual environment with `source .venv/bin/activate` (Linux/Mac) or `.venv\Scripts\activate` (Windows).
--   check the current working directory if unsure where you are.
+- always remember to cd into `backend/`
+- check the current working directory if unsure where you are.
+- always use `uv run` to run backend commands.
 
 ### to run tests:
 
@@ -94,7 +84,7 @@ to run backend tests manually instead:
 migrations are handled by Alembic and are located in `backend/api/migrations`.
 the backend is configured to **automatically run `uv run alembic upgrade head` on startup** using the same configuration the CLI uses.
 
--   **manual**: you can still run Alembic manually if needed:
+- **manual**: you can still run Alembic manually if needed:
     ```bash
     cd backend
     alembic -c api/migrations/alembic.ini upgrade head

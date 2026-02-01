@@ -14,11 +14,11 @@ export default defineConfig({
 		host: true,
 		proxy: {
 			'/v1': {
-				target: 'http://localhost:8000',
+				target: 'http://localhost:1383',
 				changeOrigin: true,
 			},
 			'/health': {
-				target: 'http://localhost:8000',
+				target: 'http://localhost:1383',
 				changeOrigin: true,
 			},
 		},

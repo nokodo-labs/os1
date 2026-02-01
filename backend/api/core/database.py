@@ -1,4 +1,4 @@
-"""Database configuration and session management."""
+"""database configuration and session management."""
 
 import asyncio
 from collections.abc import AsyncGenerator
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, with_loader_criteria
 
-from api.core.config import settings
+from api.boot_settings import boot_settings
 from api.core.logging import get_logger
 from api.models.mixins import SoftDeleteMixin
 
@@ -26,8 +26,8 @@ logger = get_logger(__name__)
 
 # Create async engine
 engine = create_async_engine(
-	str(settings.DATABASE_URL),
-	echo=settings.DEBUG,
+	boot_settings.DATABASE_URL,
+	echo=boot_settings.DEBUG,
 	future=True,
 )
 
@@ -80,14 +80,14 @@ def _build_alembic_config() -> Config:
 	script_location = Path(__file__).parent.parent / "migrations"
 	config = Config()
 	config.set_main_option("script_location", str(script_location))
-	config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
+	config.set_main_option("sqlalchemy.url", boot_settings.DATABASE_URL)
 	return config
 
 
 async def init_db() -> None:
 	"""initialize database tables via alembic."""
 	# mask credentials in url for logging
-	db_url = str(settings.DATABASE_URL)
+	db_url = boot_settings.DATABASE_URL
 	if "@" in db_url:
 		scheme_and_creds, host_and_db = db_url.rsplit("@", 1)
 		scheme = scheme_and_creds.split("://")[0]
@@ -97,12 +97,14 @@ async def init_db() -> None:
 
 	logger.info("initializing database", extra={"url": safe_url})
 
+	migration_target = "heads" if boot_settings.BRANCHING_MIGRATIONS else "head"
+
 	try:
 		alembic_cfg = _build_alembic_config()
 		loop = asyncio.get_running_loop()
 		await loop.run_in_executor(
 			None,
-			partial(command.upgrade, alembic_cfg, "head"),
+			partial(command.upgrade, alembic_cfg, migration_target),
 		)
 	except Exception as exc:
 		logger.error(f"error running migrations: {exc}")

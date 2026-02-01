@@ -1,3 +1,5 @@
+import { browser } from '$app/environment'
+
 import type { PublicConfig } from './types'
 
 function normalizeOrigin(origin: string | null): string | null {
@@ -6,6 +8,14 @@ function normalizeOrigin(origin: string | null): string | null {
 }
 
 export async function loadPublicConfig(): Promise<PublicConfig> {
+	// build-time env should take precedence when present.
+	// this allows deployments to override without relying on static config.json.
+	const envOrigin = normalizeOrigin(import.meta.env.VITE_API_ORIGIN || null)
+	if (envOrigin) return { api_origin: envOrigin }
+
+	// SSR/prerender: no browser fetch, only env is available.
+	if (!browser) return { api_origin: null }
+
 	try {
 		const response = await fetch('/config.json', {
 			method: 'GET',
@@ -19,6 +29,6 @@ export async function loadPublicConfig(): Promise<PublicConfig> {
 		const data = (await response.json()) as PublicConfig
 		return { api_origin: normalizeOrigin(data.api_origin) }
 	} catch {
-		return { api_origin: normalizeOrigin(import.meta.env.VITE_API_ORIGIN || null) }
+		return { api_origin: null }
 	}
 }

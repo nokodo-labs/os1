@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.constants import API_V1_MOUNT_PATH
-from api.core.config import settings
 from api.core.database import get_db
 from api.models.group import GroupMembership
 from api.models.user import User
+from api.settings import settings
 from api.v1.schemas.token import Token, TokenPayload
 from nokodo_ai.utils.security import (
 	create_jwt_token,
@@ -79,14 +79,14 @@ async def authenticate_user(
 async def _user_from_token(token: str, session: AsyncSession) -> User:
 	credentials_exception = HTTPException(
 		status_code=status.HTTP_401_UNAUTHORIZED,
-		detail="Could not validate credentials",
+		detail="could not validate credentials",
 		headers={"WWW-Authenticate": "Bearer"},
 	)
 	try:
 		payload = decode_jwt_token(
 			token,
-			secret_key=settings.SECRET_KEY,
-			algorithms=[settings.ALGORITHM],
+			secret_key=settings.security.secret_key,
+			algorithms=[settings.security.jwt_algorithm],
 		)
 		user_id = payload.get("sub")
 		if user_id is None:
@@ -161,22 +161,22 @@ async def require_admin(
 
 def create_access_token(user_id: str) -> str:
 	"""Create a short-lived access token for API requests."""
-	expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+	expires_delta = timedelta(minutes=settings.security.access_token_expire_minutes)
 	return create_jwt_token(
 		subject=user_id,
-		secret_key=settings.SECRET_KEY,
-		algorithm=settings.ALGORITHM,
+		secret_key=settings.security.secret_key,
+		algorithm=settings.security.jwt_algorithm,
 		expires_delta=expires_delta,
 	)
 
 
 def create_refresh_token(user_id: str) -> str:
 	"""Create a long-lived refresh token for silent re-authentication."""
-	expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+	expires_delta = timedelta(days=settings.security.refresh_token_expire_days)
 	return create_jwt_token(
 		subject=user_id,
-		secret_key=settings.SECRET_KEY,
-		algorithm=settings.ALGORITHM,
+		secret_key=settings.security.secret_key,
+		algorithm=settings.security.jwt_algorithm,
 		expires_delta=expires_delta,
 		additional_claims={"typ": "refresh"},
 	)
@@ -201,8 +201,8 @@ async def refresh_token_for_user(refresh_token: str, session: AsyncSession) -> T
 	try:
 		payload = decode_jwt_token(
 			refresh_token,
-			secret_key=settings.SECRET_KEY,
-			algorithms=[settings.ALGORITHM],
+			secret_key=settings.security.secret_key,
+			algorithms=[settings.security.jwt_algorithm],
 		)
 	except JoseError:
 		raise HTTPException(

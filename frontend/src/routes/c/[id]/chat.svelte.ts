@@ -3,12 +3,12 @@
  * Encapsulates all chat page state and business logic.
  */
 
+import { apiClient } from '$lib/api/client'
 import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { v1Client } from '$lib/api/v1/client'
-import { agentsList } from '$lib/stores/agents'
-import { selectedAgentId, setSelectedAgentId } from '$lib/stores/selectedAgent'
-import { currentUser, setActiveThread, type Thread } from '$lib/stores/session'
+import { agents } from '$lib/stores/agents.svelte'
+import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
+import { session, type Thread } from '$lib/stores/session.svelte'
 import {
 	cacheMessages,
 	cacheThread,
@@ -24,7 +24,6 @@ import {
 } from '$lib/tools'
 import { tick } from 'svelte'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
-import { get } from 'svelte/store'
 import {
 	computeIsAtBottom,
 	contentPartsToText,
@@ -71,7 +70,6 @@ export function createChatState() {
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
-	let selectedAgent = $state(get(selectedAgentId))
 	let optimisticUserMessage = $state<{ content: string; timestamp: Date } | null>(null)
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
@@ -127,7 +125,7 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
-	const currentUserId = $derived(get(currentUser)?.id ?? null)
+	const currentUserId = $derived(session.currentUser?.id ?? null)
 
 	const messageChildren = $derived.by(() => {
 		const map = new SvelteMap<string | null, string[]>()
@@ -167,12 +165,12 @@ export function createChatState() {
 		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null || runError
 	)
 
-	const agentNameById = $derived(new SvelteMap(get(agentsList).map((a) => [a.id, a.name])))
+	const agentNameById = $derived(new SvelteMap(agents.list.map((a) => [a.id, a.name])))
 	const agentAvatarById = $derived(
-		new SvelteMap(get(agentsList).map((a) => [a.id, a.profile_image_url ?? null]))
+		new SvelteMap(agents.list.map((a) => [a.id, a.profile_image_url ?? null]))
 	)
 	const selectedAgentName = $derived(
-		get(agentsList).find((a) => a.id === selectedAgent)?.name ?? 'assistant'
+		agents.list.find((a) => a.id === selectedAgent.id)?.name ?? 'assistant'
 	)
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -427,8 +425,8 @@ export function createChatState() {
 
 			toolEventsInFlight = true
 			try {
-				const { data, error } = await v1Client().POST(
-					'/threads/{thread_id}/events/by-message-ids',
+				const { data, error } = await apiClient().POST(
+					'/v1/threads/{thread_id}/events/by-message-ids',
 					{
 						params: { path: { thread_id: threadId } },
 						body: { message_ids: batch },
@@ -476,7 +474,7 @@ export function createChatState() {
 		const prevScrollTop = scrollContainer.scrollTop
 
 		try {
-			const { data, error } = await v1Client().GET('/threads/{thread_id}/messages', {
+			const { data, error } = await apiClient().GET('/v1/threads/{thread_id}/messages', {
 				params: {
 					path: { thread_id: threadId },
 					query: { skip: messageSkip, limit: 120 },
@@ -518,13 +516,13 @@ export function createChatState() {
 			messagesPage = cachedMessages
 		} else {
 			// Fetch from API
-			const { data, error: threadError } = await v1Client().GET('/threads/{thread_id}', {
+			const { data, error: threadError } = await apiClient().GET('/v1/threads/{thread_id}', {
 				params: { path: { thread_id: threadId } },
 			})
 			if (threadError) {
 				console.error('failed to load thread', threadError)
 				thread = null
-				setActiveThread(null)
+				session.activeThread = null
 				toolTracker.clear()
 				messageTree.clear()
 				currentLeafId = null
@@ -533,7 +531,7 @@ export function createChatState() {
 			}
 			if (!data) {
 				thread = null
-				setActiveThread(null)
+				session.activeThread = null
 				toolTracker.clear()
 				messageTree.clear()
 				currentLeafId = null
@@ -542,8 +540,8 @@ export function createChatState() {
 			}
 			threadData = data
 
-			const { data: msgData, error: msgError } = await v1Client().GET(
-				'/threads/{thread_id}/messages',
+			const { data: msgData, error: msgError } = await apiClient().GET(
+				'/v1/threads/{thread_id}/messages',
 				{ params: { path: { thread_id: threadId }, query: { skip: 0, limit: 120 } } }
 			)
 			if (msgError) {
@@ -559,7 +557,7 @@ export function createChatState() {
 		}
 
 		thread = threadData
-		setActiveThread(threadData)
+		session.activeThread = threadData
 
 		toolTracker.clear()
 		messageTree.clear()
@@ -686,7 +684,7 @@ export function createChatState() {
 								messageId,
 								content: '',
 								timestamp: new SvelteDate(),
-								senderAgentId: selectedAgent,
+								senderAgentId: selectedAgent.id,
 								toolCalls: [],
 							}
 						}
@@ -783,7 +781,7 @@ export function createChatState() {
 			messageId: `pending-${activeRun + 1}`,
 			content: '',
 			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent,
+			senderAgentId: selectedAgent.id,
 			toolCalls: [],
 		}
 		const runId = ++activeRun
@@ -796,7 +794,7 @@ export function createChatState() {
 		try {
 			await runThreadStream({
 				threadId: thread.id,
-				agentId: selectedAgent,
+				agentId: selectedAgent.id,
 				input: runBaseMessage,
 				runId,
 			})
@@ -817,7 +815,7 @@ export function createChatState() {
 
 	async function handleRegenerateMessage(parentId: string | null = null) {
 		if (!thread) return
-		if (!selectedAgent) return
+		if (!selectedAgent.id) return
 		runError = false
 		isGenerating = true
 
@@ -827,7 +825,7 @@ export function createChatState() {
 			messageId: `pending-${activeRun + 1}`,
 			content: '',
 			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent,
+			senderAgentId: selectedAgent.id,
 			toolCalls: [],
 		}
 		const runId = ++activeRun
@@ -836,7 +834,7 @@ export function createChatState() {
 		try {
 			await runThreadStream({
 				threadId: thread.id,
-				agentId: selectedAgent,
+				agentId: selectedAgent.id,
 				input: optimisticUserMessage ? lastRunInput : null,
 				runId,
 				parentId,
@@ -882,10 +880,13 @@ export function createChatState() {
 			parent_id: msg.parent_id ?? null,
 		} satisfies components['schemas']['MessageCreate']
 
-		const { data: newMessage, error } = await v1Client().POST('/threads/{thread_id}/messages', {
-			params: { path: { thread_id: thread.id } },
-			body,
-		})
+		const { data: newMessage, error } = await apiClient().POST(
+			'/v1/threads/{thread_id}/messages',
+			{
+				params: { path: { thread_id: thread.id } },
+				body,
+			}
+		)
 
 		if (error || !newMessage) {
 			console.error('failed to create edited message', error)
@@ -934,8 +935,8 @@ export function createChatState() {
 			return true
 		}
 
-		const { response, error } = await v1Client().DELETE(
-			'/threads/{thread_id}/messages/{message_id}',
+		const { response, error } = await apiClient().DELETE(
+			'/v1/threads/{thread_id}/messages/{message_id}',
 			{
 				params: {
 					path: {
@@ -962,12 +963,12 @@ export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
 	function setThread(t: Thread | null) {
 		thread = t
-		setActiveThread(t)
+		session.activeThread = t
 	}
 
 	function clearThread() {
 		thread = null
-		setActiveThread(null)
+		session.activeThread = null
 		messageTree.clear()
 		currentLeafId = null
 		isThreadLoading = false
@@ -1015,11 +1016,10 @@ export function createChatState() {
 			return isGenerating
 		},
 		get selectedAgent() {
-			return selectedAgent
+			return selectedAgent.id
 		},
 		set selectedAgent(v: string) {
-			selectedAgent = v
-			setSelectedAgentId(v)
+			selectedAgent.set(v)
 		},
 		get optimisticUserMessage() {
 			return optimisticUserMessage
