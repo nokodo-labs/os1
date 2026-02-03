@@ -65,8 +65,8 @@
 		class="relative flex cursor-pointer items-center border border-transparent bg-transparent text-white transition-all duration-200 {isHeaderPlacement
 			? 'h-12 w-auto min-w-8 justify-center px-1 hover:scale-[1.05] active:scale-[0.97] md:w-12 md:px-0'
 			: isExpanded
-				? 'w-full justify-start gap-3 rounded-xl p-3 hover:border-white/10 hover:bg-white/5'
-				: 'h-14 w-14 justify-center rounded-xl p-3 hover:border-white/10 hover:bg-white/5'}"
+				? 'rounded-pill w-full justify-start gap-3 p-3 hover:border-white/10 hover:bg-white/5'
+				: 'rounded-pill h-14 w-14 justify-center p-3 hover:border-white/10 hover:bg-white/5'}"
 		onclick={togglePanel}
 		aria-label="User Profile"
 		aria-expanded={isOpen}

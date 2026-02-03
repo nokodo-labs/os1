@@ -109,7 +109,10 @@
 
 <div class="min-h-0 w-full flex-1">
 	<div class="mx-auto max-w-2xl py-6">
-		<header class="mb-8 flex items-center gap-4">
+		<header
+			class="flex items-center gap-4"
+			style="margin-bottom: var(--spacing-header-content);"
+		>
 			<div class="rounded-box flex h-12 w-12 items-center justify-center bg-white/10">
 				<CurrentIcon variant="solid" class="h-6 w-6 text-white/80" />
 			</div>

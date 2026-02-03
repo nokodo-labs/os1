@@ -29,11 +29,11 @@ export const accentColors: Record<
 		shadow: 'rgba(59, 130, 246, 0.25)',
 	},
 	green: {
-		primary: '#22c55e', // green-500
+		primary: '#34c759', // imessage green
 		secondary: '#4ade80', // green-400
-		bg: 'rgba(34, 197, 94, 0.02)',
-		border: 'rgba(34, 197, 94, 0.2)',
-		shadow: 'rgba(34, 197, 94, 0.25)',
+		bg: 'rgba(52, 199, 89, 0.02)',
+		border: 'rgba(52, 199, 89, 0.2)',
+		shadow: 'rgba(52, 199, 89, 0.25)',
 	},
 	orange: {
 		primary: '#f97316', // orange-500
@@ -57,11 +57,11 @@ export const accentColors: Record<
 		shadow: 'rgba(239, 68, 68, 0.25)',
 	},
 	yellow: {
-		primary: '#d97706', // amber-600 (ocra-ish)
-		secondary: '#f59e0b', // amber-500
-		bg: 'rgba(217, 119, 6, 0.02)',
-		border: 'rgba(217, 119, 6, 0.2)',
-		shadow: 'rgba(217, 119, 6, 0.25)',
+		primary: '#fbbc04', // google keep yellow
+		secondary: '#fde68a', // windows folder yellow (light)
+		bg: 'rgba(251, 188, 4, 0.02)',
+		border: 'rgba(251, 188, 4, 0.2)',
+		shadow: 'rgba(251, 188, 4, 0.25)',
 	},
 	gray: {
 		primary: '#6b7280', // gray-500

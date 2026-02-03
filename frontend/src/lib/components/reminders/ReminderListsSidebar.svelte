@@ -34,7 +34,7 @@
 	let listMenuButtonEl: HTMLButtonElement | null = $state(null)
 
 	let editListId = $state<string | null>(null)
-	const editList = $derived(lists.find((l) => l.id === editListId) ?? null)
+	const editList = $derived(editListId ? reminders.getListById(editListId) : null)
 
 	function selectList(listId: string | null) {
 		const url = listId ? `/reminders/lists/${listId}` : '/reminders'
@@ -123,7 +123,7 @@
 	})
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-8">
+<div class="flex h-full min-h-0 flex-col" style="gap: var(--spacing-header-content);">
 	<header
 		class="{isMobile
 			? 'mt-0'
@@ -137,7 +137,7 @@
 		</div>
 		<button
 			type="button"
-			class="rounded-circle inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:border-white/10 hover:bg-white/5 hover:text-white"
+			class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 			onclick={handleCreateList}
 			aria-label="create list"
 		>

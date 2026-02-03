@@ -108,7 +108,7 @@
 		{/if}
 
 		{#if tone === 'error'}
-			<div class="border-destructive/30 bg-destructive/10 rounded-2xl border px-4 py-3">
+			<div class="border-destructive/30 bg-destructive/10 rounded-box border px-4 py-3">
 				<MarkdownRenderer
 					{content}
 					{isStreaming}

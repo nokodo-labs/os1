@@ -18,16 +18,15 @@
 
 	const isActive = $derived(chatParam === 'temp' || (chat.activeThread?.is_temporary ?? false))
 
-	function requestHomeInputFocus() {
-		if (!browser) return
-		window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
+	function focusHomeInput() {
+		window.dispatchEvent(new CustomEvent('focus:chat-input'))
 	}
 
 	function goHome() {
 		sidebar?.selectChat?.(null)
 		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
 		if (isAlreadyHome) {
-			requestHomeInputFocus()
+			focusHomeInput()
 			return
 		}
 		void goto(resolve('/'), { keepFocus: true, noScroll: true })
@@ -37,11 +36,11 @@
 		sidebar?.selectChat?.(null)
 		const isAlreadyTemp = page.url.pathname === '/' && chatParam === 'temp'
 		if (isAlreadyTemp) {
-			requestHomeInputFocus()
+			focusHomeInput()
 			return
 		}
-		// @ts-expect-error resolve typing is narrower than our constructed URL
-		void goto(resolve('/?chat=temp' as never), { keepFocus: true, noScroll: true })
+		focusHomeInput()
+		void goto(`${resolve('/')}?chat=temp`, { keepFocus: true, noScroll: true })
 	}
 
 	function toggle() {

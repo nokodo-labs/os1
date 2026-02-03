@@ -46,8 +46,17 @@ const REMINDER_LIST_EVENT_TYPES = [
 ]
 
 interface ListsCacheEntry {
-	lists: ReminderListWithCounts[]
+	/** id → list (preserves insertion order) */
+	data: SvelteMap<string, ReminderListWithCounts>
 	fetchedAt: number
+}
+
+function buildListsCache(lists: ReminderListWithCounts[], fetchedAt: number): ListsCacheEntry {
+	const data = new SvelteMap<string, ReminderListWithCounts>()
+	for (const list of lists) {
+		data.set(list.id, list)
+	}
+	return { data, fetchedAt }
 }
 
 interface DefaultCountsCacheEntry {
@@ -65,7 +74,7 @@ interface RemindersCacheEntry {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class RemindersCache {
-	/** lists with counts */
+	/** lists with counts (id → list) */
 	#listsCache = $state<ListsCacheEntry | null>(null)
 
 	/** default list (null list_id) counts */
@@ -169,25 +178,15 @@ class RemindersCache {
 				const list = data as unknown as ReminderListWithCounts
 				if (!list.id) return
 				if (this.#listsCache) {
-					const existing = this.#listsCache.lists.findIndex((l) => l.id === list.id)
-					if (existing >= 0) {
-						this.#listsCache.lists[existing] = toListWithCounts(list)
-					} else {
-						this.#listsCache = {
-							lists: [...this.#listsCache.lists, toListWithCounts(list)],
-							fetchedAt: this.#listsCache.fetchedAt,
-						}
-					}
+					const normalized = toListWithCounts(list)
+					this.#listsCache.data.set(list.id, normalized)
 				}
 			} else if (eventType === 'reminder_list.deleted') {
 				// remove list from cache
 				const listId = data.list_id as string | undefined
 				if (!listId) return
 				if (this.#listsCache) {
-					this.#listsCache = {
-						lists: this.#listsCache.lists.filter((l) => l.id !== listId),
-						fetchedAt: this.#listsCache.fetchedAt,
-					}
+					this.#listsCache.data.delete(listId)
 				}
 				// also clear reminders cache for this list
 				this.#remindersCache.delete(listId)
@@ -264,7 +263,14 @@ class RemindersCache {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	get lists(): ReminderListWithCounts[] {
-		return this.#listsCache?.lists ?? []
+		return this.#listsCache ? [...this.#listsCache.data.values()] : []
+	}
+
+	/**
+	 * O(1) lookup of a list by id.
+	 */
+	getListById(listId: string): ReminderListWithCounts | null {
+		return this.#listsCache?.data.get(listId) ?? null
 	}
 
 	get isListsFresh(): boolean {
@@ -272,7 +278,7 @@ class RemindersCache {
 	}
 
 	setLists(lists: ReminderListWithCounts[]): void {
-		this.#listsCache = { lists, fetchedAt: Date.now() }
+		this.#listsCache = buildListsCache(lists, Date.now())
 	}
 
 	async loadLists(options?: { force?: boolean }): Promise<ReminderListWithCounts[]> {
@@ -454,10 +460,7 @@ class RemindersCache {
 		const created = toListWithCounts(data as ReminderListWithCounts)
 
 		if (this.#listsCache) {
-			this.#listsCache = {
-				lists: [...this.#listsCache.lists, created],
-				fetchedAt: this.#listsCache.fetchedAt,
-			}
+			this.#listsCache.data.set(created.id, created)
 		} else {
 			this.invalidateLists()
 		}

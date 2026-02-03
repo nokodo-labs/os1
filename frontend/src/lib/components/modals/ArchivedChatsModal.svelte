@@ -40,13 +40,13 @@
 >
 	<div class="space-y-3">
 		{#if archivedChats.length === 0}
-			<div class="rounded-2xl bg-white/5 p-4 text-sm text-white/60">no archived chats</div>
+			<div class="rounded-pill bg-white/5 p-4 text-sm text-white/60">no archived chats</div>
 		{:else}
 			<div class="space-y-2">
 				{#each archivedChats as chat (chat.id)}
 					<button
 						type="button"
-						class="flex w-full items-start justify-between gap-4 rounded-2xl border-none bg-white/5 px-4 py-3 text-left transition-colors hover:bg-white/8"
+						class="rounded-pill flex w-full items-start justify-between gap-4 border-none bg-white/5 px-4 py-3 text-left transition-colors hover:bg-white/8"
 					>
 						<div class="min-w-0">
 							<div class="truncate text-sm font-semibold text-white/85">
@@ -63,7 +63,7 @@
 		<div class="flex justify-end">
 			<button
 				type="button"
-				class="rounded-2xl border-none bg-white/10 px-4 py-2 text-sm font-semibold text-white/85 transition-colors hover:bg-white/15"
+				class="rounded-pill border-none bg-white/10 px-4 py-2 text-sm font-semibold text-white/85 transition-colors hover:bg-white/15"
 				onclick={onClose}
 			>
 				close

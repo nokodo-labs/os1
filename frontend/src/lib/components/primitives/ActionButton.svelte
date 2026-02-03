@@ -22,9 +22,9 @@
 	}: ActionButtonProps = $props()
 
 	const sizeClasses: Record<Size, string> = {
-		sm: 'px-3 py-1.5 text-xs rounded-lg',
-		md: 'px-4 py-2 text-sm rounded-xl',
-		lg: 'px-5 py-2.5 text-base rounded-xl',
+		sm: 'px-3 py-1.5 text-xs rounded-pill',
+		md: 'px-4 py-2 text-sm rounded-pill',
+		lg: 'px-5 py-2.5 text-base rounded-pill',
 	}
 
 	const variantClasses: Record<Variant, string> = {

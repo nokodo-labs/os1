@@ -60,7 +60,10 @@
 		aria-label={ariaLabel}
 		style="view-transition-name: master-sidebar;"
 	>
-		<div class="relative h-full px-[clamp(10px,4vw,32px)] pt-[clamp(12px,1vw,32px)] pb-10">
+		<div
+			class="relative h-full pb-10"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: clamp(12px, 1vw, 32px);"
+		>
 			{@render master({ isMobile: false })}
 			<!-- separator (doesn't reach top/bottom) -->
 			<div
@@ -74,9 +77,12 @@
 <!-- content area: scrollbar at edge, padding inside content -->
 <div
 	class="absolute inset-0 overflow-y-auto"
-	style="padding-top: calc(var(--chrome-island-offset, 0px) + 16px);"
+	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content));"
 >
-	<div class="px-[clamp(12px,3vw,36px)] pb-10">
+	<div
+		class="pb-10"
+		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+	>
 		{@render children()}
 	</div>
 </div>

@@ -42,7 +42,7 @@
 	}
 
 	const baseClasses =
-		'inline-flex cursor-pointer items-center justify-center rounded-xl border-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-40'
+		'inline-flex cursor-pointer items-center justify-center rounded-pill border-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-40'
 </script>
 
 <button

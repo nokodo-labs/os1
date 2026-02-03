@@ -81,7 +81,7 @@
 	<div class="space-y-4">
 		{#if error}
 			<div
-				class="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+				class="rounded-box border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
 			>
 				{error}
 			</div>
@@ -90,7 +90,7 @@
 		<div class="flex items-center justify-end gap-2">
 			<button
 				type="button"
-				class="rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+				class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
 				disabled={isDeleting}
 				onclick={() => {
 					modalOpen = false
@@ -101,7 +101,7 @@
 			</button>
 			<button
 				type="button"
-				class="inline-flex items-center rounded-2xl border border-red-500/25 bg-red-500/20 px-4 py-2 text-sm text-red-100 transition-colors duration-150 hover:bg-red-500/30 disabled:opacity-60"
+				class="rounded-pill inline-flex items-center border border-red-500/25 bg-red-500/20 px-4 py-2 text-sm text-red-100 transition-colors duration-150 hover:bg-red-500/30 disabled:opacity-60"
 				disabled={isDeleting}
 				onclick={() => void runDelete()}
 			>

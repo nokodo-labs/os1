@@ -72,12 +72,12 @@
 	<div
 		class="liquid-glass rounded-container relative px-5 py-4 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-linear-to-br before:from-white/40 before:to-white/10 before:mask-exclude before:p-px before:content-[''] before:[-webkit-mask-composite:xor] before:[-webkit-mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] before:[mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)]"
 		style="
-            background: linear-gradient(to bottom right, var(--accent-shadow), var(--accent-bg));
-            box-shadow: 0 4px 16px var(--accent-border);
+			background-color: var(--accent-primary);
+			box-shadow: 0 4px 16px var(--accent-border);
         "
 	>
 		<div
-			class="text-[0.95rem] leading-relaxed wrap-break-word whitespace-pre-wrap text-black/95 dark:text-white/95"
+			class="text-[0.95rem] leading-relaxed wrap-break-word whitespace-pre-wrap text-white/95"
 		>
 			{content}
 		</div>

@@ -47,7 +47,7 @@
 		{#if memories.length > 0}
 			<div class="space-y-2">
 				{#each memories as memory, idx (idx)}
-					<div class="rounded-lg bg-white/5 px-3 py-2 text-sm text-white/70">
+					<div class="rounded-pill bg-white/5 px-3 py-2 text-sm text-white/70">
 						{typeof memory === 'string' ? memory : JSON.stringify(memory)}
 					</div>
 				{/each}

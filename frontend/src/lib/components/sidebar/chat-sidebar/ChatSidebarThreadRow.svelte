@@ -84,7 +84,7 @@
 		>
 			<button
 				type="button"
-				class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()
@@ -100,7 +100,7 @@
 			</button>
 			<button
 				type="button"
-				class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()
@@ -112,7 +112,7 @@
 			</button>
 			<button
 				type="button"
-				class="flex w-full cursor-pointer items-center gap-2 rounded-2xl border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()

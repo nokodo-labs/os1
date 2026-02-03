@@ -48,7 +48,7 @@
 			<div class="mt-6 flex justify-center">
 				<button
 					type="button"
-					class="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/85 transition-colors duration-150 hover:bg-white/12 hover:text-white active:scale-[0.99]"
+					class="group inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/85 transition-colors duration-150 hover:bg-white/12 hover:text-white active:scale-[0.99]"
 					onclick={() => void goto(resolve('/'), { keepFocus: true, noScroll: true })}
 					aria-label="go home"
 				>

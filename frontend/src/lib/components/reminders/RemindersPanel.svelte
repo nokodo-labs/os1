@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import { reminders, type ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
+	import { SvelteMap } from 'svelte/reactivity'
 	import ReminderRow from './ReminderRow.svelte'
 
 	interface Props {
@@ -14,45 +16,76 @@
 
 	let { listId, showListTitle = false }: Props = $props()
 
+	// ─────────────────────────────────────────────────────────────────────────
+	// state
+	// ─────────────────────────────────────────────────────────────────────────
+
 	let isLoading = $state(true)
 	let showCompleted = $state(false)
 	let isAddingReminder = $state(false)
 	let isAddingExpanded = $state(false)
 	let expandedReminderId = $state<string | null>(null)
-	let transitions = $state<
-		{
-			id: string
-			direction: 'to-completed' | 'to-pending'
-			reminder: ReminderWithSubtasks
-		}[]
-	>([])
-	let incoming = $state<{ id: string; delayMs: number; iconMorph?: 'plus-to-circle' | null }[]>(
-		[]
-	)
+
+	/** animation state for reminders transitioning between pending/completed */
+	interface TransitionEntry {
+		direction: 'to-completed' | 'to-pending'
+		reminder: ReminderWithSubtasks
+	}
+	const transitions = new SvelteMap<string, TransitionEntry>()
+
+	/** animation state for reminders entering the list */
+	interface IncomingEntry {
+		delayMs: number
+		iconMorph?: 'plus-to-circle' | null
+	}
+	const incoming = new SvelteMap<string, IncomingEntry>()
 
 	const MOTION_MS = 420
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// derived
+	// ─────────────────────────────────────────────────────────────────────────
 
 	const remindersList = $derived(reminders.getReminders(listId))
 	const completedCount = $derived(remindersList.filter((r) => r.status === 'completed').length)
 	const pendingReminders = $derived.by(() => {
-		const transitionIds = new Set(transitions.map((t) => t.id))
-		return remindersList.filter((r) => r.status === 'pending' && !transitionIds.has(r.id))
+		return remindersList.filter((r) => r.status === 'pending' && !transitions.has(r.id))
 	})
-	const completedReminders = $derived.by(() => {
-		const transitionIds = new Set(transitions.map((t) => t.id))
-		return remindersList.filter((r) => r.status === 'completed' && !transitionIds.has(r.id))
-	})
-	const availableLists = $derived(reminders.lists)
 
-	function motionForReminder(id: string): {
+	const completedReminders = $derived.by(() => {
+		return remindersList.filter((r) => r.status === 'completed' && !transitions.has(r.id))
+	})
+
+	/** transitions animating to completed (shown in pending section) */
+	const transitionsToCompleted = $derived.by(() => {
+		return [...transitions.values()].filter((t) => t.direction === 'to-completed')
+	})
+
+	/** transitions animating to pending (shown in completed section) */
+	const transitionsToPending = $derived.by(() => {
+		return [...transitions.values()].filter((t) => t.direction === 'to-pending')
+	})
+
+	const availableLists = $derived(reminders.lists)
+	const activeList = $derived(listId ? reminders.getListById(listId) : null)
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// helpers
+	// ─────────────────────────────────────────────────────────────────────────
+
+	function getIncomingMotion(id: string): {
 		motion: 'in' | null
 		delayMs?: number
 		iconMorph?: 'plus-to-circle' | null
 	} {
-		const entry = incoming.find((x) => x.id === id)
+		const entry = incoming.get(id)
 		if (!entry) return { motion: null }
 		return { motion: 'in', delayMs: entry.delayMs, iconMorph: entry.iconMorph ?? null }
 	}
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// actions
+	// ─────────────────────────────────────────────────────────────────────────
 
 	async function startInlineAdd() {
 		isAddingReminder = true
@@ -63,9 +96,7 @@
 	}
 
 	async function cancelInlineAdd() {
-		// collapse animation first
 		isAddingExpanded = false
-		// wait for animation to finish before removing element
 		await new Promise((resolve) => setTimeout(resolve, 220))
 		isAddingReminder = false
 	}
@@ -79,14 +110,8 @@
 		isAddingReminder = false
 		isAddingExpanded = false
 		if (created) {
-			// new reminder enters with a plus→circle icon morph
-			incoming = [
-				...incoming.filter((x) => x.id !== created.id),
-				{ id: created.id, delayMs: 0, iconMorph: 'plus-to-circle' },
-			]
-			window.setTimeout(() => {
-				incoming = incoming.filter((x) => x.id !== created.id)
-			}, 280)
+			incoming.set(created.id, { delayMs: 0, iconMorph: 'plus-to-circle' })
+			window.setTimeout(() => incoming.delete(created.id), 280)
 		}
 	}
 
@@ -100,31 +125,16 @@
 	}
 
 	async function toggleComplete(reminder: ReminderWithSubtasks) {
-		// capture direction BEFORE optimistic update changes status
 		const direction = reminder.status === 'pending' ? 'to-completed' : 'to-pending'
 
-		// start animation with captured direction
-		const exists = transitions.some((t) => t.id === reminder.id)
-		if (!exists) {
-			transitions = [
-				...transitions,
-				{ id: reminder.id, direction, reminder: { ...reminder } },
-			]
-			// we hide transitioning ids from both lists, so the incoming row appears when the transition clears
-			incoming = [
-				...incoming.filter((x) => x.id !== reminder.id),
-				{ id: reminder.id, delayMs: 0 },
-			]
+		if (!transitions.has(reminder.id)) {
+			transitions.set(reminder.id, { direction, reminder: { ...reminder } })
+			incoming.set(reminder.id, { delayMs: 0 })
 
-			window.setTimeout(() => {
-				transitions = transitions.filter((t) => t.id !== reminder.id)
-			}, MOTION_MS + 30)
-			window.setTimeout(() => {
-				incoming = incoming.filter((x) => x.id !== reminder.id)
-			}, MOTION_MS + 280)
+			window.setTimeout(() => transitions.delete(reminder.id), MOTION_MS + 30)
+			window.setTimeout(() => incoming.delete(reminder.id), MOTION_MS + 280)
 		}
 
-		// then trigger optimistic store update (which immediately flips status in cache)
 		if (direction === 'to-completed') {
 			await reminders.completeReminder(reminder)
 		} else {
@@ -151,6 +161,10 @@
 	) {
 		await reminders.updateReminder(reminder, updates)
 	}
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// effects
+	// ─────────────────────────────────────────────────────────────────────────
 
 	$effect(() => {
 		void loadReminders()
@@ -198,11 +212,28 @@
 	})
 </script>
 
-<div class="flex h-full min-h-0 flex-col">
+<div class="flex h-full min-h-0 flex-col" style="gap: var(--spacing-header-content);">
 	{#if showListTitle}
-		<header class="flex items-center gap-2 px-2 pt-2 pb-4">
-			<!-- intentionally optional; master area already shows selection -->
-			<h1 class="min-w-0 truncate text-lg font-semibold text-white/90">reminders</h1>
+		<header class="flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6">
+			<div class="flex min-w-0 items-center gap-3">
+				{#if activeList}
+					<span
+						class="rounded-pill flex h-8 w-8 items-center justify-center text-white"
+						style:background-color={activeList.color ?? 'rgba(255,255,255,0.08)'}
+					>
+						<span class="text-sm">{activeList.icon ?? '📋'}</span>
+					</span>
+				{:else}
+					<span
+						class="rounded-pill flex h-8 w-8 items-center justify-center bg-white/8 text-white/80"
+					>
+						<CheckBox variant="solid" class="h-5 w-5" />
+					</span>
+				{/if}
+				<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-white/90">
+					{activeList?.name ?? 'reminders'}
+				</h2>
+			</div>
 		</header>
 	{/if}
 
@@ -214,7 +245,7 @@
 		<div class="min-h-0 flex-1 overflow-y-auto px-1 pb-2 {showListTitle ? '' : 'pt-4'}">
 			<div class="flex flex-col gap-1">
 				{#each pendingReminders as reminder (reminder.id)}
-					{@const motion = motionForReminder(reminder.id)}
+					{@const motion = getIncomingMotion(reminder.id)}
 					<ReminderRow
 						kind="edit"
 						{reminder}
@@ -237,7 +268,7 @@
 					/>
 				{/each}
 
-				{#each transitions.filter((t) => t.direction === 'to-completed') as t (t.id)}
+				{#each transitionsToCompleted as t (t.reminder.id)}
 					<ReminderRow
 						kind="edit"
 						reminder={t.reminder}
@@ -279,7 +310,7 @@
 				{/if}
 			</div>
 
-			{#if completedCount > 0 || transitions.some((t) => t.direction === 'to-pending')}
+			{#if completedCount > 0 || transitionsToPending.length > 0}
 				<div class="mt-3 px-2">
 					<button
 						type="button"
@@ -306,7 +337,7 @@
 					<div class="min-h-0 overflow-hidden">
 						<div class="flex flex-col gap-1 pt-1">
 							{#each completedReminders as reminder (reminder.id)}
-								{@const motion = motionForReminder(reminder.id)}
+								{@const motion = getIncomingMotion(reminder.id)}
 								<ReminderRow
 									kind="edit"
 									{reminder}
@@ -331,7 +362,7 @@
 								/>
 							{/each}
 
-							{#each transitions.filter((t) => t.direction === 'to-pending') as t (t.id)}
+							{#each transitionsToPending as t (t.reminder.id)}
 								<ReminderRow
 									kind="edit"
 									reminder={t.reminder}

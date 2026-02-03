@@ -21,7 +21,7 @@
 	}: MenuItemProps = $props()
 
 	const baseClasses =
-		'flex w-full cursor-pointer items-center gap-3 rounded-xl border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40'
+		'flex w-full cursor-pointer items-center gap-3 rounded-pill border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40'
 
 	const textClasses = $derived(
 		destructive

@@ -54,7 +54,7 @@
 	</span>
 {:else}
 	<div
-		class="overflow-hidden rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm"
+		class="rounded-pill overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm"
 		in:fade={{ duration: 150 }}
 	>
 		{#if expandable}
@@ -64,7 +64,7 @@
 				onclick={toggleExpand}
 			>
 				<div
-					class="flex h-8 w-8 items-center justify-center rounded-lg text-sm {statusColor}"
+					class="rounded-pill flex h-8 w-8 items-center justify-center text-sm {statusColor}"
 				>
 					{#if icon}
 						{@render icon()}
@@ -111,7 +111,7 @@
 		{:else}
 			<div class="flex w-full items-center gap-3 px-4 py-3 text-left">
 				<div
-					class="flex h-8 w-8 items-center justify-center rounded-lg text-sm {statusColor}"
+					class="rounded-pill flex h-8 w-8 items-center justify-center text-sm {statusColor}"
 				>
 					{#if icon}
 						{@render icon()}

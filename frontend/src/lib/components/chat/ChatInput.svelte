@@ -171,7 +171,7 @@
 						>
 							<button
 								type="button"
-								class="flex w-full cursor-pointer items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+								class="rounded-pill flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
 								role="menuitem"
 								onclick={() => fileInput?.click()}
 							>
@@ -179,7 +179,7 @@
 							</button>
 							<button
 								type="button"
-								class="flex w-full cursor-pointer items-center rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+								class="rounded-pill flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
 								role="menuitem"
 								onclick={() => imageInput?.click()}
 							>
@@ -209,7 +209,7 @@
 						<button
 							type="button"
 							aria-label="stop generating"
-							class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
+							class="rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
 							onclick={onStop}
 						>
 							<Stop class="h-3.5 w-3.5" />
@@ -218,7 +218,7 @@
 						<button
 							type="submit"
 							aria-label="send message"
-							class="send-btn flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
 								value.trim() === '' || disabled
 							)
 								? 'hover:brightness-110'
@@ -236,15 +236,8 @@
 
 <style>
 	.chat-input {
-		--lg-blur: 20px;
+		--lg-blur: 8px;
 		--lg-bg: rgba(255, 255, 255, 0.12);
-		transition:
-			--lg-blur 0.2s ease-out,
-			--lg-bg 0.2s ease-out,
-			--lg-highlight-center 0.2s ease-out,
-			--lg-border-start 0.2s ease-out,
-			--lg-border-end 0.2s ease-out,
-			box-shadow 0.2s ease-out;
 	}
 
 	:global(.dark) .chat-input {
@@ -252,7 +245,6 @@
 	}
 
 	.chat-input:hover {
-		--lg-blur: 24px;
 		--lg-bg: rgba(255, 255, 255, 0.16);
 		--lg-highlight-center: rgba(255, 255, 255, 0.24);
 		--lg-border-start: rgba(80, 80, 80, 0.28);
@@ -264,7 +256,6 @@
 	}
 
 	.chat-input:has(textarea:focus) {
-		--lg-blur: 32px;
 		--lg-bg: rgba(255, 255, 255, 0.25);
 		--lg-highlight-center: rgba(255, 255, 255, 0.42);
 		--lg-border-start: rgba(120, 120, 120, 0.35);

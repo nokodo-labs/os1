@@ -342,8 +342,8 @@
 
 			<!-- system chrome: Island (top header) - fixed overlay for blur effect -->
 			<div
-				class="pointer-events-none fixed top-0 z-30 mx-auto w-full px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)]"
-				style="left: var(--island-left, 0); right: 0; max-width: min(1280px, calc(100% - var(--island-left, 0px)));"
+				class="pointer-events-none fixed top-0 z-30 mx-auto w-full pt-[clamp(12px,4vw,32px)]"
+				style="left: var(--island-left, 0); right: 0; max-width: min(1280px, calc(100% - var(--island-left, 0px))); padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 				bind:this={islandShell}
 			>
 				<div class="pointer-events-auto mx-auto max-w-7xl">

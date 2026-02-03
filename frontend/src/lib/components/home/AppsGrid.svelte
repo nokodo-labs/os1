@@ -12,6 +12,7 @@
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Database from '$lib/components/icons/Database.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
+	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Heart from '$lib/components/icons/Heart.svelte'
 	import Map from '$lib/components/icons/Map.svelte'
@@ -30,6 +31,7 @@
 		title: string
 		icon: IconComponent
 		accent?: AccentColorKey
+		iconTone?: 'primary' | 'secondary'
 		action?: () => Promise<void>
 	}
 
@@ -42,7 +44,15 @@
 	let { iconShape = 'circle' }: Props = $props()
 
 	const apps: AppDefinition[] = [
-		{ id: 'notes', title: 'notes', icon: Document },
+		{
+			id: 'notes',
+			title: 'notes',
+			icon: Document,
+			accent: 'yellow',
+			action: async () => {
+				await goto(resolve('/notes'))
+			},
+		},
 		{
 			id: 'reminders',
 			title: 'reminders',
@@ -54,7 +64,7 @@
 			},
 		},
 		{ id: 'calendar', title: 'calendar', icon: Calendar },
-		{ id: 'messages', title: 'messages', icon: ChatBubbles },
+		{ id: 'messages', title: 'messages', icon: ChatBubbles, accent: 'green' },
 		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
 		{ id: 'automations', title: 'automations', icon: Bolt },
 		{ id: 'cloud', title: 'cloud', icon: Cloud },
@@ -66,6 +76,16 @@
 			accent: 'gray',
 			action: async () => {
 				await goto(resolve('/settings'))
+			},
+		},
+		{
+			id: 'library',
+			title: 'library',
+			icon: FinderFolder,
+			accent: 'yellow',
+			iconTone: 'secondary',
+			action: async () => {
+				await goto(resolve('/library'))
 			},
 		},
 		{ id: 'database', title: 'database', icon: Database },
@@ -292,7 +312,15 @@
 
 	const iconColorForApp = (app: AppDefinition): string | null => {
 		if (!app.accent) return null
-		return accentColors[app.accent]?.primary ?? null
+		const palette = accentColors[app.accent]
+		if (!palette) return null
+
+		switch (app.iconTone ?? 'primary') {
+			case 'secondary':
+				return palette.secondary ?? palette.primary
+			case 'primary':
+				return palette.primary
+		}
 	}
 </script>
 

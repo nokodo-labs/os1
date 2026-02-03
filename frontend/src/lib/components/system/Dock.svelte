@@ -110,13 +110,13 @@
 				<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
 					{#if !session.isLoggedIn}
 						<div
-							class="rounded-2xl bg-white/5 px-3 py-3 text-center text-sm text-white/50"
+							class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50"
 						>
 							log in to see notifications
 						</div>
 					{:else if notifications.list.length === 0}
 						<div
-							class="rounded-2xl bg-white/5 px-3 py-3 text-center text-sm text-white/50"
+							class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50"
 						>
 							no notifications
 						</div>
@@ -150,25 +150,25 @@
 
 			<div class="grid grid-cols-2 gap-2">
 				<button
-					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					class="rounded-pill border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
 					type="button"
 				>
 					wifi
 				</button>
 				<button
-					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					class="rounded-pill border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
 					type="button"
 				>
 					bluetooth
 				</button>
 				<button
-					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					class="rounded-pill border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
 					type="button"
 				>
 					focus
 				</button>
 				<button
-					class="rounded-2xl border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
+					class="rounded-pill border-none bg-white/5 px-3 py-3 text-left text-sm text-white/80 transition-all duration-150 hover:bg-white/8 active:scale-[0.99]"
 					type="button"
 				>
 					dark mode

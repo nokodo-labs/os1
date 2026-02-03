@@ -87,18 +87,21 @@
 	})
 
 	// ============ EFFECTS ============
+	// explicit focus requests from buttons (new chat, temp chat, etc)
 	$effect(() => {
 		if (!browser) return
-		const handleRequestFocus = () => {
+		const handler = () => {
 			focusToken += 1
 		}
-		window.addEventListener('nokodo:focus-home-input', handleRequestFocus)
-		return () => window.removeEventListener('nokodo:focus-home-input', handleRequestFocus)
+		window.addEventListener('focus:chat-input', handler)
+		return () => window.removeEventListener('focus:chat-input', handler)
 	})
 
+	// auto-focus on route/mode changes (desktop only - mobile skips to avoid keyboard popup)
 	let lastAutoFocusKey = $state<string | null>(null)
 	$effect(() => {
 		if (!browser) return
+		if (device.isMobile) return
 		if (page.url.pathname !== '/') return
 		const chat = page.url.searchParams.get('chat')
 		if (chat !== null && chat !== 'new' && chat !== 'temp') return
@@ -190,8 +193,7 @@
 
 	async function setHomeChatMode(mode: Exclude<ChatMode, null>, opts?: { replace?: boolean }) {
 		chatStartError = null
-		// @ts-expect-error resolve typing is narrower than our constructed URL
-		await goto(resolve(`/?chat=${mode}`), {
+		await goto(`${resolve('/')}?chat=${mode}`, {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: opts?.replace ?? false,
@@ -319,7 +321,8 @@
 		<!-- scrollable content area -->
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div
-				class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-[clamp(10px,4vw,32px)] pt-[clamp(12px,4vw,32px)] pb-8"
+				class="mx-auto flex min-h-full w-full max-w-7xl flex-col pt-[clamp(12px,4vw,32px)] pb-8"
+				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 			>
 				{#if showChatBanner}
 					<div

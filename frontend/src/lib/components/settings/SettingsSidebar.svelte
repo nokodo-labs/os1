@@ -89,7 +89,7 @@
 	}
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-8">
+<div class="flex h-full min-h-0 flex-col" style="gap: var(--spacing-header-content);">
 	<header
 		class="{isMobile
 			? 'mt-0'

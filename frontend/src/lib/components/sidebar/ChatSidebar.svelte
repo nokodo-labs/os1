@@ -168,7 +168,7 @@
 		sidebar.selectChat(null)
 		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
 		if (isAlreadyHome && browser) {
-			window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
+			window.dispatchEvent(new CustomEvent('focus:chat-input'))
 		} else {
 			void goto(resolve('/'), { keepFocus: true, noScroll: true })
 		}
@@ -184,10 +184,10 @@
 				sidebar.selectChat(null)
 				const isAlreadyNew = page.url.pathname === '/' && chatParam === 'new'
 				if (isAlreadyNew && browser) {
-					window.dispatchEvent(new CustomEvent('nokodo:focus-home-input'))
+					window.dispatchEvent(new CustomEvent('focus:chat-input'))
 				} else {
-					// @ts-expect-error resolve typing is narrower than our constructed URL
-					void goto(resolve('/?chat=new' as never), { keepFocus: true, noScroll: true })
+					window.dispatchEvent(new CustomEvent('focus:chat-input'))
+					void goto(`${resolve('/')}?chat=new`, { keepFocus: true, noScroll: true })
 				}
 				if (device.isMobile) sidebar.closeChatSidebar()
 			},

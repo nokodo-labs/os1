@@ -166,7 +166,7 @@
 				class="liquid-glass--frosted rounded-container flex items-center gap-1 p-1 transition-all"
 			>
 				<button
-					class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+					class="rounded-pill flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
 					onclick={handleAsk}
 				>
 					<ChatBubble class="size-3.5" />
@@ -174,7 +174,7 @@
 				</button>
 				<div class="h-4 w-px bg-black/10 dark:bg-white/10"></div>
 				<button
-					class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+					class="rounded-pill flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
 					onclick={handleExplain}
 				>
 					<LightBulb class="size-3.5" />

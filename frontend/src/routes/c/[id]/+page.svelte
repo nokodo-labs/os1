@@ -3,7 +3,7 @@
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
-	import ChatInputLiquidGlass from '$lib/components/chat/ChatInput.svelte'
+	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
@@ -32,6 +32,8 @@
 
 	// Local UI state
 	let didLoadAgents = $state(false)
+	let inputFocusToken = $state(0)
+	let lastInputFocusKey = $state<string | null>(null)
 
 	// System chrome for agent selector
 	const chrome = useSystemChrome()
@@ -44,6 +46,16 @@
 	// ─────────────────────────────────────────────────────────────────────────────
 	// Effects: Agents loading
 	// ─────────────────────────────────────────────────────────────────────────────
+	$effect(() => {
+		if (!device.ready) return
+		if (device.isMobile) return
+		const threadId = page.params.id
+		if (!threadId) return
+		if (threadId === lastInputFocusKey) return
+		lastInputFocusKey = threadId
+		inputFocusToken += 1
+	})
+
 	$effect(() => {
 		const t = chat.thread?.title
 		pageTitleStore.pageTitle = t && t.trim() ? t : 'untitled chat'
@@ -546,12 +558,13 @@
 	<div class="absolute right-0 bottom-0 left-0 z-10 pt-4 pb-5" bind:this={chat.inputOverlay}>
 		<div class="relative mx-auto w-full max-w-7xl px-8">
 			<div class="transition-all duration-500 ease-in-out">
-				<ChatInputLiquidGlass
+				<ChatInput
 					bind:value={chat.inputValue}
 					onSubmit={chat.handleSendMessage}
 					onStop={chat.handleStopGeneration}
 					isGenerating={chat.isGenerating}
 					placeholder="send a message"
+					focusToken={inputFocusToken}
 					viewTransitionName="chat-input"
 				/>
 			</div>

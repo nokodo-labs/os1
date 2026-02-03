@@ -61,7 +61,7 @@
 		>
 			{#each models as model (model.id)}
 				<button
-					class="flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-3 text-left transition-all duration-200 hover:bg-white/10"
+					class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-3 text-left transition-all duration-200 hover:bg-white/10"
 					class:!bg-linear-to-br={model.id === selected}
 					class:!from-[rgba(139,92,246,0.3)]={model.id === selected}
 					class:!to-[rgba(99,102,241,0.2)]={model.id === selected}

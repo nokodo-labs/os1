@@ -35,7 +35,7 @@
 						type="button"
 						role="option"
 						aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
-						class="flex w-full items-center gap-3 rounded-2xl border-none px-3 py-2 text-left transition-colors {index ===
+						class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors {index ===
 							highlightedIndex && highlightedIndex >= 0
 							? 'bg-white/10'
 							: 'bg-transparent hover:bg-white/7'}"
@@ -43,7 +43,7 @@
 						onclick={() => onSelect(suggestion)}
 					>
 						<div
-							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/8 text-white/85"
+							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/85"
 						>
 							<Icon class="h-5 w-5" strokeWidth="2" />
 						</div>

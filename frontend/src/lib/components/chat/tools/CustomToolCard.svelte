@@ -35,7 +35,7 @@
 					arguments
 				</h4>
 				<pre
-					class="overflow-x-auto rounded-lg bg-black/20 p-2 text-xs text-white/70">{JSON.stringify(
+					class="rounded-pill overflow-x-auto bg-black/20 p-2 text-xs text-white/70">{JSON.stringify(
 						execution.toolCall.arguments,
 						null,
 						2
@@ -49,7 +49,7 @@
 					result
 				</h4>
 				<pre
-					class="max-h-32 overflow-auto rounded-lg bg-black/20 p-2 text-xs {execution
+					class="rounded-pill max-h-32 overflow-auto bg-black/20 p-2 text-xs {execution
 						.result.isError
 						? 'text-red-300'
 						: 'text-white/70'}">{execution.result.output}</pre>

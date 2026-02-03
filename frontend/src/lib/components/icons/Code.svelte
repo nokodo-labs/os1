@@ -1,8 +1,11 @@
 <script lang="ts">
-	const {
-		className = 'w-5 h-5',
-		strokeWidth = '1.5',
-	}: { className?: string; strokeWidth?: string } = $props()
+	import type { HTMLAttributes } from 'svelte/elements'
+
+	interface Props extends HTMLAttributes<SVGSVGElement> {
+		strokeWidth?: string
+	}
+
+	const { class: className = 'w-5 h-5', strokeWidth = '1.5', ...rest }: Props = $props()
 </script>
 
 <svg
@@ -13,6 +16,7 @@
 	stroke-width={strokeWidth}
 	stroke="currentColor"
 	class={className}
+	{...rest}
 >
 	<path
 		stroke-linecap="round"
