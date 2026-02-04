@@ -29,7 +29,7 @@
 		"@tsconfig/svelte": "^5.0.4",
 		"@types/node": "^25.0.10",
 		"@vitest/coverage-v8": "^4.0.15",
-		"autoprefixer": "^10.4.23",
+		"autoprefixer": "^10.4.24",
 		"eslint": "^9.39.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.13.1",
