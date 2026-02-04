@@ -5,13 +5,13 @@
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
+	import CopyButton from '$lib/components/chat/CopyButton.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
-	import DocumentDuplicate from '$lib/components/icons/DocumentDuplicate.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
@@ -321,20 +321,11 @@
 										{showTail}
 									>
 										{#snippet actions()}
-											<MessageActionButton
-												onclick={() =>
-													chat.handleCopyMessage(
-														chat.contentPartsToText(
-															item.message.content
-														)
-													)}
-												ariaLabel="copy message"
-											>
-												<DocumentDuplicate
-													class="h-4 w-4"
-													strokeWidth="2"
-												/>
-											</MessageActionButton>
+											<CopyButton
+												content={chat.contentPartsToText(
+													item.message.content
+												)}
+											/>
 											{#if item.align === 'right'}
 												<MessageActionButton
 													onclick={() =>
@@ -363,15 +354,7 @@
 										{showTail}
 									>
 										{#snippet actions()}
-											<MessageActionButton
-												onclick={() => chat.handleCopyMessage(item.content)}
-												ariaLabel="copy message"
-											>
-												<DocumentDuplicate
-													class="h-4 w-4"
-													strokeWidth="2"
-												/>
-											</MessageActionButton>
+											<CopyButton content={item.content} />
 										{/snippet}
 									</UserChatMessage>
 								{/if}
@@ -488,8 +471,8 @@
 										{/snippet}
 
 										{#snippet actions()}
-											<MessageActionButton
-												onclick={() => {
+											<CopyButton
+												content={() => {
 													const allText = responseItems
 														.filter(
 															(
@@ -508,18 +491,12 @@
 													const streamText = isStreamingBlock
 														? (chat.streamingAssistant?.content ?? '')
 														: ''
-													chat.handleCopyMessage(
+													return (
 														allText +
-															(streamText ? '\n\n' + streamText : '')
+														(streamText ? '\n\n' + streamText : '')
 													)
 												}}
-												ariaLabel="copy message"
-											>
-												<DocumentDuplicate
-													class="h-4 w-4"
-													strokeWidth="2"
-												/>
-											</MessageActionButton>
+											/>
 											{#if !isStreamingBlock}
 												<MessageActionButton
 													onclick={() => {

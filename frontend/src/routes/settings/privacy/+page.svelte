@@ -38,7 +38,7 @@
 	description="control your data, permissions, and access settings"
 >
 	<div class="space-y-4">
-		<div class="rounded-box bg-white/5 p-5">
+		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white/85">data collection</div>
 			<div class="mt-1 text-sm text-white/55">
 				control what data is collected and how it's used.
@@ -54,7 +54,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="rounded-box bg-white/5 p-5">
+		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white/85">sessions</div>
 			<div class="mt-1 text-sm text-white/55">
 				manage active sessions and sign out of other devices.

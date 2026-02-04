@@ -61,6 +61,7 @@ class ThreadUpdate(MetadataModel):
 	is_temporary: bool | None = None
 	project_ids: list[TypeID] | None = None
 	owner_id: TypeID | None = None
+	current_message_id: TypeID | None = None
 
 
 class ThreadSummary(ORMModel):

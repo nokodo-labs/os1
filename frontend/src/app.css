@@ -11,8 +11,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--radius: 0.625rem;
-	--radius-container-base: 1.5rem;
+	--radius-container-base: 2.5rem;
 	/* Island chrome offset: container top padding + Island height + container bottom padding.
 	   used by pages that need content to clear the sticky Island (e.g., chat). */
 	--chrome-island-offset: calc(clamp(12px, 4vw, 32px) + 88px + 16px);
@@ -123,10 +122,6 @@
 	--color-chart-3: var(--chart-3);
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
-	--radius-sm: calc(var(--radius) - 4px);
-	--radius-md: calc(var(--radius) - 2px);
-	--radius-lg: var(--radius);
-	--radius-xl: calc(var(--radius) + 4px);
 	--radius-container: var(--radius-container-base);
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
@@ -157,12 +152,7 @@
 
 	/* pill-shaped single-line items (e.g., list rows, tags, badges) */
 	.rounded-pill {
-		border-radius: var(--radius-container);
-	}
-
-	/* boxes for multi-line expandable content (e.g., reminder items, cards) */
-	.rounded-box {
-		border-radius: var(--radius-container);
+		@apply rounded-full;
 	}
 
 	/* interactive element base: use on any clickable element for consistent UX */

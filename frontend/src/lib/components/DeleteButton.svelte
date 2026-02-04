@@ -81,7 +81,7 @@
 	<div class="space-y-4">
 		{#if error}
 			<div
-				class="rounded-box border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+				class="rounded-container border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
 			>
 				{error}
 			</div>

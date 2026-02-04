@@ -420,6 +420,18 @@ async def update_thread(
 		thread.owner = new_owner
 		owner_changed = True
 
+	# validate current_message_id belongs to this thread
+	# TODO: verify perf impact. disabled until then.
+	""" new_current_message_id = update_data.pop("current_message_id", None)
+	if new_current_message_id is not None:
+		msg = await session.get(Message, new_current_message_id)
+		if not msg or msg.thread_id != thread_id:
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="Message not found in thread",
+			)
+		thread.current_message_id = new_current_message_id """
+
 	project_ids = update_data.pop("project_ids", None)
 	for field, value in update_data.items():
 		setattr(thread, field, value)

@@ -348,7 +348,7 @@ export function createChatState() {
 		}
 	}
 
-	function switchBranch(messageId: string, direction: 'prev' | 'next') {
+	async function switchBranch(messageId: string, direction: 'prev' | 'next') {
 		const msg = messageTree.get(messageId)
 		if (!msg) return
 		const parentId = msg.parent_id ?? null
@@ -365,6 +365,20 @@ export function createChatState() {
 		const newLeaf = getLatestLeaf(targetId)
 		currentLeafId = newLeaf
 		rebuildRunBlocks()
+
+		// persist branch selection to backend so subsequent messages use correct parent
+		if (thread) {
+			try {
+				await apiClient().PATCH('/v1/threads/{thread_id}', {
+					params: { path: { thread_id: thread.id } },
+					body: { current_message_id: newLeaf },
+				})
+				// update local thread state
+				thread = { ...thread, current_message_id: newLeaf }
+			} catch (e) {
+				console.error('failed to persist branch selection', e)
+			}
+		}
 	}
 
 	/**
@@ -640,7 +654,7 @@ export function createChatState() {
 			threadId: opts.threadId,
 			agentId: opts.agentId,
 			input: opts.input,
-			parentId: opts.parentId,
+			parentId: assistantParentId,
 			signal: runAbortController.signal,
 		})) {
 			if (opts.runId !== activeRun) {
@@ -817,6 +831,7 @@ export function createChatState() {
 				agentId: selectedAgent.id,
 				input: runBaseMessage,
 				runId,
+				parentId: currentLeafId,
 			})
 			if (runId !== activeRun) return
 			inputValue = ''
@@ -877,10 +892,6 @@ export function createChatState() {
 	function handleStopGeneration() {
 		activeRun++
 		isGenerating = false
-	}
-
-	function handleCopyMessage(content: string) {
-		navigator.clipboard.writeText(content)
 	}
 
 	async function handleEditMessage(messageId: string) {
@@ -1192,7 +1203,6 @@ export function createChatState() {
 		handleSendMessage,
 		handleRegenerateMessage,
 		handleStopGeneration,
-		handleCopyMessage,
 		handleEditMessage,
 		requestDeleteUserMessage,
 		deleteUserMessage,

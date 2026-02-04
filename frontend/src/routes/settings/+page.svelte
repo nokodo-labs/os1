@@ -14,7 +14,7 @@
 		description="manage your profile, email, and personal information"
 	>
 		<div class="space-y-4">
-			<div class="rounded-box bg-white/5 p-5">
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">profile</div>
 				<div class="mt-1 text-sm text-white/55">
 					your display name, avatar, and bio. this information is visible to other users.
@@ -27,7 +27,7 @@
 					</div>
 				</div>
 			</div>
-			<div class="rounded-box bg-white/5 p-5">
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">email</div>
 				<div class="mt-1 text-sm text-white/55">
 					your email address for notifications and account recovery.

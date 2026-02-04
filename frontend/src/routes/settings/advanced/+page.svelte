@@ -38,14 +38,14 @@
 	description="developer tools and experimental features"
 >
 	<div class="space-y-4">
-		<div class="rounded-box bg-white/5 p-5">
+		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white/85">developer mode</div>
 			<div class="mt-1 text-sm text-white/55">
 				enable developer tools and debug information.
 			</div>
 			<div class="mt-4 h-6 w-12 rounded-full bg-white/10"></div>
 		</div>
-		<div class="rounded-box bg-white/5 p-5">
+		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white/85">experimental features</div>
 			<div class="mt-1 text-sm text-white/55">
 				try out new features before they're released.
@@ -61,7 +61,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="rounded-box border border-red-500/30 bg-red-500/5 p-5">
+		<div class="rounded-container border border-red-500/30 bg-red-500/5 p-5">
 			<div class="text-sm font-semibold text-red-400">danger zone</div>
 			<div class="mt-1 text-sm text-white/55">
 				irreversible actions. proceed with caution.

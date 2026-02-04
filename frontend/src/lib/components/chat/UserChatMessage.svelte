@@ -75,32 +75,16 @@
 	{/if}
 
 	<div
-		class="message-bubble relative"
-		class:tail-whatsapp={showTail && tailStyle === 'whatsapp'}
-		class:tail-imessage={showTail && tailStyle === 'imessage'}
-		class:align-left={align === 'left'}
+		class="bubble-wrapper"
+		class:tail-right={showTail && tailStyle === 'imessage' && align === 'right'}
+		class:tail-left={showTail && tailStyle === 'imessage' && align === 'left'}
 	>
-		<!-- whatsapp-style tail (top) -->
-		{#if showTail && tailStyle === 'whatsapp'}
-			<svg
-				class="tail-whatsapp-svg absolute top-0 h-3 w-3"
-				class:right-svg={align === 'right'}
-				class:left-svg={align === 'left'}
-				viewBox="0 0 12 12"
-				fill="var(--accent-primary)"
-			>
-				<path
-					d={align === 'right' ? 'M0 0 L12 0 L12 12 Q6 10 0 0' : 'M12 0 L0 0 L0 12 Q6 10 12 0'}
-				/>
-			</svg>
-		{/if}
-
 		<div
-			class="liquid-glass rounded-container relative px-5 py-4 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-linear-to-br before:from-white/40 before:to-white/10 before:mask-exclude before:p-px before:content-[''] before:[-webkit-mask-composite:xor] before:[-webkit-mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)] before:[mask:linear-gradient(#fff_0_0)_content-box,linear-gradient(#fff_0_0)]"
+			class="bubble-content liquid-glass rounded-container relative px-5 py-4 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
 			style="
-				background-color: var(--accent-primary);
-				box-shadow: 0 4px 16px var(--accent-border);
-			"
+                background-color: var(--accent-primary);
+                box-shadow: 0 4px 16px var(--accent-border);
+            "
 		>
 			<div
 				class="text-[0.95rem] leading-relaxed wrap-break-word whitespace-pre-wrap text-white/95"
@@ -109,20 +93,35 @@
 			</div>
 		</div>
 
-		<!-- imessage-style tail (bottom) -->
 		{#if showTail && tailStyle === 'imessage'}
 			<svg
-				class="tail-imessage-svg absolute -bottom-0.5 h-4 w-4"
-				class:right-svg={align === 'right'}
-				class:left-svg={align === 'left'}
-				viewBox="0 0 16 16"
-				fill="var(--accent-primary)"
+				class="tail-svg"
+				class:tail-svg-right={align === 'right'}
+				class:tail-svg-left={align === 'left'}
+				width="12"
+				height="19"
+				viewBox="0 0 12 19"
+				xmlns="http://www.w3.org/2000/svg"
 			>
-				<path
-					d={align === 'right'
-						? 'M0 0 Q8 4 14 14 Q16 16 16 16 L8 8 Q4 4 0 0'
-						: 'M16 0 Q8 4 2 14 Q0 16 0 16 L8 8 Q12 4 16 0'}
-				/>
+				{#if align === 'right'}
+					<path
+						d="M 0 0
+                           C 0 6, 0 10, 4 14
+                           C 8 17, 10 19, 12 19
+                           L 0 19
+                           Z"
+						fill="var(--accent-primary)"
+					/>
+				{:else}
+					<path
+						d="M 12 0
+                           C 12 6, 12 10, 8 14
+                           C 4 17, 2 19, 0 19
+                           L 12 19
+                           Z"
+						fill="var(--accent-primary)"
+					/>
+				{/if}
 			</svg>
 		{/if}
 	</div>
@@ -156,7 +155,6 @@
 					</button>
 				</div>
 			{/if}
-
 			{#if actions}
 				{@render actions()}
 			{/if}
@@ -176,37 +174,32 @@
 		}
 	}
 
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(-5px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	/* message bubble container for tail positioning */
-	.message-bubble {
+	.bubble-wrapper {
 		position: relative;
+		display: inline-block;
 	}
 
-	/* whatsapp tail positioning */
-	.tail-whatsapp-svg.right-svg {
-		right: -6px;
+	/* tighten corner where tail attaches */
+	.tail-right .bubble-content {
+		border-bottom-right-radius: 4px !important;
 	}
 
-	.tail-whatsapp-svg.left-svg {
-		left: -6px;
+	.tail-left .bubble-content {
+		border-bottom-left-radius: 4px !important;
 	}
 
-	/* imessage tail positioning */
-	.tail-imessage-svg.right-svg {
-		right: -4px;
+	/* SVG positioning */
+	.tail-svg {
+		position: absolute;
+		bottom: 0;
+		pointer-events: none;
 	}
 
-	.tail-imessage-svg.left-svg {
-		left: -4px;
+	.tail-svg-right {
+		right: -8px;
+	}
+
+	.tail-svg-left {
+		left: -8px;
 	}
 </style>

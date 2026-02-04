@@ -187,7 +187,7 @@
 								transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 								bind:this={listMenuEl}
 								data-reminders-list-menu
-								class="animate-popup-right rounded-box absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+								class="animate-popup-right rounded-container absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
 							>
 								<button
 									type="button"

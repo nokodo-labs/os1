@@ -32,6 +32,7 @@
 	let textarea: HTMLTextAreaElement
 	let isComposing = $state(false)
 	let isAddMenuOpen = $state(false)
+	let isMultiLine = $state(false)
 
 	let fileInput: HTMLInputElement
 	let imageInput: HTMLInputElement
@@ -94,7 +95,10 @@
 	function handleInput() {
 		if (!textarea) return
 		textarea.style.height = 'auto'
-		textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
+		const newHeight = Math.min(textarea.scrollHeight, 200)
+		textarea.style.height = `${newHeight}px`
+		// Check if content spans multiple lines (scrollHeight > single line height ~24px)
+		isMultiLine = textarea.scrollHeight > 32
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -110,6 +114,7 @@
 		if (!value.trim() || disabled || !onSubmit) return
 		onSubmit(value)
 		value = ''
+		isMultiLine = false
 		if (textarea) {
 			textarea.style.height = 'auto'
 		}
@@ -131,12 +136,24 @@
 
 <form class="w-full" onsubmit={handleFormSubmit}>
 	<div
-		class="liquid-glass chat-input relative w-full rounded-full transition-all duration-300"
+		class="liquid-glass chat-input relative w-full transition-all duration-300"
+		class:rounded-pill={!isMultiLine}
+		class:rounded-container={isMultiLine}
 		style={viewTransitionName ? `view-transition-name: ${viewTransitionName};` : undefined}
 	>
 		<div class="relative z-10 px-1 py-1">
-			<div class="flex items-center gap-2 px-2.5 py-2.5">
-				<div class="ml-1 flex shrink-0 items-center" data-chat-add-menu-root>
+			<div
+				class="flex gap-2 px-2.5 py-2.5"
+				class:items-center={!isMultiLine}
+				class:items-end={isMultiLine}
+			>
+				<div
+					class="ml-1 flex shrink-0"
+					class:items-center={!isMultiLine}
+					class:items-end={isMultiLine}
+					class:pb-1={isMultiLine}
+					data-chat-add-menu-root
+				>
 					<button
 						type="button"
 						aria-label="Add attachment"
@@ -204,7 +221,12 @@
 					></textarea>
 				</div>
 
-				<div class="mr-1 flex shrink-0 items-center space-x-1">
+				<div
+					class="mr-1 flex shrink-0 space-x-1"
+					class:items-center={!isMultiLine}
+					class:items-end={isMultiLine}
+					class:pb-1={isMultiLine}
+				>
 					{#if isGenerating}
 						<button
 							type="button"

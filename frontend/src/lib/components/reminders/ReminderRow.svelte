@@ -269,7 +269,7 @@
 		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
 		: undefined}
 	class="reminder-row group relative cursor-pointer overflow-visible transition-colors duration-150 {props.expanded
-		? 'rounded-box border border-white/10 bg-white/6'
+		? 'rounded-container border border-white/10 bg-white/6'
 		: 'rounded-pill border border-transparent hover:bg-white/6'} {isCompleted
 		? 'is-completed opacity-65'
 		: ''} {isMotionIn ? 'is-incoming' : ''} {isMotionOutComplete
@@ -427,7 +427,7 @@
 		<div
 			transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 			bind:this={menuEl}
-			class="animate-popup-right rounded-box absolute top-full right-2 z-50 mt-2 w-56 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+			class="animate-popup-right rounded-container absolute top-full right-2 z-50 mt-2 w-56 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
 		>
 			<div class="px-3 pt-2 pb-1 text-xs font-medium text-white/55">move</div>
 			<div class="max-h-44 overflow-auto">

@@ -48,13 +48,13 @@
 	description="debug-only UI toggles and diagnostics"
 >
 	{#if !isAdmin}
-		<div class="rounded-box border border-red-500/30 bg-red-500/5 p-5">
+		<div class="rounded-container border border-red-500/30 bg-red-500/5 p-5">
 			<div class="text-sm font-semibold text-red-400">admin only</div>
 			<div class="mt-1 text-sm text-white/55">this section is available to superusers.</div>
 		</div>
 	{:else}
 		<div class="space-y-4">
-			<div class="rounded-box bg-white/5 p-5">
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">appearance</div>
 				<div class="mt-1 text-sm text-white/55">admin-only debug overrides.</div>
 				<label class="mt-4 flex items-center justify-between gap-4">
@@ -72,7 +72,7 @@
 				</label>
 			</div>
 
-			<div class="rounded-box bg-white/5 p-5">
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">apps grid</div>
 				<div class="mt-1 text-sm text-white/55">visual tweaks for the home apps grid.</div>
 				<button
@@ -86,7 +86,7 @@
 				</button>
 			</div>
 
-			<div class="rounded-box bg-white/5 p-5">
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">markdown streaming</div>
 				<div class="mt-1 text-sm text-white/55">
 					tune the streamdown animation used while tokens arrive.

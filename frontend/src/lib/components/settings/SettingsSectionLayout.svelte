@@ -18,7 +18,7 @@
 			class="flex items-center gap-4"
 			style="margin-bottom: var(--spacing-header-content);"
 		>
-			<div class="rounded-box flex h-12 w-12 items-center justify-center bg-white/10">
+			<div class="rounded-container flex h-12 w-12 items-center justify-center bg-white/10">
 				<Icon variant="solid" class="h-6 w-6 text-white/80" />
 			</div>
 			<div class="min-w-0">

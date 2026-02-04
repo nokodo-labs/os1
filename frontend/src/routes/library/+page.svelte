@@ -102,7 +102,7 @@
 					transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 					bind:this={filterMenuEl}
 					role="menu"
-					class="animate-popup-right rounded-box absolute top-full left-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+					class="animate-popup-right rounded-container absolute top-full left-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
 				>
 					{#each ['all', 'sent', 'received', 'created'] as FilterMode[] as option (option)}
 						<button
@@ -139,7 +139,7 @@
 					transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 					bind:this={sortMenuEl}
 					role="menu"
-					class="animate-popup-right rounded-box absolute top-full left-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+					class="animate-popup-right rounded-container absolute top-full left-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
 				>
 					{#each ['newest', 'oldest'] as SortMode[] as option (option)}
 						<button

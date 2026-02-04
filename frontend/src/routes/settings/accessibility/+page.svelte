@@ -45,7 +45,7 @@
 	description="configure haptic feedback and assistive features"
 >
 	<div class="space-y-4">
-		<div class="rounded-box bg-white/5 p-5">
+		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white/85">haptic feedback</div>
 			<div class="mt-1 text-sm text-white/55">
 				enable vibration feedback on supported devices when receiving AI responses.

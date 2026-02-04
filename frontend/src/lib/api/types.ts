@@ -3561,6 +3561,8 @@ export interface components {
             project_ids?: string[] | null;
             /** Owner Id */
             owner_id?: string | null;
+            /** Current Message Id */
+            current_message_id?: string | null;
         };
         /** Token */
         Token: {
