@@ -193,11 +193,16 @@
 
 	async function setHomeChatMode(mode: Exclude<ChatMode, null>, opts?: { replace?: boolean }) {
 		chatStartError = null
-		await goto(`${resolve('/')}?chat=${mode}`, {
+		const navOpts = {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: opts?.replace ?? false,
-		})
+		}
+		if (mode === 'temp') {
+			await goto(resolve('/?chat=temp' as unknown as '/'), navOpts)
+		} else {
+			await goto(resolve('/?chat=new' as unknown as '/'), navOpts)
+		}
 	}
 
 	async function createThreadAndNavigate(content: string): Promise<void> {

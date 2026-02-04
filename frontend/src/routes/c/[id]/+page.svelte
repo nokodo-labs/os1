@@ -289,7 +289,7 @@
 					{#each chat.runBlocks as block, i (block.runId)}
 						<div class="space-y-3">
 							<!-- user messages for this run (both real and optimistic) -->
-							{#each block.items.filter((item) => item.kind === 'user' || item.kind === 'optimistic_user') as item}
+							{#each block.items.filter((item) => item.kind === 'user' || item.kind === 'optimistic_user') as item, itemIndex (item.kind === 'user' ? item.message.id : `${block.runId}-optimistic-${itemIndex}`)}
 								{#if item.kind === 'user'}
 									{@const siblings =
 										chat.messageChildren.get(item.message.parent_id ?? null) ??

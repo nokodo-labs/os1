@@ -5,12 +5,12 @@
 	import { page } from '$app/state'
 	import { apiClient } from '$lib/api/client'
 	import type { StreamMessage } from '$lib/api/streaming'
-	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
-	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
-	import EditChatModal from '$lib/components/modals/EditChatModal.svelte'
 	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
+	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
+	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
+	import EditChatModal from '$lib/components/modals/EditChatModal.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { chat, type Thread } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -187,7 +187,10 @@
 					window.dispatchEvent(new CustomEvent('focus:chat-input'))
 				} else {
 					window.dispatchEvent(new CustomEvent('focus:chat-input'))
-					void goto(`${resolve('/')}?chat=new`, { keepFocus: true, noScroll: true })
+					void goto(resolve('/?chat=new' as unknown as '/'), {
+						keepFocus: true,
+						noScroll: true,
+					})
 				}
 				if (device.isMobile) sidebar.closeChatSidebar()
 			},

@@ -40,7 +40,7 @@
 			return
 		}
 		focusHomeInput()
-		void goto(`${resolve('/')}?chat=temp`, { keepFocus: true, noScroll: true })
+		void goto(resolve('/?chat=temp' as unknown as '/'), { keepFocus: true, noScroll: true })
 	}
 
 	function toggle() {
