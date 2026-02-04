@@ -391,9 +391,9 @@ html[data-vt-active='1'] .chat-sidebar {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MOBILE LAYOUT
+   mobile layout adjustments
    888px matches DEVICE_MOBILE_BREAKPOINT_PX from device.svelte.ts
-   In mobile mode, pages are full-width with minimal insets for space efficiency.
+   in mobile mode, pages are full-width with minimal insets for space efficiency.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 888px) {
 	:root {

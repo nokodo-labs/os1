@@ -29,13 +29,13 @@
 	aria-hidden={!expandedContentVisible}
 >
 	<hr class="my-2 border-white/10" />
-	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden px-2">
-		<div class="mb-1 flex items-center gap-2 px-3">
+	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden">
+		<div class="mb-1 flex items-center gap-2 px-5">
 			<ChatBubble class="h-4 w-4 shrink-0 text-white/60" />
 			<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
-			<div class="flex min-h-full flex-col space-y-0.5">
+			<div class="flex min-h-full flex-col space-y-0.5 px-3">
 				{#if !isLoggedIn}
 					<div class="flex flex-1 flex-col items-center justify-center">
 						<div

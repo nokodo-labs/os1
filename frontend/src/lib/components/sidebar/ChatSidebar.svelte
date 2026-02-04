@@ -366,9 +366,9 @@
 
 	<!-- Right-edge swipe catcher to close fullscreen sidebar (mobile only) -->
 	<div
-		class="fixed inset-y-0 right-0 z-60 w-8"
+		class="fixed right-0 bottom-0 z-60 w-8"
 		role="presentation"
-		style="touch-action: pan-y;"
+		style="touch-action: pan-y; top: 5rem;"
 		onpointerdown={onCloseSwipePointerDown}
 		onpointerup={onCloseSwipePointerUp}
 		onpointercancel={onCloseSwipePointerCancel}
@@ -376,7 +376,7 @@
 {/if}
 
 <aside
-	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] transition-[width,transform] duration-300 ease-in-out {sidebar.isChatSidebarOpen
+	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
 		? ''
 		: 'group'} {device.isMobile
 		? 'w-full'
@@ -407,23 +407,29 @@
 		class="pointer-events-none absolute inset-0 bg-white/3 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 
-	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-1.5 px-3 py-4">
-		<ChatSidebarHeader
-			isChatSidebarOpen={sidebar.isChatSidebarOpen}
-			{isCompactLayout}
-			{showTopLabels}
-			onHomeClick={() => {
-				if (!sidebar.isChatSidebarOpen) {
-					sidebar.toggleChatSidebar()
-				}
-				sidebar.selectChat(null)
-			}}
-			onCloseClick={() => sidebar.closeChatSidebar()}
-		/>
+	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-1.5 pt-4 pb-0">
+		<div class="w-full px-3">
+			<ChatSidebarHeader
+				isChatSidebarOpen={sidebar.isChatSidebarOpen}
+				{isCompactLayout}
+				{showTopLabels}
+				onHomeClick={() => {
+					if (!sidebar.isChatSidebarOpen) {
+						sidebar.toggleChatSidebar()
+					}
+					sidebar.selectChat(null)
+				}}
+				onCloseClick={() => sidebar.closeChatSidebar()}
+			/>
+		</div>
 
-		<hr class="border-white/10" />
+		<div class="w-full px-3">
+			<hr class="border-white/10" />
+		</div>
 
-		<ChatSidebarTopActions {showTopLabels} {items} onSearchClick={handleSearchClick} />
+		<div class="w-full px-3">
+			<ChatSidebarTopActions {showTopLabels} {items} onSearchClick={handleSearchClick} />
+		</div>
 
 		{#if renderExpandedContent}
 			<ChatSidebarChatsSection

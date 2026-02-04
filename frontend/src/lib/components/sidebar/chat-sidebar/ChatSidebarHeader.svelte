@@ -45,7 +45,7 @@
 
 	<!-- close button -->
 	<button
-		class="relative flex w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white transition-all {!isCompactLayout
+		class="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white transition-all {!isCompactLayout
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'}"
 		onclick={(e) => {
@@ -54,6 +54,6 @@
 		}}
 		aria-label="close sidebar"
 	>
-		<ChevronLeft class="h-5 w-5" />
+		<ChevronLeft class="h-8 w-8" />
 	</button>
 </div>
