@@ -309,9 +309,7 @@
 
 			{#if hasLeftLayoutInset && !device.isMobile && chrome.layout.leftWidthClass}
 				<!-- generic left layout inset spacer (master/detail scaffolds render the actual sidebar) -->
-				<div
-					class="h-screen shrink-0 {chrome.layout.leftWidthClass}"
-				></div>
+				<div class="h-screen shrink-0 {chrome.layout.leftWidthClass}"></div>
 			{/if}
 
 			{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
@@ -341,7 +339,7 @@
 
 			<!-- system chrome: Island (top header) - fixed overlay for blur effect -->
 			<div
-				class="pointer-events-none fixed top-0 z-30 mx-auto w-full pt-[clamp(12px,4vw,32px)]"
+				class="pointer-events-none fixed top-0 z-30 mx-auto w-full pt-3 sm:pt-6 lg:pt-8"
 				style="left: var(--island-left, 0); right: 0; max-width: min(1280px, calc(100% - var(--island-left, 0px))); padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 				bind:this={islandShell}
 			>
