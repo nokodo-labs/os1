@@ -46,6 +46,11 @@ class AppearancePreferences(BaseModel):
 		default=None,
 		description="background wallpaper preference",
 	)
+	bubble_tail_style: Literal["none", "whatsapp", "imessage"] | None = Field(
+		default=None,
+		alias="bubbleTailStyle",
+		description="chat bubble tail style preference",
+	)
 
 
 # AI preferences

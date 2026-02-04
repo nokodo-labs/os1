@@ -9,6 +9,9 @@
 	"editor.insertSpaces": false,
 	"editor.tabSize": 4,
 	"files.eol": "\n",
+	"files.insertFinalNewline": true,
+	"files.trimFinalNewlines": true,
+	"files.trimTrailingWhitespace": true,
 
 	// files
 	"files.exclude": {

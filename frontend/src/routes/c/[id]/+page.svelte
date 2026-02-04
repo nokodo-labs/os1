@@ -23,6 +23,7 @@
 	import { chat as chatStore } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
 	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
@@ -287,9 +288,22 @@
 						<div class="h-1"></div>
 					{/if}
 					{#each chat.runBlocks as block, i (block.runId)}
+						{@const userItems = block.items.filter(
+							(item) => item.kind === 'user' || item.kind === 'optimistic_user'
+						)}
+						{@const bubbleTailStyle =
+							preferences.data.appearance.bubbleTailStyle ?? 'none'}
 						<div class="space-y-3">
 							<!-- user messages for this run (both real and optimistic) -->
-							{#each block.items.filter((item) => item.kind === 'user' || item.kind === 'optimistic_user') as item, itemIndex (item.kind === 'user' ? item.message.id : `${block.runId}-optimistic-${itemIndex}`)}
+							{#each userItems as item, itemIndex (item.kind === 'user' ? item.message.id : `${block.runId}-optimistic-${itemIndex}`)}
+								{@const isFirst = itemIndex === 0}
+								{@const isLast = itemIndex === userItems.length - 1}
+								{@const showTail =
+									bubbleTailStyle === 'none'
+										? false
+										: bubbleTailStyle === 'whatsapp'
+											? isFirst
+											: isLast}
 								{#if item.kind === 'user'}
 									{@const siblings =
 										chat.messageChildren.get(item.message.parent_id ?? null) ??
@@ -303,6 +317,8 @@
 										onPrevious={() =>
 											chat.switchBranch(item.message.id, 'prev')}
 										onNext={() => chat.switchBranch(item.message.id, 'next')}
+										tailStyle={bubbleTailStyle}
+										{showTail}
 									>
 										{#snippet actions()}
 											<MessageActionButton
@@ -343,6 +359,8 @@
 									<UserChatMessage
 										content={item.content}
 										timestamp={item.timestamp}
+										tailStyle={bubbleTailStyle}
+										{showTail}
 									>
 										{#snippet actions()}
 											<MessageActionButton

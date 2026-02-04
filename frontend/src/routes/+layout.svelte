@@ -327,6 +327,7 @@
 			<!-- main content -->
 			<div
 				class="main-content-shell relative flex min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
+				role="main"
 				style="touch-action: pan-y;"
 				bind:this={mainContentShell}
 				onpointerdown={onMainPointerDown}

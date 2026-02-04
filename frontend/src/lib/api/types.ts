@@ -1487,6 +1487,11 @@ export interface components {
              * @description background wallpaper preference
              */
             background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            /**
+             * Bubbletailstyle
+             * @description chat bubble tail style preference
+             */
+            bubbleTailStyle?: ("none" | "whatsapp" | "imessage") | null;
         };
         /** AssetsSettings */
         AssetsSettings: {

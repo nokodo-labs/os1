@@ -76,23 +76,32 @@ frontend/
 │   │   └── signup/
 │   │       └── +page.svelte
 │   ├── lib/                # shared app code
+│   │   ├── actions/         # app actions/commands
 │   │   ├── api/            # generated OpenAPI types/client output
 │   │   ├── auth/           # auth helpers + session utilities
 │   │   ├── components/     # Svelte components (major areas)
 │   │   │   ├── backgrounds/
 │   │   │   ├── chat/
 │   │   │   ├── common/
+│   │   │   ├── editor/
 │   │   │   ├── debug/
 │   │   │   ├── effects/
 │   │   │   ├── home/
 │   │   │   ├── icons/
+│   │   │   ├── layouts/
 │   │   │   ├── markdown/
 │   │   │   ├── modals/
+│   │   │   ├── notes/
+│   │   │   ├── primitives/
+│   │   │   ├── reminders/
+│   │   │   ├── settings/
 │   │   │   ├── sidebar/
+│   │   │   ├── streamdown/
 │   │   │   ├── system/
 │   │   │   └── ui/
 │   │   ├── config/         # app/runtime config helpers
 │   │   ├── contexts/       # Svelte contexts
+│   │   ├── init.ts          # frontend init/bootstrap
 │   │   ├── stores/         # client state management
 │   │   ├── styles/         # shared styling utilities
 │   │   ├── tools/          # app tooling helpers
@@ -110,4 +119,4 @@ frontend/
 - unit/component tests: `Frontend: Test Coverage`
 - type/lint: `Frontend: Check`, `Frontend: Lint`
 - formatting: `Frontend: Format`
-- api codegen: ensure backend is running, then use the single task `Frontend: Generate API`.
+- api codegen: `Frontend: Generate API`.

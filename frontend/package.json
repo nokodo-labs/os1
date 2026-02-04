@@ -19,6 +19,7 @@
 		"generate:api-types": "openapi-typescript http://localhost:1383/v1/openapi.json -o src/lib/api/types.ts"
 	},
 	"devDependencies": {
+		"@eslint/js": "^9.39.2",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.50.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
@@ -32,6 +33,7 @@
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.14.0",
+		"globals": "^17.3.0",
 		"happy-dom": "^20.5.0",
 		"openapi-typescript": "^7.10.1",
 		"postcss": "^8.5.6",
@@ -47,6 +49,7 @@
 	},
 	"dependencies": {
 		"@internationalized/date": "^3.10.1",
+		"@floating-ui/dom": "^1.7.4",
 		"@tiptap/core": "^3.18.0",
 		"@tiptap/extension-placeholder": "^3.18.0",
 		"@tiptap/extension-typography": "^3.18.0",

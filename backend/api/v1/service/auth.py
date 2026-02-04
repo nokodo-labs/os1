@@ -259,7 +259,7 @@ def create_refresh_token(user_id: str) -> str:
 async def create_token_pair(user: User) -> Token:
 	"""Create access + refresh token pair for successful login."""
 	if not user.is_active:
-		raise HTTPException(status_code=400, detail="Inactive user")
+		raise HTTPException(status_code=400, detail="inactive user")
 	access_token = create_access_token(str(user.id))
 	refresh_token = create_refresh_token(str(user.id))
 	return Token(

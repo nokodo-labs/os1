@@ -23,6 +23,7 @@ export type {
 export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
 export type AccentColor = NonNullable<AppearancePreferences['accent']>
 export type BackgroundType = NonNullable<AppearancePreferences['background']>
+export type BubbleTailStyle = NonNullable<AppearancePreferences['bubbleTailStyle']>
 
 type Resolved = {
 	appearance: Required<AppearancePreferences>
@@ -95,6 +96,7 @@ function createPreferencesStore() {
 			accent: 'purple',
 			background: 'darkveil',
 			autoAccentColors: true,
+			bubbleTailStyle: 'none',
 		},
 		ai: {
 			defaultAgentId: settingsState.data?.ai?.default_agent_id ?? null,
