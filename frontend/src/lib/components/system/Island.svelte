@@ -38,24 +38,28 @@
 </script>
 
 <header
-	class="liquid-glass max-h-22 overflow-visible rounded-full px-[clamp(10px,4vw,28px)] py-5 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+	class="liquid-glass overflow-visible rounded-full px-[clamp(5px,2vw,14px)] py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	style="view-transition-name: island;"
 >
 	<div
-		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 sm:gap-[clamp(6px,2.5vw,16px)]"
+		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 sm:gap-4"
+		style="height: var(--chrome-island-height);"
 	>
 		<!-- left: context actions (page-injected via chrome.setContextActions) -->
-		<div class="flex min-w-0 items-center gap-0 sm:gap-[clamp(6px,2.2vw,12px)]">
+		<div class="flex h-full min-w-0 items-center gap-0 pl-2 sm:gap-2 sm:pl-0">
 			{#if chrome.island.contextActions}
 				<!-- default accent color for all context actions; pages can override with inline styles -->
-				<div class="flex items-center gap-1" style="color: var(--accent-primary, white);">
+				<div
+					class="island-context-actions flex h-full items-center gap-0 sm:gap-2"
+					style="color: var(--accent-primary, white);"
+				>
 					{@render chrome.island.contextActions()}
 				</div>
 			{/if}
 		</div>
 
 		<!-- center: pulse area -->
-		<div class="flex min-w-0 items-center justify-center">
+		<div class="flex h-full min-w-0 items-center justify-center">
 			{#if chrome.island.pulse}
 				<div class="max-w-160 truncate text-sm text-white/70">
 					{chrome.island.pulse}
@@ -64,27 +68,51 @@
 		</div>
 
 		<!-- right: stable controls + user -->
-		<div class="flex items-center justify-end gap-0 sm:gap-2">
+		<div class="island-right-controls flex h-full items-center justify-end gap-0 sm:gap-2">
 			{#if !isHomeLayout}
 				<button
-					class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+					class="flex cursor-pointer items-center justify-center text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 					onclick={handleHome}
 					aria-label="home"
 				>
-					<Home variant="solid" class="h-6 w-6" />
+					<Home variant="solid" />
 				</button>
 			{/if}
 
 			<button
-				class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+				class="flex cursor-pointer items-center justify-center text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 				onclick={() => chrome.toggleDock()}
 				aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 				aria-expanded={chrome.isDockOpen}
 			>
-				<Sidebar variant="solid" class="h-6 w-6 rotate-180" />
+				<Sidebar variant="solid" class="rotate-180" />
 			</button>
 
 			<UserProfileTrigger user={session.userDisplay} placement="header" isExpanded={false} />
 		</div>
 	</div>
 </header>
+
+<style>
+	/* only target direct children of context actions, not nested dropdown menus */
+	:global(.island-context-actions > *) {
+		height: 100%;
+		width: auto;
+	}
+	:global(.island-context-actions > * > svg),
+	:global(.island-context-actions > button > svg) {
+		height: 60%;
+		width: auto;
+	}
+
+	/* only target direct button children of right controls, not nested menus */
+	:global(.island-right-controls > button) {
+		height: 100%;
+		width: auto;
+		aspect-ratio: 1;
+	}
+	:global(.island-right-controls > button > svg) {
+		height: 60%;
+		width: auto;
+	}
+</style>

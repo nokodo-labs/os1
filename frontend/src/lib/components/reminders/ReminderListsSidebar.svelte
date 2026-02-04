@@ -27,6 +27,7 @@
 
 	let isAddingList = $state(false)
 	let newListName = $state('')
+	let isSubmittingList = $state(false)
 	let addListInputEl: HTMLInputElement | null = $state(null)
 
 	let openListMenuId = $state<string | null>(null)
@@ -54,6 +55,7 @@
 	}
 
 	async function submitInlineAddList() {
+		if (isSubmittingList) return // guard against double submit
 		const name = newListName.trim()
 		if (name === '') {
 			isAddingList = false
@@ -61,9 +63,12 @@
 			return
 		}
 
-		const created = await reminders.createList({ name })
+		isSubmittingList = true
+		newListName = '' // clear immediately to prevent onblur re-trigger
 		isAddingList = false
-		newListName = ''
+
+		const created = await reminders.createList({ name })
+		isSubmittingList = false
 		if (created) selectList(created.id)
 	}
 

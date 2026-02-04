@@ -12,63 +12,73 @@ let prefersDark = $state(false)
 // we'll use CSS variables for more flexibility, but these helpers can be useful
 export const accentColors: Record<
 	AccentColorKey,
-	{ primary: string; secondary: string; bg: string; border: string; shadow: string }
+	{ primary: string; bg: string; border: string; shadow: string }
 > = {
 	purple: {
 		primary: '#a855f7', // purple-500
-		secondary: '#c084fc', // purple-400
 		bg: 'rgba(168, 85, 247, 0.02)',
 		border: 'rgba(168, 85, 247, 0.2)',
 		shadow: 'rgba(168, 85, 247, 0.25)',
 	},
 	blue: {
 		primary: '#3b82f6', // blue-500
-		secondary: '#60a5fa', // blue-400
 		bg: 'rgba(59, 130, 246, 0.02)',
 		border: 'rgba(59, 130, 246, 0.2)',
 		shadow: 'rgba(59, 130, 246, 0.25)',
 	},
 	green: {
-		primary: '#34c759', // imessage green
-		secondary: '#4ade80', // green-400
+		primary: '#34c759', // messages green
 		bg: 'rgba(52, 199, 89, 0.02)',
 		border: 'rgba(52, 199, 89, 0.2)',
 		shadow: 'rgba(52, 199, 89, 0.25)',
 	},
 	orange: {
 		primary: '#f97316', // orange-500
-		secondary: '#fb923c', // orange-400
 		bg: 'rgba(249, 115, 22, 0.02)',
 		border: 'rgba(249, 115, 22, 0.2)',
 		shadow: 'rgba(249, 115, 22, 0.25)',
 	},
 	pink: {
 		primary: '#ec4899', // pink-500
-		secondary: '#f472b6', // pink-400
 		bg: 'rgba(236, 72, 153, 0.02)',
 		border: 'rgba(236, 72, 153, 0.2)',
 		shadow: 'rgba(236, 72, 153, 0.25)',
 	},
 	red: {
 		primary: '#ef4444', // red-500
-		secondary: '#f87171', // red-400
 		bg: 'rgba(239, 68, 68, 0.02)',
 		border: 'rgba(239, 68, 68, 0.2)',
 		shadow: 'rgba(239, 68, 68, 0.25)',
 	},
 	yellow: {
-		primary: '#fbbc04', // google keep yellow
-		secondary: '#fde68a', // windows folder yellow (light)
+		primary: '#fde68a', // library folder yellow
+		bg: 'rgba(253, 230, 138, 0.02)',
+		border: 'rgba(253, 230, 138, 0.2)',
+		shadow: 'rgba(253, 230, 138, 0.25)',
+	},
+	gray: {
+		primary: '#6b7280', // gray-500
+		bg: 'rgba(107, 114, 128, 0.02)',
+		border: 'rgba(107, 114, 128, 0.2)',
+		shadow: 'rgba(107, 114, 128, 0.25)',
+	},
+	notes: {
+		primary: '#fbbc04', // notes app yellow
 		bg: 'rgba(251, 188, 4, 0.02)',
 		border: 'rgba(251, 188, 4, 0.2)',
 		shadow: 'rgba(251, 188, 4, 0.25)',
 	},
-	gray: {
-		primary: '#6b7280', // gray-500
-		secondary: '#9ca3af', // gray-400
-		bg: 'rgba(107, 114, 128, 0.02)',
-		border: 'rgba(107, 114, 128, 0.2)',
-		shadow: 'rgba(107, 114, 128, 0.25)',
+	reminders: {
+		primary: '#4285f4', // reminders app blue
+		bg: 'rgba(66, 133, 244, 0.02)',
+		border: 'rgba(66, 133, 244, 0.2)',
+		shadow: 'rgba(66, 133, 244, 0.25)',
+	},
+	lilac: {
+		primary: '#c4b5fd', // lilac (violet-300)
+		bg: 'rgba(196, 181, 253, 0.02)',
+		border: 'rgba(196, 181, 253, 0.2)',
+		shadow: 'rgba(196, 181, 253, 0.25)',
 	},
 }
 
@@ -95,7 +105,6 @@ function updateDOM(nextResolvedMode: 'light' | 'dark', nextAccent: AccentColorKe
 	// update CSS variables for accent color
 	const colors = accentColors[nextAccent]
 	root.style.setProperty('--accent-primary', colors.primary)
-	root.style.setProperty('--accent-secondary', colors.secondary)
 	root.style.setProperty('--accent-bg', colors.bg)
 	root.style.setProperty('--accent-border', colors.border)
 	root.style.setProperty('--accent-shadow', colors.shadow)

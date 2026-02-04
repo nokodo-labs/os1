@@ -208,7 +208,6 @@ class SecuritySettings(BaseModel):
 		default=True,
 		description="set secure cookies",
 	)
-
 	session_timeout_minutes: int = Field(
 		default=30, ge=5, description="session timeout"
 	)
@@ -266,6 +265,7 @@ class SecuritySettings(BaseModel):
 class Settings(BaseSettings):
 	model_config = SettingsConfigDict(
 		case_sensitive=False,
+		env_file=".env",
 		env_prefix=ENV_PREFIX,
 		env_nested_delimiter=ENV_NESTED_DELIMITER,
 		validate_assignment=True,

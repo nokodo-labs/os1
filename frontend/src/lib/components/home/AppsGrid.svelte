@@ -31,7 +31,6 @@
 		title: string
 		icon: IconComponent
 		accent?: AccentColorKey
-		iconTone?: 'primary' | 'secondary'
 		action?: () => Promise<void>
 	}
 
@@ -39,16 +38,17 @@
 
 	interface Props {
 		iconShape?: IconShape
+		fullWidth?: boolean
 	}
 
-	let { iconShape = 'circle' }: Props = $props()
+	let { iconShape = 'circle', fullWidth = false }: Props = $props()
 
 	const apps: AppDefinition[] = [
 		{
 			id: 'notes',
 			title: 'notes',
 			icon: Document,
-			accent: 'yellow',
+			accent: 'notes',
 			action: async () => {
 				await goto(resolve('/notes'))
 			},
@@ -57,8 +57,7 @@
 			id: 'reminders',
 			title: 'reminders',
 			icon: CheckBox,
-			// keep in sync with the accent assigned in /reminders
-			accent: 'blue',
+			accent: 'reminders',
 			action: async () => {
 				await goto(resolve(reminders.remindersAppUrl))
 			},
@@ -72,7 +71,6 @@
 			id: 'settings',
 			title: 'settings',
 			icon: Cog6,
-			// keep in sync with the accent assigned in /settings
 			accent: 'gray',
 			action: async () => {
 				await goto(resolve('/settings'))
@@ -83,7 +81,6 @@
 			title: 'library',
 			icon: FinderFolder,
 			accent: 'yellow',
-			iconTone: 'secondary',
 			action: async () => {
 				await goto(resolve('/library'))
 			},
@@ -106,7 +103,8 @@
 	let gridGapYPx = $state(35)
 	let iconPx = $state(32)
 	const INDICATOR_SPACE_PX = 48
-	const SIDE_PADDING_PX = 24
+	const baseSidePaddingPx = 24
+	const sidePaddingPx = $derived(fullWidth ? 0 : baseSidePaddingPx)
 
 	let rootEl: HTMLDivElement
 	let scrollerEl: HTMLDivElement
@@ -169,7 +167,7 @@
 
 		const rect = rootEl.getBoundingClientRect()
 		// Account for side padding when calculating columns
-		const availableWidth = rect.width - SIDE_PADDING_PX * 2
+		const availableWidth = rect.width - sidePaddingPx * 2
 
 		// Scale tile sizing down on small viewports.
 		const scale = clamp(rect.width / 560, 0.78, 1)
@@ -313,14 +311,7 @@
 	const iconColorForApp = (app: AppDefinition): string | null => {
 		if (!app.accent) return null
 		const palette = accentColors[app.accent]
-		if (!palette) return null
-
-		switch (app.iconTone ?? 'primary') {
-			case 'secondary':
-				return palette.secondary ?? palette.primary
-			case 'primary':
-				return palette.primary
-		}
+		return palette?.primary ?? null
 	}
 </script>
 
@@ -337,7 +328,7 @@
 			<div class="w-full shrink-0 snap-center">
 				<div
 					class="grid w-full justify-center"
-					style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px; padding-left: {SIDE_PADDING_PX}px; padding-right: {SIDE_PADDING_PX}px;"
+					style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px; padding-left: {sidePaddingPx}px; padding-right: {sidePaddingPx}px;"
 				>
 					{#each pageApps as app (app.id)}
 						{@const Icon = app.icon}

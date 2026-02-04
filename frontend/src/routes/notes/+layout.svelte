@@ -13,7 +13,7 @@
 	})
 
 	$effect(() => {
-		accentStore.set('yellow')
+		accentStore.set('notes')
 	})
 
 	const selectedNoteId = $derived(page.params.id ?? null)

@@ -53,13 +53,13 @@
 </script>
 
 <button
-	class="flex h-12 w-auto min-w-8 cursor-pointer items-center justify-center px-1 text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] md:w-12 md:px-0"
+	class="flex cursor-pointer items-center justify-center opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 	onclick={toggle}
 	aria-label="temporary chat"
 >
 	{#if isActive}
-		<ChatBubbleDottedChecked class="h-6 w-6" />
+		<ChatBubbleDottedChecked />
 	{:else}
-		<ChatBubbleDotted class="h-6 w-6" />
+		<ChatBubbleDotted />
 	{/if}
 </button>

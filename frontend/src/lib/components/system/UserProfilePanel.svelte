@@ -101,7 +101,7 @@
 			{:else}
 				<div
 					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white uppercase"
-					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
+					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 				>
 					{getUserInitials(user.name)}
 				</div>
@@ -121,7 +121,7 @@
 		{:else}
 			<div
 				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white uppercase"
-				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
+				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 			>
 				??
 			</div>

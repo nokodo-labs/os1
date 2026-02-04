@@ -88,7 +88,7 @@
 			<button
 				type="button"
 				bind:this={filterButtonEl}
-				class="group rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+				class="group rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 				onclick={toggleFilterMenu}
 				aria-label="filter"
 				aria-haspopup="menu"
@@ -125,7 +125,7 @@
 			<button
 				type="button"
 				bind:this={sortButtonEl}
-				class="group rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+				class="group rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 				onclick={toggleSortMenu}
 				aria-label="sort"
 				aria-haspopup="menu"

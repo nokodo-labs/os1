@@ -41,25 +41,15 @@
 			stroke-linejoin="round"
 		/>
 	{:else}
-		<!-- modern finder-like folder: simple, clean, two-panel shading -->
+		<!-- solid folder icon - back tab -->
 		<path
-			d="M4.6 7.2c0-.94.76-1.7 1.7-1.7h4.1c.45 0 .88.18 1.2.5l.95.95c.32.32.75.5 1.2.5h4.95c.94 0 1.7.76 1.7 1.7v.4H4.6v-.35Z"
+			d="M4.6 7.2c0-.94.76-1.7 1.7-1.7h4.1c.45 0 .88.18 1.2.5l.95.95c.32.32.75.5 1.2.5h4.95c.94 0 1.7.76 1.7 1.7v.35H4.6V7.2Z"
 			fill={color}
-			opacity="0.92"
 		/>
+		<!-- solid folder icon - front body -->
 		<path
-			d="M4.6 9.1h16.8v8.7c0 .94-.76 1.7-1.7 1.7H6.3c-.94 0-1.7-.76-1.7-1.7V9.1Z"
+			d="M4.6 9.1h14.8c.94 0 1.7.76 1.7 1.7v7c0 .94-.76 1.7-1.7 1.7H6.3c-.94 0-1.7-.76-1.7-1.7V9.1Z"
 			fill={color}
-			opacity="0.78"
-		/>
-		<path d="M4.6 10.2h16.8v1.05H4.6z" fill={color} opacity="0.22" />
-		<path
-			d="M4.6 9.1h16.8v8.7c0 .94-.76 1.7-1.7 1.7H6.3c-.94 0-1.7-.76-1.7-1.7V9.1Z"
-			fill="none"
-			stroke={color}
-			stroke-width="1"
-			opacity="0.55"
-			stroke-linejoin="round"
 		/>
 	{/if}
 </svg>

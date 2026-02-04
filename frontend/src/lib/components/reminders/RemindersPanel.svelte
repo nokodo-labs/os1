@@ -48,22 +48,27 @@
 
 	const remindersList = $derived(reminders.getReminders(listId))
 	const completedCount = $derived(remindersList.filter((r) => r.status === 'completed').length)
+
+	/** pending reminders - exclude items currently transitioning out */
 	const pendingReminders = $derived.by(() => {
-		return remindersList.filter((r) => r.status === 'pending' && !transitions.has(r.id))
+		return remindersList.filter((r) => {
+			// show transitioning-to-completed items until animation done
+			const t = transitions.get(r.id)
+			if (t?.direction === 'to-completed') return true
+			// normal pending items (not transitioning to pending from completed)
+			return r.status === 'pending' && !t
+		})
 	})
 
+	/** completed reminders - exclude items currently transitioning out */
 	const completedReminders = $derived.by(() => {
-		return remindersList.filter((r) => r.status === 'completed' && !transitions.has(r.id))
-	})
-
-	/** transitions animating to completed (shown in pending section) */
-	const transitionsToCompleted = $derived.by(() => {
-		return [...transitions.values()].filter((t) => t.direction === 'to-completed')
-	})
-
-	/** transitions animating to pending (shown in completed section) */
-	const transitionsToPending = $derived.by(() => {
-		return [...transitions.values()].filter((t) => t.direction === 'to-pending')
+		return remindersList.filter((r) => {
+			// show transitioning-to-pending items until animation done
+			const t = transitions.get(r.id)
+			if (t?.direction === 'to-pending') return true
+			// normal completed items (not transitioning to completed from pending)
+			return r.status === 'completed' && !t
+		})
 	})
 
 	const availableLists = $derived(reminders.lists)
@@ -73,14 +78,22 @@
 	// helpers
 	// ─────────────────────────────────────────────────────────────────────────
 
-	function getIncomingMotion(id: string): {
-		motion: 'in' | null
+	function getReminderMotion(id: string): {
+		motion: 'in' | 'out-complete' | 'out-uncomplete' | null
 		delayMs?: number
 		iconMorph?: 'plus-to-circle' | null
 	} {
+		// check if transitioning
+		const t = transitions.get(id)
+		if (t) {
+			return { motion: t.direction === 'to-completed' ? 'out-complete' : 'out-uncomplete' }
+		}
+		// check if incoming
 		const entry = incoming.get(id)
-		if (!entry) return { motion: null }
-		return { motion: 'in', delayMs: entry.delayMs, iconMorph: entry.iconMorph ?? null }
+		if (entry) {
+			return { motion: 'in', delayMs: entry.delayMs, iconMorph: entry.iconMorph ?? null }
+		}
+		return { motion: null }
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -245,11 +258,12 @@
 		<div class="min-h-0 flex-1 overflow-y-auto px-1 pb-2 {showListTitle ? '' : 'pt-4'}">
 			<div class="flex flex-col gap-1">
 				{#each pendingReminders as reminder (reminder.id)}
-					{@const motion = getIncomingMotion(reminder.id)}
+					{@const motion = getReminderMotion(reminder.id)}
 					<ReminderRow
 						kind="edit"
 						{reminder}
-						expanded={expandedReminderId === reminder.id}
+						expanded={expandedReminderId === reminder.id &&
+							!transitions.has(reminder.id)}
 						{availableLists}
 						motion={motion.motion}
 						motionDelayMs={motion.delayMs}
@@ -265,22 +279,6 @@
 						}}
 						onUpdate={(updates: { title?: string; description?: string | null }) =>
 							updateReminder(reminder, updates)}
-					/>
-				{/each}
-
-				{#each transitionsToCompleted as t (t.reminder.id)}
-					<ReminderRow
-						kind="edit"
-						reminder={t.reminder}
-						expanded={false}
-						{availableLists}
-						motion="out-complete"
-						onToggleComplete={() => {}}
-						onMove={() => {}}
-						onDelete={() => {}}
-						onSelect={() => {}}
-						onDeselect={() => {}}
-						onUpdate={() => {}}
 					/>
 				{/each}
 
@@ -310,7 +308,7 @@
 				{/if}
 			</div>
 
-			{#if completedCount > 0 || transitionsToPending.length > 0}
+			{#if completedCount > 0}
 				<div class="mt-3 px-2">
 					<button
 						type="button"
@@ -337,11 +335,12 @@
 					<div class="min-h-0 overflow-hidden">
 						<div class="flex flex-col gap-1 pt-1">
 							{#each completedReminders as reminder (reminder.id)}
-								{@const motion = getIncomingMotion(reminder.id)}
+								{@const motion = getReminderMotion(reminder.id)}
 								<ReminderRow
 									kind="edit"
 									{reminder}
-									expanded={expandedReminderId === reminder.id}
+									expanded={expandedReminderId === reminder.id &&
+										!transitions.has(reminder.id)}
 									{availableLists}
 									motion={motion.motion}
 									motionDelayMs={motion.delayMs}
@@ -359,22 +358,6 @@
 										title?: string
 										description?: string | null
 									}) => updateReminder(reminder, updates)}
-								/>
-							{/each}
-
-							{#each transitionsToPending as t (t.reminder.id)}
-								<ReminderRow
-									kind="edit"
-									reminder={t.reminder}
-									expanded={false}
-									{availableLists}
-									motion="out-uncomplete"
-									onToggleComplete={() => {}}
-									onMove={() => {}}
-									onDelete={() => {}}
-									onSelect={() => {}}
-									onDeselect={() => {}}
-									onUpdate={() => {}}
 								/>
 							{/each}
 						</div>

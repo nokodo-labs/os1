@@ -86,7 +86,7 @@
 					: isExpanded
 						? 'h-10 w-10 text-[0.875rem]'
 						: 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
-				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-secondary));"
+				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 			>
 				{getUserInitials(safeUser.name)}
 			</div>

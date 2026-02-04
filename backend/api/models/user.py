@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 	from api.models.file import File
 	from api.models.group import Group, GroupMembership
 	from api.models.memory import Memory
+	from api.models.note import Note
 	from api.models.notification import Notification
 	from api.models.project import Project
 	from api.models.reminder import Reminder, ReminderList
@@ -87,6 +88,11 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	)
 	memories: Mapped[list[Memory]] = relationship(
 		"Memory",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	notes: Mapped[list[Note]] = relationship(
+		"Note",
 		back_populates="owner",
 		cascade="all, delete-orphan",
 	)

@@ -62,20 +62,20 @@
 	})
 </script>
 
-<div class="agent-selector relative flex min-w-0 items-center gap-2">
+<div class="agent-selector relative flex min-w-0 items-center">
 	<button
-		class="rounded-pill flex min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent px-[clamp(8px,2.5vw,16px)] py-2 transition-all duration-200 hover:bg-white/5 active:scale-[0.98]"
+		class="flex min-w-0 cursor-pointer items-center gap-1.5 border-none bg-transparent transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={toggle}
 		aria-expanded={isOpen}
 		aria-haspopup="listbox"
 	>
 		<span
 			class="min-w-0 truncate bg-clip-text text-xl font-semibold whitespace-nowrap text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
-			style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
+			style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 		>
 			{currentAgent?.name ?? 'assistant'}
 		</span>
-		<span style="color: var(--accent-secondary);">
+		<span style="color: var(--accent-primary);">
 			<ChevronDown
 				class="h-4 w-4 transition-transform duration-200 {isOpen ? 'rotate-180' : ''}"
 				strokeWidth="2"
@@ -86,7 +86,7 @@
 	{#if isOpen}
 		<div
 			transition:scale={{ duration: 180, start: 0.96, opacity: 0 }}
-			class="animate-popup liquid-metal rounded-container z-1000 min-w-64 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
+			class="animate-popup liquid-metal rounded-container z-1000 min-w-72 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
 			style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
 		>
 			<ul class="m-0 list-none p-0" role="listbox">
@@ -94,21 +94,31 @@
 					{@const isSelected = agent.id === selectedAgent}
 					<li role="option" aria-selected={isSelected}>
 						<button
-							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-white/8 {isSelected
+							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-all duration-150 hover:bg-white/8 {isSelected
 								? 'ring-1 ring-white/20'
 								: ''}"
 							style={isSelected ? 'background-color: var(--accent-bg);' : ''}
 							onclick={() => select(agent.id)}
 						>
-							<div class="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+							<!-- agent icon -->
+							{#if agent.profile_image_url}
+								<img
+									src={agent.profile_image_url}
+									alt={agent.name}
+									class="h-8 w-8 shrink-0 rounded-full object-cover"
+								/>
+							{:else}
+								<div
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/80 uppercase"
+								>
+									{agent.name.charAt(0)}
+								</div>
+							{/if}
+
+							<div class="flex min-w-0 flex-1 flex-col items-start gap-1">
 								<span class="text-[0.9375rem] font-semibold text-white/95">
 									{agent.name}
 								</span>
-								{#if agent.description}
-									<span class="text-[0.8125rem] text-[rgba(225,225,255,0.6)]">
-										{agent.description}
-									</span>
-								{/if}
 							</div>
 							{#if isSelected}
 								<Check class="h-4 w-4 shrink-0 text-white/80" strokeWidth="2.5" />

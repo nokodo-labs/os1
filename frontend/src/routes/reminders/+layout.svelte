@@ -18,7 +18,7 @@
 
 	// set accent color for auto accent colors feature
 	$effect(() => {
-		accentStore.set('blue')
+		accentStore.set('reminders')
 	})
 
 	// track selected list from URL

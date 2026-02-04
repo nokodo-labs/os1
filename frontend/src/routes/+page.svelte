@@ -43,7 +43,7 @@
 
 	// set accent color for auto accent colors feature
 	$effect(() => {
-		accentStore.set('purple')
+		accentStore.set('lilac')
 	})
 
 	type ChatMode = 'new' | 'temp' | null
@@ -321,7 +321,9 @@
 		<!-- scrollable content area -->
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div
-				class="mx-auto flex min-h-full w-full max-w-7xl flex-col pt-[clamp(12px,4vw,32px)] pb-8"
+				class="mx-auto flex min-h-full w-full flex-col pt-[clamp(12px,4vw,32px)] pb-8 {device.isMobile
+					? ''
+					: 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 			>
 				{#if showChatBanner}
@@ -359,7 +361,10 @@
 
 		<!-- bottom input (non-fixed; stays aligned with island/sidebar) -->
 		<div class="shrink-0 pt-4 pb-4">
-			<div class="relative mx-auto w-full max-w-7xl px-[clamp(10px,4vw,32px)]">
+			<div
+				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
+				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+			>
 				{#if chatStartError}
 					<div
 						class="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70"
@@ -386,7 +391,10 @@
 
 	<!-- stay in normal flow so the column matches the island + sidebar spacing -->
 	<div class="flex min-h-0 flex-1 flex-col">
-		<div class="mx-auto flex w-full max-w-7xl flex-1 flex-col px-[clamp(10px,4vw,32px)] pb-5">
+		<div
+			class="mx-auto flex w-full flex-1 flex-col pb-2 {device.isMobile ? '' : 'max-w-7xl'}"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+		>
 			<!-- top spacer: pushes content toward vertical center -->
 			<div class="flex-[0.6]"></div>
 
@@ -398,7 +406,7 @@
 				<h1 class="text-4xl font-medium text-white">
 					hi <span
 						class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
-						style="background-image: linear-gradient(to bottom right, var(--accent-secondary), var(--accent-primary));"
+						style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 						>{session.userDisplay.name}</span
 					>
 				</h1>
@@ -419,8 +427,11 @@
 			</div>
 
 			<!-- apps grid: flex-1 fills remaining vertical space -->
-			<div style="view-transition-name: apps-grid;" class="relative mt-14 min-h-0 flex-1">
-				<AppsGrid iconShape={debugUi.appsGridIconShape} />
+			<div
+				style="view-transition-name: apps-grid;"
+				class="relative min-h-0 flex-1 {device.isMobile ? 'mt-6' : 'mt-14'}"
+			>
+				<AppsGrid iconShape={debugUi.appsGridIconShape} fullWidth={device.isMobile} />
 
 				<!-- suggestions overlay: sits on TOP of apps grid -->
 				<div class="absolute top-0 right-0 left-0 z-20 -mt-10">

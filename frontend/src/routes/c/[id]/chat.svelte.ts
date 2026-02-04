@@ -1,6 +1,6 @@
 /**
- * Reactive chat state management using Svelte 5 runes.
- * Encapsulates all chat page state and business logic.
+ * reactive chat state management using Svelte 5 runes.
+ * encapsulates all chat page state and business logic.
  */
 
 import { apiClient } from '$lib/api/client'
@@ -33,6 +33,7 @@ type ApiEvent = components['schemas']['Event']
 
 export type RunItem =
 	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
+	| { kind: 'optimistic_user'; content: string; timestamp: Date }
 	| { kind: 'assistant'; message: ApiMessage }
 	| { kind: 'tool'; toolCallId: string }
 	| { kind: 'streaming_assistant' }
@@ -56,12 +57,12 @@ export interface StreamingAssistantState {
 }
 
 /**
- * Creates the reactive chat state for a thread page.
- * Returns an object with all state and methods needed by the UI.
+ * creates the reactive chat state for a thread page.
+ * returns an object with all state and methods needed by the UI.
  */
 export function createChatState() {
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Core state
+	// core state
 	// ─────────────────────────────────────────────────────────────────────────────
 	let inputValue = $state('')
 	let isGenerating = $state(false)
@@ -73,21 +74,21 @@ export function createChatState() {
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
 
-	// Thread state
+	// thread state
 	let thread = $state<Thread | null>(null)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
 
-	// Message paging (latest-first from backend)
+	// message paging (latest-first from backend)
 	let messageSkip = $state(0)
 	let hasMoreMessages = $state(true)
 	let isLoadingOlderMessages = $state(false)
 
-	// Message tree (for branching)
+	// message tree (for branching)
 	const messageTree = new SvelteMap<string, ApiMessage>()
 	let currentLeafId = $state<string | null>(null)
 
-	// Scroll state
+	// scroll state
 	let scrollContainer = $state<HTMLElement | null>(null)
 	let inputOverlay = $state<HTMLElement | null>(null)
 	let autoScroll = $state(true)
@@ -96,7 +97,7 @@ export function createChatState() {
 	let inputOverlayHeight = $state(0)
 	let scrollQueued = false
 
-	// Tool tracking
+	// tool tracking
 	const toolTracker = new ToolExecutionTracker()
 	let toolTick = $state(0)
 	const fetchedToolEventMessageIds = new SvelteSet<string>()
@@ -108,16 +109,16 @@ export function createChatState() {
 		return toolTracker.getExecution(toolCallId)
 	}
 
-	// Delete confirmation
+	// delete confirmation
 	let confirmDeleteMessage = $state<{ id: string; preview: string } | null>(null)
 	let isDeletingMessage = $state(false)
 	let deleteMessageError = $state<string | null>(null)
 
-	// Abort controller for streaming
+	// abort controller for streaming
 	let runAbortController: AbortController | null = null
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Derived state
+	// derived state
 	// ─────────────────────────────────────────────────────────────────────────────
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
@@ -143,7 +144,7 @@ export function createChatState() {
 		return map
 	})
 
-	// Reconstruct the active branch from root to currentLeafId
+	// reconstruct the active branch from root to currentLeafId
 	const messages = $derived.by(() => {
 		if (!currentLeafId) return []
 		const branch: ApiMessage[] = []
@@ -170,7 +171,7 @@ export function createChatState() {
 	)
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Tool call helpers
+	// tool call helpers
 	// ─────────────────────────────────────────────────────────────────────────────
 	function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCall[] {
 		const out = new SvelteMap(existing.map((tc) => [tc.id, tc]))
@@ -191,7 +192,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Run block management
+	// run block management
 	// ─────────────────────────────────────────────────────────────────────────────
 	function rebuildRunBlocks(): void {
 		const sorted = messages.slice().sort((a, b) => {
@@ -264,6 +265,17 @@ export function createChatState() {
 		if (streamingAssistant) {
 			const runId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
 			const block = ensureBlock(runId, streamingAssistant.timestamp, 'assistant')
+
+			// add optimistic user message to this run block (before assistant response)
+			// this ensures user message and streaming assistant appear in correct order
+			if (optimisticUserMessage) {
+				block.items.push({
+					kind: 'optimistic_user',
+					content: optimisticUserMessage.content,
+					timestamp: optimisticUserMessage.timestamp,
+				})
+			}
+
 			if (block.responseRootId === null) {
 				block.responseRootId = streamingAssistant.messageId
 			}
@@ -281,6 +293,16 @@ export function createChatState() {
 					block.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
 				}
 			}
+		} else if (optimisticUserMessage) {
+			// optimistic user message exists but no streaming assistant yet
+			// create a standalone block for the pending user message
+			const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
+			const block = ensureBlock(runId, optimisticUserMessage.timestamp, 'pending')
+			block.items.push({
+				kind: 'optimistic_user',
+				content: optimisticUserMessage.content,
+				timestamp: optimisticUserMessage.timestamp,
+			})
 		}
 
 		runBlocks = blocks
@@ -299,8 +321,9 @@ export function createChatState() {
 				item
 			): item is Exclude<
 				RunItem,
-				{ kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-			> => item.kind !== 'user'
+				| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
+				| { kind: 'optimistic_user'; content: string; timestamp: Date }
+			> => item.kind !== 'user' && item.kind !== 'optimistic_user'
 		)
 	}
 
@@ -314,7 +337,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Branch navigation
+	// branch navigation
 	// ─────────────────────────────────────────────────────────────────────────────
 	function getLatestLeaf(rootId: string): string {
 		let curr = rootId
@@ -345,7 +368,7 @@ export function createChatState() {
 	}
 
 	/**
-	 * Find the user message that started a run by walking up from the response root.
+	 * find the user message that started a run by walking up from the response root.
 	 */
 	function findRunUserMessage(block: RunBlock): string | null {
 		const firstResponseId = block.responseRootId
@@ -364,7 +387,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Scroll management
+	// scroll management
 	// ─────────────────────────────────────────────────────────────────────────────
 	function handleScroll() {
 		if (!scrollContainer) return
@@ -399,22 +422,22 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Data loading
+	// data loading
 	// ─────────────────────────────────────────────────────────────────────────────
 	async function fetchToolEventsForThread(threadId: string, msgIds: string[]): Promise<void> {
 		if (msgIds.length === 0) return
 
-		// Queue IDs that haven't been fetched yet
+		// queue IDs that haven't been fetched yet
 		for (const id of msgIds) {
 			if (!fetchedToolEventMessageIds.has(id)) {
 				toolEventsPendingIds.add(id)
 			}
 		}
 
-		// If already fetching, the current fetch will pick up queued IDs on completion
+		// if already fetching, the current fetch will pick up queued IDs on completion
 		if (toolEventsInFlight) return
 
-		// Process all pending IDs
+		// process all pending IDs
 		while (toolEventsPendingIds.size > 0) {
 			const batch = Array.from(toolEventsPendingIds)
 			toolEventsPendingIds.clear()
@@ -499,7 +522,7 @@ export function createChatState() {
 	}
 
 	async function loadTree(threadId: string): Promise<boolean> {
-		// Try cache first for instant load
+		// try cache first for instant load
 		const cachedThread = chatStore.threadCache.get(threadId)
 		const cachedMessages = chatStore.threadCache.getCachedMessages(threadId)
 
@@ -507,11 +530,11 @@ export function createChatState() {
 		let messagesPage: ApiMessage[]
 
 		if (cachedThread && cachedMessages) {
-			// Use cached data for instant render
+			// use cached data for instant render
 			threadData = cachedThread
 			messagesPage = cachedMessages
 		} else {
-			// Fetch from API
+			// fetch from API
 			const { data, error: threadError } = await apiClient().GET('/v1/threads/{thread_id}', {
 				params: { path: { thread_id: threadId } },
 			})
@@ -547,7 +570,7 @@ export function createChatState() {
 			}
 			messagesPage = (msgData ?? []) as ApiMessage[]
 
-			// Cache for future instant loads
+			// cache for future instant loads
 			chatStore.threadCache.set(threadData)
 			chatStore.threadCache.setMessages(threadId, messagesPage, messagesPage.length < 120)
 		}
@@ -558,7 +581,7 @@ export function createChatState() {
 		toolTracker.clear()
 		messageTree.clear()
 		messageSkip = messagesPage.length
-		// More messages exist if we got a full page (limit is 120)
+		// more messages exist if we got a full page (limit is 120)
 		hasMoreMessages = messagesPage.length >= 120
 		ingestMessages(messagesPage)
 
@@ -592,7 +615,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Streaming
+	// streaming
 	// ─────────────────────────────────────────────────────────────────────────────
 	async function runThreadStream(opts: {
 		threadId: string
@@ -755,7 +778,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// User actions
+	// user actions
 	// ─────────────────────────────────────────────────────────────────────────────
 	async function handleSendMessage(content: string) {
 		const trimmed = content.trim()
@@ -898,7 +921,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Delete functionality
+	// delete functionality
 	// ─────────────────────────────────────────────────────────────────────────────
 	function requestDeleteUserMessage(messageId: string) {
 		const msg = messages.find((m) => m.id === messageId)
@@ -956,7 +979,7 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Thread loading effect setup
+	// thread loading effect setup
 	// ─────────────────────────────────────────────────────────────────────────────
 	function setThread(t: Thread | null) {
 		thread = t
@@ -970,14 +993,21 @@ export function createChatState() {
 		currentLeafId = null
 		isThreadLoading = false
 		hasLoadedBranch = false
-		// Clear tool event tracking for previous thread
+		// clear run state to prevent leaking to other chats
+		runError = false
+		optimisticUserMessage = null
+		streamingAssistant = null
+		streamingAssistantParentId = null
+		lastRunInput = ''
+		runBlocks = []
+		// clear tool event tracking for previous thread
 		fetchedToolEventMessageIds.clear()
 		toolEventsPendingIds.clear()
 		toolTracker.clear()
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Tool event subscription
+	// tool event subscription
 	// ─────────────────────────────────────────────────────────────────────────────
 	function subscribeToToolEvents(threadId: string): () => void {
 		return eventStreamClient.subscribe((msg) => {
@@ -999,10 +1029,10 @@ export function createChatState() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Return public interface
+	// return public interface
 	// ─────────────────────────────────────────────────────────────────────────────
 	return {
-		// State (getters for reactive access)
+		// state (getters for reactive access)
 		get inputValue() {
 			return inputValue
 		},
@@ -1128,7 +1158,7 @@ export function createChatState() {
 			deleteMessageError = v
 		},
 
-		// Derived
+		// derived
 		get isTemporaryChat() {
 			return isTemporaryChat
 		},
@@ -1148,7 +1178,7 @@ export function createChatState() {
 			return selectedAgentName
 		},
 
-		// Methods
+		// methods
 		rebuildRunBlocks,
 		getBlockResponseItems,
 		getBlockFirstAssistant,

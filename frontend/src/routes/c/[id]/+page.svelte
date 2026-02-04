@@ -242,8 +242,11 @@
 		onscroll={chat.handleScroll}
 	>
 		<div
-			class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-8"
-			style={`padding-top: calc(var(--chrome-island-offset, 0px) + 16px); padding-bottom: ${Math.max(96, chat.inputOverlayHeight + 24)}px;`}
+			class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: calc(var(--chrome-island-offset, 0px) + 16px); padding-bottom: {Math.max(
+				96,
+				chat.inputOverlayHeight + 24
+			)}px;"
 		>
 			{#if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.runError}
 				<div class="flex flex-1 items-center justify-center py-16">
@@ -285,47 +288,75 @@
 					{/if}
 					{#each chat.runBlocks as block, i (block.runId)}
 						<div class="space-y-3">
-							<!-- user messages for this run -->
-							{#each block.items.filter((item) => item.kind === 'user') as item (item.message.id)}
-								{@const siblings =
-									chat.messageChildren.get(item.message.parent_id ?? null) ?? []}
-								<UserChatMessage
-									content={chat.contentPartsToText(item.message.content)}
-									timestamp={chat.getMessageCreatedAt(item.message)}
-									align={item.align}
-									siblingCount={siblings.length}
-									currentSiblingIndex={siblings.indexOf(item.message.id)}
-									onPrevious={() => chat.switchBranch(item.message.id, 'prev')}
-									onNext={() => chat.switchBranch(item.message.id, 'next')}
-								>
-									{#snippet actions()}
-										<MessageActionButton
-											onclick={() =>
-												chat.handleCopyMessage(
-													chat.contentPartsToText(item.message.content)
-												)}
-											ariaLabel="copy message"
-										>
-											<DocumentDuplicate class="h-4 w-4" strokeWidth="2" />
-										</MessageActionButton>
-										{#if item.align === 'right'}
+							<!-- user messages for this run (both real and optimistic) -->
+							{#each block.items.filter((item) => item.kind === 'user' || item.kind === 'optimistic_user') as item}
+								{#if item.kind === 'user'}
+									{@const siblings =
+										chat.messageChildren.get(item.message.parent_id ?? null) ??
+										[]}
+									<UserChatMessage
+										content={chat.contentPartsToText(item.message.content)}
+										timestamp={chat.getMessageCreatedAt(item.message)}
+										align={item.align}
+										siblingCount={siblings.length}
+										currentSiblingIndex={siblings.indexOf(item.message.id)}
+										onPrevious={() =>
+											chat.switchBranch(item.message.id, 'prev')}
+										onNext={() => chat.switchBranch(item.message.id, 'next')}
+									>
+										{#snippet actions()}
 											<MessageActionButton
 												onclick={() =>
-													chat.handleEditMessage(item.message.id)}
-												ariaLabel="edit message"
+													chat.handleCopyMessage(
+														chat.contentPartsToText(
+															item.message.content
+														)
+													)}
+												ariaLabel="copy message"
 											>
-												<Pencil variant="solid" class="h-4 w-4" />
+												<DocumentDuplicate
+													class="h-4 w-4"
+													strokeWidth="2"
+												/>
 											</MessageActionButton>
+											{#if item.align === 'right'}
+												<MessageActionButton
+													onclick={() =>
+														chat.handleEditMessage(item.message.id)}
+													ariaLabel="edit message"
+												>
+													<Pencil variant="solid" class="h-4 w-4" />
+												</MessageActionButton>
+												<MessageActionButton
+													onclick={() =>
+														chat.requestDeleteUserMessage(
+															item.message.id
+														)}
+													ariaLabel="delete message"
+												>
+													<GarbageBin class="h-4 w-4" strokeWidth="2" />
+												</MessageActionButton>
+											{/if}
+										{/snippet}
+									</UserChatMessage>
+								{:else if item.kind === 'optimistic_user'}
+									<UserChatMessage
+										content={item.content}
+										timestamp={item.timestamp}
+									>
+										{#snippet actions()}
 											<MessageActionButton
-												onclick={() =>
-													chat.requestDeleteUserMessage(item.message.id)}
-												ariaLabel="delete message"
+												onclick={() => chat.handleCopyMessage(item.content)}
+												ariaLabel="copy message"
 											>
-												<GarbageBin class="h-4 w-4" strokeWidth="2" />
+												<DocumentDuplicate
+													class="h-4 w-4"
+													strokeWidth="2"
+												/>
 											</MessageActionButton>
-										{/if}
-									{/snippet}
-								</UserChatMessage>
+										{/snippet}
+									</UserChatMessage>
+								{/if}
 							{/each}
 
 							<!-- agent run: render ALL items in chronological order -->
@@ -362,7 +393,6 @@
 
 									<AssistantChatMessage
 										isLastMessage={i === chat.runBlocks.length - 1 &&
-											!chat.optimisticUserMessage &&
 											!chat.runError}
 										{siblingCount}
 										{currentSiblingIndex}
@@ -492,27 +522,6 @@
 						</div>
 					{/each}
 
-					{#if chat.optimisticUserMessage}
-						<div in:fade={{ duration: 200 }}>
-							<UserChatMessage
-								content={chat.optimisticUserMessage.content}
-								timestamp={chat.optimisticUserMessage.timestamp}
-							>
-								{#snippet actions()}
-									<MessageActionButton
-										onclick={() =>
-											chat.handleCopyMessage(
-												chat.optimisticUserMessage?.content ?? ''
-											)}
-										ariaLabel="copy message"
-									>
-										<DocumentDuplicate class="h-4 w-4" strokeWidth="2" />
-									</MessageActionButton>
-								{/snippet}
-							</UserChatMessage>
-						</div>
-					{/if}
-
 					{#if chat.runError}
 						<div in:fade={{ duration: 200 }}>
 							<AssistantChatMessage
@@ -556,7 +565,10 @@
 	</div>
 
 	<div class="absolute right-0 bottom-0 left-0 z-10 pt-4 pb-5" bind:this={chat.inputOverlay}>
-		<div class="relative mx-auto w-full max-w-7xl px-8">
+		<div
+			class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+		>
 			<div class="transition-all duration-500 ease-in-out">
 				<ChatInput
 					bind:value={chat.inputValue}

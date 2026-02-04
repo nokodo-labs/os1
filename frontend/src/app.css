@@ -16,12 +16,15 @@
 	/* Island chrome offset: container top padding + Island height + container bottom padding.
 	   used by pages that need content to clear the sticky Island (e.g., chat). */
 	--chrome-island-offset: calc(clamp(12px, 4vw, 32px) + 88px + 16px);
+	--chrome-island-height: 3.3rem;
 	/* standardized page horizontal padding (matches Island shell) */
 	--spacing-page-x: clamp(10px, 4vw, 32px);
 	/* space between header and content (e.g., reminders list header to rows) */
 	--spacing-header-content: 2rem;
 	/* space between Island and first content element (below Island padding) */
 	--spacing-island-content: 1rem;
+	/* mobile layout: minimal margins for full viewport utilization */
+	--spacing-mobile-inset: 8px;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.13 0.028 261.692);
 	--text-color: var(--foreground);
@@ -385,4 +388,15 @@
 html[data-vt-active='1'] .chat-sidebar {
 	-webkit-backdrop-filter: none;
 	backdrop-filter: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE LAYOUT
+   888px matches DEVICE_MOBILE_BREAKPOINT_PX from device.svelte.ts
+   In mobile mode, pages are full-width with minimal insets for space efficiency.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 888px) {
+	:root {
+		--spacing-page-x: var(--spacing-mobile-inset);
+	}
 }

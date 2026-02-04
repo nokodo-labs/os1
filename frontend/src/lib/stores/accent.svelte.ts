@@ -15,9 +15,12 @@ export type AccentColorKey =
 	| 'red'
 	| 'yellow'
 	| 'gray'
+	| 'notes'
+	| 'reminders'
+	| 'lilac'
 
 // reactive state for current accent
-let currentAccent = $state<AccentColorKey>('purple')
+let currentAccent = $state<AccentColorKey>('lilac')
 
 /**
  * accent store object for reactive access

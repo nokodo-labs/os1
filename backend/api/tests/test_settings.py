@@ -15,6 +15,14 @@ from api.settings.settings import get_field_flags
 from api.v1.schemas.settings import SettingsPatch
 
 
+def test_settings_model_config_has_env_file() -> None:
+	"""ensure Settings loads .env file - regression test for missing env_file config."""
+	config = Settings.model_config
+	assert config.get("env_file") == ".env", (
+		"Settings.model_config must have env_file='.env' to load .env files"
+	)
+
+
 def test_settings_reload_updates_imported_singleton(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
-	import EllipsisVertical from '$lib/components/icons/EllipsisVertical.svelte'
+	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
-	import Trash from '$lib/components/icons/Trash.svelte'
 	import { MenuItem } from '$lib/components/primitives'
 	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -22,7 +22,7 @@
 	let openMenuId: string | null = $state(null)
 
 	$effect(() => {
-		notes.hydrate()
+		void notes.load()
 	})
 
 	// close menu on outside click/escape
@@ -50,7 +50,7 @@
 		}
 	})
 
-	const noteList = $derived(notes.data)
+	const noteList = $derived(notes.all)
 
 	function labelForNote(title: string): string {
 		const trimmed = title.trim()
@@ -58,8 +58,10 @@
 	}
 
 	async function createNote() {
-		const created = notes.create()
-		await goto(resolve(`/notes/${created.id}`), { keepFocus: true, noScroll: true })
+		const created = await notes.create()
+		if (created) {
+			await goto(resolve(`/notes/${created.id}`), { keepFocus: true, noScroll: true })
+		}
 	}
 
 	function openNote(noteId: string) {
@@ -72,12 +74,12 @@
 		console.log('share note:', noteId)
 	}
 
-	function handleDelete(noteId: string): void {
-		openMenuId = null
-		notes.remove(noteId)
+	async function handleDelete(noteId: string): Promise<void> {
+		const wasSelected = selectedNoteId === noteId
+		const remaining = noteList.filter((n) => n.id !== noteId)
+		await notes.remove(noteId)
 		// navigate away if the deleted note is currently selected
-		if (selectedNoteId === noteId) {
-			const remaining = noteList.filter((n) => n.id !== noteId)
+		if (wasSelected) {
 			if (remaining.length > 0) {
 				void goto(resolve(`/notes/${remaining[0].id}`), { keepFocus: true, noScroll: true })
 			} else {
@@ -109,12 +111,14 @@
 		</button>
 	</header>
 
-	<nav class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+	<nav class="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2">
 		{#if noteList.length === 0}
-			<div
-				class="rounded-container border border-white/10 bg-white/5 p-4 text-sm text-white/60"
-			>
-				no notes yet.
+			<div class="flex flex-1 items-center justify-center">
+				<div
+					class="rounded-container w-full overflow-hidden border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+				>
+					no notes yet
+				</div>
 			</div>
 		{:else}
 			<div class="space-y-1">
@@ -150,7 +154,7 @@
 									}}
 									aria-label="note options"
 								>
-									<EllipsisVertical class="h-4 w-4" />
+									<EllipsisHorizontal class="h-4 w-4" />
 								</button>
 							{/snippet}
 						</SidebarListItem>
@@ -165,10 +169,16 @@
 									{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
 									share
 								</MenuItem>
-								<MenuItem destructive onclick={() => handleDelete(note.id)}>
-									{#snippet icon()}<Trash class="h-4 w-4" />{/snippet}
-									delete
-								</MenuItem>
+								<DeleteButton
+									onDelete={() => handleDelete(note.id)}
+									modalText={{
+										title: 'delete note?',
+										description: 'this action cannot be undone.',
+									}}
+									onTrigger={() => {
+										openMenuId = null
+									}}
+								/>
 							</div>
 						{/if}
 					</div>

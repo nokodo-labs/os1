@@ -1,6 +1,6 @@
 <script lang="ts">
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import EllipsisVertical from '$lib/components/icons/EllipsisVertical.svelte'
+	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 
@@ -81,7 +81,7 @@
 					onMenu(event)
 				}}
 			>
-				<EllipsisVertical class="h-4 w-4" />
+				<EllipsisHorizontal class="h-4 w-4" />
 			</button>
 		{/if}
 	{/snippet}

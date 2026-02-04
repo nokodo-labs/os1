@@ -35,9 +35,11 @@
 
 	const chrome = useSystemChrome()
 
-	notes.hydrate()
+	$effect(() => {
+		void notes.load()
+	})
 
-	const note = $derived(notes.getById(noteId))
+	const note = $derived(notes.get(noteId))
 
 	let title = $state('')
 	let content = $state('') // markdown string (source of truth)
@@ -117,7 +119,7 @@
 		if (saveTimeout !== null) window.clearTimeout(saveTimeout)
 		saveTimeout = window.setTimeout(() => {
 			saveTimeout = null
-			notes.update(noteId, { title, content })
+			void notes.update(noteId, { title, content })
 		}, 200)
 	}
 
@@ -200,7 +202,7 @@
 		<!-- undo/redo buttons -->
 		<button
 			type="button"
-			class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:text-white/30 disabled:hover:scale-100"
+			class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
 			onclick={undo}
 			disabled={isRawMode || !canUndo}
 			aria-label="undo"
@@ -209,7 +211,7 @@
 		</button>
 		<button
 			type="button"
-			class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:text-white/30 disabled:hover:scale-100"
+			class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
 			onclick={redo}
 			disabled={isRawMode || !canRedo}
 			aria-label="redo"
@@ -222,7 +224,7 @@
 			<button
 				type="button"
 				bind:this={menuButtonEl}
-				class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+				class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 				onclick={() => (menuOpen = !menuOpen)}
 				aria-label="note options"
 				aria-haspopup="menu"

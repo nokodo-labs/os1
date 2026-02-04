@@ -8,6 +8,7 @@ from api.models.group import Group
 from api.models.memory import Memory
 from api.models.message import Message
 from api.models.model import Model
+from api.models.note import Note
 from api.models.notification import Notification
 from api.models.plugin import Plugin
 from api.models.project import Project
@@ -31,6 +32,7 @@ __all__ = [
 	"Memory",
 	"Message",
 	"Model",
+	"Note",
 	"Notification",
 	"Plugin",
 	"Project",

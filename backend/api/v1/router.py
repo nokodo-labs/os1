@@ -8,6 +8,7 @@ from api.v1.routers import (
 	events,
 	memories,
 	models,
+	notes,
 	notifications,
 	openai,
 	plugins,
@@ -31,6 +32,7 @@ api_router.include_router(tasks.router)
 api_router.include_router(events.router)
 api_router.include_router(notifications.router)
 api_router.include_router(memories.router)
+api_router.include_router(notes.router)
 api_router.include_router(projects.router)
 api_router.include_router(reminders.router)
 api_router.include_router(providers.router)
