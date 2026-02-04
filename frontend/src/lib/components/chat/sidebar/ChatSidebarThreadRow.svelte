@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
+	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
 

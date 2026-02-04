@@ -7,7 +7,7 @@
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import { MenuItem } from '$lib/components/primitives'
-	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
+	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
 	import { scale } from 'svelte/transition'

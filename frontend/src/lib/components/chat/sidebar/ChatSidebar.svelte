@@ -8,9 +8,9 @@
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
 	import EditChatModal from '$lib/components/modals/EditChatModal.svelte'
-	import ChatSidebarChatsSection from '$lib/components/sidebar/chat-sidebar/ChatSidebarChatsSection.svelte'
-	import ChatSidebarHeader from '$lib/components/sidebar/chat-sidebar/ChatSidebarHeader.svelte'
-	import ChatSidebarTopActions from '$lib/components/sidebar/chat-sidebar/ChatSidebarTopActions.svelte'
+	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
+	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
+	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { chat, type Thread } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -407,7 +407,7 @@
 		class="pointer-events-none absolute inset-0 bg-white/3 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 
-	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-1.5 pt-4 pb-0">
+	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-3 pt-4 pb-0">
 		<div class="w-full px-3">
 			<ChatSidebarHeader
 				isChatSidebarOpen={sidebar.isChatSidebarOpen}
@@ -423,8 +423,10 @@
 			/>
 		</div>
 
-		<div class="w-full px-3">
-			<hr class="border-white/10" />
+		<div class="w-full px-3" aria-hidden="true">
+			<div
+				class="h-px w-full bg-linear-to-r from-transparent via-white/12 to-transparent"
+			></div>
 		</div>
 
 		<div class="w-full px-3">

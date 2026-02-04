@@ -6,7 +6,7 @@
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
-	import ChatSidebar from '$lib/components/sidebar/ChatSidebar.svelte'
+	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
 	import Island from '$lib/components/system/Island.svelte'

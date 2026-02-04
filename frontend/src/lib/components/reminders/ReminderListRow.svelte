@@ -1,7 +1,7 @@
 <script lang="ts">
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
-	import SidebarListItem from '$lib/components/sidebar/SidebarListItem.svelte'
+	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 
 	type Leading =

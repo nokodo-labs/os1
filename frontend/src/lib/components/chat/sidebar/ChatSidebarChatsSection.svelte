@@ -28,9 +28,11 @@
 		: 'pointer-events-none opacity-0'}"
 	aria-hidden={!expandedContentVisible}
 >
-	<hr class="my-2 border-white/10" />
+	<div class="w-full px-3" aria-hidden="true">
+		<div class="h-px w-full bg-linear-to-r from-transparent via-white/12 to-transparent"></div>
+	</div>
 	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden">
-		<div class="mb-1 flex items-center gap-2 px-5">
+		<div class="mt-2 mb-1 flex items-center gap-2 px-5">
 			<ChatBubble class="h-4 w-4 shrink-0 text-white/60" />
 			<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
 		</div>
