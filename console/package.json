@@ -25,7 +25,7 @@
 		"@lucide/svelte": "^0.563.1",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.50.1",
-		"@tailwindcss/postcss": "^4.1.16",
+		"@tailwindcss/postcss": "^4.1.18",
 		"@tsconfig/svelte": "^5.0.4",
 		"@types/node": "^25.2.0",
 		"@vitest/coverage-v8": "^4.0.18",
