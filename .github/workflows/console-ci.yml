@@ -38,19 +38,24 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
 
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: set up Node
         uses: actions/setup-node@v6
         with:
           node-version-file: console/.nvmrc
           check-latest: true
-          cache: npm
-          cache-dependency-path: console/package-lock.json
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
 
       - name: install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: check formatting
-        run: npm run format
+        run: pnpm run format
 
   quality:
     name: check quality on Node ${{ matrix.node }}
@@ -71,14 +76,19 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
 
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: set up Node from .nvmrc
         if: ${{ matrix.node == 'file' }}
         uses: actions/setup-node@v6
         with:
           node-version-file: console/.nvmrc
           check-latest: true
-          cache: npm
-          cache-dependency-path: console/package-lock.json
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
 
       - name: set up Node ${{ matrix.node }}
         if: ${{ matrix.node != 'file' }}
@@ -86,22 +96,22 @@ jobs:
         with:
           node-version: "${{ matrix.node }}"
           check-latest: true
-          cache: npm
-          cache-dependency-path: console/package-lock.json
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
 
       - name: install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: lint
         if: ${{ inputs.run_lint }}
-        run: npm run lint
+        run: pnpm run lint
 
       - name: type check
-        run: npm run check
+        run: pnpm run check
 
       - name: run tests
         if: ${{ inputs.run_tests }}
-        run: npm run test
+        run: pnpm run test
 
       - name: build
-        run: npm run build
+        run: pnpm run build

@@ -1,29 +1,32 @@
 # syntax=docker/dockerfile:1
 
-# Build stage
+# build stage
 FROM node:24-alpine AS builder
+
+# install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# copy package files
+COPY package.json pnpm-lock.yaml ./
 
-# Install dependencies
-RUN npm ci
+# install dependencies
+RUN pnpm install --frozen-lockfile
 
-# Copy source files
+# copy source files
 COPY . .
 
-# Build the application
-RUN npm run build
+# build the application
+RUN pnpm run build
 
-# Production stage
+# production stage
 FROM nginx:alpine
 
-# Copy built files
+# copy built files
 COPY --from=builder /app/build /usr/share/nginx/html
 
-# Copy nginx configuration
+# copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

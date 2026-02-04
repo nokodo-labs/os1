@@ -11,6 +11,7 @@
 - eslint + eslint-plugin-svelte for linting
 - vitest + @testing-library/svelte for testing with coverage
 - adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
+- pnpm as package manager (not npm)
 
 > **reminder** - CLEAN code means:
 >

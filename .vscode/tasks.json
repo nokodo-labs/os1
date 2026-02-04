@@ -82,7 +82,7 @@
 		{
 			"label": "frontend: install dependencies",
 			"type": "shell",
-			"command": "npm install",
+			"command": "pnpm install",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -95,7 +95,7 @@
 		{
 			"label": "frontend: dev server",
 			"type": "shell",
-			"command": "npm run dev",
+			"command": "pnpm run dev",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -118,7 +118,7 @@
 		{
 			"label": "frontend: build",
 			"type": "shell",
-			"command": "npm run build",
+			"command": "pnpm run build",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -131,7 +131,7 @@
 		{
 			"label": "frontend: lint",
 			"type": "shell",
-			"command": "npm run lint",
+			"command": "pnpm run lint",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -144,7 +144,7 @@
 		{
 			"label": "frontend: format",
 			"type": "shell",
-			"command": "npm run format",
+			"command": "pnpm run format",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -156,7 +156,7 @@
 		{
 			"label": "frontend: check",
 			"type": "shell",
-			"command": "npm run check",
+			"command": "pnpm run check",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -170,7 +170,7 @@
 		{
 			"label": "frontend: test",
 			"type": "shell",
-			"command": "npm run test",
+			"command": "pnpm run test",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -184,7 +184,7 @@
 		{
 			"label": "frontend: test coverage",
 			"type": "shell",
-			"command": "npm run test:coverage",
+			"command": "pnpm run test:coverage",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -198,7 +198,7 @@
 		{
 			"label": "frontend: generate API types",
 			"type": "shell",
-			"command": "npm run generate:api-types",
+			"command": "pnpm run generate:api-types",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
@@ -217,7 +217,7 @@
 		{
 			"label": "console: install dependencies",
 			"type": "shell",
-			"command": "npm install",
+			"command": "pnpm install",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
@@ -230,7 +230,7 @@
 		{
 			"label": "console: dev server",
 			"type": "shell",
-			"command": "npm run dev -- --host --port 8383",
+			"command": "pnpm run dev -- --host --port 8383",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
@@ -253,7 +253,7 @@
 		{
 			"label": "console: build",
 			"type": "shell",
-			"command": "npm run build",
+			"command": "pnpm run build",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
@@ -266,7 +266,7 @@
 		{
 			"label": "console: format",
 			"type": "shell",
-			"command": "npm run format",
+			"command": "pnpm run format",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
@@ -278,7 +278,7 @@
 		{
 			"label": "console: check",
 			"type": "shell",
-			"command": "npm run check",
+			"command": "pnpm run check",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
@@ -292,7 +292,7 @@
 		{
 			"label": "console: generate API",
 			"type": "shell",
-			"command": "npm run generate:api",
+			"command": "pnpm run generate:api",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},

@@ -49,14 +49,14 @@ feat!: change API response format
 
 ### python (backend)
 
--   python 3.13+ features and type hints everywhere
--   SQLAlchemy 2.0+ with `Mapped` annotations
--   Pydantic v2.11+ for validation
--   tabs for indentation, unix line endings
--   Ruff for formatting and linting
--   no `type: ignore` or `noqa` comments - fix the actual issue
--   no `Any` type unless absolutely necessary
--   no `cast()` unless it's the only way
+- python 3.13+ features and type hints everywhere
+- SQLAlchemy 2.0+ with `Mapped` annotations
+- Pydantic v2.11+ for validation
+- tabs for indentation, unix line endings
+- Ruff for formatting and linting
+- no `type: ignore` or `noqa` comments - fix the actual issue
+- no `Any` type unless absolutely necessary
+- no `cast()` unless it's the only way
 
 **run checks:**
 
@@ -69,32 +69,32 @@ uv run pytest -v
 
 ### typescript/svelte (frontend & console)
 
--   TypeScript strict mode
--   Svelte 5 runes only
--   Tailwind 4 for styling
--   tabs for indentation, single quotes, no semicolons
--   Prettier for formatting, ESLint for linting
--   no `@ts-ignore` or `@ts-nocheck` - fix the actual issue
--   no `any` type unless absolutely necessary
--   no `as Type` assertions unless it's the only way
+- TypeScript strict mode
+- Svelte 5 runes only
+- Tailwind 4 for styling
+- tabs for indentation, single quotes, no semicolons
+- Prettier for formatting, ESLint for linting
+- no `@ts-ignore` or `@ts-nocheck` - fix the actual issue
+- no `any` type unless absolutely necessary
+- no `as Type` assertions unless it's the only way
 
 **run checks:**
 
 ```bash
 cd frontend  # or console
-npm run format
-npm run lint
-npm run check
-npm run test
+pnpm run format
+pnpm run lint
+pnpm run check
+pnpm run test
 ```
 
 ### brand style
 
 nokodo uses **lowercase typography** throughout. only use uppercase for:
 
--   acronyms (API, URL, etc.)
--   proper nouns
--   intentional emphasis
+- acronyms (API, URL, etc.)
+- proper nouns
+- intentional emphasis
 
 this applies to comments, docstrings, logging, and user-facing text.
 
@@ -114,16 +114,16 @@ uv run pytest --cov=api --cov=nokodo_ai    # with coverage
 
 ```bash
 cd frontend
-npm run test                               # run tests
-npm run test:coverage                      # with coverage
+pnpm run test                               # run tests
+pnpm run test:coverage                      # with coverage
 ```
 
 ### console
 
 ```bash
 cd console
-npm run check                              # type check
-npm run lint                               # lint
+pnpm run check                              # type check
+pnpm run lint                               # lint
 ```
 
 ## API changes

@@ -13,7 +13,8 @@
 - SvelteKit + static adapter
 - shadcn-svelte components kept stock (no heavy theming) for speed and consistency
 - only foundational deps (svelte, tailwind, vite, svelte-check, etc.). do **not** add extra libraries without explicit approval
-- prettier with tabs (useTabs=true, tabWidth=4); single quotes, no semicolons; run `npm run format`
+- prettier with tabs (useTabs=true, tabWidth=4); single quotes, no semicolons; run `pnpm run format`
+- pnpm as package manager (not npm)
 
 ## ui/ux directives
 
@@ -34,15 +35,15 @@
 
 - work inside `/console`; keep configs independent from `/frontend`
 - share code with the frontend only through an intentional shared package if duplication becomes painful
-- run `npm install, then `npm run dev -- --port 8383` for local work (don’t start servers unless user asks)
+- run `pnpm install`, then `pnpm run dev -- --port 8383` for local work (don't start servers unless user asks)
 - refer to `testing` section to know how to validate formatting and quality of your code
 
 ## testing
 
 there are several available layers of checks and tests:
 
-- smoke test with `npm run check` (svelte-check)
-- formatting with `npm run format` (prettier)
-- linting with `npm run lint` (eslint)
+- smoke test with `pnpm run check` (svelte-check)
+- formatting with `pnpm run format` (prettier)
+- linting with `pnpm run lint` (eslint)
 - check for file Problems with the built-in VSCode tool
-- api codegen: keep backend running, then use the single task `Console: Generate API (types + client)` (runs `npm run generate:api`).
+- api codegen: keep backend running, then use the single task `Console: Generate API (types + client)` (runs `pnpm run generate:api`).

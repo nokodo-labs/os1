@@ -5,7 +5,7 @@ development and deployment guide for nokodo.
 ## prerequisites
 
 - **python 3.13+** with [uv](https://docs.astral.sh/uv/)
-- **node.js 24+** with npm
+- **node.js 24+** with [pnpm](https://pnpm.io/)
 - **docker** with docker compose
 - **postgres 17** (provided via docker)
 
@@ -34,24 +34,24 @@ uv run uvicorn api.main:app --reload
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 ### console (admin)
 
 ```bash
 cd console
-npm install
-npm run dev -- --host --port 8383
+pnpm install
+pnpm run dev -- --host --port 8383
 ```
 
 ### generating API types
 
 after backend API changes, regenerate the TypeScript client using VS Code tasks:
 
-- **Frontend: Generate API Types** - runs `npm run generate:api-types`
-- **Console: Generate API** - runs `npm run generate:api`
+- **Frontend: Generate API Types** - runs `pnpm run generate:api-types`
+- **Console: Generate API** - runs `pnpm run generate:api`
 
 > requires backend running at `http://localhost:1383`
 
@@ -90,7 +90,7 @@ uv run pytest --cov=api --cov=nokodo_ai
 
 # frontend
 cd frontend
-npm run test
+pnpm run test
 ```
 
 ## docker commands
