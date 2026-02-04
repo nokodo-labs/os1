@@ -97,7 +97,6 @@
 	/* only target direct children of context actions, not nested dropdown menus */
 	:global(.island-context-actions > *) {
 		height: 100%;
-		width: auto;
 	}
 	:global(.island-context-actions > * > svg),
 	:global(.island-context-actions > button > svg) {
@@ -108,8 +107,6 @@
 	/* only target direct button children of right controls, not nested menus */
 	:global(.island-right-controls > button) {
 		height: 100%;
-		width: auto;
-		aspect-ratio: 1;
 	}
 	:global(.island-right-controls > button > svg) {
 		height: 60%;

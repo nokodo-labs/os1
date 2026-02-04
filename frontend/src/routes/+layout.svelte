@@ -4,9 +4,9 @@
 	import { page } from '$app/state'
 	import { markAuthReady } from '$lib/auth/session.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
+	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
-	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
 	import Island from '$lib/components/system/Island.svelte'
@@ -310,8 +310,7 @@
 			{#if hasLeftLayoutInset && !device.isMobile && chrome.layout.leftWidthClass}
 				<!-- generic left layout inset spacer (master/detail scaffolds render the actual sidebar) -->
 				<div
-					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {chrome
-						.layout.leftWidthClass}"
+					class="h-screen shrink-0 {chrome.layout.leftWidthClass}"
 				></div>
 			{/if}
 
