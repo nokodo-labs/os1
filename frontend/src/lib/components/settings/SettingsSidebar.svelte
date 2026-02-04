@@ -11,6 +11,7 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import UserCircle from '$lib/components/icons/UserCircle.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import type { Component } from 'svelte'
 
 	interface Props {
@@ -22,11 +23,42 @@
 	let { selectedSection, isMobile = false, rowIconBackground = false }: Props = $props()
 
 	interface SettingsSection {
-		id: string
+		id: SettingsSectionId
 		label: string
 		icon: Component
 		description: string
 	}
+
+	type SettingsSectionId =
+		| 'account'
+		| 'appearance'
+		| 'notifications'
+		| 'privacy'
+		| 'accessibility'
+		| 'ai'
+		| 'advanced'
+		| 'debug'
+
+	type SettingsRouteId =
+		| '/settings/account'
+		| '/settings/appearance'
+		| '/settings/notifications'
+		| '/settings/privacy'
+		| '/settings/accessibility'
+		| '/settings/ai'
+		| '/settings/advanced'
+		| '/settings/debug'
+
+	const settingsRouteBySection = {
+		account: '/settings/account',
+		appearance: '/settings/appearance',
+		notifications: '/settings/notifications',
+		privacy: '/settings/privacy',
+		accessibility: '/settings/accessibility',
+		ai: '/settings/ai',
+		advanced: '/settings/advanced',
+		debug: '/settings/debug',
+	} as const satisfies Record<SettingsSectionId, SettingsRouteId>
 
 	const sections: SettingsSection[] = [
 		{
@@ -71,16 +103,25 @@
 			icon: Wrench,
 			description: 'developer tools and experimental features',
 		},
-		{
-			id: 'debug',
-			label: 'debug',
-			icon: CommandLine,
-			description: 'debug-only UI toggles and diagnostics',
-		},
 	]
 
-	function selectSection(sectionId: string) {
-		void goto(resolve(`/settings/${sectionId}`), { keepFocus: true, noScroll: true })
+	const showAdminDebug = $derived(Boolean(session.currentUser?.is_superuser))
+
+	const effectiveSections = $derived.by((): SettingsSection[] => {
+		if (!showAdminDebug) return sections
+		return [
+			...sections,
+			{
+				id: 'debug',
+				label: 'debug',
+				icon: CommandLine,
+				description: 'debug-only UI toggles and diagnostics',
+			},
+		]
+	})
+
+	function selectSection(sectionId: SettingsSectionId) {
+		void goto(resolve(settingsRouteBySection[sectionId]), { keepFocus: true, noScroll: true })
 	}
 
 	function prefetchSection(sectionId: string): void {
@@ -105,7 +146,7 @@
 
 	<nav class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
 		<div class="space-y-1">
-			{#each sections as section (section.id)}
+			{#each effectiveSections as section (section.id)}
 				<div
 					role="button"
 					tabindex="0"

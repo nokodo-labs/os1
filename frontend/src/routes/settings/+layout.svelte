@@ -20,9 +20,10 @@
 
 	// track selected section from URL
 	const selectedSection = $derived.by(() => {
-		if (page.params.section) return page.params.section
-		if (page.url.pathname === '/settings') return 'account'
-		return null
+		const parts = page.url.pathname.split('/').filter(Boolean)
+		if (parts[0] !== 'settings') return null
+		if (parts.length === 1) return 'account'
+		return parts[1] ?? null
 	})
 </script>
 
