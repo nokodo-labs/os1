@@ -42,15 +42,15 @@
 	style="view-transition-name: island;"
 >
 	<div
-		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-0 sm:gap-4"
+		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
 		style="height: var(--chrome-island-height);"
 	>
 		<!-- left: context actions (page-injected via chrome.setContextActions) -->
-		<div class="flex h-full min-w-0 items-center gap-0 pl-2 sm:gap-2 sm:pl-0">
+		<div class="flex h-full items-center">
 			{#if chrome.island.contextActions}
 				<!-- default accent color for all context actions; pages can override with inline styles -->
 				<div
-					class="island-context-actions flex h-full items-center gap-0 sm:gap-2"
+					class="island-context-actions flex h-full items-center gap-1"
 					style="color: var(--accent-primary, white);"
 				>
 					{@render chrome.island.contextActions()}
@@ -68,7 +68,7 @@
 		</div>
 
 		<!-- right: stable controls + user -->
-		<div class="island-right-controls flex h-full items-center justify-end gap-0 sm:gap-2">
+		<div class="island-right-controls flex h-full items-center justify-end">
 			{#if !isHomeLayout}
 				<button
 					class="flex cursor-pointer items-center justify-center text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97]"

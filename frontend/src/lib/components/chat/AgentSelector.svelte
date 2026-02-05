@@ -62,9 +62,9 @@
 	})
 </script>
 
-<div class="agent-selector relative flex min-w-0 items-center">
+<div class="agent-selector relative flex items-center pl-1">
 	<button
-		class="flex min-w-0 cursor-pointer items-center gap-1.5 border-none bg-transparent transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
+		class="flex cursor-pointer items-center gap-1 border-none bg-transparent transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={toggle}
 		aria-expanded={isOpen}
 		aria-haspopup="listbox"

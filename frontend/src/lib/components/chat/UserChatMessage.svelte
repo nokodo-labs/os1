@@ -76,54 +76,24 @@
 
 	<div
 		class="bubble-wrapper"
-		class:tail-right={showTail && tailStyle === 'imessage' && align === 'right'}
-		class:tail-left={showTail && tailStyle === 'imessage' && align === 'left'}
+		class:imessage-right={showTail && tailStyle === 'imessage' && align === 'right'}
+		class:imessage-left={showTail && tailStyle === 'imessage' && align === 'left'}
+		class:whatsapp-right={showTail && tailStyle === 'whatsapp' && align === 'right'}
+		class:whatsapp-left={showTail && tailStyle === 'whatsapp' && align === 'left'}
 	>
 		<div
-			class="bubble-content liquid-glass rounded-container relative px-5 py-4 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
+			class="bubble-content liquid-glass relative rounded-container px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
 			style="
                 background-color: var(--accent-primary);
                 box-shadow: 0 4px 16px var(--accent-border);
             "
 		>
 			<div
-				class="text-[0.95rem] leading-relaxed wrap-break-word whitespace-pre-wrap text-white/95"
+				class="leading-relaxed wrap-break-word whitespace-pre-wrap text-white"
 			>
 				{content}
 			</div>
 		</div>
-
-		{#if showTail && tailStyle === 'imessage'}
-			<svg
-				class="tail-svg"
-				class:tail-svg-right={align === 'right'}
-				class:tail-svg-left={align === 'left'}
-				width="12"
-				height="19"
-				viewBox="0 0 12 19"
-				xmlns="http://www.w3.org/2000/svg"
-			>
-				{#if align === 'right'}
-					<path
-						d="M 0 0
-                           C 0 6, 0 10, 4 14
-                           C 8 17, 10 19, 12 19
-                           L 0 19
-                           Z"
-						fill="var(--accent-primary)"
-					/>
-				{:else}
-					<path
-						d="M 12 0
-                           C 12 6, 12 10, 8 14
-                           C 4 17, 2 19, 0 19
-                           L 12 19
-                           Z"
-						fill="var(--accent-primary)"
-					/>
-				{/if}
-			</svg>
-		{/if}
 	</div>
 
 	{#if actions || siblingCount > 1}
@@ -176,30 +146,107 @@
 
 	.bubble-wrapper {
 		position: relative;
-		display: inline-block;
 	}
 
-	/* tighten corner where tail attaches */
-	.tail-right .bubble-content {
+	/* ════════════════════════════════════════════════════════════
+       iMESSAGE TAIL - Two-element technique (::before + ::after)
+       ::before = colored tail shape
+       ::after  = background cutout to shape the curve
+       ════════════════════════════════════════════════════════════ */
+
+	.imessage-right .bubble-content {
 		border-bottom-right-radius: 4px !important;
 	}
 
-	.tail-left .bubble-content {
+	.imessage-left .bubble-content {
 		border-bottom-left-radius: 4px !important;
 	}
 
-	/* SVG positioning */
-	.tail-svg {
+	/* Common styles for both pseudo-elements */
+	.imessage-right .bubble-content::before,
+	.imessage-right .bubble-content::after,
+	.imessage-left .bubble-content::before,
+	.imessage-left .bubble-content::after {
+		content: '';
 		position: absolute;
 		bottom: 0;
-		pointer-events: none;
+		height: 20px;
 	}
 
-	.tail-svg-right {
+	/* RIGHT TAIL (sent messages) */
+	/* ::before - Colored tail shape */
+	.imessage-right .bubble-content::before {
+		right: -7px;
+		width: 20px;
+		background-color: var(--accent-primary);
+		border-bottom-left-radius: 16px 14px; /* Elliptical radius for iOS curve */
+	}
+
+	/* ::after - Background cutout */
+	.imessage-right .bubble-content::after {
+		right: -26px;
+		width: 26px;
+		background-color: var(--chat-bg, var(--background));
+		border-bottom-left-radius: 10px;
+	}
+
+	/* LEFT TAIL (received messages) */
+	/* ::before - Colored tail shape */
+	.imessage-left .bubble-content::before {
+		left: -7px;
+		width: 20px;
+		background-color: var(--accent-primary);
+		border-bottom-right-radius: 16px 14px; /* Mirrored elliptical radius */
+	}
+
+	/* ::after - Background cutout */
+	.imessage-left .bubble-content::after {
+		left: -26px;
+		width: 26px;
+		background-color: var(--chat-bg, var(--background));
+		border-bottom-right-radius: 10px;
+	}
+
+	/* ════════════════════════════════════════════════════════════
+       WHATSAPP TAIL - Single rotated pseudo-element with border trick
+       ════════════════════════════════════════════════════════════ */
+
+	/* WhatsApp uses sharper corners than iMessage */
+	.whatsapp-right .bubble-content {
+		border-radius: 8px !important;
+		border-bottom-right-radius: 2px !important;
+	}
+
+	.whatsapp-left .bubble-content {
+		border-radius: 8px !important;
+		border-bottom-left-radius: 2px !important;
+	}
+
+	/* RIGHT TAIL (sent messages) */
+	.whatsapp-right .bubble-content::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
 		right: -8px;
+		width: 0;
+		height: 0;
+		border: 0 solid transparent;
+		border-top: 13px solid var(--accent-primary);
+		border-radius: 0 20px 0;
+		transform: rotate(145deg);
 	}
 
-	.tail-svg-left {
+	/* LEFT TAIL (received messages) */
+	.whatsapp-left .bubble-content::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
 		left: -8px;
+		width: 0;
+		height: 0;
+		border: 0 solid transparent;
+		border-top: 13px solid var(--accent-primary);
+		border-radius: 0 20px 0;
+		transform: rotate(45deg) scaleY(-1);
 	}
 </style>
