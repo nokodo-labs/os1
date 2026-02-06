@@ -22,14 +22,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.many_to_many import user_role_association
-from api.models.permissions import (
-	ActionPermission,
-	DefaultPermissions,
-	ResourceType,
-)
 from api.models.role import Role
 from api.models.thread import Thread
 from api.models.user import User
+from api.permissions import (
+	ActionPermission,
+	DefaultPermissions,
+	DefaultResourceAccess,
+	ResourceType,
+)
 from api.v1.service import authorization
 from api.v1.service import roles as roles_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -46,18 +47,18 @@ class TestDefaultPermissions:
 
 	def test_empty_defaults(self) -> None:
 		dp = DefaultPermissions()
-		assert dp.resource_access == {}
+		assert dp.resource_access == DefaultResourceAccess()
 		assert dp.action_permissions == set()
 
 	def test_with_resource_access(self) -> None:
 		dp = DefaultPermissions(
-			resource_access={
-				ResourceType.THREAD: AccessLevel.READER,
-				ResourceType.PROJECT: AccessLevel.EDITOR,
-			}
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.READER,
+				project=AccessLevel.EDITOR,
+			)
 		)
-		assert dp.resource_access[ResourceType.THREAD] == AccessLevel.READER
-		assert dp.resource_access[ResourceType.PROJECT] == AccessLevel.EDITOR
+		assert dp.resource_access.thread == AccessLevel.READER
+		assert dp.resource_access.project == AccessLevel.EDITOR
 
 	def test_with_action_permissions(self) -> None:
 		dp = DefaultPermissions(
@@ -72,18 +73,20 @@ class TestDefaultPermissions:
 
 	def test_full_model(self) -> None:
 		dp = DefaultPermissions(
-			resource_access={ResourceType.AGENT: AccessLevel.ADMIN},
+			resource_access=DefaultResourceAccess(
+				agent=AccessLevel.ADMIN,
+			),
 			action_permissions={ActionPermission.SETTINGS_WRITE},
 		)
-		assert dp.resource_access[ResourceType.AGENT] == AccessLevel.ADMIN
+		assert dp.resource_access.agent == AccessLevel.ADMIN
 		assert ActionPermission.SETTINGS_WRITE in dp.action_permissions
 
 	def test_json_roundtrip(self) -> None:
 		dp = DefaultPermissions(
-			resource_access={
-				ResourceType.THREAD: AccessLevel.EDITOR,
-				ResourceType.FILE: AccessLevel.READER,
-			},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.EDITOR,
+				file=AccessLevel.READER,
+			),
 			action_permissions={
 				ActionPermission.USERS_READ,
 				ActionPermission.EVENTS_MANAGE,
@@ -95,13 +98,15 @@ class TestDefaultPermissions:
 		assert restored.action_permissions == dp.action_permissions
 
 	def test_json_string_keys(self) -> None:
-		"""ensure JSON serialization uses string keys, not enum objects."""
+		"""ensure JSON serialization uses string values."""
 		dp = DefaultPermissions(
-			resource_access={ResourceType.THREAD: AccessLevel.READER},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.READER,
+			),
 			action_permissions={ActionPermission.AGENTS_READ},
 		)
 		data = dp.model_dump(mode="json")
-		assert isinstance(list(data["resource_access"].keys())[0], str)
+		assert isinstance(data["resource_access"]["thread"], str)
 		assert isinstance(list(data["action_permissions"])[0], str)
 
 	def test_validates_from_raw_strings(self) -> None:
@@ -112,7 +117,7 @@ class TestDefaultPermissions:
 				"action_permissions": ["agents:read"],
 			}
 		)
-		assert dp.resource_access[ResourceType.THREAD] == AccessLevel.EDITOR
+		assert dp.resource_access.thread == AccessLevel.EDITOR
 		assert ActionPermission.AGENTS_READ in dp.action_permissions
 
 	def test_rejects_invalid_resource_type(self) -> None:
@@ -219,7 +224,7 @@ class TestRoleModel:
 		await db_session.refresh(role)
 
 		dp = role.get_default_permissions()
-		assert dp.resource_access == {}
+		assert dp.resource_access == DefaultResourceAccess()
 		assert dp.action_permissions == set()
 
 	@pytest.mark.asyncio
@@ -227,7 +232,9 @@ class TestRoleModel:
 		self, db_session: AsyncSession
 	) -> None:
 		dp = DefaultPermissions(
-			resource_access={ResourceType.THREAD: AccessLevel.EDITOR},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.EDITOR,
+			),
 			action_permissions={ActionPermission.AGENTS_READ},
 		)
 		role = Role(name="typed-perms")
@@ -237,7 +244,7 @@ class TestRoleModel:
 		await db_session.refresh(role)
 
 		restored = role.get_default_permissions()
-		assert restored.resource_access[ResourceType.THREAD] == AccessLevel.EDITOR
+		assert restored.resource_access.thread == AccessLevel.EDITOR
 		assert ActionPermission.AGENTS_READ in restored.action_permissions
 
 	@pytest.mark.asyncio
@@ -256,10 +263,10 @@ class TestRoleModel:
 	) -> None:
 		"""verify the raw JSON column stores serialized data correctly."""
 		dp = DefaultPermissions(
-			resource_access={
-				ResourceType.AGENT: AccessLevel.ADMIN,
-				ResourceType.PLUGIN: AccessLevel.READER,
-			},
+			resource_access=DefaultResourceAccess(
+				agent=AccessLevel.ADMIN,
+				plugin=AccessLevel.READER,
+			),
 			action_permissions={
 				ActionPermission.MODELS_READ,
 				ActionPermission.PROVIDERS_MANAGE,
@@ -267,7 +274,10 @@ class TestRoleModel:
 		)
 		role = Role(
 			name="json-storage",
-			default_permissions=dp.model_dump(mode="json"),
+			default_permissions=dp.model_dump(
+				mode="json",
+				exclude_none=True,
+			),
 		)
 		db_session.add(role)
 		await db_session.commit()
@@ -304,7 +314,6 @@ class TestPrincipalPermissions:
 			group_ids=(),
 			role_ids=(),
 			permissions=permissions,
-			role_resource_defaults={},
 			global_action_permissions=global_action_permissions,
 		)
 
@@ -403,10 +412,10 @@ class TestGetCurrentPrincipal:
 		self, db_session: AsyncSession
 	) -> None:
 		dp = DefaultPermissions(
-			resource_access={
-				ResourceType.THREAD: AccessLevel.EDITOR,
-				ResourceType.PROJECT: AccessLevel.READER,
-			},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.EDITOR,
+				project=AccessLevel.READER,
+			),
 		)
 		role = Role(
 			name="editor-role",
@@ -422,21 +431,23 @@ class TestGetCurrentPrincipal:
 		await db_session.refresh(user, attribute_names=["roles"])
 
 		principal = await get_current_principal(user, db_session)
-		assert principal.role_resource_defaults["thread"] == "editor"
-		assert principal.role_resource_defaults["project"] == "reader"
+		assert principal.role_resource_defaults.thread == AccessLevel.EDITOR
+		assert principal.role_resource_defaults.project == AccessLevel.READER
 
 	@pytest.mark.asyncio
 	async def test_multi_role_highest_wins(self, db_session: AsyncSession) -> None:
 		"""when user has multiple roles, highest access level per resource wins."""
 		dp1 = DefaultPermissions(
-			resource_access={ResourceType.THREAD: AccessLevel.READER},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.READER,
+			),
 			action_permissions={ActionPermission.AGENTS_READ},
 		)
 		dp2 = DefaultPermissions(
-			resource_access={
-				ResourceType.THREAD: AccessLevel.ADMIN,
-				ResourceType.FILE: AccessLevel.EDITOR,
-			},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.ADMIN,
+				file=AccessLevel.EDITOR,
+			),
 			action_permissions={ActionPermission.MODELS_MANAGE},
 		)
 		role1 = Role(
@@ -459,9 +470,9 @@ class TestGetCurrentPrincipal:
 
 		principal = await get_current_principal(user, db_session)
 		# thread: admin wins over reader
-		assert principal.role_resource_defaults["thread"] == "admin"
+		assert principal.role_resource_defaults.thread == AccessLevel.ADMIN
 		# file: only role2 has it
-		assert principal.role_resource_defaults["file"] == "editor"
+		assert principal.role_resource_defaults.file == AccessLevel.EDITOR
 		# action perms: union of both
 		assert "agents:read" in principal.permissions
 		assert "models:manage" in principal.permissions
@@ -479,7 +490,7 @@ class TestResourceAccessPredicateWithDefaults:
 		self,
 		user: User,
 		*,
-		resource_defaults: dict[str, str] | None = None,
+		resource_defaults: DefaultResourceAccess | None = None,
 		group_ids: tuple[str, ...] = (),
 		role_ids: tuple[str, ...] = (),
 	) -> Principal:
@@ -488,7 +499,7 @@ class TestResourceAccessPredicateWithDefaults:
 			group_ids=group_ids,
 			role_ids=role_ids,
 			permissions=frozenset(),
-			role_resource_defaults=resource_defaults or {},
+			role_resource_defaults=(resource_defaults or DefaultResourceAccess()),
 			global_action_permissions=frozenset(),
 		)
 
@@ -520,7 +531,10 @@ class TestResourceAccessPredicateWithDefaults:
 
 		# with reader default: gets access
 		principal_with_defaults = self._make_principal(
-			user, resource_defaults={"thread": "reader"}
+			user,
+			resource_defaults=DefaultResourceAccess(
+				thread=AccessLevel.READER,
+			),
 		)
 		pred = authorization.resource_access_predicate(
 			principal_with_defaults, ResourceType.THREAD
@@ -546,7 +560,12 @@ class TestResourceAccessPredicateWithDefaults:
 		db_session.add(thread)
 		await db_session.commit()
 
-		principal = self._make_principal(user, resource_defaults={"thread": "reader"})
+		principal = self._make_principal(
+			user,
+			resource_defaults=DefaultResourceAccess(
+				thread=AccessLevel.READER,
+			),
+		)
 		pred = authorization.resource_access_predicate(
 			principal,
 			ResourceType.THREAD,
@@ -585,7 +604,6 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -611,7 +629,6 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -650,7 +667,9 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={"thread": "reader"},
+			role_resource_defaults=DefaultResourceAccess(
+				thread=AccessLevel.READER,
+			),
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -679,7 +698,9 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={"thread": "editor"},
+			role_resource_defaults=DefaultResourceAccess(
+				thread=AccessLevel.EDITOR,
+			),
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -710,7 +731,6 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -745,7 +765,6 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -787,7 +806,6 @@ class TestGetEffectiveAccessLevel:
 			group_ids=(str(group.id),),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -811,7 +829,6 @@ class TestRequirePermission:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		with pytest.raises(HTTPException) as exc:
@@ -825,7 +842,6 @@ class TestRequirePermission:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset({ActionPermission.AGENTS_MANAGE}),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		authorization.require_permission(principal, ActionPermission.AGENTS_MANAGE)
@@ -838,7 +854,6 @@ class TestRequirePermission:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset({"agents:read"}),
 		)
 		authorization.require_permission(principal, ActionPermission.AGENTS_READ)
@@ -854,7 +869,6 @@ class TestRequirePermission:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		authorization.require_permission(principal, ActionPermission.SETTINGS_WRITE)
@@ -879,7 +893,6 @@ class TestRequireResourceAccess:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		with pytest.raises(HTTPException) as exc:
@@ -922,7 +935,6 @@ class TestRequireResourceAccess:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		with pytest.raises(HTTPException) as exc:
@@ -953,7 +965,6 @@ class TestRequireResourceAccess:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		await authorization.require_resource_access(
@@ -992,12 +1003,13 @@ class TestRolesService:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 
 		dp = DefaultPermissions(
-			resource_access={ResourceType.THREAD: AccessLevel.EDITOR},
+			resource_access=DefaultResourceAccess(
+				thread=AccessLevel.EDITOR,
+			),
 			action_permissions={ActionPermission.AGENTS_READ},
 		)
 		role_in = RoleCreate(
@@ -1009,7 +1021,7 @@ class TestRolesService:
 		assert role.name == "service-test"
 
 		restored = role.get_default_permissions()
-		assert restored.resource_access[ResourceType.THREAD] == AccessLevel.EDITOR
+		assert restored.resource_access.thread == AccessLevel.EDITOR
 		assert ActionPermission.AGENTS_READ in restored.action_permissions
 
 	@pytest.mark.asyncio
@@ -1031,7 +1043,6 @@ class TestRolesService:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 
@@ -1046,7 +1057,9 @@ class TestRolesService:
 		# update
 		new_dp = DefaultPermissions(
 			action_permissions={ActionPermission.SETTINGS_READ},
-			resource_access={ResourceType.FILE: AccessLevel.ADMIN},
+			resource_access=DefaultResourceAccess(
+				file=AccessLevel.ADMIN,
+			),
 		)
 		updated = await roles_service.update_role(
 			str(role.id),
@@ -1056,7 +1069,7 @@ class TestRolesService:
 		)
 		restored = updated.get_default_permissions()
 		assert ActionPermission.SETTINGS_READ in restored.action_permissions
-		assert restored.resource_access[ResourceType.FILE] == AccessLevel.ADMIN
+		assert restored.resource_access.file == AccessLevel.ADMIN
 
 	@pytest.mark.asyncio
 	async def test_list_and_delete_roles(self, db_session: AsyncSession) -> None:
@@ -1075,7 +1088,6 @@ class TestRolesService:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 
@@ -1105,7 +1117,6 @@ class TestRolesService:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		with pytest.raises(HTTPException) as exc:
@@ -1127,7 +1138,6 @@ class TestRolesService:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		with pytest.raises(HTTPException) as exc:
@@ -1182,7 +1192,6 @@ class TestAccessRuleWithRole:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -1196,7 +1205,6 @@ class TestAccessRuleWithRole:
 			group_ids=(),
 			role_ids=(str(role.id),),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -1295,7 +1303,6 @@ class TestEdgeCases:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={},
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
@@ -1317,19 +1324,19 @@ class TestEdgeCases:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			role_resource_defaults={
-				"thread": "editor",
-				"project": "reader",
-			},
+			role_resource_defaults=DefaultResourceAccess(
+				thread=AccessLevel.EDITOR,
+				project=AccessLevel.READER,
+			),
 			global_action_permissions=frozenset(),
 		)
 		# thread default is editor
 		assert authorization._level_satisfies(
-			AccessLevel(principal.role_resource_defaults["thread"]),
+			principal.role_resource_defaults.thread,
 			AccessLevel.EDITOR,
 		)
 		# project default is reader (not editor)
 		assert not authorization._level_satisfies(
-			AccessLevel(principal.role_resource_defaults["project"]),
+			principal.role_resource_defaults.project,
 			AccessLevel.EDITOR,
 		)

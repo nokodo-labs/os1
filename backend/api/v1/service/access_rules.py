@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
-from api.models.permissions import ResourceType
+from api.permissions import ResourceType
 from api.schemas.access_rule import AccessRuleCreate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (

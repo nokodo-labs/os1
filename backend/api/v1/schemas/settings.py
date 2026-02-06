@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.core.permissions import (
-	AccessLevel,
+from api.permissions import (
 	ActionPermission,
-	ResourceType,
+	DefaultResourceAccess,
 )
 from api.settings import Settings
 
@@ -176,9 +175,9 @@ class AISettingsPatch(BaseModel):
 class DefaultPermissionsSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	resource_access: dict[ResourceType, AccessLevel] | None = Field(
+	resource_access: DefaultResourceAccess | None = Field(
 		default=None,
-		description="maps resource type → access level",
+		description="per-resource-type default access levels",
 	)
 	action_permissions: list[ActionPermission] | None = Field(
 		default=None,

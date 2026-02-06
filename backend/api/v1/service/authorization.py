@@ -15,12 +15,12 @@ from api.models.agent import Agent
 from api.models.file import File
 from api.models.memory import Memory
 from api.models.note import Note
-from api.models.permissions import ResourceType
 from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
 from api.models.task import Task
 from api.models.thread import Thread
+from api.permissions import ResourceType
 from api.v1.service.auth import Principal
 
 
@@ -214,9 +214,9 @@ def resource_access_predicate(
 	)
 
 	# check if the principal's role_resource_defaults grant sufficient access
-	default_level = principal.role_resource_defaults.get(resource_type.value)
+	default_level = principal.role_resource_defaults.get(resource_type)
 	has_default_access = default_level is not None and _level_satisfies(
-		AccessLevel(default_level), required_level
+		default_level, required_level
 	)
 
 	if owner_fk is not None:
@@ -317,9 +317,9 @@ async def get_effective_access_level(
 
 	# if no explicit rule matched, fall back to role_resource_defaults
 	if effective_level is None:
-		default_level = principal.role_resource_defaults.get(resource_type.value)
-		if default_level is not None:
-			effective_level = AccessLevel(default_level)
+		effective_level = principal.role_resource_defaults.get(
+			resource_type,
+		)
 
 	return effective_level
 

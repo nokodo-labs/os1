@@ -16,6 +16,7 @@ from api.constants import API_V1_MOUNT_PATH
 from api.core.database import AsyncSessionLocal, get_db
 from api.models.group import GroupMembership
 from api.models.user import User
+from api.permissions import DefaultResourceAccess
 from api.settings import settings
 from api.v1.schemas.token import Token, TokenPayload
 from nokodo_ai.utils.security import (
@@ -117,8 +118,10 @@ class Principal:
 	group_ids: tuple[str, ...]
 	permissions: frozenset[str]
 	role_ids: tuple[str, ...] = ()
-	# maps ResourceType → highest AccessLevel across all roles + global
-	role_resource_defaults: dict[str, str] = field(default_factory=dict)
+	# merged resource access defaults across all roles + global
+	role_resource_defaults: DefaultResourceAccess = field(
+		default_factory=DefaultResourceAccess,
+	)
 	# action permissions from global defaults (role perms are in permissions)
 	global_action_permissions: frozenset[str] = field(default_factory=frozenset)
 
@@ -225,24 +228,18 @@ async def get_current_principal(
 
 	# aggregate permissions and resource defaults across all roles
 	all_permissions: list[str] = []
-	resource_defaults: dict[str, str] = {}
+	merged_access = DefaultResourceAccess()
 	role_ids: list[str] = []
 
 	for role in user.roles:
 		role_ids.append(str(role.id))
 		dp = role.get_default_permissions()
 		all_permissions.extend(str(p) for p in dp.action_permissions)
-		for res_type, level in dp.resource_access.items():
-			existing = resource_defaults.get(str(res_type))
-			if existing is None or _level_rank(str(level)) > _level_rank(existing):
-				resource_defaults[str(res_type)] = str(level)
+		merged_access = merged_access.merge(dp.resource_access)
 
-	# merge global defaults (role-scoped wins over global via highest-wins)
+	# merge global defaults (highest-wins)
 	global_dp = settings.default_permissions
-	for res_type, level_str in global_dp.resource_access.items():
-		existing = resource_defaults.get(res_type)
-		if existing is None or _level_rank(level_str) > _level_rank(existing):
-			resource_defaults[res_type] = level_str
+	merged_access = merged_access.merge(global_dp.resource_access)
 
 	global_action_perms = frozenset(global_dp.action_permissions)
 
@@ -251,17 +248,9 @@ async def get_current_principal(
 		group_ids=group_ids,
 		role_ids=tuple(role_ids),
 		permissions=frozenset(all_permissions),
-		role_resource_defaults=resource_defaults,
+		role_resource_defaults=merged_access,
 		global_action_permissions=global_action_perms,
 	)
-
-
-_LEVEL_RANKS = {"reader": 0, "editor": 1, "admin": 2}
-
-
-def _level_rank(level: str) -> int:
-	"""return numeric rank for an access level string."""
-	return _LEVEL_RANKS.get(level, -1)
 
 
 async def require_admin(

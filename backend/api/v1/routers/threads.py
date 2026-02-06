@@ -16,8 +16,8 @@ from api.models.agent import Agent, AgentVisibility
 from api.models.event import Event
 from api.models.message import Message
 from api.models.model import Model
-from api.models.permissions import ResourceType
 from api.models.thread import Thread
+from api.permissions import ResourceType
 from api.schemas.access_rule import (
 	AccessRuleCreate,
 	AccessRuleResponse,

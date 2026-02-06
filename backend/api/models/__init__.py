@@ -1,6 +1,5 @@
 """Database models."""
 
-from api.core.permissions import AccessLevel
 from api.models.access_rule import AccessRule
 from api.models.agent import Agent
 from api.models.event import Event
@@ -11,7 +10,6 @@ from api.models.message import Message
 from api.models.model import Model
 from api.models.note import Note
 from api.models.notification import Notification
-from api.models.permissions import ActionPermission, DefaultPermissions, ResourceType
 from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
@@ -23,14 +21,12 @@ from api.models.task import Task
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
+from api.permissions import AccessLevel
 
 
 __all__ = [
 	"AccessLevel",
 	"AccessRule",
-	"ActionPermission",
-	"DefaultPermissions",
-	"ResourceType",
 	"Agent",
 	"Event",
 	"File",

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from api.models.base import Base
 from api.models.many_to_many import user_role_association
 from api.models.mixins import MetadataJSONMixin, TypeIDPrimaryKeyMixin
-from api.models.permissions import DefaultPermissions
+from api.permissions import DefaultPermissions
 
 
 if TYPE_CHECKING:
@@ -43,4 +43,7 @@ class Role(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 
 	def set_default_permissions(self, value: DefaultPermissions) -> None:
 		"""serialize a DefaultPermissions model into the JSON column."""
-		self.default_permissions = value.model_dump(mode="json")
+		self.default_permissions = value.model_dump(
+			mode="json",
+			exclude_none=True,
+		)

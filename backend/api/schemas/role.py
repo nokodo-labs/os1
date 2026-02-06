@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import Field
 
-from api.models.permissions import DefaultPermissions
+from api.permissions import DefaultPermissions
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 

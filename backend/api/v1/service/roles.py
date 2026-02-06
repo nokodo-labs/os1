@@ -6,8 +6,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.permissions import DefaultPermissions
 from api.models.role import Role
+from api.permissions import DefaultPermissions
 from api.schemas.role import RoleCreate, RoleUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
@@ -55,7 +55,10 @@ async def create_role(
 	role = Role(
 		name=role_in.name,
 		description=role_in.description,
-		default_permissions=role_in.default_permissions.model_dump(mode="json"),
+		default_permissions=role_in.default_permissions.model_dump(
+			mode="json",
+			exclude_none=True,
+		),
 		quotas=role_in.quotas,
 		priority=role_in.priority,
 		metadata_=role_in.metadata,
@@ -87,7 +90,10 @@ async def update_role(
 			role.metadata_ = value
 		elif field == "default_permissions" and value is not None:
 			dp = DefaultPermissions.model_validate(value)
-			role.default_permissions = dp.model_dump(mode="json")
+			role.default_permissions = dp.model_dump(
+				mode="json",
+				exclude_none=True,
+			)
 		else:
 			setattr(role, field, value)
 	await session.commit()

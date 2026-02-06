@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.permissions import AccessLevel
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
 from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from api.permissions import AccessLevel
 
 
 if TYPE_CHECKING:

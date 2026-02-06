@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.access_rule import AccessRule
-from api.models.permissions import ResourceType
+from api.permissions import ResourceType
 from api.schemas.access_rule import (
 	AccessRuleCreate,
 	AccessRuleResponse,

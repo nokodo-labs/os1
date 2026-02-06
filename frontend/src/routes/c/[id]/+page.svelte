@@ -28,15 +28,15 @@
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
 
-	// Initialize chat state
+	// initialize chat state
 	const chat = createChatState()
 
-	// Local UI state
+	// local UI state
 	let didLoadAgents = $state(false)
 	let inputFocusToken = $state(0)
 	let lastInputFocusKey = $state<string | null>(null)
 
-	// System chrome for agent selector
+	// system chrome for agent selector
 	const chrome = useSystemChrome()
 
 	// set accent color for auto accent colors feature
@@ -45,7 +45,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Agents loading
+	// effects: agents loading
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!device.ready) return
@@ -75,7 +75,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Thread loading and management
+	// effects: thread loading and management
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		const threadId = page.params.id
@@ -106,7 +106,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Island context actions for agent selector
+	// effects: Island context actions for agent selector
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
@@ -114,7 +114,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Tool events subscription
+	// effects: tool events subscription
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.thread) return
@@ -122,7 +122,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Pending chat start
+	// effects: pending chat start
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.thread) return
@@ -145,7 +145,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Input overlay height tracking
+	// effects: input overlay height tracking
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.inputOverlay) {
@@ -163,7 +163,7 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Auto-scroll
+	// effects: auto-scroll
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		const threadId = page.params.id
@@ -179,7 +179,7 @@
 		}
 		if (!chat.scrollContainer) return
 
-		// Dependency reads to track changes
+		// dependency reads to track changes
 		const streamingContent = chat.streamingAssistant?.content ?? ''
 		const optimisticContent = chat.optimisticUserMessage?.content ?? ''
 		const blocksCount = chat.runBlocks.length
@@ -194,12 +194,12 @@
 			return
 		}
 
-		// Keep pinned while streaming if user was already at bottom
+		// keep pinned while streaming if user was already at bottom
 		if (chat.isGenerating && chat.autoScroll) void chat.queueScrollToBottom('auto')
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Effects: Rebuild run blocks when messages change
+	// effects: rebuild run blocks when messages change
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		chat.rebuildRunBlocks()
@@ -284,7 +284,7 @@
 							<NokodoLoader className="opacity-70" shimmer />
 						</div>
 					{:else if chat.hasMoreMessages}
-						<!-- Spacer for scroll trigger area -->
+						<!-- spacer for scroll trigger area -->
 						<div class="h-1"></div>
 					{/if}
 					{#each chat.runBlocks as block, i (block.runId)}
@@ -500,7 +500,7 @@
 											{#if !isStreamingBlock}
 												<MessageActionButton
 													onclick={() => {
-														// Pass the user message ID so new responses branch from there
+														// pass the user message ID so new responses branch from there
 														const userMessageId =
 															chat.findRunUserMessage(block)
 														chat.handleRegenerateMessage(userMessageId)
