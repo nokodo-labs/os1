@@ -17,7 +17,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
-	from api.models.acl import AccessControlEntry
+	from api.models.access_rule import AccessRule
 	from api.models.file import File
 	from api.models.message import Message
 	from api.models.model import Model
@@ -65,8 +65,8 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		"File",
 		foreign_keys=[profile_image_file_id],
 	)
-	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
-		"AccessControlEntry",
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
 		back_populates="agent",
 		cascade="all, delete-orphan",
 	)

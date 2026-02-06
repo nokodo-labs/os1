@@ -17,6 +17,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
 	from api.models.message import Message
 	from api.models.user import User
 
@@ -50,4 +51,9 @@ class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	source_message: Mapped[Message | None] = relationship(
 		"Message",
 		lazy="selectin",
+	)
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		back_populates="memory",
+		cascade="all, delete-orphan",
 	)

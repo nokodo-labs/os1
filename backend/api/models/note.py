@@ -17,6 +17,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
 	from api.models.user import User
 
 
@@ -41,4 +42,9 @@ class Note(
 		"User",
 		back_populates="notes",
 		lazy="selectin",
+	)
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		back_populates="note",
+		cascade="all, delete-orphan",
 	)

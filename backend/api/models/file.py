@@ -18,6 +18,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
 	from api.models.message import Message
 	from api.models.project import Project
 	from api.models.user import User
@@ -95,4 +96,9 @@ class File(
 	message: Mapped[Message | None] = relationship(
 		"Message",
 		back_populates="files",
+	)
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		back_populates="file",
+		cascade="all, delete-orphan",
 	)

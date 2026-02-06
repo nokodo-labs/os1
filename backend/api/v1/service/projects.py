@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.acl import AccessRole
+from api.models.access_rule import AccessLevel
 from api.models.project import Project
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import project_access_predicate
@@ -18,14 +18,16 @@ async def load_projects(
 	session: AsyncSession,
 	principal: Principal,
 	*,
-	required_role: AccessRole = AccessRole.EDITOR,
+	required_level: AccessLevel = AccessLevel.EDITOR,
 ) -> list[Project]:
 	"""load projects with access control; raise 404 for any missing ids."""
 	if not project_ids:
 		return []
 
 	stmt = select(Project).where(Project.id.in_(project_ids))
-	stmt = stmt.where(project_access_predicate(principal, required_role=required_role))
+	stmt = stmt.where(
+		project_access_predicate(principal, required_level=required_level)
+	)
 	result = await session.scalars(stmt)
 	projects = list(result.all())
 	found = {project.id for project in projects}

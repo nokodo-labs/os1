@@ -37,6 +37,9 @@ class _FakePrincipal:
 		self.is_admin = is_admin
 		self.user = SimpleNamespace(id=user_id)
 		self.group_ids = groups or []
+		self.role_ids = ()
+		self.role_resource_defaults: dict[str, str] = {}
+		self.global_action_permissions: frozenset[str] = frozenset()
 
 	def has_permission(self, permission: str) -> bool:
 		return permission == "any"
@@ -275,8 +278,8 @@ async def test_threads_router_delegates(monkeypatch):
 	async def _switch(*_args, **_kwargs):
 		return SimpleNamespace(current_message_id=new_typeid("message"))
 
-	async def _return_acl(*_args, **_kwargs):
-		return ["acl"]
+	async def _return_access_rules(*_args, **_kwargs):
+		return ["rule"]
 
 	monkeypatch.setattr(threads_router.thread_service, "create_thread", _return_thread)
 	monkeypatch.setattr(
@@ -297,8 +300,16 @@ async def test_threads_router_delegates(monkeypatch):
 		threads_router.thread_service, "create_message", _return_message
 	)
 	monkeypatch.setattr(threads_router.thread_service, "switch_branch", _switch)
-	monkeypatch.setattr(threads_router.acl_service, "list_thread_acl", _return_acl)
-	monkeypatch.setattr(threads_router.acl_service, "set_thread_acl", _return_acl)
+	monkeypatch.setattr(
+		threads_router.access_rules_service,
+		"list_access_rules",
+		_return_access_rules,
+	)
+	monkeypatch.setattr(
+		threads_router.access_rules_service,
+		"set_access_rules",
+		_return_access_rules,
+	)
 
 	# patch the chat runner for /threads/{id}/run (streaming-only)
 	async def _chat_run_agent(*_args, **_kwargs):
@@ -345,8 +356,12 @@ async def test_threads_router_delegates(monkeypatch):
 		principal=principal,
 		db=None,
 	)
-	acl_list = await threads_router.list_thread_acl("t", principal=principal, db=None)
-	acl_set = await threads_router.set_thread_acl("t", [], principal=principal, db=None)
+	rule_list = await threads_router.list_thread_access_rules(
+		"t", principal=principal, db=None
+	)
+	rule_set = await threads_router.set_thread_access_rules(
+		"t", [], principal=principal, db=None
+	)
 
 	assert created is fake_thread
 	assert listed == [fake_thread]
@@ -359,8 +374,8 @@ async def test_threads_router_delegates(monkeypatch):
 	assert run_resp.media_type == "text/event-stream"
 	assert run_resp.headers.get("X-Accel-Buffering") == "no"
 	assert switched.current_message_id is not None
-	assert acl_list == ["acl"]
-	assert acl_set == ["acl"]
+	assert rule_list == ["rule"]
+	assert rule_set == ["rule"]
 
 
 @pytest.mark.asyncio

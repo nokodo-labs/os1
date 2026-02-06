@@ -11,14 +11,17 @@ from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
-from api.models.acl import AccessControlEntry
+from api.models.access_rule import AccessRule
 from api.models.agent import Agent, AgentVisibility
 from api.models.event import Event
 from api.models.message import Message
 from api.models.model import Model
+from api.models.permissions import ResourceType
 from api.models.thread import Thread
-from api.schemas.acl import AccessControlEntry as AccessControlEntrySchema
-from api.schemas.acl import AccessControlEntryCreate
+from api.schemas.access_rule import (
+	AccessRuleCreate,
+	AccessRuleResponse,
+)
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
@@ -35,7 +38,7 @@ from api.schemas.thread import (
 	ThreadSwitchResponse,
 	ThreadUpdate,
 )
-from api.v1.service import acl as acl_service
+from api.v1.service import access_rules as access_rules_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.chat import run_agent as chat_run_agent
@@ -345,22 +348,26 @@ async def switch_branch(
 	return ThreadSwitchResponse(ok=True, current_message_id=thread.current_message_id)
 
 
-@router.get("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])
-async def list_thread_acl(
+@router.get("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
+async def list_thread_access_rules(
 	thread_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[AccessControlEntry]:
-	"""List acl entries for a thread."""
-	return await acl_service.list_thread_acl(thread_id, db, principal=principal)
+) -> list[AccessRule]:
+	"""List access rules for a thread."""
+	return await access_rules_service.list_access_rules(
+		ResourceType.THREAD, str(thread_id), db, principal=principal
+	)
 
 
-@router.put("/{thread_id}/acl", response_model=list[AccessControlEntrySchema])
-async def set_thread_acl(
+@router.put("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
+async def set_thread_access_rules(
 	thread_id: TypeID,
-	entries: list[AccessControlEntryCreate],
+	rules: list[AccessRuleCreate],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[AccessControlEntry]:
-	"""Replace acl entries for a thread."""
-	return await acl_service.set_thread_acl(thread_id, entries, db, principal=principal)
+) -> list[AccessRule]:
+	"""Replace access rules for a thread."""
+	return await access_rules_service.set_access_rules(
+		ResourceType.THREAD, str(thread_id), rules, db, principal=principal
+	)

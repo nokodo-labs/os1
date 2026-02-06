@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Annotated
 from urllib.parse import urlparse
@@ -89,7 +89,7 @@ async def authenticate_websocket_refresh_cookie(websocket: WebSocket) -> User | 
 
 	async with AsyncSessionLocal() as session:
 		result = await session.execute(
-			select(User).options(selectinload(User.role)).where(User.id == user_id)
+			select(User).options(selectinload(User.roles)).where(User.id == user_id)
 		)
 		user = result.scalar_one_or_none()
 
@@ -111,11 +111,16 @@ oauth2_scheme_optional = OAuth2PasswordBearer(
 
 @dataclass(frozen=True, slots=True)
 class Principal:
-	"""Authenticated principal for authorization decisions."""
+	"""authenticated principal for authorization decisions."""
 
 	user: User
 	group_ids: tuple[str, ...]
 	permissions: frozenset[str]
+	role_ids: tuple[str, ...] = ()
+	# maps ResourceType → highest AccessLevel across all roles + global
+	role_resource_defaults: dict[str, str] = field(default_factory=dict)
+	# action permissions from global defaults (role perms are in permissions)
+	global_action_permissions: frozenset[str] = field(default_factory=frozenset)
 
 	@property
 	def user_id(self) -> str:
@@ -131,6 +136,9 @@ class Principal:
 		if "*" in self.permissions:
 			return True
 		if permission in self.permissions:
+			return True
+		# check global defaults
+		if permission in self.global_action_permissions:
 			return True
 		for granted in self.permissions:
 			if granted.endswith(":*") and permission.startswith(granted[:-1]):
@@ -170,7 +178,7 @@ async def _user_from_token(token: str, session: AsyncSession) -> User:
 		raise credentials_exception
 
 	result = await session.execute(
-		select(User).options(selectinload(User.role)).where(User.id == token_data.sub)
+		select(User).options(selectinload(User.roles)).where(User.id == token_data.sub)
 	)
 	user = result.scalar_one_or_none()
 
@@ -215,15 +223,45 @@ async def get_current_principal(
 	)
 	group_ids = tuple(str(row[0]) for row in group_ids_result.all())
 
-	permissions: list[str] = []
-	if user.role is not None:
-		permissions = [str(permission) for permission in user.role.permissions]
+	# aggregate permissions and resource defaults across all roles
+	all_permissions: list[str] = []
+	resource_defaults: dict[str, str] = {}
+	role_ids: list[str] = []
+
+	for role in user.roles:
+		role_ids.append(str(role.id))
+		dp = role.get_default_permissions()
+		all_permissions.extend(str(p) for p in dp.action_permissions)
+		for res_type, level in dp.resource_access.items():
+			existing = resource_defaults.get(str(res_type))
+			if existing is None or _level_rank(str(level)) > _level_rank(existing):
+				resource_defaults[str(res_type)] = str(level)
+
+	# merge global defaults (role-scoped wins over global via highest-wins)
+	global_dp = settings.default_permissions
+	for res_type, level_str in global_dp.resource_access.items():
+		existing = resource_defaults.get(res_type)
+		if existing is None or _level_rank(level_str) > _level_rank(existing):
+			resource_defaults[res_type] = level_str
+
+	global_action_perms = frozenset(global_dp.action_permissions)
 
 	return Principal(
 		user=user,
 		group_ids=group_ids,
-		permissions=frozenset(permissions),
+		role_ids=tuple(role_ids),
+		permissions=frozenset(all_permissions),
+		role_resource_defaults=resource_defaults,
+		global_action_permissions=global_action_perms,
 	)
+
+
+_LEVEL_RANKS = {"reader": 0, "editor": 1, "admin": 2}
+
+
+def _level_rank(level: str) -> int:
+	"""return numeric rank for an access level string."""
+	return _LEVEL_RANKS.get(level, -1)
 
 
 async def require_admin(

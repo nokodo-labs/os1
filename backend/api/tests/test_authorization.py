@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import and_, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.acl import AccessRole
+from api.models.access_rule import AccessLevel
 from api.models.thread import Thread
 from api.models.user import User
 from api.v1.service import authorization
@@ -22,7 +20,13 @@ async def test_require_thread_and_project_access(db_session: AsyncSession) -> No
 	user = User(email="authz@example.com", hashed_password="pw", is_active=True)
 	db_session.add(user)
 	await db_session.commit()
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal(
+		user=user,
+		group_ids=(),
+		role_ids=(),
+		permissions=frozenset(),
+		role_resource_defaults={},
+	)
 
 	with pytest.raises(HTTPException):
 		await authorization.require_thread_access(
@@ -37,7 +41,13 @@ async def test_require_thread_and_project_access(db_session: AsyncSession) -> No
 
 def test_require_permission_denied() -> None:
 	user = User(email="authz-deny@example.com", hashed_password="pw", is_active=True)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal(
+		user=user,
+		group_ids=(),
+		role_ids=(),
+		permissions=frozenset(),
+		role_resource_defaults={},
+	)
 	with pytest.raises(HTTPException):
 		authorization.require_permission(principal, "agents:manage")
 
@@ -47,7 +57,9 @@ def test_require_permission_allows() -> None:
 	principal = Principal(
 		user=user,
 		group_ids=(),
+		role_ids=(),
 		permissions=frozenset({"agents:manage"}),
+		role_resource_defaults={},
 	)
 
 	authorization.require_permission(principal, "agents:manage")
@@ -58,7 +70,13 @@ async def test_require_thread_access_hidden_forbidden(db_session: AsyncSession) 
 	user = User(email="authz-hidden@example.com", hashed_password="pw", is_active=True)
 	db_session.add(user)
 	await db_session.commit()
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal(
+		user=user,
+		group_ids=(),
+		role_ids=(),
+		permissions=frozenset(),
+		role_resource_defaults={},
+	)
 
 	with pytest.raises(HTTPException) as exc:
 		await authorization.require_thread_access(
@@ -70,9 +88,11 @@ async def test_require_thread_access_hidden_forbidden(db_session: AsyncSession) 
 	assert exc.value.status_code == 403
 
 
-def test_allowed_roles_default_case() -> None:
-	assert authorization._allowed_roles(cast(AccessRole, "unexpected")) == (
-		AccessRole.ADMIN,
+def test_allowed_levels_reader_case() -> None:
+	assert authorization._allowed_levels(AccessLevel.READER) == (
+		AccessLevel.READER,
+		AccessLevel.EDITOR,
+		AccessLevel.ADMIN,
 	)
 
 
@@ -86,9 +106,15 @@ async def test_authorization_admin_predicates(db_session: AsyncSession) -> None:
 	)
 	db_session.add(admin)
 	await db_session.commit()
-	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	principal = Principal(
+		user=admin,
+		group_ids=(),
+		role_ids=(),
+		permissions=frozenset(),
+		role_resource_defaults={},
+	)
 
-	assert authorization._allowed_roles(AccessRole.ADMIN) == (AccessRole.ADMIN,)
+	assert authorization._allowed_levels(AccessLevel.ADMIN) == (AccessLevel.ADMIN,)
 	visibility = and_(Thread.deleted_at.is_(None), Thread.is_temporary.is_(False))
 	assert authorization.thread_access_predicate(principal).compare(visibility)
 	assert authorization.thread_access_predicate(

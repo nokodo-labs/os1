@@ -1,20 +1,20 @@
-"""User model."""
+"""user model."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, func
+from sqlalchemy import JSON, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.models.base import TYPEID_LENGTH, Base
+from api.models.base import Base
+from api.models.many_to_many import user_role_association
 from api.models.mixins import TypeIDPrimaryKeyMixin
-from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
-	from api.models.acl import AccessControlEntry
+	from api.models.access_rule import AccessRule
 	from api.models.file import File
 	from api.models.group import Group, GroupMembership
 	from api.models.memory import Memory
@@ -50,12 +50,18 @@ class User(TypeIDPrimaryKeyMixin, Base):
 		DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
 	)
 
-	role_id: Mapped[TypeID | None] = mapped_column(
-		String(TYPEID_LENGTH),
-		ForeignKey("roles.id"),
+	roles: Mapped[list[Role]] = relationship(
+		"Role",
+		secondary=user_role_association,
+		back_populates="users",
+		lazy="selectin",
 	)
-
-	role: Mapped[Role | None] = relationship("Role", back_populates="users")
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		foreign_keys="AccessRule.subject_user_id",
+		cascade="all, delete-orphan",
+		overlaps="subject_user",
+	)
 	projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
 	owned_groups: Mapped[list[Group]] = relationship("Group", back_populates="owner")
 	group_memberships: Mapped[list[GroupMembership]] = relationship(
@@ -66,9 +72,6 @@ class User(TypeIDPrimaryKeyMixin, Base):
 		"ReminderList",
 		back_populates="owner",
 		cascade="all, delete-orphan",
-	)
-	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
-		"AccessControlEntry", back_populates="user", cascade="all, delete-orphan"
 	)
 
 	threads: Mapped[list[Thread]] = relationship(

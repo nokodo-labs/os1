@@ -28,7 +28,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
-	from api.models.acl import AccessControlEntry
+	from api.models.access_rule import AccessRule
 	from api.models.event import Event
 	from api.models.message import Message
 	from api.models.project import Project
@@ -99,8 +99,8 @@ class Thread(
 		secondary=thread_project_association,
 		back_populates="threads",
 	)
-	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
-		"AccessControlEntry",
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
 		back_populates="thread",
 		cascade="all, delete-orphan",
 	)

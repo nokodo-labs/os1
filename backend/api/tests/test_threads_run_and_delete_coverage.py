@@ -130,11 +130,11 @@ async def test_delete_thread_forbidden_when_editor_not_owner(
 	other_token = login_resp.json()["access_token"]
 	other_headers = {"Authorization": f"Bearer {other_token}"}
 
-	# Grant EDITOR access via ACL, but they are not the owner.
+	# grant EDITOR access via access rules, but they are not the owner.
 	acl_resp = await client.put(
-		f"/v1/threads/{thread_id}/acl",
+		f"/v1/threads/{thread_id}/access-rules",
 		headers=owner_headers,
-		json=[{"user_id": other_user_id, "role": "editor"}],
+		json=[{"subject_user_id": other_user_id, "level": "editor"}],
 	)
 	assert acl_resp.status_code == 200
 

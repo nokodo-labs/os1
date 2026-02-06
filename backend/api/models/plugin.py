@@ -7,9 +7,10 @@ Plugins can be tools, filters, or hooks that extend agent capabilities.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import Base, StringEnum
 from api.models.mixins import (
@@ -17,6 +18,10 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+
+
+if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
 
 
 class PluginType(StrEnum):
@@ -39,3 +44,9 @@ class Plugin(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	author: Mapped[str | None] = mapped_column(String(150))
 	version: Mapped[str | None] = mapped_column(String(50))
 	source_code: Mapped[str] = mapped_column(Text())
+
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		back_populates="plugin",
+		cascade="all, delete-orphan",
+	)

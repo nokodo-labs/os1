@@ -58,6 +58,5 @@ class User(UserBase):
 	model_config = ConfigDict(from_attributes=True)
 
 	id: TypeID
-	role_id: TypeID | None = None
 	created_at: datetime
 	updated_at: datetime

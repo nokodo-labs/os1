@@ -6,8 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-type ApiJSONObject = dict[str, object]
+from nokodo_ai.types.json import JSONObject
 
 
 class ORMModel(BaseModel):
@@ -19,7 +18,7 @@ class ORMModel(BaseModel):
 class MetadataModel(ORMModel):
 	"""Adds metadata support for models using MetadataJSONMixin."""
 
-	metadata: ApiJSONObject = Field(default_factory=dict, alias="metadata_")
+	metadata: JSONObject = Field(default_factory=dict, alias="metadata_")
 
 	@field_validator("metadata", mode="before")
 	@classmethod

@@ -17,7 +17,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
-	from api.models.acl import AccessControlEntry
+	from api.models.access_rule import AccessRule
 	from api.models.event import Event
 	from api.models.file import File
 	from api.models.thread import Thread
@@ -43,8 +43,8 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		secondary=thread_project_association,
 		back_populates="projects",
 	)
-	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
-		"AccessControlEntry",
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
 		back_populates="project",
 		cascade="all, delete-orphan",
 	)

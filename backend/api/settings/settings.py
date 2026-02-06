@@ -12,6 +12,11 @@ from pydantic_settings import (
 	SettingsConfigDict,
 )
 
+from api.core.permissions import (
+	AccessLevel,
+	ActionPermission,
+	ResourceType,
+)
 from nokodo_ai.utils.typing import extract_literal_values
 
 
@@ -258,6 +263,28 @@ class SecuritySettings(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# default permissions section
+# ---------------------------------------------------------------------------
+
+
+class DefaultPermissionsSettings(BaseModel):
+	"""global default permissions applied when no role or
+	explicit rule grants access."""
+
+	resource_access: dict[ResourceType, AccessLevel] = Field(
+		default_factory=dict,
+		description=("maps resource type → access level, e.g. {'thread': 'reader'}"),
+	)
+	action_permissions: list[ActionPermission] = Field(
+		default_factory=list,
+		description=(
+			"action permissions granted by default, "
+			"e.g. ['agents:read', 'prompts:read']"
+		),
+	)
+
+
+# ---------------------------------------------------------------------------
 # root settings
 # ---------------------------------------------------------------------------
 
@@ -278,6 +305,9 @@ class Settings(BaseSettings):
 	assets: AssetsSettings = Field(default_factory=AssetsSettings)
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)
+	default_permissions: DefaultPermissionsSettings = Field(
+		default_factory=DefaultPermissionsSettings
+	)
 
 	@staticmethod
 	@cache

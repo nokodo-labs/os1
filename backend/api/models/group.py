@@ -17,7 +17,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
-	from api.models.acl import AccessControlEntry
+	from api.models.access_rule import AccessRule
 	from api.models.user import User
 
 
@@ -69,6 +69,9 @@ class Group(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	memberships: Mapped[list[GroupMembership]] = relationship(
 		"GroupMembership", back_populates="group", cascade="all, delete-orphan"
 	)
-	access_control_entries: Mapped[list[AccessControlEntry]] = relationship(
-		"AccessControlEntry", back_populates="group", cascade="all, delete-orphan"
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		foreign_keys="AccessRule.subject_group_id",
+		cascade="all, delete-orphan",
+		overlaps="subject_group",
 	)

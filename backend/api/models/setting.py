@@ -1,4 +1,4 @@
-"""Settings document model."""
+"""settings document model."""
 
 from __future__ import annotations
 

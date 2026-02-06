@@ -18,6 +18,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
 	from api.models.event import Event
 	from api.models.message import Message
 	from api.models.thread import Thread
@@ -95,4 +96,9 @@ class Task(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	events: Mapped[list[Event]] = relationship(
 		"Event",
 		back_populates="task",
+	)
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		back_populates="task",
+		cascade="all, delete-orphan",
 	)

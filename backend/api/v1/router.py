@@ -16,6 +16,7 @@ from api.v1.routers import (
 	prompts,
 	providers,
 	reminders,
+	roles,
 	settings,
 	tasks,
 	threads,
@@ -38,6 +39,7 @@ api_router.include_router(reminders.router)
 api_router.include_router(providers.router)
 api_router.include_router(models.router)
 api_router.include_router(agents.router)
+api_router.include_router(roles.router)
 api_router.include_router(prompts.router)
 api_router.include_router(openai.router)
 api_router.include_router(plugins.router)

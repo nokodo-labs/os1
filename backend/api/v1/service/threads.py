@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.acl import AccessRole
+from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.message import Message, MessageType
@@ -78,7 +78,7 @@ async def generate_thread_metadata(
 			str(thread_id),
 			session,
 			principal,
-			required_role=AccessRole.EDITOR,
+			required_level=AccessLevel.EDITOR,
 		)
 
 	thread = await session.get(
@@ -187,7 +187,7 @@ async def list_thread_recipient_user_ids(
 			thread_id,
 			session,
 			principal,
-			required_role=AccessRole.VIEWER,
+			required_level=AccessLevel.READER,
 			include_hidden=include_hidden,
 		)
 	else:
@@ -219,7 +219,7 @@ async def _load_thread(
 	session: AsyncSession,
 	principal: Principal,
 	*,
-	required_role: AccessRole = AccessRole.VIEWER,
+	required_level: AccessLevel = AccessLevel.READER,
 	include_hidden: bool = False,
 ) -> Thread: ...
 
@@ -239,7 +239,7 @@ async def _load_thread(
 	session: AsyncSession,
 	principal: Principal | None = None,
 	*,
-	required_role: AccessRole = AccessRole.VIEWER,
+	required_level: AccessLevel = AccessLevel.READER,
 	include_hidden: bool = False,
 ) -> Thread:
 	options = [selectinload(Thread.owner), selectinload(Thread.projects)]
@@ -249,7 +249,7 @@ async def _load_thread(
 		stmt = stmt.where(
 			thread_access_predicate(
 				principal,
-				required_role=required_role,
+				required_level=required_level,
 				include_hidden=include_hidden,
 			)
 		)
@@ -292,7 +292,7 @@ async def create_thread(
 			)
 
 	projects = await project_service.load_projects(
-		thread_in.project_ids, session, principal, required_role=AccessRole.EDITOR
+		thread_in.project_ids, session, principal, required_level=AccessLevel.EDITOR
 	)
 	thread_data = thread_in.model_dump(by_alias=True, exclude={"project_ids"})
 	thread_data["owner_id"] = owner_id
@@ -341,7 +341,7 @@ async def list_threads(
 		.where(
 			thread_access_predicate(
 				principal,
-				required_role=AccessRole.VIEWER,
+				required_level=AccessLevel.READER,
 				include_hidden=include_hidden,
 			)
 		)
@@ -382,7 +382,7 @@ async def get_thread(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.VIEWER,
+		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
 	)
 
@@ -399,7 +399,7 @@ async def update_thread(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.EDITOR,
+		required_level=AccessLevel.EDITOR,
 	)
 	update_data = thread_in.model_dump(exclude_unset=True, by_alias=True)
 	new_owner_id = update_data.pop("owner_id", None)
@@ -438,7 +438,7 @@ async def update_thread(
 
 	if project_ids is not None:
 		thread.projects = await project_service.load_projects(
-			project_ids, session, principal, required_role=AccessRole.EDITOR
+			project_ids, session, principal, required_level=AccessLevel.EDITOR
 		)
 
 	await session.flush()
@@ -471,7 +471,7 @@ async def update_thread(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.VIEWER,
+		required_level=AccessLevel.READER,
 	)
 
 
@@ -485,7 +485,7 @@ async def delete_thread(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.EDITOR,
+		required_level=AccessLevel.EDITOR,
 	)
 
 	if not principal.is_admin and thread.owner_id != principal.user.id:
@@ -532,7 +532,7 @@ async def list_messages(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.VIEWER,
+		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
 	)
 	base_stmt = select(Message).where(Message.thread_id == thread_id)
@@ -631,7 +631,7 @@ async def list_events_for_message_ids(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.VIEWER,
+		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
 	)
 
@@ -686,7 +686,7 @@ async def get_current_branch(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.VIEWER,
+		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
 	)
 	if not thread.current_message_id:
@@ -714,7 +714,7 @@ async def switch_branch(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.EDITOR,
+		required_level=AccessLevel.EDITOR,
 	)
 	msg = await session.get(Message, message_id)
 	if not msg or msg.thread_id != thread_id:
@@ -752,7 +752,7 @@ async def create_message(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.EDITOR,
+		required_level=AccessLevel.EDITOR,
 	)
 	data = message_in.model_dump(by_alias=True, exclude={"type"})
 	sender_user_id = data.get("sender_user_id")
@@ -821,7 +821,7 @@ async def delete_user_message_turn(
 		thread_id,
 		session,
 		principal,
-		required_role=AccessRole.EDITOR,
+		required_level=AccessLevel.EDITOR,
 	)
 
 	branch = await get_current_branch(

@@ -3,8 +3,10 @@
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.many_to_many import user_role_association
 from api.models.role import Role
 from api.models.user import User
 from api.schemas.user import UserCreate
@@ -315,14 +317,26 @@ async def test_get_current_active_user_allows_active_user(
 
 @pytest.mark.asyncio
 async def test_get_current_principal_with_role(db_session: AsyncSession) -> None:
-	role = Role(name="tester", permissions=["perm:read"])
+	role = Role(
+		name="tester",
+		default_permissions={
+			"resource_access": {},
+			"action_permissions": ["prompts:read"],
+		},
+	)
 	user = User(
 		email="principal-role@example.com", hashed_password="pw", is_active=True
 	)
-	user.role = role
 	db_session.add_all([role, user])
+	await db_session.flush()
+	# insert M2M association directly
+	await db_session.execute(
+		insert(user_role_association).values(user_id=user.id, role_id=role.id)
+	)
 	await db_session.commit()
+	# re-load user with roles eagerly
+	await db_session.refresh(user, attribute_names=["roles"])
 
 	principal = await get_current_principal(user, db_session)
-	assert "perm:read" in principal.permissions
+	assert "prompts:read" in principal.permissions
 	assert principal.user_id == str(user.id)

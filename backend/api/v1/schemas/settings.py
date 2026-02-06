@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.core.permissions import (
+	AccessLevel,
+	ActionPermission,
+	ResourceType,
+)
 from api.settings import Settings
 
 
@@ -168,6 +173,19 @@ class AISettingsPatch(BaseModel):
 	chat_context: AIChatContextSettingsPatch | None = None
 
 
+class DefaultPermissionsSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	resource_access: dict[ResourceType, AccessLevel] | None = Field(
+		default=None,
+		description="maps resource type → access level",
+	)
+	action_permissions: list[ActionPermission] | None = Field(
+		default=None,
+		description="action permissions granted by default",
+	)
+
+
 class SettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -178,6 +196,7 @@ class SettingsPatch(BaseModel):
 	assets: AssetsSettingsPatch | None = None
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
+	default_permissions: DefaultPermissionsSettingsPatch | None = None
 
 
 class SettingsVersions(BaseModel):
@@ -190,6 +209,7 @@ class SettingsVersions(BaseModel):
 	assets: int = 0
 	limits: int = 0
 	security: int = 0
+	default_permissions: int = 0
 
 
 class SettingsUpdateRequest(BaseModel):

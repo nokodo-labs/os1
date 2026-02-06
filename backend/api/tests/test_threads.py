@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.acl import AccessControlEntry, AccessRole
+from api.models.access_rule import AccessLevel, AccessRule
 from api.models.message import MessageType
 from api.models.project import Project
 from api.models.thread import Thread
@@ -633,13 +633,15 @@ async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
 		db_session,
 		principal=owner_principal,
 	)
-	ace = AccessControlEntry(
-		id=TypeID(new_typeid("acl")),
+	rule = AccessRule(
+		id=TypeID(new_typeid("arule")),
 		thread_id=thread.id,
-		user_id=editor.id,
-		role=AccessRole.EDITOR,
+		subject_user_id=editor.id,
+		level=AccessLevel.EDITOR,
+		order_index=0,
+		metadata_={},
 	)
-	db_session.add(ace)
+	db_session.add(rule)
 	await db_session.commit()
 
 	editor_principal = Principal(user=editor, group_ids=(), permissions=frozenset())
@@ -707,7 +709,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		session: AsyncSession,
 		principal: Principal | None = None,
 		*,
-		required_role: AccessRole = AccessRole.VIEWER,
+		required_level: AccessLevel = AccessLevel.READER,
 		include_hidden: bool = False,
 	) -> thread_service.Thread:
 		nonlocal called
@@ -718,7 +720,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 			thread_id,
 			session,
 			principal,
-			required_role=required_role,
+			required_level=required_level,
 			include_hidden=include_hidden,
 		)
 
