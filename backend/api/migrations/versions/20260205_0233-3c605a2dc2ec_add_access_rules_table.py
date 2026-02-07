@@ -149,17 +149,23 @@ def upgrade() -> None:
 	)
 
 	# --- roles table additions ---
+	bind = op.get_bind()
+	inspector = sa.inspect(bind)
+	role_columns = {col["name"] for col in inspector.get_columns("roles")}
 	with op.batch_alter_table("roles", schema=None) as batch_op:
-		batch_op.add_column(sa.Column("description", sa.Text(), nullable=True))
-		batch_op.add_column(
-			sa.Column(
-				"default_permissions",
-				sa.JSON(),
-				nullable=False,
-				server_default="{}",
+		if "description" not in role_columns:
+			batch_op.add_column(sa.Column("description", sa.Text(), nullable=True))
+		if "default_permissions" not in role_columns:
+			batch_op.add_column(
+				sa.Column(
+					"default_permissions",
+					sa.JSON(),
+					nullable=False,
+					server_default="{}",
+				)
 			)
-		)
-		batch_op.drop_column("permissions")
+		if "permissions" in role_columns:
+			batch_op.drop_column("permissions")
 
 	# --- drop old ACL table ---
 	with op.batch_alter_table("access_control_entries", schema=None) as batch_op:
@@ -257,6 +263,25 @@ def downgrade() -> None:
 			["project_id"],
 			unique=False,
 		)
+
+	# --- restore roles table columns ---
+	bind = op.get_bind()
+	inspector = sa.inspect(bind)
+	role_columns = {col["name"] for col in inspector.get_columns("roles")}
+	with op.batch_alter_table("roles", schema=None) as batch_op:
+		if "permissions" not in role_columns:
+			batch_op.add_column(
+				sa.Column(
+					"permissions",
+					sa.JSON(),
+					nullable=False,
+					server_default="{}",
+				)
+			)
+		if "default_permissions" in role_columns:
+			batch_op.drop_column("default_permissions")
+		if "description" in role_columns:
+			batch_op.drop_column("description")
 		batch_op.create_index(
 			batch_op.f("ix_access_control_entries_group_id"), ["group_id"], unique=False
 		)
