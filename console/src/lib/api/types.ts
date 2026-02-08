@@ -1560,6 +1560,8 @@ export interface components {
             prompt_id?: string | null;
             /** Group Id */
             group_id?: string | null;
+            /** Reminder List Id */
+            reminder_list_id?: string | null;
         };
         /**
          * AccessibilityPreferences
@@ -1927,6 +1929,7 @@ export interface components {
             file?: components["schemas"]["AccessLevel"] | null;
             note?: components["schemas"]["AccessLevel"] | null;
             group?: components["schemas"]["AccessLevel"] | null;
+            reminder_list?: components["schemas"]["AccessLevel"] | null;
         };
         /**
          * Event

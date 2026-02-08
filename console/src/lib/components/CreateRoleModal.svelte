@@ -52,6 +52,7 @@
 				file: input.resource_access?.file ?? null,
 				note: input.resource_access?.note ?? null,
 				group: input.resource_access?.group ?? null,
+				reminder_list: input.resource_access?.reminder_list ?? null,
 			},
 			action_permissions: [...(input.action_permissions ?? [])].sort(),
 		}

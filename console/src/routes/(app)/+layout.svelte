@@ -9,6 +9,7 @@
 		FileText,
 		FlaskConical,
 		LayoutDashboard,
+		ListChecks,
 		MessageSquare,
 		Plug,
 		ScrollText,
@@ -133,6 +134,17 @@
 			>
 				<StickyNote class="h-4 w-4" />
 				notes
+			</a>
+			<a
+				href={resolve('/reminders')}
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/reminders'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<ListChecks class="h-4 w-4" />
+				reminders
 			</a>
 			<a
 				href={resolve('/memories')}

@@ -95,6 +95,7 @@
 			file: null,
 			note: null,
 			group: null,
+			reminder_list: null,
 		},
 		action_permissions: [],
 	})
@@ -204,6 +205,7 @@
 				file: input.resource_access?.file ?? null,
 				note: input.resource_access?.note ?? null,
 				group: input.resource_access?.group ?? null,
+				reminder_list: input.resource_access?.reminder_list ?? null,
 			},
 			action_permissions: [...(input.action_permissions ?? [])].sort(),
 		}
@@ -375,6 +377,7 @@
 				file: defaultPermissions.resource_access?.file ?? null,
 				note: defaultPermissions.resource_access?.note ?? null,
 				group: defaultPermissions.resource_access?.group ?? null,
+				reminder_list: defaultPermissions.resource_access?.reminder_list ?? null,
 			},
 			action_permissions: defaultPermissions.action_permissions ?? [],
 		}
