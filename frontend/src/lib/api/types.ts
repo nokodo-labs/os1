@@ -333,7 +333,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/acl": {
+    "/threads/{thread_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -341,15 +341,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Thread Acl
-         * @description List acl entries for a thread.
+         * List Thread Access Rules
+         * @description List access rules for a thread.
          */
-        get: operations["list_thread_acl_threads__thread_id__acl_get"];
+        get: operations["list_thread_access_rules_threads__thread_id__access_rules_get"];
         /**
-         * Set Thread Acl
-         * @description Replace acl entries for a thread.
+         * Set Thread Access Rules
+         * @description Replace access rules for a thread.
          */
-        put: operations["set_thread_acl_threads__thread_id__acl_put"];
+        put: operations["set_thread_access_rules_threads__thread_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -650,7 +650,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}/acl": {
+    "/groups": {
         parameters: {
             query?: never;
             header?: never;
@@ -658,15 +658,131 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Project Acl
-         * @description List acl entries for a project.
+         * Read Groups
+         * @description list groups. optionally filter by member user_id.
          */
-        get: operations["list_project_acl_projects__project_id__acl_get"];
+        get: operations["read_groups_groups_get"];
+        put?: never;
         /**
-         * Set Project Acl
-         * @description Replace acl entries for a project.
+         * Create Group
+         * @description create a new group. the caller becomes the owner.
          */
-        put: operations["set_project_acl_projects__project_id__acl_put"];
+        post: operations["create_group_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Group
+         * @description get a group by id.
+         */
+        get: operations["read_group_groups__group_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Group
+         * @description delete a group.
+         */
+        delete: operations["delete_group_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Group
+         * @description update an existing group.
+         */
+        patch: operations["update_group_groups__group_id__patch"];
+        trace?: never;
+    };
+    "/groups/{group_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Member
+         * @description add a user to a group.
+         */
+        post: operations["add_member_groups__group_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{group_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Member
+         * @description remove a user from a group.
+         */
+        delete: operations["remove_member_groups__group_id__members__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{group_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Group Access Rules
+         * @description list access rules for a group.
+         */
+        get: operations["list_group_access_rules_groups__group_id__access_rules_get"];
+        /**
+         * Set Group Access Rules
+         * @description replace access rules for a group.
+         */
+        put: operations["set_group_access_rules_groups__group_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Project Access Rules
+         * @description list access rules for a project.
+         */
+        get: operations["list_project_access_rules_projects__project_id__access_rules_get"];
+        /**
+         * Set Project Access Rules
+         * @description replace access rules for a project.
+         */
+        put: operations["set_project_access_rules_projects__project_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -988,6 +1104,82 @@ export interface paths {
         patch: operations["update_agent_agents__agent_id__patch"];
         trace?: never;
     };
+    "/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Roles
+         * @description list all roles. optionally filter by user_id.
+         */
+        get: operations["read_roles_roles_get"];
+        put?: never;
+        /**
+         * Create Role
+         * @description create a new role.
+         */
+        post: operations["create_role_roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Role
+         * @description get a role by id.
+         */
+        get: operations["read_role_roles__role_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Role
+         * @description delete a role.
+         */
+        delete: operations["delete_role_roles__role_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Role
+         * @description update an existing role.
+         */
+        patch: operations["update_role_roles__role_id__patch"];
+        trace?: never;
+    };
+    "/roles/{role_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Role Members
+         * @description list users assigned to a role.
+         */
+        get: operations["read_role_members_roles__role_id__members_get"];
+        /**
+         * Set Role Members
+         * @description replace the entire member list for a role with the given user IDs.
+         */
+        put: operations["set_role_members_roles__role_id__members_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/prompts": {
         parameters: {
             query?: never;
@@ -1293,10 +1485,36 @@ export interface components {
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
         };
         /**
-         * AccessControlEntry
-         * @description response schema for an ace.
+         * AccessLevel
+         * @description level of access granted by an access rule or role default.
+         * @enum {string}
          */
-        AccessControlEntry: {
+        AccessLevel: "reader" | "editor" | "admin";
+        /**
+         * AccessRuleCreate
+         * @description payload for creating/updating access rules on a resource.
+         */
+        AccessRuleCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Subject User Id */
+            subject_user_id?: string | null;
+            /** Subject Group Id */
+            subject_group_id?: string | null;
+            /** Subject Role Id */
+            subject_role_id?: string | null;
+            /** @default reader */
+            level: components["schemas"]["AccessLevel"];
+            /**
+             * Order Index
+             * @default 0
+             */
+            order_index: number;
+        };
+        /**
+         * AccessRuleResponse
+         * @description response schema for an access rule.
+         */
+        AccessRuleResponse: {
             /**
              * Created At
              * Format: date-time
@@ -1307,45 +1525,44 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
+            /** Subject User Id */
+            subject_user_id?: string | null;
+            /** Subject Group Id */
+            subject_group_id?: string | null;
+            /** Subject Role Id */
+            subject_role_id?: string | null;
+            level: components["schemas"]["AccessLevel"];
+            /** Order Index */
+            order_index: number;
             /** Thread Id */
             thread_id?: string | null;
             /** Project Id */
             project_id?: string | null;
-            /** User Id */
-            user_id?: string | null;
-            /** Group Id */
-            group_id?: string | null;
             /** Agent Id */
             agent_id?: string | null;
-            role: components["schemas"]["AccessRole"];
-        };
-        /**
-         * AccessControlEntryCreate
-         * @description payload for setting acl entries on a resource.
-         */
-        AccessControlEntryCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
-            /** User Id */
-            user_id?: string | null;
+            /** Note Id */
+            note_id?: string | null;
+            /** Memory Id */
+            memory_id?: string | null;
+            /** Task Id */
+            task_id?: string | null;
+            /** File Id */
+            file_id?: string | null;
+            /** Plugin Id */
+            plugin_id?: string | null;
+            /** Prompt Id */
+            prompt_id?: string | null;
             /** Group Id */
             group_id?: string | null;
-            /** Agent Id */
-            agent_id?: string | null;
-            /** @default viewer */
-            role: components["schemas"]["AccessRole"];
+            /** Reminder List Id */
+            reminder_list_id?: string | null;
         };
-        /**
-         * AccessRole
-         * @description Level of access granted.
-         * @enum {string}
-         */
-        AccessRole: "viewer" | "editor" | "admin";
         /**
          * AccessibilityPreferences
          * @description user accessibility preferences.
@@ -1358,11 +1575,21 @@ export interface components {
             hapticFeedback?: boolean | null;
         };
         /**
+         * ActionPermission
+         * @description typed action permissions for role-based authorization.
+         *
+         *     use require_permission() to enforce them in service/router code.
+         *
+         *     naming convention: {domain}:{action}
+         * @enum {string}
+         */
+        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "users:create" | "settings:read" | "settings:write" | "events:read" | "events:manage" | "agents:read" | "agents:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "files:upload";
+        /**
          * Agent
          * @description Response schema.
          */
         Agent: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -1405,7 +1632,7 @@ export interface components {
          * @description Payload for agent creation.
          */
         AgentCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -1432,7 +1659,7 @@ export interface components {
          * @description Payload for agent update.
          */
         AgentUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -1459,9 +1686,6 @@ export interface components {
          * @enum {string}
          */
         AgentVisibility: "public" | "private" | "admin-only";
-        ApiJSONObject: {
-            [key: string]: unknown;
-        };
         /**
          * AppearancePreferences
          * @description user appearance preferences.
@@ -1636,11 +1860,83 @@ export interface components {
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
         /**
+         * DefaultPermissions
+         * @description default permissions model for both global settings and
+         *     role-scoped defaults.
+         *
+         *     resource_access: per-resource-type access level defaults.
+         *     action_permissions: set of action permissions granted by
+         *             default.
+         */
+        "DefaultPermissions-Input": {
+            resource_access?: components["schemas"]["DefaultResourceAccess"];
+            /** Action Permissions */
+            action_permissions?: components["schemas"]["ActionPermission"][];
+        };
+        /**
+         * DefaultPermissions
+         * @description default permissions model for both global settings and
+         *     role-scoped defaults.
+         *
+         *     resource_access: per-resource-type access level defaults.
+         *     action_permissions: set of action permissions granted by
+         *             default.
+         */
+        "DefaultPermissions-Output": {
+            resource_access?: components["schemas"]["DefaultResourceAccess"];
+            /** Action Permissions */
+            action_permissions?: components["schemas"]["ActionPermission"][];
+        };
+        /**
+         * DefaultPermissionsSettings
+         * @description global default permissions applied when no role or
+         *     explicit rule grants access.
+         */
+        DefaultPermissionsSettings: {
+            /** @description per-resource-type default access levels */
+            resource_access?: components["schemas"]["DefaultResourceAccess"];
+            /**
+             * Action Permissions
+             * @description action permissions granted by default, e.g. ['agents:read', 'prompts:read']
+             */
+            action_permissions?: components["schemas"]["ActionPermission"][];
+        };
+        /** DefaultPermissionsSettingsPatch */
+        DefaultPermissionsSettingsPatch: {
+            /** @description per-resource-type default access levels */
+            resource_access?: components["schemas"]["DefaultResourceAccess"] | null;
+            /**
+             * Action Permissions
+             * @description action permissions granted by default
+             */
+            action_permissions?: components["schemas"]["ActionPermission"][] | null;
+        };
+        /**
+         * DefaultResourceAccess
+         * @description per-resource-type access level defaults.
+         *
+         *     only covers user-owned resource types. admin-only resources
+         *     (agents, plugins, prompts, memories, tasks) are controlled via
+         *     action permissions and explicit access rules instead.
+         *
+         *     ``None`` means "no default for this resource type" — inherits
+         *     from the global settings when used on a role, or means "no
+         *     access" when used on the global settings themselves.
+         */
+        DefaultResourceAccess: {
+            thread?: components["schemas"]["AccessLevel"] | null;
+            project?: components["schemas"]["AccessLevel"] | null;
+            file?: components["schemas"]["AccessLevel"] | null;
+            note?: components["schemas"]["AccessLevel"] | null;
+            group?: components["schemas"]["AccessLevel"] | null;
+            reminder_list?: components["schemas"]["AccessLevel"] | null;
+        };
+        /**
          * Event
          * @description Event response.
          */
         Event: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1687,7 +1983,7 @@ export interface components {
          * @description Payload to emit a new event.
          */
         EventCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -1725,7 +2021,7 @@ export interface components {
          * @description Request payload to fetch events for a set of messages.
          */
         EventsByMessageIDsRequest: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Message Ids */
             message_ids?: string[];
         };
@@ -1774,6 +2070,100 @@ export interface components {
             media_type?: string | null;
         };
         /**
+         * Group
+         * @description Group schema.
+         */
+        Group: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
+            /**
+             * Memberships
+             * @default []
+             */
+            memberships: components["schemas"]["GroupMembershipResponse"][];
+        };
+        /**
+         * GroupCreate
+         * @description Schema for creating a group.
+         */
+        GroupCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+        };
+        /**
+         * GroupMemberRole
+         * @description Role of a user in a group.
+         * @enum {string}
+         */
+        GroupMemberRole: "owner" | "admin" | "member";
+        /**
+         * GroupMembershipCreate
+         * @description Schema for adding a member to a group.
+         */
+        GroupMembershipCreate: {
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
+            /** @default member */
+            role: components["schemas"]["GroupMemberRole"];
+        };
+        /**
+         * GroupMembershipResponse
+         * @description Schema for a group membership.
+         */
+        GroupMembershipResponse: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
+            role: components["schemas"]["GroupMemberRole"];
+        };
+        /**
+         * GroupUpdate
+         * @description Schema for updating a group.
+         */
+        GroupUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /**
          * ImageContent
          * @description image content part.
          *
@@ -1798,6 +2188,18 @@ export interface components {
             /** Media Type */
             media_type?: string | null;
         };
+        "JSONObject-Input": {
+            [key: string]: components["schemas"]["JSONValue-Input"];
+        };
+        "JSONObject-Output": {
+            [key: string]: components["schemas"]["JSONValue-Output"];
+        };
+        "JSONValue-Input": boolean | number | string | {
+            [key: string]: components["schemas"]["JSONValue-Input"];
+        } | components["schemas"]["JSONValue-Input"][] | null;
+        "JSONValue-Output": boolean | number | string | {
+            [key: string]: components["schemas"]["JSONValue-Output"];
+        } | components["schemas"]["JSONValue-Output"][] | null;
         /**
          * JsonContent
          * @description structured JSON content (for structured outputs).
@@ -1872,7 +2274,7 @@ export interface components {
          * @description Response schema.
          */
         Memory: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1905,14 +2307,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            owner?: components["schemas"]["User"] | null;
         };
         /**
          * MemoryCreate
          * @description Payload to capture a memory.
          */
         MemoryCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -1932,7 +2333,7 @@ export interface components {
          * @description Payload to update a memory.
          */
         MemoryUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content?: string | null;
             /** Confidence */
@@ -1945,7 +2346,7 @@ export interface components {
          * @description Response schema.
          */
         Message: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /** Content */
@@ -2002,7 +2403,7 @@ export interface components {
          *     - A list of content part dicts or ContentPart objects
          */
         MessageCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /**
@@ -2046,7 +2447,7 @@ export interface components {
          * @description Response schema.
          */
         Model: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Display Name */
@@ -2095,7 +2496,7 @@ export interface components {
          * @description Payload to register a model.
          */
         ModelCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Display Name */
@@ -2138,7 +2539,7 @@ export interface components {
          * @description Payload to update a model.
          */
         ModelUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Display Name */
@@ -2166,7 +2567,7 @@ export interface components {
          * @description response schema.
          */
         Note: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /**
@@ -2198,14 +2599,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            owner?: components["schemas"]["User"] | null;
         };
         /**
          * NoteCreate
          * @description payload to create a note.
          */
         NoteCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title: string;
             /**
@@ -2223,7 +2623,7 @@ export interface components {
          * @description payload to update a note.
          */
         NoteUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Content */
@@ -2383,7 +2783,7 @@ export interface components {
          * @description Response schema.
          */
         Plugin: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -2432,7 +2832,7 @@ export interface components {
          * @description Payload for plugin creation.
          */
         PluginCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -2505,7 +2905,7 @@ export interface components {
          * @description Payload for plugin update.
          */
         PluginUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -2587,7 +2987,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -2610,7 +3010,7 @@ export interface components {
          * @description Response schema.
          */
         Prompt: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -2636,7 +3036,7 @@ export interface components {
          * @description Payload for prompt creation.
          */
         PromptCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Command
              * @description Prompt identifier, e.g. '/my-prompt'
@@ -2650,7 +3050,7 @@ export interface components {
          * @description Payload for prompt update.
          */
         PromptUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Command */
             command?: string | null;
             /** Content */
@@ -2661,7 +3061,7 @@ export interface components {
          * @description Response schema.
          */
         Provider: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2705,7 +3105,7 @@ export interface components {
          * @description Payload to create a provider.
          */
         ProviderCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -2751,7 +3151,7 @@ export interface components {
          * @description Partial provider update payload.
          */
         ProviderUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -2808,7 +3208,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /** Description */
@@ -2850,7 +3250,7 @@ export interface components {
          * @description schema for creating a reminder.
          */
         ReminderCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title: string;
             /** Description */
@@ -2890,7 +3290,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -2920,7 +3320,7 @@ export interface components {
          * @description schema for creating a reminder list.
          */
         ReminderListCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -2940,7 +3340,7 @@ export interface components {
          * @description schema for updating a reminder list.
          */
         ReminderListUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -2967,7 +3367,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -3018,7 +3418,7 @@ export interface components {
          * @description schema for updating a reminder.
          */
         ReminderUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Description */
@@ -3054,7 +3454,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /** Description */
@@ -3092,6 +3492,81 @@ export interface components {
             completed_at?: string | null;
             /** Subtasks */
             subtasks?: components["schemas"]["Reminder"][];
+        };
+        /**
+         * Role
+         * @description role response schema.
+         */
+        Role: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Quotas */
+            quotas?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            default_permissions?: components["schemas"]["DefaultPermissions-Output"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+        };
+        /**
+         * RoleCreate
+         * @description schema for creating a role.
+         */
+        RoleCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Quotas */
+            quotas?: {
+                [key: string]: unknown;
+            };
+            /** Priority */
+            priority?: number | null;
+            default_permissions?: components["schemas"]["DefaultPermissions-Input"];
+        };
+        /**
+         * RoleUpdate
+         * @description schema for updating a role.
+         */
+        RoleUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Quotas */
+            quotas?: {
+                [key: string]: unknown;
+            } | null;
+            /** Priority */
+            priority?: number | null;
+            default_permissions?: components["schemas"]["DefaultPermissions-Input"] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** SecuritySettings */
         SecuritySettings: {
@@ -3220,6 +3695,7 @@ export interface components {
             assets?: components["schemas"]["AssetsSettings"];
             limits?: components["schemas"]["LimitsSettings"];
             security?: components["schemas"]["SecuritySettings"];
+            default_permissions?: components["schemas"]["DefaultPermissionsSettings"];
         };
         /** SettingsPatch */
         SettingsPatch: {
@@ -3230,6 +3706,7 @@ export interface components {
             assets?: components["schemas"]["AssetsSettingsPatch"] | null;
             limits?: components["schemas"]["LimitsSettingsPatch"] | null;
             security?: components["schemas"]["SecuritySettingsPatch"] | null;
+            default_permissions?: components["schemas"]["DefaultPermissionsSettingsPatch"] | null;
         };
         /** SettingsResponse */
         SettingsResponse: {
@@ -3278,6 +3755,11 @@ export interface components {
              * @default 0
              */
             security: number;
+            /**
+             * Default Permissions
+             * @default 0
+             */
+            default_permissions: number;
         };
         /** @enum {string} */
         SortDir: "asc" | "desc";
@@ -3286,7 +3768,7 @@ export interface components {
          * @description Response model.
          */
         Task: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -3335,7 +3817,7 @@ export interface components {
          * @description Payload to start a task.
          */
         TaskCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default pending */
@@ -3373,7 +3855,7 @@ export interface components {
          * @description Mutable task fields for PATCH operations.
          */
         TaskUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             status?: components["schemas"]["TaskStatus"] | null;
             /** Progress */
             progress?: number | null;
@@ -3409,7 +3891,7 @@ export interface components {
          * @description Detailed response schema.
          */
         Thread: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -3455,7 +3937,6 @@ export interface components {
             updated_at: string;
             /** Deleted At */
             deleted_at?: string | null;
-            owner?: components["schemas"]["User"] | null;
             /** Projects */
             projects?: components["schemas"]["Project"][];
         };
@@ -3464,7 +3945,7 @@ export interface components {
          * @description Payload for creating a thread.
          */
         ThreadCreate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -3548,7 +4029,7 @@ export interface components {
          * @description Payload for updating a thread.
          */
         ThreadUpdate: {
-            metadata_?: components["schemas"]["ApiJSONObject"];
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
@@ -3639,8 +4120,6 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
-            /** Role Id */
-            role_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -3722,6 +4201,8 @@ export interface components {
             usage_quotas?: {
                 [key: string]: unknown;
             } | null;
+            /** Role Ids */
+            role_ids?: string[] | null;
         };
         /**
          * ValidationIssue
@@ -5823,7 +6304,7 @@ export interface operations {
             };
         };
     };
-    list_thread_acl_threads__thread_id__acl_get: {
+    list_thread_access_rules_threads__thread_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5840,7 +6321,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccessControlEntry"][];
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
             /** @description bad request */
@@ -5917,7 +6398,7 @@ export interface operations {
             };
         };
     };
-    set_thread_acl_threads__thread_id__acl_put: {
+    set_thread_access_rules_threads__thread_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -5928,7 +6409,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AccessControlEntryCreate"][];
+                "application/json": components["schemas"]["AccessRuleCreate"][];
             };
         };
         responses: {
@@ -5938,7 +6419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccessControlEntry"][];
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
             /** @description bad request */
@@ -8025,13 +8506,17 @@ export interface operations {
             };
         };
     };
-    list_project_acl_projects__project_id__acl_get: {
+    read_groups_groups_get: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
+            query?: {
+                skip?: number;
+                limit?: number;
+                sort_by?: string;
+                sort_dir?: components["schemas"]["SortDir"];
+                user_id?: string | null;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -8042,7 +8527,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccessControlEntry"][];
+                    "application/json": components["schemas"]["Group"][];
                 };
             };
             /** @description bad request */
@@ -8119,7 +8604,864 @@ export interface operations {
             };
         };
     };
-    set_project_acl_projects__project_id__acl_put: {
+    create_group_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_group_groups__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_group_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_group_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    add_member_groups__group_id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMembershipCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMembershipResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_member_groups__group_id__members__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_group_access_rules_groups__group_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_group_access_rules_groups__group_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_project_access_rules_projects__project_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_project_access_rules_projects__project_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -8130,7 +9472,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AccessControlEntryCreate"][];
+                "application/json": components["schemas"]["AccessRuleCreate"][];
             };
         };
         responses: {
@@ -8140,7 +9482,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccessControlEntry"][];
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
             /** @description bad request */
@@ -10622,6 +11964,679 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Agent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_roles_roles_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                sort_by?: string;
+                sort_dir?: string;
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_role_roles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_role_roles__role_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_role_roles__role_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_role_roles__role_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Role"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_role_members_roles__role_id__members_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_role_members_roles__role_id__members_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": string[];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"][];
                 };
             };
             /** @description bad request */
