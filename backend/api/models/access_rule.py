@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 	from api.models.plugin import Plugin
 	from api.models.project import Project
 	from api.models.prompt import Prompt
+	from api.models.reminder import ReminderList
 	from api.models.role import Role
 	from api.models.task import Task
 	from api.models.thread import Thread
@@ -128,6 +129,11 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 		ForeignKey("groups.id", ondelete="CASCADE"),
 		index=True,
 	)
+	reminder_list_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("reminder_lists.id", ondelete="CASCADE"),
+		index=True,
+	)
 
 	thread: Mapped[Thread | None] = relationship(
 		"Thread", back_populates="access_rules"
@@ -152,6 +158,10 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 		"Group",
 		foreign_keys="AccessRule.group_id",
 		back_populates="resource_access_rules",
+	)
+	reminder_list: Mapped[ReminderList | None] = relationship(
+		"ReminderList",
+		back_populates="access_rules",
 	)
 
 	# subject relationships
@@ -184,6 +194,7 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 			"plugin_id",
 			"prompt_id",
 			"group_id",
+			"reminder_list_id",
 			name="uq_access_rule_subject_resource",
 		),
 		CheckConstraint(

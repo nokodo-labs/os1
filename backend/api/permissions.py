@@ -81,6 +81,7 @@ class ResourceType(StrEnum):
 	PLUGIN = "plugin"
 	PROMPT = "prompt"
 	GROUP = "group"
+	REMINDER_LIST = "reminder_list"
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +122,7 @@ DEFAULT_ACCESS_RESOURCE_TYPES: frozenset[ResourceType] = frozenset(
 		ResourceType.FILE,
 		ResourceType.NOTE,
 		ResourceType.GROUP,
+		ResourceType.REMINDER_LIST,
 	}
 )
 
@@ -145,6 +147,7 @@ class DefaultResourceAccess(BaseModel):
 	file: AccessLevel | None = None
 	note: AccessLevel | None = None
 	group: AccessLevel | None = None
+	reminder_list: AccessLevel | None = None
 
 	def get(self, resource_type: ResourceType) -> AccessLevel | None:
 		"""look up the access level for a resource type."""

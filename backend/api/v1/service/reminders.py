@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.reminder import Reminder, ReminderList, ReminderStatus
+from api.permissions import ResourceType
 from api.schemas.reminder import (
 	ReminderCreate,
 	ReminderListCreate,
@@ -22,6 +23,10 @@ from api.schemas.reminder import (
 )
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import (
+	require_resource_access,
+	resource_access_predicate,
+)
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
 
@@ -92,7 +97,9 @@ async def list_reminder_lists(
 ) -> list[ReminderListWithCounts]:
 	"""list reminder lists, optionally with counts (single query)."""
 	if not include_counts:
-		stmt = select(ReminderList).where(ReminderList.owner_id == principal.user_id)
+		stmt = select(ReminderList).where(
+			resource_access_predicate(principal, ResourceType.REMINDER_LIST)
+		)
 		stmt = apply_sort(
 			stmt,
 			sort_by=sort_by,
@@ -115,7 +122,6 @@ async def list_reminder_lists(
 				case((Reminder.status == ReminderStatus.COMPLETED, 1), else_=0)
 			).label("completed"),
 		)
-		.where(Reminder.owner_id == principal.user_id)
 		.where(Reminder.parent_id.is_(None))
 		.group_by(Reminder.list_id)
 		.subquery()
@@ -129,7 +135,7 @@ async def list_reminder_lists(
 			func.coalesce(counts_subq.c.completed, 0).label("completed_count"),
 		)
 		.outerjoin(counts_subq, ReminderList.id == counts_subq.c.list_id)
-		.where(ReminderList.owner_id == principal.user_id)
+		.where(resource_access_predicate(principal, ResourceType.REMINDER_LIST))
 	)
 	stmt = apply_sort(
 		stmt, sort_by=sort_by, sort_dir=sort_dir, columns=_REMINDER_LIST_SORT_COLUMNS
@@ -194,11 +200,18 @@ async def get_reminder_list(
 ) -> ReminderList:
 	"""get a reminder list by id."""
 	reminder_list = await session.get(ReminderList, list_id)
-	if not reminder_list or reminder_list.owner_id != principal.user_id:
+	if not reminder_list:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="reminder list not found",
 		)
+	await require_resource_access(
+		str(list_id),
+		session,
+		principal,
+		ResourceType.REMINDER_LIST,
+		owner_id=reminder_list.owner_id,
+	)
 	return reminder_list
 
 
@@ -320,18 +333,20 @@ async def list_reminders(
 	sort_dir: SortDir = "asc",
 ) -> list[ReminderWithSubtasks]:
 	"""list top-level reminders, optionally with subtasks eagerly loaded."""
-	stmt = (
-		select(Reminder)
-		.where(Reminder.owner_id == principal.user_id)
-		.where(Reminder.parent_id.is_(None))
-	)
+	stmt = select(Reminder).where(Reminder.parent_id.is_(None))
 
 	if include_subtasks:
 		stmt = stmt.options(selectinload(Reminder.subtasks))
 
 	if list_id is None:
-		stmt = stmt.where(Reminder.list_id.is_(None))
+		# default list — owner-only (no list to share)
+		stmt = stmt.where(
+			Reminder.list_id.is_(None),
+			Reminder.owner_id == principal.user_id,
+		)
 	else:
+		# verify the caller can access this list
+		await get_reminder_list(list_id, session, principal=principal)
 		stmt = stmt.where(Reminder.list_id == list_id)
 
 	if status_filter is not None:
@@ -365,11 +380,28 @@ async def get_reminder(
 	else:
 		reminder = await session.get(Reminder, reminder_id)
 
-	if not reminder or reminder.owner_id != principal.user_id:
+	if not reminder:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="reminder not found",
 		)
+	# access check: owner always has access; otherwise check list access
+	if reminder.owner_id != principal.user_id and not principal.is_admin:
+		if reminder.list_id:
+			# delegate to list access check — raises 403 if denied
+			await require_resource_access(
+				str(reminder.list_id),
+				session,
+				principal,
+				ResourceType.REMINDER_LIST,
+				owner_id=reminder.owner_id,
+			)
+		else:
+			# no list = owner-only
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="reminder not found",
+			)
 	return reminder
 
 

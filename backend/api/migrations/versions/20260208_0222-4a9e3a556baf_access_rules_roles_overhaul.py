@@ -48,6 +48,7 @@ def upgrade() -> None:
 		sa.Column("plugin_id", sa.String(length=90), nullable=True),
 		sa.Column("prompt_id", sa.String(length=90), nullable=True),
 		sa.Column("group_id", sa.String(length=90), nullable=True),
+		sa.Column("reminder_list_id", sa.String(length=90), nullable=True),
 		sa.Column("id", sa.String(length=90), nullable=False),
 		sa.Column(
 			"created_at",
@@ -86,6 +87,9 @@ def upgrade() -> None:
 		sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
 		sa.ForeignKeyConstraint(["prompt_id"], ["prompts.id"], ondelete="CASCADE"),
 		sa.ForeignKeyConstraint(
+			["reminder_list_id"], ["reminder_lists.id"], ondelete="CASCADE"
+		),
+		sa.ForeignKeyConstraint(
 			["subject_group_id"], ["groups.id"], ondelete="CASCADE"
 		),
 		sa.ForeignKeyConstraint(["subject_role_id"], ["roles.id"], ondelete="CASCADE"),
@@ -107,6 +111,7 @@ def upgrade() -> None:
 			"plugin_id",
 			"prompt_id",
 			"group_id",
+			"reminder_list_id",
 			name="uq_access_rule_subject_resource",
 		),
 	)
@@ -134,6 +139,11 @@ def upgrade() -> None:
 		)
 		batch_op.create_index(
 			batch_op.f("ix_access_rules_prompt_id"), ["prompt_id"], unique=False
+		)
+		batch_op.create_index(
+			batch_op.f("ix_access_rules_reminder_list_id"),
+			["reminder_list_id"],
+			unique=False,
 		)
 		batch_op.create_index(
 			batch_op.f("ix_access_rules_subject_group_id"),
@@ -318,6 +328,7 @@ def downgrade() -> None:
 		batch_op.drop_index(batch_op.f("ix_access_rules_subject_role_id"))
 		batch_op.drop_index(batch_op.f("ix_access_rules_subject_group_id"))
 		batch_op.drop_index(batch_op.f("ix_access_rules_prompt_id"))
+		batch_op.drop_index(batch_op.f("ix_access_rules_reminder_list_id"))
 		batch_op.drop_index(batch_op.f("ix_access_rules_project_id"))
 		batch_op.drop_index(batch_op.f("ix_access_rules_plugin_id"))
 		batch_op.drop_index(batch_op.f("ix_access_rules_note_id"))

@@ -18,6 +18,7 @@ from api.models.mixins import (
 
 
 if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
 	from api.models.thread import Thread
 	from api.models.user import User
 
@@ -48,6 +49,11 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 	owner: Mapped[User] = relationship("User", back_populates="reminder_lists")
 	reminders: Mapped[list[Reminder]] = relationship(
 		"Reminder",
+		back_populates="reminder_list",
+		cascade="all, delete-orphan",
+	)
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
 		back_populates="reminder_list",
 		cascade="all, delete-orphan",
 	)

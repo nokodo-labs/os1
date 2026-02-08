@@ -19,6 +19,7 @@ from api.models.note import Note
 from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
+from api.models.reminder import ReminderList
 from api.models.task import Task
 from api.models.thread import Thread
 from api.permissions import ResourceType
@@ -97,6 +98,12 @@ RESOURCE_CONFIG: dict[ResourceType, ResourceConfig] = {
 		id_col=Group.id,
 		rule_fk=AccessRule.group_id,
 		owner_fk=Group.owner_id,
+		deleted_at_col=None,
+	),
+	ResourceType.REMINDER_LIST: ResourceConfig(
+		id_col=ReminderList.id,
+		rule_fk=AccessRule.reminder_list_id,
+		owner_fk=ReminderList.owner_id,
 		deleted_at_col=None,
 	),
 }
