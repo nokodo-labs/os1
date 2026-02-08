@@ -1065,7 +1065,7 @@ export interface paths {
         };
         /**
          * List Agents
-         * @description List all agents.
+         * @description List all agents visible to the caller.
          */
         get: operations["list_agents_agents_get"];
         put?: never;
@@ -1094,7 +1094,11 @@ export interface paths {
         get: operations["get_agent_agents__agent_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Agent
+         * @description Delete an agent.
+         */
+        delete: operations["delete_agent_agents__agent_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -1102,6 +1106,35 @@ export interface paths {
          * @description Update an agent.
          */
         patch: operations["update_agent_agents__agent_id__patch"];
+        trace?: never;
+    };
+    "/agents/{agent_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agent Access Rules
+         * @description list access rules for an agent.
+         *
+         *     requires agents:manage permission (not resource-level admin) because
+         *     agents are admin-managed resources without individual owners.
+         */
+        get: operations["list_agent_access_rules_agents__agent_id__access_rules_get"];
+        /**
+         * Set Agent Access Rules
+         * @description replace access rules for an agent.
+         *
+         *     requires agents:manage permission.
+         */
+        put: operations["set_agent_access_rules_agents__agent_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/roles": {
@@ -1586,9 +1619,19 @@ export interface components {
         ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "users:create" | "settings:read" | "settings:write" | "events:read" | "events:manage" | "agents:read" | "agents:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "files:upload";
         /**
          * Agent
-         * @description Response schema.
+         * @description Agent response schema — returns IDs only, no hydrated relationships.
          */
         Agent: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
@@ -1615,17 +1658,6 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            model?: components["schemas"]["Model"] | null;
         };
         /**
          * AgentCreate
@@ -1936,6 +1968,16 @@ export interface components {
          * @description Event response.
          */
         Event: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
@@ -1967,16 +2009,6 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * EventCreate
@@ -2274,6 +2306,16 @@ export interface components {
          * @description Response schema.
          */
         Memory: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** Content */
             content: string;
@@ -2297,16 +2339,6 @@ export interface components {
             embedding?: string | null;
             /** Last Accessed At */
             last_accessed_at?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * MemoryCreate
@@ -2346,6 +2378,16 @@ export interface components {
          * @description Response schema.
          */
         Message: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default user */
             type: components["schemas"]["MessageType"];
@@ -2383,16 +2425,6 @@ export interface components {
             sender_agent_id?: string | null;
             /** Sender User Id */
             sender_user_id?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * MessageCreate
@@ -2447,6 +2479,16 @@ export interface components {
          * @description Response schema.
          */
         Model: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
@@ -2480,16 +2522,6 @@ export interface components {
             id: string;
             /** Provider Id */
             provider_id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * ModelCreate
@@ -2567,6 +2599,16 @@ export interface components {
          * @description response schema.
          */
         Note: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
@@ -2589,16 +2631,6 @@ export interface components {
             user_id: string;
             /** Deleted At */
             deleted_at?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * NoteCreate
@@ -2637,6 +2669,16 @@ export interface components {
          */
         Notification: {
             /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
              * User Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
@@ -2658,16 +2700,6 @@ export interface components {
             id: string;
             /** Read At */
             read_at?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
             event?: components["schemas"]["Event"] | null;
         };
         /**
@@ -2783,6 +2815,16 @@ export interface components {
          * @description Response schema.
          */
         Plugin: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Name
@@ -2816,16 +2858,6 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * PluginCreate
@@ -3010,16 +3042,6 @@ export interface components {
          * @description Response schema.
          */
         Prompt: {
-            metadata_?: components["schemas"]["JSONObject-Output"];
-            /**
-             * Command
-             * @description Prompt identifier, e.g. '/my-prompt'
-             */
-            command: string;
-            /** Content */
-            content: string;
-            /** Id */
-            id: string;
             /**
              * Created At
              * Format: date-time
@@ -3030,6 +3052,16 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /**
+             * Command
+             * @description Prompt identifier, e.g. '/my-prompt'
+             */
+            command: string;
+            /** Content */
+            content: string;
+            /** Id */
+            id: string;
         };
         /**
          * PromptCreate
@@ -3061,6 +3093,16 @@ export interface components {
          * @description Response schema.
          */
         Provider: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
@@ -3089,16 +3131,6 @@ export interface components {
             last_synced_at?: string | null;
             /** Id */
             id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * ProviderCreate
@@ -3768,6 +3800,16 @@ export interface components {
          * @description Response model.
          */
         Task: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
@@ -3801,16 +3843,6 @@ export interface components {
             cancelled_at?: string | null;
             /** Last Event At */
             last_event_at?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * TaskCreate
@@ -3891,6 +3923,16 @@ export interface components {
          * @description Detailed response schema.
          */
         Thread: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             metadata_?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title?: string | null;
@@ -3925,16 +3967,6 @@ export interface components {
              * Format: date-time
              */
             last_activity_at: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
             /** Deleted At */
             deleted_at?: string | null;
             /** Projects */
@@ -4088,6 +4120,16 @@ export interface components {
          */
         User: {
             /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
              * Email
              * Format: email
              */
@@ -4120,16 +4162,6 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * UserCreate
@@ -11942,6 +11974,98 @@ export interface operations {
             };
         };
     };
+    delete_agent_agents__agent_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     update_agent_agents__agent_id__patch: {
         parameters: {
             query?: never;
@@ -11964,6 +12088,198 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Agent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_agent_access_rules_agents__agent_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_agent_access_rules_agents__agent_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
             /** @description bad request */

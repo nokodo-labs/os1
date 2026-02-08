@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from api.models.provider import ProviderStatus, ProviderType
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 
 
 class ProviderBase(MetadataModel):
@@ -44,9 +44,7 @@ class ProviderUpdate(MetadataModel):
 	last_synced_at: datetime | None = None
 
 
-class Provider(ProviderBase):
+class Provider(ProviderBase, TimestampedModel):
 	"""Response schema."""
 
 	id: str
-	created_at: datetime
-	updated_at: datetime

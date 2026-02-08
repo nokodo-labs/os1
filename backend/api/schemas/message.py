@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated, Any
 
 from pydantic import Field, field_validator, model_validator
 
 from api.models.message import MessageType
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 from api.schemas.content import (
 	ContentPart,
 	TextContent,
@@ -155,7 +154,7 @@ class MessageCreate(MetadataModel):
 				raise ValueError(f"unknown sdk message role: {sdk_msg.role}")
 
 
-class Message(MessageBase):
+class Message(MessageBase, TimestampedModel):
 	"""Response schema."""
 
 	id: TypeID
@@ -164,5 +163,3 @@ class Message(MessageBase):
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
 	sender_user_id: TypeID | None = None
-	created_at: datetime
-	updated_at: datetime

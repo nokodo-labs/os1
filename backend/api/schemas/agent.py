@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from pydantic import Field
 
 from api.models.agent import AgentVisibility
-from api.schemas.common import MetadataModel
-from api.schemas.model import Model
+from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -47,10 +45,7 @@ class AgentUpdate(MetadataModel):
 	profile_image_url: str | None = None
 
 
-class Agent(AgentBase):
-	"""Response schema."""
+class Agent(AgentBase, TimestampedModel):
+	"""Agent response schema — returns IDs only, no hydrated relationships."""
 
 	id: TypeID
-	created_at: datetime
-	updated_at: datetime
-	model: Model | None = None

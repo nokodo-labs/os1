@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
 
 from api.models.plugin import PluginType
-from api.schemas.common import MetadataModel, ORMModel
+from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -45,12 +44,10 @@ class PluginUpdate(MetadataModel):
 	source_code: str | None = None
 
 
-class Plugin(PluginBase):
+class Plugin(PluginBase, TimestampedModel):
 	"""Response schema."""
 
 	id: TypeID
-	created_at: datetime
-	updated_at: datetime
 
 
 class PluginInfo(ORMModel):

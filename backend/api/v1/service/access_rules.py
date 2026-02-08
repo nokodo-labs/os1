@@ -87,6 +87,19 @@ async def _list_rules_for_resource(
 	return list(result.scalars().all())
 
 
+async def list_access_rules_unchecked(
+	resource_type: ResourceType,
+	resource_id: str,
+	session: AsyncSession,
+) -> list[AccessRule]:
+	"""list access rules for a resource without authorization checks.
+
+	the caller is responsible for verifying that the principal has
+	appropriate permissions before calling this function.
+	"""
+	return await _list_rules_for_resource(resource_type, resource_id, session)
+
+
 async def list_access_rules(
 	resource_type: ResourceType,
 	resource_id: str,
@@ -126,7 +139,31 @@ async def set_access_rules(
 		resource_type,
 		required_level=AccessLevel.ADMIN,
 	)
+	return await _set_rules_impl(resource_type, resource_id, rules, session)
 
+
+async def set_access_rules_unchecked(
+	resource_type: ResourceType,
+	resource_id: str,
+	rules: list[AccessRuleCreate],
+	session: AsyncSession,
+) -> list[AccessRule]:
+	"""replace all access rules for a resource without authorization checks.
+
+	the caller is responsible for verifying that the principal has
+	appropriate permissions before calling this function.
+	subject FK validity is enforced by the database.
+	"""
+	return await _set_rules_impl(resource_type, resource_id, rules, session)
+
+
+async def _set_rules_impl(
+	resource_type: ResourceType,
+	resource_id: str,
+	rules: list[AccessRuleCreate],
+	session: AsyncSession,
+) -> list[AccessRule]:
+	"""shared implementation for replacing access rules on a resource."""
 	existing = await _list_rules_for_resource(resource_type, resource_id, session)
 	existing_by_key = {_access_rule_key(r): r for r in existing}
 	desired_keys: set[str] = set()

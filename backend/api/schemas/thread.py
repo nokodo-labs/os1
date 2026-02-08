@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from api.schemas.common import MetadataModel, ORMModel
+from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
 from api.schemas.project import Project as ProjectSchema
 from nokodo_ai.utils.typeid import TypeID
 
@@ -78,15 +78,13 @@ class ThreadSummary(ORMModel):
 		return _populate_project_ids(data)
 
 
-class Thread(ThreadBase, ORMModel):
+class Thread(ThreadBase, TimestampedModel):
 	"""Detailed response schema."""
 
 	id: TypeID
 	owner_id: TypeID
 	current_message_id: TypeID | None = None
 	last_activity_at: datetime
-	created_at: datetime
-	updated_at: datetime
 	deleted_at: datetime | None = None
 	projects: list[ProjectSchema] = Field(default_factory=list)
 

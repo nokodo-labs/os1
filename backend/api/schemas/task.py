@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from api.models.task import TaskStatus, TaskType
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -36,7 +36,7 @@ class TaskUpdate(MetadataModel):
 	result: dict[str, Any] | None = None
 
 
-class Task(TaskBase):
+class Task(TaskBase, TimestampedModel):
 	"""Response model."""
 
 	id: TypeID
@@ -46,5 +46,3 @@ class Task(TaskBase):
 	completed_at: datetime | None = None
 	cancelled_at: datetime | None = None
 	last_event_at: datetime | None = None
-	created_at: datetime
-	updated_at: datetime

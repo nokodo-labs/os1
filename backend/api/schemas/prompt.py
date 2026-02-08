@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
 
 from pydantic import Field, field_validator
 
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 
 
 _COMMAND_PATTERN = r"^/[a-zA-Z0-9][a-zA-Z0-9-_]*$"
@@ -61,9 +60,7 @@ class PromptUpdate(MetadataModel):
 		return PromptBase._validate_command(value)
 
 
-class Prompt(PromptBase):
+class Prompt(PromptBase, TimestampedModel):
 	"""Response schema."""
 
 	id: str
-	created_at: datetime
-	updated_at: datetime

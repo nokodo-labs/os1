@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import Field
 
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -32,11 +32,9 @@ class NoteUpdate(MetadataModel):
 	labels: list[str] | None = None
 
 
-class Note(NoteBase):
+class Note(NoteBase, TimestampedModel):
 	"""response schema."""
 
 	id: TypeID
 	user_id: TypeID
 	deleted_at: datetime | None = None
-	created_at: datetime
-	updated_at: datetime

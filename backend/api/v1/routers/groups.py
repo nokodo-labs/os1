@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.models.access_rule import AccessRule
+from api.models.group import Group, GroupMembership
 from api.permissions import ResourceType
 from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
 from api.schemas.group import Group as GroupSchema
@@ -34,7 +36,7 @@ async def read_groups(
 	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[GroupSchema]:
+) -> list[Group]:
 	"""list groups. optionally filter by member user_id."""
 	return await groups_service.list_groups(
 		db,
@@ -52,7 +54,7 @@ async def read_group(
 	group_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> GroupSchema:
+) -> Group:
 	"""get a group by id."""
 	return await groups_service.get_group(group_id, db, principal=principal)
 
@@ -62,7 +64,7 @@ async def create_group(
 	group_in: GroupCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> GroupSchema:
+) -> Group:
 	"""create a new group. the caller becomes the owner."""
 	return await groups_service.create_group(group_in, db, principal=principal)
 
@@ -73,7 +75,7 @@ async def update_group(
 	body: GroupUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> GroupSchema:
+) -> Group:
 	"""update an existing group."""
 	return await groups_service.update_group(group_id, body, db, principal=principal)
 
@@ -101,7 +103,7 @@ async def add_member(
 	member_in: GroupMembershipCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> GroupMembershipResponse:
+) -> GroupMembership:
 	"""add a user to a group."""
 	return await groups_service.add_member(group_id, member_in, db, principal=principal)
 
@@ -131,7 +133,7 @@ async def list_group_access_rules(
 	group_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[AccessRuleResponse]:
+) -> list[AccessRule]:
 	"""list access rules for a group."""
 	return await access_rules_service.list_access_rules(
 		ResourceType.GROUP, str(group_id), db, principal=principal
@@ -147,7 +149,7 @@ async def set_group_access_rules(
 	rules: list[AccessRuleCreate],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[AccessRuleResponse]:
+) -> list[AccessRule]:
 	"""replace access rules for a group."""
 	return await access_rules_service.set_access_rules(
 		ResourceType.GROUP, str(group_id), rules, db, principal=principal

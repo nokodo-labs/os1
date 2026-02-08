@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import Field
 
 from api.models.model import ModelType
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 
 
 class ModelBase(MetadataModel):
@@ -32,13 +30,11 @@ class ModelCreate(ModelBase):
 	provider_id: str
 
 
-class Model(ModelBase):
+class Model(ModelBase, TimestampedModel):
 	"""Response schema."""
 
 	id: str
 	provider_id: str
-	created_at: datetime
-	updated_at: datetime
 
 
 class ModelUpdate(MetadataModel):

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import Base64Bytes
 
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,12 +33,10 @@ class MemoryUpdate(MetadataModel):
 	category: str | None = None
 
 
-class Memory(MemoryBase):
+class Memory(MemoryBase, TimestampedModel):
 	"""Response schema."""
 
 	id: TypeID
 	user_id: TypeID
 	embedding: Base64Bytes | None = None
 	last_accessed_at: datetime | None = None
-	created_at: datetime
-	updated_at: datetime

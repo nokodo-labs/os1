@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import Field
 
 from api.models.event import EventScope
-from api.schemas.common import MetadataModel
+from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,12 +33,10 @@ class EventCreate(EventBase):
 	pass
 
 
-class Event(EventBase):
+class Event(EventBase, TimestampedModel):
 	"""Event response."""
 
 	id: TypeID
-	created_at: datetime
-	updated_at: datetime
 
 
 class EventsByMessageIDsRequest(MetadataModel):

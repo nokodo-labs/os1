@@ -1,10 +1,10 @@
 """user schemas."""
 
-from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
 
+from api.schemas.common import TimestampedModel
 from api.schemas.preferences import UserPreferences
 from nokodo_ai.utils.typeid import TypeID
 
@@ -53,11 +53,7 @@ class UserUpdate(BaseModel):
 	role_ids: list[TypeID] | None = None
 
 
-class User(UserBase):
+class User(UserBase, TimestampedModel):
 	"""schema for user response."""
 
-	model_config = ConfigDict(from_attributes=True)
-
 	id: TypeID
-	created_at: datetime
-	updated_at: datetime

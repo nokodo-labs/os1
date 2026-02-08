@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from api.schemas.common import ORMModel
+from api.schemas.common import ORMModel, TimestampedModel
 from api.schemas.event import Event
 from nokodo_ai.utils.typeid import TypeID
 
@@ -19,13 +19,11 @@ class NotificationBase(ORMModel):
 	dismissed: bool = False
 
 
-class Notification(NotificationBase):
+class Notification(NotificationBase, TimestampedModel):
 	"""Response schema."""
 
 	id: TypeID
 	read_at: datetime | None = None
-	created_at: datetime
-	updated_at: datetime
 	event: Event | None = None
 
 

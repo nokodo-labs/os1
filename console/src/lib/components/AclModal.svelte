@@ -20,7 +20,7 @@
 		title = 'permissions',
 	}: {
 		open?: boolean
-		resourceType: 'thread' | 'project'
+		resourceType: 'thread' | 'project' | 'agent'
 		resourceId: string
 		title?: string
 	} = $props()
@@ -57,18 +57,25 @@
 		isLoading = true
 		error = null
 		try {
-			entries =
-				resourceType === 'thread'
-					? unwrap(
-							await api.GET('/v1/threads/{thread_id}/access-rules', {
-								params: { path: { thread_id: resourceId } },
-							})
-						)
-					: unwrap(
-							await api.GET('/v1/projects/{project_id}/access-rules', {
-								params: { path: { project_id: resourceId } },
-							})
-						)
+			if (resourceType === 'thread') {
+				entries = unwrap(
+					await api.GET('/v1/threads/{thread_id}/access-rules', {
+						params: { path: { thread_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'project') {
+				entries = unwrap(
+					await api.GET('/v1/projects/{project_id}/access-rules', {
+						params: { path: { project_id: resourceId } },
+					})
+				)
+			} else {
+				entries = unwrap(
+					await api.GET('/v1/agents/{agent_id}/access-rules', {
+						params: { path: { agent_id: resourceId } },
+					})
+				)
+			}
 		} catch (e: unknown) {
 			console.error('Failed to load acl', e)
 			error = e instanceof Error ? e.message : String(e)
@@ -95,6 +102,7 @@
 			id: `draft:${crypto.randomUUID()}`,
 			thread_id: resourceType === 'thread' ? resourceId : null,
 			project_id: resourceType === 'project' ? resourceId : null,
+			agent_id: resourceType === 'agent' ? resourceId : null,
 			subject_user_id: null,
 			subject_group_id: null,
 			subject_role_id: null,
@@ -146,20 +154,29 @@
 		isSaving = true
 		error = null
 		try {
-			entries =
-				resourceType === 'thread'
-					? unwrap(
-							await api.PUT('/v1/threads/{thread_id}/access-rules', {
-								params: { path: { thread_id: resourceId } },
-								body: entries.map((entry, index) => toCreate(entry, index)),
-							})
-						)
-					: unwrap(
-							await api.PUT('/v1/projects/{project_id}/access-rules', {
-								params: { path: { project_id: resourceId } },
-								body: entries.map((entry, index) => toCreate(entry, index)),
-							})
-						)
+			const body = entries.map((entry, index) => toCreate(entry, index))
+			if (resourceType === 'thread') {
+				entries = unwrap(
+					await api.PUT('/v1/threads/{thread_id}/access-rules', {
+						params: { path: { thread_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'project') {
+				entries = unwrap(
+					await api.PUT('/v1/projects/{project_id}/access-rules', {
+						params: { path: { project_id: resourceId } },
+						body,
+					})
+				)
+			} else {
+				entries = unwrap(
+					await api.PUT('/v1/agents/{agent_id}/access-rules', {
+						params: { path: { agent_id: resourceId } },
+						body,
+					})
+				)
+			}
 			open = false
 		} catch (e: unknown) {
 			console.error('Failed to save acl', e)

@@ -5,10 +5,10 @@
 		type Agent,
 		type AgentCreate,
 		type AgentUpdate,
-		type AgentVisibility,
 		type Model,
 		type PluginInfo,
 	} from '$lib/api'
+	import AclModal from '$lib/components/AclModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -23,7 +23,7 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { Pencil, Plus } from '@lucide/svelte'
+	import { Pencil, Plus, Shield, Trash2 } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
 	let agents = $state<Agent[]>([])
@@ -39,10 +39,12 @@
 	let error = $state<string | null>(null)
 	let submitError = $state<string | null>(null)
 
+	let showAclModal = $state(false)
+	let aclAgentId = $state('')
+
 	let formName = $state('')
 	let formDescription = $state('')
 	let formSystemPrompt = $state('')
-	let formVisibility = $state<AgentVisibility>('admin-only')
 	let formModelId = $state<string>('')
 	let formPluginIds = $state<string[]>([])
 	let formProfileImageUrl = $state('')
@@ -84,7 +86,6 @@
 		formName = ''
 		formDescription = ''
 		formSystemPrompt = ''
-		formVisibility = 'admin-only'
 		formModelId = ''
 		formPluginIds = []
 		formProfileImageUrl = ''
@@ -99,7 +100,6 @@
 		formName = agent.name ?? ''
 		formDescription = agent.description ?? ''
 		formSystemPrompt = agent.system_prompt ?? ''
-		formVisibility = agent.visibility ?? 'admin-only'
 		formModelId = agent.model_id ?? ''
 		formPluginIds = agent.plugin_ids ?? []
 		formProfileImageUrl = agent.profile_image_url ?? ''
@@ -152,6 +152,30 @@
 		return modalMode === 'create' ? 'failed to create agent' : 'failed to save agent'
 	}
 
+	function openAclModal(agentId: string) {
+		aclAgentId = agentId
+		showAclModal = true
+	}
+
+	async function handleDelete() {
+		if (!editingId) return
+		if (!confirm('are you sure you want to delete this agent?')) return
+		isLoading = true
+		submitError = null
+		try {
+			await api.DELETE('/v1/agents/{agent_id}', {
+				params: { path: { agent_id: editingId } },
+			})
+			showModal = false
+			await fetchData()
+		} catch (err: unknown) {
+			console.error('Failed to delete agent', err)
+			submitError = err instanceof Error ? err.message : 'failed to delete agent'
+		} finally {
+			isLoading = false
+		}
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault()
 		isLoading = true
@@ -174,7 +198,6 @@
 					name: formName.trim(),
 					description: formDescription.trim() ? formDescription.trim() : null,
 					system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
-					visibility: formVisibility,
 					model_id: formModelId ? formModelId : null,
 					plugin_ids: formPluginIds,
 					profile_image_file_id,
@@ -186,7 +209,6 @@
 					name: formName.trim(),
 					description: formDescription.trim() ? formDescription.trim() : null,
 					system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
-					visibility: formVisibility,
 					model_id: formModelId ? formModelId : null,
 					plugin_ids: formPluginIds,
 					profile_image_file_id,
@@ -245,18 +267,30 @@
 						<div class="flex items-start justify-between">
 							<div>
 								<CardTitle>{agent.name}</CardTitle>
-								<CardDescription>{agent.visibility || 'admin-only'}</CardDescription
-								>
+								{#if agent.description}
+									<CardDescription>{agent.description}</CardDescription>
+								{/if}
 							</div>
-							<Button
-								variant="ghost"
-								size="icon"
-								class="h-8 w-8 text-zinc-500"
-								onclick={() => openEditModal(agent)}
-								title="edit agent"
-							>
-								<Pencil class="h-4 w-4" />
-							</Button>
+							<div class="flex gap-1">
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-zinc-500"
+									onclick={() => openAclModal(agent.id)}
+									title="access rules"
+								>
+									<Shield class="h-4 w-4" />
+								</Button>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-zinc-500"
+									onclick={() => openEditModal(agent)}
+									title="edit agent"
+								>
+									<Pencil class="h-4 w-4" />
+								</Button>
+							</div>
 						</div>
 					</CardHeader>
 					<CardContent>
@@ -269,11 +303,6 @@
 								<div class="flex justify-between">
 									<span>plugins:</span>
 									<span class="truncate">{agent.plugin_ids.length}</span>
-								</div>
-							{/if}
-							{#if agent.description}
-								<div class="mt-2 border-t border-zinc-800 pt-2">
-									<p class="text-xs text-zinc-500">{agent.description}</p>
 								</div>
 							{/if}
 						</div>
@@ -385,19 +414,6 @@
 					</div>
 
 					<div class="space-y-2">
-						<Label for="visibility">visibility</Label>
-						<select
-							id="visibility"
-							bind:value={formVisibility}
-							class="flex h-10 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-						>
-							<option value="admin-only">admin-only</option>
-							<option value="private">private</option>
-							<option value="public">public</option>
-						</select>
-					</div>
-
-					<div class="space-y-2">
 						<Label for="description">description (optional)</Label>
 						<textarea
 							id="description"
@@ -477,29 +493,65 @@
 						</div>
 					{/if}
 				</CardContent>
-				<CardFooter class="flex justify-end gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						class="rounded-xl"
-						disabled={isLoading}
-						onclick={closeModal}
-					>
-						cancel
-					</Button>
-					<Button
-						type="submit"
-						class="rounded-xl"
-						disabled={isLoading || !formName.trim()}
-					>
-						{#if isLoading}
-							{modalMode === 'create' ? 'creating…' : 'saving…'}
-						{:else}
-							{modalMode === 'create' ? 'create agent' : 'save changes'}
+				<CardFooter class="flex justify-between gap-2">
+					<div class="flex gap-2">
+						{#if modalMode === 'edit' && editingId}
+							<Button
+								type="button"
+								variant="outline"
+								class="gap-2 rounded-xl text-red-400 hover:text-red-300"
+								disabled={isLoading}
+								onclick={handleDelete}
+							>
+								<Trash2 class="h-4 w-4" />
+								delete
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								class="gap-2 rounded-xl"
+								disabled={isLoading}
+								onclick={() => {
+									showModal = false
+									openAclModal(editingId!)
+								}}
+							>
+								<Shield class="h-4 w-4" />
+								access rules
+							</Button>
 						{/if}
-					</Button>
+					</div>
+					<div class="flex gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							class="rounded-xl"
+							disabled={isLoading}
+							onclick={closeModal}
+						>
+							cancel
+						</Button>
+						<Button
+							type="submit"
+							class="rounded-xl"
+							disabled={isLoading || !formName.trim()}
+						>
+							{#if isLoading}
+								{modalMode === 'create' ? 'creating…' : 'saving…'}
+							{:else}
+								{modalMode === 'create' ? 'create agent' : 'save changes'}
+							{/if}
+						</Button>
+					</div>
 				</CardFooter>
 			</form>
 		</Card>
 	</div>
 {/if}
+
+<AclModal
+	bind:open={showAclModal}
+	resourceType="agent"
+	resourceId={aclAgentId}
+	title="agent access rules"
+/>
