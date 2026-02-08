@@ -74,11 +74,11 @@ class TestDefaultPermissions:
 	def test_full_model(self) -> None:
 		dp = DefaultPermissions(
 			resource_access=DefaultResourceAccess(
-				agent=AccessLevel.ADMIN,
+				thread=AccessLevel.ADMIN,
 			),
 			action_permissions={ActionPermission.SETTINGS_WRITE},
 		)
-		assert dp.resource_access.agent == AccessLevel.ADMIN
+		assert dp.resource_access.thread == AccessLevel.ADMIN
 		assert ActionPermission.SETTINGS_WRITE in dp.action_permissions
 
 	def test_json_roundtrip(self) -> None:
@@ -120,13 +120,14 @@ class TestDefaultPermissions:
 		assert dp.resource_access.thread == AccessLevel.EDITOR
 		assert ActionPermission.AGENTS_READ in dp.action_permissions
 
-	def test_rejects_invalid_resource_type(self) -> None:
-		with pytest.raises(Exception):
-			DefaultPermissions.model_validate(
-				{
-					"resource_access": {"invalid_type": "reader"},
-				}
-			)
+	def test_ignores_unknown_resource_type(self) -> None:
+		"""unknown fields are silently ignored (supports DB migration)."""
+		dp = DefaultPermissions.model_validate(
+			{
+				"resource_access": {"invalid_type": "reader", "thread": "editor"},
+			}
+		)
+		assert dp.resource_access.thread == AccessLevel.EDITOR
 
 	def test_rejects_invalid_access_level(self) -> None:
 		with pytest.raises(Exception):

@@ -84,7 +84,9 @@ async def generate_thread_metadata(
 	thread = await session.get(
 		Thread,
 		thread_id,
-		options=[selectinload(Thread.messages), selectinload(Thread.owner)],
+		options=[
+			selectinload(Thread.messages),
+		],
 	)
 	if not thread or thread.deleted_at or thread.is_temporary:
 		return None
@@ -242,7 +244,9 @@ async def _load_thread(
 	required_level: AccessLevel = AccessLevel.READER,
 	include_hidden: bool = False,
 ) -> Thread:
-	options = [selectinload(Thread.owner), selectinload(Thread.projects)]
+	options = [
+		selectinload(Thread.projects),
+	]
 	stmt = select(Thread).options(*options).where(Thread.id == thread_id)
 
 	if principal is not None:
@@ -335,7 +339,6 @@ async def list_threads(
 		select(Thread)
 		.options(
 			selectinload(Thread.messages),
-			selectinload(Thread.owner),
 			selectinload(Thread.projects),
 		)
 		.where(

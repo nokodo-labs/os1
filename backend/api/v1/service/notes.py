@@ -5,7 +5,6 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from api.models.note import Note
 from api.schemas.note import NoteCreate, NoteUpdate
@@ -19,11 +18,7 @@ async def _get_note(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Note:
-	stmt = (
-		select(Note)
-		.options(selectinload(Note.owner))
-		.where(Note.id == note_id, Note.deleted_at.is_(None))
-	)
+	stmt = select(Note).where(Note.id == note_id, Note.deleted_at.is_(None))
 	if not principal.is_admin:
 		stmt = stmt.where(Note.user_id == principal.user.id)
 	result = await session.execute(stmt)
@@ -69,9 +64,7 @@ async def list_notes(
 
 	stmt = (
 		apply_sort(
-			select(Note)
-			.options(selectinload(Note.owner))
-			.where(Note.deleted_at.is_(None)),
+			select(Note).where(Note.deleted_at.is_(None)),
 			sort_by=sort_by,
 			sort_dir=sort_dir,
 			columns={

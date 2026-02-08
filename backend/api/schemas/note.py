@@ -7,7 +7,6 @@ from datetime import datetime
 from pydantic import Field
 
 from api.schemas.common import MetadataModel
-from api.schemas.user import User
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -41,4 +40,3 @@ class Note(NoteBase):
 	deleted_at: datetime | None = None
 	created_at: datetime
 	updated_at: datetime
-	owner: User | None = None

@@ -6,6 +6,7 @@ from api.v1.routers import (
 	agents,
 	auth,
 	events,
+	groups,
 	memories,
 	models,
 	notes,
@@ -34,6 +35,7 @@ api_router.include_router(events.router)
 api_router.include_router(notifications.router)
 api_router.include_router(memories.router)
 api_router.include_router(notes.router)
+api_router.include_router(groups.router)
 api_router.include_router(projects.router)
 api_router.include_router(reminders.router)
 api_router.include_router(providers.router)

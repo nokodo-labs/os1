@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
-		ProvidersService,
+		api,
+		unwrap,
 		type Provider,
 		type ProviderCreate,
 		type ProviderType,
@@ -113,7 +114,7 @@
 	async function loadProviders() {
 		error = null
 		try {
-			providers = await ProvidersService.listProvidersProvidersGet()
+			providers = unwrap(await api.GET('/v1/providers'))
 		} catch (e) {
 			console.error('Failed to load providers', e)
 			error = 'Failed to load providers. Please check if the backend is running.'
@@ -212,9 +213,10 @@
 						: null,
 					api_key: formState.api_key.trim() ? formState.api_key.trim() : null,
 					additional_headers: Object.keys(headers).length > 0 ? headers : null,
+					status: 'enabled',
 					is_autofetch_enabled: formState.is_autofetch_enabled,
 				}
-				await ProvidersService.createProviderProvidersPost(payload)
+				unwrap(await api.POST('/v1/providers', { body: payload }))
 			} else if (editingId) {
 				const payload: ProviderUpdate = {
 					adapter_type: formState.adapter_type,
@@ -227,7 +229,12 @@
 					is_autofetch_enabled: formState.is_autofetch_enabled,
 				}
 				if (formState.api_key.trim()) payload.api_key = formState.api_key.trim()
-				await ProvidersService.updateProviderProvidersProviderIdPatch(editingId, payload)
+				unwrap(
+					await api.PATCH('/v1/providers/{provider_id}', {
+						params: { path: { provider_id: editingId } },
+						body: payload,
+					})
+				)
 			}
 			await loadProviders()
 			showModal = false

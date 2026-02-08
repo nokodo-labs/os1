@@ -1,9 +1,7 @@
 <script lang="ts">
 	import {
-		AgentsService,
-		ApiError,
-		ModelsService,
-		PluginsService,
+		api,
+		unwrap,
 		type Agent,
 		type AgentCreate,
 		type AgentUpdate,
@@ -55,10 +53,14 @@
 		error = null
 		try {
 			const [agentsData, modelsData, toolPluginsData, filterPluginsData] = await Promise.all([
-				AgentsService.listAgentsAgentsGet(),
-				ModelsService.listModelsModelsGet(),
-				PluginsService.listAvailablePluginsPluginsAvailableGet('tool'),
-				PluginsService.listAvailablePluginsPluginsAvailableGet('filter'),
+				api.GET('/v1/agents').then((r) => unwrap(r)),
+				api.GET('/v1/models').then((r) => unwrap(r)),
+				api
+					.GET('/v1/plugins/available', { params: { query: { plugin_type: 'tool' } } })
+					.then((r) => unwrap(r)),
+				api
+					.GET('/v1/plugins/available', { params: { query: { plugin_type: 'filter' } } })
+					.then((r) => unwrap(r)),
 			])
 			agents = agentsData
 			models = modelsData
@@ -146,23 +148,7 @@
 	}
 
 	function formatSubmitError(err: unknown): string {
-		if (err instanceof ApiError) {
-			const detail = err.body?.detail
-			if (typeof detail === 'string') return detail
-			if (Array.isArray(detail) && detail.length > 0) {
-				const first = detail[0]
-				const msg = typeof first?.msg === 'string' ? first.msg : err.message
-				const loc = Array.isArray(first?.loc) ? first.loc.join('.') : null
-				return loc ? `${loc}: ${msg}` : msg
-			}
-			return err.message
-		}
-
-		if (err && typeof err === 'object' && 'message' in err) {
-			const message = (err as { message?: unknown }).message
-			if (typeof message === 'string' && message) return message
-		}
-
+		if (err instanceof Error && err.message) return err.message
 		return modalMode === 'create' ? 'failed to create agent' : 'failed to save agent'
 	}
 
@@ -194,7 +180,7 @@
 					profile_image_file_id,
 					profile_image_url,
 				}
-				await AgentsService.createAgentAgentsPost(payload)
+				unwrap(await api.POST('/v1/agents', { body: payload }))
 			} else if (editingId) {
 				const payload: AgentUpdate = {
 					name: formName.trim(),
@@ -206,7 +192,12 @@
 					profile_image_file_id,
 					profile_image_url,
 				}
-				await AgentsService.updateAgentAgentsAgentIdPatch(editingId, payload)
+				unwrap(
+					await api.PATCH('/v1/agents/{agent_id}', {
+						params: { path: { agent_id: editingId } },
+						body: payload,
+					})
+				)
 			}
 
 			showModal = false

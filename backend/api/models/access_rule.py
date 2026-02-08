@@ -123,6 +123,11 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 		ForeignKey("prompts.id", ondelete="CASCADE"),
 		index=True,
 	)
+	group_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("groups.id", ondelete="CASCADE"),
+		index=True,
+	)
 
 	thread: Mapped[Thread | None] = relationship(
 		"Thread", back_populates="access_rules"
@@ -142,6 +147,11 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	)
 	prompt: Mapped[Prompt | None] = relationship(
 		"Prompt", back_populates="access_rules"
+	)
+	group: Mapped[Group | None] = relationship(
+		"Group",
+		foreign_keys="AccessRule.group_id",
+		back_populates="resource_access_rules",
 	)
 
 	# subject relationships
@@ -173,6 +183,7 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 			"file_id",
 			"plugin_id",
 			"prompt_id",
+			"group_id",
 			name="uq_access_rule_subject_resource",
 		),
 		CheckConstraint(
@@ -180,5 +191,11 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 			"CASE WHEN subject_group_id IS NULL THEN 0 ELSE 1 END + "
 			"CASE WHEN subject_role_id IS NULL THEN 0 ELSE 1 END) IN (0, 1)",
 			name="ck_access_rules_single_principal",
+		),
+		# a group cannot grant itself access
+		CheckConstraint(
+			"subject_group_id IS NULL OR group_id IS NULL "
+			"OR subject_group_id != group_id",
+			name="ck_access_rules_no_self_group",
 		),
 	)

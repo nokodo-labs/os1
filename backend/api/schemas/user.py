@@ -50,6 +50,7 @@ class UserUpdate(BaseModel):
 	preferences: UserPreferences | None = None
 	integration_tokens: dict[str, Any] | None = None
 	usage_quotas: dict[str, Any] | None = None
+	role_ids: list[TypeID] | None = None
 
 
 class User(UserBase):

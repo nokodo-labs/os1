@@ -1,8 +1,7 @@
 <script lang="ts">
 	import {
-		AgentsService,
-		ModelsService,
-		ThreadsService,
+		api,
+		unwrap,
 		type Agent,
 		type Message,
 		type MessageCreate,
@@ -49,8 +48,8 @@
 		error = null
 		try {
 			const [agentsData, modelsData] = await Promise.all([
-				AgentsService.listAgentsAgentsGet(),
-				ModelsService.listModelsModelsGet(),
+				api.GET('/v1/agents').then((r) => unwrap(r)),
+				api.GET('/v1/models').then((r) => unwrap(r)),
 			])
 			agents = agentsData
 			models = modelsData
@@ -78,7 +77,11 @@
 
 	async function refreshMessages() {
 		if (!thread) return
-		messages = await ThreadsService.listMessagesThreadsThreadIdMessagesGet(thread.id)
+		messages = unwrap(
+			await api.GET('/v1/threads/{thread_id}/messages', {
+				params: { path: { thread_id: thread.id } },
+			})
+		)
 	}
 
 	async function createThread() {
@@ -93,8 +96,10 @@
 			const payload: ThreadCreate = {
 				owner_id: auth.user.id,
 				title: threadTitle.trim() ? threadTitle.trim() : null,
+				is_archived: false,
+				is_temporary: false,
 			}
-			thread = await ThreadsService.createThreadThreadsPost(payload)
+			thread = unwrap(await api.POST('/v1/threads', { body: payload }))
 			messages = []
 			await refreshMessages()
 		} catch (e: unknown) {
@@ -124,6 +129,7 @@
 			if (selectedAgentId) metadata.agent_id = selectedAgentId
 
 			const payload: MessageCreate = {
+				type: 'user',
 				content: messageContent.trim(),
 				sender_user_id: auth.user.id,
 				sender_agent_id: selectedAgentId || null,
@@ -133,7 +139,12 @@
 						: undefined,
 			}
 
-			await ThreadsService.createMessageThreadsThreadIdMessagesPost(thread.id, payload)
+			unwrap(
+				await api.POST('/v1/threads/{thread_id}/messages', {
+					params: { path: { thread_id: thread.id } },
+					body: payload,
+				})
+			)
 			messageContent = ''
 			await refreshMessages()
 		} catch (e: unknown) {

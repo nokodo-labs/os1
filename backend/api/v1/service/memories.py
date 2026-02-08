@@ -7,7 +7,6 @@ import struct
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate, MemoryUpdate
@@ -37,9 +36,7 @@ async def _get_memory(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Memory:
-	stmt = (
-		select(Memory).options(selectinload(Memory.owner)).where(Memory.id == memory_id)
-	)
+	stmt = select(Memory).where(Memory.id == memory_id)
 	if not principal.is_admin:
 		stmt = stmt.where(Memory.user_id == principal.user.id)
 	result = await session.execute(stmt)
@@ -97,9 +94,7 @@ async def list_memories(
 
 	stmt = (
 		apply_sort(
-			select(Memory)
-			.options(selectinload(Memory.owner))
-			.where(Memory.user_id == user_id),
+			select(Memory).where(Memory.user_id == user_id),
 			sort_by=sort_by,
 			sort_dir=sort_dir,
 			columns={

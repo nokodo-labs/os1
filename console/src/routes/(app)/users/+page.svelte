@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { UsersService, type User } from '$lib/api'
+	import { api, unwrap, type User } from '$lib/api'
 	import CreateUserModal from '$lib/components/CreateUserModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
@@ -141,7 +141,10 @@
 		isLoading = true
 		error = null
 
-		UsersService.readUsersUsersGet(skip, limit, sortKey, sortDir)
+		api.GET('/v1/users', {
+			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
+		})
+			.then((r) => unwrap(r))
 			.then((result) => {
 				users = result
 				hasNext = result.length === limit
@@ -168,7 +171,7 @@
 				type="search"
 				placeholder="search users..."
 				bind:value={searchQuery}
-				class="h-9 w-[200px] lg:w-[300px]"
+				class="h-9 w-50 lg:w-75"
 			/>
 			<Button class="gap-2 rounded-xl" onclick={() => (isCreateUserOpen = true)}>
 				<Plus class="h-4 w-4" />

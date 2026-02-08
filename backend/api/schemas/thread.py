@@ -9,7 +9,6 @@ from pydantic import Field, model_validator
 
 from api.schemas.common import MetadataModel, ORMModel
 from api.schemas.project import Project as ProjectSchema
-from api.schemas.user import User
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -89,7 +88,6 @@ class Thread(ThreadBase, ORMModel):
 	created_at: datetime
 	updated_at: datetime
 	deleted_at: datetime | None = None
-	owner: User | None = None
 	projects: list[ProjectSchema] = Field(default_factory=list)
 
 	@model_validator(mode="before")

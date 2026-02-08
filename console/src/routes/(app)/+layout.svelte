@@ -6,6 +6,7 @@
 		Bot,
 		Box,
 		Brain,
+		FileText,
 		FlaskConical,
 		LayoutDashboard,
 		MessageSquare,
@@ -13,7 +14,10 @@
 		ScrollText,
 		Server,
 		Settings,
+		Shield,
+		StickyNote,
 		Users,
+		UsersRound,
 	} from '@lucide/svelte'
 
 	let { children } = $props()
@@ -120,6 +124,17 @@
 				threads
 			</a>
 			<a
+				href={resolve('/notes')}
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/notes'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<StickyNote class="h-4 w-4" />
+				notes
+			</a>
+			<a
 				href={resolve('/memories')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/memories'
@@ -140,6 +155,39 @@
 			>
 				<Users class="h-4 w-4" />
 				users
+			</a>
+			<a
+				href={resolve('/groups')}
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/groups'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<UsersRound class="h-4 w-4" />
+				groups
+			</a>
+			<a
+				href={resolve('/files')}
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/files'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<FileText class="h-4 w-4" />
+				files
+			</a>
+			<a
+				href={resolve('/roles')}
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/roles'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Shield class="h-4 w-4" />
+				roles
 			</a>
 			<a
 				href={resolve('/settings')}

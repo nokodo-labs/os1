@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, insert, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.many_to_many import user_role_association
 from api.models.user import User
 from api.schemas.user import UserCreate, UserUpdate
 from api.settings import settings
@@ -156,6 +158,7 @@ async def update_user(
 			or user_in.avatar_url is not None
 			or user_in.integration_tokens is not None
 			or user_in.usage_quotas is not None
+			or user_in.role_ids is not None
 		):
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
@@ -191,8 +194,31 @@ async def update_user(
 			user.usage_quotas = dict(user_in.usage_quotas)
 		if user_in.password is not None:
 			user.hashed_password = hash_password(user_in.password)
+		if user_in.role_ids is not None:
+			# clear existing roles and insert new ones via the secondary table.
+			# FK constraints on user_roles will reject non-existent role IDs.
+			await session.execute(
+				delete(user_role_association).where(
+					user_role_association.c.user_id == str(user.id)
+				)
+			)
+			if user_in.role_ids:
+				await session.execute(
+					insert(user_role_association),
+					[
+						{"user_id": str(user.id), "role_id": str(rid)}
+						for rid in user_in.role_ids
+					],
+				)
 
 	session.add(user)
-	await session.commit()
+	try:
+		await session.commit()
+	except IntegrityError as exc:
+		await session.rollback()
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=f"invalid reference: {exc.orig}",
+		) from None
 	await session.refresh(user)
 	return user

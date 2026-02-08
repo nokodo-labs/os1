@@ -31,7 +31,7 @@ class ActionPermission(StrEnum):
 
 	# role management
 	ROLES_READ = "roles:read"
-	ROLES_ADMIN = "roles:admin"
+	ROLES_ADMIN = "roles:manage"
 
 	# user management
 	USERS_READ = "users:read"
@@ -64,6 +64,9 @@ class ActionPermission(StrEnum):
 	PROMPTS_READ = "prompts:read"
 	PROMPTS_MANAGE = "prompts:manage"
 
+	# features
+	FILES_UPLOAD = "files:upload"
+
 
 class ResourceType(StrEnum):
 	"""supported resource types for access control."""
@@ -77,6 +80,7 @@ class ResourceType(StrEnum):
 	FILE = "file"
 	PLUGIN = "plugin"
 	PROMPT = "prompt"
+	GROUP = "group"
 
 
 # ---------------------------------------------------------------------------
@@ -107,37 +111,54 @@ def higher_access(
 # ---------------------------------------------------------------------------
 
 
+# resource types that support default resource access (user-owned content).
+# admin-only resources (agent, plugin, prompt, memory, task) are governed
+# solely by action permissions and explicit access rules.
+DEFAULT_ACCESS_RESOURCE_TYPES: frozenset[ResourceType] = frozenset(
+	{
+		ResourceType.THREAD,
+		ResourceType.PROJECT,
+		ResourceType.FILE,
+		ResourceType.NOTE,
+		ResourceType.GROUP,
+	}
+)
+
+
 class DefaultResourceAccess(BaseModel):
 	"""
 	per-resource-type access level defaults.
+
+	only covers user-owned resource types. admin-only resources
+	(agents, plugins, prompts, memories, tasks) are controlled via
+	action permissions and explicit access rules instead.
 
 	``None`` means "no default for this resource type" — inherits
 	from the global settings when used on a role, or means "no
 	access" when used on the global settings themselves.
 	"""
 
-	model_config = ConfigDict(extra="forbid")
+	model_config = ConfigDict(extra="ignore")
 
 	thread: AccessLevel | None = None
 	project: AccessLevel | None = None
-	agent: AccessLevel | None = None
-	note: AccessLevel | None = None
-	memory: AccessLevel | None = None
-	task: AccessLevel | None = None
 	file: AccessLevel | None = None
-	plugin: AccessLevel | None = None
-	prompt: AccessLevel | None = None
+	note: AccessLevel | None = None
+	group: AccessLevel | None = None
 
 	def get(self, resource_type: ResourceType) -> AccessLevel | None:
 		"""look up the access level for a resource type."""
-		return getattr(self, resource_type.value)
+		field_name = resource_type.value
+		if field_name not in self.model_fields:
+			return None
+		return getattr(self, field_name)
 
 	def merge(self, other: DefaultResourceAccess) -> DefaultResourceAccess:
 		"""merge two access models, keeping the higher level for each."""
 		return DefaultResourceAccess(
 			**{
 				rt.value: higher_access(self.get(rt), other.get(rt))
-				for rt in ResourceType
+				for rt in DEFAULT_ACCESS_RESOURCE_TYPES
 			}
 		)
 

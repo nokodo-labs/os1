@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import Base
 from api.models.many_to_many import user_role_association
-from api.models.mixins import MetadataJSONMixin, TypeIDPrimaryKeyMixin
+from api.models.mixins import MetadataJSONMixin, TimestampMixin, TypeIDPrimaryKeyMixin
 from api.permissions import DefaultPermissions
 
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 	from api.models.user import User
 
 
-class Role(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
+class Role(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""role model for permissions and resource access defaults."""
 
 	__tablename__ = "roles"

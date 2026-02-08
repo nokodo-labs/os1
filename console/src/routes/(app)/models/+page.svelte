@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
 	import {
-		ModelsService,
-		ProvidersService,
+		api,
+		unwrap,
 		type Model,
 		type ModelCreate,
 		type ModelUpdate,
@@ -95,8 +95,8 @@
 		isFetching = true
 		try {
 			const [modelsData, providersData] = await Promise.all([
-				ModelsService.listModelsModelsGet(),
-				ProvidersService.listProvidersProvidersGet(),
+				api.GET('/v1/models').then((r) => unwrap(r)),
+				api.GET('/v1/providers').then((r) => unwrap(r)),
 			])
 			models = modelsData
 			providers = providersData
@@ -203,7 +203,7 @@
 				if (contextWindow !== null) createPayload.context_window = contextWindow
 				if (inputCost !== null) createPayload.input_cost = inputCost
 				if (outputCost !== null) createPayload.output_cost = outputCost
-				await ModelsService.createModelModelsPost(createPayload)
+				unwrap(await api.POST('/v1/models', { body: createPayload }))
 			} else if (editingId) {
 				// Exclude provider_id from update
 				const rest = Object.fromEntries(
@@ -215,7 +215,12 @@
 					input_cost: parseOptionalNumber(inputCostInput),
 					output_cost: parseOptionalNumber(outputCostInput),
 				} as unknown as ModelUpdate
-				await ModelsService.updateModelModelsModelIdPatch(editingId, updatePayload)
+				unwrap(
+					await api.PATCH('/v1/models/{model_id}', {
+						params: { path: { model_id: editingId } },
+						body: updatePayload as unknown as ModelUpdate,
+					})
+				)
 			}
 			showModal = false
 			await fetchData()
@@ -232,7 +237,11 @@
 		if (!confirm('Are you sure you want to delete this model?')) return
 		isLoading = true
 		try {
-			await ModelsService.deleteModelModelsModelIdDelete(editingId)
+			unwrap(
+				await api.DELETE('/v1/models/{model_id}', {
+					params: { path: { model_id: editingId } },
+				})
+			)
 			showModal = false
 			await fetchData()
 		} catch (e) {
@@ -246,7 +255,9 @@
 	async function handleDelete(id: string) {
 		if (!confirm('Are you sure you want to delete this model?')) return
 		try {
-			await ModelsService.deleteModelModelsModelIdDelete(id)
+			unwrap(
+				await api.DELETE('/v1/models/{model_id}', { params: { path: { model_id: id } } })
+			)
 			await fetchData()
 		} catch (e) {
 			console.error('Failed to delete model', e)

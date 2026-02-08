@@ -1,12 +1,14 @@
 <script lang="ts">
 	import {
-		AgentsService,
-		ApiError,
-		SettingsService,
+		api,
+		unwrap,
 		type Agent,
+		type DefaultPermissionsSettings,
+		type DefaultPermissionsSettingsPatch,
 		type SettingsResponse,
 		type SettingsUpdateRequest,
 	} from '$lib/api'
+	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -55,8 +57,6 @@
 	let uiDefaultTheme = $state<ThemeMode>('system')
 	let uiSidebarCollapsed = $state(false)
 
-	let featuresEnableFileUploads = $state(false)
-
 	type ChatContextMode = 'recent' | 'relevant' | 'pinned'
 
 	let aiDefaultAgentId = $state<string>('')
@@ -88,11 +88,21 @@
 	let securityRequireEmailVerification = $state(false)
 	let securityAllowedEmailDomains = $state('')
 
+	let defaultPermissions = $state<DefaultPermissionsSettings>({
+		resource_access: {
+			thread: null,
+			project: null,
+			file: null,
+			note: null,
+			group: null,
+		},
+		action_permissions: [],
+	})
+
 	// Original snapshots for change detection
 	let original = $state({
 		uiDefaultTheme: 'system' as ThemeMode,
 		uiSidebarCollapsed: false,
-		featuresEnableFileUploads: false,
 		aiDefaultAgentId: '',
 		aiMemoryEnable: false,
 		aiMemorySimilarityThreshold: '',
@@ -116,12 +126,22 @@
 		securitySessionTimeoutMinutes: '',
 		securityRequireEmailVerification: false,
 		securityAllowedEmailDomains: '',
+		defaultPermissions: {
+			resource_access: {
+				thread: null,
+				project: null,
+				file: null,
+				note: null,
+				group: null,
+			},
+			action_permissions: [],
+		} as DefaultPermissionsSettings,
+		defaultPermissionsKey: '',
 	})
 
 	const hasChanges = $derived(
 		uiDefaultTheme !== original.uiDefaultTheme ||
 			uiSidebarCollapsed !== original.uiSidebarCollapsed ||
-			featuresEnableFileUploads !== original.featuresEnableFileUploads ||
 			aiDefaultAgentId !== original.aiDefaultAgentId ||
 			aiMemoryEnable !== original.aiMemoryEnable ||
 			aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold ||
@@ -144,7 +164,8 @@
 			securityAuthCookieSecure !== original.securityAuthCookieSecure ||
 			securitySessionTimeoutMinutes !== original.securitySessionTimeoutMinutes ||
 			securityRequireEmailVerification !== original.securityRequireEmailVerification ||
-			securityAllowedEmailDomains !== original.securityAllowedEmailDomains
+			securityAllowedEmailDomains !== original.securityAllowedEmailDomains ||
+			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
 
 	function toStringOrEmpty(v: unknown): string {
@@ -173,6 +194,25 @@
 			.filter(Boolean)
 	}
 
+	function normalizeDefaultPermissions(
+		input: DefaultPermissionsSettings
+	): DefaultPermissionsSettings {
+		return {
+			resource_access: {
+				thread: input.resource_access?.thread ?? null,
+				project: input.resource_access?.project ?? null,
+				file: input.resource_access?.file ?? null,
+				note: input.resource_access?.note ?? null,
+				group: input.resource_access?.group ?? null,
+			},
+			action_permissions: [...(input.action_permissions ?? [])].sort(),
+		}
+	}
+
+	function defaultPermissionsKey(value: DefaultPermissionsSettings): string {
+		return JSON.stringify(normalizeDefaultPermissions(value))
+	}
+
 	function setFromResponse(r: SettingsResponse) {
 		response = r
 		saveSuccess = null
@@ -181,9 +221,6 @@
 		const ui = r.data.ui
 		uiDefaultTheme = (ui?.default_theme as ThemeMode) ?? 'system'
 		uiSidebarCollapsed = ui?.sidebar_collapsed ?? false
-
-		const features = r.data.features
-		featuresEnableFileUploads = features?.enable_file_uploads ?? false
 
 		const ai = r.data.ai
 		aiDefaultAgentId = ai?.default_agent_id ?? ''
@@ -228,10 +265,14 @@
 		securityEnableOauth = toBool(security?.enable_oauth)
 		securityCorsOrigins = (security?.cors_origins ?? []).join(', ')
 
+		const defaults = r.data.default_permissions
+		defaultPermissions = normalizeDefaultPermissions(
+			defaults ?? { resource_access: {}, action_permissions: [] }
+		)
+
 		original = {
 			uiDefaultTheme,
 			uiSidebarCollapsed,
-			featuresEnableFileUploads,
 			aiDefaultAgentId,
 			aiMemoryEnable,
 			aiMemorySimilarityThreshold,
@@ -255,6 +296,8 @@
 			securitySessionTimeoutMinutes,
 			securityRequireEmailVerification,
 			securityAllowedEmailDomains,
+			defaultPermissions,
+			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
 		}
 	}
 
@@ -262,7 +305,7 @@
 		isFetching = true
 		error = null
 		try {
-			const r = await SettingsService.getSettingsSettingsGet()
+			const r = unwrap(await api.GET('/v1/settings'))
 			setFromResponse(r)
 		} catch (e) {
 			console.error('Failed to fetch settings', e)
@@ -276,7 +319,7 @@
 		isFetchingAgents = true
 		agentsError = null
 		try {
-			const list = await AgentsService.listAgentsAgentsGet()
+			const list = unwrap(await api.GET('/v1/agents'))
 			agents = [...list].sort((a, b) => a.name.localeCompare(b.name))
 		} catch (e) {
 			console.error('Failed to fetch agents', e)
@@ -289,7 +332,6 @@
 	function resetDraft() {
 		uiDefaultTheme = original.uiDefaultTheme
 		uiSidebarCollapsed = original.uiSidebarCollapsed
-		featuresEnableFileUploads = original.featuresEnableFileUploads
 		aiDefaultAgentId = original.aiDefaultAgentId
 		aiMemoryEnable = original.aiMemoryEnable
 		aiMemorySimilarityThreshold = original.aiMemorySimilarityThreshold
@@ -313,6 +355,7 @@
 		securitySessionTimeoutMinutes = original.securitySessionTimeoutMinutes
 		securityRequireEmailVerification = original.securityRequireEmailVerification
 		securityAllowedEmailDomains = original.securityAllowedEmailDomains
+		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
 	}
@@ -322,6 +365,19 @@
 		if (!trimmed) return null
 		const n = Number(trimmed)
 		return Number.isFinite(n) ? n : null
+	}
+
+	function buildDefaultPermissionsPatch(): DefaultPermissionsSettingsPatch {
+		return {
+			resource_access: {
+				thread: defaultPermissions.resource_access?.thread ?? null,
+				project: defaultPermissions.resource_access?.project ?? null,
+				file: defaultPermissions.resource_access?.file ?? null,
+				note: defaultPermissions.resource_access?.note ?? null,
+				group: defaultPermissions.resource_access?.group ?? null,
+			},
+			action_permissions: defaultPermissions.action_permissions ?? [],
+		}
 	}
 
 	function buildUpdateRequest(): SettingsUpdateRequest {
@@ -335,12 +391,6 @@
 			if (uiDefaultTheme !== original.uiDefaultTheme) data.ui.default_theme = uiDefaultTheme
 			if (uiSidebarCollapsed !== original.uiSidebarCollapsed)
 				data.ui.sidebar_collapsed = uiSidebarCollapsed
-		}
-
-		if (featuresEnableFileUploads !== original.featuresEnableFileUploads) {
-			data.features = {}
-			if (featuresEnableFileUploads !== original.featuresEnableFileUploads)
-				data.features.enable_file_uploads = featuresEnableFileUploads
 		}
 
 		if (
@@ -458,6 +508,10 @@
 				data.security.allowed_email_domains = parseCommaList(securityAllowedEmailDomains)
 		}
 
+		if (defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey) {
+			data.default_permissions = buildDefaultPermissionsPatch()
+		}
+
 		return {
 			data,
 			expected_versions: response?.versions ?? null,
@@ -473,20 +527,21 @@
 
 		try {
 			const req = buildUpdateRequest()
-			const r = await SettingsService.updateSettingsSettingsPatch(req)
-			setFromResponse(r)
+			const result = await api.PATCH('/v1/settings', { body: req })
+			if (result.error) {
+				if (result.response.status === 409) {
+					saveError = 'settings were updated elsewhere. reload and try again.'
+				} else {
+					const detail = result.error?.detail
+					saveError = typeof detail === 'string' ? detail : 'failed to save settings'
+				}
+				return
+			}
+			setFromResponse(result.data!)
 			saveSuccess = 'saved'
 		} catch (e) {
 			console.error('Failed to save settings', e)
-			if (e instanceof ApiError) {
-				if (e.status === 409) {
-					saveError = 'settings were updated elsewhere. reload and try again.'
-				} else {
-					saveError = e.message || 'failed to save settings'
-				}
-			} else {
-				saveError = 'failed to save settings'
-			}
+			saveError = 'failed to save settings'
 		} finally {
 			isSaving = false
 		}
@@ -575,25 +630,6 @@
 							id="sidebar_collapsed"
 							checked={uiSidebarCollapsed}
 							onCheckedChange={(v: boolean) => (uiSidebarCollapsed = v)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
-
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>features</CardTitle>
-					<CardDescription>toggle product capabilities.</CardDescription>
-				</CardHeader>
-				<CardContent class="space-y-5">
-					<div class="flex items-center justify-between">
-						<div class="space-y-0.5">
-							<Label for="enable_file_uploads">enable file uploads</Label>
-						</div>
-						<Switch
-							id="enable_file_uploads"
-							checked={featuresEnableFileUploads}
-							onCheckedChange={(v: boolean) => (featuresEnableFileUploads = v)}
 						/>
 					</div>
 				</CardContent>
@@ -1024,6 +1060,21 @@
 							onCheckedChange={(v: boolean) => (securityRequireEmailVerification = v)}
 						/>
 					</div>
+				</CardContent>
+			</Card>
+
+			<Card class="border-zinc-800 bg-zinc-950">
+				<CardHeader>
+					<CardTitle>default permissions</CardTitle>
+					<CardDescription>
+						global defaults applied when no role or explicit rule grants access.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<DefaultPermissionsEditor
+						bind:value={defaultPermissions}
+						allowInherit={false}
+					/>
 				</CardContent>
 			</Card>
 		</div>

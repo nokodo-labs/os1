@@ -1,129 +1,93 @@
-type FetchOptions = RequestInit & {
-	params?: Record<string, string | number>
+import { authReady, clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth.svelte'
+import createClient from 'openapi-fetch'
+import type { paths } from './types'
+
+type PrefixedPaths<P, Prefix extends string> = {
+	[K in keyof P as K extends string ? `${Prefix}${K}` : never]: P[K]
 }
 
-class APIError extends Error {
-	constructor(
-		message: string,
-		public status: number,
-		public response?: unknown
-	) {
-		super(message)
-		this.name = 'APIError'
-	}
-}
+export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
 
-class APIClient {
-	private baseURL: string
+const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1383'
 
-	constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:1383/v1') {
-		this.baseURL = baseURL
-	}
+// ── Deduped refresh ──────────────────────────────────────────────────
+let refreshInFlight: Promise<string | null> | null = null
 
-	private async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-		const { params, ...fetchOptions } = options
+export async function refreshAccessToken(): Promise<string | null> {
+	if (refreshInFlight) return refreshInFlight
 
-		let url = `${this.baseURL}${endpoint}`
-
-		if (params) {
-			const searchParams = new URLSearchParams(
-				Object.entries(params).map(([key, value]) => [key, String(value)])
-			)
-			url += `?${searchParams}`
-		}
-
-		const headers = new Headers(fetchOptions.headers)
-		if (
-			!headers.has('Content-Type') &&
-			fetchOptions.body &&
-			!(fetchOptions.body instanceof FormData) &&
-			!(fetchOptions.body instanceof URLSearchParams)
-		) {
-			headers.set('Content-Type', 'application/json')
-		}
-
-		// Add auth token if available
-		const token = localStorage.getItem('access_token')
-		if (token) {
-			headers.set('Authorization', `Bearer ${token}`)
-		}
-
-		const response = await fetch(url, {
-			...fetchOptions,
-			headers,
-		})
-
-		if (response.status === 401 && typeof window !== 'undefined') {
-			try {
-				localStorage.removeItem('access_token')
-			} catch {
-				// ignore
+	refreshInFlight = (async () => {
+		try {
+			const { data, response } = await rawApi.POST('/v1/auth/refresh', {})
+			if (!response.ok || !data?.access_token) {
+				clearAccessToken()
+				return null
 			}
-
-			const path = window.location?.pathname ?? ''
-			if (path !== '/login' && path !== '/welcome') {
-				window.location.assign('/login')
-			}
+			setAccessToken(data.access_token)
+			return data.access_token
+		} finally {
+			refreshInFlight = null
 		}
+	})()
 
-		if (!response.ok) {
-			const errorData = await response.json().catch(() => null)
-			throw new APIError(errorData?.detail || response.statusText, response.status, errorData)
-		}
-
-		const contentType = response.headers.get('Content-Type')
-		if (!contentType?.includes('application/json')) {
-			return null as T
-		}
-
-		return response.json()
-	}
-
-	async get<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, { ...options, method: 'GET' })
-	}
-
-	async post<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'POST',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
-
-	async put<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'PUT',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
-
-	async patch<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'PATCH',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
-
-	async delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, { ...options, method: 'DELETE' })
-	}
-
-	async postForm<T>(
-		endpoint: string,
-		data: URLSearchParams | FormData,
-		options?: FetchOptions
-	): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'POST',
-			body: data,
-		})
-	}
+	return refreshInFlight
 }
 
-export const apiClient = new APIClient()
-export { APIError }
-export type { FetchOptions }
+// ── Fetch wrappers ───────────────────────────────────────────────────
+
+/** Raw fetch: cookies included, no Authorization header, no auth gate. */
+async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	const req = input instanceof Request ? input : new Request(input, init)
+	return fetch(new Request(req, { credentials: 'include' }))
+}
+
+/** Authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
+async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	await authReady
+
+	const req = input instanceof Request ? input : new Request(input, init)
+	const retryReq = req.clone()
+
+	const token = getAccessToken()
+	const headers = new Headers(req.headers)
+	if (token && !headers.has('Authorization')) {
+		headers.set('Authorization', `Bearer ${token}`)
+	}
+
+	const res = await fetch(new Request(req, { headers, credentials: 'include' }))
+	if (res.status !== 401) return res
+
+	// 401 — try refreshing once
+	const refreshed = await refreshAccessToken()
+	if (!refreshed) return res
+
+	const retryHeaders = new Headers(retryReq.headers)
+	retryHeaders.set('Authorization', `Bearer ${refreshed}`)
+	return fetch(new Request(retryReq, { headers: retryHeaders, credentials: 'include' }))
+}
+
+// ── Clients ──────────────────────────────────────────────────────────
+
+/** Unauthenticated client — for login, register, refresh, logout, etc. */
+export const rawApi = createClient<ApiPaths>({
+	baseUrl: DEFAULT_API_BASE,
+	fetch: rawFetch,
+})
+
+/** Authenticated client — waits for auth, injects Bearer, auto-retries on 401. */
+export const api = createClient<ApiPaths>({
+	baseUrl: DEFAULT_API_BASE,
+	fetch: authFetch,
+})
+
+/** Throw if the openapi-fetch response has an error, otherwise return data. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function unwrap<T>(result: { data?: T; error?: any; response: Response }): T {
+	if (result.error !== undefined) {
+		const detail = result.error?.detail
+		throw new Error(
+			typeof detail === 'string' ? detail : `request failed (${result.response.status})`
+		)
+	}
+	return result.data as T
+}

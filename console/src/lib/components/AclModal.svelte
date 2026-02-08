@@ -1,17 +1,17 @@
 <script lang="ts">
 	import {
-		ProjectsService,
-		ThreadsService,
-		type AccessControlEntry,
-		type AccessControlEntryCreate,
+		api,
+		unwrap,
+		type AccessLevel,
+		type AccessRuleCreate,
+		type AccessRuleResponse,
 	} from '$lib/api'
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Dialog } from 'bits-ui'
 
-	type PrincipalType = 'user' | 'group' | 'agent'
-	type Role = AccessControlEntry['role']
+	type PrincipalType = 'user' | 'group' | 'role'
 
 	let {
 		open = $bindable(false),
@@ -29,25 +29,26 @@
 	let isSaving = $state(false)
 	let error = $state<string | null>(null)
 
-	let entries = $state<AccessControlEntry[]>([])
+	let entries = $state<AccessRuleResponse[]>([])
 
 	let newPrincipalType = $state<PrincipalType>('user')
 	let newPrincipalId = $state<string>('')
-	let newRole = $state<Role>('viewer')
+	let newLevel = $state<AccessLevel>('reader')
 
-	function principalLabel(entry: AccessControlEntry) {
-		if (entry.user_id) return `user:${entry.user_id}`
-		if (entry.group_id) return `group:${entry.group_id}`
-		if (entry.agent_id) return `agent:${entry.agent_id}`
+	function principalLabel(entry: AccessRuleResponse) {
+		if (entry.subject_user_id) return `user:${entry.subject_user_id}`
+		if (entry.subject_group_id) return `group:${entry.subject_group_id}`
+		if (entry.subject_role_id) return `role:${entry.subject_role_id}`
 		return 'unknown'
 	}
 
-	function toCreate(entry: AccessControlEntry): AccessControlEntryCreate {
+	function toCreate(entry: AccessRuleResponse, index: number): AccessRuleCreate {
 		return {
-			role: entry.role,
-			user_id: entry.user_id,
-			group_id: entry.group_id,
-			agent_id: entry.agent_id,
+			level: entry.level,
+			subject_user_id: entry.subject_user_id,
+			subject_group_id: entry.subject_group_id,
+			subject_role_id: entry.subject_role_id,
+			order_index: index,
 			metadata_: entry.metadata_,
 		}
 	}
@@ -58,8 +59,16 @@
 		try {
 			entries =
 				resourceType === 'thread'
-					? await ThreadsService.listThreadAclThreadsThreadIdAclGet(resourceId)
-					: await ProjectsService.listProjectAclProjectsProjectIdAclGet(resourceId)
+					? unwrap(
+							await api.GET('/v1/threads/{thread_id}/access-rules', {
+								params: { path: { thread_id: resourceId } },
+							})
+						)
+					: unwrap(
+							await api.GET('/v1/projects/{project_id}/access-rules', {
+								params: { path: { project_id: resourceId } },
+							})
+						)
 		} catch (e: unknown) {
 			console.error('Failed to load acl', e)
 			error = e instanceof Error ? e.message : String(e)
@@ -82,23 +91,24 @@
 			return
 		}
 
-		const next: AccessControlEntry = {
+		const next: AccessRuleResponse = {
 			id: `draft:${crypto.randomUUID()}`,
 			thread_id: resourceType === 'thread' ? resourceId : null,
 			project_id: resourceType === 'project' ? resourceId : null,
-			user_id: null,
-			group_id: null,
-			agent_id: null,
-			role: newRole,
+			subject_user_id: null,
+			subject_group_id: null,
+			subject_role_id: null,
+			level: newLevel,
+			order_index: entries.length,
 			created_at: new Date().toISOString(),
 			updated_at: new Date().toISOString(),
 		}
 
 		if (newPrincipalType === 'user') {
-			next.user_id = principalId
+			next.subject_user_id = principalId
 		}
-		if (newPrincipalType === 'group') next.group_id = principalId
-		if (newPrincipalType === 'agent') next.agent_id = principalId
+		if (newPrincipalType === 'group') next.subject_group_id = principalId
+		if (newPrincipalType === 'role') next.subject_role_id = principalId
 
 		const key = principalLabel(next)
 		if (entries.some((e) => principalLabel(e) === key)) {
@@ -108,15 +118,28 @@
 
 		entries = [...entries, next]
 		newPrincipalId = ''
-		newRole = 'viewer'
+		newLevel = 'reader'
 	}
 
 	function removeEntry(id: string) {
 		entries = entries.filter((e) => e.id !== id)
 	}
 
-	function updateRole(id: string, role: Role) {
-		entries = entries.map((e) => (e.id === id ? { ...e, role } : e))
+	function updateLevel(id: string, level: AccessLevel) {
+		entries = entries.map((e) => (e.id === id ? { ...e, level } : e))
+	}
+
+	function parseAccessLevel(value: string): AccessLevel | null {
+		if (value === 'reader') return 'reader'
+		if (value === 'editor') return 'editor'
+		if (value === 'admin') return 'admin'
+		return null
+	}
+
+	function readSelectValue(event: Event): string | null {
+		const target = event.currentTarget
+		if (target instanceof HTMLSelectElement) return target.value
+		return null
 	}
 
 	async function save() {
@@ -125,13 +148,17 @@
 		try {
 			entries =
 				resourceType === 'thread'
-					? await ThreadsService.setThreadAclThreadsThreadIdAclPut(
-							resourceId,
-							entries.map(toCreate)
+					? unwrap(
+							await api.PUT('/v1/threads/{thread_id}/access-rules', {
+								params: { path: { thread_id: resourceId } },
+								body: entries.map((entry, index) => toCreate(entry, index)),
+							})
 						)
-					: await ProjectsService.setProjectAclProjectsProjectIdAclPut(
-							resourceId,
-							entries.map(toCreate)
+					: unwrap(
+							await api.PUT('/v1/projects/{project_id}/access-rules', {
+								params: { path: { project_id: resourceId } },
+								body: entries.map((entry, index) => toCreate(entry, index)),
+							})
 						)
 			open = false
 		} catch (e: unknown) {
@@ -183,7 +210,7 @@
 								>
 									<option value="user">user</option>
 									<option value="group">group</option>
-									<option value="agent">agent</option>
+									<option value="role">role</option>
 								</select>
 							</div>
 							<div class="space-y-2">
@@ -195,12 +222,12 @@
 								/>
 							</div>
 							<div class="space-y-2">
-								<Label>role</Label>
+								<Label>level</Label>
 								<select
-									bind:value={newRole}
+									bind:value={newLevel}
 									class="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm"
 								>
-									<option value="viewer">viewer</option>
+									<option value="reader">reader</option>
 									<option value="editor">editor</option>
 									<option value="admin">admin</option>
 								</select>
@@ -234,17 +261,18 @@
 										</div>
 										<div>
 											<select
-												value={entry.role}
-												onchange={(e) =>
-													updateRole(
-														entry.id,
-														(e.currentTarget as HTMLSelectElement)
-															.value as Role
-													)}
+												value={entry.level}
+												onchange={(e) => {
+													const nextValue = readSelectValue(e)
+													if (!nextValue) return
+													const nextLevel = parseAccessLevel(nextValue)
+													if (!nextLevel) return
+													updateLevel(entry.id, nextLevel)
+												}}
 												class="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm"
 												disabled={isSaving}
 											>
-												<option value="viewer">viewer</option>
+												<option value="reader">reader</option>
 												<option value="editor">editor</option>
 												<option value="admin">admin</option>
 											</select>

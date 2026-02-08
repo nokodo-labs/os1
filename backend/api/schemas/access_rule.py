@@ -55,6 +55,7 @@ class AccessRuleResponse(MetadataModel, TimestampedModel, ORMModel):
 	file_id: TypeID | None = None
 	plugin_id: TypeID | None = None
 	prompt_id: TypeID | None = None
+	group_id: TypeID | None = None
 
 
 class AccessRulesUpdate(ORMModel):

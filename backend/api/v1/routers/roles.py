@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.role import Role
+from api.models.user import User
 from api.schemas.role import Role as RoleSchema
 from api.schemas.role import RoleCreate, RoleUpdate
+from api.schemas.user import User as UserSchema
 from api.v1.service import roles as roles_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
@@ -21,12 +23,21 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 async def read_roles(
 	skip: int = 0,
 	limit: int = 100,
+	sort_by: str = "priority",
+	sort_dir: str = "desc",
+	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Role]:
-	"""list all roles."""
+	"""list all roles. optionally filter by user_id."""
 	return await roles_service.list_roles(
-		db, principal=principal, skip=skip, limit=limit
+		db,
+		principal=principal,
+		skip=skip,
+		limit=limit,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		user_id=str(user_id) if user_id else None,
 	)
 
 
@@ -69,3 +80,35 @@ async def delete_role(
 ) -> None:
 	"""delete a role."""
 	await roles_service.delete_role(role_id, db, principal=principal)
+
+
+# ---------------------------------------------------------------------------
+# role members
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{role_id}/members", response_model=list[UserSchema])
+async def read_role_members(
+	role_id: TypeID,
+	skip: int = 0,
+	limit: int = 100,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[User]:
+	"""list users assigned to a role."""
+	return await roles_service.list_role_members(
+		role_id, db, principal=principal, skip=skip, limit=limit
+	)
+
+
+@router.put("/{role_id}/members", response_model=list[UserSchema])
+async def set_role_members(
+	role_id: TypeID,
+	body: list[TypeID],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[User]:
+	"""replace the entire member list for a role with the given user IDs."""
+	return await roles_service.set_role_members(
+		role_id, [str(uid) for uid in body], db, principal=principal
+	)

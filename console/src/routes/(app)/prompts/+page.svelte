@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { PromptsService, type Prompt } from '$lib/api'
+	import { api, unwrap, type Prompt } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -117,7 +117,10 @@
 
 		isLoading = true
 		error = null
-		PromptsService.listPromptsPromptsGet(skip, limit, sortKey, sortDir)
+		api.GET('/v1/prompts', {
+			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
+		})
+			.then((r) => unwrap(r))
 			.then((result) => {
 				prompts = result
 				hasNext = result.length === limit
@@ -167,15 +170,24 @@
 		error = null
 		try {
 			if (modalMode === 'edit' && editingId) {
-				await PromptsService.updatePromptPromptsPromptIdPatch(editingId, {
-					command: trimmedCommand,
-					content: formContent,
-				})
+				await unwrap(
+					await api.PATCH('/v1/prompts/{prompt_id}', {
+						params: { path: { prompt_id: editingId } },
+						body: {
+							command: trimmedCommand,
+							content: formContent,
+						},
+					})
+				)
 			} else {
-				await PromptsService.createPromptPromptsPost({
-					command: trimmedCommand,
-					content: formContent,
-				})
+				await unwrap(
+					await api.POST('/v1/prompts', {
+						body: {
+							command: trimmedCommand,
+							content: formContent,
+						},
+					})
+				)
 			}
 			refresh()
 			closeModal()
@@ -193,7 +205,11 @@
 		isDeleting = true
 		error = null
 		try {
-			await PromptsService.deletePromptPromptsPromptIdDelete(promptId)
+			await unwrap(
+				await api.DELETE('/v1/prompts/{prompt_id}', {
+					params: { path: { prompt_id: promptId } },
+				})
+			)
 			refresh()
 		} catch (e: unknown) {
 			error = e instanceof Error ? e.message : 'failed to delete prompt'

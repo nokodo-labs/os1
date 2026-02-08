@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { UsersService, type User } from '$lib/api'
+	import { api, unwrap, type User } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -40,6 +40,11 @@
 		close()
 	}
 
+	function openRoles(userId: string) {
+		void goto(resolve('/roles'), { state: { user: userId } })
+		close()
+	}
+
 	function errorMessage(error: unknown): string {
 		if (error instanceof Error) return error.message
 		if (typeof error === 'string') return error
@@ -55,7 +60,8 @@
 		error = null
 		user = null
 
-		UsersService.readUserUsersUserIdGet(userId)
+		api.GET('/v1/users/{user_id}', { params: { path: { user_id: userId } } })
+			.then((r) => unwrap(r))
 			.then((u) => {
 				user = u
 			})
@@ -101,6 +107,13 @@
 								onclick={() => user && openMemories(user.id)}
 							>
 								memories
+							</Button>
+							<Button
+								variant="outline"
+								class="rounded-xl"
+								onclick={() => user && openRoles(user.id)}
+							>
+								roles
 							</Button>
 						</div>
 

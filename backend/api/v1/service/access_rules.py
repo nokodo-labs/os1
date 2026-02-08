@@ -64,6 +64,8 @@ def _apply_resource_fk(
 			access_rule.plugin_id = resource_id
 		case ResourceType.PROMPT:
 			access_rule.prompt_id = resource_id
+		case ResourceType.GROUP:
+			access_rule.group_id = resource_id
 
 
 async def _list_rules_for_resource(

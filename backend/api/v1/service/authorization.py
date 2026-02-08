@@ -13,6 +13,7 @@ from sqlalchemy.sql import ColumnElement
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.agent import Agent
 from api.models.file import File
+from api.models.group import Group
 from api.models.memory import Memory
 from api.models.note import Note
 from api.models.plugin import Plugin
@@ -90,6 +91,12 @@ RESOURCE_CONFIG: dict[ResourceType, ResourceConfig] = {
 		id_col=Prompt.id,
 		rule_fk=AccessRule.prompt_id,
 		owner_fk=None,
+		deleted_at_col=None,
+	),
+	ResourceType.GROUP: ResourceConfig(
+		id_col=Group.id,
+		rule_fk=AccessRule.group_id,
+		owner_fk=Group.owner_id,
 		deleted_at_col=None,
 	),
 }

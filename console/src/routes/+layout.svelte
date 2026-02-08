@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { SystemService } from '$lib/api'
-	import { auth } from '$lib/auth.svelte'
+	import { auth, markAuthReady } from '$lib/auth.svelte'
 	import SplashLoader from '$lib/components/SplashLoader.svelte'
 	import { onMount } from 'svelte'
 	import '../app.css'
@@ -18,9 +18,15 @@
 			isInitialized = status.initialized
 		} catch (e) {
 			console.error('Failed to check system status', e)
-			// Fallback to login if check fails
 			isInitialized = true
 		}
+
+		// Try restoring session from refresh cookie
+		if (isInitialized) {
+			await auth.restoreSession().catch(() => {})
+		}
+
+		markAuthReady()
 	})
 
 	$effect(() => {

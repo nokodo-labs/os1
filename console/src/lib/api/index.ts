@@ -1,80 +1,50 @@
-import {
-	AgentsService,
-	AuthService,
-	MemoriesService,
-	ModelsService,
-	OpenAPI,
-	PluginsService,
-	ProjectsService,
-	PromptsService,
-	ProvidersService,
-	SettingsService,
-	ThreadsService,
-	UsersService,
-} from './generated'
-
+export { api, rawApi, refreshAccessToken, unwrap } from './client'
+export type { ApiPaths } from './client'
 export { SystemService } from './system'
+export type { components, operations, paths } from './types'
 
-const DEFAULT_API_BASE = 'http://localhost:1383/v1'
+// Schema type aliases for consumer convenience
+type Schemas = import('./types').components['schemas']
 
-OpenAPI.BASE = import.meta.env.VITE_API_URL || DEFAULT_API_BASE
-OpenAPI.TOKEN = async () => {
-	if (typeof localStorage === 'undefined') return ''
-	return localStorage.getItem('access_token') ?? ''
-}
-
-export { ApiError } from './generated'
-export {
-	AgentsService,
-	AuthService,
-	MemoriesService,
-	ModelsService,
-	PluginsService,
-	ProjectsService,
-	PromptsService,
-	ProvidersService,
-	SettingsService,
-	ThreadsService,
-	UsersService,
-}
-
-export type {
-	AccessControlEntry,
-	AccessControlEntryCreate,
-	AccessRole,
-	Agent,
-	AgentCreate,
-	AgentUpdate,
-	AgentVisibility,
-	Memory,
-	MemoryCreate,
-	Message,
-	MessageCreate,
-	Model,
-	ModelCreate,
-	ModelType,
-	ModelUpdate,
-	Plugin,
-	PluginCreate,
-	PluginInfo,
-	PluginType,
-	PluginUpdate,
-	Project,
-	Prompt,
-	PromptCreate,
-	PromptUpdate,
-	Provider,
-	ProviderCreate,
-	ProviderStatus,
-	ProviderType,
-	ProviderUpdate,
-	Settings,
-	SettingsResponse,
-	SettingsUpdateRequest,
-	Thread,
-	ThreadCreate,
-	Token,
-	UISettings,
-	User,
-	UserCreate,
-} from './generated'
+export type AccessLevel = Schemas['AccessLevel']
+export type AccessRuleCreate = Schemas['AccessRuleCreate']
+export type AccessRuleResponse = Schemas['AccessRuleResponse']
+export type ActionPermission = Schemas['ActionPermission']
+export type Agent = Schemas['Agent']
+export type AgentCreate = Schemas['AgentCreate']
+export type AgentUpdate = Schemas['AgentUpdate']
+export type AgentVisibility = Schemas['AgentVisibility']
+export type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
+export type DefaultPermissions_Output = Schemas['DefaultPermissions-Output']
+export type DefaultPermissionsSettings = Schemas['DefaultPermissionsSettings']
+export type DefaultPermissionsSettingsPatch = Schemas['DefaultPermissionsSettingsPatch']
+export type DefaultResourceAccess = Schemas['DefaultResourceAccess']
+export type Group = Schemas['Group']
+export type GroupCreate = Schemas['GroupCreate']
+export type GroupMemberRole = Schemas['GroupMemberRole']
+export type GroupMembershipCreate = Schemas['GroupMembershipCreate']
+export type GroupMembershipResponse = Schemas['GroupMembershipResponse']
+export type GroupUpdate = Schemas['GroupUpdate']
+export type Memory = Schemas['Memory']
+export type Message = Schemas['Message']
+export type MessageCreate = Schemas['MessageCreate']
+export type Model = Schemas['Model']
+export type ModelCreate = Schemas['ModelCreate']
+export type ModelUpdate = Schemas['ModelUpdate']
+export type Note = Schemas['Note']
+export type NoteCreate = Schemas['NoteCreate']
+export type NoteUpdate = Schemas['NoteUpdate']
+export type PluginInfo = Schemas['PluginInfo']
+export type Prompt = Schemas['Prompt']
+export type Provider = Schemas['Provider']
+export type ProviderCreate = Schemas['ProviderCreate']
+export type ProviderType = Schemas['ProviderType']
+export type ProviderUpdate = Schemas['ProviderUpdate']
+export type Role = Schemas['Role']
+export type RoleCreate = Schemas['RoleCreate']
+export type RoleUpdate = Schemas['RoleUpdate']
+export type SettingsResponse = Schemas['SettingsResponse']
+export type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
+export type Thread = Schemas['Thread']
+export type ThreadCreate = Schemas['ThreadCreate']
+export type User = Schemas['User']

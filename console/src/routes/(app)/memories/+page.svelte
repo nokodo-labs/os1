@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { MemoriesService, type Memory } from '$lib/api'
+	import { api, unwrap, type Memory } from '$lib/api'
 	import MemoryDetailsModal from '$lib/components/MemoryDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
@@ -152,7 +152,12 @@
 
 		isLoading = true
 		error = null
-		MemoriesService.listMemoriesMemoriesGet(userIdFilter, skip, limit, sortKey, sortDir)
+		api.GET('/v1/memories', {
+			params: {
+				query: { user_id: userIdFilter!, skip, limit, sort_by: sortKey, sort_dir: sortDir },
+			},
+		})
+			.then((r) => unwrap(r))
 			.then((result) => {
 				memories = result
 				hasNext = result.length === limit

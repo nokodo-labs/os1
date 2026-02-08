@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { UsersService, type User } from '$lib/api'
+	import { api, unwrap, type User } from '$lib/api'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
@@ -58,13 +58,17 @@
 		isCreating = true
 		error = null
 		try {
-			const created = await UsersService.createUserUsersPost({
-				email: trimmedEmail,
-				password,
-				display_name: displayName.trim() ? displayName.trim() : null,
-				is_active: isActive,
-				is_superuser: isSuperuser,
-			})
+			const created = unwrap(
+				await api.POST('/v1/users', {
+					body: {
+						email: trimmedEmail,
+						password,
+						display_name: displayName.trim() ? displayName.trim() : null,
+						is_active: isActive,
+						is_superuser: isSuperuser,
+					},
+				})
+			)
 			onCreated?.(created)
 			reset()
 			close()

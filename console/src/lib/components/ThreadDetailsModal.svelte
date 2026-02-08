@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { ThreadsService, type Message, type Thread } from '$lib/api'
+	import { api, unwrap, type Message, type Thread } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -79,7 +79,11 @@
 	}
 
 	async function loadThreadMeta(id: string) {
-		thread = await ThreadsService.getThreadThreadsThreadIdGet(id, true)
+		thread = unwrap(
+			await api.GET('/v1/threads/{thread_id}', {
+				params: { path: { thread_id: id }, query: { include_hidden: true } },
+			})
+		)
 	}
 
 	async function loadLatestMessages(id: string) {
@@ -90,14 +94,20 @@
 		messages = []
 
 		try {
-			const page = await ThreadsService.listMessagesThreadsThreadIdMessagesGet(
-				id,
-				0,
-				messagePageSize,
-				'created_at',
-				'desc',
-				true,
-				true
+			const page = unwrap(
+				await api.GET('/v1/threads/{thread_id}/messages', {
+					params: {
+						path: { thread_id: id },
+						query: {
+							skip: 0,
+							limit: messagePageSize,
+							sort_by: 'created_at',
+							sort_dir: 'desc',
+							group_task_runs: true,
+							include_hidden: true,
+						},
+					},
+				})
 			)
 			messageSkip += page.length
 			messageHasMore = page.length > 0
@@ -124,14 +134,20 @@
 		const prevScrollTop = messagesEl.scrollTop
 
 		try {
-			const page = await ThreadsService.listMessagesThreadsThreadIdMessagesGet(
-				threadId,
-				messageSkip,
-				messagePageSize,
-				'created_at',
-				'desc',
-				true,
-				true
+			const page = unwrap(
+				await api.GET('/v1/threads/{thread_id}/messages', {
+					params: {
+						path: { thread_id: threadId },
+						query: {
+							skip: messageSkip,
+							limit: messagePageSize,
+							sort_by: 'created_at',
+							sort_dir: 'desc',
+							group_task_runs: true,
+							include_hidden: true,
+						},
+					},
+				})
 			)
 			if (page.length === 0) {
 				messageHasMore = false

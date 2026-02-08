@@ -24,6 +24,8 @@ class RoleBase(MetadataModel):
 class RoleCreate(RoleBase):
 	"""schema for creating a role."""
 
+	priority: int | None = None
+
 
 class RoleUpdate(ORMModel):
 	"""schema for updating a role."""
@@ -33,6 +35,7 @@ class RoleUpdate(ORMModel):
 	quotas: dict[str, Any] | None = None
 	priority: int | None = None
 	default_permissions: DefaultPermissions | None = None
+	metadata: dict[str, Any] | None = None
 
 
 class Role(RoleBase, TimestampedModel, ORMModel):

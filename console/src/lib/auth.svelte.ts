@@ -1,5 +1,16 @@
 import { browser } from '$app/environment'
-import { AuthService, UsersService, type User } from '$lib/api'
+import { rawApi, refreshAccessToken } from '$lib/api'
+
+type User = {
+	id: string
+	email: string
+	display_name: string | null
+	avatar_url: string | null
+	is_active: boolean
+	is_superuser: boolean
+	created_at: string
+	updated_at: string
+}
 
 function parseJwt(token: string) {
 	try {
@@ -9,67 +20,98 @@ function parseJwt(token: string) {
 	}
 }
 
-class AuthState {
-	token = $state<string | null>(browser ? localStorage.getItem('access_token') : null)
-	user = $state<User | null>(null)
-	isAuthenticated = $derived(!!this.token)
+/**
+ * In-memory access token.
+ * Intentionally NOT in localStorage — cleared on page refresh by design.
+ * Refresh token lives in an httpOnly cookie set by the backend.
+ */
+let accessToken = $state<string | null>(null)
 
-	constructor() {
-		if (this.token) {
-			this.fetchUser()
-		}
-	}
+/** Auth readiness gate — API requests wait for this before firing. */
+let authReadyResolve: (() => void) | null = null
+export const authReady: Promise<void> = browser
+	? new Promise<void>((resolve) => {
+			authReadyResolve = resolve
+		})
+	: Promise.resolve()
+
+/** Called by the root layout after auth flow completes. */
+export function markAuthReady(): void {
+	authReadyResolve?.()
+	authReadyResolve = null
+}
+
+export function getAccessToken(): string | null {
+	return accessToken
+}
+
+export function setAccessToken(token: string): void {
+	accessToken = token
+}
+
+export function clearAccessToken(): void {
+	accessToken = null
+}
+
+class AuthState {
+	user = $state<User | null>(null)
+	isAuthenticated = $derived(!!accessToken)
 
 	async login(email: string, password: string) {
-		const data = await AuthService.loginAccessTokenAuthLoginAccessTokenPost({
-			username: email,
-			password: password,
-			scope: '',
+		const formBody = new URLSearchParams({ username: email, password, scope: '' })
+		const { data, error } = await rawApi.POST('/v1/auth/login/access-token', {
+			body: { username: email, password, scope: '' },
+			bodySerializer: () => formBody,
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 		})
 
-		this.setToken(data.access_token)
+		if (error || !data) throw new Error('login failed')
+		setAccessToken(data.access_token)
 		await this.fetchUser()
 	}
 
+	async restoreSession(): Promise<boolean> {
+		const token = await refreshAccessToken()
+		if (!token) return false
+		await this.fetchUser()
+		return true
+	}
+
 	async fetchUser() {
-		if (!this.token) return
-		const decoded = parseJwt(this.token)
+		if (!accessToken) return
+		const decoded = parseJwt(accessToken)
 		if (!decoded || !decoded.sub) return
 
 		const userId = String(decoded.sub)
-		try {
-			this.user = await UsersService.readUserUsersUserIdGet(userId)
-		} catch (e) {
-			console.error('Failed to fetch user', e)
+		const { data, error } = await rawApi.GET('/v1/users/{user_id}', {
+			params: { path: { user_id: userId } },
+			headers: { Authorization: `Bearer ${accessToken}` },
+		})
+		if (error || !data) {
+			console.error('failed to fetch user')
 			this.logout()
+			return
 		}
+		this.user = data as User
 	}
 
 	async register(email: string, password: string) {
-		await UsersService.createUserUsersPost({
-			email,
-			password,
-			is_active: true,
-			is_superuser: true, // First user should be superuser? Or let backend handle it?
-			// The user said "CREATE a brand new user, since that will be the first thing to do when you first spin up the project!"
-			// So making them superuser seems appropriate for the console.
+		await rawApi.POST('/v1/users', {
+			body: {
+				email,
+				password,
+				is_active: true,
+				is_superuser: true,
+			},
 		})
 	}
 
-	logout() {
-		this.token = null
+	async logout() {
+		await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
+		clearAccessToken()
 		this.user = null
-		if (browser) {
-			localStorage.removeItem('access_token')
-		}
-	}
-
-	private setToken(token: string) {
-		this.token = token
-		if (browser) {
-			localStorage.setItem('access_token', token)
-		}
 	}
 }
 
 export const auth = new AuthState()
+export type { User }

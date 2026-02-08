@@ -1,0 +1,252 @@
+"""service helpers for group operations."""
+
+from __future__ import annotations
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from api.models.access_rule import AccessLevel
+from api.models.group import Group, GroupMembership
+from api.permissions import ResourceType
+from api.schemas.group import GroupCreate, GroupMembershipCreate, GroupUpdate
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import (
+	require_resource_access,
+	resource_access_predicate,
+)
+from api.v1.service.sorting import SortDir, apply_sort
+from nokodo_ai.utils.typeid import TypeID
+
+
+async def list_groups(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	skip: int = 0,
+	limit: int = 100,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
+	member_user_id: TypeID | None = None,
+) -> list[Group]:
+	"""list groups accessible by the principal."""
+	stmt = select(Group).where(
+		resource_access_predicate(
+			principal,
+			ResourceType.GROUP,
+			required_level=AccessLevel.READER,
+		)
+	)
+	if member_user_id is not None:
+		stmt = stmt.join(
+			GroupMembership,
+			GroupMembership.group_id == Group.id,
+		).where(GroupMembership.user_id == member_user_id)
+	stmt = apply_sort(
+		stmt,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"created_at": Group.created_at,
+			"updated_at": Group.updated_at,
+			"name": Group.name,
+		},
+		tie_breaker=Group.id,
+	)
+	result = await session.execute(
+		stmt.offset(skip).limit(limit).options(selectinload(Group.memberships))
+	)
+	return list(result.scalars().all())
+
+
+async def get_group(
+	group_id: str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Group:
+	"""get a group by id (requires reader access)."""
+	await require_resource_access(
+		group_id,
+		session,
+		principal,
+		ResourceType.GROUP,
+		required_level=AccessLevel.READER,
+	)
+	result = await session.execute(
+		select(Group)
+		.where(Group.id == group_id)
+		.options(selectinload(Group.memberships))
+	)
+	group = result.scalar_one_or_none()
+	if not group:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="group not found",
+		)
+	return group
+
+
+async def create_group(
+	group_in: GroupCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Group:
+	"""create a new group. the creator becomes the owner."""
+	group = Group(
+		name=group_in.name,
+		description=group_in.description,
+		metadata_=group_in.metadata,
+		owner_id=str(principal.user.id),
+	)
+	session.add(group)
+	await session.flush()
+
+	# add creator as owner member
+	membership = GroupMembership(
+		group_id=str(group.id),
+		user_id=str(principal.user.id),
+		role="owner",
+	)
+	session.add(membership)
+	await session.commit()
+	await session.refresh(group)
+	return group
+
+
+async def update_group(
+	group_id: str,
+	group_in: GroupUpdate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Group:
+	"""update group details (requires editor access)."""
+	await require_resource_access(
+		group_id,
+		session,
+		principal,
+		ResourceType.GROUP,
+		required_level=AccessLevel.EDITOR,
+	)
+	group = await _load_group(group_id, session)
+	if group_in.name is not None:
+		group.name = group_in.name
+	if group_in.description is not None:
+		group.description = group_in.description
+	if group_in.metadata is not None:
+		group.metadata_ = group_in.metadata
+	session.add(group)
+	await session.commit()
+	await session.refresh(group)
+	return group
+
+
+async def delete_group(
+	group_id: str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	"""delete a group (requires admin access)."""
+	await require_resource_access(
+		group_id,
+		session,
+		principal,
+		ResourceType.GROUP,
+		required_level=AccessLevel.ADMIN,
+	)
+	group = await _load_group(group_id, session)
+	await session.delete(group)
+	await session.commit()
+
+
+# ---- membership management ----
+
+
+async def add_member(
+	group_id: str,
+	member_in: GroupMembershipCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> GroupMembership:
+	"""add a user to a group (requires editor access on the group)."""
+	await require_resource_access(
+		group_id,
+		session,
+		principal,
+		ResourceType.GROUP,
+		required_level=AccessLevel.EDITOR,
+	)
+	existing = await session.execute(
+		select(GroupMembership).where(
+			GroupMembership.group_id == group_id,
+			GroupMembership.user_id == str(member_in.user_id),
+		)
+	)
+	if existing.scalar_one_or_none():
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail="user is already a member",
+		)
+	membership = GroupMembership(
+		group_id=group_id,
+		user_id=str(member_in.user_id),
+		role=member_in.role,
+	)
+	session.add(membership)
+	await session.commit()
+	await session.refresh(membership)
+	return membership
+
+
+async def remove_member(
+	group_id: str,
+	user_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	"""remove a user from a group (requires editor access)."""
+	await require_resource_access(
+		group_id,
+		session,
+		principal,
+		ResourceType.GROUP,
+		required_level=AccessLevel.EDITOR,
+	)
+	result = await session.execute(
+		select(GroupMembership).where(
+			GroupMembership.group_id == group_id,
+			GroupMembership.user_id == str(user_id),
+		)
+	)
+	membership = result.scalar_one_or_none()
+	if not membership:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="membership not found",
+		)
+	await session.delete(membership)
+	await session.commit()
+
+
+# ---- internal helpers ----
+
+
+async def _load_group(group_id: str, session: AsyncSession) -> Group:
+	result = await session.execute(
+		select(Group)
+		.where(Group.id == group_id)
+		.options(selectinload(Group.memberships))
+	)
+	group = result.scalar_one_or_none()
+	if not group:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="group not found",
+		)
+	return group

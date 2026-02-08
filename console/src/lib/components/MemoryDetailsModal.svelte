@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { MemoriesService, type Memory } from '$lib/api'
+	import { api, unwrap, type Memory } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -49,7 +49,8 @@
 		error = null
 		memory = null
 
-		MemoriesService.getMemoryMemoriesMemoryIdGet(memoryId)
+		api.GET('/v1/memories/{memory_id}', { params: { path: { memory_id: memoryId } } })
+			.then((r) => unwrap(r))
 			.then((m) => {
 				memory = m
 			})

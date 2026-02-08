@@ -54,8 +54,8 @@ class User(TypeIDPrimaryKeyMixin, Base):
 		"Role",
 		secondary=user_role_association,
 		back_populates="users",
-		lazy="selectin",
 	)
+
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.subject_user_id",
@@ -65,7 +65,9 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
 	owned_groups: Mapped[list[Group]] = relationship("Group", back_populates="owner")
 	group_memberships: Mapped[list[GroupMembership]] = relationship(
-		"GroupMembership", back_populates="user", cascade="all, delete-orphan"
+		"GroupMembership",
+		back_populates="user",
+		cascade="all, delete-orphan",
 	)
 	reminders: Mapped[list[Reminder]] = relationship("Reminder", back_populates="owner")
 	reminder_lists: Mapped[list[ReminderList]] = relationship(
