@@ -24,6 +24,7 @@
 	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
+	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
 	import { createChatState, type ApiMessage } from './chat.svelte'
@@ -69,9 +70,9 @@
 	})
 
 	$effect(() => {
-		if (chat.selectedAgent !== '') return
+		if (selectedAgent.id !== '') return
 		if (agents.list.length === 0) return
-		chat.selectedAgent = agents.list[0].id
+		selectedAgent.set(selectedAgent.resolveDefault(agents.list))
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +137,7 @@
 			chat.isGenerating ||
 			chat.runError ||
 			chat.optimisticUserMessage !== null ||
-			chat.selectedAgent === ''
+			selectedAgent.id === ''
 		)
 			return
 		const content = chatStore.consumePendingChatStart(chat.thread.id)
@@ -208,8 +209,8 @@
 
 {#snippet islandContextActions()}
 	<AgentSelector
-		selectedAgent={chat.selectedAgent}
-		onAgentChange={(agentId) => (chat.selectedAgent = agentId)}
+		selectedAgent={selectedAgent.id}
+		onAgentChange={(agentId) => selectedAgent.set(agentId)}
 	/>
 	{#if device.isMobile}
 		<ChatSidebarToggleButton />
@@ -520,10 +521,10 @@
 					{#if chat.runError}
 						<div in:fade={{ duration: 200 }}>
 							<AssistantChatMessage
-								content={chat.selectedAgent
+								content={selectedAgent.id
 									? 'there was an error generating a response.'
 									: 'select an agent to generate a response.'}
-								modelName={chat.selectedAgentName}
+								modelName={chat.agentNameById.get(selectedAgent.id) ?? 'assistant'}
 								isLastMessage={true}
 								tone="error"
 							>

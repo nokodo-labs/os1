@@ -7,6 +7,7 @@
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
+	import { settingsState } from '$lib/stores/settings.svelte'
 
 	let email = $state('')
 	let password = $state('')
@@ -23,6 +24,9 @@
 	)
 
 	pageTitleStore.pageTitle = 'login'
+
+	const allowSignups = $derived(settingsState.data?.security?.allow_signups ?? true)
+	const oidcOnly = $derived(settingsState.data?.security?.oidc?.only ?? false)
 
 	$effect(() => {
 		if (!browser) return
@@ -45,6 +49,7 @@
 	async function onSubmit(event: SubmitEvent) {
 		event.preventDefault()
 		if (isSubmitting) return
+		if (oidcOnly) return
 
 		errorMessage = null
 		isSubmitting = true
@@ -140,7 +145,14 @@
 								/>
 							</div>
 
-							{#if errorMessage}
+							{#if oidcOnly}
+								<div
+									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+									role="alert"
+								>
+									password login is disabled. sign in with oidc.
+								</div>
+							{:else if errorMessage}
 								<div
 									class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
 									role="alert"
@@ -151,7 +163,7 @@
 
 							<button
 								type="submit"
-								disabled={isSubmitting}
+								disabled={isSubmitting || oidcOnly}
 								class="interactive inline-flex h-11 w-full items-center justify-center rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-black/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
 							>
 								{#if isSubmitting}
@@ -168,15 +180,17 @@
 							</button>
 						</form>
 
-						<div class="mt-6 text-center text-sm text-white/55">
-							don't have an account?
-							<a
-								href={resolve('/signup')}
-								class="ml-1 font-medium text-white/80 hover:text-white"
-							>
-								sign up
-							</a>
-						</div>
+						{#if allowSignups}
+							<div class="mt-6 text-center text-sm text-white/55">
+								don't have an account?
+								<a
+									href={resolve('/signup')}
+									class="ml-1 font-medium text-white/80 hover:text-white"
+								>
+									sign up
+								</a>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>

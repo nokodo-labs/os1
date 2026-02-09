@@ -7,8 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.setting import SettingsDocument
-from api.settings import Settings, get_field_flags
+from api.settings import Settings, check_writable
 from api.v1.schemas.settings import SettingsPatch, SettingsVersions
+from nokodo_ai.utils.dicts import deep_merge
 
 
 class VersionConflictError(Exception):
@@ -59,11 +60,7 @@ async def update(
 			raise ValueError(f"invalid section: {section}")
 
 		# validate all fields are writable (defense in depth)
-		for field_name in fields:
-			if field_name not in annotation.model_fields:
-				raise ValueError(f"{section}: unknown field '{field_name}'")
-			if get_field_flags(annotation, field_name).get("write_locked", False):
-				raise ValueError(f"{section}: field '{field_name}' is not writable")
+		check_writable(annotation, fields, section)
 
 		doc = await _get_doc(db, section)
 		if doc is None:
@@ -77,7 +74,7 @@ async def update(
 		else:
 			if section in expected and doc.version != expected[section]:
 				raise VersionConflictError(section, expected[section], doc.version)
-			doc.data = {**doc.data, **fields}
+			doc.data = deep_merge(doc.data, fields)
 			doc.version += 1
 			doc.updated_by_id = changed_by_id
 

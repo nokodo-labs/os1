@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import cache
 from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import (
 	BaseSettings,
 	PydanticBaseSettingsSource,
@@ -16,6 +16,7 @@ from api.permissions import (
 	ActionPermission,
 	DefaultResourceAccess,
 )
+from api.schemas.preferences import BackgroundType
 from nokodo_ai.utils.typing import extract_literal_values
 
 
@@ -79,6 +80,14 @@ def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag,
 class UISettings(BaseModel):
 	default_theme: str = Field(
 		default="system", description="'light', 'dark', or 'system'"
+	)
+	default_background: BackgroundType = Field(
+		default="darkveil",
+		description="default background for the app",
+	)
+	auth_pages_background: BackgroundType = Field(
+		default="lightrays",
+		description="background for auth pages (login, signup)",
 	)
 	sidebar_collapsed: bool = Field(default=False, description="collapse sidebar")
 
@@ -162,6 +171,10 @@ class BrandingSettings(BaseModel):
 		default=None,
 		description="public admin console origin",
 	)
+	pwa_manifest_url: HttpUrl | None = Field(
+		default=None,
+		description="external pwa manifest.json url",
+	)
 	analytics_key: str | None = settings_field(
 		default=None,
 		private=True,
@@ -194,12 +207,73 @@ class AssetsSettings(BaseModel):
 	)
 
 
+class OIDCSettings(BaseModel):
+	"""openid connect provider configuration."""
+
+	enabled: bool = Field(default=False, description="enable oidc authentication")
+	issuer_url: HttpUrl | None = Field(
+		default=None,
+		description="oidc issuer url",
+	)
+	client_id: str | None = Field(
+		default=None,
+		description="oidc client id",
+	)
+	client_secret: str | None = settings_field(
+		default=None,
+		private=True,
+		description="oidc client secret",
+	)
+	redirect_uri: HttpUrl | None = Field(
+		default=None,
+		description="oidc redirect uri",
+	)
+	scopes: list[str] = Field(
+		default_factory=lambda: ["openid", "profile", "email"],
+		description="oidc scopes",
+	)
+	only: bool = Field(
+		default=False,
+		description="only allow login via oidc (disables password login)",
+	)
+
+	def is_configured(self) -> bool:
+		"""check whether all required oidc fields are set."""
+		return bool(
+			self.issuer_url
+			and self.client_id
+			and self.client_secret
+			and self.redirect_uri
+		)
+
+	@model_validator(mode="after")
+	def validate_oidc_flags(self) -> OIDCSettings:
+		if self.only and not self.enabled:
+			raise ValueError("oidc.only requires oidc.enabled")
+		if self.only and not self.is_configured():
+			raise ValueError("oidc.only requires oidc provider configuration")
+		if self.enabled and not self.is_configured():
+			raise ValueError(
+				"oidc.enabled requires issuer_url, client_id, client_secret, "
+				"and redirect_uri"
+			)
+		return self
+
+
 class SecuritySettings(BaseModel):
 	secret_key: str = settings_field(
 		default="changeme",
 		private=True,
 		write_locked=True,
 		description="application secret key (env-only)",
+	)
+	allow_signups: bool = Field(
+		default=True,
+		description="allow new user signups",
+	)
+	auto_signup_role_ids: list[str] | None = Field(
+		default=None,
+		description="role ids auto-applied to new signups",
 	)
 	jwt_algorithm: str = settings_field(
 		default="HS256",
@@ -228,6 +302,10 @@ class SecuritySettings(BaseModel):
 	)
 	allowed_email_domains: list[str] = Field(
 		default_factory=list, description="allowed domains"
+	)
+	oidc: OIDCSettings = Field(
+		default_factory=OIDCSettings,
+		description="openid connect provider settings",
 	)
 	enable_oauth: bool = settings_field(
 		default=True,
@@ -283,7 +361,11 @@ class DefaultPermissionsSettings(BaseModel):
 		description="per-resource-type default access levels",
 	)
 	action_permissions: list[ActionPermission] = Field(
-		default_factory=list,
+		default_factory=lambda: [
+			ActionPermission.SETTINGS_READ,
+			ActionPermission.AGENTS_READ,
+			ActionPermission.FILES_UPLOAD,
+		],
 		description=(
 			"action permissions granted by default, "
 			"e.g. ['agents:read', 'prompts:read']"
@@ -378,3 +460,30 @@ class Settings(BaseSettings):
 
 
 settings: Settings = Settings()
+
+
+# ---------------------------------------------------------------------------
+# public helpers
+# ---------------------------------------------------------------------------
+
+
+def check_writable(
+	schema: type[BaseModel],
+	fields: dict[str, Any],
+	prefix: str,
+) -> None:
+	"""recursively validate that no write_locked fields are being changed.
+
+	raises ValueError for unknown or write_locked fields.
+	"""
+	for field_name, value in fields.items():
+		if field_name not in schema.model_fields:
+			raise ValueError(f"{prefix}: unknown field '{field_name}'")
+		if get_field_flags(schema, field_name).get("write_locked", False):
+			raise ValueError(f"{prefix}: field '{field_name}' is not writable")
+		# recurse into nested BaseModel sub-sections
+		if isinstance(value, dict):
+			field_info = schema.model_fields[field_name]
+			annotation = field_info.annotation
+			if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+				check_writable(annotation, value, f"{prefix}.{field_name}")

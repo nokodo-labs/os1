@@ -166,10 +166,6 @@ export function createChatState() {
 	const agentAvatarById = $derived(
 		new SvelteMap(agents.list.map((a) => [a.id, a.profile_image_url ?? null]))
 	)
-	const selectedAgentName = $derived(
-		agents.list.find((a) => a.id === selectedAgent.id)?.name ?? 'assistant'
-	)
-
 	// ─────────────────────────────────────────────────────────────────────────────
 	// tool call helpers
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -1055,12 +1051,6 @@ export function createChatState() {
 		get isGenerating() {
 			return isGenerating
 		},
-		get selectedAgent() {
-			return selectedAgent.id
-		},
-		set selectedAgent(v: string) {
-			selectedAgent.set(v)
-		},
 		get optimisticUserMessage() {
 			return optimisticUserMessage
 		},
@@ -1187,10 +1177,6 @@ export function createChatState() {
 		get agentAvatarById() {
 			return agentAvatarById
 		},
-		get selectedAgentName() {
-			return selectedAgentName
-		},
-
 		// methods
 		rebuildRunBlocks,
 		getBlockResponseItems,

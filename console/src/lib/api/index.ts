@@ -55,4 +55,8 @@ export type SettingsResponse = Schemas['SettingsResponse']
 export type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
 export type Thread = Schemas['Thread']
 export type ThreadCreate = Schemas['ThreadCreate']
+export type UISettings = Schemas['UISettings']
 export type User = Schemas['User']
+
+// derived literal types
+export type BackgroundType = NonNullable<Schemas['AppearancePreferences']['background']>

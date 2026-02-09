@@ -170,12 +170,12 @@ async def test_notification_access_guard(db_session: AsyncSession) -> None:
 	user_a = await user_service.create_user(
 		UserCreate(email="notif_guard_a@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	user_b = await user_service.create_user(
 		UserCreate(email="notif_guard_b@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	event = Event(scope=EventScope.USER, type="guard", data={}, user_id=user_a.id)
 	db_session.add(event)
@@ -232,12 +232,12 @@ async def test_list_notifications_forbidden_other_user(
 	user_a = await user_service.create_user(
 		UserCreate(email="notif_list_a@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	user_b = await user_service.create_user(
 		UserCreate(email="notif_list_b@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	event = Event(scope=EventScope.USER, type="list-guard", data={}, user_id=user_a.id)
 	db_session.add(event)

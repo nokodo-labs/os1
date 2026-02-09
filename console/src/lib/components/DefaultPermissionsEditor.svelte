@@ -45,7 +45,6 @@
 			items: [
 				{ value: 'users:read', label: 'read' },
 				{ value: 'users:manage', label: 'manage' },
-				{ value: 'users:create', label: 'create' },
 			],
 		},
 		{

@@ -182,6 +182,9 @@ class TestActionPermission:
 			"providers",
 			"plugins",
 			"prompts",
+			"console",
+			"files",
+			"frontend",
 		}
 		assert expected == domains
 

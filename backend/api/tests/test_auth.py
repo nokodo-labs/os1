@@ -250,10 +250,15 @@ async def test_principal_permission_checks_and_active_guard(
 		),
 		db_session,
 	)
+	admin_principal = Principal(
+		user=admin_seed,
+		group_ids=(),
+		permissions=frozenset(),
+	)
 	user = await user_service.create_user(
 		UserCreate(email="principal@example.com", password="pw"),
 		db_session,
-		actor=admin_seed,
+		principal=admin_principal,
 	)
 	principal = Principal(
 		user=user,

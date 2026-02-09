@@ -11,6 +11,18 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# shared literal type for background options
+BackgroundType = Literal[
+	"galaxy",
+	"darkveil",
+	"lightbends",
+	"lightrays",
+	"silk",
+	"static",
+	"none",
+]
+
+
 # appearance preferences
 class AppearancePreferences(BaseModel):
 	"""user appearance preferences."""
@@ -31,18 +43,7 @@ class AppearancePreferences(BaseModel):
 		alias="autoAccentColors",
 		description="when enabled, accent colors change automatically based on context",
 	)
-	background: (
-		Literal[
-			"galaxy",
-			"darkveil",
-			"lightbends",
-			"lightrays",
-			"silk",
-			"static",
-			"none",
-		]
-		| None
-	) = Field(
+	background: BackgroundType | None = Field(
 		default=None,
 		description="background wallpaper preference",
 	)

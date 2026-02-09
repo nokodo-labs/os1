@@ -36,7 +36,6 @@ class ActionPermission(StrEnum):
 	# user management
 	USERS_READ = "users:read"
 	USERS_MANAGE = "users:manage"
-	USERS_CREATE = "users:create"
 
 	# settings
 	SETTINGS_READ = "settings:read"

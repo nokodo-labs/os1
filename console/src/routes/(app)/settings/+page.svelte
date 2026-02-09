@@ -3,6 +3,7 @@
 		api,
 		unwrap,
 		type Agent,
+		type BackgroundType,
 		type DefaultPermissionsSettings,
 		type DefaultPermissionsSettingsPatch,
 		type SettingsResponse,
@@ -33,6 +34,20 @@
 		return 'system'
 	}
 
+	const backgroundOptions: { value: BackgroundType; label: string }[] = [
+		{ value: 'galaxy', label: 'galaxy' },
+		{ value: 'darkveil', label: 'dark veil' },
+		{ value: 'lightbends', label: 'light bends' },
+		{ value: 'lightrays', label: 'light rays' },
+		{ value: 'silk', label: 'silk' },
+		{ value: 'static', label: 'static' },
+		{ value: 'none', label: 'none' },
+	]
+
+	function backgroundLabel(v: string): string {
+		return backgroundOptions.find((o) => o.value === v)?.label ?? v
+	}
+
 	let isFetching = $state(true)
 	let isSaving = $state(false)
 	let error = $state<string | null>(null)
@@ -55,6 +70,8 @@
 
 	// Editable form state (only fields supported by Settings*Patch models)
 	let uiDefaultTheme = $state<ThemeMode>('system')
+	let uiDefaultBackground = $state('')
+	let uiAuthPagesBackground = $state('')
 	let uiSidebarCollapsed = $state(false)
 
 	type ChatContextMode = 'recent' | 'relevant' | 'pinned'
@@ -75,6 +92,7 @@
 	let brandingPrimaryColor = $state('')
 	let brandingPublicFrontendOrigin = $state('')
 	let brandingPublicCdnOrigin = $state('')
+	let brandingPwaManifestUrl = $state('')
 
 	let limitsMaxThreadsPerUser = $state<string>('')
 	let limitsMaxMessagesPerThread = $state<string>('')
@@ -87,6 +105,15 @@
 	let securitySessionTimeoutMinutes = $state<string>('')
 	let securityRequireEmailVerification = $state(false)
 	let securityAllowedEmailDomains = $state('')
+	let securityAllowSignups = $state(true)
+	let securityAutoSignupRoleIds = $state('')
+	let securityOidcEnabled = $state(false)
+	let securityOidcIssuerUrl = $state('')
+	let securityOidcClientId = $state('')
+	let securityOidcClientSecret = $state('')
+	let securityOidcRedirectUri = $state('')
+	let securityOidcScopes = $state('')
+	let securityOidcOnly = $state(false)
 
 	let defaultPermissions = $state<DefaultPermissionsSettings>({
 		resource_access: {
@@ -103,6 +130,8 @@
 	// Original snapshots for change detection
 	let original = $state({
 		uiDefaultTheme: 'system' as ThemeMode,
+		uiDefaultBackground: '',
+		uiAuthPagesBackground: '',
 		uiSidebarCollapsed: false,
 		aiDefaultAgentId: '',
 		aiMemoryEnable: false,
@@ -117,6 +146,7 @@
 		brandingPrimaryColor: '',
 		brandingPublicFrontendOrigin: '',
 		brandingPublicCdnOrigin: '',
+		brandingPwaManifestUrl: '',
 		limitsMaxThreadsPerUser: '',
 		limitsMaxMessagesPerThread: '',
 		limitsMaxFileSizeMb: '',
@@ -127,6 +157,15 @@
 		securitySessionTimeoutMinutes: '',
 		securityRequireEmailVerification: false,
 		securityAllowedEmailDomains: '',
+		securityAllowSignups: true,
+		securityAutoSignupRoleIds: '',
+		securityOidcEnabled: false,
+		securityOidcIssuerUrl: '',
+		securityOidcClientId: '',
+		securityOidcClientSecret: '',
+		securityOidcRedirectUri: '',
+		securityOidcScopes: '',
+		securityOidcOnly: false,
 		defaultPermissions: {
 			resource_access: {
 				thread: null,
@@ -142,6 +181,8 @@
 
 	const hasChanges = $derived(
 		uiDefaultTheme !== original.uiDefaultTheme ||
+			uiDefaultBackground !== original.uiDefaultBackground ||
+			uiAuthPagesBackground !== original.uiAuthPagesBackground ||
 			uiSidebarCollapsed !== original.uiSidebarCollapsed ||
 			aiDefaultAgentId !== original.aiDefaultAgentId ||
 			aiMemoryEnable !== original.aiMemoryEnable ||
@@ -156,6 +197,7 @@
 			brandingPrimaryColor !== original.brandingPrimaryColor ||
 			brandingPublicFrontendOrigin !== original.brandingPublicFrontendOrigin ||
 			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin ||
+			brandingPwaManifestUrl !== original.brandingPwaManifestUrl ||
 			limitsMaxThreadsPerUser !== original.limitsMaxThreadsPerUser ||
 			limitsMaxMessagesPerThread !== original.limitsMaxMessagesPerThread ||
 			limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb ||
@@ -166,6 +208,15 @@
 			securitySessionTimeoutMinutes !== original.securitySessionTimeoutMinutes ||
 			securityRequireEmailVerification !== original.securityRequireEmailVerification ||
 			securityAllowedEmailDomains !== original.securityAllowedEmailDomains ||
+			securityAllowSignups !== original.securityAllowSignups ||
+			securityAutoSignupRoleIds !== original.securityAutoSignupRoleIds ||
+			securityOidcEnabled !== original.securityOidcEnabled ||
+			securityOidcIssuerUrl !== original.securityOidcIssuerUrl ||
+			securityOidcClientId !== original.securityOidcClientId ||
+			securityOidcClientSecret !== original.securityOidcClientSecret ||
+			securityOidcRedirectUri !== original.securityOidcRedirectUri ||
+			securityOidcScopes !== original.securityOidcScopes ||
+			securityOidcOnly !== original.securityOidcOnly ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
 
@@ -222,6 +273,8 @@
 
 		const ui = r.data.ui
 		uiDefaultTheme = (ui?.default_theme as ThemeMode) ?? 'system'
+		uiDefaultBackground = ui?.default_background ?? ''
+		uiAuthPagesBackground = ui?.auth_pages_background ?? ''
 		uiSidebarCollapsed = ui?.sidebar_collapsed ?? false
 
 		const ai = r.data.ai
@@ -244,6 +297,7 @@
 		brandingPrimaryColor = branding?.primary_color ?? ''
 		brandingPublicFrontendOrigin = toStringOrEmpty(branding?.public_frontend_origin)
 		brandingPublicCdnOrigin = toStringOrEmpty(branding?.public_cdn_origin)
+		brandingPwaManifestUrl = toStringOrEmpty(branding?.pwa_manifest_url)
 
 		brandingAppVersion = branding?.app_version ?? ''
 		brandingAnalyticsKeyConfigured = Boolean(branding?.analytics_key)
@@ -261,6 +315,17 @@
 		securitySessionTimeoutMinutes = toStringOrEmpty(security?.session_timeout_minutes)
 		securityRequireEmailVerification = security?.require_email_verification ?? false
 		securityAllowedEmailDomains = (security?.allowed_email_domains ?? []).join(', ')
+		securityAllowSignups = security?.allow_signups ?? true
+		securityAutoSignupRoleIds = (security?.auto_signup_role_ids ?? []).join(', ')
+
+		const oidc = security?.oidc
+		securityOidcEnabled = oidc?.enabled ?? false
+		securityOidcIssuerUrl = toStringOrEmpty(oidc?.issuer_url)
+		securityOidcClientId = toStringOrEmpty(oidc?.client_id)
+		securityOidcClientSecret = toStringOrEmpty(oidc?.client_secret)
+		securityOidcRedirectUri = toStringOrEmpty(oidc?.redirect_uri)
+		securityOidcScopes = (oidc?.scopes ?? []).join(', ')
+		securityOidcOnly = oidc?.only ?? false
 
 		securitySecretKeyConfigured = Boolean(security?.secret_key)
 		securityJwtAlgorithm = security?.jwt_algorithm ?? ''
@@ -274,6 +339,8 @@
 
 		original = {
 			uiDefaultTheme,
+			uiDefaultBackground,
+			uiAuthPagesBackground,
 			uiSidebarCollapsed,
 			aiDefaultAgentId,
 			aiMemoryEnable,
@@ -288,6 +355,7 @@
 			brandingPrimaryColor,
 			brandingPublicFrontendOrigin,
 			brandingPublicCdnOrigin,
+			brandingPwaManifestUrl,
 			limitsMaxThreadsPerUser,
 			limitsMaxMessagesPerThread,
 			limitsMaxFileSizeMb,
@@ -298,6 +366,15 @@
 			securitySessionTimeoutMinutes,
 			securityRequireEmailVerification,
 			securityAllowedEmailDomains,
+			securityAllowSignups,
+			securityAutoSignupRoleIds,
+			securityOidcEnabled,
+			securityOidcIssuerUrl,
+			securityOidcClientId,
+			securityOidcClientSecret,
+			securityOidcRedirectUri,
+			securityOidcScopes,
+			securityOidcOnly,
 			defaultPermissions,
 			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
 		}
@@ -333,6 +410,8 @@
 
 	function resetDraft() {
 		uiDefaultTheme = original.uiDefaultTheme
+		uiDefaultBackground = original.uiDefaultBackground
+		uiAuthPagesBackground = original.uiAuthPagesBackground
 		uiSidebarCollapsed = original.uiSidebarCollapsed
 		aiDefaultAgentId = original.aiDefaultAgentId
 		aiMemoryEnable = original.aiMemoryEnable
@@ -347,6 +426,7 @@
 		brandingPrimaryColor = original.brandingPrimaryColor
 		brandingPublicFrontendOrigin = original.brandingPublicFrontendOrigin
 		brandingPublicCdnOrigin = original.brandingPublicCdnOrigin
+		brandingPwaManifestUrl = original.brandingPwaManifestUrl
 		limitsMaxThreadsPerUser = original.limitsMaxThreadsPerUser
 		limitsMaxMessagesPerThread = original.limitsMaxMessagesPerThread
 		limitsMaxFileSizeMb = original.limitsMaxFileSizeMb
@@ -357,6 +437,15 @@
 		securitySessionTimeoutMinutes = original.securitySessionTimeoutMinutes
 		securityRequireEmailVerification = original.securityRequireEmailVerification
 		securityAllowedEmailDomains = original.securityAllowedEmailDomains
+		securityAllowSignups = original.securityAllowSignups
+		securityAutoSignupRoleIds = original.securityAutoSignupRoleIds
+		securityOidcEnabled = original.securityOidcEnabled
+		securityOidcIssuerUrl = original.securityOidcIssuerUrl
+		securityOidcClientId = original.securityOidcClientId
+		securityOidcClientSecret = original.securityOidcClientSecret
+		securityOidcRedirectUri = original.securityOidcRedirectUri
+		securityOidcScopes = original.securityOidcScopes
+		securityOidcOnly = original.securityOidcOnly
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
@@ -388,10 +477,16 @@
 
 		if (
 			uiDefaultTheme !== original.uiDefaultTheme ||
+			uiDefaultBackground !== original.uiDefaultBackground ||
+			uiAuthPagesBackground !== original.uiAuthPagesBackground ||
 			uiSidebarCollapsed !== original.uiSidebarCollapsed
 		) {
 			data.ui = {}
 			if (uiDefaultTheme !== original.uiDefaultTheme) data.ui.default_theme = uiDefaultTheme
+			if (uiDefaultBackground !== original.uiDefaultBackground)
+				data.ui.default_background = uiDefaultBackground || null
+			if (uiAuthPagesBackground !== original.uiAuthPagesBackground)
+				data.ui.auth_pages_background = uiAuthPagesBackground || null
 			if (uiSidebarCollapsed !== original.uiSidebarCollapsed)
 				data.ui.sidebar_collapsed = uiSidebarCollapsed
 		}
@@ -446,7 +541,8 @@
 			brandingFaviconUrl !== original.brandingFaviconUrl ||
 			brandingPrimaryColor !== original.brandingPrimaryColor ||
 			brandingPublicFrontendOrigin !== original.brandingPublicFrontendOrigin ||
-			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin
+			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin ||
+			brandingPwaManifestUrl !== original.brandingPwaManifestUrl
 		) {
 			data.branding = {}
 			if (brandingSiteName !== original.brandingSiteName)
@@ -461,6 +557,8 @@
 				data.branding.public_frontend_origin = brandingPublicFrontendOrigin || null
 			if (brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin)
 				data.branding.public_cdn_origin = brandingPublicCdnOrigin || null
+			if (brandingPwaManifestUrl !== original.brandingPwaManifestUrl)
+				data.branding.pwa_manifest_url = brandingPwaManifestUrl || null
 		}
 
 		if (
@@ -488,7 +586,16 @@
 			securityAuthCookieSecure !== original.securityAuthCookieSecure ||
 			securitySessionTimeoutMinutes !== original.securitySessionTimeoutMinutes ||
 			securityRequireEmailVerification !== original.securityRequireEmailVerification ||
-			securityAllowedEmailDomains !== original.securityAllowedEmailDomains
+			securityAllowedEmailDomains !== original.securityAllowedEmailDomains ||
+			securityAllowSignups !== original.securityAllowSignups ||
+			securityAutoSignupRoleIds !== original.securityAutoSignupRoleIds ||
+			securityOidcEnabled !== original.securityOidcEnabled ||
+			securityOidcIssuerUrl !== original.securityOidcIssuerUrl ||
+			securityOidcClientId !== original.securityOidcClientId ||
+			securityOidcClientSecret !== original.securityOidcClientSecret ||
+			securityOidcRedirectUri !== original.securityOidcRedirectUri ||
+			securityOidcScopes !== original.securityOidcScopes ||
+			securityOidcOnly !== original.securityOidcOnly
 		) {
 			data.security = {}
 			if (securityAccessTokenExpireMinutes !== original.securityAccessTokenExpireMinutes)
@@ -509,6 +616,36 @@
 				data.security.require_email_verification = securityRequireEmailVerification
 			if (securityAllowedEmailDomains !== original.securityAllowedEmailDomains)
 				data.security.allowed_email_domains = parseCommaList(securityAllowedEmailDomains)
+			if (securityAllowSignups !== original.securityAllowSignups)
+				data.security.allow_signups = securityAllowSignups
+			if (securityAutoSignupRoleIds !== original.securityAutoSignupRoleIds)
+				data.security.auto_signup_role_ids = parseCommaList(securityAutoSignupRoleIds)
+
+			if (
+				securityOidcEnabled !== original.securityOidcEnabled ||
+				securityOidcIssuerUrl !== original.securityOidcIssuerUrl ||
+				securityOidcClientId !== original.securityOidcClientId ||
+				securityOidcClientSecret !== original.securityOidcClientSecret ||
+				securityOidcRedirectUri !== original.securityOidcRedirectUri ||
+				securityOidcScopes !== original.securityOidcScopes ||
+				securityOidcOnly !== original.securityOidcOnly
+			) {
+				data.security.oidc = {}
+				if (securityOidcEnabled !== original.securityOidcEnabled)
+					data.security.oidc.enabled = securityOidcEnabled
+				if (securityOidcIssuerUrl !== original.securityOidcIssuerUrl)
+					data.security.oidc.issuer_url = securityOidcIssuerUrl || null
+				if (securityOidcClientId !== original.securityOidcClientId)
+					data.security.oidc.client_id = securityOidcClientId || null
+				if (securityOidcClientSecret !== original.securityOidcClientSecret)
+					data.security.oidc.client_secret = securityOidcClientSecret || null
+				if (securityOidcRedirectUri !== original.securityOidcRedirectUri)
+					data.security.oidc.redirect_uri = securityOidcRedirectUri || null
+				if (securityOidcScopes !== original.securityOidcScopes)
+					data.security.oidc.scopes = parseCommaList(securityOidcScopes)
+				if (securityOidcOnly !== original.securityOidcOnly)
+					data.security.oidc.only = securityOidcOnly
+			}
 		}
 
 		if (defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey) {
@@ -634,6 +771,44 @@
 							checked={uiSidebarCollapsed}
 							onCheckedChange={(v: boolean) => (uiSidebarCollapsed = v)}
 						/>
+					</div>
+
+					<div class="space-y-2">
+						<Label for="default_background">default background</Label>
+						<Select
+							value={uiDefaultBackground || 'darkveil'}
+							onValueChange={(v: string) => (uiDefaultBackground = v)}
+						>
+							<SelectTrigger id="default_background" class="rounded-xl">
+								<span class="truncate text-left"
+									>{backgroundLabel(uiDefaultBackground || 'darkveil')}</span
+								>
+							</SelectTrigger>
+							<SelectContent>
+								{#each backgroundOptions as opt (opt.value)}
+									<SelectItem value={opt.value}>{opt.label}</SelectItem>
+								{/each}
+							</SelectContent>
+						</Select>
+					</div>
+
+					<div class="space-y-2">
+						<Label for="auth_pages_background">auth pages background</Label>
+						<Select
+							value={uiAuthPagesBackground || 'lightrays'}
+							onValueChange={(v: string) => (uiAuthPagesBackground = v)}
+						>
+							<SelectTrigger id="auth_pages_background" class="rounded-xl">
+								<span class="truncate text-left"
+									>{backgroundLabel(uiAuthPagesBackground || 'lightrays')}</span
+								>
+							</SelectTrigger>
+							<SelectContent>
+								{#each backgroundOptions as opt (opt.value)}
+									<SelectItem value={opt.value}>{opt.label}</SelectItem>
+								{/each}
+							</SelectContent>
+						</Select>
 					</div>
 				</CardContent>
 			</Card>
@@ -866,6 +1041,20 @@
 							/>
 						</div>
 					</div>
+
+					<div class="space-y-2">
+						<Label for="pwa_manifest_url">pwa manifest url</Label>
+						<Input
+							id="pwa_manifest_url"
+							bind:value={brandingPwaManifestUrl}
+							placeholder="https://cdn.example.com/manifest.json"
+							class="rounded-xl"
+						/>
+						<p class="text-xs text-zinc-500">
+							external manifest.json for PWA configuration. served directly in the
+							frontend HTML.
+						</p>
+					</div>
 				</CardContent>
 			</Card>
 
@@ -1043,6 +1232,33 @@
 
 					<div class="flex items-center justify-between">
 						<div class="space-y-0.5">
+							<Label for="allow_signups">allow new user signups</Label>
+							<p class="text-xs text-zinc-500">
+								when off, admins or users with users:manage only.
+							</p>
+						</div>
+						<Switch
+							id="allow_signups"
+							checked={securityAllowSignups}
+							onCheckedChange={(v: boolean) => (securityAllowSignups = v)}
+						/>
+					</div>
+
+					<div class="space-y-2">
+						<Label for="auto_signup_roles">auto-apply role ids</Label>
+						<Input
+							id="auto_signup_roles"
+							bind:value={securityAutoSignupRoleIds}
+							placeholder="role_... , role_..."
+							class="rounded-xl"
+						/>
+						<p class="text-xs text-zinc-500">
+							comma-separated role ids. empty means none.
+						</p>
+					</div>
+
+					<div class="flex items-center justify-between">
+						<div class="space-y-0.5">
 							<Label for="cookie_secure">auth cookie secure</Label>
 							<p class="text-xs text-zinc-500">recommended true in production.</p>
 						</div>
@@ -1062,6 +1278,90 @@
 							checked={securityRequireEmailVerification}
 							onCheckedChange={(v: boolean) => (securityRequireEmailVerification = v)}
 						/>
+					</div>
+
+					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+						<p class="mb-1 text-sm font-medium">oidc</p>
+						<p class="mb-4 text-xs text-zinc-500">
+							openid connect provider settings for single sign-on.
+						</p>
+
+						<div class="mb-4 flex items-center justify-between">
+							<div class="space-y-0.5">
+								<Label for="oidc_enabled">enable oidc</Label>
+								<p class="text-xs text-zinc-500">
+									allow users to sign in with an oidc provider.
+								</p>
+							</div>
+							<Switch
+								id="oidc_enabled"
+								checked={securityOidcEnabled}
+								onCheckedChange={(v: boolean) => (securityOidcEnabled = v)}
+							/>
+						</div>
+
+						<div class="grid gap-4 md:grid-cols-2">
+							<div class="space-y-2">
+								<Label for="oidc_issuer">issuer url</Label>
+								<Input
+									id="oidc_issuer"
+									bind:value={securityOidcIssuerUrl}
+									placeholder="https://issuer.example.com"
+									class="rounded-xl"
+								/>
+							</div>
+							<div class="space-y-2">
+								<Label for="oidc_client_id">client id</Label>
+								<Input
+									id="oidc_client_id"
+									bind:value={securityOidcClientId}
+									class="rounded-xl"
+								/>
+							</div>
+							<div class="space-y-2">
+								<Label for="oidc_client_secret">client secret</Label>
+								<Input
+									id="oidc_client_secret"
+									type="password"
+									bind:value={securityOidcClientSecret}
+									class="rounded-xl"
+								/>
+							</div>
+							<div class="space-y-2">
+								<Label for="oidc_redirect">redirect uri</Label>
+								<Input
+									id="oidc_redirect"
+									bind:value={securityOidcRedirectUri}
+									placeholder="https://app.example.com/oidc/callback"
+									class="rounded-xl"
+								/>
+							</div>
+							<div class="space-y-2 md:col-span-2">
+								<Label for="oidc_scopes">scopes</Label>
+								<Input
+									id="oidc_scopes"
+									bind:value={securityOidcScopes}
+									placeholder="openid, profile, email"
+									class="rounded-xl"
+								/>
+								<p class="text-xs text-zinc-500">comma-separated list.</p>
+							</div>
+						</div>
+
+						<div class="mt-4 flex items-center justify-between">
+							<div class="space-y-0.5">
+								<Label for="oidc_only">oidc only</Label>
+								<p class="text-xs text-zinc-500">
+									disable password login. requires oidc to be enabled &amp;
+									configured.
+								</p>
+							</div>
+							<Switch
+								id="oidc_only"
+								checked={securityOidcOnly}
+								onCheckedChange={(v: boolean) => (securityOidcOnly = v)}
+							/>
+						</div>
 					</div>
 				</CardContent>
 			</Card>

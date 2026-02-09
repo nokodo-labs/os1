@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.many_to_many import user_role_association
 from api.models.user import User
+from api.permissions import ActionPermission
 from api.schemas.user import UserCreate, UserUpdate
 from api.settings import settings
 from api.v1.service.auth import Principal
@@ -73,10 +74,11 @@ async def create_user(
 	user_in: UserCreate,
 	session: AsyncSession,
 	*,
-	actor: User | None = None,
+	principal: Principal | None = None,
 ) -> User:
 	user_count = await session.scalar(select(func.count()).select_from(User))
 	is_bootstrap = (user_count or 0) == 0
+	actor = principal.user if principal else None
 
 	# determine what privilege level the new user can have:
 	# - bootstrap (first user): must request superuser explicitly (console setup)
@@ -102,19 +104,41 @@ async def create_user(
 		is_active = True
 		is_superuser = True
 	elif actor is not None:
-		# authenticated user creation is admin-only
-		if not actor.is_active or not actor.is_superuser:
+		if not actor.is_active:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="inactive user",
+			)
+
+		if principal is None:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
 			)
 
-		# superuser can set values; default to True/False if not provided
-		is_active = user_in.is_active if user_in.is_active is not None else True
-		is_superuser = (
-			user_in.is_superuser if user_in.is_superuser is not None else False
-		)
+		if not principal.is_admin and not principal.has_permission(
+			str(ActionPermission.USERS_MANAGE)
+		):
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="forbidden",
+			)
+
+		# allow signups toggle does not block admin/authorized creation
+		if principal.is_admin:
+			is_active = user_in.is_active if user_in.is_active is not None else True
+			is_superuser = (
+				user_in.is_superuser if user_in.is_superuser is not None else False
+			)
+		else:
+			is_active = True
+			is_superuser = False
 	else:
+		if not settings.security.allow_signups:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="signups are disabled",
+			)
 		# unauthenticated: regular user only
 		is_active = True
 		is_superuser = False
@@ -134,7 +158,33 @@ async def create_user(
 		is_superuser=is_superuser,
 	)
 	session.add(user)
-	await session.commit()
+	await session.flush()
+
+	if actor is None:
+		role_ids = settings.security.auto_signup_role_ids
+		if role_ids:
+			await session.execute(
+				insert(user_role_association),
+				[{"user_id": str(user.id), "role_id": str(rid)} for rid in role_ids],
+			)
+
+	try:
+		await session.commit()
+	except IntegrityError as exc:
+		await session.rollback()
+		msg = str(exc.orig).lower()
+		if "email" in msg and "unique" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail="email already registered",
+			) from None
+		elif "foreign key" in msg and "user_roles" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+				detail="invalid role reference in auto_signup_role_ids",
+			) from None
+		else:
+			raise exc
 	await session.refresh(user)
 	return user
 

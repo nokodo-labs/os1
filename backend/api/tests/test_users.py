@@ -176,7 +176,7 @@ async def test_service_get_user(db_session: AsyncSession) -> None:
 	created_user = await user_service.create_user(
 		user_in,
 		db_session,
-		actor=admin,
+		principal=admin_principal,
 	)
 
 	# Get user
@@ -202,7 +202,11 @@ async def test_service_list_users(db_session: AsyncSession) -> None:
 
 	for i in range(2):
 		user_in = UserCreate(email=f"list_{i}@example.com", password="password123")
-		await user_service.create_user(user_in, db_session, actor=admin)
+		await user_service.create_user(
+			user_in,
+			db_session,
+			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		)
 
 	users = await user_service.list_users(db_session, principal=admin_principal)
 	assert len(users) >= 3
@@ -240,10 +244,18 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 		email="duplicate_service@example.com",
 		password="password123",
 	)
-	await user_service.create_user(user_in, db_session, actor=admin)
+	await user_service.create_user(
+		user_in,
+		db_session,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+	)
 
 	with pytest.raises(HTTPException) as exc:
-		await user_service.create_user(user_in, db_session, actor=admin)
+		await user_service.create_user(
+			user_in,
+			db_session,
+			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		)
 	assert exc.value.status_code == 400
 
 
@@ -257,7 +269,7 @@ async def test_user_service_guards(db_session: AsyncSession) -> None:
 	normal_user = await user_service.create_user(
 		UserCreate(email="guard@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	principal = Principal(user=normal_user, group_ids=(), permissions=frozenset())
 
@@ -294,7 +306,7 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 	sneaky = await user_service.create_user(
 		UserCreate(email="sneaky@example.com", password="pw", is_superuser=True),
 		db_session,
-		actor=None,
+		principal=None,
 	)
 	assert sneaky.is_superuser is False
 	assert sneaky.is_active is True
@@ -303,6 +315,6 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 	new_admin = await user_service.create_user(
 		UserCreate(email="new-admin@example.com", password="pw", is_superuser=True),
 		db_session,
-		actor=bootstrap,
+		principal=Principal(user=bootstrap, group_ids=(), permissions=frozenset()),
 	)
 	assert new_admin.is_superuser is True

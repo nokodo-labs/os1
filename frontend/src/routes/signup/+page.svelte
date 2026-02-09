@@ -20,6 +20,8 @@
 
 	pageTitleStore.pageTitle = 'sign up'
 
+	const allowSignups = $derived(settingsState.data?.security?.allow_signups ?? true)
+
 	const consoleOrigin = $derived(
 		consoleOriginOverride ?? settingsState.data?.branding?.public_console_origin ?? null
 	)
@@ -44,13 +46,15 @@
 			password.length >= 1 &&
 			passwordConfirm.length >= 1 &&
 			password === passwordConfirm &&
-			isInitialized !== false
+			isInitialized !== false &&
+			allowSignups
 	)
 
 	async function onSubmit(event: SubmitEvent) {
 		event.preventDefault()
 		if (isSubmitting) return
 		if (isInitialized === false) return
+		if (!allowSignups) return
 
 		errorMessage = null
 
@@ -134,6 +138,14 @@
 											</a>
 										{/if}
 									{/if}
+								</div>
+							{/if}
+							{#if !allowSignups}
+								<div
+									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+									role="alert"
+								>
+									signups are currently disabled.
 								</div>
 							{/if}
 							<div class="space-y-2">

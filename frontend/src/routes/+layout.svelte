@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { markAuthReady } from '$lib/auth/session.svelte'
+	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
@@ -91,7 +92,19 @@
 	setThemeContext(theme)
 
 	// background is directly reactive from the store
-	const currentBackground = $derived(preferences.data.appearance.background ?? 'lightrays')
+	const currentBackground = $derived.by(() => {
+		const isAuth = page.url.pathname === '/login' || page.url.pathname === '/signup'
+		if (isAuth) {
+			const authBg: BackgroundType =
+				settingsState.data?.ui?.auth_pages_background ?? 'lightrays'
+			return authBg
+		}
+		return (
+			preferences.data.appearance.background ??
+			settingsState.data?.ui?.default_background ??
+			'darkveil'
+		)
+	})
 
 	// access gate state
 	let pendingApproval = $state<boolean>(false)
@@ -164,10 +177,13 @@
 			return
 		}
 
-		// access gate: show pending approval if user lacks frontend access
-		await permissions.refresh()
-		if (!permissions.hasPermission('frontend:access')) {
-			pendingApproval = true
+		pendingApproval = false
+		if (token) {
+			// access gate: show pending approval if user lacks frontend access
+			await permissions.refresh()
+			if (!permissions.hasPermission('frontend:access')) {
+				pendingApproval = true
+			}
 		}
 	})
 
@@ -295,6 +311,9 @@
 
 <svelte:head>
 	<title>{pageTitleStore.pageFullTitle}</title>
+	{#if settingsState.data?.branding?.pwa_manifest_url}
+		<link rel="manifest" href={settingsState.data.branding.pwa_manifest_url} />
+	{/if}
 </svelte:head>
 
 <SplashController />

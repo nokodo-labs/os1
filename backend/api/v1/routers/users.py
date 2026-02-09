@@ -13,7 +13,11 @@ from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate, UserPermissions, UserUpdate
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal, get_current_principal, get_optional_user
+from api.v1.service.auth import (
+	Principal,
+	get_current_principal,
+	get_optional_principal,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -61,11 +65,11 @@ async def read_user(
 @router.post("", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 async def create_user(
 	user_in: UserCreate,
-	current_user: User | None = Depends(get_optional_user),
+	principal: Principal | None = Depends(get_optional_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> User:
 	"""create new user."""
-	return await user_service.create_user(user_in, db, actor=current_user)
+	return await user_service.create_user(user_in, db, principal=principal)
 
 
 @router.get("/{user_id}/permissions", response_model=UserPermissions)

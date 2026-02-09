@@ -222,7 +222,7 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 	created = await users.create_user(
 		user_in=UserCreate(email="x@example.com", password="pw", is_superuser=True),
 		session=db_session,
-		actor=None,
+		principal=None,
 	)
 	assert created.is_active is True
 	assert created.is_superuser is False
@@ -231,7 +231,7 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 		await users.create_user(
 			user_in=UserCreate(email="y@example.com", password="pw"),
 			session=db_session,
-			actor=user,
+			principal=Principal(user=user, group_ids=(), permissions=frozenset()),
 		)
 
 	user.is_active = False
@@ -239,7 +239,7 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 		await users.create_user(
 			user_in=UserCreate(email="z@example.com", password="pw", is_active=True),
 			session=db_session,
-			actor=user,
+			principal=Principal(user=user, group_ids=(), permissions=frozenset()),
 		)
 
 

@@ -14,6 +14,7 @@ from api.permissions import (
 	ActionPermission,
 	DefaultResourceAccess,
 )
+from api.schemas.preferences import BackgroundType
 from api.settings import Settings
 
 
@@ -23,6 +24,14 @@ class UISettingsPatch(BaseModel):
 	default_theme: str | None = Field(
 		default=None,
 		description="'light', 'dark', or 'system'",
+	)
+	default_background: BackgroundType | None = Field(
+		default=None,
+		description="default background for the app",
+	)
+	auth_pages_background: BackgroundType | None = Field(
+		default=None,
+		description="background for auth pages (login, signup)",
 	)
 	sidebar_collapsed: bool | None = Field(default=None, description="collapse sidebar")
 
@@ -68,6 +77,10 @@ class BrandingSettingsPatch(BaseModel):
 		default=None,
 		description="public console origin",
 	)
+	pwa_manifest_url: str | None = Field(
+		default=None,
+		description="external pwa manifest.json url",
+	)
 
 
 class LimitsSettingsPatch(BaseModel):
@@ -95,9 +108,50 @@ class LimitsSettingsPatch(BaseModel):
 	)
 
 
+class OIDCSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = Field(
+		default=None,
+		description="enable oidc authentication",
+	)
+	issuer_url: str | None = Field(
+		default=None,
+		description="oidc issuer url",
+	)
+	client_id: str | None = Field(
+		default=None,
+		description="oidc client id",
+	)
+	client_secret: str | None = Field(
+		default=None,
+		description="oidc client secret",
+	)
+	redirect_uri: str | None = Field(
+		default=None,
+		description="oidc redirect uri",
+	)
+	scopes: list[str] | None = Field(
+		default=None,
+		description="oidc scopes",
+	)
+	only: bool | None = Field(
+		default=None,
+		description="only allow login via oidc",
+	)
+
+
 class SecuritySettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
+	allow_signups: bool | None = Field(
+		default=None,
+		description="allow new user signups",
+	)
+	auto_signup_role_ids: list[str] | None = Field(
+		default=None,
+		description="role ids auto-applied to new signups",
+	)
 	access_token_expire_minutes: int | None = Field(
 		default=None,
 		ge=1,
@@ -112,7 +166,6 @@ class SecuritySettingsPatch(BaseModel):
 		default=None,
 		description="set secure cookies",
 	)
-
 	session_timeout_minutes: int | None = Field(
 		default=None,
 		ge=5,
@@ -126,6 +179,7 @@ class SecuritySettingsPatch(BaseModel):
 		default=None,
 		description="allowed domains",
 	)
+	oidc: OIDCSettingsPatch | None = None
 
 
 class AIMemorySettingsPatch(BaseModel):

@@ -50,6 +50,11 @@ async def login_access_token(
 	session: AsyncSession = Depends(get_db),
 ) -> Token:
 	"""OAuth2 compatible token login, get an access token for future requests."""
+	if settings.security.oidc.only:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="oidc login required",
+		)
 	user = await auth_service.authenticate_user(
 		session=session, email=form_data.username, password=form_data.password
 	)

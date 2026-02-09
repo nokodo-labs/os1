@@ -253,6 +253,20 @@ async def get_current_principal(
 	)
 
 
+async def get_optional_principal(
+	user: Annotated[User | None, Depends(get_optional_user)],
+	session: Annotated[AsyncSession, Depends(get_db)],
+) -> Principal | None:
+	if user is None:
+		return None
+	if not user.is_active:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="inactive user",
+		)
+	return await get_current_principal(user=user, session=session)
+
+
 async def require_admin(
 	principal: Annotated[Principal, Depends(get_current_principal)],
 ) -> None:

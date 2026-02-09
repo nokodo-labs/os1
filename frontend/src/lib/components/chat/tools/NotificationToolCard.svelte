@@ -49,9 +49,9 @@
 				isUnread={true}
 			/>
 		{:else if execution.status === 'running' || execution.status === 'pending'}
-			<div class="animate-pulse space-y-2 rounded-xl bg-white/5 p-3">
-				<div class="h-3 w-32 rounded bg-white/10"></div>
-				<div class="h-3 w-48 rounded bg-white/10"></div>
+			<div class="animate-pulse space-y-2 bg-white/5 p-3">
+				<div class="h-3 w-32 bg-white/10"></div>
+				<div class="h-3 w-48 bg-white/10"></div>
 			</div>
 		{/if}
 

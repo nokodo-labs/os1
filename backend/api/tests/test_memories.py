@@ -178,7 +178,7 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 	other = await user_service.create_user(
 		UserCreate(email="mem_other@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
 	memory = await memory_service.create_memory(
@@ -206,12 +206,12 @@ async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> 
 	owner = await user_service.create_user(
 		UserCreate(email="mem_guard_owner@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	other = await user_service.create_user(
 		UserCreate(email="mem_guard_other@example.com", password="pw"),
 		db_session,
-		actor=admin,
+		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
 

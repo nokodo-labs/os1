@@ -6,12 +6,14 @@
 	import { auth, markAuthReady } from '$lib/auth.svelte'
 	import PendingApproval from '$lib/components/PendingApproval.svelte'
 	import SplashLoader from '$lib/components/SplashLoader.svelte'
+	import { permissions } from '$lib/stores/permissions.svelte'
 	import { onMount } from 'svelte'
 	import '../app.css'
 
 	let { children } = $props()
 
 	let isInitialized = $state<boolean | null>(null)
+	let pendingApproval = $state(false)
 
 	onMount(async () => {
 		try {
@@ -28,6 +30,23 @@
 		}
 
 		markAuthReady()
+	})
+
+	$effect(() => {
+		if (!auth.isAuthenticated) {
+			pendingApproval = false
+			permissions.clear()
+			return
+		}
+
+		void (async () => {
+			await permissions.refresh()
+			if (!permissions.hasPermission('console:access')) {
+				pendingApproval = true
+			} else {
+				pendingApproval = false
+			}
+		})()
 	})
 
 	$effect(() => {
@@ -51,7 +70,7 @@
 <SplashLoader ready={isInitialized !== null} />
 
 {#if isInitialized !== null}
-	{#if auth.pendingApproval}
+	{#if pendingApproval}
 		<PendingApproval />
 	{:else}
 		{@render children()}

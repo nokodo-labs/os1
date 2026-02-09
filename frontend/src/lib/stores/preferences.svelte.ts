@@ -89,12 +89,12 @@ function createPreferencesStore() {
 	let userId = $state<string | null>(null)
 
 	// defaults: admin settings → hardcoded fallbacks
-	// only ui.default_theme and ai.default_agent_id have admin settings
 	const defaults: Resolved = $derived({
 		appearance: {
 			themeMode: (settingsState.data?.ui?.default_theme as ThemeMode) ?? 'system',
 			accent: 'purple',
-			background: 'darkveil',
+			background:
+				(settingsState.data?.ui?.default_background as BackgroundType) ?? 'lightrays',
 			autoAccentColors: true,
 			bubbleTailStyle: 'none',
 		},

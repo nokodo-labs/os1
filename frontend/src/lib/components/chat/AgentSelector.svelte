@@ -2,6 +2,7 @@
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
+	import { selectedAgent as selectedAgentStore } from '$lib/stores/selectedAgent.svelte'
 	import { scale } from 'svelte/transition'
 
 	interface Props {
@@ -33,7 +34,7 @@
 		const hasSelected = selectedAgent && agents.list.some((a) => a.id === selectedAgent)
 		if (!hasSelected) {
 			didAutoSelect = true
-			onAgentChange(agents.list[0].id)
+			onAgentChange(selectedAgentStore.resolveDefault(agents.list))
 		}
 	})
 
