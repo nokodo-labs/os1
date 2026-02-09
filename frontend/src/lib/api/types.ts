@@ -73,13 +73,13 @@ export interface paths {
         };
         /**
          * Read Users
-         * @description Retrieve users.
+         * @description retrieve users.
          */
         get: operations["read_users_users_get"];
         put?: never;
         /**
          * Create User
-         * @description Create new user.
+         * @description create new user.
          */
         post: operations["create_user_users_post"];
         delete?: never;
@@ -97,7 +97,7 @@ export interface paths {
         };
         /**
          * Read User
-         * @description Get user by ID.
+         * @description get user by ID.
          */
         get: operations["read_user_users__user_id__get"];
         put?: never;
@@ -107,9 +107,29 @@ export interface paths {
         head?: never;
         /**
          * Update User
-         * @description Update user.
+         * @description update user.
          */
         patch: operations["update_user_users__user_id__patch"];
+        trace?: never;
+    };
+    "/users/{user_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read User Permissions
+         * @description get resolved permissions for user.
+         */
+        get: operations["read_user_permissions_users__user_id__permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/threads": {
@@ -1616,7 +1636,7 @@ export interface components {
          *     naming convention: {domain}:{action}
          * @enum {string}
          */
-        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "users:create" | "settings:read" | "settings:write" | "events:read" | "events:manage" | "agents:read" | "agents:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "files:upload";
+        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:write" | "events:read" | "events:manage" | "agents:read" | "agents:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "files:upload" | "frontend:access" | "console:access";
         /**
          * Agent
          * @description Agent response schema — returns IDs only, no hydrated relationships.
@@ -1707,12 +1727,6 @@ export interface components {
             /** Profile Image Url */
             profile_image_url?: string | null;
         };
-        /**
-         * AgentVisibility
-         * @description Controls who can view an agent.
-         * @enum {string}
-         */
-        AgentVisibility: "public" | "private" | "admin-only";
         /**
          * AppearancePreferences
          * @description user appearance preferences.
@@ -1826,6 +1840,16 @@ export interface components {
              */
             primary_color: string;
             /**
+             * Support Email
+             * @description support email shown to users awaiting approval
+             */
+            support_email?: string | null;
+            /**
+             * Admin Email
+             * @description admin email for internal / escalation contact
+             */
+            admin_email?: string | null;
+            /**
              * Public Frontend Origin
              * @description public frontend origin
              */
@@ -1840,6 +1864,11 @@ export interface components {
              * @description public admin console origin
              */
             public_console_origin?: string | null;
+            /**
+             * Pwa Manifest Url
+             * @description external pwa manifest.json url
+             */
+            pwa_manifest_url?: string | null;
             /**
              * Analytics Key
              * @description analytics key (env-only)
@@ -1883,6 +1912,11 @@ export interface components {
              * @description public console origin
              */
             public_console_origin?: string | null;
+            /**
+             * Pwa Manifest Url
+             * @description external pwa manifest.json url
+             */
+            pwa_manifest_url?: string | null;
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
@@ -2724,6 +2758,87 @@ export interface components {
              * @description whether notification sounds are enabled
              */
             sound?: boolean | null;
+        };
+        /**
+         * OIDCSettings
+         * @description openid connect provider configuration.
+         */
+        OIDCSettings: {
+            /**
+             * Enabled
+             * @description enable oidc authentication
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Issuer Url
+             * @description oidc issuer url
+             */
+            issuer_url?: string | null;
+            /**
+             * Client Id
+             * @description oidc client id
+             */
+            client_id?: string | null;
+            /**
+             * Client Secret
+             * @description oidc client secret
+             */
+            client_secret?: string | null;
+            /**
+             * Redirect Uri
+             * @description oidc redirect uri
+             */
+            redirect_uri?: string | null;
+            /**
+             * Scopes
+             * @description oidc scopes
+             */
+            scopes?: string[];
+            /**
+             * Only
+             * @description only allow login via oidc (disables password login)
+             * @default false
+             */
+            only: boolean;
+        };
+        /** OIDCSettingsPatch */
+        OIDCSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable oidc authentication
+             */
+            enabled?: boolean | null;
+            /**
+             * Issuer Url
+             * @description oidc issuer url
+             */
+            issuer_url?: string | null;
+            /**
+             * Client Id
+             * @description oidc client id
+             */
+            client_id?: string | null;
+            /**
+             * Client Secret
+             * @description oidc client secret
+             */
+            client_secret?: string | null;
+            /**
+             * Redirect Uri
+             * @description oidc redirect uri
+             */
+            redirect_uri?: string | null;
+            /**
+             * Scopes
+             * @description oidc scopes
+             */
+            scopes?: string[] | null;
+            /**
+             * Only
+             * @description only allow login via oidc
+             */
+            only?: boolean | null;
         };
         /** OpenAIChatCompletionChoice */
         OpenAIChatCompletionChoice: {
@@ -3604,6 +3719,17 @@ export interface components {
              */
             secret_key: string;
             /**
+             * Allow Signups
+             * @description allow new user signups
+             * @default true
+             */
+            allow_signups: boolean;
+            /**
+             * Auto Signup Role Ids
+             * @description role ids auto-applied to new signups
+             */
+            auto_signup_role_ids?: string[] | null;
+            /**
              * Jwt Algorithm
              * @description jwt algorithm
              * @default HS256
@@ -3644,6 +3770,8 @@ export interface components {
              * @description allowed domains
              */
             allowed_email_domains?: string[];
+            /** @description openid connect provider settings */
+            oidc?: components["schemas"]["OIDCSettings"];
             /**
              * Enable Oauth
              * @description enable oauth (env-only)
@@ -3683,6 +3811,16 @@ export interface components {
         /** SecuritySettingsPatch */
         SecuritySettingsPatch: {
             /**
+             * Allow Signups
+             * @description allow new user signups
+             */
+            allow_signups?: boolean | null;
+            /**
+             * Auto Signup Role Ids
+             * @description role ids auto-applied to new signups
+             */
+            auto_signup_role_ids?: string[] | null;
+            /**
              * Access Token Expire Minutes
              * @description access token expire minutes
              */
@@ -3712,6 +3850,7 @@ export interface components {
              * @description allowed domains
              */
             allowed_email_domains?: string[] | null;
+            oidc?: components["schemas"]["OIDCSettingsPatch"] | null;
         };
         /** Settings */
         Settings: {
@@ -4090,6 +4229,20 @@ export interface components {
              */
             default_theme: string;
             /**
+             * Default Background
+             * @description default background for the app
+             * @default darkveil
+             * @enum {string}
+             */
+            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none";
+            /**
+             * Auth Pages Background
+             * @description background for auth pages (login, signup)
+             * @default lightrays
+             * @enum {string}
+             */
+            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none";
+            /**
              * Sidebar Collapsed
              * @description collapse sidebar
              * @default false
@@ -4103,6 +4256,16 @@ export interface components {
              * @description 'light', 'dark', or 'system'
              */
             default_theme?: string | null;
+            /**
+             * Default Background
+             * @description default background for the app
+             */
+            default_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            /**
+             * Auth Pages Background
+             * @description background for auth pages (login, signup)
+             */
+            auth_pages_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
             /**
              * Sidebar Collapsed
              * @description collapse sidebar
@@ -4182,6 +4345,14 @@ export interface components {
             is_active?: boolean | null;
             /** Is Superuser */
             is_superuser?: boolean | null;
+        };
+        /**
+         * UserPermissions
+         * @description resolved permissions for a user.
+         */
+        UserPermissions: {
+            /** Permissions */
+            permissions: string[];
         };
         /**
          * UserPreferences
@@ -4407,7 +4578,7 @@ export interface operations {
             };
             path?: never;
             cookie?: {
-                refresh_token?: string | null;
+                "nokodo:refresh_token"?: string | null;
             };
         };
         requestBody?: never;
@@ -4896,6 +5067,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_user_permissions_users__user_id__permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPermissions"];
                 };
             };
             /** @description bad request */
