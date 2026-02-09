@@ -12,7 +12,7 @@ from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
 from api.models.access_rule import AccessRule
-from api.models.agent import Agent, AgentVisibility
+from api.models.agent import Agent
 from api.models.event import Event
 from api.models.message import Message
 from api.models.model import Model
@@ -41,6 +41,7 @@ from api.schemas.thread import (
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat import run_agent as chat_run_agent
 from api.v1.service.chat.models import (
 	build_chat_model,
@@ -150,7 +151,7 @@ async def generate_thread_metadata(
 			.order_by(Agent.created_at.desc())
 		)
 		if not principal.is_admin:
-			stmt = stmt.where(Agent.visibility == AgentVisibility.PUBLIC)
+			stmt = stmt.where(resource_access_predicate(principal, ResourceType.AGENT))
 		result = await db.execute(stmt)
 		agent = result.scalars().first()
 		if agent is None or agent.model is None:

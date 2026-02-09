@@ -10,6 +10,8 @@
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
 	import Island from '$lib/components/system/Island.svelte'
+	import NotificationToast from '$lib/components/system/NotificationToast.svelte'
+	import PendingApproval from '$lib/components/system/PendingApproval.svelte'
 	import { createDebugUiContext } from '$lib/contexts/debugUiContext.svelte'
 	import { createSidebarContext, useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
@@ -18,8 +20,11 @@
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import { notifications } from '$lib/stores/notifications.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
+	import { permissions } from '$lib/stores/permissions.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
+	import { settingsState } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
@@ -88,6 +93,9 @@
 	// background is directly reactive from the store
 	const currentBackground = $derived(preferences.data.appearance.background ?? 'lightrays')
 
+	// access gate state
+	let pendingApproval = $state<boolean>(false)
+
 	let { children } = $props()
 
 	// Island offset tracking for fixed positioning with blur effect
@@ -154,6 +162,12 @@
 		if (token && isPublic) {
 			void goto(resolve('/'), { replaceState: true })
 			return
+		}
+
+		// access gate: show pending approval if user lacks frontend access
+		await permissions.refresh()
+		if (!permissions.hasPermission('frontend:access')) {
+			pendingApproval = true
 		}
 	})
 
@@ -291,7 +305,12 @@
 	config={{ color: '#0a0a0a' }}
 	onReady={handleBackgroundReady}
 >
-	{#if isAuthRoute}
+	{#if pendingApproval}
+		<PendingApproval
+			supportEmail={settingsState.data?.branding?.support_email ?? null}
+			adminEmail={settingsState.data?.branding?.admin_email ?? null}
+		/>
+	{:else if isAuthRoute}
 		<div class="relative z-1 flex h-screen">
 			<div class="relative flex min-w-0 flex-1 flex-col">
 				{@render children()}
@@ -359,7 +378,7 @@
 				></div>
 			{/if}
 			<div
-				class="dock-shell fixed top-0 right-0 bottom-0 z-30 w-[min(31rem,calc(100vw-3rem))] px-6 pt-8 pb-8 {chrome.isDockOpen
+				class="dock-shell fixed top-0 right-0 bottom-0 z-30 w-[min(31rem,calc(100vw-3rem))] {chrome.isDockOpen
 					? 'pointer-events-auto'
 					: 'pointer-events-none'}"
 				role="presentation"
@@ -371,9 +390,10 @@
 				onpointercancel={onDockPointerCancel}
 			>
 				<div
-					class="relative h-full w-full transition-all duration-300 ease-out {chrome.isDockOpen
-						? 'translate-x-0 opacity-100'
-						: 'translate-x-full opacity-0'}"
+					class="dock-content h-full w-full px-6 pt-8 pb-8 backdrop-blur-[14px] transition-transform duration-300 ease-in-out {chrome.isDockOpen
+						? 'translate-x-0'
+						: 'translate-x-full'}"
+					style="background-color: var(--accent-bg);"
 				>
 					<Dock />
 				</div>
@@ -387,6 +407,29 @@
 			/>
 		</div>
 	{/if}
+
+	<!-- notification toasts (global, above all content) -->
+	{#if !chrome.isDockOpen}
+		<NotificationToast
+			toasts={notifications.toasts}
+			onDismiss={(id: string) => notifications.dismissToast(id)}
+			onSwipeDismiss={(id: string) => {
+				const toast = notifications.toasts.find((t) => t.id === id)
+				if (toast) {
+					const match = notifications.list.find((n) => {
+						const data = n.event?.data as Record<string, unknown> | undefined
+						return !n.dismissed && data?.title === toast.title
+					})
+					if (match) void notifications.delete(match.id)
+				}
+				notifications.dismissToast(id)
+			}}
+			onClick={(id: string) => {
+				notifications.dismissToast(id)
+				chrome.openDock()
+			}}
+		/>
+	{/if}
 </BackgroundManager>
 
 <style>
@@ -394,6 +437,9 @@
 		.dock-shell {
 			left: 0;
 			width: 100%;
+		}
+
+		.dock-content {
 			padding-left: 1rem;
 			padding-right: 1rem;
 		}

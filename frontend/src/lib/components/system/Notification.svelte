@@ -29,12 +29,12 @@
 </script>
 
 <div
-	class="group rounded-pill relative flex items-start gap-3 px-3 py-3 text-left transition-all duration-150 {isUnread
+	class="group rounded-container relative flex items-start gap-3 px-3 py-3 text-left transition-all duration-150 {isUnread
 		? 'bg-white/8'
 		: 'bg-white/3'} hover:bg-white/10"
 >
 	<div
-		class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/85"
+		class="rounded-container flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/85"
 	>
 		{#if iconUrl}
 			<img src={iconUrl} alt="" class="h-5 w-5 rounded-full object-cover" />

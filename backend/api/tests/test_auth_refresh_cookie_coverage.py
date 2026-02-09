@@ -27,7 +27,7 @@ async def test_refresh_rejects_missing_origin(
 	client: AsyncClient,
 ) -> None:
 	"""Requests without Origin header should be rejected (CSRF protection)."""
-	client.cookies.set("refresh_token", "r")
+	client.cookies.set("nokodo:refresh_token", "r")
 	resp = await client.post("/v1/auth/refresh")
 	assert resp.status_code == 403
 
@@ -37,7 +37,7 @@ async def test_refresh_rejects_invalid_origin(
 	client: AsyncClient,
 ) -> None:
 	"""Requests with non-whitelisted Origin should be rejected."""
-	client.cookies.set("refresh_token", "r")
+	client.cookies.set("nokodo:refresh_token", "r")
 	resp = await client.post(
 		"/v1/auth/refresh", headers={"Origin": "https://evil.example.com"}
 	)
@@ -71,7 +71,7 @@ async def test_refresh_clears_cookie_on_flag(
 		_raise,
 	)
 
-	client.cookies.set("refresh_token", "r")
+	client.cookies.set("nokodo:refresh_token", "r")
 
 	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 401
@@ -91,13 +91,13 @@ async def test_refresh_sets_cookie_on_success(
 		_ok,
 	)
 
-	client.cookies.set("refresh_token", "r")
+	client.cookies.set("nokodo:refresh_token", "r")
 
 	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 200
 	assert resp.json()["access_token"] == "a"
 	assert "set-cookie" in resp.headers
-	assert "refresh_token" in resp.headers["set-cookie"]
+	assert "nokodo:refresh_token" in resp.headers["set-cookie"]
 
 
 @pytest.mark.asyncio
@@ -123,7 +123,7 @@ async def test_refresh_does_not_clear_cookie_without_header(
 		_raise,
 	)
 
-	client.cookies.set("refresh_token", "r")
+	client.cookies.set("nokodo:refresh_token", "r")
 
 	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 401
@@ -143,7 +143,7 @@ async def test_refresh_does_not_set_cookie_when_refresh_token_missing(
 		_ok,
 	)
 
-	client.cookies.set("refresh_token", "r")
+	client.cookies.set("nokodo:refresh_token", "r")
 
 	resp = await client.post("/v1/auth/refresh", headers={"Origin": ALLOWED_ORIGIN})
 	assert resp.status_code == 200

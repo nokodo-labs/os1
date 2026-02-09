@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.agent import Agent, AgentVisibility
+from api.models.agent import Agent
 from api.models.event import Event, EventScope
 from api.models.memory import Memory
 from api.models.message import MessageType
@@ -103,7 +103,6 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 				name="bad",
 				description=None,
 				system_prompt=None,
-				visibility=AgentVisibility.PUBLIC,
 				plugin_ids=[],
 				config={},
 			),
@@ -117,7 +116,6 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 		name="private",
 		description=None,
 		system_prompt=None,
-		visibility=AgentVisibility.PRIVATE,
 		plugin_ids=[],
 		config={},
 		model_id=None,

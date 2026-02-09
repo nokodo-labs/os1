@@ -79,7 +79,7 @@
 	<div class="flex h-full flex-col gap-4">
 		<section
 			data-dock-panel
-			class="blur-area rounded-container relative flex min-h-0 flex-col px-5 py-4"
+			class="relative flex min-h-0 flex-col overflow-hidden rounded-2xl bg-white/5 px-5 py-4"
 			style={controlCenterHeightPx > 0
 				? `max-height: calc(100% - ${controlCenterHeightPx}px - 1rem);`
 				: undefined}
@@ -142,7 +142,7 @@
 
 		<section
 			data-dock-panel
-			class="blur-area rounded-container shrink-0 px-5 py-4"
+			class="relative shrink-0 overflow-hidden rounded-2xl bg-white/5 px-5 py-4"
 			aria-label="control center"
 			bind:this={controlCenterEl}
 		>
@@ -177,90 +177,3 @@
 		</section>
 	</div>
 </aside>
-
-<style>
-	.blur-area {
-		position: relative;
-		isolation: isolate;
-		overflow: visible; /* let the blur bleed out */
-	}
-
-	.blur-area::before {
-		content: '';
-		position: absolute;
-		inset: -100px;
-		pointer-events: none;
-		z-index: 0;
-		border-radius: 100px;
-
-		backdrop-filter: blur(14px);
-		-webkit-backdrop-filter: blur(14px);
-
-		/* smoother eased ramp using multiple stops */
-		-webkit-mask:
-			linear-gradient(
-				to right,
-				transparent,
-				rgba(0, 0, 0, 0.1) 25px,
-				rgba(0, 0, 0, 0.4) 50px,
-				rgba(0, 0, 0, 0.75) 75px,
-				black 100px,
-				black calc(100% - 100px),
-				rgba(0, 0, 0, 0.75) calc(100% - 75px),
-				rgba(0, 0, 0, 0.4) calc(100% - 50px),
-				rgba(0, 0, 0, 0.1) calc(100% - 25px),
-				transparent
-			),
-			linear-gradient(
-				to bottom,
-				transparent,
-				rgba(0, 0, 0, 0.1) 25px,
-				rgba(0, 0, 0, 0.4) 50px,
-				rgba(0, 0, 0, 0.75) 75px,
-				black 100px,
-				black calc(100% - 100px),
-				rgba(0, 0, 0, 0.75) calc(100% - 75px),
-				rgba(0, 0, 0, 0.4) calc(100% - 50px),
-				rgba(0, 0, 0, 0.1) calc(100% - 25px),
-				transparent
-			);
-		-webkit-mask-composite: source-in;
-		mask:
-			linear-gradient(
-				to right,
-				transparent,
-				rgba(0, 0, 0, 0.1) 25px,
-				rgba(0, 0, 0, 0.4) 50px,
-				rgba(0, 0, 0, 0.75) 75px,
-				black 100px,
-				black calc(100% - 100px),
-				rgba(0, 0, 0, 0.75) calc(100% - 75px),
-				rgba(0, 0, 0, 0.4) calc(100% - 50px),
-				rgba(0, 0, 0, 0.1) calc(100% - 25px),
-				transparent
-			),
-			linear-gradient(
-				to bottom,
-				transparent,
-				rgba(0, 0, 0, 0.1) 25px,
-				rgba(0, 0, 0, 0.4) 50px,
-				rgba(0, 0, 0, 0.75) 75px,
-				black 100px,
-				black calc(100% - 100px),
-				rgba(0, 0, 0, 0.75) calc(100% - 75px),
-				rgba(0, 0, 0, 0.4) calc(100% - 50px),
-				rgba(0, 0, 0, 0.1) calc(100% - 25px),
-				transparent
-			);
-		mask-composite: intersect;
-		transform: translateZ(0);
-		-webkit-transform: translateZ(0);
-		will-change: backdrop-filter;
-		backface-visibility: hidden;
-	}
-
-	.blur-area > :global(*) {
-		position: relative;
-		z-index: 1;
-	}
-</style>

@@ -4,6 +4,7 @@
 	import { page } from '$app/state'
 	import { SystemService } from '$lib/api'
 	import { auth, markAuthReady } from '$lib/auth.svelte'
+	import PendingApproval from '$lib/components/PendingApproval.svelte'
 	import SplashLoader from '$lib/components/SplashLoader.svelte'
 	import { onMount } from 'svelte'
 	import '../app.css'
@@ -50,5 +51,9 @@
 <SplashLoader ready={isInitialized !== null} />
 
 {#if isInitialized !== null}
-	{@render children()}
+	{#if auth.pendingApproval}
+		<PendingApproval />
+	{:else}
+		{@render children()}
+	{/if}
 {/if}

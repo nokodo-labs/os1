@@ -1,17 +1,17 @@
-"""User routers."""
+"""user routers."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.user import User
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.user import User as UserSchema
-from api.schemas.user import UserCreate, UserUpdate
+from api.schemas.user import UserCreate, UserPermissions, UserUpdate
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal, get_current_principal, get_optional_user
 from nokodo_ai.utils.typeid import TypeID
@@ -37,7 +37,7 @@ async def read_users(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
-	"""Retrieve users."""
+	"""retrieve users."""
 	return await user_service.list_users(
 		db,
 		principal=principal,
@@ -54,7 +54,7 @@ async def read_user(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> User:
-	"""Get user by ID."""
+	"""get user by ID."""
 	return await user_service.get_user(user_id, db, principal=principal)
 
 
@@ -64,8 +64,26 @@ async def create_user(
 	current_user: User | None = Depends(get_optional_user),
 	db: AsyncSession = Depends(get_db),
 ) -> User:
-	"""Create new user."""
+	"""create new user."""
 	return await user_service.create_user(user_in, db, actor=current_user)
+
+
+@router.get("/{user_id}/permissions", response_model=UserPermissions)
+async def read_user_permissions(
+	user_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> UserPermissions:
+	"""get resolved permissions for user."""
+	if not principal.is_admin and str(user_id) != principal.user_id:
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+	user = await user_service.get_user(user_id, db, principal=principal)
+	as_principal = await get_current_principal(user=user, session=db)
+
+	return UserPermissions(
+		permissions=sorted(as_principal.permissions),
+	)
 
 
 @router.patch("/{user_id}", response_model=UserSchema)
@@ -75,5 +93,5 @@ async def update_user(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> User:
-	"""Update user."""
+	"""update user."""
 	return await user_service.update_user(user_id, body, db, principal=principal)

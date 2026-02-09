@@ -170,10 +170,9 @@ def _namespaced_display_name(
 	model_id: str,
 	upstream_display_name: str | None,
 ) -> str | None:
-	if prefix is None or prefix.strip() == "":
-		return upstream_display_name
-	base = upstream_display_name if upstream_display_name is not None else model_id
-	return f"{prefix.strip()}/{base}"
+	# display names are no longer prefixed — models are unique by
+	# (name, provider_id) instead, so the prefix is unnecessary.
+	return upstream_display_name
 
 
 async def _sync_autofetched_models(

@@ -13,6 +13,14 @@ import { SvelteDate, SvelteSet } from 'svelte/reactivity'
 export type Notification = components['schemas']['Notification']
 export type Event = components['schemas']['Event']
 
+export interface ToastItem {
+	id: string
+	title: string
+	body: string
+	iconUrl?: string | null
+	addedAt: number
+}
+
 const NOTIFICATION_EVENT_TYPES = ['notification.custom', 'notification.agent']
 const THREAD_EVENT_TYPES = ['thread.created', 'thread.updated', 'thread.deleted']
 const MESSAGE_EVENT_TYPES = ['message.created', 'message.updated', 'message.deleted']
@@ -44,12 +52,14 @@ class NotificationsStore {
 	isLoading = $state(false)
 	error = $state<string | null>(null)
 	typingIndicators = $state<TypingIndicator[]>([])
+	toasts = $state<ToastItem[]>([])
 
 	readonly unreadCount = $derived(this.list.filter((n) => !n.read_at).length)
 	readonly unread = $derived(this.list.filter((n) => !n.read_at))
 
 	#refreshTimer: ReturnType<typeof setTimeout> | null = null
 	#unsubscribe: (() => void) | null = null
+	static readonly TOAST_DURATION_MS = 5000
 
 	#scheduleRefresh = () => {
 		if (this.#refreshTimer) clearTimeout(this.#refreshTimer)
@@ -59,11 +69,27 @@ class NotificationsStore {
 		}, 350)
 	}
 
+	#pushToast = (message: StreamMessage) => {
+		const data = message.data as Record<string, unknown> | undefined
+		const title = (data?.title as string) || message.type || 'notification'
+		const body = (data?.body as string) || ''
+		const iconUrl = (data?.icon_url as string) || null
+		const id = typeof message.id === 'string' ? message.id : null
+		if (!id) return
+
+		this.toasts = [...this.toasts, { id, title, body, iconUrl, addedAt: Date.now() }]
+	}
+
+	dismissToast = (id: string) => {
+		this.toasts = this.toasts.filter((t) => t.id !== id)
+	}
+
 	#handleStreamEvent = (message: StreamMessage) => {
 		const eventType = message.type
 
 		if (NOTIFICATION_EVENT_TYPES.includes(eventType)) {
 			this.#scheduleRefresh()
+			this.#pushToast(message)
 			for (const handler of notificationEventHandlers) handler(message)
 		}
 

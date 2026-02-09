@@ -54,7 +54,7 @@
 	</span>
 {:else}
 	<div
-		class="rounded-pill overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm"
+		class="rounded-container overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm"
 		in:fade={{ duration: 150 }}
 	>
 		{#if expandable}

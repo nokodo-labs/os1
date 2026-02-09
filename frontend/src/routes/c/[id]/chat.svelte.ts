@@ -468,6 +468,7 @@ export function createChatState() {
 				if (!error && data) {
 					for (const ev of data as ApiEvent[]) {
 						const toolEv = parseToolEvent({
+							id: ev.id,
 							type: ev.type,
 							data: (ev.data ?? {}) as Record<string, unknown>,
 							created_at: ev.created_at ?? undefined,
@@ -1028,6 +1029,7 @@ export function createChatState() {
 			if (!ev.type.startsWith('tool.')) return
 			if (ev.thread_id !== threadId) return
 			const toolEv = parseToolEvent({
+				id: ev.id,
 				type: ev.type,
 				data: (ev.data ?? {}) as Record<string, unknown>,
 				created_at: ev.created_at ?? undefined,

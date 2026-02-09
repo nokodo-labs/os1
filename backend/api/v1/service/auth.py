@@ -27,7 +27,7 @@ from nokodo_ai.utils.security import (
 from nokodo_ai.utils.typeid import TypeID, assert_typeid
 
 
-REFRESH_COOKIE_NAME = "refresh_token"
+REFRESH_COOKIE_NAME = "nokodo:refresh_token"
 
 
 def origin_allowed(

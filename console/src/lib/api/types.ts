@@ -1639,8 +1639,6 @@ export interface components {
             description?: string | null;
             /** System Prompt */
             system_prompt?: string | null;
-            /** @default public */
-            visibility: components["schemas"]["AgentVisibility"];
             /** Plugin Ids */
             plugin_ids?: string[];
             /** Config */
@@ -1671,8 +1669,6 @@ export interface components {
             description?: string | null;
             /** System Prompt */
             system_prompt?: string | null;
-            /** @default public */
-            visibility: components["schemas"]["AgentVisibility"];
             /** Plugin Ids */
             plugin_ids?: string[];
             /** Config */
@@ -1698,7 +1694,6 @@ export interface components {
             description?: string | null;
             /** System Prompt */
             system_prompt?: string | null;
-            visibility?: components["schemas"]["AgentVisibility"] | null;
             /** Plugin Ids */
             plugin_ids?: string[] | null;
             /** Config */

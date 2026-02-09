@@ -46,9 +46,9 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 		data={"username": user_payload["email"], "password": user_payload["password"]},
 	)
 	assert login_resp.status_code == 200
-	assert "refresh_token=" in login_resp.headers.get("set-cookie", "")
+	assert "nokodo:refresh_token=" in login_resp.headers.get("set-cookie", "")
 	token = login_resp.json()["access_token"]
-	refresh_cookie = login_resp.cookies.get("refresh_token")
+	refresh_cookie = login_resp.cookies.get("nokodo:refresh_token")
 	assert refresh_cookie
 
 	me_resp = await client.get(
@@ -61,7 +61,7 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 
 	refresh_resp = await client.post(
 		"/v1/auth/refresh",
-		cookies={"refresh_token": refresh_cookie},
+		cookies={"nokodo:refresh_token": refresh_cookie},
 		headers={"Origin": "http://localhost:888"},
 	)
 	assert refresh_resp.status_code == 200

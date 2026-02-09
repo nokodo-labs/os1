@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.models.base import TYPEID_LENGTH, Base, StringEnum
+from api.models.base import TYPEID_LENGTH, Base
 from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
@@ -24,14 +23,6 @@ if TYPE_CHECKING:
 	from api.models.thread_participant import ThreadParticipant
 
 
-class AgentVisibility(StrEnum):
-	"""Controls who can view an agent."""
-
-	PUBLIC = "public"
-	PRIVATE = "private"
-	ADMIN = "admin-only"
-
-
 class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""User-facing AI persona with configuration."""
 
@@ -41,10 +32,6 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	description: Mapped[str | None] = mapped_column(Text())
 	system_prompt: Mapped[str | None] = mapped_column(Text())
-	visibility: Mapped[AgentVisibility] = mapped_column(
-		StringEnum(AgentVisibility),
-		default=AgentVisibility.PUBLIC,
-	)
 	plugin_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
 	config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 	model_id: Mapped[str | None] = mapped_column(

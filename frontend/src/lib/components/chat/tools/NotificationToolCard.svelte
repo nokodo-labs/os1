@@ -17,8 +17,8 @@
 			const title = typeof args.title === 'string' ? args.title : null
 			const body = typeof args.body === 'string' ? args.body : null
 			const iconUrl = typeof args.icon_url === 'string' ? args.icon_url : null
-			if (!title || !body) return null
-			return { title, body, iconUrl }
+			if (!title && !body) return null
+			return { title: title ?? 'sending notification…', body: body ?? '', iconUrl }
 		})()
 	)
 </script>
@@ -48,6 +48,11 @@
 				timestamp={new Date()}
 				isUnread={true}
 			/>
+		{:else if execution.status === 'running' || execution.status === 'pending'}
+			<div class="animate-pulse space-y-2 rounded-xl bg-white/5 p-3">
+				<div class="h-3 w-32 rounded bg-white/10"></div>
+				<div class="h-3 w-48 rounded bg-white/10"></div>
+			</div>
 		{/if}
 
 		{#if execution.events.length > 0}

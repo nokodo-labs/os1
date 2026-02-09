@@ -7,9 +7,10 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.agent import Agent, AgentVisibility
+from api.models.access_rule import AccessRule
 from api.models.model import ModelType
 from api.models.user import User
+from api.permissions import AccessLevel
 from api.schemas.agent import AgentCreate, AgentUpdate
 from api.schemas.model import ModelCreate
 from api.schemas.provider import ProviderCreate
@@ -37,7 +38,6 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		name="test-agent",
 		description="Test Agent",
 		system_prompt="You are a test agent.",
-		visibility=AgentVisibility.PRIVATE,
 		plugin_ids=[],
 		config={},
 	)
@@ -47,7 +47,6 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		principal=_admin_principal(),
 	)
 	assert agent.name == "test-agent"
-	assert agent.visibility == AgentVisibility.PRIVATE
 
 
 @pytest.mark.asyncio
@@ -58,7 +57,6 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 	await agent_service.create_agent(
 		AgentCreate(
 			name="agent-1",
-			visibility=AgentVisibility.PUBLIC,
 			plugin_ids=[],
 			config={},
 		),
@@ -68,7 +66,6 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 	await agent_service.create_agent(
 		AgentCreate(
 			name="agent-2",
-			visibility=AgentVisibility.PRIVATE,
 			plugin_ids=[],
 			config={},
 		),
@@ -90,7 +87,6 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-get",
-			visibility=AgentVisibility.PUBLIC,
 			plugin_ids=[],
 			config={},
 		),
@@ -111,7 +107,6 @@ async def test_update_agent(db_session: AsyncSession) -> None:
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-update",
-			visibility=AgentVisibility.PUBLIC,
 			plugin_ids=[],
 			config={},
 		),
@@ -139,7 +134,6 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-delete",
-			visibility=AgentVisibility.PUBLIC,
 			plugin_ids=[],
 			config={},
 		),
@@ -162,7 +156,6 @@ async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
 	principal = _admin_principal()
 	agent_in = AgentCreate(
 		name="agent-invalid-model",
-		visibility=AgentVisibility.PUBLIC,
 		plugin_ids=[],
 		config={},
 		model_id=new_typeid("model"),  # valid format but doesn't exist
@@ -179,7 +172,6 @@ async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-update-model",
-			visibility=AgentVisibility.PUBLIC,
 			plugin_ids=[],
 			config={},
 		),
@@ -206,7 +198,6 @@ async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 	principal = _admin_principal()
 	agent_in = AgentCreate(
 		name="agent-no-model",
-		visibility=AgentVisibility.PUBLIC,
 		plugin_ids=[],
 		config={},
 		model_id=None,
@@ -216,26 +207,21 @@ async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_private_agent_hidden_from_non_admin(db_session: AsyncSession) -> None:
-	owner = _user_principal().user
-	db_session.add(owner)
-	await db_session.commit()
-	private_agent = Agent(
-		name="private-hidden",
-		description=None,
-		system_prompt=None,
-		visibility=AgentVisibility.PRIVATE,
-		plugin_ids=[],
-		config={},
-		model_id=None,
+async def test_agent_hidden_without_access_rule(db_session: AsyncSession) -> None:
+	"""non-admin cannot get an agent unless an access rule grants access."""
+	admin = _admin_principal()
+	agent = await agent_service.create_agent(
+		AgentCreate(name="hidden-agent", plugin_ids=[], config={}),
+		db_session,
+		principal=admin,
 	)
-	private_agent.owner_id = owner.id
-	db_session.add(private_agent)
-	await db_session.commit()
 
-	non_admin = Principal(user=owner, group_ids=(), permissions=frozenset())
+	user = _user_principal().user
+	db_session.add(user)
+	await db_session.commit()
+	non_admin = Principal(user=user, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException):
-		await agent_service.get_agent(private_agent.id, db_session, principal=non_admin)
+		await agent_service.get_agent(agent.id, db_session, principal=non_admin)
 
 
 @pytest.mark.asyncio
@@ -261,7 +247,6 @@ async def test_create_agent_with_model(db_session: AsyncSession) -> None:
 
 	agent_in = AgentCreate(
 		name="agent-with-model",
-		visibility=AgentVisibility.PUBLIC,
 		plugin_ids=[],
 		config={},
 		model_id=model.id,
@@ -292,37 +277,39 @@ async def test_get_agent_endpoint(
 
 
 @pytest.mark.asyncio
-async def test_list_agents_filters_private_for_non_admin(
+async def test_list_agents_filters_by_access_rules(
 	db_session: AsyncSession,
 ) -> None:
+	"""non-admin sees only agents with a matching access rule."""
 	admin_principal = _admin_principal()
-	public = await agent_service.create_agent(
-		AgentCreate(
-			name="list-public",
-			visibility=AgentVisibility.PUBLIC,
-			plugin_ids=[],
-			config={},
-		),
+	accessible = await agent_service.create_agent(
+		AgentCreate(name="list-accessible", plugin_ids=[], config={}),
 		db_session,
 		principal=admin_principal,
 	)
 	await agent_service.create_agent(
-		AgentCreate(
-			name="list-private",
-			visibility=AgentVisibility.PRIVATE,
-			plugin_ids=[],
-			config={},
-		),
+		AgentCreate(name="list-hidden", plugin_ids=[], config={}),
 		db_session,
 		principal=admin_principal,
 	)
 
 	non_admin_user = _user_principal().user
 	db_session.add(non_admin_user)
+	await db_session.flush()
+
+	# grant reader access to one agent
+	db_session.add(
+		AccessRule(
+			agent_id=accessible.id,
+			subject_user_id=non_admin_user.id,
+			level=AccessLevel.READER,
+			order_index=0,
+		)
+	)
 	await db_session.commit()
+
 	non_admin_principal = Principal(
 		user=non_admin_user, group_ids=(), permissions=frozenset()
 	)
-
 	visible = await agent_service.list_agents(db_session, principal=non_admin_principal)
-	assert [agent.id for agent in visible] == [public.id]
+	assert [agent.id for agent in visible] == [accessible.id]

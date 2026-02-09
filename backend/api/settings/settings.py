@@ -142,6 +142,14 @@ class BrandingSettings(BaseModel):
 	logo_url: HttpUrl | None = Field(default=None, description="logo url")
 	favicon_url: HttpUrl | None = Field(default=None, description="favicon url")
 	primary_color: str = Field(default="#6366f1", description="primary color hex")
+	support_email: str | None = Field(
+		default=None,
+		description="support email shown to users awaiting approval",
+	)
+	admin_email: str | None = Field(
+		default=None,
+		description="admin email for internal / escalation contact",
+	)
 	public_frontend_origin: HttpUrl | None = Field(
 		default=None,
 		description="public frontend origin",

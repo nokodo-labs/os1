@@ -56,6 +56,7 @@ export function clearAccessToken(): void {
 class AuthState {
 	user = $state<User | null>(null)
 	isAuthenticated = $derived(!!accessToken)
+	pendingApproval = $state<boolean>(false)
 
 	async login(email: string, password: string) {
 		const formBody = new URLSearchParams({ username: email, password, scope: '' })
@@ -68,12 +69,14 @@ class AuthState {
 		if (error || !data) throw new Error('login failed')
 		setAccessToken(data.access_token)
 		await this.fetchUser()
+		await this.checkConsoleAccess()
 	}
 
 	async restoreSession(): Promise<boolean> {
 		const token = await refreshAccessToken()
 		if (!token) return false
 		await this.fetchUser()
+		await this.checkConsoleAccess()
 		return true
 	}
 
@@ -110,6 +113,20 @@ class AuthState {
 		await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
 		clearAccessToken()
 		this.user = null
+		this.pendingApproval = false
+	}
+
+	async checkConsoleAccess(): Promise<void> {
+		if (!accessToken || !this.user) return
+		const { data, error } = await rawApi.GET('/v1/users/{user_id}/permissions', {
+			params: { path: { user_id: this.user.id } },
+			headers: { Authorization: `Bearer ${accessToken}` },
+		})
+		if (error || !data) return
+		const permissions = data?.permissions ?? null
+		if (permissions && !permissions.includes('*') && !permissions.includes('console:access')) {
+			this.pendingApproval = true
+		}
 	}
 }
 

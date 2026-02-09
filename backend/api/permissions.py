@@ -67,6 +67,10 @@ class ActionPermission(StrEnum):
 	# features
 	FILES_UPLOAD = "files:upload"
 
+	# app access
+	FRONTEND_ACCESS = "frontend:access"
+	CONSOLE_ACCESS = "console:access"
+
 
 class ResourceType(StrEnum):
 	"""supported resource types for access control."""

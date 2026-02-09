@@ -215,6 +215,7 @@ export function isToolOnlyMessage(message: ApiMessage): boolean {
  * Parse a stream event into a ToolEvent.
  */
 export function parseToolEvent(event: {
+	id?: string
 	type: string
 	data?: Record<string, unknown>
 	created_at?: string
@@ -223,6 +224,8 @@ export function parseToolEvent(event: {
 	const validTypes: ToolEventType[] = ['tool.progress', 'tool.custom', 'tool.notification']
 
 	if (!validTypes.includes(event.type as ToolEventType)) return null
+	const eventId = typeof event.id === 'string' ? event.id : null
+	if (!eventId) return null
 
 	const data = event.data ?? {}
 
@@ -237,7 +240,7 @@ export function parseToolEvent(event: {
 	}
 
 	return {
-		id: crypto.randomUUID(),
+		id: eventId,
 		type: event.type as ToolEventType,
 		toolCallId: (data.tool_call_id as string) ?? '',
 		toolName: (data.tool_name as string) ?? '',

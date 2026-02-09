@@ -57,3 +57,9 @@ class User(UserBase, TimestampedModel):
 	"""schema for user response."""
 
 	id: TypeID
+
+
+class UserPermissions(BaseModel):
+	"""resolved permissions for a user."""
+
+	permissions: list[str]
