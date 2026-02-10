@@ -70,6 +70,8 @@ export function createChatState() {
 	let optimisticUserMessage = $state<{ content: string; timestamp: Date } | null>(null)
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
+	let viewingStreamingBranch = $state(true)
+	let streamingLeafId = $state<string | null>(null)
 	let runError = $state(false)
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
@@ -258,7 +260,7 @@ export function createChatState() {
 			}
 		}
 
-		if (streamingAssistant) {
+		if (streamingAssistant && viewingStreamingBranch) {
 			const runId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
 			const block = ensureBlock(runId, streamingAssistant.timestamp, 'assistant')
 
@@ -289,7 +291,7 @@ export function createChatState() {
 					block.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
 				}
 			}
-		} else if (optimisticUserMessage) {
+		} else if (optimisticUserMessage && viewingStreamingBranch) {
 			// optimistic user message exists but no streaming assistant yet
 			// create a standalone block for the pending user message
 			const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
@@ -344,6 +346,19 @@ export function createChatState() {
 		}
 	}
 
+	/** check if a leaf node is on the streaming branch by walking up to the streaming leaf */
+	function isOnStreamingBranch(leafId: string): boolean {
+		if (!streamingLeafId) return true
+		let curr: string | null = streamingLeafId
+		while (curr) {
+			if (curr === leafId) return true
+			const msg = messageTree.get(curr)
+			if (!msg) break
+			curr = msg.parent_id ?? null
+		}
+		return false
+	}
+
 	async function switchBranch(messageId: string, direction: 'prev' | 'next') {
 		const msg = messageTree.get(messageId)
 		if (!msg) return
@@ -359,17 +374,26 @@ export function createChatState() {
 
 		const targetId = siblings[targetIdx]
 		const newLeaf = getLatestLeaf(targetId)
+
+		// during generation, track whether we're viewing the streaming branch
+		if (isGenerating) {
+			const onStreaming = isOnStreamingBranch(newLeaf)
+			viewingStreamingBranch = onStreaming
+			currentLeafId = onStreaming && streamingLeafId ? streamingLeafId : newLeaf
+			rebuildRunBlocks()
+			return
+		}
+
 		currentLeafId = newLeaf
 		rebuildRunBlocks()
 
-		// persist branch selection to backend so subsequent messages use correct parent
+		// persist branch selection to backend
 		if (thread) {
 			try {
 				await apiClient().PATCH('/v1/threads/{thread_id}', {
 					params: { path: { thread_id: thread.id } },
 					body: { current_message_id: newLeaf },
 				})
-				// update local thread state
 				thread = { ...thread, current_message_id: newLeaf }
 			} catch (e) {
 				console.error('failed to persist branch selection', e)
@@ -670,7 +694,10 @@ export function createChatState() {
 						optimisticUserMessage = null
 					}
 					messageTree.set(msg.id, msg)
-					currentLeafId = msg.id
+					streamingLeafId = msg.id
+					if (viewingStreamingBranch) {
+						currentLeafId = msg.id
+					}
 					// keep parent chain updated for subsequent messages in this run
 					assistantParentId = msg.id
 					streamingAssistantParentId = msg.id
@@ -773,12 +800,30 @@ export function createChatState() {
 							} satisfies ApiMessage
 							if (!messageTree.has(finalized.id)) {
 								messageTree.set(finalized.id, finalized)
+							}
+							streamingLeafId = finalized.id
+							if (viewingStreamingBranch) {
 								currentLeafId = finalized.id
 							}
 							// update parent chain for next message in this run
 							assistantParentId = finalized.id
 							streamingAssistantParentId = finalized.id
-							streamingAssistant = null
+
+							// if this message had tool calls, the agent will continue after
+							// tool execution — keep a skeleton so the pulsing ball renders
+							// during the gap before the next assistant message streams
+							if (streaming.toolCalls.length > 0) {
+								streamingAssistant = {
+									runId: streaming.runId,
+									messageId: `pending-next-${opts.runId}`,
+									content: '',
+									timestamp: new SvelteDate(),
+									senderAgentId: streaming.senderAgentId,
+									toolCalls: [],
+								}
+							} else {
+								streamingAssistant = null
+							}
 							rebuildRunBlocks()
 						}
 					}
@@ -807,6 +852,8 @@ export function createChatState() {
 		optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
 		const shouldAutoScroll = scrollContainer ? computeIsAtBottom(scrollContainer) : true
 		isGenerating = true
+		viewingStreamingBranch = true
+		streamingLeafId = null
 		streamingAssistant = {
 			runId: null,
 			messageId: `pending-${activeRun + 1}`,
@@ -835,11 +882,13 @@ export function createChatState() {
 			runError = false
 			optimisticUserMessage = null
 			streamingAssistant = null
+			rebuildRunBlocks()
 		} catch (e) {
 			console.error('failed to run thread', e)
 			runError = true
 			optimisticUserMessage = null
 			streamingAssistant = null
+			rebuildRunBlocks()
 		} finally {
 			if (runId === activeRun) isGenerating = false
 		}
@@ -850,8 +899,15 @@ export function createChatState() {
 		if (!selectedAgent.id) return
 		runError = false
 		isGenerating = true
+		viewingStreamingBranch = true
+		streamingLeafId = null
 
-		streamingAssistantParentId = parentId ?? currentLeafId
+		const resolvedParent = parentId ?? currentLeafId
+		streamingAssistantParentId = resolvedParent
+
+		// switch view to parent so old response leaves the visible branch
+		if (resolvedParent) currentLeafId = resolvedParent
+
 		streamingAssistant = {
 			runId: null,
 			messageId: `pending-${activeRun + 1}`,
@@ -869,26 +925,34 @@ export function createChatState() {
 				agentId: selectedAgent.id,
 				input: optimisticUserMessage ? lastRunInput : null,
 				runId,
-				parentId,
+				parentId: resolvedParent,
 			})
 			if (runId !== activeRun) return
 			runError = false
 			optimisticUserMessage = null
 			streamingAssistant = null
 			streamingAssistantParentId = null
+			rebuildRunBlocks()
 		} catch (e) {
 			console.error('failed to retry run', e)
 			runError = true
 			streamingAssistant = null
 			streamingAssistantParentId = null
+			rebuildRunBlocks()
 		} finally {
 			if (runId === activeRun) isGenerating = false
 		}
 	}
 
 	function handleStopGeneration() {
+		runAbortController?.abort()
 		activeRun++
 		isGenerating = false
+		viewingStreamingBranch = true
+		streamingLeafId = null
+		streamingAssistant = null
+		streamingAssistantParentId = null
+		rebuildRunBlocks()
 	}
 
 	async function handleEditMessage(messageId: string) {
@@ -1006,6 +1070,8 @@ export function createChatState() {
 		optimisticUserMessage = null
 		streamingAssistant = null
 		streamingAssistantParentId = null
+		viewingStreamingBranch = true
+		streamingLeafId = null
 		lastRunInput = ''
 		runBlocks = []
 		// clear tool event tracking for previous thread
@@ -1170,6 +1236,9 @@ export function createChatState() {
 		},
 		get hasRenderableMessages() {
 			return hasRenderableMessages
+		},
+		get viewingStreamingBranch() {
+			return viewingStreamingBranch
 		},
 		get hasActiveStreamingToolCalls() {
 			if (!streamingAssistant) return false

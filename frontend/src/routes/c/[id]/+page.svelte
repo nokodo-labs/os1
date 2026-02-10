@@ -198,13 +198,6 @@
 		// keep pinned while streaming if user was already at bottom
 		if (chat.isGenerating && chat.autoScroll) void chat.queueScrollToBottom('auto')
 	})
-
-	// ─────────────────────────────────────────────────────────────────────────────
-	// effects: rebuild run blocks when messages change
-	// ─────────────────────────────────────────────────────────────────────────────
-	$effect(() => {
-		chat.rebuildRunBlocks()
-	})
 </script>
 
 {#snippet islandContextActions()}

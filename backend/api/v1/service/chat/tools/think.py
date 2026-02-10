@@ -40,7 +40,6 @@ class ChainOfThoughts(BaseModel):
 	"""structured reasoning output from the agent's thought process."""
 
 	thoughts: list[Thought] = Field(
-		default_factory=list,
 		min_length=1,
 		description=(
 			"list of individual thoughts that make up the agent's reasoning process."
@@ -56,9 +55,13 @@ class ThinkingTool(Tool[AppContext]):
 		default=(
 			"think, reason, and articulate your thought process in a "
 			"structured way. use this as your internal, private "
-			"scratchpad to work through complex problems step by step. "
+			"scratchpad to work through complex problems. "
 			"use this tool every time you need to stop and reason "
-			"through something."
+			"through something.\n\n"
+			"NEVER use this tool before saying anything to the user. "
+			"always prioritize feedback, by saying something like "
+			"'let me think about that' before using this tool for the "
+			"first time in your turn."
 		)
 	)
 	parameters: JSONObject = Field(

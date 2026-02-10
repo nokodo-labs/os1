@@ -82,15 +82,13 @@
 		class:whatsapp-left={showTail && tailStyle === 'whatsapp' && align === 'left'}
 	>
 		<div
-			class="bubble-content liquid-glass relative rounded-container px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
+			class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
 			style="
                 background-color: var(--accent-primary);
                 box-shadow: 0 4px 16px var(--accent-border);
             "
 		>
-			<div
-				class="leading-relaxed wrap-break-word whitespace-pre-wrap text-white"
-			>
+			<div class="leading-relaxed wrap-break-word whitespace-pre-wrap text-white">
 				{content}
 			</div>
 		</div>

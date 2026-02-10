@@ -24,9 +24,9 @@
 		) {
 			// start the live timer
 			const start = execution.startedAt.getTime()
-			elapsed = Math.floor((Date.now() - start) / 1000)
+			elapsed = (Date.now() - start) / 1000
 			timerInterval = setInterval(() => {
-				elapsed = Math.floor((Date.now() - start) / 1000)
+				elapsed = (Date.now() - start) / 1000
 			}, 100)
 		} else {
 			// stop the timer
@@ -75,7 +75,7 @@
 		<Brain class="h-3.5 w-3.5" />
 		{#if isActive}
 			<ShimmerText>thinking</ShimmerText>
-			<span class="text-white/40 tabular-nums">{elapsed}s</span>
+			<span class="text-white/40 tabular-nums">{elapsed.toFixed(1)}s</span>
 		{:else if isDone}
 			<span>thought for {displayElapsed}s</span>
 			<Check class="h-3 w-3 text-green-400" />
@@ -112,7 +112,7 @@
 		<div class="flex items-center gap-2 text-sm">
 			{#if isActive}
 				<ShimmerText className="text-white/70">thinking</ShimmerText>
-				<span class="text-xs text-white/40 tabular-nums">{elapsed}s</span>
+				<span class="text-xs text-white/40 tabular-nums">{elapsed.toFixed(1)}s</span>
 			{:else if isDone}
 				<span class="text-white/50">thought for {displayElapsed}s</span>
 			{:else if isError}
