@@ -15,6 +15,7 @@
 		tail?: Snippet
 		isLastMessage?: boolean
 		isStreaming?: boolean
+		isRunActive?: boolean
 		showStreamingPlaceholder?: boolean
 		modelName?: string
 		avatarUrl?: string | null
@@ -33,6 +34,7 @@
 		tail,
 		isLastMessage = false,
 		isStreaming = false,
+		isRunActive = false,
 		showStreamingPlaceholder = true,
 		modelName = 'assistant',
 		avatarUrl = null,
@@ -136,6 +138,7 @@
 		<!-- Actions -->
 		<div
 			class="flex items-center gap-2 transition-opacity duration-200 {!isStreaming &&
+			!isRunActive &&
 			(isLastMessage || showActions)
 				? 'opacity-100'
 				: 'pointer-events-none opacity-0'}"

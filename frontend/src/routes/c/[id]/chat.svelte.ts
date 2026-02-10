@@ -1171,6 +1171,14 @@ export function createChatState() {
 		get hasRenderableMessages() {
 			return hasRenderableMessages
 		},
+		get hasActiveStreamingToolCalls() {
+			if (!streamingAssistant) return false
+			if (streamingAssistant.toolCalls.length === 0) return false
+			return streamingAssistant.toolCalls.some((tc) => {
+				const exec = getToolExecution(tc.id)
+				return !exec || exec.status === 'pending' || exec.status === 'running'
+			})
+		},
 		get agentNameById() {
 			return agentNameById
 		},

@@ -81,10 +81,9 @@
 				const rawArgs = (tc as Record<string, unknown>).arguments
 				let argsStr = ''
 				if (typeof rawArgs === 'string') {
-					argsStr = rawArgs.length > 200 ? rawArgs.slice(0, 200) + '…' : rawArgs
+					argsStr = rawArgs
 				} else if (rawArgs != null) {
-					const s = JSON.stringify(rawArgs, null, 2)
-					argsStr = s.length > 200 ? s.slice(0, 200) + '…' : s
+					argsStr = JSON.stringify(rawArgs, null, 2)
 				}
 				rendered.push(`tool_call: ${name}(${argsStr})`)
 			}
@@ -330,7 +329,7 @@
 																: (m.type ?? 'message')}
 													</div>
 													<pre
-														class="mt-2 max-h-96 overflow-auto font-mono text-xs break-all whitespace-pre-wrap text-zinc-100">{contentToText(
+														class="mt-2 overflow-auto font-mono text-xs break-all whitespace-pre-wrap text-zinc-100">{contentToText(
 															m
 														) || '(no text)'}</pre>
 												</div>

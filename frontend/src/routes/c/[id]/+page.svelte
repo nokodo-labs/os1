@@ -408,6 +408,7 @@
 												? (chat.streamingAssistant?.timestamp ?? new Date())
 												: undefined}
 										isStreaming={Boolean(isStreamingBlock)}
+										isRunActive={chat.isGenerating}
 										showStreamingPlaceholder={false}
 										modelName={displayAgent
 											? (chat.agentNameById.get(displayAgent) ?? 'assistant')
@@ -458,7 +459,7 @@
 																isStreaming={true}
 															/>
 														</div>
-													{:else}
+													{:else if !chat.hasActiveStreamingToolCalls}
 														<div
 															class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
 														>
@@ -526,6 +527,7 @@
 									: 'select an agent to generate a response.'}
 								modelName={chat.agentNameById.get(selectedAgent.id) ?? 'assistant'}
 								isLastMessage={true}
+								isRunActive={chat.isGenerating}
 								tone="error"
 							>
 								{#snippet actions()}
