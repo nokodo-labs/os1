@@ -139,6 +139,7 @@
 		class="liquid-glass chat-input relative w-full transition-all duration-300"
 		class:rounded-pill={!isMultiLine}
 		class:rounded-container={isMultiLine}
+		data-chat-input
 		style={viewTransitionName ? `view-transition-name: ${viewTransitionName};` : undefined}
 	>
 		<div class="relative z-10 px-1 py-1">

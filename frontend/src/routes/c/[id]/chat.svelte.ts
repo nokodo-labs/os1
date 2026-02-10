@@ -218,6 +218,9 @@ export function createChatState() {
 		}
 
 		for (const msg of sorted) {
+			// skip the message currently being streamed — the streaming overlay handles it
+			if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
+
 			const runId = getRunId(msg)
 			const block = ensureBlock(runId, getMessageCreatedAt(msg), 'assistant')
 			let seen = seenToolCalls.get(runId)
@@ -348,7 +351,11 @@ export function createChatState() {
 
 	/** check if a leaf node is on the streaming branch by walking up to the streaming leaf */
 	function isOnStreamingBranch(leafId: string): boolean {
-		if (!streamingLeafId) return true
+		if (!streamingLeafId) {
+			// if we haven't created the message yet, we are on the streaming branch
+			// only if we are sitting at the parent (waiting for it)
+			return streamingAssistantParentId ? leafId === streamingAssistantParentId : true
+		}
 		let curr: string | null = streamingLeafId
 		while (curr) {
 			if (curr === leafId) return true
@@ -360,22 +367,45 @@ export function createChatState() {
 	}
 
 	async function switchBranch(messageId: string, direction: 'prev' | 'next') {
-		const msg = messageTree.get(messageId)
-		if (!msg) return
-		const parentId = msg.parent_id ?? null
-		const siblings = messageChildren.get(parentId) ?? []
-		if (siblings.length <= 1) return
+		let parentId: string | null
+		let siblings: string[]
+		let idx: number
+		let pendingVirtual = false
 
-		const idx = siblings.indexOf(messageId)
+		const msg = messageTree.get(messageId)
+		if (msg) {
+			parentId = msg.parent_id ?? null
+			siblings = messageChildren.get(parentId) ?? []
+			idx = siblings.indexOf(messageId)
+		} else if (isGenerating && streamingAssistantParentId) {
+			// pending streaming placeholder not yet in the tree
+			parentId = streamingAssistantParentId
+			siblings = messageChildren.get(parentId) ?? []
+			idx = siblings.length // virtual last entry
+			pendingVirtual = true
+		} else {
+			return
+		}
+
 		if (idx === -1) return
 
+		const totalCount = siblings.length + (pendingVirtual ? 1 : 0)
+		if (totalCount <= 1) return
+
 		const targetIdx = direction === 'prev' ? idx - 1 : idx + 1
-		if (targetIdx < 0 || targetIdx >= siblings.length) return
+		if (targetIdx < 0 || targetIdx >= totalCount) return
+
+		// navigating back to the virtual pending entry (only during the brief pre-delta window)
+		if (pendingVirtual && targetIdx >= siblings.length) {
+			viewingStreamingBranch = true
+			currentLeafId = streamingLeafId ?? streamingAssistantParentId
+			rebuildRunBlocks()
+			return
+		}
 
 		const targetId = siblings[targetIdx]
 		const newLeaf = getLatestLeaf(targetId)
 
-		// during generation, track whether we're viewing the streaming branch
 		if (isGenerating) {
 			const onStreaming = isOnStreamingBranch(newLeaf)
 			viewingStreamingBranch = onStreaming
@@ -737,14 +767,33 @@ export function createChatState() {
 							!streamingAssistant || streamingAssistant.messageId !== messageId
 						if (isNewStreamingMessage) {
 							hapticFeedback()
+							const runId = typeof env.run_id === 'string' ? env.run_id : null
 							streamingAssistant = {
-								runId: typeof env.run_id === 'string' ? env.run_id : null,
+								runId,
 								messageId,
 								content: '',
 								timestamp: new SvelteDate(),
 								senderAgentId: selectedAgent.id,
 								toolCalls: [],
 							}
+							// insert placeholder into tree so branch nav works immediately
+							if (!messageTree.has(messageId)) {
+								const now = new SvelteDate().toISOString()
+								messageTree.set(messageId, {
+									id: messageId,
+									thread_id: opts.threadId,
+									parent_id: assistantParentId,
+									type: 'assistant',
+									content: [],
+									tool_calls: [],
+									metadata_: runId ? { run_id: runId } : undefined,
+									sender_agent_id: selectedAgent.id,
+									sender_user_id: null,
+									created_at: now,
+									updated_at: now,
+								} satisfies ApiMessage)
+							}
+							streamingLeafId = messageId
 						}
 						const streaming = streamingAssistant
 						if (!streaming) break
@@ -798,9 +847,7 @@ export function createChatState() {
 								created_at: now,
 								updated_at: now,
 							} satisfies ApiMessage
-							if (!messageTree.has(finalized.id)) {
-								messageTree.set(finalized.id, finalized)
-							}
+							messageTree.set(finalized.id, finalized)
 							streamingLeafId = finalized.id
 							if (viewingStreamingBranch) {
 								currentLeafId = finalized.id
@@ -849,9 +896,11 @@ export function createChatState() {
 		}
 		runError = false
 		lastRunInput = runBaseMessage
+		inputValue = ''
 		optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
 		const shouldAutoScroll = scrollContainer ? computeIsAtBottom(scrollContainer) : true
 		isGenerating = true
+		streamingAssistant = null
 		viewingStreamingBranch = true
 		streamingLeafId = null
 		streamingAssistant = {
@@ -878,7 +927,6 @@ export function createChatState() {
 				parentId: currentLeafId,
 			})
 			if (runId !== activeRun) return
-			inputValue = ''
 			runError = false
 			optimisticUserMessage = null
 			streamingAssistant = null
@@ -950,6 +998,7 @@ export function createChatState() {
 		isGenerating = false
 		viewingStreamingBranch = true
 		streamingLeafId = null
+		optimisticUserMessage = null
 		streamingAssistant = null
 		streamingAssistantParentId = null
 		rebuildRunBlocks()

@@ -302,6 +302,20 @@
 		margin: 0px;
 	}
 
+	/* Mobile UX: allow vertical scroll over charts unless fullscreen.
+	   We disable SVG hit-testing so swipes become normal page scroll.
+	*/
+	@media (pointer: coarse) {
+		:global([data-streamdown-mermaid] [data-expanded='false']) {
+			touch-action: pan-y !important;
+			overflow: visible !important;
+		}
+
+		:global([data-streamdown-mermaid] [data-expanded='false'] svg[data-mermaid-svg]) {
+			pointer-events: none !important;
+		}
+	}
+
 	/* Hide Mermaid's temporary rendering containers */
 	:global(div[id^='dmermaid-']) {
 		position: absolute !important;

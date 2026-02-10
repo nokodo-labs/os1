@@ -350,18 +350,6 @@
 				<div class="h-screen shrink-0 {chrome.layout.leftWidthClass}"></div>
 			{/if}
 
-			{#if device.isMobile && isChatSwipeEligibleRoute && !chrome.isDockOpen && !sidebar.isChatSidebarOpen}
-				<div
-					class="fixed inset-y-0 left-0 z-20 w-6"
-					role="presentation"
-					style="touch-action: pan-y;"
-					onpointerdown={onMainPointerDown}
-					onpointermove={onMainPointerMove}
-					onpointerup={onMainPointerUp}
-					onpointercancel={onMainPointerCancel}
-				></div>
-			{/if}
-
 			<!-- main content -->
 			<div
 				class="main-content-shell relative flex min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"

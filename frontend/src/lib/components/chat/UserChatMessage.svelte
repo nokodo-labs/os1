@@ -4,6 +4,8 @@
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { BubbleTailStyle } from '$lib/stores/preferences.svelte'
 	import type { Snippet } from 'svelte'
+	import { onMount } from 'svelte'
+	import type { Action } from 'svelte/action'
 
 	interface Props {
 		content: string
@@ -33,13 +35,18 @@
 
 	let showActions = $state(false)
 	let isHovered = $state(false)
-	let hideTimeout: number | null = null
+
+	// intentionally non-reactive — synchronous flag between touch + click handlers.
+	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
+	let justRevealed = false
+	const instanceId = Math.random().toString(36).slice(2)
+	const ACTIONS_EVENT = 'nokodo:chat-message-actions-open'
+	let touchStartX = 0
+	let touchStartY = 0
+	let touchMoved = false
+	let touchActive = false
 
 	function handleMouseEnter() {
-		if (hideTimeout) {
-			clearTimeout(hideTimeout)
-			hideTimeout = null
-		}
 		showActions = true
 		isHovered = true
 	}
@@ -47,9 +54,76 @@
 	function handleMouseLeave() {
 		showActions = false
 		isHovered = false
-		if (hideTimeout) {
-			clearTimeout(hideTimeout)
-			hideTimeout = null
+	}
+
+	function openActions() {
+		showActions = true
+		isHovered = true
+		justRevealed = true
+		window.dispatchEvent(new CustomEvent(ACTIONS_EVENT, { detail: { id: instanceId } }))
+		// safety net: clear if click never fires (e.g. scroll intercepts the tap)
+		setTimeout(() => {
+			justRevealed = false
+		}, 400)
+	}
+
+	function handleTouchStart(e: TouchEvent) {
+		if (showActions) return
+		if (e.touches.length !== 1) return
+		touchActive = true
+		touchMoved = false
+		const t = e.touches[0]
+		touchStartX = t.clientX
+		touchStartY = t.clientY
+	}
+
+	function handleTouchMove(e: TouchEvent) {
+		if (!touchActive) return
+		if (e.touches.length !== 1) return
+		const t = e.touches[0]
+		if (Math.abs(t.clientX - touchStartX) > 8 || Math.abs(t.clientY - touchStartY) > 8) {
+			touchMoved = true
+		}
+	}
+
+	function handleTouchEnd() {
+		if (!touchActive) return
+		touchActive = false
+		if (touchMoved) return
+		openActions()
+	}
+
+	function handleTouchCancel() {
+		if (!touchActive) return
+		touchActive = false
+	}
+
+	onMount(() => {
+		const handler = (ev: Event) => {
+			const e = ev as CustomEvent<{ id?: string }>
+			if (e.detail?.id === instanceId) return
+			showActions = false
+			isHovered = false
+		}
+		window.addEventListener(ACTIONS_EVENT, handler as EventListener)
+		return () => {
+			window.removeEventListener(ACTIONS_EVENT, handler as EventListener)
+		}
+	})
+
+	const captureClick: Action = (node) => {
+		const handler = (e: Event) => {
+			if (justRevealed) {
+				e.stopPropagation()
+				e.preventDefault()
+				justRevealed = false
+			}
+		}
+		node.addEventListener('click', handler, { capture: true })
+		return {
+			destroy() {
+				node.removeEventListener('click', handler, { capture: true })
+			},
 		}
 	}
 </script>
@@ -63,6 +137,10 @@
 	class:self-start={align === 'left'}
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
+	ontouchstart={handleTouchStart}
+	ontouchmove={handleTouchMove}
+	ontouchend={handleTouchEnd}
+	ontouchcancel={handleTouchCancel}
 	role="article"
 >
 	{#if timestamp}
@@ -99,6 +177,8 @@
 			class="flex items-center gap-1 px-1 transition-opacity duration-200 {showActions
 				? 'opacity-100'
 				: 'pointer-events-none opacity-0'}"
+			role="none"
+			use:captureClick
 		>
 			{#if siblingCount > 1}
 				<div

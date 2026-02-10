@@ -45,6 +45,22 @@
 		accentStore.set('green')
 	})
 
+	// focus chat input when agent run completes (desktop only)
+	let wasGenerating = $state(false)
+	$effect(() => {
+		const generating = chat.isGenerating
+		if (wasGenerating && !generating && !device.isMobile) {
+			// only focus if the textarea isn't already focused
+			const active = document.activeElement
+			const isTextareaFocused =
+				active?.tagName === 'TEXTAREA' && active.closest('[data-chat-input]')
+			if (!isTextareaFocused) {
+				inputFocusToken += 1
+			}
+		}
+		wasGenerating = generating
+	})
+
 	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: agents loading
 	// ─────────────────────────────────────────────────────────────────────────────

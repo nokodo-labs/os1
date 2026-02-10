@@ -264,6 +264,12 @@ export const usePanzoom = (opts = {}) => {
 
 	/** @param {TouchEvent} e */
 	function onTouchStart(e) {
+		// on mobile (touch devices), only allow pan/zoom when expanded (fullscreen).
+		// this prevents mermaid charts from blocking chat scroll.
+		if (!isExpanded && 'ontouchstart' in window) {
+			return // let touch events bubble up for normal scrolling
+		}
+
 		const hasButton = e
 			.composedPath()
 			.some((el) => el instanceof HTMLElement && el.tagName.toLowerCase() === 'button')
@@ -420,9 +426,12 @@ export const usePanzoom = (opts = {}) => {
 			const t = eventTarget ?? node
 			if (!t) return () => destroy()
 			t.style.userSelect = 'none'
-			t.style.touchAction = 'none'
+			// on touch devices, allow normal scrolling when not expanded.
+			// only block touch-action when expanded (fullscreen) or on desktop.
+			const isTouchDevice = 'ontouchstart' in window
+			t.style.touchAction = isTouchDevice ? 'pan-y' : 'none'
 			t.style.cursor = 'grab'
-			t.style.overscrollBehavior = 'contain'
+			t.style.overscrollBehavior = isTouchDevice ? 'auto' : 'contain'
 			// For SVG root, use fill-box so translation math stays in CSS px space
 			const n = node
 			if (typeof SVGSVGElement !== 'undefined' && target instanceof SVGSVGElement) {
@@ -466,6 +475,8 @@ export const usePanzoom = (opts = {}) => {
 
 			target.dataset.expanded = 'true'
 			isExpanded = true
+			// enable touch interaction now that we're fullscreen
+			target.style.touchAction = 'none'
 			zoomToFit()
 
 			// Last: capture new state (now fixed on body)
@@ -558,6 +569,9 @@ export const usePanzoom = (opts = {}) => {
 				// Move back to original context
 				eventTarget.dataset.expanded = 'false'
 				isExpanded = false
+				// restore touch-action for mobile scrolling
+				const isTouchDevice = 'ontouchstart' in window
+				eventTarget.style.touchAction = isTouchDevice ? 'auto' : 'none'
 
 				if (restoreParent) {
 					if (restoreNextSibling) {
