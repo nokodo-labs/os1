@@ -122,6 +122,14 @@ const nativeTools = new Map<string, NativeToolDefinition>([
 			inline: false,
 		},
 	],
+	[
+		'think',
+		{
+			displayName: 'thinking',
+			icon: 'brain',
+			inline: true,
+		},
+	],
 	// add more native tools here as they're implemented
 ])
 
@@ -285,7 +293,12 @@ export class ToolExecutionTracker {
 			return
 		}
 
-		this.executions.set(toolCall.id, { toolCall, status: 'pending', events: [] })
+		this.executions.set(toolCall.id, {
+			toolCall,
+			status: 'pending',
+			events: [],
+			startedAt: new Date(),
+		})
 	}
 
 	/** Process a tool event */
@@ -452,8 +465,38 @@ export function formatToolEventLine(event: ToolEvent): string {
 	return event.data.description ?? event.data.message ?? 'update'
 }
 
+/** Get the elapsed time in seconds for a think tool execution from server JSON response */
+export function getThinkElapsed(execution: ToolExecution): string | null {
+	// prefer server-reported elapsed time from JSON response
+	if (execution.result && !execution.result.isError) {
+		try {
+			const parsed = JSON.parse(execution.result.output)
+			if (typeof parsed.elapsed_seconds === 'number') {
+				return parsed.elapsed_seconds.toFixed(1)
+			}
+		} catch {
+			// not json, fall through
+		}
+	}
+	// fallback to client-side timing
+	if (!execution.startedAt || !execution.completedAt) return null
+	const ms = execution.completedAt.getTime() - execution.startedAt.getTime()
+	return (ms / 1000).toFixed(1)
+}
+
 export function getToolSummary(execution: ToolExecution): ToolSummary {
 	const isNative = isNativeTool(execution.toolCall.name)
+
+	if (isNative && execution.toolCall.name === 'think') {
+		const elapsed = getThinkElapsed(execution)
+		if (execution.status === 'error') {
+			return { title: 'thinking failed' }
+		}
+		if (execution.status === 'completed' && elapsed !== null) {
+			return { title: `thought for ${elapsed}s` }
+		}
+		return { title: 'thinking' }
+	}
 
 	if (isNative && execution.toolCall.name === 'send_notification') {
 		const def = getNativeToolDefinition('send_notification')

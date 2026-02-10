@@ -187,6 +187,7 @@ class Agent[AppContextT = None](Base):
 					model=self.chat_model,
 					tool_call_id=tool_call.id,
 					iteration=iteration,
+					tool_call_start_time=tool_call.created_at,
 				)
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
@@ -258,6 +259,7 @@ class Agent[AppContextT = None](Base):
 					model=self.chat_model,
 					tool_call_id=tool_call.id,
 					iteration=iteration,
+					tool_call_start_time=tool_call.created_at,
 				)
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
@@ -350,6 +352,7 @@ class Agent[AppContextT = None](Base):
 			tool_call_id=tool_call.id,
 			iteration=agent_context.iteration,
 			retry_count=agent_context.retry_count,
+			tool_call_start_time=agent_context.tool_call_start_time,
 			metadata=tool_call.metadata or {},
 		)
 

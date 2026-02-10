@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Awaitable
+from time import time
 from typing import TYPE_CHECKING, Literal, overload
 
 import anthropic
@@ -227,53 +228,84 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			stream=True,
 		)
 
-		tool_use_state: dict[int, tuple[str, str, str]] = {}
-		# index -> (tool_id, tool_name, input_json_buffer)
+		# transport: event index → provider tool call id
+		idx_to_provider_id: dict[int, str] = {}
+		# canonical: provider tool call id → SDK tool call id
+		provider_to_sdk_id: dict[str, str] = {}
+		# provider tool call id → state
+		tc_names: dict[str, str] = {}
+		tc_created_at: dict[str, float] = {}
+
 		async for event in stream:
+			now = time()
+
 			if isinstance(event, AnthropicRawContentBlockStartEvent):
 				block = event.content_block
 				if isinstance(block, AnthropicToolUseBlock):
-					tool_use_state[event.index] = (block.id, block.name, "")
+					provider_id = block.id
+					idx_to_provider_id[event.index] = provider_id
+					tc_created_at[provider_id] = now
+					tc_names[provider_id] = block.name
+					# create ToolCall with auto-generated SDK id
+					tc = ToolCall(
+						name=block.name,
+						arguments="",
+						created_at=now,
+						updated_at=now,
+						metadata=_provider_tool_call_metadata(
+							provider="anthropic.messages",
+							tool_call_id=provider_id,
+						),
+					)
+					provider_to_sdk_id[provider_id] = tc.id
+					yield AssistantMessage(
+						tool_calls=[tc],
+						created_at=now,
+						updated_at=now,
+					)
 				continue
 
 			if isinstance(event, AnthropicRawContentBlockDeltaEvent):
 				delta = event.delta
 				if isinstance(delta, AnthropicTextDelta):
 					if delta.text:
-						yield AssistantMessage(content=[TextContent(text=delta.text)])
+						yield AssistantMessage(
+							content=[TextContent(text=delta.text)],
+							created_at=now,
+							updated_at=now,
+						)
 					continue
 				if isinstance(delta, AnthropicInputJSONDelta):
-					state = tool_use_state.get(event.index)
-					if state is None:
+					provider_id = idx_to_provider_id.get(event.index)
+					if provider_id is None or provider_id not in provider_to_sdk_id:
 						continue
-					tool_id, tool_name, buf = state
-					tool_use_state[event.index] = (
-						tool_id,
-						tool_name,
-						buf + delta.partial_json,
-					)
+					# yield the argument fragment as a delta
+					if delta.partial_json:
+						tc = ToolCall(
+							id=provider_to_sdk_id[provider_id],
+							name=tc_names.get(provider_id, ""),
+							arguments=delta.partial_json,
+							created_at=tc_created_at[provider_id],
+							updated_at=now,
+							metadata=_provider_tool_call_metadata(
+								provider="anthropic.messages",
+								tool_call_id=provider_id,
+							),
+						)
+						yield AssistantMessage(
+							tool_calls=[tc],
+							created_at=tc_created_at[provider_id],
+							updated_at=now,
+						)
 					continue
 				continue
 
 			if isinstance(event, AnthropicRawContentBlockStopEvent):
-				state = tool_use_state.get(event.index)
-				if state is None:
-					continue
-				tool_id, tool_name, buf = state
-				raw_args = buf if buf.strip() else "{}"
-				yield AssistantMessage(
-					tool_calls=[
-						ToolCall(
-							name=tool_name,
-							arguments=raw_args,
-							metadata=_provider_tool_call_metadata(
-								provider="anthropic.messages",
-								tool_call_id=tool_id,
-							),
-						)
-					]
-				)
-				del tool_use_state[event.index]
+				# all argument fragments already streamed; clean up transport
+				provider_id = idx_to_provider_id.pop(event.index, None)
+				if provider_id:
+					tc_created_at.pop(provider_id, None)
+					tc_names.pop(provider_id, None)
 				continue
 
 

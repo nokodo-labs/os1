@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from time import time
 from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter
@@ -103,6 +104,8 @@ class ToolCall(Base):
 	id: str = Field(default_factory=lambda: typeid.new_typeid("tool_call"))
 	name: str
 	arguments: JSONValue = Field(default_factory=dict)
+	created_at: float = Field(default_factory=time)
+	updated_at: float = Field(default_factory=time)
 	metadata: JSONObject | None = None
 
 
@@ -169,6 +172,8 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 	finish_reason: FinishReason | None = Field(
 		default=None, description="reason for message completion"
 	)
+	created_at: float = Field(default_factory=time)
+	updated_at: float = Field(default_factory=time)
 
 	@classmethod
 	def from_text(cls, text: str) -> AssistantMessage:
@@ -203,6 +208,8 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 		- usage and finish_reason updates
 		"""
 		# --- merge text content ---
+		now = time()
+
 		if delta.text:
 			# find existing text part or create one
 			text_part = next(
@@ -240,6 +247,11 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 				# update name if provided (usually comes in first chunk)
 				if delta_tc.name:
 					existing_tc.name = delta_tc.name
+				# preserve the earliest created_at
+				if delta_tc.created_at < existing_tc.created_at:
+					existing_tc.created_at = delta_tc.created_at
+				# always bump updated_at to the latest delta
+				existing_tc.updated_at = now
 			else:
 				# new tool call, append it
 				self.tool_calls.append(delta_tc.model_copy(deep=True))
@@ -264,6 +276,13 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 				self.metadata = delta.metadata
 			else:
 				self.metadata.update(delta.metadata)
+
+		# --- merge timestamps ---
+		# preserve the earliest created_at across deltas
+		if delta.created_at < self.created_at:
+			self.created_at = delta.created_at
+		# always bump updated_at
+		self.updated_at = now
 
 		return self
 

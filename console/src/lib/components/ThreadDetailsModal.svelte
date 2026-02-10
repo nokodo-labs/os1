@@ -73,6 +73,29 @@
 				return ''
 			})
 			.filter((s): s is string => Boolean(s))
+
+		// render tool calls if present
+		if (message.tool_calls?.length) {
+			for (const tc of message.tool_calls) {
+				const name = (tc as Record<string, unknown>).name ?? '?'
+				const rawArgs = (tc as Record<string, unknown>).arguments
+				let argsStr = ''
+				if (typeof rawArgs === 'string') {
+					argsStr = rawArgs.length > 200 ? rawArgs.slice(0, 200) + '…' : rawArgs
+				} else if (rawArgs != null) {
+					const s = JSON.stringify(rawArgs, null, 2)
+					argsStr = s.length > 200 ? s.slice(0, 200) + '…' : s
+				}
+				rendered.push(`tool_call: ${name}(${argsStr})`)
+			}
+		}
+
+		// render tool result context if this is a tool message
+		if (message.tool_call_id) {
+			const prefix = message.is_error ? 'tool_error' : 'tool_result'
+			rendered.unshift(`[${prefix} for ${message.tool_call_id}]`)
+		}
+
 		// Join with newlines and apply debug rendering
 		const raw = rendered.join('\n\n')
 		return renderDebugText(raw)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Awaitable
+from time import time
 from typing import TYPE_CHECKING, Literal, overload
 
 import openai
@@ -27,12 +28,16 @@ from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
 from .types import (
 	OpenAIEasyInputMessageParam,
+	OpenAIResponseCompletedEvent,
+	OpenAIResponseFunctionCallArgumentsDeltaEvent,
+	OpenAIResponseFunctionCallArgumentsDoneEvent,
 	OpenAIResponseFunctionCallOutput,
 	OpenAIResponseFunctionToolCall,
 	OpenAIResponseFunctionToolCallParam,
 	OpenAIResponseFunctionToolParam,
 	OpenAIResponseInputItemParam,
 	OpenAIResponseInputParam,
+	OpenAIResponseOutputItemAddedEvent,
 	OpenAIResponsesModel,
 	OpenAIResponseTextConfigParam,
 	OpenAIResponseTextDeltaEvent,
@@ -221,10 +226,91 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			tools=openai_tools,
 			top_p=params.top_p if params.top_p is not None else openai.omit,
 		)
+
+		# transport: output_index → provider call_id
+		idx_to_call_id: dict[int, str] = {}
+		# canonical: provider call_id → SDK tool call id
+		call_id_to_sdk_id: dict[str, str] = {}
+		# provider call_id → state
+		tc_created_at: dict[str, float] = {}
+		tc_metadata: dict[str, JSONObject] = {}
+		tc_names: dict[str, str] = {}
+
 		async for event in stream:
+			now = time()
+
+			# --- text delta ---
 			if isinstance(event, OpenAIResponseTextDeltaEvent):
 				if event.delta:
-					yield AssistantMessage(content=[TextContent(text=event.delta)])
+					yield AssistantMessage(
+						content=[TextContent(text=event.delta)],
+						created_at=now,
+						updated_at=now,
+					)
+				continue
+
+			# --- tool call: output item added (first delta) ---
+			if isinstance(event, OpenAIResponseOutputItemAddedEvent):
+				item = event.item
+				if isinstance(item, OpenAIResponseFunctionToolCall):
+					call_id = item.call_id
+					idx_to_call_id[event.output_index] = call_id
+					tc_created_at[call_id] = now
+					tc_names[call_id] = item.name
+					tc_metadata[call_id] = _provider_tool_call_metadata(
+						provider="openai.responses",
+						tool_call_id=call_id,
+					)
+					# create ToolCall with auto-generated SDK id
+					tc = ToolCall(
+						name=item.name,
+						arguments="",
+						created_at=now,
+						updated_at=now,
+						metadata=tc_metadata[call_id],
+					)
+					call_id_to_sdk_id[call_id] = tc.id
+					yield AssistantMessage(
+						tool_calls=[tc],
+						created_at=now,
+						updated_at=now,
+					)
+				continue
+
+			# --- tool call: argument fragment ---
+			if isinstance(event, OpenAIResponseFunctionCallArgumentsDeltaEvent):
+				call_id = idx_to_call_id.get(event.output_index)
+				if call_id and call_id in call_id_to_sdk_id and event.delta:
+					tc = ToolCall(
+						id=call_id_to_sdk_id[call_id],
+						name=tc_names.get(call_id, ""),
+						arguments=event.delta,
+						created_at=tc_created_at[call_id],
+						updated_at=now,
+						metadata=tc_metadata.get(call_id),
+					)
+					yield AssistantMessage(
+						tool_calls=[tc],
+						created_at=tc_created_at[call_id],
+						updated_at=now,
+					)
+				continue
+
+			# --- tool call: arguments done (final name + full args for safety) ---
+			if isinstance(event, OpenAIResponseFunctionCallArgumentsDoneEvent):
+				# we already streamed all fragments; nothing extra to yield
+				continue
+
+			# --- response completed: extract usage ---
+			if isinstance(event, OpenAIResponseCompletedEvent):
+				response_usage = event.response.usage
+				if response_usage:
+					usage = Usage(
+						input_tokens=response_usage.input_tokens,
+						output_tokens=response_usage.output_tokens,
+						total_tokens=response_usage.total_tokens,
+					)
+					yield AssistantMessage(usage=usage)
 
 
 def _messages_to_openai_responses_input(

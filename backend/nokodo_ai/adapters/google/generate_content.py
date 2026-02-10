@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Awaitable
+from time import time
 from typing import TYPE_CHECKING, Literal, overload
 
 from google.genai.types import FunctionCallingConfigMode
@@ -283,51 +284,6 @@ def _response_to_assistant_message(
 	return AssistantMessage(content=content_parts, tool_calls=tool_calls, usage=usage)
 
 
-def _delta_to_assistant_message(
-	chunk: GoogleGenerateContentResponse,
-	accumulated_tool_calls: dict[str, tuple[str, str]],
-) -> AssistantMessage:
-	"""convert a streaming chunk to AssistantMessage delta.
-
-	accumulated_tool_calls: dict[provider_id, (name, args_buffer)]
-	"""
-	content_parts: list[ContentPart] = []
-
-	# check for text delta
-	if chunk.text:
-		content_parts.append(TextContent(text=chunk.text))
-
-	# check for function calls in this chunk
-	for candidate_index, cand in enumerate(chunk.candidates or []):
-		if cand.content is None:
-			continue
-		for part_index, part in enumerate(cand.content.parts or []):
-			function_call = part.function_call
-			if function_call is None:
-				continue
-			name = function_call.name
-			if not name:
-				continue
-			args = function_call.args
-
-			raw_args: str
-			if isinstance(args, dict):
-				raw_args = json.dumps(args)
-			elif isinstance(args, str):
-				raw_args = args
-			else:
-				raw_args = "{}"
-
-			provider_id = f"c{candidate_index}_p{part_index}"
-			existing = accumulated_tool_calls.get(provider_id)
-			if existing is not None and isinstance(args, str):
-				accumulated_tool_calls[provider_id] = (name, existing[1] + raw_args)
-			else:
-				accumulated_tool_calls[provider_id] = (name, raw_args)
-
-	return AssistantMessage(content=content_parts)
-
-
 class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 	"""adapter for google genai `models.generate_content` API."""
 
@@ -445,11 +401,14 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			config=config,
 		)
 
-		# track accumulated tool calls for final emission
-		accumulated_tool_calls: dict[str, tuple[str, str]] = {}
+		# per-provider_id state: auto-generated SDK id, name, created_at, metadata
+		tc_sdk_ids: dict[str, str] = {}
+		tc_created_at: dict[str, float] = {}
 		final_usage: Usage | None = None
 
 		async for chunk in stream:
+			now = time()
+
 			# extract usage from final chunk
 			if chunk.usage_metadata is not None:
 				prompt_tokens = chunk.usage_metadata.prompt_token_count
@@ -467,21 +426,72 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 						total_tokens=total,
 					)
 
-			delta = _delta_to_assistant_message(chunk, accumulated_tool_calls)
-			if delta.content:
-				yield delta
-
-		# emit accumulated tool calls at the end
-		if accumulated_tool_calls:
-			final_tool_calls: list[ToolCall] = []
-			for provider_id, (name, raw_args) in accumulated_tool_calls.items():
-				final_tool_calls.append(
-					ToolCall(
-						name=name,
-						arguments=raw_args,
-						metadata=_provider_tool_call_metadata(tool_call_id=provider_id),
-					)
+			# --- text delta ---
+			if chunk.text:
+				yield AssistantMessage(
+					content=[TextContent(text=chunk.text)],
+					created_at=now,
+					updated_at=now,
 				)
-			yield AssistantMessage(tool_calls=final_tool_calls, usage=final_usage)
-		elif final_usage is not None:
+
+			# --- tool call deltas ---
+			for candidate_index, cand in enumerate(chunk.candidates or []):
+				if cand.content is None:
+					continue
+				for part_index, part in enumerate(cand.content.parts or []):
+					function_call = part.function_call
+					if function_call is None:
+						continue
+					name = function_call.name
+					if not name:
+						continue
+					args = function_call.args
+
+					raw_args: str
+					if isinstance(args, dict):
+						raw_args = json.dumps(args)
+					elif isinstance(args, str):
+						raw_args = args
+					else:
+						raw_args = "{}"
+
+					provider_id = f"c{candidate_index}_p{part_index}"
+					metadata = _provider_tool_call_metadata(
+						tool_call_id=provider_id,
+					)
+
+					if provider_id not in tc_sdk_ids:
+						# first delta for this tool call: auto-generate SDK id
+						tc_created_at[provider_id] = now
+						tc = ToolCall(
+							name=name,
+							arguments=raw_args,
+							created_at=now,
+							updated_at=now,
+							metadata=metadata,
+						)
+						tc_sdk_ids[provider_id] = tc.id
+						yield AssistantMessage(
+							tool_calls=[tc],
+							created_at=now,
+							updated_at=now,
+						)
+					else:
+						# subsequent delta: reuse SDK id
+						tc = ToolCall(
+							id=tc_sdk_ids[provider_id],
+							name=name,
+							arguments=raw_args,
+							created_at=tc_created_at[provider_id],
+							updated_at=now,
+							metadata=metadata,
+						)
+						yield AssistantMessage(
+							tool_calls=[tc],
+							created_at=tc_created_at[provider_id],
+							updated_at=now,
+						)
+
+		# emit usage at the end
+		if final_usage is not None:
 			yield AssistantMessage(usage=final_usage)

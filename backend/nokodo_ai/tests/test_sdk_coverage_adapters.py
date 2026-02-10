@@ -26,11 +26,10 @@ from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingsAdapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.chat_completions import (
 	OpenAIChatCompletionsAdapter,
-	_accumulate_streaming_chunks,
-	_build_tool_calls_from_deltas,
 	_chat_completion_to_assistant_message,
 	_logit_bias_to_openai_chatcompletions,
 	_messages_to_openai_chatcompletions,
+	_openai_stream_to_assistant_messages,
 	_openai_tool_calls_to_tool_calls,
 	_response_format_to_openai_chatcompletions,
 	_tool_choice_to_openai_chatcompletions,
@@ -393,12 +392,6 @@ def test_openai_chat_helpers_cover_branches(
 	assert tool_calls[0].name == "f"
 	assert _openai_tool_calls_to_tool_calls(cast(Any, [object()])) == []
 
-	# cover missing-name warning path
-	caplog.set_level("WARNING")
-	built = _build_tool_calls_from_deltas({}, {}, {0: "{}"})
-	assert built == []
-	assert any("missing function name" in r.message for r in caplog.records)
-
 	# content_filter with missing refusal triggers warning and adds refusal content
 	caplog.clear()
 	caplog.set_level("WARNING")
@@ -503,7 +496,7 @@ async def test_openai_chat_stream_accumulator_covers_finish_reasons(
 
 	stream = _DummyAsyncIterator(chunks)
 	seen: list[AssistantMessage] = []
-	async for delta in _accumulate_streaming_chunks(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):
 		seen.append(delta)
 
 	assert any(m.text == "a" for m in seen)
@@ -538,19 +531,75 @@ async def test_openai_chat_stream_tool_call_delta_missing_fields() -> None:
 	]
 	stream = _DummyAsyncIterator(chunks)
 	seen: list[AssistantMessage] = []
-	async for delta in _accumulate_streaming_chunks(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):
 		seen.append(delta)
 	# should not crash; final message should exist due to finish_reason
 	assert any(m.finish_reason == "tool_calls" for m in seen)
 
 
-def test_openai_build_tool_calls_from_deltas_metadata_created() -> None:
-	built = _build_tool_calls_from_deltas(
-		tool_call_ids={0: "id0"},
-		tool_call_names={0: "f"},
-		tool_call_arguments={0: "{}"},
-	)
-	assert built and built[0].metadata == {
+@pytest.mark.asyncio
+async def test_openai_stream_tool_call_metadata_and_created_at() -> None:
+	"""tool call deltas carry provider metadata, auto-generated SDK id, and timestamps."""
+	chunks = [
+		_DummyOpenAIChunk(
+			choices=[
+				_DummyOpenAIChunkChoice(
+					index=0,
+					delta=_DummyOpenAIDelta(
+						tool_calls=[
+							_DummyOpenAIDeltaToolCall(
+								index=0,
+								id="id0",
+								function=_DummyOpenAIFunction(
+									name="f", arguments='{"a":'
+								),
+							),
+						]
+					),
+				)
+			],
+		),
+		_DummyOpenAIChunk(
+			choices=[
+				_DummyOpenAIChunkChoice(
+					index=0,
+					delta=_DummyOpenAIDelta(
+						tool_calls=[
+							_DummyOpenAIDeltaToolCall(
+								index=0,
+								function=_DummyOpenAIFunction(name="f", arguments="1}"),
+							),
+						]
+					),
+					finish_reason="tool_calls",
+				)
+			],
+		),
+	]
+	stream = _DummyAsyncIterator(chunks)
+	tc_deltas: list[AssistantMessage] = []
+	async for delta in _openai_stream_to_assistant_messages(stream):
+		if delta.tool_calls:
+			tc_deltas.append(delta)
+
+	# should have two tool call deltas (one per chunk)
+	assert len(tc_deltas) == 2
+	first_tc = tc_deltas[0].tool_calls[0]
+	second_tc = tc_deltas[1].tool_calls[0]
+
+	# SDK id auto-generated (not the provider's "id0"), stable across deltas
+	assert first_tc.id == second_tc.id
+	assert first_tc.id.startswith("tool_call_")
+	assert first_tc.id != "id0"
+
+	# created_at matches (first-seen for both)
+	assert first_tc.created_at == second_tc.created_at
+
+	# updated_at progresses (second should be >= first)
+	assert second_tc.updated_at >= first_tc.updated_at
+
+	# first delta carries provider metadata
+	assert first_tc.metadata == {
 		"_provider_data": {
 			"openai.chat_completions": {
 				"tool_call_id": "id0",
@@ -558,13 +607,13 @@ def test_openai_build_tool_calls_from_deltas_metadata_created() -> None:
 		}
 	}
 
-	# openai_id None should keep metadata=None
-	built2 = _build_tool_calls_from_deltas(
-		tool_call_ids={},
-		tool_call_names={0: "f"},
-		tool_call_arguments={0: "{}"},
-	)
-	assert built2 and built2[0].metadata is None
+	# arguments are streamed per-chunk, not accumulated
+	assert first_tc.arguments == '{"a":'
+	assert second_tc.arguments == "1}"
+
+	# AssistantMessage deltas also carry timestamps
+	assert tc_deltas[0].created_at > 0
+	assert tc_deltas[0].updated_at >= tc_deltas[0].created_at
 
 
 def test_openai_messages_to_chatcompletions_tool_message_success() -> None:
@@ -593,7 +642,7 @@ def test_openai_messages_to_chatcompletions_tool_message_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_openai_chat_stream_accumulator_skips_empty_choices_and_indexes() -> None:
+async def test_openai_chat_stream_skips_empty_choices_and_indexes() -> None:
 	stream = _DummyAsyncIterator(
 		[
 			_DummyOpenAIChunk(choices=[]),
@@ -616,13 +665,13 @@ async def test_openai_chat_stream_accumulator_skips_empty_choices_and_indexes() 
 		]
 	)
 	seen: list[AssistantMessage] = []
-	async for delta in _accumulate_streaming_chunks(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):
 		seen.append(delta)
 	assert seen == []
 
 
 @pytest.mark.asyncio
-async def test_openai_chat_stream_accumulator_content_filter_final_message() -> None:
+async def test_openai_chat_stream_content_filter_final_message() -> None:
 	stream = _DummyAsyncIterator(
 		[
 			_DummyOpenAIChunk(
@@ -637,7 +686,7 @@ async def test_openai_chat_stream_accumulator_content_filter_final_message() -> 
 		]
 	)
 	seen: list[AssistantMessage] = []
-	async for delta in _accumulate_streaming_chunks(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):
 		seen.append(delta)
 	assert seen and seen[-1].refusal == "content filtered"
 
@@ -1265,6 +1314,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 	adapter2 = AnthropicMessagesAdapter()
 	seen_text = ""
 	seen_tool = False
+	seen_tool_args: list[str] = []
 	async for delta in adapter2.generate(
 		[UserMessage.from_text("u")],
 		model="claude",
@@ -1281,8 +1331,14 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 		seen_text += delta.text
 		if delta.tool_calls:
 			seen_tool = True
+			for tc in delta.tool_calls:
+				if isinstance(tc.arguments, str) and tc.arguments:
+					seen_tool_args.append(tc.arguments)
 	assert seen_text == "a"
 	assert seen_tool is True
+	# tool call arguments are now streamed per JSON delta fragment
+	assert "{" in seen_tool_args
+	assert "}" in seen_tool_args
 
 	# cover tools present but tool_choice is None
 	seen_text2 = ""

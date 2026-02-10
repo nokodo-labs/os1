@@ -95,7 +95,7 @@
 		remindersError = null
 		try {
 			listReminders = unwrap(
-				await api.GET('/reminders', {
+				await api.GET('/v1/reminders', {
 					params: {
 						query: {
 							list_id: listId,
@@ -124,7 +124,7 @@
 		isLoading = true
 		error = null
 
-		api.GET('/reminders/lists', {
+		api.GET('/v1/reminders/lists', {
 			params: {
 				query: {
 					include_counts: true,

@@ -33,4 +33,5 @@ class AgentContext:
 	tool_call_id: str = field()
 	iteration: int = field(default=0)
 	retry_count: int = field(default=0)
+	tool_call_start_time: float = field(default=0.0)
 	metadata: JSONObject = field(default_factory=dict)
