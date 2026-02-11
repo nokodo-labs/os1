@@ -1,18 +1,9 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
-	import { resolve } from '$app/paths'
-	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import { RadioGroup, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
-	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import {
-		accentColors,
-		selectableAccentColors,
-		useTheme,
-	} from '$lib/contexts/themeContext.svelte'
+	import { accentColors, selectableAccentColors } from '$lib/contexts/themeContext.svelte'
 	import { background } from '$lib/stores/background.svelte'
-	import { device } from '$lib/stores/device.svelte'
 	import {
 		preferences,
 		type AccentColor,
@@ -21,20 +12,6 @@
 		type ThemeMode,
 	} from '$lib/stores/preferences.svelte'
 	import { slide } from 'svelte/transition'
-
-	const chrome = useSystemChrome()
-	const theme = useTheme()
-
-	const handleBackToSettings = async () => {
-		await goto(resolve('/settings'), { keepFocus: true, noScroll: true })
-	}
-
-	$effect(() => {
-		if (device.isMobile) {
-			chrome.setContextActions(mobileBackAction)
-			return () => chrome.setContextActions(null)
-		}
-	})
 
 	const themeModeOptions = [
 		{ value: 'light', label: 'light' },
@@ -99,17 +76,6 @@
 		void preferences.update('appearance', { bubbleTailStyle: style as BubbleTailStyle })
 	}
 </script>
-
-{#snippet mobileBackAction()}
-	<button
-		type="button"
-		class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent text-white transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97]"
-		onclick={handleBackToSettings}
-		aria-label="back to settings"
-	>
-		<ChevronLeft class="h-5 w-5" strokeWidth="2" />
-	</button>
-{/snippet}
 
 <SettingsSectionLayout
 	icon={Eye}

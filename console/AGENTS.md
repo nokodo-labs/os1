@@ -37,6 +37,7 @@
 - share code with the frontend only through an intentional shared package if duplication becomes painful
 - run `pnpm install`, then `pnpm run dev -- --port 8383` for local work (don't start servers unless user asks)
 - refer to `testing` section to know how to validate formatting and quality of your code
+- ALWAYS code as if autogen API types were up to date with the backend, even if they might not yet be.
 
 ## testing
 

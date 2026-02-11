@@ -1515,6 +1515,36 @@ export interface components {
              * @description preferred default agent id
              */
             defaultAgentId?: string | null;
+            /**
+             * Bio
+             * @description AI-specific bio / about me for AI context
+             */
+            bio?: string | null;
+            /**
+             * Useaccountbio
+             * @description when true, use the account bio instead of a separate AI bio
+             */
+            useAccountBio?: boolean | null;
+            /**
+             * Memoriesenabled
+             * @description whether AI memories are enabled
+             */
+            memoriesEnabled?: boolean | null;
+            /**
+             * Chatrecall
+             * @description whether the AI can recall previous conversations
+             */
+            chatRecall?: boolean | null;
+            /**
+             * Custominstructions
+             * @description custom instructions for the AI to follow
+             */
+            customInstructions?: string | null;
+            /**
+             * Personality
+             * @description desired AI personality / tone description
+             */
+            personality?: string | null;
         };
         /** AISettings */
         AISettings: {
@@ -1627,6 +1657,29 @@ export interface components {
              * @description whether haptic feedback is enabled on compatible devices
              */
             hapticFeedback?: boolean | null;
+        };
+        /**
+         * AccountPreferences
+         * @description user account/profile preferences.
+         *
+         *     profile data that doesn't warrant its own database column.
+         */
+        AccountPreferences: {
+            /**
+             * Bio
+             * @description personal bio visible to other users
+             */
+            bio?: string | null;
+            /**
+             * Birthdate
+             * @description birth date in ISO 8601 format (YYYY-MM-DD)
+             */
+            birthDate?: string | null;
+            /**
+             * Gender
+             * @description gender identity
+             */
+            gender?: string | null;
         };
         /**
          * ActionPermission
@@ -4375,6 +4428,8 @@ export interface components {
         UserPreferences: {
             /** @description appearance preferences */
             appearance?: components["schemas"]["AppearancePreferences"] | null;
+            /** @description account / profile preferences */
+            account?: components["schemas"]["AccountPreferences"] | null;
             /** @description AI preferences */
             ai?: components["schemas"]["AIPreferences"] | null;
             /** @description notification preferences */

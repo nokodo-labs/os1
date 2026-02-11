@@ -3,6 +3,11 @@
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import SettingsSidebar from '$lib/components/settings/SettingsSidebar.svelte'
 	import { device } from '$lib/stores/device.svelte'
+	import { session } from '$lib/stores/session.svelte'
+	import { getUserInitials } from '$lib/utils'
+
+	const displayName = $derived(session.currentUser?.display_name ?? 'user')
+	const email = $derived(session.currentUser?.email ?? '')
 </script>
 
 {#if device.isMobile}
@@ -11,28 +16,18 @@
 	<SettingsSectionLayout
 		icon={UserCircle}
 		label="account"
-		description="manage your profile, email, and personal information"
+		description="manage your profile and personal information"
 	>
-		<div class="space-y-4">
-			<div class="rounded-container bg-white/5 p-5">
-				<div class="text-sm font-semibold text-white/85">profile</div>
-				<div class="mt-1 text-sm text-white/55">
-					your display name, avatar, and bio. this information is visible to other users.
-				</div>
-				<div class="mt-4 flex items-center gap-4">
-					<div class="h-16 w-16 rounded-full bg-white/10"></div>
-					<div class="flex-1 space-y-2">
-						<div class="h-4 w-32 rounded bg-white/10"></div>
-						<div class="h-3 w-48 rounded bg-white/8"></div>
-					</div>
-				</div>
+		<div class="rounded-container flex items-center gap-4 bg-white/5 p-5">
+			<div
+				class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white uppercase"
+				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
+			>
+				{getUserInitials(displayName)}
 			</div>
-			<div class="rounded-container bg-white/5 p-5">
-				<div class="text-sm font-semibold text-white/85">email</div>
-				<div class="mt-1 text-sm text-white/55">
-					your email address for notifications and account recovery.
-				</div>
-				<div class="rounded-pill mt-3 h-10 w-full bg-white/8"></div>
+			<div class="min-w-0 flex-1">
+				<div class="truncate text-sm font-semibold text-white/85">{displayName}</div>
+				<div class="mt-0.5 truncate text-sm text-white/50">{email}</div>
 			</div>
 		</div>
 	</SettingsSectionLayout>

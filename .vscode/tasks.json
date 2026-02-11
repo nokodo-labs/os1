@@ -202,7 +202,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
-			"dependsOn": "Backend: Check API Alive",
+			"dependsOn": "backend: check API alive",
 			"group": "build",
 			"presentation": {
 				"reveal": "always",
@@ -296,7 +296,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},
-			"dependsOn": "Backend: Check API Alive",
+			"dependsOn": "backend: check API alive",
 			"group": "build",
 			"presentation": {
 				"reveal": "always",

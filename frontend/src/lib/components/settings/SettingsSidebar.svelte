@@ -6,7 +6,9 @@
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
+	import LockClosed from '$lib/components/icons/LockClosed.svelte'
 	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import UserCircle from '$lib/components/icons/UserCircle.svelte'
@@ -36,7 +38,9 @@
 		| 'privacy'
 		| 'accessibility'
 		| 'ai'
+		| 'security'
 		| 'advanced'
+		| 'about'
 		| 'debug'
 
 	type SettingsRouteId =
@@ -46,7 +50,9 @@
 		| '/settings/privacy'
 		| '/settings/accessibility'
 		| '/settings/ai'
+		| '/settings/security'
 		| '/settings/advanced'
+		| '/settings/about'
 		| '/settings/debug'
 
 	const settingsRouteBySection = {
@@ -56,7 +62,9 @@
 		privacy: '/settings/privacy',
 		accessibility: '/settings/accessibility',
 		ai: '/settings/ai',
+		security: '/settings/security',
 		advanced: '/settings/advanced',
+		about: '/settings/about',
 		debug: '/settings/debug',
 	} as const satisfies Record<SettingsSectionId, SettingsRouteId>
 
@@ -81,9 +89,9 @@
 		},
 		{
 			id: 'privacy',
-			label: 'privacy & security',
+			label: 'privacy',
 			icon: Lock,
-			description: 'data, permissions, and access control',
+			description: 'data collection and sharing settings',
 		},
 		{
 			id: 'accessibility',
@@ -93,15 +101,27 @@
 		},
 		{
 			id: 'ai',
-			label: 'AI & models',
+			label: 'AI',
 			icon: Sparkles,
 			description: 'model preferences and behavior',
+		},
+		{
+			id: 'security',
+			label: 'security',
+			icon: LockClosed,
+			description: 'passwords, sessions, and authentication',
 		},
 		{
 			id: 'advanced',
 			label: 'advanced',
 			icon: Wrench,
-			description: 'developer tools and experimental features',
+			description: 'data management and imports',
+		},
+		{
+			id: 'about',
+			label: 'about',
+			icon: InfoCircle,
+			description: 'app info, credits, and links',
 		},
 	]
 

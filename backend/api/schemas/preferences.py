@@ -65,6 +65,30 @@ class AppearancePreferences(BaseModel):
 	)
 
 
+# account / profile preferences (stored alongside other prefs)
+class AccountPreferences(BaseModel):
+	"""user account/profile preferences.
+
+	profile data that doesn't warrant its own database column.
+	"""
+
+	model_config = ConfigDict(extra="forbid")
+
+	bio: str | None = Field(
+		default=None,
+		description="personal bio visible to other users",
+	)
+	birth_date: str | None = Field(
+		default=None,
+		alias="birthDate",
+		description="birth date in ISO 8601 format (YYYY-MM-DD)",
+	)
+	gender: str | None = Field(
+		default=None,
+		description="gender identity",
+	)
+
+
 # AI preferences
 class AIPreferences(BaseModel):
 	"""user AI preferences."""
@@ -75,6 +99,34 @@ class AIPreferences(BaseModel):
 		default=None,
 		alias="defaultAgentId",
 		description="preferred default agent id",
+	)
+	bio: str | None = Field(
+		default=None,
+		description="AI-specific bio / about me for AI context",
+	)
+	use_account_bio: bool | None = Field(
+		default=None,
+		alias="useAccountBio",
+		description="when true, use the account bio instead of a separate AI bio",
+	)
+	memories_enabled: bool | None = Field(
+		default=None,
+		alias="memoriesEnabled",
+		description="whether AI memories are enabled",
+	)
+	chat_recall: bool | None = Field(
+		default=None,
+		alias="chatRecall",
+		description="whether the AI can recall previous conversations",
+	)
+	custom_instructions: str | None = Field(
+		default=None,
+		alias="customInstructions",
+		description="custom instructions for the AI to follow",
+	)
+	personality: str | None = Field(
+		default=None,
+		description="desired AI personality / tone description",
 	)
 
 
@@ -141,6 +193,10 @@ class UserPreferences(BaseModel):
 	appearance: AppearancePreferences | None = Field(
 		default=None,
 		description="appearance preferences",
+	)
+	account: AccountPreferences | None = Field(
+		default=None,
+		description="account / profile preferences",
 	)
 	ai: AIPreferences | None = Field(
 		default=None,

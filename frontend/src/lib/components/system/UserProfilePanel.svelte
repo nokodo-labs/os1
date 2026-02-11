@@ -2,8 +2,9 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { logout } from '$lib/api/client'
-	import { Cog6, QuestionMarkCircle, SignOut, Sparkles } from '$lib/components/icons'
+	import { Cog6, InfoCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import { session } from '$lib/stores/session.svelte'
+	import { getUserInitials } from '$lib/utils'
 
 	interface UserProfilePanelProps {
 		user: {
@@ -22,15 +23,13 @@
 	}
 
 	function handlePersonalizeClick() {
-		console.log('Open personalize')
 		onClose?.()
-		// TODO: navigate to personalization page or open modal
+		void goto(resolve('/settings/ai'), { keepFocus: true, noScroll: true })
 	}
 
-	function handleHelpClick() {
-		console.log('Open help')
+	function handleAboutClick() {
 		onClose?.()
-		// TODO: open help modal or navigate to help page
+		void goto(resolve('/settings/about'), { keepFocus: true, noScroll: true })
 	}
 
 	function handleLogout() {
@@ -43,15 +42,6 @@
 	function handleLogin() {
 		onClose?.()
 		void goto(resolve('/login'))
-	}
-
-	function getUserInitials(name: string): string {
-		return name
-			.split(' ')
-			.map((n) => n[0])
-			.join('')
-			.toUpperCase()
-			.slice(0, 2)
 	}
 
 	type IconComponent = typeof Cog6
@@ -80,10 +70,10 @@
 			variant: 'solid',
 		},
 		{
-			id: 'help',
-			icon: QuestionMarkCircle,
-			label: 'help & support',
-			action: handleHelpClick,
+			id: 'about',
+			icon: InfoCircle,
+			label: 'about',
+			action: handleAboutClick,
 		},
 	]
 </script>

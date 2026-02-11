@@ -1,5 +1,6 @@
 import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
+import { deepMerge, isPlainObject } from '$lib/utils'
 
 type Settings = components['schemas']['Settings']
 type SettingsPatch = components['schemas']['SettingsPatch']
@@ -37,33 +38,6 @@ export function clearSettings(): void {
 	settingsState.stale = true
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function deepMergeObjects(
-	current: Record<string, unknown>,
-	patch: Record<string, unknown>,
-	options: { applyNulls: boolean }
-): Record<string, unknown> {
-	const next: Record<string, unknown> = { ...current }
-
-	for (const [key, patchValue] of Object.entries(patch)) {
-		if (patchValue === undefined) continue
-		if (patchValue === null && !options.applyNulls) continue
-
-		const currentValue = next[key]
-		if (isPlainObject(currentValue) && isPlainObject(patchValue)) {
-			next[key] = deepMergeObjects(currentValue, patchValue, options)
-			continue
-		}
-
-		next[key] = patchValue
-	}
-
-	return next
-}
-
 /**
 	apply a partial update to the cached settings without refetching.
 
@@ -86,9 +60,11 @@ export function applySettingsPatch(
 		return
 	}
 
-	settingsState.data = deepMergeObjects(settingsState.data, patch, {
-		applyNulls: options?.applyNulls ?? false,
-	}) as Settings
+	settingsState.data = deepMerge(
+		settingsState.data as Record<string, unknown>,
+		patch as Record<string, unknown>,
+		{ applyNulls: options?.applyNulls ?? false }
+	) as Settings
 
 	if (options?.versions) {
 		settingsState.versions = options.versions

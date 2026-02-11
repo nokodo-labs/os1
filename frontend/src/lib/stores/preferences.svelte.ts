@@ -3,9 +3,11 @@ import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
 import { session } from '$lib/stores/session.svelte'
 import { settingsState } from '$lib/stores/settings.svelte'
+import { deepMerge, isPlainObject } from '$lib/utils'
 
 type UserPreferences = components['schemas']['UserPreferences']
 type AppearancePreferences = components['schemas']['AppearancePreferences']
+type AccountPreferences = components['schemas']['AccountPreferences']
 type AIPreferences = components['schemas']['AIPreferences']
 type NotificationPreferences = components['schemas']['NotificationPreferences']
 type PrivacyPreferences = components['schemas']['PrivacyPreferences']
@@ -13,6 +15,7 @@ type AccessibilityPreferences = components['schemas']['AccessibilityPreferences'
 
 export type {
 	AccessibilityPreferences,
+	AccountPreferences,
 	AIPreferences,
 	AppearancePreferences,
 	NotificationPreferences,
@@ -27,6 +30,7 @@ export type BubbleTailStyle = NonNullable<AppearancePreferences['bubbleTailStyle
 
 type Resolved = {
 	appearance: Required<AppearancePreferences>
+	account: Required<AccountPreferences>
 	ai: Required<AIPreferences>
 	notifications: Required<NotificationPreferences>
 	privacy: Required<PrivacyPreferences>
@@ -36,26 +40,8 @@ type Resolved = {
 const STORAGE_KEY = 'user-preferences:'
 
 // ────────────────────────────────────────────────────────────
-// utils
+// local storage helpers
 // ────────────────────────────────────────────────────────────
-
-function isObject(v: unknown): v is Record<string, unknown> {
-	return v !== null && typeof v === 'object' && !Array.isArray(v)
-}
-
-function merge<T extends Record<string, unknown>>(a: T, b: Partial<T>): T {
-	const out = { ...a }
-	for (const k in b) {
-		const bVal = b[k]
-		if (bVal === undefined) continue
-		const aVal = a[k]
-		out[k] =
-			isObject(aVal) && isObject(bVal)
-				? merge(aVal, bVal as Partial<typeof aVal>)
-				: (bVal as T[typeof k])
-	}
-	return out
-}
 
 function readStorage(userId: string): UserPreferences {
 	if (!browser) return {}
@@ -63,7 +49,7 @@ function readStorage(userId: string): UserPreferences {
 		const raw = localStorage.getItem(`${STORAGE_KEY}${userId}`)
 		if (!raw) return {}
 		const parsed = JSON.parse(raw)
-		return isObject(parsed) ? (parsed as UserPreferences) : {}
+		return isPlainObject(parsed) ? (parsed as UserPreferences) : {}
 	} catch {
 		return {}
 	}
@@ -100,8 +86,19 @@ function createPreferencesStore() {
 			staticColor: '#171717',
 			bubbleTailStyle: 'none',
 		},
+		account: {
+			bio: null,
+			birthDate: null,
+			gender: null,
+		},
 		ai: {
 			defaultAgentId: settingsState.data?.ai?.default_agent_id ?? null,
+			bio: null,
+			useAccountBio: false,
+			memoriesEnabled: true,
+			chatRecall: true,
+			customInstructions: null,
+			personality: null,
 		},
 		notifications: {
 			enabled: true,
@@ -117,7 +114,7 @@ function createPreferencesStore() {
 	})
 
 	// user preferences → defaults (which already include admin settings)
-	const data: Resolved = $derived(merge(structuredClone(defaults), raw as Partial<Resolved>))
+	const data: Resolved = $derived(deepMerge(structuredClone(defaults), raw as Partial<Resolved>))
 
 	// ──────────────────────────────────────────────────────
 	// auto-sync with session
@@ -190,9 +187,9 @@ function createPreferencesStore() {
 		}
 	}
 
-	async function update<K extends keyof UserPreferences>(
+	async function update<K extends keyof Resolved>(
 		section: K,
-		updates: Partial<NonNullable<UserPreferences[K]>>
+		updates: Partial<Resolved[K]>
 	): Promise<boolean> {
 		const uid = userId
 		if (!uid) return false

@@ -1,84 +1,249 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
-	import { resolve } from '$app/paths'
-	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
+	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
+	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+	import Download from '$lib/components/icons/Download.svelte'
+	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
+	import Trash from '$lib/components/icons/Trash.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
-	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { device } from '$lib/stores/device.svelte'
+	import { slide } from 'svelte/transition'
 
-	const chrome = useSystemChrome()
+	let owuiExpanded = $state(false)
+	let owuiHost = $state('')
+	let owuiJwt = $state('')
 
-	const handleBackToSettings = async () => {
-		await goto(resolve('/settings'), { keepFocus: true, noScroll: true })
+	interface DataAction {
+		label: string
+		description: string
+		icon: typeof Download
+		variant: 'default' | 'danger'
+		action: () => void
 	}
 
-	$effect(() => {
-		if (device.isMobile) {
-			chrome.setContextActions(mobileBackAction)
-			return () => chrome.setContextActions(null)
-		}
-	})
-</script>
+	const exportActions: DataAction[] = [
+		{
+			label: 'download all chats',
+			description: 'export all your conversations as JSON',
+			icon: Download,
+			variant: 'default',
+			action: () => {},
+		},
+		{
+			label: 'download all memories',
+			description: 'export all AI memories as JSON',
+			icon: Download,
+			variant: 'default',
+			action: () => {},
+		},
+		{
+			label: 'download all your data',
+			description: 'export everything: chats, memories, preferences, and files',
+			icon: Download,
+			variant: 'default',
+			action: () => {},
+		},
+	]
 
-{#snippet mobileBackAction()}
-	<button
-		type="button"
-		class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-		onclick={handleBackToSettings}
-		aria-label="back to settings"
-	>
-		<ChevronLeft class="h-5 w-5" strokeWidth="2" />
-	</button>
-{/snippet}
+	const manageActions: DataAction[] = [
+		{
+			label: 'archive all chats',
+			description: 'move all conversations to the archive',
+			icon: ArchiveBox,
+			variant: 'default',
+			action: () => {},
+		},
+		{
+			label: 'delete all chats',
+			description: 'permanently remove all conversations',
+			icon: Trash,
+			variant: 'danger',
+			action: () => {},
+		},
+	]
+</script>
 
 <SettingsSectionLayout
 	icon={Wrench}
 	label="advanced"
-	description="developer tools and experimental features"
+	description="data management, imports, and danger zone"
 >
 	<div class="space-y-4">
+		<!-- data export -->
 		<div class="rounded-container bg-white/5 p-5">
-			<div class="text-sm font-semibold text-white/85">developer mode</div>
-			<div class="mt-1 text-sm text-white/55">
-				enable developer tools and debug information.
+			<div class="text-sm font-semibold text-white">data export</div>
+			<div class="mt-1 text-sm text-white/50">download your data in portable formats.</div>
+			<div class="mt-4 space-y-2">
+				{#each exportActions as action (action.label)}
+					{@const Icon = action.icon}
+					<button
+						type="button"
+						disabled
+						class="rounded-pill flex w-full items-center gap-3 border border-white/10 bg-white/3 px-4 py-3 text-left text-sm transition-all hover:border-white/15 hover:bg-white/5 disabled:opacity-50"
+					>
+						<Icon class="h-4.5 w-4.5 shrink-0 text-white/50" />
+						<div class="min-w-0 flex-1">
+							<div class="font-medium text-white/80">{action.label}</div>
+							<div class="text-xs text-white/40">{action.description}</div>
+						</div>
+						<span
+							class="rounded-pill bg-white/5 px-2 py-0.5 text-[0.65rem] text-white/30"
+							>soon</span
+						>
+					</button>
+				{/each}
 			</div>
-			<div class="mt-4 h-6 w-12 rounded-full bg-white/10"></div>
 		</div>
+
+		<!-- chat management -->
 		<div class="rounded-container bg-white/5 p-5">
-			<div class="text-sm font-semibold text-white/85">experimental features</div>
-			<div class="mt-1 text-sm text-white/55">
-				try out new features before they're released.
-			</div>
-			<div class="mt-4 space-y-3">
-				<div class="flex items-center justify-between">
-					<span class="text-sm text-white/70">new chat UI</span>
-					<div class="h-6 w-12 rounded-full bg-white/10"></div>
-				</div>
-				<div class="flex items-center justify-between">
-					<span class="text-sm text-white/70">voice input</span>
-					<div class="h-6 w-12 rounded-full bg-white/10"></div>
-				</div>
+			<div class="text-sm font-semibold text-white">chat management</div>
+			<div class="mt-1 text-sm text-white/50">organize or clean up your conversations.</div>
+			<div class="mt-4 space-y-2">
+				{#each manageActions as action (action.label)}
+					{@const Icon = action.icon}
+					<button
+						type="button"
+						disabled
+						class="rounded-pill flex w-full items-center gap-3 border px-4 py-3 text-left text-sm transition-all disabled:opacity-50
+							{action.variant === 'danger'
+							? 'border-red-500/20 bg-red-500/5 hover:border-red-500/30 hover:bg-red-500/10'
+							: 'border-white/10 bg-white/3 hover:border-white/15 hover:bg-white/5'}"
+					>
+						<Icon
+							class="h-4.5 w-4.5 shrink-0 {action.variant === 'danger'
+								? 'text-red-400/60'
+								: 'text-white/50'}"
+						/>
+						<div class="min-w-0 flex-1">
+							<div
+								class="font-medium {action.variant === 'danger'
+									? 'text-red-400/80'
+									: 'text-white/80'}"
+							>
+								{action.label}
+							</div>
+							<div class="text-xs text-white/40">{action.description}</div>
+						</div>
+						<span
+							class="rounded-pill bg-white/5 px-2 py-0.5 text-[0.65rem] text-white/30"
+							>soon</span
+						>
+					</button>
+				{/each}
 			</div>
 		</div>
-		<div class="rounded-container border border-red-500/30 bg-red-500/5 p-5">
-			<div class="text-sm font-semibold text-red-400">danger zone</div>
-			<div class="mt-1 text-sm text-white/55">
-				irreversible actions. proceed with caution.
-			</div>
-			<div class="mt-4 flex gap-3">
-				<button
-					type="button"
-					class="rounded-pill border border-red-500/50 bg-transparent px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+
+		<!-- open webui import -->
+		<div class="rounded-container bg-white/5">
+			<button
+				type="button"
+				class="flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-5 text-left"
+				onclick={() => (owuiExpanded = !owuiExpanded)}
+			>
+				<div>
+					<div class="text-sm font-semibold text-white">open webui import</div>
+					<div class="mt-1 text-sm text-white/50">
+						import data from an open webui instance.
+					</div>
+				</div>
+				<ChevronDown
+					class="h-4.5 w-4.5 text-white/40 transition-transform duration-200 {owuiExpanded
+						? 'rotate-180'
+						: ''}"
+				/>
+			</button>
+
+			{#if owuiExpanded}
+				<div
+					class="border-t border-white/8 px-5 pt-4 pb-5"
+					transition:slide={{ duration: 200 }}
 				>
-					clear all data
-				</button>
+					<form class="space-y-3" onsubmit={(e) => e.preventDefault()} autocomplete="off">
+						<div>
+							<label
+								class="mb-1.5 block text-xs font-medium text-white/50"
+								for="owui-host">host URL</label
+							>
+							<input
+								id="owui-host"
+								type="url"
+								class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+								placeholder="https://your-open-webui.example.com"
+								bind:value={owuiHost}
+							/>
+						</div>
+						<div>
+							<label
+								class="mb-1.5 block text-xs font-medium text-white/50"
+								for="owui-jwt">JWT token</label
+							>
+							<input
+								id="owui-jwt"
+								type="password"
+								autocomplete="off"
+								class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+								placeholder="paste your open webui JWT here"
+								bind:value={owuiJwt}
+							/>
+						</div>
+
+						<div class="flex gap-2 pt-1">
+							<button
+								type="button"
+								disabled
+								class="rounded-pill flex-1 border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/50 transition-colors disabled:opacity-50"
+							>
+								import all chats
+							</button>
+							<button
+								type="button"
+								disabled
+								class="rounded-pill flex-1 border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/50 transition-colors disabled:opacity-50"
+							>
+								import all memories
+							</button>
+						</div>
+						<p class="text-xs text-white/30">coming soon</p>
+					</form>
+
+					<div class="mt-5 border-t border-white/8 pt-4">
+						<div class="text-xs font-medium text-white/40">
+							more imports coming soon
+						</div>
+						<div class="mt-2 flex flex-wrap gap-2">
+							{#each ['ChatGPT', 'Claude', 'Gemini', 'LibreChat'] as platform (platform)}
+								<span
+									class="rounded-pill border border-white/8 bg-white/3 px-3 py-1 text-xs text-white/30"
+								>
+									{platform}
+								</span>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- danger zone -->
+		<div class="rounded-container border border-red-500/20 bg-red-500/5 p-5">
+			<div class="flex items-center gap-2">
+				<GarbageBin class="h-4.5 w-4.5 text-red-400/70" />
+				<div class="text-sm font-semibold text-red-400">danger zone</div>
+			</div>
+			<div class="mt-1 text-sm text-white/50">
+				irreversible actions. proceed with extreme caution.
+			</div>
+			<div class="mt-4">
 				<button
 					type="button"
-					class="rounded-pill border border-red-500/50 bg-transparent px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+					disabled
+					class="rounded-pill border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
 				>
 					delete account
 				</button>
+				<p class="mt-2 text-xs text-white/30">
+					this will permanently delete your account and all associated data. coming soon.
+				</p>
 			</div>
 		</div>
 	</div>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '$lib/styles/liquid-glass.css'
+	import { getUserInitials } from '$lib/utils'
 	import { onMount } from 'svelte'
 	import { scale } from 'svelte/transition'
 	import UserProfilePanel from './UserProfilePanel.svelte'
@@ -19,15 +20,6 @@
 	let isOpen = $state(false)
 	let buttonElement: HTMLButtonElement | undefined = $state()
 	let panelElement: HTMLDivElement | undefined = $state()
-
-	function getUserInitials(name: string): string {
-		return name
-			.split(' ')
-			.map((n) => n[0])
-			.join('')
-			.toUpperCase()
-			.slice(0, 2)
-	}
 
 	function togglePanel() {
 		isOpen = !isOpen

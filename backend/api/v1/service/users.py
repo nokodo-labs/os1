@@ -204,8 +204,6 @@ async def update_user(
 			user_in.email is not None
 			or user_in.password is not None
 			or user_in.is_active is not None
-			or user_in.display_name is not None
-			or user_in.avatar_url is not None
 			or user_in.integration_tokens is not None
 			or user_in.usage_quotas is not None
 			or user_in.role_ids is not None
@@ -214,10 +212,14 @@ async def update_user(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="unsupported fields",
 			)
-		if user_in.preferences is None:
+		if (
+			user_in.preferences is None
+			and user_in.display_name is None
+			and user_in.avatar_url is None
+		):
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="preferences is required",
+				detail="preferences, display_name, or avatar_url is required",
 			)
 
 	user = await get_user(user_id, session, principal=principal)
@@ -229,13 +231,15 @@ async def update_user(
 			exclude_none=True,
 		)
 
+	# allow non-admin users to update their own display name and avatar
+	if user_in.display_name is not None:
+		user.display_name = user_in.display_name
+	if user_in.avatar_url is not None:
+		user.avatar_url = user_in.avatar_url
+
 	if principal.is_admin:
 		if user_in.email is not None:
 			user.email = user_in.email
-		if user_in.display_name is not None:
-			user.display_name = user_in.display_name
-		if user_in.avatar_url is not None:
-			user.avatar_url = user_in.avatar_url
 		if user_in.is_active is not None:
 			user.is_active = user_in.is_active
 		if user_in.integration_tokens is not None:
