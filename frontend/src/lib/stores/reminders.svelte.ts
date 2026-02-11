@@ -240,16 +240,6 @@ class RemindersCache {
 		}
 	}
 
-	get remindersAppUrl(): '/reminders' | `/reminders/lists/${string}` {
-		const path = this.lastVisitedPath
-		if (path && (path === '/reminders' || path.startsWith('/reminders/lists/'))) {
-			return path as '/reminders' | `/reminders/lists/${string}`
-		}
-
-		const listId = this.lastVisitedListId
-		return listId ? `/reminders/lists/${listId}` : '/reminders'
-	}
-
 	#isFresh(fetchedAt: number): boolean {
 		return Date.now() - fetchedAt < CACHE_TTL_MS
 	}

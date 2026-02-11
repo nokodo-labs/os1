@@ -21,7 +21,7 @@
 	import Star from '$lib/components/icons/Star.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
-	import { reminders } from '$lib/stores/reminders.svelte'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { onDestroy, tick } from 'svelte'
 
 	type IconComponent = typeof Document
@@ -50,7 +50,7 @@
 			icon: Document,
 			accent: 'notes',
 			action: async () => {
-				await goto(resolve('/notes'))
+				await goto(resolve(appNavigation.getEntryRoute('notes')))
 			},
 		},
 		{
@@ -59,7 +59,7 @@
 			icon: CheckBox,
 			accent: 'reminders',
 			action: async () => {
-				await goto(resolve(reminders.remindersAppUrl))
+				await goto(resolve(appNavigation.getEntryRoute('reminders')))
 			},
 		},
 		{ id: 'calendar', title: 'calendar', icon: Calendar },
@@ -73,7 +73,7 @@
 			icon: Cog6,
 			accent: 'gray',
 			action: async () => {
-				await goto(resolve('/settings'))
+				await goto(resolve(appNavigation.getEntryRoute('settings')))
 			},
 		},
 		{

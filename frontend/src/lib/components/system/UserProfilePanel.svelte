@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths'
 	import { logout } from '$lib/api/client'
 	import { Cog6, InfoCircle, SignOut, Sparkles } from '$lib/components/icons'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { getUserInitials } from '$lib/utils'
 
@@ -19,7 +20,10 @@
 
 	function handleSettingsClick() {
 		onClose?.()
-		void goto(resolve('/settings'), { keepFocus: true, noScroll: true })
+		void goto(resolve(appNavigation.getEntryRoute('settings')), {
+			keepFocus: true,
+			noScroll: true,
+		})
 	}
 
 	function handlePersonalizeClick() {

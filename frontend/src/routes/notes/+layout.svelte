@@ -3,6 +3,7 @@
 	import MasterDetailScaffold from '$lib/components/layouts/MasterDetailScaffold.svelte'
 	import NotesSidebar from '$lib/components/notes/NotesSidebar.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import type { Snippet } from 'svelte'
 
@@ -14,6 +15,10 @@
 
 	$effect(() => {
 		accentStore.set('notes')
+	})
+
+	$effect(() => {
+		appNavigation.setLastVisited('notes', page.url.pathname)
 	})
 
 	const selectedNoteId = $derived(page.params.id ?? null)

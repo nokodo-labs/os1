@@ -23,6 +23,7 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -257,7 +258,10 @@
 		isSuggestionNavigationActive = false
 		if (suggestion.id === 'settings') {
 			inputValue = ''
-			void goto(resolve('/settings'), { keepFocus: true, noScroll: true })
+			void goto(resolve(appNavigation.getEntryRoute('settings')), {
+				keepFocus: true,
+				noScroll: true,
+			})
 			return
 		}
 		if (suggestion.id === 'archived-chats') {

@@ -1,33 +1,34 @@
 <script lang="ts">
-	import UserCircle from '$lib/components/icons/UserCircle.svelte'
+	import { browser } from '$app/environment'
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
+	import { page } from '$app/state'
+	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import SettingsSidebar from '$lib/components/settings/SettingsSidebar.svelte'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { device } from '$lib/stores/device.svelte'
-	import { session } from '$lib/stores/session.svelte'
-	import { getUserInitials } from '$lib/utils'
 
-	const displayName = $derived(session.currentUser?.display_name ?? 'user')
-	const email = $derived(session.currentUser?.email ?? '')
+	$effect(() => {
+		if (!browser || device.isMobile) return
+		if (page.url.pathname !== '/settings') return
+		const target = appNavigation.getEntryRoute('settings')
+		void goto(resolve(target), { keepFocus: true, noScroll: true, replaceState: true })
+	})
 </script>
 
 {#if device.isMobile}
 	<SettingsSidebar selectedSection={null} isMobile={true} />
 {:else}
 	<SettingsSectionLayout
-		icon={UserCircle}
-		label="account"
-		description="manage your profile and personal information"
+		icon={Cog6}
+		label="settings"
+		description="select a section to get started"
 	>
-		<div class="rounded-container flex items-center gap-4 bg-white/5 p-5">
-			<div
-				class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white uppercase"
-				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
-			>
-				{getUserInitials(displayName)}
-			</div>
-			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-semibold text-white/85">{displayName}</div>
-				<div class="mt-0.5 truncate text-sm text-white/50">{email}</div>
+		<div class="rounded-container flex flex-col gap-2 bg-white/5 p-5">
+			<div class="text-sm font-semibold text-white/85">select a section</div>
+			<div class="text-sm text-white/50">
+				choose an item from the sidebar to view its settings
 			</div>
 		</div>
 	</SettingsSectionLayout>

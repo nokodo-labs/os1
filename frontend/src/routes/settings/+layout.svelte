@@ -3,6 +3,7 @@
 	import MasterDetailScaffold from '$lib/components/layouts/MasterDetailScaffold.svelte'
 	import SettingsSidebar from '$lib/components/settings/SettingsSidebar.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import type { Snippet } from 'svelte'
 
@@ -24,6 +25,10 @@
 		if (parts[0] !== 'settings') return null
 		if (parts.length === 1) return 'account'
 		return parts[1] ?? null
+	})
+
+	$effect(() => {
+		appNavigation.setLastVisited('settings', page.url.pathname)
 	})
 </script>
 

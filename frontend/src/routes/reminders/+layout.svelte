@@ -4,6 +4,7 @@
 	import MasterDetailScaffold from '$lib/components/layouts/MasterDetailScaffold.svelte'
 	import ReminderListsSidebar from '$lib/components/reminders/ReminderListsSidebar.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { reminders } from '$lib/stores/reminders.svelte'
@@ -34,6 +35,7 @@
 		const path = page.url.pathname
 		if (path.startsWith('/reminders')) {
 			reminders.lastVisitedPath = path
+			appNavigation.setLastVisited('reminders', path)
 		}
 
 		if (selectedListId) reminders.lastVisitedListId = selectedListId
