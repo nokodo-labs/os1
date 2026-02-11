@@ -162,6 +162,23 @@
 	})
 
 	// ─────────────────────────────────────────────────────────────────────────────
+	// effects: input draft persistence
+	// ─────────────────────────────────────────────────────────────────────────────
+	// restore draft on mount
+	$effect(() => {
+		const threadId = page.params.id
+		if (!threadId) return
+		const draft = chatStore.getDraft(threadId)
+		if (draft) chat.inputValue = draft
+	})
+	// sync input changes back to draft store
+	$effect(() => {
+		const threadId = page.params.id
+		if (!threadId) return
+		chatStore.setDraft(threadId, chat.inputValue)
+	})
+
+	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: input overlay height tracking
 	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {

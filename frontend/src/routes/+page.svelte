@@ -31,7 +31,7 @@
 	import { session } from '$lib/stores/session.svelte'
 	import { fade } from 'svelte/transition'
 
-	let inputValue = $state('')
+	let inputValue = $state(chat.getDraft('home'))
 	let isGenerating = $state(false)
 	let focusToken = $state(0)
 	let showSuggestions = $state(false)
@@ -125,6 +125,11 @@
 		return () => {
 			if (timeoutId !== null) window.clearTimeout(timeoutId)
 		}
+	})
+
+	// sync input draft to chat store so it persists across navigation
+	$effect(() => {
+		chat.setDraft('home', inputValue)
 	})
 
 	const normalizedQuery = $derived(inputValue.trim().toLowerCase())

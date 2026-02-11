@@ -147,12 +147,32 @@ class ChatStore {
 	pendingChatStart = $state<PendingChatStart | null>(null)
 	isLoadingThreads = $state(false)
 
+	/** in-memory drafts keyed by context id (thread id or 'home') */
+	readonly drafts = new SvelteMap<string, string>()
+
+	getDraft = (key: string): string => {
+		return this.drafts.get(key) ?? ''
+	}
+
+	setDraft = (key: string, value: string): void => {
+		if (value) {
+			this.drafts.set(key, value)
+		} else {
+			this.drafts.delete(key)
+		}
+	}
+
+	clearDraft = (key: string): void => {
+		this.drafts.delete(key)
+	}
+
 	clear = () => {
 		this.threadCache.clear()
 		this.recentThreads = []
 		this.activeThread = null
 		this.pendingChatStart = null
 		this.isLoadingThreads = false
+		this.drafts.clear()
 	}
 
 	consumePendingChatStart = (threadId: string): string | null => {
