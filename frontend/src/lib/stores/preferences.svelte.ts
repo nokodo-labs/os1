@@ -107,6 +107,8 @@ function createPreferencesStore() {
 		privacy: {
 			saveHistory: true,
 			shareUsageData: false,
+			useLocation: false,
+			useDeviceContext: true,
 		},
 		accessibility: {
 			hapticFeedback: true,

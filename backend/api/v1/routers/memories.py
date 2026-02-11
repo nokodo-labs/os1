@@ -22,6 +22,7 @@ router = APIRouter(prefix="/memories", tags=["memories"])
 
 MemorySortBy = Literal[
 	"category",
+	"content_length",
 	"last_accessed_at",
 	"confidence",
 ]
@@ -33,7 +34,7 @@ async def create_memory(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
-	"""Capture a new memory."""
+	"""capture a new memory."""
 	return await memory_service.create_memory(
 		memory_in,
 		db,
@@ -48,11 +49,12 @@ async def list_memories(
 	limit: int = 50,
 	sort_by: CommonSortBy | MemorySortBy = "updated_at",
 	sort_dir: SortDir = "desc",
+	search: str | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[Memory]:
-	"""List memories for a user."""
-	return await memory_service.list_memories(
+) -> list[MemorySchema]:
+	"""list memories for a user."""
+	items = await memory_service.list_memories(
 		db,
 		principal=principal,
 		user_id=user_id,
@@ -60,7 +62,9 @@ async def list_memories(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		search=search,
 	)
+	return [MemorySchema.model_validate(m) for m in items]
 
 
 @router.get("/{memory_id}", response_model=MemorySchema)
@@ -69,7 +73,7 @@ async def get_memory(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
-	"""Fetch a single memory."""
+	"""fetch a single memory."""
 	return await memory_service.get_memory(memory_id, db, principal=principal)
 
 
@@ -80,7 +84,7 @@ async def update_memory(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Memory:
-	"""Update a memory."""
+	"""update a memory."""
 	return await memory_service.update_memory(
 		memory_id,
 		memory_in,
@@ -95,5 +99,14 @@ async def delete_memory(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> None:
-	"""Delete a memory."""
+	"""delete a memory."""
 	await memory_service.delete_memory(memory_id, db, principal=principal)
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_all_memories(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""delete all memories for the current user."""
+	await memory_service.delete_all_memories(db, principal=principal)

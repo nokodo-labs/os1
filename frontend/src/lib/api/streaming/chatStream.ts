@@ -6,6 +6,7 @@
  */
 
 import { getAccessToken } from '$lib/auth/session.svelte'
+import { getClientContext } from '$lib/stores/device.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
 
 /** Content part in a message. */
@@ -92,6 +93,7 @@ export async function* runChatStream(
 				agent_id: opts.agentId,
 				input: opts.input,
 				parent_id: opts.parentId,
+				clientContext: getClientContext(),
 			}),
 			signal: opts.signal,
 		})

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.settings import settings
-from api.v1.schemas.token import Token
+from api.v1.schemas.auth import PasswordChange, Token
 from api.v1.service import auth as auth_service
 
 
@@ -16,7 +16,7 @@ REFRESH_COOKIE_PATH = "/"
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
-	"""Set refresh token as HttpOnly cookie."""
+	"""set refresh token as HttpOnly cookie."""
 	max_age = int(
 		timedelta(days=settings.security.refresh_token_expire_days).total_seconds()
 	)
@@ -33,7 +33,7 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-	"""Clear refresh token cookie."""
+	"""clear refresh token cookie."""
 	samesite = "none" if settings.security.auth_cookie_secure else "strict"
 	response.delete_cookie(
 		key=auth_service.REFRESH_COOKIE_NAME,
@@ -84,7 +84,7 @@ async def refresh_access_token(
 		default=None, alias=auth_service.REFRESH_COOKIE_NAME
 	),
 ) -> Token:
-	"""Exchange refresh token for new access token (sliding refresh)."""
+	"""exchange refresh token for new access token (sliding refresh)."""
 	if not refresh_token:
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,
@@ -105,11 +105,31 @@ async def refresh_access_token(
 	return Token(access_token=token_pair.access_token, token_type=token_pair.token_type)
 
 
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+	body: PasswordChange,
+	principal: auth_service.Principal = Depends(auth_service.get_current_principal),
+	session: AsyncSession = Depends(get_db),
+) -> None:
+	"""change the authenticated user's password."""
+	if settings.security.oidc.only:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="password change not available with oidc-only authentication",
+		)
+	await auth_service.change_password(
+		session,
+		principal,
+		current_password=body.current_password,
+		new_password=body.new_password,
+	)
+
+
 @router.post(
 	"/logout",
 	status_code=status.HTTP_204_NO_CONTENT,
 	dependencies=[Depends(auth_service.require_csrf_origin)],
 )
 async def logout(response: Response) -> None:
-	"""Clear refresh token cookie to log out."""
+	"""clear refresh token cookie to log out."""
 	_clear_refresh_cookie(response)

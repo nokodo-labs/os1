@@ -4,6 +4,7 @@
 	import { page } from '$app/state'
 	import { api, unwrap, type Prompt } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import PromptVariablesLegend from '$lib/components/PromptVariablesLegend.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
@@ -15,7 +16,7 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, BookOpen, Pencil, Plus, Trash2 } from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'command'
@@ -54,6 +55,7 @@
 	let editingId = $state<string | null>(null)
 	let formCommand = $state('')
 	let formContent = $state('')
+	let showVariablesLegend = $state(false)
 
 	function replaceUrl(target: string) {
 		if (!browser) return
@@ -403,7 +405,19 @@
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="content">content</Label>
+						<div class="flex items-center justify-between">
+							<Label for="content">content</Label>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+								onclick={() => (showVariablesLegend = true)}
+							>
+								<BookOpen class="h-3.5 w-3.5" />
+								variables
+							</Button>
+						</div>
 						<textarea
 							id="content"
 							bind:value={formContent}
@@ -431,3 +445,5 @@
 		</Card>
 	</div>
 {/if}
+
+<PromptVariablesLegend bind:open={showVariablesLegend} />

@@ -1,7 +1,43 @@
 <script lang="ts">
+	import { apiClient } from '$lib/api/client'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
 	import LockClosed from '$lib/components/icons/LockClosed.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
+
+	let currentPassword = $state('')
+	let newPassword = $state('')
+	let saving = $state(false)
+	let error = $state<string | null>(null)
+	let success = $state(false)
+
+	const canSubmit = $derived(currentPassword.length > 0 && newPassword.length >= 8)
+
+	async function handleSubmit(e: Event): Promise<void> {
+		e.preventDefault()
+		if (!canSubmit || saving) return
+		saving = true
+		error = null
+		success = false
+		try {
+			const { response, error: apiError } = await apiClient().POST(
+				'/v1/auth/change-password',
+				{ body: { current_password: currentPassword, new_password: newPassword } }
+			)
+			if (!response.ok) {
+				const detail = (apiError as Record<string, unknown>)?.detail
+				error = typeof detail === 'string' ? detail : 'failed to change password'
+				return
+			}
+			success = true
+			currentPassword = ''
+			newPassword = ''
+		} catch {
+			error = 'network error'
+		} finally {
+			saving = false
+		}
+	}
 </script>
 
 <SettingsSectionLayout
@@ -36,7 +72,7 @@
 			<div class="mt-1 text-sm text-white/50">
 				update your account password. you'll need to enter your current password.
 			</div>
-			<form class="mt-4 space-y-3" onsubmit={(e) => e.preventDefault()} autocomplete="off">
+			<form class="mt-4 space-y-3" onsubmit={handleSubmit} autocomplete="off">
 				<div>
 					<label
 						class="mb-1.5 block text-xs font-medium text-white/50"
@@ -48,7 +84,8 @@
 						autocomplete="current-password"
 						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 						placeholder="enter current password"
-						disabled
+						bind:value={currentPassword}
+						disabled={saving}
 					/>
 				</div>
 				<div>
@@ -60,18 +97,30 @@
 						type="password"
 						autocomplete="new-password"
 						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
-						placeholder="enter new password"
-						disabled
+						placeholder="enter new password (min 8 characters)"
+						bind:value={newPassword}
+						disabled={saving}
 					/>
 				</div>
+
+				{#if error}
+					<p class="text-xs text-red-400">{error}</p>
+				{/if}
+				{#if success}
+					<p class="text-xs text-green-400">password updated successfully</p>
+				{/if}
+
 				<button
 					type="submit"
-					disabled
-					class="rounded-pill border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/40 transition-colors"
+					disabled={!canSubmit || saving}
+					class="rounded-pill border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/15 disabled:text-white/40 disabled:hover:bg-white/10"
 				>
-					update password
+					{#if saving}
+						<ShimmerText className="inline-block">updating</ShimmerText>
+					{:else}
+						update password
+					{/if}
 				</button>
-				<p class="text-xs text-white/30">coming soon</p>
 			</form>
 		</div>
 

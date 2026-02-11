@@ -6,6 +6,7 @@
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
+	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -391,6 +392,7 @@
 			</div>
 
 			<ArchivedChatsModal open={modals.isOpen('archived-chats')} onClose={modals.close} />
+			<MemoriesModal open={modals.isOpen('memories')} onClose={modals.close} />
 			<ShareResourceModal
 				open={modals.isOpen('share-resource')}
 				payload={modals.shareResourcePayload}

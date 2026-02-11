@@ -5,7 +5,7 @@ from __future__ import annotations
 import struct
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.memory import Memory
@@ -88,18 +88,24 @@ async def list_memories(
 	limit: int = 50,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
+	search: str | None = None,
 ) -> list[Memory]:
 	if not principal.is_admin:
 		user_id = TypeID(principal.user.id)
 
+	base = select(Memory).where(Memory.user_id == user_id)
+	if search:
+		base = base.where(Memory.content.ilike(f"%{search}%"))
+
 	stmt = (
 		apply_sort(
-			select(Memory).where(Memory.user_id == user_id),
+			base,
 			sort_by=sort_by,
 			sort_dir=sort_dir,
 			columns={
 				"updated_at": Memory.updated_at,
 				"created_at": Memory.created_at,
+				"content_length": func.length(Memory.content),
 				"category": Memory.category,
 				"last_accessed_at": Memory.last_accessed_at,
 				"confidence": Memory.confidence,
@@ -173,3 +179,24 @@ async def delete_memory(
 
 	await session.delete(memory)
 	await session.commit()
+
+
+async def delete_all_memories(
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	"""delete all memories for the current user and wipe vectorstore."""
+	user_id = TypeID(principal.user.id)
+
+	id_result = await session.execute(
+		select(Memory.id).where(Memory.user_id == user_id)
+	)
+	memory_ids = list(id_result.scalars().all())
+
+	if len(memory_ids) > 0:
+		collection = _memories_collection(user_id=user_id)
+		chunks = [Chunk(id=str(mid), embedding=[]) for mid in memory_ids]
+		await delete_chunks(collection=collection, chunks=chunks)
+
+		await session.execute(delete(Memory).where(Memory.user_id == user_id))
+		await session.commit()

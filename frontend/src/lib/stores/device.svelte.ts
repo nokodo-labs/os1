@@ -1,4 +1,5 @@
 import { browser } from '$app/environment'
+import { preferences } from '$lib/stores/preferences.svelte'
 
 export const DEVICE_MOBILE_BREAKPOINT_PX = 888
 
@@ -54,6 +55,13 @@ export const device = $state({
 	hasHover: true,
 	gpuTier: 'mid' as GpuTier,
 	gpuDiagnostics: { ...GPU_DIAGNOSTICS_DEFAULT },
+
+	// client context fields (populated once at init)
+	timezone: '',
+	language: '',
+	os: '',
+	browserName: '',
+	pwaInstalled: false,
 })
 
 type Cleanup = () => void
@@ -91,6 +99,11 @@ function resetDeviceState() {
 	device.hasHover = true
 	device.gpuTier = 'mid'
 	device.gpuDiagnostics = { ...GPU_DIAGNOSTICS_DEFAULT }
+	device.timezone = ''
+	device.language = ''
+	device.os = ''
+	device.browserName = ''
+	device.pwaInstalled = false
 }
 
 /**
@@ -98,6 +111,76 @@ function resetDeviceState() {
  * combines WebGL renderer info, hardware concurrency, device memory,
  * and mobile/touch heuristics to estimate GPU capability.
  */
+
+function detectTimezone(): string {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+	} catch {
+		return ''
+	}
+}
+
+function detectLanguage(): string {
+	try {
+		return navigator.language || ''
+	} catch {
+		return ''
+	}
+}
+
+function detectOS(): string {
+	try {
+		const nav = navigator as Navigator & {
+			userAgentData?: { platform?: string }
+		}
+		if (nav.userAgentData?.platform) return nav.userAgentData.platform
+
+		const ua = navigator.userAgent
+		if (ua.includes('Win')) return 'Windows'
+		if (ua.includes('Mac')) return 'macOS'
+		if (ua.includes('Linux')) return 'Linux'
+		if (ua.includes('Android')) return 'Android'
+		if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS'
+		if (ua.includes('CrOS')) return 'ChromeOS'
+		return ''
+	} catch {
+		return ''
+	}
+}
+
+function detectBrowser(): string {
+	try {
+		const nav = navigator as Navigator & {
+			userAgentData?: { brands?: Array<{ brand: string; version: string }> }
+		}
+		if (nav.userAgentData?.brands) {
+			const known = nav.userAgentData.brands.find(
+				(b) =>
+					!b.brand.includes('Not') &&
+					!b.brand.includes('Chromium') &&
+					b.brand !== 'Chromium'
+			)
+			if (known) return known.brand
+		}
+		const ua = navigator.userAgent
+		if (ua.includes('Firefox/')) return 'Firefox'
+		if (ua.includes('Edg/')) return 'Edge'
+		if (ua.includes('OPR/') || ua.includes('Opera/')) return 'Opera'
+		if (ua.includes('Chrome/')) return 'Chrome'
+		if (ua.includes('Safari/') && !ua.includes('Chrome')) return 'Safari'
+		return ''
+	} catch {
+		return ''
+	}
+}
+
+function detectPwaInstalled(): boolean {
+	try {
+		return window.matchMedia('(display-mode: standalone)').matches
+	} catch {
+		return false
+	}
+}
 
 function readDeviceMemory(): number | null {
 	if (!('deviceMemory' in navigator)) return null
@@ -333,6 +416,13 @@ export function initDevice(): void {
 	device.gpuTier = detected.tier
 	device.gpuDiagnostics = detected.diagnostics
 
+	// detect client context fields once at startup
+	device.timezone = detectTimezone()
+	device.language = detectLanguage()
+	device.os = detectOS()
+	device.browserName = detectBrowser()
+	device.pwaInstalled = detectPwaInstalled()
+
 	const offMobile = addMqListener(mqMobile, onEvent)
 	const offCoarsePointer = addMqListener(mqCoarsePointer, onEvent)
 	const offHover = addMqListener(mqHover, onEvent)
@@ -373,4 +463,32 @@ export function destroyDevice(): void {
 	cleanup = null
 	didInit = false
 	resetDeviceState()
+}
+
+/** build the client context payload for agent run requests.
+ * respects user privacy preferences — omits device info or location
+ * when the corresponding toggle is disabled. */
+export function getClientContext(): {
+	timezone: string
+	language: string
+	os: string
+	browser: string
+	pwaInstalled: boolean
+	screenWidth: number
+	screenHeight: number
+	isMobile: boolean
+} {
+	const privacy = preferences.data.privacy
+	const sendDevice = privacy.useDeviceContext
+
+	return {
+		timezone: sendDevice ? device.timezone : '',
+		language: sendDevice ? device.language : '',
+		os: sendDevice ? device.os : '',
+		browser: sendDevice ? device.browserName : '',
+		pwaInstalled: sendDevice ? device.pwaInstalled : false,
+		screenWidth: sendDevice ? device.width : 0,
+		screenHeight: sendDevice ? device.height : 0,
+		isMobile: sendDevice ? device.isMobile : false,
+	}
 }

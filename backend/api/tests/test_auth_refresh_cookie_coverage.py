@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 
-from api.v1.schemas.token import Token
+from api.v1.schemas.auth import Token
 
 
 # All cookie-auth endpoints require Origin header for CSRF protection.

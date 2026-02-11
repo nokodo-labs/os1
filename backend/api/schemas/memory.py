@@ -1,4 +1,4 @@
-"""Memory schemas."""
+"""memory schemas."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 class MemoryBase(MetadataModel):
-	"""Shared memory fields."""
+	"""shared memory fields."""
 
 	content: str
 	source_message_id: TypeID | None = None
@@ -20,13 +20,13 @@ class MemoryBase(MetadataModel):
 
 
 class MemoryCreate(MemoryBase):
-	"""Payload to capture a memory."""
+	"""payload to capture a memory."""
 
 	user_id: TypeID
 
 
 class MemoryUpdate(MetadataModel):
-	"""Payload to update a memory."""
+	"""payload to update a memory."""
 
 	content: str | None = None
 	confidence: float | None = None
@@ -34,7 +34,7 @@ class MemoryUpdate(MetadataModel):
 
 
 class Memory(MemoryBase, TimestampedModel):
-	"""Response schema."""
+	"""response schema."""
 
 	id: TypeID
 	user_id: TypeID

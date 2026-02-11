@@ -18,10 +18,11 @@ from api.models.group import GroupMembership
 from api.models.user import User
 from api.permissions import DefaultResourceAccess
 from api.settings import settings
-from api.v1.schemas.token import Token, TokenPayload
+from api.v1.schemas.auth import Token, TokenPayload
 from nokodo_ai.utils.security import (
 	create_jwt_token,
 	decode_jwt_token,
+	hash_password,
 	verify_password,
 )
 from nokodo_ai.utils.typeid import TypeID, assert_typeid
@@ -368,3 +369,22 @@ async def refresh_token_for_user(refresh_token: str, session: AsyncSession) -> T
 		token_type="bearer",
 		refresh_token=new_refresh_token,
 	)
+
+
+async def change_password(
+	session: AsyncSession,
+	principal: Principal,
+	*,
+	current_password: str,
+	new_password: str,
+) -> None:
+	"""change the authenticated user's password after verifying the current one."""
+	user = principal.user
+	if not verify_password(current_password, user.hashed_password):
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="current password is incorrect",
+		)
+	user.hashed_password = hash_password(new_password)
+	session.add(user)
+	await session.commit()

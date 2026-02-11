@@ -319,7 +319,8 @@ async def run_thread(
 		db,
 		principal,
 		input=req.input,
-		parent_id=getattr(req, "parent_id", None),
+		parent_id=req.parent_id,
+		client_context=req.client_context,
 	)
 	return StreamingResponse(
 		stream,

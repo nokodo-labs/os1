@@ -162,6 +162,19 @@ class PrivacyPreferences(BaseModel):
 		alias="shareUsageData",
 		description="whether to share anonymous usage data",
 	)
+	use_location: bool | None = Field(
+		default=None,
+		alias="useLocation",
+		description="whether to send precise location to personalise AI responses",
+	)
+	use_device_context: bool | None = Field(
+		default=None,
+		alias="useDeviceContext",
+		description=(
+			"whether to send device information (timezone, OS, browser)"
+			" to personalise AI responses"
+		),
+	)
 
 
 # accessibility preferences

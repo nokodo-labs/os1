@@ -11,6 +11,7 @@
 	import AclModal from '$lib/components/AclModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import PromptVariablesLegend from '$lib/components/PromptVariablesLegend.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
@@ -23,7 +24,7 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { Pencil, Plus, Shield, Trash2 } from '@lucide/svelte'
+	import { BookOpen, Pencil, Plus, Shield, Trash2 } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
 	let agents = $state<Agent[]>([])
@@ -41,6 +42,7 @@
 
 	let showAclModal = $state(false)
 	let aclAgentId = $state('')
+	let showVariablesLegend = $state(false)
 
 	let formName = $state('')
 	let formDescription = $state('')
@@ -425,7 +427,19 @@
 					</div>
 
 					<div class="space-y-2">
-						<Label for="system_prompt">system prompt (optional)</Label>
+						<div class="flex items-center justify-between">
+							<Label for="system_prompt">system prompt (optional)</Label>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+								onclick={() => (showVariablesLegend = true)}
+							>
+								<BookOpen class="h-3.5 w-3.5" />
+								variables
+							</Button>
+						</div>
 						<textarea
 							id="system_prompt"
 							bind:value={formSystemPrompt}
@@ -555,3 +569,5 @@
 	resourceId={aclAgentId}
 	title="agent access rules"
 />
+
+<PromptVariablesLegend bind:open={showVariablesLegend} />

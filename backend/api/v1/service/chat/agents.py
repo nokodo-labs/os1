@@ -18,6 +18,7 @@ from api.models.event import Event
 from api.models.message import Message as MessageORM
 from api.models.model import Model
 from api.schemas.message import MessageCreate
+from api.schemas.runs import ClientContext
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
@@ -26,7 +27,7 @@ from api.v1.service.chat.hooks import resolve_hooks
 from api.v1.service.chat.models import build_chat_model
 from api.v1.service.chat.tools import resolve_tools
 from api.v1.service.events import build_event_emitter
-from api.v1.service.prompt_runtime import render_inline_with_prompts
+from api.v1.service.prompt_runtime import render_agent_instructions
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
 from nokodo_ai import Hook as SDKHook
@@ -154,15 +155,19 @@ async def inject_system_instructions(
 	thread: SDKThread,
 	*,
 	session: AsyncSession,
+	principal: Principal | None = None,
+	client_context: ClientContext | None = None,
 ) -> SDKThread:
 	"""inject an agent's rendered system instructions at the start of a thread."""
 	if not agent_orm.system_prompt:
 		return thread
 
-	rendered = await render_inline_with_prompts(
+	user = principal.user if principal else None
+	rendered = await render_agent_instructions(
 		session,
 		text=agent_orm.system_prompt,
-		variables=None,
+		user=user,
+		client_context=client_context,
 	)
 	if not rendered:
 		return thread
@@ -207,6 +212,7 @@ async def run_agent(
 	*,
 	input: str | None = None,
 	parent_id: TypeID | None = None,
+	client_context: ClientContext | None = None,
 ) -> AsyncIterator[bytes]:
 	"""stream a thread run as sse events.
 
@@ -373,6 +379,8 @@ async def run_agent(
 			agent,
 			sdk_thread,
 			session=session,
+			principal=principal,
+			client_context=client_context,
 		)
 	finally:
 		# Restore original head to avoid unintended side effects on the session object

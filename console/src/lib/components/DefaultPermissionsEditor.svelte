@@ -100,6 +100,13 @@
 			title: 'features',
 			items: [{ value: 'files:upload', label: 'file uploads' }],
 		},
+		{
+			title: 'app access',
+			items: [
+				{ value: 'frontend:access', label: 'frontend' },
+				{ value: 'console:access', label: 'console' },
+			],
+		},
 	]
 
 	const inheritValue = 'inherit'
