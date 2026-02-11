@@ -11,6 +11,7 @@
 	} from '$lib/api'
 	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import RolePicker from '$lib/components/RolePicker.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
@@ -106,7 +107,7 @@
 	let securityRequireEmailVerification = $state(false)
 	let securityAllowedEmailDomains = $state('')
 	let securityAllowSignups = $state(true)
-	let securityAutoSignupRoleIds = $state('')
+	let securityAutoSignupRoleIds = $state<string[]>([])
 	let securityOidcEnabled = $state(false)
 	let securityOidcIssuerUrl = $state('')
 	let securityOidcClientId = $state('')
@@ -158,7 +159,7 @@
 		securityRequireEmailVerification: false,
 		securityAllowedEmailDomains: '',
 		securityAllowSignups: true,
-		securityAutoSignupRoleIds: '',
+		securityAutoSignupRoleIds: [] as string[],
 		securityOidcEnabled: false,
 		securityOidcIssuerUrl: '',
 		securityOidcClientId: '',
@@ -209,7 +210,7 @@
 			securityRequireEmailVerification !== original.securityRequireEmailVerification ||
 			securityAllowedEmailDomains !== original.securityAllowedEmailDomains ||
 			securityAllowSignups !== original.securityAllowSignups ||
-			securityAutoSignupRoleIds !== original.securityAutoSignupRoleIds ||
+			!arrayEquals(securityAutoSignupRoleIds, original.securityAutoSignupRoleIds) ||
 			securityOidcEnabled !== original.securityOidcEnabled ||
 			securityOidcIssuerUrl !== original.securityOidcIssuerUrl ||
 			securityOidcClientId !== original.securityOidcClientId ||
@@ -219,6 +220,10 @@
 			securityOidcOnly !== original.securityOidcOnly ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
+
+	function arrayEquals(a: string[], b: string[]): boolean {
+		return a.length === b.length && a.every((v, i) => v === b[i])
+	}
 
 	function toStringOrEmpty(v: unknown): string {
 		if (v === null || v === undefined) return ''
@@ -316,7 +321,7 @@
 		securityRequireEmailVerification = security?.require_email_verification ?? false
 		securityAllowedEmailDomains = (security?.allowed_email_domains ?? []).join(', ')
 		securityAllowSignups = security?.allow_signups ?? true
-		securityAutoSignupRoleIds = (security?.auto_signup_role_ids ?? []).join(', ')
+		securityAutoSignupRoleIds = [...(security?.auto_signup_role_ids ?? [])]
 
 		const oidc = security?.oidc
 		securityOidcEnabled = oidc?.enabled ?? false
@@ -438,7 +443,7 @@
 		securityRequireEmailVerification = original.securityRequireEmailVerification
 		securityAllowedEmailDomains = original.securityAllowedEmailDomains
 		securityAllowSignups = original.securityAllowSignups
-		securityAutoSignupRoleIds = original.securityAutoSignupRoleIds
+		securityAutoSignupRoleIds = [...original.securityAutoSignupRoleIds]
 		securityOidcEnabled = original.securityOidcEnabled
 		securityOidcIssuerUrl = original.securityOidcIssuerUrl
 		securityOidcClientId = original.securityOidcClientId
@@ -588,7 +593,7 @@
 			securityRequireEmailVerification !== original.securityRequireEmailVerification ||
 			securityAllowedEmailDomains !== original.securityAllowedEmailDomains ||
 			securityAllowSignups !== original.securityAllowSignups ||
-			securityAutoSignupRoleIds !== original.securityAutoSignupRoleIds ||
+			!arrayEquals(securityAutoSignupRoleIds, original.securityAutoSignupRoleIds) ||
 			securityOidcEnabled !== original.securityOidcEnabled ||
 			securityOidcIssuerUrl !== original.securityOidcIssuerUrl ||
 			securityOidcClientId !== original.securityOidcClientId ||
@@ -618,8 +623,8 @@
 				data.security.allowed_email_domains = parseCommaList(securityAllowedEmailDomains)
 			if (securityAllowSignups !== original.securityAllowSignups)
 				data.security.allow_signups = securityAllowSignups
-			if (securityAutoSignupRoleIds !== original.securityAutoSignupRoleIds)
-				data.security.auto_signup_role_ids = parseCommaList(securityAutoSignupRoleIds)
+			if (!arrayEquals(securityAutoSignupRoleIds, original.securityAutoSignupRoleIds))
+				data.security.auto_signup_role_ids = securityAutoSignupRoleIds
 
 			if (
 				securityOidcEnabled !== original.securityOidcEnabled ||
@@ -1245,15 +1250,10 @@
 					</div>
 
 					<div class="space-y-2">
-						<Label for="auto_signup_roles">auto-apply role ids</Label>
-						<Input
-							id="auto_signup_roles"
-							bind:value={securityAutoSignupRoleIds}
-							placeholder="role_... , role_..."
-							class="rounded-xl"
-						/>
+						<Label>auto-apply roles</Label>
+						<RolePicker bind:value={securityAutoSignupRoleIds} />
 						<p class="text-xs text-zinc-500">
-							comma-separated role ids. empty means none.
+							roles automatically assigned to new users on signup.
 						</p>
 					</div>
 

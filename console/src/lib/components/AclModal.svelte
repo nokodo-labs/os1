@@ -6,9 +6,10 @@
 		type AccessRuleCreate,
 		type AccessRuleResponse,
 	} from '$lib/api'
+	import PrincipalPicker from '$lib/components/PrincipalPicker.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
+	import { Globe, Shield, Users, UsersRound } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type PrincipalType = 'user' | 'group' | 'role'
@@ -30,17 +31,36 @@
 	let error = $state<string | null>(null)
 
 	let entries = $state<AccessRuleResponse[]>([])
+	let entryLabels = $state<Record<string, string>>({})
 
-	let newPrincipalType = $state<PrincipalType>('user')
-	let newPrincipalId = $state<string>('')
 	let newLevel = $state<AccessLevel>('reader')
 
-	function principalLabel(entry: AccessRuleResponse) {
+	function principalType(entry: AccessRuleResponse): PrincipalType | null {
+		if (entry.subject_user_id) return 'user'
+		if (entry.subject_group_id) return 'group'
+		if (entry.subject_role_id) return 'role'
+		return null
+	}
+
+	function principalId(entry: AccessRuleResponse): string | null {
+		return entry.subject_user_id ?? entry.subject_group_id ?? entry.subject_role_id ?? null
+	}
+
+	function principalKey(entry: AccessRuleResponse): string {
 		if (entry.subject_user_id) return `user:${entry.subject_user_id}`
 		if (entry.subject_group_id) return `group:${entry.subject_group_id}`
 		if (entry.subject_role_id) return `role:${entry.subject_role_id}`
 		return 'unknown'
 	}
+
+	function principalDisplayLabel(entry: AccessRuleResponse): string {
+		const key = principalKey(entry)
+		return entryLabels[key] ?? key
+	}
+
+	const existingPrincipalIds = $derived(
+		entries.map((e) => principalId(e)).filter((id): id is string => id !== null)
+	)
 
 	function toCreate(entry: AccessRuleResponse, index: number): AccessRuleCreate {
 		return {
@@ -90,13 +110,8 @@
 		loadAcl()
 	})
 
-	function addEntry() {
+	function addEntry(principal: { type: PrincipalType; id: string; label: string }) {
 		error = null
-		const principalId = newPrincipalId.trim()
-		if (!principalId) {
-			error = 'principal id is required'
-			return
-		}
 
 		const next: AccessRuleResponse = {
 			id: `draft:${crypto.randomUUID()}`,
@@ -112,20 +127,18 @@
 			updated_at: new Date().toISOString(),
 		}
 
-		if (newPrincipalType === 'user') {
-			next.subject_user_id = principalId
-		}
-		if (newPrincipalType === 'group') next.subject_group_id = principalId
-		if (newPrincipalType === 'role') next.subject_role_id = principalId
+		if (principal.type === 'user') next.subject_user_id = principal.id
+		if (principal.type === 'group') next.subject_group_id = principal.id
+		if (principal.type === 'role') next.subject_role_id = principal.id
 
-		const key = principalLabel(next)
-		if (entries.some((e) => principalLabel(e) === key)) {
+		const key = principalKey(next)
+		if (entries.some((e) => principalKey(e) === key)) {
 			error = 'that principal already has an entry'
 			return
 		}
 
+		entryLabels = { ...entryLabels, [key]: principal.label }
 		entries = [...entries, next]
-		newPrincipalId = ''
 		newLevel = 'reader'
 	}
 
@@ -217,32 +230,13 @@
 			{:else}
 				<div class="space-y-4">
 					<div class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-						<div class="mb-3 text-sm font-medium">add principal</div>
-						<div class="grid gap-3 sm:grid-cols-3">
-							<div class="space-y-2">
-								<Label>type</Label>
-								<select
-									bind:value={newPrincipalType}
-									class="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm"
-								>
-									<option value="user">user</option>
-									<option value="group">group</option>
-									<option value="role">role</option>
-								</select>
-							</div>
-							<div class="space-y-2">
-								<Label>id</Label>
-								<Input
-									bind:value={newPrincipalId}
-									class="rounded-xl"
-									placeholder="e.g. 123 or uuid"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label>level</Label>
+						<div class="mb-3 flex items-center justify-between">
+							<div class="text-sm font-medium">add principal</div>
+							<div class="flex items-center gap-2">
+								<Label class="text-xs text-zinc-500">level:</Label>
 								<select
 									bind:value={newLevel}
-									class="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm"
+									class="h-8 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-xs"
 								>
 									<option value="reader">reader</option>
 									<option value="editor">editor</option>
@@ -250,33 +244,44 @@
 								</select>
 							</div>
 						</div>
-						<div class="mt-3 flex justify-end">
-							<Button class="rounded-xl" onclick={addEntry} disabled={isSaving}
-								>add</Button
-							>
-						</div>
+						<PrincipalPicker
+							exclude={existingPrincipalIds}
+							onPick={(p) => addEntry(p)}
+						/>
 					</div>
 
 					<div class="rounded-xl border border-zinc-800 bg-zinc-900/40">
 						<div class="border-b border-zinc-800 px-4 py-3 text-sm font-medium">
-							entries
+							entries ({entries.length})
 						</div>
 						{#if entries.length === 0}
 							<div class="px-4 py-8 text-center text-sm text-zinc-500">
-								no entries yet.
+								no entries yet. pick a user, group, or role above to add one.
 							</div>
 						{:else}
 							<div class="divide-y divide-zinc-800">
 								{#each entries as entry (entry.id)}
-									<div
-										class="grid items-center gap-3 px-4 py-3 sm:grid-cols-[1fr,140px,80px]"
-									>
-										<div class="text-sm">
-											<div class="font-mono text-xs text-zinc-400">
-												{principalLabel(entry)}
+									<div class="flex items-center gap-3 px-4 py-3">
+										<div class="flex items-center gap-2 text-zinc-500">
+											{#if principalType(entry) === 'user'}
+												<Users class="h-3.5 w-3.5" />
+											{:else if principalType(entry) === 'group'}
+												<UsersRound class="h-3.5 w-3.5" />
+											{:else if principalType(entry) === 'role'}
+												<Shield class="h-3.5 w-3.5" />
+											{:else}
+												<Globe class="h-3.5 w-3.5" />
+											{/if}
+										</div>
+										<div class="min-w-0 flex-1 text-sm">
+											<div class="truncate font-medium text-zinc-200">
+												{principalDisplayLabel(entry)}
+											</div>
+											<div class="truncate font-mono text-xs text-zinc-500">
+												{principalKey(entry)}
 											</div>
 										</div>
-										<div>
+										<div class="shrink-0">
 											<select
 												value={entry.level}
 												onchange={(e) => {
@@ -286,7 +291,7 @@
 													if (!nextLevel) return
 													updateLevel(entry.id, nextLevel)
 												}}
-												class="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm"
+												class="h-8 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-xs"
 												disabled={isSaving}
 											>
 												<option value="reader">reader</option>
@@ -294,10 +299,10 @@
 												<option value="admin">admin</option>
 											</select>
 										</div>
-										<div class="flex justify-end">
+										<div class="shrink-0">
 											<Button
 												variant="outline"
-												class="rounded-xl"
+												class="h-8 rounded-xl px-2 text-xs"
 												onclick={() => removeEntry(entry.id)}
 												disabled={isSaving}
 											>

@@ -36,9 +36,29 @@ export interface paths {
         put?: never;
         /**
          * Refresh Access Token
-         * @description Exchange refresh token for new access token (sliding refresh).
+         * @description exchange refresh token for new access token (sliding refresh).
          */
         post: operations["refresh_access_token_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description change the authenticated user's password.
+         */
+        post: operations["change_password_auth_change_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -56,7 +76,7 @@ export interface paths {
         put?: never;
         /**
          * Logout
-         * @description Clear refresh token cookie to log out.
+         * @description clear refresh token cookie to log out.
          */
         post: operations["logout_auth_logout_post"];
         delete?: never;
@@ -576,16 +596,20 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description List memories for a user.
+         * @description list memories for a user.
          */
         get: operations["list_memories_memories_get"];
         put?: never;
         /**
          * Create Memory
-         * @description Capture a new memory.
+         * @description capture a new memory.
          */
         post: operations["create_memory_memories_post"];
-        delete?: never;
+        /**
+         * Delete All Memories
+         * @description delete all memories for the current user.
+         */
+        delete: operations["delete_all_memories_memories_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -600,18 +624,18 @@ export interface paths {
         };
         /**
          * Get Memory
-         * @description Fetch a single memory.
+         * @description fetch a single memory.
          */
         get: operations["get_memory_memories__memory_id__get"];
         /**
          * Update Memory
-         * @description Update a memory.
+         * @description update a memory.
          */
         put: operations["update_memory_memories__memory_id__put"];
         post?: never;
         /**
          * Delete Memory
-         * @description Delete a memory.
+         * @description delete a memory.
          */
         delete: operations["delete_memory_memories__memory_id__delete"];
         options?: never;
@@ -1982,6 +2006,56 @@ export interface components {
              */
             pwa_manifest_url?: string | null;
         };
+        /**
+         * ClientContext
+         * @description optional runtime context sent by the client with each agent run.
+         *
+         *     the frontend collects device and environment data that the agent
+         *     can use to personalise responses (e.g. timezone-aware greetings).
+         *     all fields are optional — the backend gracefully handles missing data.
+         */
+        ClientContext: {
+            /**
+             * Timezone
+             * @description IANA timezone identifier, e.g. 'America/New_York'
+             */
+            timezone?: string | null;
+            /**
+             * Language
+             * @description BCP 47 language tag, e.g. 'en-US'
+             */
+            language?: string | null;
+            /**
+             * Os
+             * @description operating system name, e.g. 'Windows', 'macOS', 'Android'
+             */
+            os?: string | null;
+            /**
+             * Browser
+             * @description browser name, e.g. 'Chrome', 'Firefox', 'Safari'
+             */
+            browser?: string | null;
+            /**
+             * Pwainstalled
+             * @description whether the app is running as an installed PWA
+             */
+            pwaInstalled?: boolean | null;
+            /**
+             * Screenwidth
+             * @description device screen width in pixels
+             */
+            screenWidth?: number | null;
+            /**
+             * Screenheight
+             * @description device screen height in pixels
+             */
+            screenHeight?: number | null;
+            /**
+             * Ismobile
+             * @description whether the client is on a mobile device
+             */
+            isMobile?: boolean | null;
+        };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
         /**
@@ -2396,7 +2470,7 @@ export interface components {
         };
         /**
          * Memory
-         * @description Response schema.
+         * @description response schema.
          */
         Memory: {
             /**
@@ -2435,7 +2509,7 @@ export interface components {
         };
         /**
          * MemoryCreate
-         * @description Payload to capture a memory.
+         * @description payload to capture a memory.
          */
         MemoryCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -2455,7 +2529,7 @@ export interface components {
         };
         /**
          * MemoryUpdate
-         * @description Payload to update a memory.
+         * @description payload to update a memory.
          */
         MemoryUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -2985,6 +3059,16 @@ export interface components {
             content: string;
         };
         /**
+         * PasswordChange
+         * @description payload for self-service password change.
+         */
+        PasswordChange: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
+        /**
          * Plugin
          * @description Response schema.
          */
@@ -3139,6 +3223,16 @@ export interface components {
              * @description whether to share anonymous usage data
              */
             shareUsageData?: boolean | null;
+            /**
+             * Uselocation
+             * @description whether to send precise location to personalise AI responses
+             */
+            useLocation?: boolean | null;
+            /**
+             * Usedevicecontext
+             * @description whether to send device information (timezone, OS, browser) to personalise AI responses
+             */
+            useDeviceContext?: boolean | null;
         };
         /**
          * ProblemDetails
@@ -4232,6 +4326,8 @@ export interface components {
             input?: string | null;
             /** Parent Id */
             parent_id?: string | null;
+            /** @description optional device/environment context from the client */
+            clientContext?: components["schemas"]["ClientContext"] | null;
         };
         /**
          * ThreadSwitchRequest
@@ -4657,6 +4753,100 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Token"];
                 };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    change_password_auth_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description bad request */
             400: {
@@ -7913,8 +8103,9 @@ export interface operations {
                 user_id: string;
                 skip?: number;
                 limit?: number;
-                sort_by?: components["schemas"]["CommonSortBy"] | ("category" | "last_accessed_at" | "confidence");
+                sort_by?: components["schemas"]["CommonSortBy"] | ("category" | "content_length" | "last_accessed_at" | "confidence");
                 sort_dir?: components["schemas"]["SortDir"];
+                search?: string | null;
             };
             header?: never;
             path?: never;
@@ -8026,6 +8217,96 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Memory"];
                 };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_all_memories_memories_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description bad request */
             400: {
