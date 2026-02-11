@@ -6,7 +6,7 @@
  * 1. ensure API origin is configured
  * 2. attempt token refresh (restore session)
  * 3. mark auth as ready (unblocks API requests)
- * 4. load user settings (if authenticated)
+ * 4. load settings (public + user)
  * 5. connect event stream (if authenticated)
  *
  * call initApp() once from the root layout's onMount.
@@ -54,9 +54,9 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 	// 3. mark auth as ready (unblocks any waiting API requests)
 	markAuthReady()
 
-	// 4 & 5. if authenticated, load settings and connect event stream
+	// 4 & 5. load settings, connect event stream if authenticated
+	void loadSettings()
 	if (token) {
-		void loadSettings()
 		eventStreamClient.connect()
 	}
 

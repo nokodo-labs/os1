@@ -45,7 +45,18 @@ class AppearancePreferences(BaseModel):
 	)
 	background: BackgroundType | None = Field(
 		default=None,
-		description="background wallpaper preference",
+		description="background wallpaper preference "
+		"used when auto_background is disabled",
+	)
+	auto_background: bool | None = Field(
+		default=None,
+		alias="autoBackground",
+		description="when enabled, background changes automatically based on context",
+	)
+	static_color: str | None = Field(
+		default=None,
+		alias="staticColor",
+		description="hex color used when background is set to 'static'",
 	)
 	bubble_tail_style: Literal["none", "whatsapp", "imessage"] | None = Field(
 		default=None,

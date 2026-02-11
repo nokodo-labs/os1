@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { markAuthReady } from '$lib/auth/session.svelte'
-	import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
@@ -19,12 +18,12 @@
 	import { createThemeContext, setThemeContext } from '$lib/contexts/themeContext.svelte'
 	import { initApp } from '$lib/init'
 	import { appReadiness } from '$lib/stores/appReadiness.svelte'
+	import { background } from '$lib/stores/background.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { notifications } from '$lib/stores/notifications.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { permissions } from '$lib/stores/permissions.svelte'
-	import { preferences } from '$lib/stores/preferences.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
@@ -90,21 +89,6 @@
 	// initialize theme context and make it available to child components
 	const theme = createThemeContext()
 	setThemeContext(theme)
-
-	// background is directly reactive from the store
-	const currentBackground = $derived.by(() => {
-		const isAuth = page.url.pathname === '/login' || page.url.pathname === '/signup'
-		if (isAuth) {
-			const authBg: BackgroundType =
-				settingsState.data?.ui?.auth_pages_background ?? 'lightrays'
-			return authBg
-		}
-		return (
-			preferences.data.appearance.background ??
-			settingsState.data?.ui?.default_background ??
-			'darkveil'
-		)
-	})
 
 	// access gate state
 	let pendingApproval = $state<boolean>(false)
@@ -320,8 +304,8 @@
 
 <!-- BackgroundManager handles all backgrounds with smooth transitions -->
 <BackgroundManager
-	type={currentBackground}
-	config={{ color: '#0a0a0a' }}
+	type={background.resolved}
+	config={{ color: background.resolvedStaticColor }}
 	onReady={handleBackgroundReady}
 >
 	{#if pendingApproval}

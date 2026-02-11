@@ -24,6 +24,7 @@
 	let user = $state<User | null>(null)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
+	let showPreferences = $state(false)
 
 	function close() {
 		open = false
@@ -59,6 +60,7 @@
 		isLoading = true
 		error = null
 		user = null
+		showPreferences = false
 
 		api.GET('/v1/users/{user_id}', { params: { path: { user_id: userId } } })
 			.then((r) => unwrap(r))
@@ -115,7 +117,26 @@
 							>
 								roles
 							</Button>
+							<Button
+								variant={showPreferences ? 'default' : 'outline'}
+								class="rounded-xl"
+								onclick={() => (showPreferences = !showPreferences)}
+							>
+								preferences
+							</Button>
 						</div>
+
+						{#if showPreferences}
+							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+								<div class="mb-2 text-xs font-medium text-zinc-400">
+									raw preferences
+								</div>
+								<pre
+									class="max-h-64 overflow-auto text-xs break-all whitespace-pre-wrap text-zinc-300">{user.preferences
+										? JSON.stringify(user.preferences, null, 2)
+										: 'no preferences set'}</pre>
+							</div>
+						{/if}
 
 						<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm">
 							<div class="flex justify-between gap-3">

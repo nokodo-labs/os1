@@ -15,7 +15,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
-		"generate:api-types": "openapi-typescript http://localhost:1383/v1/openapi.json -o src/lib/api/types.ts",
+		"generate:api-types": "openapi-typescript http://localhost:1383/v1/openapi.json -o src/lib/api/types.ts && node -e \"var f='src/lib/api/types.ts',s=require('fs');s.writeFileSync(f,'// @ts-nocheck\\n'+s.readFileSync(f,'utf8'))\"",
 		"generate:api": "pnpm run generate:api-types"
 	},
 	"devDependencies": {

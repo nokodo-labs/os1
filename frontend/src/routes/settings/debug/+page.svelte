@@ -73,6 +73,97 @@
 			</div>
 
 			<div class="rounded-container bg-white/5 p-5">
+				<div class="text-sm font-semibold text-white/85">device insights</div>
+				<div class="mt-1 text-sm text-white/55">
+					computed device metrics and gpu tier signal breakdown.
+				</div>
+
+				<div class="mt-4 grid gap-3 text-sm text-white/75 sm:grid-cols-2">
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">gpu tier</div>
+						<div class="mt-1 text-white/85">{device.gpuTier}</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">score</div>
+						<div class="mt-1 text-white/85">{device.gpuDiagnostics.score}</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">cores</div>
+						<div class="mt-1 text-white/85">{device.gpuDiagnostics.cores}</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">memory</div>
+						<div class="mt-1 text-white/85">
+							{device.gpuDiagnostics.memoryGb !== null
+								? `${device.gpuDiagnostics.memoryGb} gb`
+								: 'unknown'}
+						</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">webgl</div>
+						<div class="mt-1 text-white/85">{device.gpuDiagnostics.webgl}</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">
+							renderer source
+						</div>
+						<div class="mt-1 text-white/85">{device.gpuDiagnostics.rendererSource}</div>
+					</div>
+				</div>
+
+				<div class="rounded-pill mt-4 border border-white/10 bg-white/3 px-3 py-2">
+					<div class="text-xs font-semibold text-white/50 uppercase">renderer</div>
+					<div class="mt-1 text-sm break-all text-white/85">
+						{device.gpuDiagnostics.renderer ?? 'unknown'}
+					</div>
+				</div>
+
+				<div class="mt-4 grid gap-3 text-sm text-white/75 sm:grid-cols-2">
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">mobile</div>
+						<div class="mt-1 text-white/85">
+							{device.gpuDiagnostics.isMobile ? 'yes' : 'no'}
+						</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">touch</div>
+						<div class="mt-1 text-white/85">
+							{device.gpuDiagnostics.isTouch ? 'yes' : 'no'}
+						</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">
+							coarse pointer
+						</div>
+						<div class="mt-1 text-white/85">
+							{device.gpuDiagnostics.isCoarsePointer ? 'yes' : 'no'}
+						</div>
+					</div>
+					<div class="rounded-pill border border-white/10 bg-white/3 px-3 py-2">
+						<div class="text-xs font-semibold text-white/50 uppercase">hover</div>
+						<div class="mt-1 text-white/85">
+							{device.gpuDiagnostics.hasHover ? 'yes' : 'no'}
+						</div>
+					</div>
+				</div>
+
+				{#if device.gpuDiagnostics.notes.length > 0}
+					<div class="mt-4">
+						<div class="text-xs font-semibold text-white/50 uppercase">notes</div>
+						<div class="mt-2 flex flex-wrap gap-2">
+							{#each device.gpuDiagnostics.notes as note (note)}
+								<span
+									class="rounded-pill border border-white/10 bg-white/3 px-3 py-1.5 text-xs text-white/75"
+								>
+									{note}
+								</span>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">apps grid</div>
 				<div class="mt-1 text-sm text-white/55">visual tweaks for the home apps grid.</div>
 				<button

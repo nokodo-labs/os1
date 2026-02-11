@@ -5,6 +5,7 @@
 	import { apiClient } from '$lib/api/client'
 	import { getSystemStatus } from '$lib/api/system'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import { background } from '$lib/stores/background.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import { onMount } from 'svelte'
@@ -21,6 +22,12 @@
 	pageTitleStore.pageTitle = 'sign up'
 
 	const allowSignups = $derived(settingsState.data?.security?.allow_signups ?? true)
+
+	// auth pages use the admin-configured auth background
+	$effect(() => {
+		background.setPage(background.auth)
+		return background.clearPage
+	})
 
 	const consoleOrigin = $derived(
 		consoleOriginOverride ?? settingsState.data?.branding?.public_console_origin ?? null

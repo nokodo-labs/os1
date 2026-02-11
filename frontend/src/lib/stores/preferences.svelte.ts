@@ -96,6 +96,8 @@ function createPreferencesStore() {
 			background:
 				(settingsState.data?.ui?.default_background as BackgroundType) ?? 'lightrays',
 			autoAccentColors: true,
+			autoBackground: true,
+			staticColor: '#171717',
 			bubbleTailStyle: 'none',
 		},
 		ai: {
