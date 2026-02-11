@@ -101,6 +101,12 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 - **user groups** - shared threads, files, and projects with group-level quotas
 - **rate limiting** - per-user, global, by time period, with clear messaging
 
+### 🖌️ no branding restrictions
+
+- **fully open source** - use, modify, and deploy without limitations
+- **customizable UI** - easily rebrand and tailor the interface to your needs
+- **self-hosting** - complete control over your deployment and data
+
 ### 📱 workspace features
 
 - **projects** - organize threads, files, and resources together

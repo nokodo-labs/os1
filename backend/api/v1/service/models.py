@@ -170,7 +170,7 @@ def _namespaced_display_name(
 	model_id: str,
 	upstream_display_name: str | None,
 ) -> str | None:
-	# display names are no longer prefixed — models are unique by
+	# display names are no longer prefixed - models are unique by
 	# (name, provider_id) instead, so the prefix is unnecessary.
 	return upstream_display_name
 

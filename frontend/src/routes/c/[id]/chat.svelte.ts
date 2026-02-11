@@ -218,7 +218,7 @@ export function createChatState() {
 		}
 
 		for (const msg of sorted) {
-			// skip the message currently being streamed — the streaming overlay handles it
+			// skip the message currently being streamed - the streaming overlay handles it
 			if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
 
 			const runId = getRunId(msg)
@@ -857,7 +857,7 @@ export function createChatState() {
 							streamingAssistantParentId = finalized.id
 
 							// if this message had tool calls, the agent will continue after
-							// tool execution — keep a skeleton so the pulsing ball renders
+							// tool execution - keep a skeleton so the pulsing ball renders
 							// during the gap before the next assistant message streams
 							if (streaming.toolCalls.length > 0) {
 								streamingAssistant = {

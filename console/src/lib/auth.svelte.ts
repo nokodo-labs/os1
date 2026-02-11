@@ -22,12 +22,12 @@ function parseJwt(token: string) {
 
 /**
  * In-memory access token.
- * Intentionally NOT in localStorage — cleared on page refresh by design.
- * Refresh token lives in an httpOnly cookie set by the backend.
+ * intentionally NOT in localStorage - cleared on page refresh by design.
+ * refresh token lives in an httpOnly cookie set by the backend.
  */
 let accessToken = $state<string | null>(null)
 
-/** Auth readiness gate — API requests wait for this before firing. */
+/** auth readiness gate - API requests wait for this before firing. */
 let authReadyResolve: (() => void) | null = null
 export const authReady: Promise<void> = browser
 	? new Promise<void>((resolve) => {
@@ -35,7 +35,7 @@ export const authReady: Promise<void> = browser
 		})
 	: Promise.resolve()
 
-/** Called by the root layout after auth flow completes. */
+/** called by the root layout after auth flow completes. */
 export function markAuthReady(): void {
 	authReadyResolve?.()
 	authReadyResolve = null

@@ -339,7 +339,7 @@ async def list_reminders(
 		stmt = stmt.options(selectinload(Reminder.subtasks))
 
 	if list_id is None:
-		# default list — owner-only (no list to share)
+		# default list - owner-only (no list to share)
 		stmt = stmt.where(
 			Reminder.list_id.is_(None),
 			Reminder.owner_id == principal.user_id,
@@ -388,7 +388,7 @@ async def get_reminder(
 	# access check: owner always has access; otherwise check list access
 	if reminder.owner_id != principal.user_id and not principal.is_admin:
 		if reminder.list_id:
-			# delegate to list access check — raises 403 if denied
+			# delegate to list access check - raises 403 if denied
 			await require_resource_access(
 				str(reminder.list_id),
 				session,

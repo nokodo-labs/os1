@@ -43,6 +43,6 @@ class AgentUpdate(MetadataModel):
 
 
 class Agent(AgentBase, TimestampedModel):
-	"""Agent response schema — returns IDs only, no hydrated relationships."""
+	"""Agent response schema - returns IDs only, no hydrated relationships."""
 
 	id: TypeID

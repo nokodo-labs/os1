@@ -28,7 +28,7 @@ class Role(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	quotas: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 	priority: Mapped[int] = mapped_column(Integer, default=0)
 
-	# typed default permissions — resource access levels + action permissions
+	# typed default permissions - resource access levels + action permissions
 	default_permissions: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 	users: Mapped[list[User]] = relationship(

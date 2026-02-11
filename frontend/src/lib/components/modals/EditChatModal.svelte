@@ -31,7 +31,7 @@
 <BaseModal
 	{open}
 	title="edit chat"
-	description="placeholder — wiring to the API comes next"
+	description="placeholder - wiring to the API comes next"
 	{onClose}
 	widthClassName="max-w-sm"
 >

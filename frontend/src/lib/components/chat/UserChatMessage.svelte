@@ -36,7 +36,7 @@
 	let showActions = $state(false)
 	let isHovered = $state(false)
 
-	// intentionally non-reactive — synchronous flag between touch + click handlers.
+	// intentionally non-reactive - synchronous flag between touch + click handlers.
 	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
 	let justRevealed = false
 	const instanceId = Math.random().toString(36).slice(2)

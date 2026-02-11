@@ -126,7 +126,7 @@
 		const absY = Math.abs(d.dy)
 
 		if (absX < DRAG_THRESHOLD && absY < DRAG_THRESHOLD) {
-			// tap — treat as click then dismiss
+			// tap - treat as click then dismiss
 			delete drags[id]
 			onClick?.(id)
 			startDismiss(id)
@@ -142,7 +142,7 @@
 			delete drags[id]
 			startSwipeDismiss(id, d.dx > 0 ? 'right' : 'left')
 		} else {
-			// below threshold — snap back, resume auto-dismiss
+			// below threshold - snap back, resume auto-dismiss
 			delete drags[id]
 			resumeAutoDismiss(id)
 		}

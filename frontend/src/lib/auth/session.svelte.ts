@@ -2,7 +2,7 @@ import { browser } from '$app/environment'
 
 /**
  * access token is stored in memory only (not localStorage).
- * this is intentional for security — the token lives only for the session lifetime.
+ * this is intentional for security - the token lives only for the session lifetime.
  * refresh token is stored in an httpOnly cookie managed by the backend.
  */
 

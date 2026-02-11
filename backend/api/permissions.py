@@ -1,4 +1,4 @@
-"""permission type definitions — canonical source of truth.
+"""permission type definitions - canonical source of truth.
 
 enums and the DefaultPermissions model live here so both
 ``api.models`` and ``api.settings`` can import them without
@@ -111,7 +111,7 @@ def higher_access(
 
 
 # ---------------------------------------------------------------------------
-# default resource access — typed model, one field per resource type
+# default resource access - typed model, one field per resource type
 # ---------------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ class DefaultResourceAccess(BaseModel):
 	(agents, plugins, prompts, memories, tasks) are controlled via
 	action permissions and explicit access rules instead.
 
-	``None`` means "no default for this resource type" — inherits
+	``None`` means "no default for this resource type" - inherits
 	from the global settings when used on a role, or means "no
 	access" when used on the global settings themselves.
 	"""

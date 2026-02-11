@@ -206,7 +206,7 @@ async def _set_rules_impl(
 		await session.rollback()
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-			detail="invalid subject reference — user, group, or role not found",
+			detail="invalid subject reference - user, group, or role not found",
 		)
 
 	return await _list_rules_for_resource(resource_type, resource_id, session)

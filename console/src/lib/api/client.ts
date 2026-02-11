@@ -10,7 +10,7 @@ export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
 
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1383'
 
-// ── Deduped refresh ──────────────────────────────────────────────────
+// ── deduped refresh ──────────────────────────────────────────────────
 let refreshInFlight: Promise<string | null> | null = null
 
 export async function refreshAccessToken(): Promise<string | null> {
@@ -33,15 +33,15 @@ export async function refreshAccessToken(): Promise<string | null> {
 	return refreshInFlight
 }
 
-// ── Fetch wrappers ───────────────────────────────────────────────────
+// ── fetch wrappers ───────────────────────────────────────────────────
 
-/** Raw fetch: cookies included, no Authorization header, no auth gate. */
+/** raw fetch: cookies included, no Authorization header, no auth gate. */
 async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	const req = input instanceof Request ? input : new Request(input, init)
 	return fetch(new Request(req, { credentials: 'include' }))
 }
 
-/** Authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
+/** authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
 async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	await authReady
 
@@ -57,7 +57,7 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 	const res = await fetch(new Request(req, { headers, credentials: 'include' }))
 	if (res.status !== 401) return res
 
-	// 401 — try refreshing once
+	// 401 - try refreshing once
 	const refreshed = await refreshAccessToken()
 	if (!refreshed) return res
 
@@ -66,21 +66,21 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 	return fetch(new Request(retryReq, { headers: retryHeaders, credentials: 'include' }))
 }
 
-// ── Clients ──────────────────────────────────────────────────────────
+// ── clients ──────────────────────────────────────────────────────────
 
-/** Unauthenticated client — for login, register, refresh, logout, etc. */
+/** unauthenticated client - for login, register, refresh, logout, etc. */
 export const rawApi = createClient<ApiPaths>({
 	baseUrl: DEFAULT_API_BASE,
 	fetch: rawFetch,
 })
 
-/** Authenticated client — waits for auth, injects Bearer, auto-retries on 401. */
+/** authenticated client - waits for auth, injects Bearer, auto-retries on 401. */
 export const api = createClient<ApiPaths>({
 	baseUrl: DEFAULT_API_BASE,
 	fetch: authFetch,
 })
 
-/** Throw if the openapi-fetch response has an error, otherwise return data. */
+/** throw if the openapi-fetch response has an error, otherwise return data. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function unwrap<T>(result: { data?: T; error?: any; response: Response }): T {
 	if (result.error !== undefined) {

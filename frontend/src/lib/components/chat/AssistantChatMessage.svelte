@@ -53,11 +53,11 @@
 	let isHovered = $state(false)
 	let avatarError = $state(false)
 
-	// derived visibility — keeps the template readable
+	// derived visibility - keeps the template readable
 	let actionsVisible = $derived(!isStreaming && !isRunActive && (isLastMessage || showActions))
 	let branchNavVisible = $derived(siblingCount > 1 && (isLastMessage || showActions))
 
-	// intentionally non-reactive — synchronous flag between touch + click handlers.
+	// intentionally non-reactive - synchronous flag between touch + click handlers.
 	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
 	let justRevealed = false
 	const instanceId = Math.random().toString(36).slice(2)
@@ -162,7 +162,7 @@
 	role="article"
 	aria-label="{modelName} message"
 >
-	<!-- avatar — hidden on mobile to reclaim full width -->
+	<!-- avatar - hidden on mobile to reclaim full width -->
 	{#if !device.isMobile}
 		<div
 			class="assistant-avatar mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5"

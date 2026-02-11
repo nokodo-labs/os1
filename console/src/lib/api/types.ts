@@ -1639,7 +1639,7 @@ export interface components {
         ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:write" | "events:read" | "events:manage" | "agents:read" | "agents:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "files:upload" | "frontend:access" | "console:access";
         /**
          * Agent
-         * @description Agent response schema — returns IDs only, no hydrated relationships.
+         * @description Agent response schema - returns IDs only, no hydrated relationships.
          */
         Agent: {
             /**
@@ -1980,7 +1980,7 @@ export interface components {
          *     (agents, plugins, prompts, memories, tasks) are controlled via
          *     action permissions and explicit access rules instead.
          *
-         *     ``None`` means "no default for this resource type" — inherits
+         *     ``None`` means "no default for this resource type" - inherits
          *     from the global settings when used on a role, or means "no
          *     access" when used on the global settings themselves.
          */
