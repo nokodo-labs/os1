@@ -14,7 +14,6 @@
 		Card,
 		CardContent,
 		CardDescription,
-		CardFooter,
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
@@ -22,7 +21,8 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Bot, Cpu, Pencil, Plus, Settings2, Sparkles, Trash2 } from '@lucide/svelte'
+	import { Bot, Cpu, Pencil, Plus, Settings2, Sparkles, Trash2, X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
 	let providers = $state<Provider[]>([])
@@ -253,138 +253,166 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<div class="flex items-center justify-between">
-		<div>
-			<h2 class="text-2xl font-bold tracking-tight">providers</h2>
-			<p class="text-zinc-400">manage your AI model providers.</p>
+<div class="min-h-0 flex-1 overflow-y-auto">
+	<div class="space-y-6">
+		<div class="flex items-center justify-between">
+			<div>
+				<h2 class="text-2xl font-bold tracking-tight">providers</h2>
+				<p class="text-zinc-400">manage your AI model providers.</p>
+			</div>
+			<Button onclick={openCreateModal} class="gap-2 rounded-xl">
+				<Plus class="h-4 w-4" />
+				add provider
+			</Button>
 		</div>
-		<Button onclick={openCreateModal} class="gap-2 rounded-xl">
-			<Plus class="h-4 w-4" />
-			add provider
-		</Button>
-	</div>
 
-	{#if isFetching}
-		<div class="flex flex-col items-center justify-center gap-4 py-16">
-			<NokodoLoader expanded={true} />
-		</div>
-	{:else if error}
-		<div
-			class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
-		>
-			<p>{error}</p>
-			<Button variant="outline" class="mt-4" onclick={loadProviders}>Retry</Button>
-		</div>
-	{:else}
-		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each providers as provider (provider.id)}
-				<Card class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-					<CardHeader>
-						<div class="flex items-start justify-between">
-							<div>
-								<CardTitle>{provider.name}</CardTitle>
-								<CardDescription>{provider.adapter_type}</CardDescription>
-							</div>
-							<Button
-								variant="ghost"
-								size="icon"
-								class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
-								onclick={() => openEditModal(provider)}
-							>
-								<Pencil class="h-4 w-4" />
-							</Button>
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div class="space-y-1 text-sm text-zinc-400">
-							<div class="flex justify-between">
-								<span>status:</span>
-								<span
-									class={provider.status === 'enabled'
-										? 'text-green-400'
-										: 'text-zinc-500'}>{provider.status}</span
+		{#if isFetching}
+			<div class="flex flex-col items-center justify-center gap-4 py-16">
+				<NokodoLoader expanded={true} />
+			</div>
+		{:else if error}
+			<div
+				class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
+			>
+				<p>{error}</p>
+				<Button variant="outline" class="mt-4" onclick={loadProviders}>Retry</Button>
+			</div>
+		{:else}
+			<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#each providers as provider (provider.id)}
+					<Card
+						class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+					>
+						<CardHeader>
+							<div class="flex items-start justify-between">
+								<div>
+									<CardTitle>{provider.name}</CardTitle>
+									<CardDescription>{provider.adapter_type}</CardDescription>
+								</div>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
+									onclick={() => openEditModal(provider)}
 								>
+									<Pencil class="h-4 w-4" />
+								</Button>
 							</div>
-							<div class="flex justify-between">
-								<span>type:</span>
-								<span>{provider.provider_type}</span>
-							</div>
-							<div class="flex justify-between">
-								<span>autofetch:</span>
-								<span
-									class={provider.is_autofetch_enabled
-										? 'text-blue-400'
-										: 'text-zinc-500'}
-									>{provider.is_autofetch_enabled ? 'enabled' : 'disabled'}</span
-								>
-							</div>
-							{#if provider.model_prefix}
+						</CardHeader>
+						<CardContent>
+							<div class="space-y-1 text-sm text-zinc-400">
 								<div class="flex justify-between">
-									<span>prefix:</span>
+									<span>status:</span>
 									<span
-										class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs"
-										>{provider.model_prefix}</span
+										class={provider.status === 'enabled'
+											? 'text-green-400'
+											: 'text-zinc-500'}>{provider.status}</span
 									>
 								</div>
-							{/if}
-							{#if provider.base_url}
-								<div class="mt-2 border-t border-zinc-800 pt-2">
-									<p class="truncate font-mono text-xs opacity-70">
-										{provider.base_url}
-									</p>
+								<div class="flex justify-between">
+									<span>type:</span>
+									<span>{provider.provider_type}</span>
 								</div>
-							{/if}
-						</div>
-					</CardContent>
-				</Card>
-			{/each}
+								<div class="flex justify-between">
+									<span>autofetch:</span>
+									<span
+										class={provider.is_autofetch_enabled
+											? 'text-blue-400'
+											: 'text-zinc-500'}
+										>{provider.is_autofetch_enabled
+											? 'enabled'
+											: 'disabled'}</span
+									>
+								</div>
+								{#if provider.model_prefix}
+									<div class="flex justify-between">
+										<span>prefix:</span>
+										<span
+											class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs"
+											>{provider.model_prefix}</span
+										>
+									</div>
+								{/if}
+								{#if provider.base_url}
+									<div class="mt-2 border-t border-zinc-800 pt-2">
+										<p class="truncate font-mono text-xs opacity-70">
+											{provider.base_url}
+										</p>
+									</div>
+								{/if}
+							</div>
+						</CardContent>
+					</Card>
+				{/each}
 
-			{#if providers.length === 0}
-				<EmptyState message="no providers configured yet." />
-			{/if}
-		</div>
-	{/if}
+				{#if providers.length === 0}
+					<EmptyState message="no providers configured yet." />
+				{/if}
+			</div>
+		{/if}
+	</div>
 </div>
 
-{#if showModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-		<Card class="w-full max-w-lg rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader>
-				<CardTitle>
-					{modalMode === 'create'
-						? modalStep === 'select'
-							? 'select provider'
-							: 'configure provider'
-						: 'edit provider'}
-				</CardTitle>
-				<CardDescription>
-					{modalMode === 'create' && modalStep === 'select'
-						? 'choose a provider template or start from scratch.'
-						: 'enter connection details.'}
-				</CardDescription>
-			</CardHeader>
+<Dialog.Root
+	bind:open={showModal}
+	onOpenChange={(open) => {
+		if (!open) showModal = false
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold">
+						{modalMode === 'create'
+							? modalStep === 'select'
+								? 'select provider'
+								: 'configure provider'
+							: 'edit provider'}
+					</Dialog.Title>
+					<p class="text-sm text-zinc-400">
+						{modalMode === 'create' && modalStep === 'select'
+							? 'choose a provider template or start from scratch.'
+							: 'enter connection details.'}
+					</p>
+				</div>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-8 w-8 rounded-lg"
+					onclick={() => (showModal = false)}
+				>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
 
 			{#if modalMode === 'create' && modalStep === 'select'}
-				<CardContent class="grid grid-cols-2 gap-4">
-					{#each presets as preset (preset.name)}
-						<button
-							class="flex flex-col items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
-							onclick={() => selectPreset(preset)}
-						>
-							<preset.icon class="h-8 w-8 text-zinc-400" />
-							<span class="font-medium">{preset.name}</span>
-						</button>
-					{/each}
-				</CardContent>
-				<CardFooter class="flex justify-end">
+				<div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+					<div class="grid grid-cols-2 gap-4">
+						{#each presets as preset (preset.name)}
+							<button
+								class="flex flex-col items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
+								onclick={() => selectPreset(preset)}
+							>
+								<preset.icon class="h-8 w-8 text-zinc-400" />
+								<span class="font-medium">{preset.name}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+				<div class="flex shrink-0 justify-end border-t border-zinc-800 px-6 py-4">
 					<Button variant="outline" class="rounded-xl" onclick={() => (showModal = false)}
 						>cancel</Button
 					>
-				</CardFooter>
+				</div>
 			{:else}
-				<form onsubmit={handleSubmit}>
-					<CardContent class="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
+				<form onsubmit={handleSubmit} class="flex min-h-0 flex-1 flex-col">
+					<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 						<div class="space-y-2">
 							<Label for="name">name</Label>
 							<div class="space-y-2">
@@ -532,8 +560,10 @@
 								{submitError}
 							</div>
 						{/if}
-					</CardContent>
-					<CardFooter class="flex justify-between gap-2">
+					</div>
+					<div
+						class="flex shrink-0 justify-between gap-2 border-t border-zinc-800 px-6 py-4"
+					>
 						{#if modalMode === 'create'}
 							<Button
 								variant="ghost"
@@ -570,9 +600,9 @@
 										: 'save changes'}
 							</Button>
 						</div>
-					</CardFooter>
+					</div>
 				</form>
 			{/if}
-		</Card>
-	</div>
-{/if}
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

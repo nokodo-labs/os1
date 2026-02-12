@@ -9,20 +9,10 @@
 	} from '$lib/api'
 	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardFooter,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') close()
-	}
+	import { X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 
 	type Props = {
 		open: boolean
@@ -99,23 +89,32 @@
 	}
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-		onkeydown={handleKeydown}
-		onclick={(e) => {
-			if (e.target === e.currentTarget) close()
-		}}
-	>
-		<Card
-			class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+<Dialog.Root
+	bind:open
+	onOpenChange={(v) => {
+		if (!v) close()
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(768px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
-			<CardHeader class="shrink-0">
-				<CardTitle>new role</CardTitle>
-				<CardDescription>create a role with default permissions</CardDescription>
-			</CardHeader>
-			<CardContent class="min-h-0 flex-1 space-y-6 overflow-y-auto">
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold">new role</Dialog.Title>
+					<Dialog.Description class="text-sm text-zinc-400">
+						create a role with default permissions
+					</Dialog.Description>
+				</div>
+				<Button variant="ghost" size="icon" class="rounded-xl" onclick={close}>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
+
+			<div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-4">
 				{#if error}
 					<div
 						class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
@@ -135,14 +134,14 @@
 						id="role_description"
 						rows="3"
 						class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
-						placeholder="optional description"
 						bind:value={description}
 					></textarea>
 				</div>
 
 				<DefaultPermissionsEditor bind:value={defaultPermissions} />
-			</CardContent>
-			<CardFooter class="flex shrink-0 justify-end gap-2">
+			</div>
+
+			<div class="flex shrink-0 justify-end gap-2 border-t border-zinc-800 px-6 py-4">
 				<Button
 					type="button"
 					variant="outline"
@@ -155,7 +154,7 @@
 				<Button type="button" class="rounded-xl" onclick={submit} disabled={isCreating}>
 					{isCreating ? 'creating...' : 'create'}
 				</Button>
-			</CardFooter>
-		</Card>
-	</div>
-{/if}
+			</div>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

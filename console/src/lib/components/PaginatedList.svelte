@@ -74,13 +74,12 @@
 		emptyMessage = 'no items found',
 	}: Props = $props()
 
-	let sortKey = $state<SortKey | undefined>(defaultSort)
+	let sortKey = $state<SortKey | undefined>(undefined)
 	let filterValue = $state<string | null>(null)
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		window.history.replaceState(window.history.state, '', target)
-		replaceState('', {})
+		replaceState(target, {})
 	}
 
 	function updateQueryParams(updates: Record<string, string | null>) {
@@ -128,8 +127,8 @@
 	})
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">{title}</h2>
 			<p class="text-zinc-400">{description}</p>
@@ -174,13 +173,19 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200">
+		<div
+			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+		>
 			{error}
 		</div>
 	{/if}
 
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	<Card
+		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+	>
+		<CardHeader
+			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+		>
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
@@ -206,7 +211,7 @@
 				</Button>
 			</div>
 		</CardHeader>
-		<CardContent class="space-y-2">
+		<CardContent class="min-h-0 flex-1 space-y-2 overflow-y-auto">
 			{#if isLoading && items.length === 0}
 				<div
 					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"

@@ -4,6 +4,7 @@
 	import { page } from '$app/state'
 	import { api, unwrap, type Note } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import NoteDetailsModal from '$lib/components/NoteDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -15,7 +16,7 @@
 	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Clock, FileText, Hash, Tag, User } from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'title'
@@ -53,6 +54,9 @@
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
 
+	let isNoteDetailsOpen = $state(false)
+	let selectedNote = $state<Note | null>(null)
+
 	const filteredNotes = $derived(
 		notes.filter((n) => {
 			const q = searchQuery.toLowerCase()
@@ -70,14 +74,18 @@
 		isUserDetailsOpen = true
 	}
 
+	function openNote(note: Note) {
+		selectedNote = note
+		isNoteDetailsOpen = true
+	}
+
 	function refresh() {
 		refreshToken += 1
 	}
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		window.history.replaceState(window.history.state, '', target)
-		replaceState('', {})
+		replaceState(target, {})
 	}
 
 	function updateQueryParams(updates: Record<string, string | null>) {
@@ -170,8 +178,8 @@
 	})
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">notes</h2>
 			<p class="text-zinc-400">all notes in the system.</p>
@@ -231,13 +239,19 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200">
+		<div
+			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+		>
 			{error}
 		</div>
 	{/if}
 
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	<Card
+		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+	>
+		<CardHeader
+			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+		>
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
@@ -267,10 +281,10 @@
 				</Button>
 			</div>
 		</CardHeader>
-		<CardContent class="space-y-2">
+		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
 			{#if isLoading && notes.length === 0}
 				<div
-					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 				>
 					<NokodoLoader />
 				</div>
@@ -285,48 +299,70 @@
 			{/if}
 
 			{#each filteredNotes as n (n.id)}
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+					class="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+					onclick={() => openNote(n)}
 				>
-					<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0 flex-1">
-							<div class="truncate font-medium">{n.title}</div>
+					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+						<div class="min-w-0 flex-1 space-y-2">
+							<div class="flex items-center gap-2">
+								<FileText class="h-4 w-4 text-zinc-500" />
+								<span class="truncate font-medium">{n.title}</span>
+								{#if n.deleted_at}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+									>
+										deleted
+									</span>
+								{/if}
+							</div>
 							{#if n.content}
-								<div class="mt-1 line-clamp-2 text-sm text-zinc-400">
+								<div class="line-clamp-2 text-sm text-zinc-400">
 									{n.content}
 								</div>
 							{/if}
-							<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
-								<div>id: {n.id}</div>
-								<div>
-									user:
+							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<Hash class="h-3.5 w-3.5" />
+									{n.id}
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<User class="h-3.5 w-3.5" />
 									<button
 										type="button"
-										class="ml-1 underline underline-offset-4 hover:text-zinc-200"
+										class="underline underline-offset-4 hover:text-zinc-200"
 										onclick={() => openUser(n.user_id)}
 									>
 										{n.user_id}
 									</button>
-								</div>
-								{#if n.deleted_at}
-									<div class="text-red-300">deleted</div>
-								{/if}
-							</div>
-							{#if (n.labels ?? []).length > 0}
-								<div class="mt-2 flex flex-wrap gap-1">
+								</span>
+								{#if (n.labels ?? []).length > 0}
 									{#each n.labels ?? [] as label (label)}
 										<span
-											class="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300"
+											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
 										>
+											<Tag class="h-3.5 w-3.5" />
 											{label}
 										</span>
 									{/each}
-								</div>
-							{/if}
+								{/if}
+							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
-							updated {new Date(n.updated_at).toLocaleString()}
-							<div>created {new Date(n.created_at).toLocaleString()}</div>
+							<div class="flex items-center gap-1">
+								<Clock class="h-3.5 w-3.5" />
+								updated {new Date(n.updated_at).toLocaleString()}
+							</div>
+							<div class="mt-1 flex items-center gap-1">
+								<Clock class="h-3.5 w-3.5" />
+								created {new Date(n.created_at).toLocaleString()}
+							</div>
 						</div>
 					</div>
 				</div>
@@ -336,3 +372,8 @@
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
+<NoteDetailsModal
+	bind:open={isNoteDetailsOpen}
+	note={selectedNote}
+	onViewUser={(userId) => openUser(userId)}
+/>

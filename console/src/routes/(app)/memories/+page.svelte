@@ -15,7 +15,16 @@
 		CardTitle,
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		Clock,
+		Hash,
+		MessageSquare,
+		Percent,
+		Tag,
+		User,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'last_accessed_at' | 'confidence' | 'category'
@@ -58,8 +67,7 @@
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		window.history.replaceState(window.history.state, '', target)
-		replaceState('', {})
+		replaceState(target, {})
 	}
 
 	function openUser(userId: string) {
@@ -173,8 +181,8 @@
 	})
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">memories</h2>
 			<p class="text-zinc-400">user-scoped memories (use filters; start from a user).</p>
@@ -223,14 +231,20 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200">
+		<div
+			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+		>
 			{error}
 		</div>
 	{/if}
 
 	<!-- Memories List -->
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	<Card
+		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+	>
+		<CardHeader
+			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+		>
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
@@ -266,7 +280,7 @@
 				</div>
 			{/if}
 		</CardHeader>
-		<CardContent class="space-y-2">
+		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
 			{#if !userIdFilter}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
@@ -275,7 +289,7 @@
 				</div>
 			{:else if isLoading && memories.length === 0}
 				<div
-					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 				>
 					<NokodoLoader />
 				</div>
@@ -300,35 +314,46 @@
 						}}
 					>
 						<div
-							class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
 						>
-							<div class="min-w-0 flex-1">
-								<div class="flex items-center gap-2">
+							<div class="min-w-0 flex-1 space-y-2">
+								<div class="flex flex-wrap items-center gap-2">
 									{#if m.category}
 										<span
-											class="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300"
+											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
 										>
+											<Tag class="h-3.5 w-3.5" />
 											{m.category}
 										</span>
 									{/if}
 									{#if m.confidence !== null && m.confidence !== undefined}
-										<span class="text-xs text-zinc-500">
-											{(m.confidence * 100).toFixed(0)}% confidence
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Percent class="h-3.5 w-3.5" />
+											{(m.confidence * 100).toFixed(0)}%
 										</span>
 									{/if}
 								</div>
-								<div class="mt-2 font-mono text-sm text-zinc-100">
+								<div class="font-mono text-sm text-zinc-100">
 									{preview(m.content)}
 								</div>
 								<div
-									class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400"
+									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
 								>
-									<div>id: {m.id}</div>
-									<div>
-										user:
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{m.id}
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<User class="h-3.5 w-3.5" />
 										<button
 											type="button"
-											class="ml-1 underline underline-offset-4 hover:text-zinc-200"
+											class="underline underline-offset-4 hover:text-zinc-200"
 											onclick={(e) => {
 												e.stopPropagation()
 												openUser(m.user_id)
@@ -336,17 +361,29 @@
 										>
 											{m.user_id}
 										</button>
-									</div>
+									</span>
 									{#if m.source_message_id}
-										<div>source: {m.source_message_id}</div>
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+										>
+											<MessageSquare class="h-3.5 w-3.5" />
+											source {m.source_message_id}
+										</span>
 									{/if}
 								</div>
 							</div>
 							<div class="shrink-0 text-xs text-zinc-500">
-								<div>updated {new Date(m.updated_at).toLocaleString()}</div>
-								<div>created {new Date(m.created_at).toLocaleString()}</div>
+								<div class="flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									updated {new Date(m.updated_at).toLocaleString()}
+								</div>
+								<div class="mt-1 flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									created {new Date(m.created_at).toLocaleString()}
+								</div>
 								{#if m.last_accessed_at}
-									<div>
+									<div class="mt-1 flex items-center gap-1">
+										<Clock class="h-3.5 w-3.5" />
 										accessed {new Date(m.last_accessed_at).toLocaleString()}
 									</div>
 								{/if}

@@ -34,22 +34,31 @@
 		items: Array<{ value: ActionPermission; label: string }>
 	}> = [
 		{
-			title: 'resource creation',
+			title: 'app access',
+			items: [
+				{ value: 'frontend:access', label: 'frontend' },
+				{ value: 'console:access', label: 'console' },
+			],
+		},
+		{
+			title: 'content creation',
 			items: [
 				{ value: 'threads:create', label: 'threads' },
 				{ value: 'projects:create', label: 'projects' },
 				{ value: 'notes:create', label: 'notes' },
-				{ value: 'groups:create', label: 'groups' },
-				{ value: 'reminders:create', label: 'reminders' },
-				{ value: 'memories:create', label: 'memories' },
-				{ value: 'tasks:create', label: 'tasks' },
 				{ value: 'files:create', label: 'files' },
-				{ value: 'agents:create', label: 'agents' },
+				{ value: 'groups:create', label: 'groups' },
+				{ value: 'memories:create', label: 'memories' },
+				{ value: 'reminders:create', label: 'reminders' },
+				{ value: 'tasks:create', label: 'tasks' },
 			],
 		},
 		{
 			title: 'agents',
-			items: [{ value: 'agents:manage', label: 'manage all agents' }],
+			items: [
+				{ value: 'agents:create', label: 'create' },
+				{ value: 'agents:manage', label: 'manage all' },
+			],
 		},
 		{
 			title: 'plugins',
@@ -66,10 +75,12 @@
 			],
 		},
 		{
-			title: 'roles',
+			title: 'models & providers',
 			items: [
-				{ value: 'roles:read', label: 'read' },
-				{ value: 'roles:manage', label: 'manage' },
+				{ value: 'models:read', label: 'read models' },
+				{ value: 'models:manage', label: 'manage models' },
+				{ value: 'providers:read', label: 'read providers' },
+				{ value: 'providers:manage', label: 'manage providers' },
 			],
 		},
 		{
@@ -77,6 +88,13 @@
 			items: [
 				{ value: 'users:read', label: 'read' },
 				{ value: 'users:manage', label: 'manage' },
+			],
+		},
+		{
+			title: 'roles',
+			items: [
+				{ value: 'roles:read', label: 'read' },
+				{ value: 'roles:manage', label: 'manage' },
 			],
 		},
 		{
@@ -91,22 +109,6 @@
 			items: [
 				{ value: 'events:read', label: 'read' },
 				{ value: 'events:manage', label: 'manage' },
-			],
-		},
-		{
-			title: 'models / providers',
-			items: [
-				{ value: 'models:read', label: 'read models' },
-				{ value: 'models:manage', label: 'manage models' },
-				{ value: 'providers:read', label: 'read providers' },
-				{ value: 'providers:manage', label: 'manage providers' },
-			],
-		},
-		{
-			title: 'app access',
-			items: [
-				{ value: 'frontend:access', label: 'frontend' },
-				{ value: 'console:access', label: 'console' },
 			],
 		},
 	]
@@ -217,7 +219,7 @@
 	</div>
 	<div class="grid gap-6 xl:grid-cols-2">
 		{#each actionPermissionGroups as group (group.title)}
-			<div class="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+			<div class="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
 				<div class="text-sm font-medium text-zinc-200">{group.title}</div>
 				<div class="space-y-3">
 					{#each group.items as item (item.value)}

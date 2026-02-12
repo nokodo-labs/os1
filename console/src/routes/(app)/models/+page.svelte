@@ -11,19 +11,13 @@
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardFooter,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Pencil, Plus, Trash2 } from '@lucide/svelte'
+	import { Pencil, Plus, Trash2, X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
 	type ModelCreateForm = ModelCreate & { adapter?: string | null }
@@ -311,8 +305,8 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<div class="flex items-center justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">models</h2>
 			<p class="text-zinc-400">manage your AI models.</p>
@@ -340,7 +334,7 @@
 		{/if}
 	</div>
 
-	<div class="flex w-full items-center space-x-2">
+	<div class="flex w-full shrink-0 items-center space-x-2">
 		<Input
 			type="search"
 			placeholder="search models..."
@@ -349,87 +343,115 @@
 		/>
 	</div>
 
-	{#if isFetching}
-		<div class="flex h-64 items-center justify-center">
-			<NokodoLoader />
-		</div>
-	{:else if error}
-		<div class="rounded-md bg-red-500/10 p-4 text-red-500">
-			{error}
-		</div>
-	{:else}
-		<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-			{#each filteredModels as model (model.id)}
-				<Card class="border-zinc-800 bg-zinc-900 text-zinc-100">
-					<CardHeader class="flex flex-row items-start justify-between space-y-0 pb-2">
-						<CardTitle class="text-base font-medium">
-							{model.display_name || model.name}
-						</CardTitle>
-						<div class="flex gap-2">
-							<Button
-								variant="ghost"
-								size="icon"
-								class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
-								onclick={() => openEditModal(model)}
+	<div class="min-h-0 flex-1 overflow-y-auto">
+		<div class="flex min-h-0 flex-1 flex-col gap-6">
+			{#if isFetching}
+				<div class="flex min-h-0 flex-1 items-center justify-center">
+					<NokodoLoader />
+				</div>
+			{:else if error}
+				<div class="rounded-md bg-red-500/10 p-4 text-red-500">
+					{error}
+				</div>
+			{:else}
+				<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+					{#each filteredModels as model (model.id)}
+						<Card class="border-zinc-800 bg-zinc-900 text-zinc-100">
+							<CardHeader
+								class="flex flex-row items-start justify-between space-y-0 pb-2"
 							>
-								<Pencil class="h-4 w-4" />
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								class="h-8 w-8 text-zinc-400 hover:text-red-500"
-								onclick={() => handleDelete(model.id)}
-							>
-								<Trash2 class="h-4 w-4" />
-							</Button>
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div class="mb-4 text-sm text-zinc-400">
-							{getProviderName(model.provider_id)} • {getModelTypeLabel(
-								model.model_type
-							)}
-						</div>
-						<div class="flex items-center gap-2">
-							<div
-								class={`h-2 w-2 rounded-full ${
-									model.enabled ? 'bg-green-500' : 'bg-zinc-700'
-								}`}
-							></div>
-							<span class="text-xs text-zinc-500">
-								{model.enabled ? 'enabled' : 'disabled'}
-							</span>
-							{#if model.is_autofetched}
-								<span class="ml-2 text-xs text-blue-500">autofetched</span>
-							{/if}
-						</div>
-					</CardContent>
-				</Card>
-			{/each}
+								<CardTitle class="text-base font-medium">
+									{model.display_name || model.name}
+								</CardTitle>
+								<div class="flex gap-2">
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
+										onclick={() => openEditModal(model)}
+									>
+										<Pencil class="h-4 w-4" />
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-8 w-8 text-zinc-400 hover:text-red-500"
+										onclick={() => handleDelete(model.id)}
+									>
+										<Trash2 class="h-4 w-4" />
+									</Button>
+								</div>
+							</CardHeader>
+							<CardContent>
+								<div class="mb-4 text-sm text-zinc-400">
+									{getProviderName(model.provider_id)} • {getModelTypeLabel(
+										model.model_type
+									)}
+								</div>
+								<div class="flex items-center gap-2">
+									<div
+										class={`h-2 w-2 rounded-full ${
+											model.enabled ? 'bg-green-500' : 'bg-zinc-700'
+										}`}
+									></div>
+									<span class="text-xs text-zinc-500">
+										{model.enabled ? 'enabled' : 'disabled'}
+									</span>
+									{#if model.is_autofetched}
+										<span class="ml-2 text-xs text-blue-500">autofetched</span>
+									{/if}
+								</div>
+							</CardContent>
+						</Card>
+					{/each}
 
-			{#if models.length === 0}
-				{#if !hasProviders}
-					<EmptyState
-						message={emptyStateNoProvidersMessage}
-						hint={emptyStateNoProvidersHint}
-					/>
-				{:else}
-					<EmptyState message={emptyStateNoModelsMessage} />
-				{/if}
+					{#if models.length === 0}
+						{#if !hasProviders}
+							<EmptyState
+								message={emptyStateNoProvidersMessage}
+								hint={emptyStateNoProvidersHint}
+							/>
+						{:else}
+							<EmptyState message={emptyStateNoModelsMessage} />
+						{/if}
+					{/if}
+				</div>
 			{/if}
 		</div>
-	{/if}
+	</div>
 </div>
 
-{#if showModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-		<Card class="w-full max-w-lg border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader>
-				<CardTitle>{modalMode === 'create' ? 'add model' : 'edit model'}</CardTitle>
-				<CardDescription>configure model details</CardDescription>
-			</CardHeader>
-			<form onsubmit={handleSubmit}>
-				<CardContent class="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
+<Dialog.Root
+	bind:open={showModal}
+	onOpenChange={(open) => {
+		if (!open) showModal = false
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold"
+						>{modalMode === 'create' ? 'add model' : 'edit model'}</Dialog.Title
+					>
+					<p class="text-sm text-zinc-400">configure model details</p>
+				</div>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-8 w-8 rounded-lg"
+					onclick={() => (showModal = false)}
+				>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
+			<form onsubmit={handleSubmit} class="flex min-h-0 flex-1 flex-col">
+				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 					{#if submitError}
 						<div class="rounded-md bg-red-500/10 p-3 text-sm text-red-500">
 							{submitError}
@@ -503,30 +525,35 @@
 						</Select>
 					</div>
 
-					{@const providerKey = getProviderKey(formState.provider_id)}
-					{@const adapterOptions = getAdapterOptions(providerKey, formState.model_type)}
-					<div class="space-y-2">
-						<Label for="adapter">adapter</Label>
-						<Select
-							value={formState.adapter ?? undefined}
-							onValueChange={(value: string) => (formState.adapter = value)}
-							disabled={!providerKey || adapterOptions.length === 0}
-						>
-							<SelectTrigger class="rounded-xl">
-								<span class="truncate text-left">
-									{formState.adapter || 'select adapter'}
-								</span>
-							</SelectTrigger>
-							<SelectContent>
-								{#each adapterOptions as opt (opt.value)}
-									<SelectItem value={opt.value}>{opt.label}</SelectItem>
-								{/each}
-							</SelectContent>
-						</Select>
-						<p class="text-xs text-zinc-500">
-							select which sdk adapter is used for this model.
-						</p>
-					</div>
+					{#if true}
+						{@const providerKey = getProviderKey(formState.provider_id)}
+						{@const adapterOptions = getAdapterOptions(
+							providerKey,
+							formState.model_type
+						)}
+						<div class="space-y-2">
+							<Label for="adapter">adapter</Label>
+							<Select
+								value={formState.adapter ?? undefined}
+								onValueChange={(value: string) => (formState.adapter = value)}
+								disabled={!providerKey || adapterOptions.length === 0}
+							>
+								<SelectTrigger class="rounded-xl">
+									<span class="truncate text-left">
+										{formState.adapter || 'select adapter'}
+									</span>
+								</SelectTrigger>
+								<SelectContent>
+									{#each adapterOptions as opt (opt.value)}
+										<SelectItem value={opt.value}>{opt.label}</SelectItem>
+									{/each}
+								</SelectContent>
+							</Select>
+							<p class="text-xs text-zinc-500">
+								select which sdk adapter is used for this model.
+							</p>
+						</div>
+					{/if}
 
 					<div class="grid gap-4 sm:grid-cols-2">
 						<div class="space-y-2">
@@ -577,16 +604,17 @@
 						</div>
 						<Switch bind:checked={formState.enabled} />
 					</div>
-				</CardContent>
-				<CardFooter class="flex justify-between gap-2">
+				</div>
+				<div class="flex shrink-0 justify-between gap-2 border-t border-zinc-800 px-6 py-4">
 					{#if modalMode === 'edit'}
 						<Button
 							type="button"
-							variant="destructive"
-							class="rounded-xl"
+							variant="outline"
+							class="gap-2 rounded-xl text-red-400 hover:text-red-300"
 							disabled={isLoading}
 							onclick={handleDeleteFromModal}
 						>
+							<Trash2 class="h-4 w-4" />
 							delete
 						</Button>
 					{:else}
@@ -609,8 +637,8 @@
 									: 'save changes'}
 						</Button>
 					</div>
-				</CardFooter>
+				</div>
 			</form>
-		</Card>
-	</div>
-{/if}
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

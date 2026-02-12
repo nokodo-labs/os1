@@ -12,21 +12,10 @@
 	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardFooter,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
-	import { X } from '@lucide/svelte'
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') close()
-	}
+	import { Trash2, X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 
 	type Props = {
 		open: boolean
@@ -255,26 +244,34 @@
 	})
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-		onkeydown={handleKeydown}
-		onclick={(e) => {
-			if (e.target === e.currentTarget) close()
-		}}
-	>
-		<Card
-			class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+<Dialog.Root
+	bind:open
+	onOpenChange={(v) => {
+		if (!v) close()
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(768px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
-			<CardHeader class="flex shrink-0 flex-row items-start justify-between gap-4">
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
 				<div>
-					<CardTitle>role details</CardTitle>
-					<CardDescription>{roleId ?? ''}</CardDescription>
+					<Dialog.Title class="text-lg font-semibold">role details</Dialog.Title>
+					<p class="text-sm text-zinc-400">{roleId ?? ''}</p>
 				</div>
-				<Button variant="outline" class="rounded-xl" onclick={() => close()}>close</Button>
-			</CardHeader>
-			<CardContent class="min-h-0 flex-1 space-y-6 overflow-y-auto">
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-8 w-8 rounded-lg"
+					onclick={() => close()}
+				>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
+			<div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-4">
 				{#if isLoading}
 					<div class="flex items-center justify-center py-10">
 						<NokodoLoader />
@@ -423,22 +420,23 @@
 						no role selected
 					</div>
 				{/if}
-			</CardContent>
+			</div>
 			{#if role}
-				<CardFooter class="flex shrink-0 justify-between gap-2">
+				<div class="flex shrink-0 justify-between gap-2 border-t border-zinc-800 px-6 py-4">
 					<Button
-						variant="destructive"
-						class="rounded-xl"
+						variant="outline"
+						class="gap-2 rounded-xl text-red-400 hover:text-red-300"
 						onclick={deleteRole}
 						disabled={isSaving}
 					>
+						<Trash2 class="h-4 w-4" />
 						delete
 					</Button>
 					<Button class="rounded-xl" onclick={saveRole} disabled={isSaving || isLoading}>
 						{isSaving ? 'saving…' : 'save role'}
 					</Button>
-				</CardFooter>
+				</div>
 			{/if}
-		</Card>
-	</div>
-{/if}
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

@@ -17,14 +17,14 @@
 		Card,
 		CardContent,
 		CardDescription,
-		CardFooter,
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { BookOpen, Pencil, Plus, Shield, Trash2 } from '@lucide/svelte'
+	import { BookOpen, Pencil, Plus, Shield, Trash2, X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
 	let agents = $state<Agent[]>([])
@@ -238,8 +238,8 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<div class="flex items-center justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 items-center justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">agents</h2>
 			<p class="text-zinc-400">create and manage agents.</p>
@@ -250,84 +250,113 @@
 		</Button>
 	</div>
 
-	{#if isFetching}
-		<div class="flex flex-col items-center justify-center gap-4 py-16">
-			<NokodoLoader expanded={true} />
-		</div>
-	{:else if error}
-		<div
-			class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
-		>
-			<p>{error}</p>
-			<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
-		</div>
-	{:else}
-		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each agents as agent (agent.id)}
-				<Card class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-					<CardHeader>
-						<div class="flex items-start justify-between">
-							<div>
-								<CardTitle>{agent.name}</CardTitle>
-								{#if agent.description}
-									<CardDescription>{agent.description}</CardDescription>
-								{/if}
-							</div>
-							<div class="flex gap-1">
-								<Button
-									variant="ghost"
-									size="icon"
-									class="h-8 w-8 text-zinc-500"
-									onclick={() => openAclModal(agent.id)}
-									title="access rules"
-								>
-									<Shield class="h-4 w-4" />
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon"
-									class="h-8 w-8 text-zinc-500"
-									onclick={() => openEditModal(agent)}
-									title="edit agent"
-								>
-									<Pencil class="h-4 w-4" />
-								</Button>
-							</div>
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div class="space-y-1 text-sm text-zinc-400">
-							<div class="flex justify-between">
-								<span>model:</span>
-								<span class="truncate">{getModelLabel(agent.model_id)}</span>
-							</div>
-							{#if agent.plugin_ids && agent.plugin_ids.length > 0}
-								<div class="flex justify-between">
-									<span>plugins:</span>
-									<span class="truncate">{agent.plugin_ids.length}</span>
+	<div class="min-h-0 flex-1 overflow-y-auto">
+		<div class="flex min-h-0 flex-1 flex-col gap-6">
+			{#if isFetching}
+				<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
+					<NokodoLoader expanded={true} />
+				</div>
+			{:else if error}
+				<div
+					class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
+				>
+					<p>{error}</p>
+					<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
+				</div>
+			{:else}
+				<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+					{#each agents as agent (agent.id)}
+						<Card
+							class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+						>
+							<CardHeader>
+								<div class="flex items-start justify-between">
+									<div>
+										<CardTitle>{agent.name}</CardTitle>
+										{#if agent.description}
+											<CardDescription>{agent.description}</CardDescription>
+										{/if}
+									</div>
+									<div class="flex gap-1">
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-8 w-8 text-zinc-500"
+											onclick={() => openAclModal(agent.id)}
+											title="access rules"
+										>
+											<Shield class="h-4 w-4" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-8 w-8 text-zinc-500"
+											onclick={() => openEditModal(agent)}
+											title="edit agent"
+										>
+											<Pencil class="h-4 w-4" />
+										</Button>
+									</div>
 								</div>
-							{/if}
-						</div>
-					</CardContent>
-				</Card>
-			{/each}
+							</CardHeader>
+							<CardContent>
+								<div class="space-y-1 text-sm text-zinc-400">
+									<div class="flex justify-between">
+										<span>model:</span>
+										<span class="truncate">{getModelLabel(agent.model_id)}</span
+										>
+									</div>
+									{#if agent.plugin_ids && agent.plugin_ids.length > 0}
+										<div class="flex justify-between">
+											<span>plugins:</span>
+											<span class="truncate">{agent.plugin_ids.length}</span>
+										</div>
+									{/if}
+								</div>
+							</CardContent>
+						</Card>
+					{/each}
 
-			{#if agents.length === 0}
-				<EmptyState message="no agents yet." hint="create an agent to get started." />
+					{#if agents.length === 0}
+						<EmptyState
+							message="no agents yet."
+							hint="create an agent to get started."
+						/>
+					{/if}
+				</div>
 			{/if}
 		</div>
-	{/if}
+	</div>
 </div>
 
-{#if showModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-		<Card class="w-full max-w-lg rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader>
-				<CardTitle>{modalMode === 'create' ? 'create agent' : 'edit agent'}</CardTitle>
-				<CardDescription>define prompting + attach a model (optional).</CardDescription>
-			</CardHeader>
-			<form onsubmit={handleSubmit}>
-				<CardContent class="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
+<Dialog.Root
+	bind:open={showModal}
+	onOpenChange={(v) => {
+		if (!v) closeModal()
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold">
+						{modalMode === 'create' ? 'create agent' : 'edit agent'}
+					</Dialog.Title>
+					<Dialog.Description class="text-sm text-zinc-400">
+						define prompting + attach a model (optional).
+					</Dialog.Description>
+				</div>
+				<Button variant="ghost" size="icon" class="rounded-xl" onclick={closeModal}>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
+			<form onsubmit={handleSubmit} class="flex min-h-0 flex-1 flex-col">
+				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 					{#if submitError}
 						<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
 							{submitError}
@@ -506,8 +535,8 @@
 							</div>
 						</div>
 					{/if}
-				</CardContent>
-				<CardFooter class="flex justify-between gap-2">
+				</div>
+				<div class="flex shrink-0 justify-between gap-2 border-t border-zinc-800 px-6 py-4">
 					<div class="flex gap-2">
 						{#if modalMode === 'edit' && editingId}
 							<Button
@@ -557,11 +586,11 @@
 							{/if}
 						</Button>
 					</div>
-				</CardFooter>
+				</div>
 			</form>
-		</Card>
-	</div>
-{/if}
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>
 
 <AclModal
 	bind:open={showAclModal}

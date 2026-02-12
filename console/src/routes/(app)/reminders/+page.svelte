@@ -20,6 +20,10 @@
 		ChevronRight,
 		Circle,
 		CircleCheck,
+		Clock,
+		Hash,
+		ListChecks,
+		User,
 	} from '@lucide/svelte'
 
 	type ListSortKey = 'updated_at' | 'created_at' | 'name' | 'position'
@@ -148,8 +152,8 @@
 	})
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">reminders</h2>
 			<p class="text-zinc-400">all reminder lists and their reminders.</p>
@@ -199,22 +203,26 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200">
+		<div
+			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+		>
 			{error}
 		</div>
 	{/if}
 
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader>
+	<Card
+		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+	>
+		<CardHeader class="shrink-0">
 			<CardTitle>reminder lists</CardTitle>
 			<CardDescription>
 				{filteredLists.length} list{filteredLists.length === 1 ? '' : 's'}
 			</CardDescription>
 		</CardHeader>
-		<CardContent class="space-y-2">
+		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
 			{#if isLoading && lists.length === 0}
 				<div
-					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 				>
 					<NokodoLoader />
 				</div>
@@ -251,7 +259,7 @@
 								<ChevronRight class="h-4 w-4" />
 							{/if}
 						</div>
-						<div class="min-w-0 flex-1">
+						<div class="min-w-0 flex-1 space-y-2">
 							<div class="flex items-center gap-2">
 								{#if list.color}
 									<span
@@ -262,17 +270,24 @@
 								<span class="truncate font-medium">{list.name}</span>
 							</div>
 							{#if list.description}
-								<div class="mt-1 line-clamp-1 text-sm text-zinc-400">
+								<div class="line-clamp-1 text-sm text-zinc-400">
 									{list.description}
 								</div>
 							{/if}
-							<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
-								<div>id: {list.id}</div>
-								<div>
-									owner:
+							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<Hash class="h-3.5 w-3.5" />
+									{list.id}
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<User class="h-3.5 w-3.5" />
 									<button
 										type="button"
-										class="ml-1 underline underline-offset-4 hover:text-zinc-200"
+										class="underline underline-offset-4 hover:text-zinc-200"
 										onclick={(e: MouseEvent) => {
 											e.stopPropagation()
 											openUser(list.owner_id)
@@ -280,14 +295,32 @@
 									>
 										{list.owner_id}
 									</button>
-								</div>
-								<div>total: {list.total_count}</div>
-								<div>pending: {list.pending_count}</div>
-								<div>completed: {list.completed_count}</div>
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<ListChecks class="h-3.5 w-3.5" />
+									total {list.total_count}
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<Circle class="h-3.5 w-3.5" />
+									pending {list.pending_count}
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<CircleCheck class="h-3.5 w-3.5" />
+									completed {list.completed_count}
+								</span>
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
-							updated {new Date(list.updated_at).toLocaleString()}
+							<div class="flex items-center gap-1">
+								<Clock class="h-3.5 w-3.5" />
+								updated {new Date(list.updated_at).toLocaleString()}
+							</div>
 						</div>
 					</div>
 					{#if expandedListId === list.id}

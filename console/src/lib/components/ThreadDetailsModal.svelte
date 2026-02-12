@@ -3,13 +3,8 @@
 	import { api, unwrap, type Message, type Thread } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+	import { X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 	import { tick } from 'svelte'
 
 	type Props = {
@@ -217,34 +212,45 @@
 	})
 </script>
 
-{#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-		<Card class="w-full max-w-7xl rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+<Dialog.Root bind:open>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(1100px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
 				<div>
-					<CardTitle>thread details</CardTitle>
-					<CardDescription>{threadId ?? ''}</CardDescription>
-					<div class="mt-1 text-xs text-zinc-500">
-						special chars: ⏎ = newline, → = tab
-					</div>
+					<Dialog.Title class="text-lg font-semibold">thread details</Dialog.Title>
+					<Dialog.Description class="mt-0.5 text-sm text-zinc-400">
+						{threadId ?? ''}
+						<span class="ml-2 text-zinc-500">⏎ = newline, → = tab</span>
+					</Dialog.Description>
 				</div>
-				<Button variant="outline" class="rounded-xl" onclick={close}>close</Button>
-			</CardHeader>
-			<CardContent class="space-y-4">
+				<button
+					class="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+					onclick={close}
+				>
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="min-h-0 flex-1 overflow-y-auto p-6">
 				{#if isLoading}
 					<div class="flex items-center justify-center py-12">
 						<NokodoLoader />
 					</div>
 				{:else if error}
 					<div
-						class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+						class="rounded-xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
 					>
 						{error}
 					</div>
 				{:else if thread}
 					<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
 						<div class="space-y-3 lg:col-span-1">
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm">
+							<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm">
 								<div class="font-medium">{thread.title ?? '(untitled)'}</div>
 								<div class="mt-2 space-y-1 text-xs text-zinc-400">
 									<div>id: {thread.id}</div>
@@ -275,7 +281,7 @@
 						</div>
 
 						<div class="lg:col-span-2">
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950">
+							<div class="rounded-xl border border-zinc-800 bg-zinc-900">
 								<div class="border-b border-zinc-800 px-4 py-3">
 									<div class="text-sm font-medium">messages</div>
 									<div class="text-xs text-zinc-500">
@@ -283,7 +289,7 @@
 									</div>
 								</div>
 								<div
-									class="max-h-[60vh] space-y-2 overflow-y-auto p-4"
+									class="max-h-[55vh] space-y-2 overflow-y-auto p-4"
 									bind:this={messagesEl}
 									onscroll={onMessagesScroll}
 								>
@@ -317,7 +323,7 @@
 
 									{#each messages as m (m.id)}
 										<div
-											class="rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"
+											class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3"
 										>
 											<div class="flex items-start justify-between gap-3">
 												<div class="min-w-0 flex-1">
@@ -350,7 +356,7 @@
 						no thread selected
 					</div>
 				{/if}
-			</CardContent>
-		</Card>
-	</div>
-{/if}
+			</div>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

@@ -172,7 +172,7 @@
 	}
 }
 
-/* Custom Scrollbar */
+/* custom scrollbar */
 ::-webkit-scrollbar {
 	width: 6px;
 	height: 6px;
@@ -191,7 +191,7 @@
 	background: rgba(255, 255, 255, 0.2);
 }
 
-/* Hide scrollbar for specific scroll areas (e.g., home apps grid). */
+/* hide scrollbar for specific scroll areas (e.g., home apps grid). */
 .no-scrollbar {
 	-ms-overflow-style: none; /* IE and Edge */
 	scrollbar-width: none; /* Firefox */
@@ -201,7 +201,7 @@
 	display: none;
 }
 
-/* Popup/dropdown animations - animate from different origin corners */
+/* popup/dropdown animations - animate from different origin corners */
 @keyframes popup-appear {
 	from {
 		opacity: 0;
@@ -240,7 +240,7 @@
 	transform-origin: bottom right;
 }
 
-/* View Transitions (assume supported) */
+/* view Transitions (assume supported) */
 @keyframes vt-fade-out {
 	from {
 		opacity: 1;
@@ -295,33 +295,33 @@
 	}
 }
 
-/* Match home input choreography (duration-500 ease-in-out) when crossing routes. */
+/* match home input choreography (duration-500 ease-in-out) when crossing routes. */
 ::view-transition-group(chat-input) {
 	animation-duration: 500ms;
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Landing greeting disappears when going to /c/[id] */
+/* landing greeting disappears when going to /c/[id] */
 ::view-transition-old(landing-greeting) {
 	animation: 200ms ease both vt-fade-out;
 }
 
-/* Landing greeting appears when returning home */
+/* landing greeting appears when returning home */
 ::view-transition-new(landing-greeting) {
 	animation: 260ms ease 80ms both vt-fade-in;
 }
 
-/* Thread body fades away when leaving /c/[id] */
+/* thread body fades away when leaving /c/[id] */
 ::view-transition-old(thread-body) {
 	animation: 220ms ease both vt-fade-out;
 }
 
-/* Thread body fades in when entering /c/[id] (after input settles) */
+/* thread body fades in when entering /c/[id] (after input settles) */
 ::view-transition-new(thread-body) {
 	animation: 240ms ease 220ms both vt-fade-in;
 }
 
-/* Apps grid slides in/out from bottom when navigating to/from home */
+/* apps grid slides in/out from bottom when navigating to/from home */
 ::view-transition-new(apps-grid) {
 	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-up;
 }

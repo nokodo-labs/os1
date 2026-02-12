@@ -97,7 +97,7 @@
 				owner_id: auth.user.id,
 				title: threadTitle.trim() ? threadTitle.trim() : null,
 				is_archived: false,
-				is_temporary: false,
+				is_temporary: true,
 			}
 			thread = unwrap(await api.POST('/v1/threads', { body: payload }))
 			messages = []
@@ -167,14 +167,26 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<div>
-		<h2 class="text-2xl font-bold tracking-tight">playground</h2>
-		<p class="text-zinc-400">test agents and models by creating threads + messages.</p>
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 items-center justify-between">
+		<div>
+			<h2 class="text-2xl font-bold tracking-tight">playground</h2>
+			<p class="text-zinc-400">test agents and models in a temporary thread.</p>
+		</div>
+		{#if thread}
+			<Button
+				variant="outline"
+				class="rounded-xl"
+				onclick={resetSession}
+				disabled={isWorking}
+			>
+				reset session
+			</Button>
+		{/if}
 	</div>
 
 	{#if isFetching}
-		<div class="flex h-64 items-center justify-center">
+		<div class="flex min-h-0 flex-1 items-center justify-center">
 			<NokodoLoader />
 		</div>
 	{:else if error}
@@ -185,84 +197,22 @@
 			<Button variant="outline" class="mt-4" onclick={loadMeta}>Retry</Button>
 		</div>
 	{:else}
-		<div class="grid gap-6 lg:grid-cols-2">
-			<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-				<CardHeader>
+		<div class="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+			<Card class="flex flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
+				<CardHeader class="shrink-0">
 					<CardTitle>session</CardTitle>
-					<CardDescription>create a thread and post messages.</CardDescription>
+					<CardDescription>
+						{thread
+							? 'thread active — send messages below.'
+							: 'configure and create a thread.'}
+					</CardDescription>
 				</CardHeader>
-				<CardContent class="space-y-4">
+				<CardContent class="min-h-0 flex-1 space-y-4 overflow-y-auto">
 					{#if actionError}
 						<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
 							{actionError}
 						</div>
 					{/if}
-
-					<div class="space-y-2">
-						<Label for="threadTitle">thread title (optional)</Label>
-						<Input
-							id="threadTitle"
-							bind:value={threadTitle}
-							class="rounded-xl"
-							placeholder="e.g. model sanity check"
-						/>
-					</div>
-
-					<div class="flex gap-2">
-						<Button class="rounded-xl" onclick={createThread} disabled={isWorking}>
-							{thread ? 'new thread' : 'create thread'}
-						</Button>
-						<Button
-							variant="outline"
-							class="rounded-xl"
-							onclick={resetSession}
-							disabled={isWorking}
-						>
-							reset
-						</Button>
-					</div>
-
-					{#if thread}
-						<div
-							class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 text-sm text-zinc-400"
-						>
-							<div class="flex justify-between">
-								<span>thread id:</span>
-								<span class="font-mono text-xs">{thread.id}</span>
-							</div>
-							<div class="mt-3 flex justify-end">
-								<Button
-									variant="outline"
-									class="rounded-xl"
-									onclick={() => (isAclOpen = true)}
-								>
-									permissions
-								</Button>
-							</div>
-						</div>
-					{/if}
-
-					<div class="space-y-2">
-						<Label>model (optional)</Label>
-						<Select
-							value={selectedModelId}
-							onValueChange={(v: string) => (selectedModelId = v)}
-						>
-							<SelectTrigger class="rounded-xl">
-								<span class="truncate text-left">
-									{selectedModelId ? getModelLabel(selectedModelId) : 'none'}
-								</span>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="">none</SelectItem>
-								{#each models as model (model.id)}
-									<SelectItem value={model.id}
-										>{model.display_name || model.name}</SelectItem
-									>
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
 
 					<div class="space-y-2">
 						<Label>agent (optional)</Label>
@@ -285,48 +235,132 @@
 					</div>
 
 					<div class="space-y-2">
-						<Label for="message">message</Label>
-						<textarea
-							id="message"
-							bind:value={messageContent}
-							rows={6}
-							placeholder="type a message to store on the thread..."
-							class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-						></textarea>
+						<Label>model override (optional)</Label>
+						<Select
+							value={selectedModelId}
+							onValueChange={(v: string) => (selectedModelId = v)}
+						>
+							<SelectTrigger class="rounded-xl">
+								<span class="truncate text-left">
+									{selectedModelId
+										? getModelLabel(selectedModelId)
+										: 'use agent default'}
+								</span>
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="">use agent default</SelectItem>
+								{#each models as model (model.id)}
+									<SelectItem value={model.id}
+										>{model.display_name || model.name}</SelectItem
+									>
+								{/each}
+							</SelectContent>
+						</Select>
 					</div>
+
+					{#if !thread}
+						<div class="space-y-2">
+							<Label for="threadTitle">thread title (optional)</Label>
+							<Input
+								id="threadTitle"
+								bind:value={threadTitle}
+								class="rounded-xl"
+								placeholder="e.g. model sanity check"
+							/>
+						</div>
+
+						<Button
+							class="w-full rounded-xl"
+							onclick={createThread}
+							disabled={isWorking}
+						>
+							{isWorking ? 'creating...' : 'create thread'}
+						</Button>
+					{:else}
+						<div
+							class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-400"
+						>
+							<div class="flex justify-between">
+								<span>thread id:</span>
+								<span class="font-mono text-xs">{thread.id}</span>
+							</div>
+							<div class="mt-3 flex justify-end">
+								<Button
+									variant="outline"
+									size="sm"
+									class="rounded-xl"
+									onclick={() => (isAclOpen = true)}
+								>
+									permissions
+								</Button>
+							</div>
+						</div>
+
+						<div class="space-y-2">
+							<Label for="message">message</Label>
+							<textarea
+								id="message"
+								bind:value={messageContent}
+								rows={6}
+								placeholder="type a message to store on the thread..."
+								class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+							></textarea>
+						</div>
+					{/if}
 				</CardContent>
-				<CardFooter class="flex justify-end">
-					<Button
-						class="rounded-xl"
-						onclick={sendMessage}
-						disabled={isWorking || !thread || !messageContent.trim()}
-					>
-						{isWorking ? 'sending...' : 'send message'}
-					</Button>
-				</CardFooter>
+				{#if thread}
+					<CardFooter class="flex shrink-0 justify-end border-t border-zinc-800">
+						<Button
+							class="rounded-xl"
+							onclick={sendMessage}
+							disabled={isWorking || !messageContent.trim()}
+						>
+							{isWorking ? 'sending...' : 'send message'}
+						</Button>
+					</CardFooter>
+				{/if}
 			</Card>
 
-			<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-				<CardHeader>
-					<CardTitle>messages</CardTitle>
-					<CardDescription>stored messages for the current thread.</CardDescription>
+			<Card class="flex flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
+				<CardHeader class="flex shrink-0 flex-row items-center justify-between">
+					<div>
+						<CardTitle>messages</CardTitle>
+						<CardDescription>
+							{#if thread}
+								{messages.length} message{messages.length === 1 ? '' : 's'}
+							{:else}
+								create a thread to start.
+							{/if}
+						</CardDescription>
+					</div>
+					{#if thread}
+						<Button
+							variant="outline"
+							size="sm"
+							class="rounded-xl"
+							onclick={refreshMessages}
+							disabled={isWorking}
+						>
+							reload
+						</Button>
+					{/if}
 				</CardHeader>
-				<CardContent class="space-y-3">
+				<CardContent class="min-h-0 flex-1 space-y-3 overflow-y-auto">
 					{#if !thread}
 						<div
-							class="rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
+							class="flex h-full items-center justify-center rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
 						>
 							create a thread to start.
 						</div>
 					{:else if messages.length === 0}
 						<div
-							class="rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
+							class="flex h-full items-center justify-center rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
 						>
 							no messages yet.
 						</div>
 					{:else}
 						{#each messages as msg (msg.id)}
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
 								<div
 									class="mb-2 flex items-center justify-between text-xs text-zinc-500"
 								>
@@ -340,16 +374,6 @@
 						{/each}
 					{/if}
 				</CardContent>
-				<CardFooter class="flex justify-end">
-					<Button
-						variant="outline"
-						class="rounded-xl"
-						onclick={refreshMessages}
-						disabled={!thread || isWorking}
-					>
-						reload
-					</Button>
-				</CardFooter>
 			</Card>
 		</div>
 	{/if}

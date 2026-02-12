@@ -223,7 +223,7 @@
 	</aside>
 
 	<!-- Main Content -->
-	<main class="flex-1 overflow-y-auto p-8">
+	<main class="flex flex-1 flex-col overflow-hidden p-8">
 		{@render children()}
 	</main>
 </div>

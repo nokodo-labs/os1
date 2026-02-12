@@ -15,7 +15,17 @@
 		CardTitle,
 	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp } from '@lucide/svelte'
+	import {
+		Activity,
+		Archive,
+		ArrowDown,
+		ArrowUp,
+		Clock,
+		Hash,
+		Timer,
+		Trash2,
+		User,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'last_activity_at' | 'updated_at' | 'created_at' | 'title'
@@ -85,8 +95,7 @@
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		window.history.replaceState(window.history.state, '', target)
-		replaceState('', {})
+		replaceState(target, {})
 	}
 
 	function updateQueryParams(updates: Record<string, string | null>) {
@@ -185,8 +194,8 @@
 	})
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">threads</h2>
 			<p class="text-zinc-400">all threads in the system (including hidden).</p>
@@ -238,13 +247,19 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200">
+		<div
+			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+		>
 			{error}
 		</div>
 	{/if}
 
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	<Card
+		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+	>
+		<CardHeader
+			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+		>
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
@@ -274,10 +289,10 @@
 				</Button>
 			</div>
 		</CardHeader>
-		<CardContent class="space-y-2">
+		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
 			{#if isLoading && threads.length === 0}
 				<div
-					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 				>
 					<NokodoLoader />
 				</div>
@@ -304,19 +319,50 @@
 						}
 					}}
 				>
-					<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0">
-							<div class="truncate font-medium">
-								{t.title ?? '(untitled)'}
+					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+						<div class="min-w-0 flex-1 space-y-2">
+							<div class="flex flex-wrap items-center gap-2">
+								<span class="truncate font-medium">{t.title ?? '(untitled)'}</span>
+								{#if t.is_archived}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300"
+									>
+										<Archive class="h-3.5 w-3.5" />
+										archived
+									</span>
+								{/if}
+								{#if deletedAt(t)}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+										deleted
+									</span>
+								{/if}
+								{#if t.is_temporary}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300"
+									>
+										<Timer class="h-3.5 w-3.5" />
+										temporary
+									</span>
+								{/if}
 							</div>
-							<div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
-								<div>id: {t.id}</div>
-								<div>
-									owner:
+							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<Hash class="h-3.5 w-3.5" />
+									{t.id}
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+								>
+									<User class="h-3.5 w-3.5" />
 									{#if t.owner_id}
 										<button
 											type="button"
-											class="ml-1 underline underline-offset-4 hover:text-zinc-200"
+											class="underline underline-offset-4 hover:text-zinc-200"
 											onclick={(e) => {
 												e.stopPropagation()
 												openUser(t.owner_id)
@@ -325,23 +371,20 @@
 											{t.owner_id}
 										</button>
 									{:else}
-										<span class="ml-1">-</span>
+										<span>-</span>
 									{/if}
-								</div>
-								<div class={t.is_archived ? 'text-amber-300' : 'text-zinc-500'}>
-									archived: {t.is_archived ? 'yes' : 'no'}
-								</div>
-								<div class={deletedAt(t) ? 'text-red-300' : 'text-zinc-500'}>
-									deleted: {deletedAt(t) ? 'yes' : 'no'}
-								</div>
-								<div class={t.is_temporary ? 'text-amber-300' : 'text-zinc-500'}>
-									temporary: {t.is_temporary ? 'yes' : 'no'}
-								</div>
+								</span>
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
-							updated {new Date(t.updated_at).toLocaleString()}
-							<div>activity {new Date(t.last_activity_at).toLocaleString()}</div>
+							<div class="flex items-center gap-1">
+								<Clock class="h-3.5 w-3.5" />
+								updated {new Date(t.updated_at).toLocaleString()}
+							</div>
+							<div class="mt-1 flex items-center gap-1">
+								<Activity class="h-3.5 w-3.5" />
+								activity {new Date(t.last_activity_at).toLocaleString()}
+							</div>
 						</div>
 					</div>
 				</div>

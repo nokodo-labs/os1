@@ -302,9 +302,9 @@
 		return chat.recentThreads.some((t) => t.id === routeChatId)
 	})
 
-	// Keep selection synced with the current route.
-	// - On /c/:id: select it if visible in the sidebar; otherwise clear selection.
-	// - Anywhere else: clear selection.
+	// keep selection synced with the current route.
+	// - on /c/:id: select it if visible in the sidebar; otherwise clear selection.
+	// - anywhere else: clear selection.
 	$effect(() => {
 		if (routeChatId && routeChatIsInSidebar) {
 			if (sidebar.selectedChatId !== routeChatId) sidebar.selectChat(routeChatId)
@@ -333,7 +333,7 @@
 
 		if (Math.abs(dx) <= 80) return
 		if (Math.abs(dx) <= Math.abs(dy)) return
-		// Close gesture: right-to-left
+		// close gesture: right-to-left
 		if (dx < 0) sidebar.closeChatSidebar()
 	}
 
@@ -367,7 +367,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="fixed inset-0 z-40 bg-black/40" onclick={() => sidebar.closeChatSidebar()}></div>
 
-	<!-- Right-edge swipe catcher to close fullscreen sidebar (mobile only) -->
+	<!-- right-edge swipe catcher to close fullscreen sidebar (mobile only) -->
 	<div
 		class="fixed right-0 bottom-0 z-60 w-8"
 		role="presentation"
@@ -397,12 +397,12 @@
 		if (sidebar.isChatSidebarOpen) return
 		const target = event.target as HTMLElement | null
 		if (target?.closest('button, [role="button"], a')) return
-		// Allow clicking anywhere in the collapsed sidebar to open it.
-		// Buttons will still run their own actions.
+		// allow clicking anywhere in the collapsed sidebar to open it.
+		// buttons will still run their own actions.
 		sidebar.openChatSidebar()
 	}}
 >
-	<!-- Gradient overlay (replaces ::before pseudo-element) -->
+	<!-- gradient overlay (replaces ::before pseudo-element) -->
 	<div
 		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/10 via-white/5 to-transparent opacity-70 transition-opacity duration-200 group-hover:opacity-100"
 	></div>

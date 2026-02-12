@@ -1,17 +1,11 @@
 <script lang="ts">
 	import { api, unwrap, type User } from '$lib/api'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardFooter,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Switch } from '$lib/components/ui/switch'
+	import { X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 
 	type Props = {
 		open: boolean
@@ -80,17 +74,34 @@
 	}
 </script>
 
-{#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-		<Card class="w-full max-w-lg rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader>
-				<CardTitle>add user</CardTitle>
-				<CardDescription>create a new user account</CardDescription>
-			</CardHeader>
-			<CardContent class="space-y-4">
+<Dialog.Root bind:open>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold">add user</Dialog.Title>
+					<Dialog.Description class="mt-0.5 text-sm text-zinc-400">
+						create a new user account
+					</Dialog.Description>
+				</div>
+				<button
+					class="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+					onclick={close}
+					disabled={isCreating}
+				>
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
 				{#if error}
 					<div
-						class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+						class="rounded-xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
 					>
 						{error}
 					</div>
@@ -119,7 +130,7 @@
 						/>
 					</div>
 					<div
-						class="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+						class="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3"
 					>
 						<label class="flex items-center justify-between gap-3">
 							<span class="text-sm text-zinc-200">active</span>
@@ -131,8 +142,9 @@
 						</label>
 					</div>
 				</div>
-			</CardContent>
-			<CardFooter class="flex justify-end gap-2">
+			</div>
+
+			<div class="flex shrink-0 justify-end gap-2 border-t border-zinc-800 px-6 py-4">
 				<Button
 					type="button"
 					variant="outline"
@@ -145,7 +157,7 @@
 				<Button type="button" class="rounded-xl" onclick={submit} disabled={isCreating}>
 					{isCreating ? 'creating...' : 'create'}
 				</Button>
-			</CardFooter>
-		</Card>
-	</div>
-{/if}
+			</div>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

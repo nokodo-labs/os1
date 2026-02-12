@@ -16,7 +16,19 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, BookOpen, Pencil, Plus, Trash2 } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		BookOpen,
+		Clock,
+		Hash,
+		Pencil,
+		Plus,
+		Terminal,
+		Trash2,
+		X,
+	} from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'command'
@@ -59,8 +71,7 @@
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		window.history.replaceState(window.history.state, '', target)
-		replaceState('', {})
+		replaceState(target, {})
 	}
 
 	function updateQueryParams(updates: Record<string, string | null>) {
@@ -227,8 +238,8 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">prompts</h2>
 			<p class="text-zinc-400">write and iterate on prompts.</p>
@@ -276,13 +287,19 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200">
+		<div
+			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+		>
 			{error}
 		</div>
 	{/if}
 
-	<Card class="rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-		<CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	<Card
+		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+	>
+		<CardHeader
+			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+		>
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
@@ -312,10 +329,10 @@
 				</Button>
 			</div>
 		</CardHeader>
-		<CardContent class="space-y-2">
+		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
 			{#if isLoading && prompts.length === 0}
 				<div
-					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 				>
 					<NokodoLoader />
 				</div>
@@ -331,25 +348,37 @@
 						class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
 					>
 						<div
-							class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
 						>
-							<div class="min-w-0 flex-1">
+							<div class="min-w-0 flex-1 space-y-2">
 								<div class="flex items-center gap-2">
+									<Terminal class="h-4 w-4 text-zinc-500" />
 									<span class="truncate font-medium">{p.command}</span>
 								</div>
-								<div
-									class="mt-2 font-mono text-xs whitespace-pre-wrap text-zinc-400"
-								>
+								<div class="font-mono text-xs whitespace-pre-wrap text-zinc-400">
 									{preview(p.content)}
 								</div>
-								<div class="mt-2 text-xs text-zinc-500">
-									id: {p.id}
+								<div
+									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
+								>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{p.id}
+									</span>
 								</div>
 							</div>
-							<div class="flex shrink-0 items-start gap-2">
+							<div class="flex shrink-0 items-start gap-3">
 								<div class="text-xs text-zinc-500">
-									<div>updated {new Date(p.updated_at).toLocaleString()}</div>
-									<div>created {new Date(p.created_at).toLocaleString()}</div>
+									<div class="flex items-center gap-1">
+										<Clock class="h-3.5 w-3.5" />
+										updated {new Date(p.updated_at).toLocaleString()}
+									</div>
+									<div class="mt-1 flex items-center gap-1">
+										<Clock class="h-3.5 w-3.5" />
+										created {new Date(p.created_at).toLocaleString()}
+									</div>
 								</div>
 								<div class="flex gap-1">
 									<Button
@@ -379,22 +408,39 @@
 	</Card>
 </div>
 
-{#if showModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-	>
-		<Card class="w-full max-w-3xl rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader>
-				<CardTitle>{modalMode === 'create' ? 'create prompt' : 'edit prompt'}</CardTitle>
-				<CardDescription>command + content</CardDescription>
-			</CardHeader>
+<Dialog.Root
+	bind:open={showModal}
+	onOpenChange={(v) => {
+		if (!v) closeModal()
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(768px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold">
+						{modalMode === 'create' ? 'create prompt' : 'edit prompt'}
+					</Dialog.Title>
+					<Dialog.Description class="text-sm text-zinc-400">
+						command + content
+					</Dialog.Description>
+				</div>
+				<Button variant="ghost" size="icon" class="rounded-xl" onclick={closeModal}>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
 			<form
 				onsubmit={(e) => {
 					e.preventDefault()
 					handleSave()
 				}}
 			>
-				<CardContent class="max-h-[70vh] space-y-4 overflow-y-auto pr-2">
+				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 					<div class="space-y-2">
 						<Label for="command">command</Label>
 						<Input
@@ -423,11 +469,11 @@
 							bind:value={formContent}
 							rows={16}
 							placeholder="write your prompt..."
-							class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm"
+							class="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-sm"
 						></textarea>
 					</div>
-				</CardContent>
-				<div class="flex justify-end gap-2 border-t border-zinc-800 p-4">
+				</div>
+				<div class="flex shrink-0 justify-end gap-2 border-t border-zinc-800 px-6 py-4">
 					<Button
 						type="button"
 						variant="outline"
@@ -442,8 +488,8 @@
 					</Button>
 				</div>
 			</form>
-		</Card>
-	</div>
-{/if}
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>
 
 <PromptVariablesLegend bind:open={showVariablesLegend} />

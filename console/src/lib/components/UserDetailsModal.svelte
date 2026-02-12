@@ -6,12 +6,19 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+		Brain,
+		CheckCircle,
+		Clock,
+		Hash,
+		Mail,
+		MessageSquare,
+		Shield,
+		Sliders,
+		User as UserIcon,
+		X,
+		XCircle,
+	} from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
 
 	type Props = {
 		open: boolean
@@ -76,31 +83,50 @@
 	})
 </script>
 
-{#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-		<Card class="w-full max-w-lg rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-			<CardHeader class="flex flex-row items-start justify-between gap-4">
+<Dialog.Root bind:open>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(540px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
 				<div>
-					<CardTitle>user details</CardTitle>
-					<CardDescription>{userId ?? ''}</CardDescription>
+					<Dialog.Title class="text-lg font-semibold">user details</Dialog.Title>
+					<Dialog.Description class="mt-0.5 text-sm text-zinc-400">
+						{userId ?? ''}
+					</Dialog.Description>
 				</div>
-				<Button variant="outline" class="rounded-xl" onclick={() => close()}>close</Button>
-			</CardHeader>
-			<CardContent class="space-y-4">
+				<button
+					class="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+					onclick={close}
+				>
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="min-h-0 flex-1 overflow-y-auto p-6">
 				{#if isLoading}
-					<div class="flex items-center justify-center py-10">
+					<div class="flex items-center justify-center py-12">
 						<NokodoLoader />
 					</div>
 				{:else if error}
 					<div
-						class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+						class="rounded-xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
 					>
 						{error}
 					</div>
 				{:else if user}
-					<div class="space-y-3">
+					<div class="space-y-5">
+						<!-- Quick actions -->
 						<div class="flex flex-wrap gap-2">
-							<Button class="rounded-xl" onclick={() => user && openThreads(user.id)}>
+							<Button
+								variant="outline"
+								class="rounded-xl"
+								onclick={() => user && openThreads(user.id)}
+							>
+								<MessageSquare class="mr-1.5 h-3.5 w-3.5" />
 								threads
 							</Button>
 							<Button
@@ -108,6 +134,7 @@
 								class="rounded-xl"
 								onclick={() => user && openMemories(user.id)}
 							>
+								<Brain class="mr-1.5 h-3.5 w-3.5" />
 								memories
 							</Button>
 							<Button
@@ -115,19 +142,21 @@
 								class="rounded-xl"
 								onclick={() => user && openRoles(user.id)}
 							>
+								<Shield class="mr-1.5 h-3.5 w-3.5" />
 								roles
 							</Button>
 							<Button
-								variant={showPreferences ? 'default' : 'outline'}
+								variant={showPreferences ? 'secondary' : 'outline'}
 								class="rounded-xl"
 								onclick={() => (showPreferences = !showPreferences)}
 							>
+								<Sliders class="mr-1.5 h-3.5 w-3.5" />
 								preferences
 							</Button>
 						</div>
 
 						{#if showPreferences}
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+							<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
 								<div class="mb-2 text-xs font-medium text-zinc-400">
 									raw preferences
 								</div>
@@ -138,45 +167,68 @@
 							</div>
 						{/if}
 
-						<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm">
-							<div class="flex justify-between gap-3">
-								<span class="text-zinc-400">email</span>
-								<span class="truncate">{user.email}</span>
-							</div>
-							<div class="mt-2 flex justify-between gap-3">
-								<span class="text-zinc-400">id</span>
-								<span class="truncate">{user.id}</span>
-							</div>
-							<div class="mt-2 flex justify-between gap-3">
+						<!-- User info grid -->
+						<div class="space-y-3">
+							<div class="flex items-center gap-3 text-sm">
+								<UserIcon class="h-4 w-4 shrink-0 text-zinc-500" />
 								<span class="text-zinc-400">display name</span>
-								<span class="truncate">{user.display_name ?? '-'}</span>
+								<span class="ml-auto truncate font-medium">
+									{user.display_name ?? '-'}
+								</span>
 							</div>
-							<div class="mt-2 flex justify-between gap-3">
-								<span class="text-zinc-400">active</span>
-								<span>{user.is_active === false ? 'no' : 'yes'}</span>
+							<div class="flex items-center gap-3 text-sm">
+								<Mail class="h-4 w-4 shrink-0 text-zinc-500" />
+								<span class="text-zinc-400">email</span>
+								<span class="ml-auto truncate font-medium">{user.email}</span>
 							</div>
-							<div class="mt-2 flex justify-between gap-3">
-								<span class="text-zinc-400">superuser</span>
-								<span>{user.is_superuser ? 'yes' : 'no'}</span>
+							<div class="flex items-center gap-3 text-sm">
+								<Hash class="h-4 w-4 shrink-0 text-zinc-500" />
+								<span class="text-zinc-400">id</span>
+								<span class="ml-auto truncate font-mono text-xs text-zinc-300">
+									{user.id}
+								</span>
 							</div>
-						</div>
 
-						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-							<div
-								class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400"
-							>
-								<div class="text-zinc-500">created</div>
-								<div class="mt-1 text-zinc-200">
-									{new Date(user.created_at).toLocaleString()}
-								</div>
+							<div class="h-px bg-zinc-800"></div>
+
+							<div class="flex items-center gap-3 text-sm">
+								{#if user.is_active !== false}
+									<CheckCircle class="h-4 w-4 shrink-0 text-emerald-400" />
+									<span class="text-zinc-400">active</span>
+									<span class="ml-auto text-emerald-400">yes</span>
+								{:else}
+									<XCircle class="h-4 w-4 shrink-0 text-red-400" />
+									<span class="text-zinc-400">active</span>
+									<span class="ml-auto text-red-400">no</span>
+								{/if}
 							</div>
-							<div
-								class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400"
-							>
-								<div class="text-zinc-500">updated</div>
-								<div class="mt-1 text-zinc-200">
+							<div class="flex items-center gap-3 text-sm">
+								<Shield class="h-4 w-4 shrink-0 text-zinc-500" />
+								<span class="text-zinc-400">superuser</span>
+								<span
+									class="ml-auto {user.is_superuser
+										? 'text-amber-400'
+										: 'text-zinc-300'}"
+								>
+									{user.is_superuser ? 'yes' : 'no'}
+								</span>
+							</div>
+
+							<div class="h-px bg-zinc-800"></div>
+
+							<div class="flex items-center gap-3 text-sm">
+								<Clock class="h-4 w-4 shrink-0 text-zinc-500" />
+								<span class="text-zinc-400">created</span>
+								<span class="ml-auto text-xs text-zinc-300">
+									{new Date(user.created_at).toLocaleString()}
+								</span>
+							</div>
+							<div class="flex items-center gap-3 text-sm">
+								<Clock class="h-4 w-4 shrink-0 text-zinc-500" />
+								<span class="text-zinc-400">updated</span>
+								<span class="ml-auto text-xs text-zinc-300">
 									{new Date(user.updated_at).toLocaleString()}
-								</div>
+								</span>
 							</div>
 						</div>
 					</div>
@@ -187,7 +239,7 @@
 						no user selected
 					</div>
 				{/if}
-			</CardContent>
-		</Card>
-	</div>
-{/if}
+			</div>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

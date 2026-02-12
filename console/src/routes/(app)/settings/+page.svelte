@@ -71,8 +71,8 @@
 
 	// Editable form state (only fields supported by Settings*Patch models)
 	let uiDefaultTheme = $state<ThemeMode>('system')
-	let uiDefaultBackground = $state('')
-	let uiAuthPagesBackground = $state('')
+	let uiDefaultBackground = $state<BackgroundType | null>(null)
+	let uiAuthPagesBackground = $state<BackgroundType | null>(null)
 	let uiSidebarCollapsed = $state(false)
 
 	type ChatContextMode = 'recent' | 'relevant' | 'pinned'
@@ -131,8 +131,8 @@
 	// Original snapshots for change detection
 	let original = $state({
 		uiDefaultTheme: 'system' as ThemeMode,
-		uiDefaultBackground: '',
-		uiAuthPagesBackground: '',
+		uiDefaultBackground: null as BackgroundType | null,
+		uiAuthPagesBackground: null as BackgroundType | null,
 		uiSidebarCollapsed: false,
 		aiDefaultAgentId: '',
 		aiMemoryEnable: false,
@@ -278,8 +278,8 @@
 
 		const ui = r.data.ui
 		uiDefaultTheme = (ui?.default_theme as ThemeMode) ?? 'system'
-		uiDefaultBackground = ui?.default_background ?? ''
-		uiAuthPagesBackground = ui?.auth_pages_background ?? ''
+		uiDefaultBackground = ui?.default_background ?? null
+		uiAuthPagesBackground = ui?.auth_pages_background ?? null
 		uiSidebarCollapsed = ui?.sidebar_collapsed ?? false
 
 		const ai = r.data.ai
@@ -489,9 +489,9 @@
 			data.ui = {}
 			if (uiDefaultTheme !== original.uiDefaultTheme) data.ui.default_theme = uiDefaultTheme
 			if (uiDefaultBackground !== original.uiDefaultBackground)
-				data.ui.default_background = uiDefaultBackground || null
+				data.ui.default_background = uiDefaultBackground ?? null
 			if (uiAuthPagesBackground !== original.uiAuthPagesBackground)
-				data.ui.auth_pages_background = uiAuthPagesBackground || null
+				data.ui.auth_pages_background = uiAuthPagesBackground ?? null
 			if (uiSidebarCollapsed !== original.uiSidebarCollapsed)
 				data.ui.sidebar_collapsed = uiSidebarCollapsed
 		}
@@ -697,13 +697,12 @@
 	})
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-wrap items-start justify-between gap-3">
+<div class="flex min-h-0 flex-1 flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">settings</h2>
 			<p class="text-zinc-400">manage backend settings (admin only).</p>
 		</div>
-
 		<div class="flex items-center gap-2">
 			<Button variant="secondary" onclick={fetchSettings} disabled={isFetching || isSaving}
 				>reload</Button
@@ -719,669 +718,714 @@
 		</div>
 	</div>
 
-	{#if error}
-		<div class="rounded-lg border border-red-900/40 bg-red-950/40 p-4 text-sm text-red-200">
-			{error}
-		</div>
-	{/if}
-	{#if saveError}
-		<div class="rounded-lg border border-red-900/40 bg-red-950/40 p-4 text-sm text-red-200">
-			{saveError}
-		</div>
-	{/if}
-	{#if saveSuccess}
-		<div
-			class="rounded-lg border border-emerald-900/40 bg-emerald-950/40 p-4 text-sm text-emerald-200"
-		>
-			{saveSuccess}
-		</div>
-	{/if}
+	<div class="min-h-0 flex-1 overflow-y-auto">
+		<div class="flex min-h-0 flex-1 flex-col gap-6">
+			{#if error}
+				<div
+					class="rounded-lg border border-red-900/40 bg-red-950/40 p-4 text-sm text-red-200"
+				>
+					{error}
+				</div>
+			{/if}
+			{#if saveError}
+				<div
+					class="rounded-lg border border-red-900/40 bg-red-950/40 p-4 text-sm text-red-200"
+				>
+					{saveError}
+				</div>
+			{/if}
+			{#if saveSuccess}
+				<div
+					class="rounded-lg border border-emerald-900/40 bg-emerald-950/40 p-4 text-sm text-emerald-200"
+				>
+					{saveSuccess}
+				</div>
+			{/if}
 
-	{#if isFetching}
-		<div class="flex items-center justify-center py-16">
-			<NokodoLoader className="opacity-70" />
-		</div>
-	{:else if response}
-		<div class="space-y-6">
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>ui</CardTitle>
-					<CardDescription>console UX defaults.</CardDescription>
-				</CardHeader>
-				<CardContent class="space-y-5">
-					<div class="space-y-2">
-						<Label for="default_theme">default theme</Label>
-						<Select
-							value={uiDefaultTheme}
-							onValueChange={(v: string) => (uiDefaultTheme = v as ThemeMode)}
-						>
-							<SelectTrigger id="default_theme" class="rounded-xl">
-								<span class="truncate text-left">{themeLabel(uiDefaultTheme)}</span>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="system">system</SelectItem>
-								<SelectItem value="light">light</SelectItem>
-								<SelectItem value="dark">dark</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-
-					<div class="flex items-center justify-between">
-						<div class="space-y-0.5">
-							<Label for="sidebar_collapsed">sidebar collapsed</Label>
-							<p class="text-xs text-zinc-500">collapse sidebar by default.</p>
-						</div>
-						<Switch
-							id="sidebar_collapsed"
-							checked={uiSidebarCollapsed}
-							onCheckedChange={(v: boolean) => (uiSidebarCollapsed = v)}
-						/>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="default_background">default background</Label>
-						<Select
-							value={uiDefaultBackground || 'darkveil'}
-							onValueChange={(v: string) => (uiDefaultBackground = v)}
-						>
-							<SelectTrigger id="default_background" class="rounded-xl">
-								<span class="truncate text-left"
-									>{backgroundLabel(uiDefaultBackground || 'darkveil')}</span
-								>
-							</SelectTrigger>
-							<SelectContent>
-								{#each backgroundOptions as opt (opt.value)}
-									<SelectItem value={opt.value}>{opt.label}</SelectItem>
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="auth_pages_background">auth pages background</Label>
-						<Select
-							value={uiAuthPagesBackground || 'lightrays'}
-							onValueChange={(v: string) => (uiAuthPagesBackground = v)}
-						>
-							<SelectTrigger id="auth_pages_background" class="rounded-xl">
-								<span class="truncate text-left"
-									>{backgroundLabel(uiAuthPagesBackground || 'lightrays')}</span
-								>
-							</SelectTrigger>
-							<SelectContent>
-								{#each backgroundOptions as opt (opt.value)}
-									<SelectItem value={opt.value}>{opt.label}</SelectItem>
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
-				</CardContent>
-			</Card>
-
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>ai</CardTitle>
-					<CardDescription>agent defaults and behavior.</CardDescription>
-				</CardHeader>
-				<CardContent class="space-y-6">
-					<div class="space-y-2">
-						<div class="flex items-center justify-between gap-2">
-							<Label for="default_agent">default agent</Label>
-							{#if isFetchingAgents}
-								<span class="text-xs text-zinc-500">loading…</span>
-							{/if}
-						</div>
-						<Select
-							value={aiDefaultAgentId}
-							onValueChange={(v: string) => (aiDefaultAgentId = v)}
-						>
-							<SelectTrigger id="default_agent" class="rounded-xl">
-								<span class="truncate text-left">{selectedAgentLabel()}</span>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="">none</SelectItem>
-								{#each agents as a (a.id)}
-									<SelectItem value={a.id}>{agentLabel(a)}</SelectItem>
-								{/each}
-							</SelectContent>
-						</Select>
-						{#if agentsError}
-							<p class="text-xs text-red-300">{agentsError}</p>
-						{/if}
-					</div>
-
-					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-						<div class="mb-4 flex items-center justify-between">
-							<div>
-								<p class="text-sm font-medium">memory</p>
-								<p class="text-xs text-zinc-500">
-									retrieval and consolidation settings.
-								</p>
-							</div>
-							<Switch
-								id="ai_memory_enable"
-								checked={aiMemoryEnable}
-								onCheckedChange={(v: boolean) => (aiMemoryEnable = v)}
-							/>
-						</div>
-						<div class="grid gap-4 md:grid-cols-2">
+			{#if isFetching}
+				<div class="flex min-h-0 flex-1 items-center justify-center">
+					<NokodoLoader className="opacity-70" />
+				</div>
+			{:else if response}
+				<div class="space-y-6">
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>ui</CardTitle>
+							<CardDescription>console UX defaults.</CardDescription>
+						</CardHeader>
+						<CardContent class="space-y-5">
 							<div class="space-y-2">
-								<Label for="ai_similarity">similarity threshold</Label>
-								<Input
-									id="ai_similarity"
-									type="number"
-									step="0.01"
-									min="0"
-									max="1"
-									bind:value={aiMemorySimilarityThreshold}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="ai_top_k">top k</Label>
-								<Input
-									id="ai_top_k"
-									type="number"
-									min="1"
-									bind:value={aiMemoryTopK}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="ai_messages">messages to consider</Label>
-								<Input
-									id="ai_messages"
-									type="number"
-									min="1"
-									bind:value={aiMemoryMessagesToConsider}
-									class="rounded-xl"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-						<p class="mb-1 text-sm font-medium">chat context</p>
-						<p class="mb-4 text-xs text-zinc-500">
-							how prior chats are added to context.
-						</p>
-						<div class="grid gap-4 md:grid-cols-2">
-							<div class="space-y-2">
-								<Label for="ai_chat_mode">mode</Label>
+								<Label for="default_theme">default theme</Label>
 								<Select
-									value={aiChatContextMode}
-									onValueChange={(v: string) =>
-										(aiChatContextMode = v as ChatContextMode)}
+									value={uiDefaultTheme}
+									onValueChange={(v: string) => (uiDefaultTheme = v as ThemeMode)}
 								>
-									<SelectTrigger id="ai_chat_mode" class="rounded-xl">
-										<span class="truncate text-left">{aiChatContextMode}</span>
+									<SelectTrigger id="default_theme" class="rounded-xl">
+										<span class="truncate text-left"
+											>{themeLabel(uiDefaultTheme)}</span
+										>
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="recent">recent</SelectItem>
-										<SelectItem value="relevant">relevant</SelectItem>
-										<SelectItem value="pinned">pinned</SelectItem>
+										<SelectItem value="system">system</SelectItem>
+										<SelectItem value="light">light</SelectItem>
+										<SelectItem value="dark">dark</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>
+
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="sidebar_collapsed">sidebar collapsed</Label>
+									<p class="text-xs text-zinc-500">
+										collapse sidebar by default.
+									</p>
+								</div>
+								<Switch
+									id="sidebar_collapsed"
+									checked={uiSidebarCollapsed}
+									onCheckedChange={(v: boolean) => (uiSidebarCollapsed = v)}
+								/>
+							</div>
+
 							<div class="space-y-2">
-								<Label for="ai_chat_top_k">top k</Label>
+								<Label for="default_background">default background</Label>
+								<Select
+									value={uiDefaultBackground || 'darkveil'}
+									onValueChange={(v: string) =>
+										(uiDefaultBackground = v as BackgroundType)}
+								>
+									<SelectTrigger id="default_background" class="rounded-xl">
+										<span class="truncate text-left"
+											>{backgroundLabel(
+												uiDefaultBackground || 'darkveil'
+											)}</span
+										>
+									</SelectTrigger>
+									<SelectContent>
+										{#each backgroundOptions as opt (opt.value)}
+											<SelectItem value={opt.value}>{opt.label}</SelectItem>
+										{/each}
+									</SelectContent>
+								</Select>
+							</div>
+
+							<div class="space-y-2">
+								<Label for="auth_pages_background">auth pages background</Label>
+								<Select
+									value={uiAuthPagesBackground || 'lightrays'}
+									onValueChange={(v: string) =>
+										(uiAuthPagesBackground = v as BackgroundType)}
+								>
+									<SelectTrigger id="auth_pages_background" class="rounded-xl">
+										<span class="truncate text-left"
+											>{backgroundLabel(
+												uiAuthPagesBackground || 'lightrays'
+											)}</span
+										>
+									</SelectTrigger>
+									<SelectContent>
+										{#each backgroundOptions as opt (opt.value)}
+											<SelectItem value={opt.value}>{opt.label}</SelectItem>
+										{/each}
+									</SelectContent>
+								</Select>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>ai</CardTitle>
+							<CardDescription>agent defaults and behavior.</CardDescription>
+						</CardHeader>
+						<CardContent class="space-y-6">
+							<div class="space-y-2">
+								<div class="flex items-center justify-between gap-2">
+									<Label for="default_agent">default agent</Label>
+									{#if isFetchingAgents}
+										<span class="text-xs text-zinc-500">loading…</span>
+									{/if}
+								</div>
+								<Select
+									value={aiDefaultAgentId}
+									onValueChange={(v: string) => (aiDefaultAgentId = v)}
+								>
+									<SelectTrigger id="default_agent" class="rounded-xl">
+										<span class="truncate text-left"
+											>{selectedAgentLabel()}</span
+										>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="">none</SelectItem>
+										{#each agents as a (a.id)}
+											<SelectItem value={a.id}>{agentLabel(a)}</SelectItem>
+										{/each}
+									</SelectContent>
+								</Select>
+								{#if agentsError}
+									<p class="text-xs text-red-300">{agentsError}</p>
+								{/if}
+							</div>
+
+							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+								<div class="mb-4 flex items-center justify-between">
+									<div>
+										<p class="text-sm font-medium">memory</p>
+										<p class="text-xs text-zinc-500">
+											retrieval and consolidation settings.
+										</p>
+									</div>
+									<Switch
+										id="ai_memory_enable"
+										checked={aiMemoryEnable}
+										onCheckedChange={(v: boolean) => (aiMemoryEnable = v)}
+									/>
+								</div>
+								<div class="grid gap-4 md:grid-cols-2">
+									<div class="space-y-2">
+										<Label for="ai_similarity">similarity threshold</Label>
+										<Input
+											id="ai_similarity"
+											type="number"
+											step="0.01"
+											min="0"
+											max="1"
+											bind:value={aiMemorySimilarityThreshold}
+											class="rounded-xl"
+										/>
+									</div>
+									<div class="space-y-2">
+										<Label for="ai_top_k">top k</Label>
+										<Input
+											id="ai_top_k"
+											type="number"
+											min="1"
+											bind:value={aiMemoryTopK}
+											class="rounded-xl"
+										/>
+									</div>
+									<div class="space-y-2">
+										<Label for="ai_messages">messages to consider</Label>
+										<Input
+											id="ai_messages"
+											type="number"
+											min="1"
+											bind:value={aiMemoryMessagesToConsider}
+											class="rounded-xl"
+										/>
+									</div>
+								</div>
+							</div>
+
+							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+								<p class="mb-1 text-sm font-medium">chat context</p>
+								<p class="mb-4 text-xs text-zinc-500">
+									how prior chats are added to context.
+								</p>
+								<div class="grid gap-4 md:grid-cols-2">
+									<div class="space-y-2">
+										<Label for="ai_chat_mode">mode</Label>
+										<Select
+											value={aiChatContextMode}
+											onValueChange={(v: string) =>
+												(aiChatContextMode = v as ChatContextMode)}
+										>
+											<SelectTrigger id="ai_chat_mode" class="rounded-xl">
+												<span class="truncate text-left"
+													>{aiChatContextMode}</span
+												>
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="recent">recent</SelectItem>
+												<SelectItem value="relevant">relevant</SelectItem>
+												<SelectItem value="pinned">pinned</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+									<div class="space-y-2">
+										<Label for="ai_chat_top_k">top k</Label>
+										<Input
+											id="ai_chat_top_k"
+											type="number"
+											min="1"
+											bind:value={aiChatContextTopK}
+											class="rounded-xl"
+										/>
+									</div>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>branding</CardTitle>
+							<CardDescription>public-facing brand configuration.</CardDescription>
+						</CardHeader>
+						<CardContent class="space-y-5">
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="site_name">site name</Label>
+									<Input
+										id="site_name"
+										bind:value={brandingSiteName}
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<div class="flex items-center justify-between gap-2">
+										<Label for="app_version">app version</Label>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Lock class="h-3 w-3" />
+											env-only
+										</span>
+									</div>
+									<Input
+										id="app_version"
+										value={brandingAppVersion}
+										disabled
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										set via environment variables only.
+									</p>
+								</div>
+							</div>
+
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="primary_color">primary color</Label>
+									<Input
+										id="primary_color"
+										bind:value={brandingPrimaryColor}
+										placeholder="#6366f1"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<div class="flex items-center justify-between gap-2">
+										<Label for="analytics_key">analytics key</Label>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Lock class="h-3 w-3" />
+											env-only
+										</span>
+									</div>
+									<Input
+										id="analytics_key"
+										value={brandingAnalyticsKeyConfigured
+											? '(configured)'
+											: '(not set)'}
+										disabled
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										set via environment variables only.
+									</p>
+								</div>
+							</div>
+
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="logo_url">logo url</Label>
+									<Input
+										id="logo_url"
+										bind:value={brandingLogoUrl}
+										placeholder="https://…"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="favicon_url">favicon url</Label>
+									<Input
+										id="favicon_url"
+										bind:value={brandingFaviconUrl}
+										placeholder="https://…"
+										class="rounded-xl"
+									/>
+								</div>
+							</div>
+
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="public_frontend_origin"
+										>public frontend origin</Label
+									>
+									<Input
+										id="public_frontend_origin"
+										bind:value={brandingPublicFrontendOrigin}
+										placeholder="https://app.nokodo.net"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="public_cdn_origin">public cdn origin</Label>
+									<Input
+										id="public_cdn_origin"
+										bind:value={brandingPublicCdnOrigin}
+										placeholder="https://cdn.nokodo.net"
+										class="rounded-xl"
+									/>
+								</div>
+							</div>
+
+							<div class="space-y-2">
+								<Label for="pwa_manifest_url">pwa manifest url</Label>
 								<Input
-									id="ai_chat_top_k"
+									id="pwa_manifest_url"
+									bind:value={brandingPwaManifestUrl}
+									placeholder="https://cdn.example.com/manifest.json"
+									class="rounded-xl"
+								/>
+								<p class="text-xs text-zinc-500">
+									external manifest.json for PWA configuration. served directly in
+									the frontend HTML.
+								</p>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>limits</CardTitle>
+							<CardDescription>protect the system with sane caps.</CardDescription>
+						</CardHeader>
+						<CardContent class="grid gap-4 md:grid-cols-2">
+							<div class="space-y-2">
+								<Label for="max_threads">max threads per user</Label>
+								<Input
+									id="max_threads"
 									type="number"
-									min="1"
-									bind:value={aiChatContextTopK}
+									bind:value={limitsMaxThreadsPerUser}
 									class="rounded-xl"
 								/>
 							</div>
-						</div>
-					</div>
-				</CardContent>
-			</Card>
-
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>branding</CardTitle>
-					<CardDescription>public-facing brand configuration.</CardDescription>
-				</CardHeader>
-				<CardContent class="space-y-5">
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<Label for="site_name">site name</Label>
-							<Input
-								id="site_name"
-								bind:value={brandingSiteName}
-								class="rounded-xl"
-							/>
-						</div>
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label for="app_version">app version</Label>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-								>
-									<Lock class="h-3 w-3" />
-									env-only
-								</span>
+							<div class="space-y-2">
+								<Label for="max_messages">max messages per thread</Label>
+								<Input
+									id="max_messages"
+									type="number"
+									bind:value={limitsMaxMessagesPerThread}
+									class="rounded-xl"
+								/>
 							</div>
-							<Input
-								id="app_version"
-								value={brandingAppVersion}
-								disabled
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">set via environment variables only.</p>
-						</div>
-					</div>
-
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<Label for="primary_color">primary color</Label>
-							<Input
-								id="primary_color"
-								bind:value={brandingPrimaryColor}
-								placeholder="#6366f1"
-								class="rounded-xl"
-							/>
-						</div>
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label for="analytics_key">analytics key</Label>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-								>
-									<Lock class="h-3 w-3" />
-									env-only
-								</span>
+							<div class="space-y-2">
+								<Label for="max_file_size">max file size (MB)</Label>
+								<Input
+									id="max_file_size"
+									type="number"
+									bind:value={limitsMaxFileSizeMb}
+									class="rounded-xl"
+								/>
 							</div>
-							<Input
-								id="analytics_key"
-								value={brandingAnalyticsKeyConfigured
-									? '(configured)'
-									: '(not set)'}
-								disabled
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">set via environment variables only.</p>
-						</div>
-					</div>
-
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<Label for="logo_url">logo url</Label>
-							<Input
-								id="logo_url"
-								bind:value={brandingLogoUrl}
-								placeholder="https://…"
-								class="rounded-xl"
-							/>
-						</div>
-						<div class="space-y-2">
-							<Label for="favicon_url">favicon url</Label>
-							<Input
-								id="favicon_url"
-								bind:value={brandingFaviconUrl}
-								placeholder="https://…"
-								class="rounded-xl"
-							/>
-						</div>
-					</div>
-
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<Label for="public_frontend_origin">public frontend origin</Label>
-							<Input
-								id="public_frontend_origin"
-								bind:value={brandingPublicFrontendOrigin}
-								placeholder="https://app.nokodo.net"
-								class="rounded-xl"
-							/>
-						</div>
-						<div class="space-y-2">
-							<Label for="public_cdn_origin">public cdn origin</Label>
-							<Input
-								id="public_cdn_origin"
-								bind:value={brandingPublicCdnOrigin}
-								placeholder="https://cdn.nokodo.net"
-								class="rounded-xl"
-							/>
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="pwa_manifest_url">pwa manifest url</Label>
-						<Input
-							id="pwa_manifest_url"
-							bind:value={brandingPwaManifestUrl}
-							placeholder="https://cdn.example.com/manifest.json"
-							class="rounded-xl"
-						/>
-						<p class="text-xs text-zinc-500">
-							external manifest.json for PWA configuration. served directly in the
-							frontend HTML.
-						</p>
-					</div>
-				</CardContent>
-			</Card>
-
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>limits</CardTitle>
-					<CardDescription>protect the system with sane caps.</CardDescription>
-				</CardHeader>
-				<CardContent class="grid gap-4 md:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="max_threads">max threads per user</Label>
-						<Input
-							id="max_threads"
-							type="number"
-							bind:value={limitsMaxThreadsPerUser}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="max_messages">max messages per thread</Label>
-						<Input
-							id="max_messages"
-							type="number"
-							bind:value={limitsMaxMessagesPerThread}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="max_file_size">max file size (MB)</Label>
-						<Input
-							id="max_file_size"
-							type="number"
-							bind:value={limitsMaxFileSizeMb}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="rate_limit">rate limit (requests/min)</Label>
-						<Input
-							id="rate_limit"
-							type="number"
-							bind:value={limitsRateLimitRequestsPerMinute}
-							class="rounded-xl"
-						/>
-					</div>
-				</CardContent>
-			</Card>
-
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>security</CardTitle>
-					<CardDescription>authentication and session behavior.</CardDescription>
-				</CardHeader>
-				<CardContent class="space-y-5">
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label for="secret_key">secret key</Label>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-								>
-									<Lock class="h-3 w-3" />
-									env-only
-								</span>
+							<div class="space-y-2">
+								<Label for="rate_limit">rate limit (requests/min)</Label>
+								<Input
+									id="rate_limit"
+									type="number"
+									bind:value={limitsRateLimitRequestsPerMinute}
+									class="rounded-xl"
+								/>
 							</div>
-							<Input
-								id="secret_key"
-								value={securitySecretKeyConfigured ? '(configured)' : '(not set)'}
-								disabled
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">set via environment variables only.</p>
-						</div>
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label for="jwt_algorithm">jwt algorithm</Label>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-								>
-									<Lock class="h-3 w-3" />
-									env-only
-								</span>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>security</CardTitle>
+							<CardDescription>authentication and session behavior.</CardDescription>
+						</CardHeader>
+						<CardContent class="space-y-5">
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<div class="flex items-center justify-between gap-2">
+										<Label for="secret_key">secret key</Label>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Lock class="h-3 w-3" />
+											env-only
+										</span>
+									</div>
+									<Input
+										id="secret_key"
+										value={securitySecretKeyConfigured
+											? '(configured)'
+											: '(not set)'}
+										disabled
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										set via environment variables only.
+									</p>
+								</div>
+								<div class="space-y-2">
+									<div class="flex items-center justify-between gap-2">
+										<Label for="jwt_algorithm">jwt algorithm</Label>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Lock class="h-3 w-3" />
+											env-only
+										</span>
+									</div>
+									<Input
+										id="jwt_algorithm"
+										value={securityJwtAlgorithm || '(not set)'}
+										disabled
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										set via environment variables only.
+									</p>
+								</div>
 							</div>
-							<Input
-								id="jwt_algorithm"
-								value={securityJwtAlgorithm || '(not set)'}
-								disabled
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">set via environment variables only.</p>
-						</div>
-					</div>
 
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label for="enable_oauth">enable oauth</Label>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-								>
-									<Lock class="h-3 w-3" />
-									env-only
-								</span>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<div class="flex items-center justify-between gap-2">
+										<Label for="enable_oauth">enable oauth</Label>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Lock class="h-3 w-3" />
+											env-only
+										</span>
+									</div>
+									<Input
+										id="enable_oauth"
+										value={securityEnableOauth ? 'true' : 'false'}
+										disabled
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										set via environment variables only.
+									</p>
+								</div>
+								<div class="space-y-2">
+									<div class="flex items-center justify-between gap-2">
+										<Label for="cors_origins">cors origins</Label>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+										>
+											<Lock class="h-3 w-3" />
+											env-only
+										</span>
+									</div>
+									<Input
+										id="cors_origins"
+										value={securityCorsOrigins || '(not set)'}
+										disabled
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										set via environment variables only.
+									</p>
+								</div>
 							</div>
-							<Input
-								id="enable_oauth"
-								value={securityEnableOauth ? 'true' : 'false'}
-								disabled
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">set via environment variables only.</p>
-						</div>
-						<div class="space-y-2">
-							<div class="flex items-center justify-between gap-2">
-								<Label for="cors_origins">cors origins</Label>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-								>
-									<Lock class="h-3 w-3" />
-									env-only
-								</span>
+
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="access_expire">access token expire minutes</Label>
+									<Input
+										id="access_expire"
+										type="number"
+										bind:value={securityAccessTokenExpireMinutes}
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="refresh_expire">refresh token expire days</Label>
+									<Input
+										id="refresh_expire"
+										type="number"
+										bind:value={securityRefreshTokenExpireDays}
+										class="rounded-xl"
+									/>
+								</div>
 							</div>
-							<Input
-								id="cors_origins"
-								value={securityCorsOrigins || '(not set)'}
-								disabled
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">set via environment variables only.</p>
-						</div>
-					</div>
 
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<Label for="access_expire">access token expire minutes</Label>
-							<Input
-								id="access_expire"
-								type="number"
-								bind:value={securityAccessTokenExpireMinutes}
-								class="rounded-xl"
-							/>
-						</div>
-						<div class="space-y-2">
-							<Label for="refresh_expire">refresh token expire days</Label>
-							<Input
-								id="refresh_expire"
-								type="number"
-								bind:value={securityRefreshTokenExpireDays}
-								class="rounded-xl"
-							/>
-						</div>
-					</div>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="session_timeout">session timeout minutes</Label>
+									<Input
+										id="session_timeout"
+										type="number"
+										bind:value={securitySessionTimeoutMinutes}
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="allowed_domains">allowed email domains</Label>
+									<Input
+										id="allowed_domains"
+										bind:value={securityAllowedEmailDomains}
+										placeholder="example.com, example.org"
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">comma-separated list.</p>
+								</div>
+							</div>
 
-					<div class="grid gap-4 md:grid-cols-2">
-						<div class="space-y-2">
-							<Label for="session_timeout">session timeout minutes</Label>
-							<Input
-								id="session_timeout"
-								type="number"
-								bind:value={securitySessionTimeoutMinutes}
-								class="rounded-xl"
-							/>
-						</div>
-						<div class="space-y-2">
-							<Label for="allowed_domains">allowed email domains</Label>
-							<Input
-								id="allowed_domains"
-								bind:value={securityAllowedEmailDomains}
-								placeholder="example.com, example.org"
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">comma-separated list.</p>
-						</div>
-					</div>
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="allow_signups">allow new user signups</Label>
+									<p class="text-xs text-zinc-500">
+										when off, admins or users with users:manage only.
+									</p>
+								</div>
+								<Switch
+									id="allow_signups"
+									checked={securityAllowSignups}
+									onCheckedChange={(v: boolean) => (securityAllowSignups = v)}
+								/>
+							</div>
 
-					<div class="flex items-center justify-between">
-						<div class="space-y-0.5">
-							<Label for="allow_signups">allow new user signups</Label>
-							<p class="text-xs text-zinc-500">
-								when off, admins or users with users:manage only.
-							</p>
-						</div>
-						<Switch
-							id="allow_signups"
-							checked={securityAllowSignups}
-							onCheckedChange={(v: boolean) => (securityAllowSignups = v)}
-						/>
-					</div>
-
-					<div class="space-y-2">
-						<Label>auto-apply roles</Label>
-						<RolePicker bind:value={securityAutoSignupRoleIds} />
-						<p class="text-xs text-zinc-500">
-							roles automatically assigned to new users on signup.
-						</p>
-					</div>
-
-					<div class="flex items-center justify-between">
-						<div class="space-y-0.5">
-							<Label for="cookie_secure">auth cookie secure</Label>
-							<p class="text-xs text-zinc-500">recommended true in production.</p>
-						</div>
-						<Switch
-							id="cookie_secure"
-							checked={securityAuthCookieSecure}
-							onCheckedChange={(v: boolean) => (securityAuthCookieSecure = v)}
-						/>
-					</div>
-
-					<div class="flex items-center justify-between">
-						<div class="space-y-0.5">
-							<Label for="email_verification">require email verification</Label>
-						</div>
-						<Switch
-							id="email_verification"
-							checked={securityRequireEmailVerification}
-							onCheckedChange={(v: boolean) => (securityRequireEmailVerification = v)}
-						/>
-					</div>
-
-					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-						<p class="mb-1 text-sm font-medium">oidc</p>
-						<p class="mb-4 text-xs text-zinc-500">
-							openid connect provider settings for single sign-on.
-						</p>
-
-						<div class="mb-4 flex items-center justify-between">
-							<div class="space-y-0.5">
-								<Label for="oidc_enabled">enable oidc</Label>
+							<div class="space-y-2">
+								<Label>auto-apply roles</Label>
+								<RolePicker bind:value={securityAutoSignupRoleIds} />
 								<p class="text-xs text-zinc-500">
-									allow users to sign in with an oidc provider.
+									roles automatically assigned to new users on signup.
 								</p>
 							</div>
-							<Switch
-								id="oidc_enabled"
-								checked={securityOidcEnabled}
-								onCheckedChange={(v: boolean) => (securityOidcEnabled = v)}
-							/>
-						</div>
 
-						<div class="grid gap-4 md:grid-cols-2">
-							<div class="space-y-2">
-								<Label for="oidc_issuer">issuer url</Label>
-								<Input
-									id="oidc_issuer"
-									bind:value={securityOidcIssuerUrl}
-									placeholder="https://issuer.example.com"
-									class="rounded-xl"
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="cookie_secure">auth cookie secure</Label>
+									<p class="text-xs text-zinc-500">
+										recommended true in production.
+									</p>
+								</div>
+								<Switch
+									id="cookie_secure"
+									checked={securityAuthCookieSecure}
+									onCheckedChange={(v: boolean) => (securityAuthCookieSecure = v)}
 								/>
 							</div>
-							<div class="space-y-2">
-								<Label for="oidc_client_id">client id</Label>
-								<Input
-									id="oidc_client_id"
-									bind:value={securityOidcClientId}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="oidc_client_secret">client secret</Label>
-								<Input
-									id="oidc_client_secret"
-									type="password"
-									bind:value={securityOidcClientSecret}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="oidc_redirect">redirect uri</Label>
-								<Input
-									id="oidc_redirect"
-									bind:value={securityOidcRedirectUri}
-									placeholder="https://app.example.com/oidc/callback"
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2 md:col-span-2">
-								<Label for="oidc_scopes">scopes</Label>
-								<Input
-									id="oidc_scopes"
-									bind:value={securityOidcScopes}
-									placeholder="openid, profile, email"
-									class="rounded-xl"
-								/>
-								<p class="text-xs text-zinc-500">comma-separated list.</p>
-							</div>
-						</div>
 
-						<div class="mt-4 flex items-center justify-between">
-							<div class="space-y-0.5">
-								<Label for="oidc_only">oidc only</Label>
-								<p class="text-xs text-zinc-500">
-									disable password login. requires oidc to be enabled &amp;
-									configured.
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="email_verification"
+										>require email verification</Label
+									>
+								</div>
+								<Switch
+									id="email_verification"
+									checked={securityRequireEmailVerification}
+									onCheckedChange={(v: boolean) =>
+										(securityRequireEmailVerification = v)}
+								/>
+							</div>
+
+							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+								<p class="mb-1 text-sm font-medium">oidc</p>
+								<p class="mb-4 text-xs text-zinc-500">
+									openid connect provider settings for single sign-on.
 								</p>
-							</div>
-							<Switch
-								id="oidc_only"
-								checked={securityOidcOnly}
-								onCheckedChange={(v: boolean) => (securityOidcOnly = v)}
-							/>
-						</div>
-					</div>
-				</CardContent>
-			</Card>
 
-			<Card class="border-zinc-800 bg-zinc-950">
-				<CardHeader>
-					<CardTitle>default permissions</CardTitle>
-					<CardDescription>
-						global defaults applied when no role or explicit rule grants access.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<DefaultPermissionsEditor
-						bind:value={defaultPermissions}
-						allowInherit={false}
-					/>
-				</CardContent>
-			</Card>
+								<div class="mb-4 flex items-center justify-between">
+									<div class="space-y-0.5">
+										<Label for="oidc_enabled">enable oidc</Label>
+										<p class="text-xs text-zinc-500">
+											allow users to sign in with an oidc provider.
+										</p>
+									</div>
+									<Switch
+										id="oidc_enabled"
+										checked={securityOidcEnabled}
+										onCheckedChange={(v: boolean) => (securityOidcEnabled = v)}
+									/>
+								</div>
+
+								<div class="grid gap-4 md:grid-cols-2">
+									<div class="space-y-2">
+										<Label for="oidc_issuer">issuer url</Label>
+										<Input
+											id="oidc_issuer"
+											bind:value={securityOidcIssuerUrl}
+											placeholder="https://issuer.example.com"
+											class="rounded-xl"
+										/>
+									</div>
+									<div class="space-y-2">
+										<Label for="oidc_client_id">client id</Label>
+										<Input
+											id="oidc_client_id"
+											bind:value={securityOidcClientId}
+											class="rounded-xl"
+										/>
+									</div>
+									<div class="space-y-2">
+										<Label for="oidc_client_secret">client secret</Label>
+										<Input
+											id="oidc_client_secret"
+											type="password"
+											bind:value={securityOidcClientSecret}
+											class="rounded-xl"
+										/>
+									</div>
+									<div class="space-y-2">
+										<Label for="oidc_redirect">redirect uri</Label>
+										<Input
+											id="oidc_redirect"
+											bind:value={securityOidcRedirectUri}
+											placeholder="https://app.example.com/oidc/callback"
+											class="rounded-xl"
+										/>
+									</div>
+									<div class="space-y-2 md:col-span-2">
+										<Label for="oidc_scopes">scopes</Label>
+										<Input
+											id="oidc_scopes"
+											bind:value={securityOidcScopes}
+											placeholder="openid, profile, email"
+											class="rounded-xl"
+										/>
+										<p class="text-xs text-zinc-500">comma-separated list.</p>
+									</div>
+								</div>
+
+								<div class="mt-4 flex items-center justify-between">
+									<div class="space-y-0.5">
+										<Label for="oidc_only">oidc only</Label>
+										<p class="text-xs text-zinc-500">
+											disable password login. requires oidc to be enabled
+											&amp; configured.
+										</p>
+									</div>
+									<Switch
+										id="oidc_only"
+										checked={securityOidcOnly}
+										onCheckedChange={(v: boolean) => (securityOidcOnly = v)}
+									/>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>default permissions</CardTitle>
+							<CardDescription>
+								global defaults applied when no role or explicit rule grants access.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<DefaultPermissionsEditor
+								bind:value={defaultPermissions}
+								allowInherit={false}
+							/>
+						</CardContent>
+					</Card>
+				</div>
+			{:else}
+				<div class="rounded-lg border border-zinc-800 p-8 text-zinc-400">
+					no settings loaded.
+				</div>
+			{/if}
 		</div>
-	{:else}
-		<div class="rounded-lg border border-zinc-800 p-8 text-zinc-400">no settings loaded.</div>
-	{/if}
+	</div>
 </div>
