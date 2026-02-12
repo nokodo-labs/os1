@@ -239,6 +239,14 @@ class DefaultPermissionsSettingsPatch(BaseModel):
 	)
 
 
+class SoftDeleteSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	threads: bool | None = Field(default=None, description="soft-delete threads")
+	notes: bool | None = Field(default=None, description="soft-delete notes")
+	files: bool | None = Field(default=None, description="soft-delete files")
+
+
 class SettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -249,6 +257,7 @@ class SettingsPatch(BaseModel):
 	assets: AssetsSettingsPatch | None = None
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
+	soft_delete: SoftDeleteSettingsPatch | None = None
 	default_permissions: DefaultPermissionsSettingsPatch | None = None
 
 
@@ -262,6 +271,7 @@ class SettingsVersions(BaseModel):
 	assets: int = 0
 	limits: int = 0
 	security: int = 0
+	soft_delete: int = 0
 	default_permissions: int = 0
 
 

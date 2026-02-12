@@ -18,6 +18,7 @@ from api.models.mixins import (
 
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
+	from api.models.project import Project
 	from api.models.user import User
 
 
@@ -37,11 +38,20 @@ class Note(
 	title: Mapped[str] = mapped_column(String(255))
 	content: Mapped[str] = mapped_column(Text(), default="")
 	labels: Mapped[list[str]] = mapped_column(ARRAY(String(50)), default=list)
+	project_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("projects.id", ondelete="SET NULL"),
+		index=True,
+	)
 
 	owner: Mapped[User] = relationship(
 		"User",
 		back_populates="notes",
 		lazy="selectin",
+	)
+	project: Mapped[Project | None] = relationship(
+		"Project",
+		back_populates="notes",
 	)
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",

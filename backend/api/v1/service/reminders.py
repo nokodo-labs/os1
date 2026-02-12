@@ -9,6 +9,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.reminder import Reminder, ReminderList, ReminderStatus
@@ -24,6 +25,8 @@ from api.schemas.reminder import (
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	require_permission,
+	require_project_access,
 	require_resource_access,
 	resource_access_predicate,
 )
@@ -58,6 +61,14 @@ async def create_reminder_list(
 	principal: Principal,
 ) -> ReminderList:
 	"""create a new reminder list."""
+	require_permission(principal, "reminders:create")
+	if data.project_id is not None:
+		await require_project_access(
+			data.project_id,
+			session,
+			principal,
+			required_level=AccessLevel.EDITOR,
+		)
 	reminder_list = ReminderList(
 		owner_id=principal.user_id,
 		**data.model_dump(exclude_unset=True),
@@ -224,7 +235,18 @@ async def update_reminder_list(
 ) -> ReminderList:
 	"""update a reminder list."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
-	for key, value in data.model_dump(exclude_unset=True).items():
+	update_data = data.model_dump(exclude_unset=True)
+	new_project_id = update_data.get("project_id")
+	if new_project_id is not None and str(new_project_id) != str(
+		reminder_list.project_id or ""
+	):
+		await require_project_access(
+			new_project_id,
+			session,
+			principal,
+			required_level=AccessLevel.EDITOR,
+		)
+	for key, value in update_data.items():
 		setattr(reminder_list, key, value)
 	await session.flush()
 	await session.refresh(reminder_list)

@@ -63,11 +63,11 @@ class TestDefaultPermissions:
 	def test_with_action_permissions(self) -> None:
 		dp = DefaultPermissions(
 			action_permissions={
-				ActionPermission.AGENTS_READ,
+				ActionPermission.AGENTS_CREATE,
 				ActionPermission.PROMPTS_READ,
 			}
 		)
-		assert ActionPermission.AGENTS_READ in dp.action_permissions
+		assert ActionPermission.AGENTS_CREATE in dp.action_permissions
 		assert ActionPermission.PROMPTS_READ in dp.action_permissions
 		assert len(dp.action_permissions) == 2
 
@@ -76,10 +76,10 @@ class TestDefaultPermissions:
 			resource_access=DefaultResourceAccess(
 				thread=AccessLevel.ADMIN,
 			),
-			action_permissions={ActionPermission.SETTINGS_WRITE},
+			action_permissions={ActionPermission.SETTINGS_MANAGE},
 		)
 		assert dp.resource_access.thread == AccessLevel.ADMIN
-		assert ActionPermission.SETTINGS_WRITE in dp.action_permissions
+		assert ActionPermission.SETTINGS_MANAGE in dp.action_permissions
 
 	def test_json_roundtrip(self) -> None:
 		dp = DefaultPermissions(
@@ -103,7 +103,7 @@ class TestDefaultPermissions:
 			resource_access=DefaultResourceAccess(
 				thread=AccessLevel.READER,
 			),
-			action_permissions={ActionPermission.AGENTS_READ},
+			action_permissions={ActionPermission.AGENTS_CREATE},
 		)
 		data = dp.model_dump(mode="json")
 		assert isinstance(data["resource_access"]["thread"], str)
@@ -114,11 +114,11 @@ class TestDefaultPermissions:
 		dp = DefaultPermissions.model_validate(
 			{
 				"resource_access": {"thread": "editor"},
-				"action_permissions": ["agents:read"],
+				"action_permissions": ["agents:create"],
 			}
 		)
 		assert dp.resource_access.thread == AccessLevel.EDITOR
-		assert ActionPermission.AGENTS_READ in dp.action_permissions
+		assert ActionPermission.AGENTS_CREATE in dp.action_permissions
 
 	def test_ignores_unknown_resource_type(self) -> None:
 		"""unknown fields are silently ignored (supports DB migration)."""
@@ -137,13 +137,19 @@ class TestDefaultPermissions:
 				}
 			)
 
-	def test_rejects_invalid_action_permission(self) -> None:
-		with pytest.raises(Exception):
-			DefaultPermissions.model_validate(
-				{
-					"action_permissions": ["invalid:permission"],
-				}
-			)
+	def test_strips_unknown_action_permission(self) -> None:
+		"""unknown action permissions are silently dropped (handles removed perms)."""
+		dp = DefaultPermissions.model_validate(
+			{
+				"action_permissions": [
+					"invalid:permission",
+					"agents:create",
+					"old:removed",
+				],
+			}
+		)
+		# only valid permission survives
+		assert dp.action_permissions == {ActionPermission.AGENTS_CREATE}
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +167,11 @@ class TestActionPermission:
 
 	def test_string_equality(self) -> None:
 		assert ActionPermission.ROLES_READ == "roles:read"
-		assert ActionPermission.SETTINGS_WRITE == "settings:write"
+		assert ActionPermission.SETTINGS_MANAGE == "settings:manage"
 
 	def test_membership_in_set(self) -> None:
-		perms = {ActionPermission.AGENTS_READ, ActionPermission.AGENTS_MANAGE}
-		assert "agents:read" in perms
+		perms = {ActionPermission.AGENTS_CREATE, ActionPermission.AGENTS_MANAGE}
+		assert "agents:create" in perms
 		assert "agents:manage" in perms
 		assert "agents:delete" not in perms
 
@@ -177,13 +183,20 @@ class TestActionPermission:
 			"users",
 			"settings",
 			"events",
+			"threads",
+			"projects",
+			"notes",
+			"groups",
+			"reminders",
+			"memories",
+			"tasks",
 			"agents",
 			"models",
 			"providers",
 			"plugins",
 			"prompts",
-			"console",
 			"files",
+			"console",
 			"frontend",
 		}
 		assert expected == domains
@@ -239,7 +252,7 @@ class TestRoleModel:
 			resource_access=DefaultResourceAccess(
 				thread=AccessLevel.EDITOR,
 			),
-			action_permissions={ActionPermission.AGENTS_READ},
+			action_permissions={ActionPermission.AGENTS_CREATE},
 		)
 		role = Role(name="typed-perms")
 		role.set_default_permissions(dp)
@@ -249,7 +262,7 @@ class TestRoleModel:
 
 		restored = role.get_default_permissions()
 		assert restored.resource_access.thread == AccessLevel.EDITOR
-		assert ActionPermission.AGENTS_READ in restored.action_permissions
+		assert ActionPermission.AGENTS_CREATE in restored.action_permissions
 
 	@pytest.mark.asyncio
 	async def test_role_description_is_text(self, db_session: AsyncSession) -> None:
@@ -323,16 +336,16 @@ class TestPrincipalPermissions:
 
 	def test_no_permissions(self) -> None:
 		p = self._make_principal()
-		assert not p.has_permission("agents:read")
+		assert not p.has_permission("agents:create")
 
 	def test_role_permission_exact(self) -> None:
-		p = self._make_principal(permissions=frozenset({"agents:read"}))
-		assert p.has_permission("agents:read")
+		p = self._make_principal(permissions=frozenset({"agents:create"}))
+		assert p.has_permission("agents:create")
 		assert not p.has_permission("agents:manage")
 
 	def test_role_permission_wildcard(self) -> None:
 		p = self._make_principal(permissions=frozenset({"agents:*"}))
-		assert p.has_permission("agents:read")
+		assert p.has_permission("agents:create")
 		assert p.has_permission("agents:manage")
 		assert not p.has_permission("models:read")
 
@@ -347,9 +360,9 @@ class TestPrincipalPermissions:
 	def test_global_action_permissions(self) -> None:
 		"""global defaults should grant permissions even without role perms."""
 		p = self._make_principal(
-			global_action_permissions=frozenset({"agents:read", "prompts:read"})
+			global_action_permissions=frozenset({"agents:create", "prompts:read"})
 		)
-		assert p.has_permission("agents:read")
+		assert p.has_permission("agents:create")
 		assert p.has_permission("prompts:read")
 		assert not p.has_permission("agents:manage")
 
@@ -357,11 +370,11 @@ class TestPrincipalPermissions:
 		"""role perms and global perms combine (union)."""
 		p = self._make_principal(
 			permissions=frozenset({"models:manage"}),
-			global_action_permissions=frozenset({"agents:read"}),
+			global_action_permissions=frozenset({"agents:create"}),
 		)
 		assert p.has_permission("models:manage")
-		assert p.has_permission("agents:read")
-		assert not p.has_permission("settings:write")
+		assert p.has_permission("agents:create")
+		assert not p.has_permission("settings:manage")
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +402,7 @@ class TestGetCurrentPrincipal:
 	) -> None:
 		dp = DefaultPermissions(
 			action_permissions={
-				ActionPermission.AGENTS_READ,
+				ActionPermission.AGENTS_CREATE,
 				ActionPermission.MODELS_READ,
 			},
 		)
@@ -407,7 +420,7 @@ class TestGetCurrentPrincipal:
 		await db_session.refresh(user, attribute_names=["roles"])
 
 		principal = await get_current_principal(user, db_session)
-		assert "agents:read" in principal.permissions
+		assert "agents:create" in principal.permissions
 		assert "models:read" in principal.permissions
 		assert str(role.id) in principal.role_ids
 
@@ -445,7 +458,7 @@ class TestGetCurrentPrincipal:
 			resource_access=DefaultResourceAccess(
 				thread=AccessLevel.READER,
 			),
-			action_permissions={ActionPermission.AGENTS_READ},
+			action_permissions={ActionPermission.AGENTS_CREATE},
 		)
 		dp2 = DefaultPermissions(
 			resource_access=DefaultResourceAccess(
@@ -478,7 +491,7 @@ class TestGetCurrentPrincipal:
 		# file: only role2 has it
 		assert principal.role_resource_defaults.file == AccessLevel.EDITOR
 		# action perms: union of both
-		assert "agents:read" in principal.permissions
+		assert "agents:create" in principal.permissions
 		assert "models:manage" in principal.permissions
 
 
@@ -858,9 +871,9 @@ class TestRequirePermission:
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
-			global_action_permissions=frozenset({"agents:read"}),
+			global_action_permissions=frozenset({"agents:create"}),
 		)
-		authorization.require_permission(principal, ActionPermission.AGENTS_READ)
+		authorization.require_permission(principal, ActionPermission.AGENTS_CREATE)
 
 	def test_superuser_bypass(self) -> None:
 		user = User(
@@ -875,7 +888,7 @@ class TestRequirePermission:
 			permissions=frozenset(),
 			global_action_permissions=frozenset(),
 		)
-		authorization.require_permission(principal, ActionPermission.SETTINGS_WRITE)
+		authorization.require_permission(principal, ActionPermission.SETTINGS_MANAGE)
 
 
 # ---------------------------------------------------------------------------
@@ -1014,7 +1027,7 @@ class TestRolesService:
 			resource_access=DefaultResourceAccess(
 				thread=AccessLevel.EDITOR,
 			),
-			action_permissions={ActionPermission.AGENTS_READ},
+			action_permissions={ActionPermission.AGENTS_CREATE},
 		)
 		role_in = RoleCreate(
 			name="service-test",
@@ -1026,7 +1039,7 @@ class TestRolesService:
 
 		restored = role.get_default_permissions()
 		assert restored.resource_access.thread == AccessLevel.EDITOR
-		assert ActionPermission.AGENTS_READ in restored.action_permissions
+		assert ActionPermission.AGENTS_CREATE in restored.action_permissions
 
 	@pytest.mark.asyncio
 	async def test_update_role_default_permissions(

@@ -8,7 +8,25 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-def test_list_native_plugins_description_fallbacks(
+class _FakePrincipal:
+	"""minimal principal stub that bypasses permission checks."""
+
+	is_admin = True
+	user = SimpleNamespace(id="admin")
+	user_id = "admin"
+	group_ids: list[str] = []
+	role_ids: tuple[str, ...] = ()
+	role_resource_defaults: dict[str, str] = {}
+	global_action_permissions: frozenset[str] = frozenset()
+
+	def has_permission(self, permission: str) -> bool:
+		return True
+
+
+_admin = _FakePrincipal()
+
+
+def test_list_native_description_fallbacks(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	from api.v1.service import plugins as plugin_service
@@ -49,21 +67,25 @@ def test_list_native_plugins_description_fallbacks(
 		{"hook_1": NoDocHook(), "hook_2": DocHook()},
 	)
 
-	plugins = plugin_service.list_native_plugins()
+	plugins = plugin_service._list_native()
 	assert {p.type for p in plugins} == {"tool", "filter", "hook"}
 
-	filter_info = next(p for p in plugins if p.type == "filter")
+	# tools now also go through _build_native_info
+	tool_info = next(p for p in plugins if p.type == "tool")
+	assert tool_info.description == "tool desc"
+
+	filter_info = next(p for p in plugins if p.id == "filter_1")
 	assert filter_info.description == "first line doc."
 	filter_no_doc = next(p for p in plugins if p.id == "filter_2")
 	assert filter_no_doc.description.endswith(" filter")
 
-	hook_info = next(p for p in plugins if p.type == "hook")
+	hook_info = next(p for p in plugins if p.id == "hook_1")
 	assert hook_info.description.endswith(" hook")
 	hook_doc = next(p for p in plugins if p.id == "hook_2")
 	assert hook_doc.description == "hook doc line."
 
 
-def test_list_native_plugins_type_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_native_type_filter(monkeypatch: pytest.MonkeyPatch) -> None:
 	from api.v1.service import plugins as plugin_service
 
 	monkeypatch.setattr(
@@ -82,12 +104,12 @@ def test_list_native_plugins_type_filter(monkeypatch: pytest.MonkeyPatch) -> Non
 		{"hook_1": SimpleNamespace(name="h", description="hook desc")},
 	)
 
-	assert {p.type for p in plugin_service.list_native_plugins("tool")} == {"tool"}
-	assert {p.type for p in plugin_service.list_native_plugins("filter")} == {"filter"}
-	assert {p.type for p in plugin_service.list_native_plugins("hook")} == {"hook"}
+	assert {p.type for p in plugin_service._list_native("tool")} == {"tool"}
+	assert {p.type for p in plugin_service._list_native("filter")} == {"filter"}
+	assert {p.type for p in plugin_service._list_native("hook")} == {"hook"}
 
 
-def test_get_native_plugin_variants(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_native_variants(monkeypatch: pytest.MonkeyPatch) -> None:
 	from api.v1.service import plugins as plugin_service
 
 	class DocFilter:
@@ -142,44 +164,61 @@ def test_get_native_plugin_variants(monkeypatch: pytest.MonkeyPatch) -> None:
 		},
 	)
 
-	tool_info = plugin_service.get_native_plugin("tool_1")
+	# tools now go through _build_native_info too
+	tool_info = plugin_service._get_native("tool_1")
 	assert tool_info is not None
 	assert tool_info.type == "tool"
+	assert tool_info.description == "tool desc"
 
-	filter_info = plugin_service.get_native_plugin("filter_1")
+	filter_info = plugin_service._get_native("filter_1")
 	assert filter_info is not None
 	assert filter_info.type == "filter"
 	assert filter_info.description == "doc filter."
 
-	filter_no_doc = plugin_service.get_native_plugin("filter_2")
+	filter_no_doc = plugin_service._get_native("filter_2")
 	assert filter_no_doc is not None
 	assert filter_no_doc.type == "filter"
 	assert filter_no_doc.description.endswith(" filter")
 
-	filter_described = plugin_service.get_native_plugin("filter_3")
+	filter_described = plugin_service._get_native("filter_3")
 	assert filter_described is not None
 	assert filter_described.type == "filter"
 	assert filter_described.description == "already described"
 
-	hook_info = plugin_service.get_native_plugin("hook_1")
+	hook_info = plugin_service._get_native("hook_1")
 	assert hook_info is not None
 	assert hook_info.type == "hook"
 	assert hook_info.description == "doc hook."
 
-	hook_no_doc = plugin_service.get_native_plugin("hook_2")
+	hook_no_doc = plugin_service._get_native("hook_2")
 	assert hook_no_doc is not None
 	assert hook_no_doc.type == "hook"
 	assert hook_no_doc.description.endswith(" hook")
 
-	hook_described = plugin_service.get_native_plugin("hook_3")
+	hook_described = plugin_service._get_native("hook_3")
 	assert hook_described is not None
 	assert hook_described.type == "hook"
 	assert hook_described.description == "already described"
-	assert plugin_service.get_native_plugin("missing") is None
+	assert plugin_service._get_native("missing") is None
+
+
+def test_is_native_name_collision(monkeypatch: pytest.MonkeyPatch) -> None:
+	from api.v1.service import plugins as plugin_service
+
+	monkeypatch.setattr(
+		plugin_service,
+		"get_tool_names",
+		lambda: frozenset({"my-tool"}),
+	)
+	monkeypatch.setattr(plugin_service, "get_filter_names", lambda: frozenset())
+	monkeypatch.setattr(plugin_service, "get_hook_names", lambda: frozenset())
+
+	assert plugin_service._is_native_name("my-tool") is True
+	assert plugin_service._is_native_name("other-name") is False
 
 
 @pytest.mark.asyncio
-async def test_list_available_plugins_filters_db_by_type(db_session) -> None:
+async def test_list_plugins_with_native_filters_db_by_type(db_session) -> None:
 	from api.models.plugin import PluginType
 	from api.schemas.plugin import PluginCreate
 	from api.v1.service import plugins as plugin_service
@@ -194,6 +233,7 @@ async def test_list_available_plugins_filters_db_by_type(db_session) -> None:
 			source_code="code",
 		),
 		db_session,
+		principal=_admin,
 	)
 	await plugin_service.create_plugin(
 		PluginCreate(
@@ -205,10 +245,13 @@ async def test_list_available_plugins_filters_db_by_type(db_session) -> None:
 			source_code="code",
 		),
 		db_session,
+		principal=_admin,
 	)
 
-	filtered = await plugin_service.list_available_plugins(
+	filtered = await plugin_service.list_plugins(
 		db_session,
+		principal=_admin,
+		include_native=True,
 		plugin_type="tool",
 	)
 	assert any(p.is_native for p in filtered)
@@ -217,7 +260,7 @@ async def test_list_available_plugins_filters_db_by_type(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_available_plugins_merges_db_plugins(
+async def test_list_plugins_with_native_merges_db_plugins(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -249,9 +292,13 @@ async def test_list_available_plugins_merges_db_plugins(
 	db_session.add(filter_plugin)
 	await db_session.commit()
 
-	all_plugins = await plugin_service.list_available_plugins(db_session)
+	all_plugins = await plugin_service.list_plugins(
+		db_session, principal=_admin, include_native=True
+	)
 	assert any(p.is_native is False and p.name == "db-tool" for p in all_plugins)
 
-	only_tools = await plugin_service.list_available_plugins(db_session, "tool")
+	only_tools = await plugin_service.list_plugins(
+		db_session, principal=_admin, include_native=True, plugin_type="tool"
+	)
 	assert {p.type for p in only_tools} == {"tool"}
 	assert all(p.name == "db-tool" for p in only_tools)

@@ -10,9 +10,12 @@ from fastapi import WebSocket
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from api.v1.service import auth as auth_service
+
 
 # WebSocket tests need Origin header for CSRF protection.
 ALLOWED_ORIGIN = "http://localhost:888"
+REFRESH_COOKIE_NAME = auth_service.REFRESH_COOKIE_NAME
 
 
 class _FakeWebSocket:
@@ -139,7 +142,7 @@ async def test_events_stream_loop_disconnect_and_finally(
 			{"type": "ping"},
 			WebSocketDisconnect(code=1000),
 		],
-		cookies={"refresh_token": "valid"},
+		cookies={REFRESH_COOKIE_NAME: "valid"},
 	)
 
 	await events_router.events_stream(cast(WebSocket, ws))
@@ -206,7 +209,7 @@ async def test_events_stream_exception_path_still_disconnects(
 	)
 	monkeypatch.setattr(events_router.event_service, "event_connections", _Mgr())
 
-	ws = _FakeWebSocket([ValueError("boom")], cookies={"refresh_token": "valid"})
+	ws = _FakeWebSocket([ValueError("boom")], cookies={REFRESH_COOKIE_NAME: "valid"})
 	await events_router.events_stream(cast(WebSocket, ws))
 	assert calls == [("connect", "user_1"), ("disconnect", "user_1")]
 
@@ -248,7 +251,7 @@ async def test_authenticate_websocket_cookie_decode_error_returns_none(
 		raise JoseError("bad token")
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _boom)
-	ws = _FakeWebSocket([], cookies={"refresh_token": "bad"})
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "bad"})
 	assert (
 		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
 	) is None
@@ -264,7 +267,7 @@ async def test_authenticate_websocket_cookie_wrong_type_returns_none(
 		return {"sub": "user_123", "typ": "access"}  # Not a refresh token
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
-	ws = _FakeWebSocket([], cookies={"refresh_token": "access_token"})
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "access_token"})
 	assert (
 		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
 	) is None
@@ -280,7 +283,7 @@ async def test_authenticate_websocket_cookie_missing_sub_returns_none(
 		return {"typ": "refresh", "no_sub": "x"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
-	ws = _FakeWebSocket([], cookies={"refresh_token": "token"})
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "token"})
 	assert (
 		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
 	) is None
@@ -302,7 +305,7 @@ async def test_authenticate_websocket_cookie_user_not_found_returns_none(
 		return {"sub": new_typeid("user"), "typ": "refresh"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
-	ws = _FakeWebSocket([], cookies={"refresh_token": "token"})
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "token"})
 	assert (
 		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
 	) is None
@@ -335,7 +338,7 @@ async def test_authenticate_websocket_cookie_inactive_user_returns_none(
 		return {"sub": str(inactive.id), "typ": "refresh"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
-	ws = _FakeWebSocket([], cookies={"refresh_token": "token"})
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "token"})
 	assert (
 		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
 	) is None
@@ -357,7 +360,7 @@ async def test_authenticate_websocket_cookie_active_user_is_returned(
 		return {"sub": str(test_user["id"]), "typ": "refresh"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
-	ws = _FakeWebSocket([], cookies={"refresh_token": "token"})
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "token"})
 	user = await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
 	assert user is not None
 	assert str(user.id) == str(test_user["id"])

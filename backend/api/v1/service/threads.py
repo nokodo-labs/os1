@@ -22,10 +22,12 @@ from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.sorting import CommonSortBy
 from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.settings.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	require_permission,
 	require_thread_access,
 	thread_access_predicate,
 )
@@ -284,6 +286,7 @@ async def create_thread(
 	*,
 	principal: Principal,
 ) -> Thread:
+	require_permission(principal, "threads:create")
 	owner_id = thread_in.owner_id
 	if not principal.is_admin:
 		owner_id = TypeID(principal.user.id)
@@ -500,7 +503,10 @@ async def delete_thread(
 	owner_id = str(thread.owner_id)
 	thread_title = thread.title
 
-	thread.soft_delete()
+	if settings.soft_delete.threads:
+		thread.soft_delete()
+	else:
+		await session.delete(thread)
 	await session.flush()
 
 	# emit thread.deleted event

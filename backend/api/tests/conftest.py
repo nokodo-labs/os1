@@ -28,6 +28,9 @@ from sqlalchemy.ext.asyncio import (
 	create_async_engine,
 )
 
+from api.permissions import ActionPermission
+from api.settings import settings
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _api_test_env_defaults() -> Generator[None]:
@@ -37,10 +40,21 @@ def _api_test_env_defaults() -> Generator[None]:
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
 	if not os.getenv("NOKODO__ASSETS__QDRANT_URL"):
 		monkeypatch.setenv("NOKODO__ASSETS__QDRANT_URL", ":memory:")
-
-	from api.settings import settings
+	monkeypatch.setenv("NOKODO__SECURITY__AUTO_SIGNUP_ROLE_IDS", "[]")
 
 	settings.reload()
+	settings.security.auto_signup_role_ids = []
+	settings.default_permissions.action_permissions = [
+		ActionPermission.SETTINGS_READ,
+		ActionPermission.THREADS_CREATE,
+		ActionPermission.PROJECTS_CREATE,
+		ActionPermission.NOTES_CREATE,
+		ActionPermission.GROUPS_CREATE,
+		ActionPermission.REMINDERS_CREATE,
+		ActionPermission.MEMORIES_CREATE,
+		ActionPermission.TASKS_CREATE,
+		ActionPermission.FILES_CREATE,
+	]
 	try:
 		yield
 	finally:
@@ -72,7 +86,6 @@ async def _api_test_seed_default_embedding_model(
 	from api.models.user import User
 	from api.schemas.model import ModelCreate
 	from api.schemas.provider import ProviderCreate
-	from api.settings import settings
 	from api.v1.service import models as model_service
 	from api.v1.service import providers as provider_service
 	from api.v1.service.auth import Principal
@@ -108,6 +121,18 @@ async def _api_test_seed_default_embedding_model(
 		str(model.id),
 	)
 	settings.reload()
+	settings.security.auto_signup_role_ids = []
+	settings.default_permissions.action_permissions = [
+		ActionPermission.SETTINGS_READ,
+		ActionPermission.THREADS_CREATE,
+		ActionPermission.PROJECTS_CREATE,
+		ActionPermission.NOTES_CREATE,
+		ActionPermission.GROUPS_CREATE,
+		ActionPermission.REMINDERS_CREATE,
+		ActionPermission.MEMORIES_CREATE,
+		ActionPermission.TASKS_CREATE,
+		ActionPermission.FILES_CREATE,
+	]
 
 
 _CI_TRUE_VALUES = {"1", "true", "yes", "on"}

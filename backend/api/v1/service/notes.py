@@ -6,9 +6,12 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.access_rule import AccessLevel
 from api.models.note import Note
 from api.schemas.note import NoteCreate, NoteUpdate
+from api.settings.settings import settings
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission, require_project_access
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
 
@@ -36,6 +39,14 @@ async def create_note(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Note:
+	require_permission(principal, "notes:create")
+	if note_in.project_id is not None:
+		await require_project_access(
+			note_in.project_id,
+			session,
+			principal,
+			required_level=AccessLevel.EDITOR,
+		)
 	data = note_in.model_dump(by_alias=True)
 	data["user_id"] = data.get("user_id") or principal.user.id
 	if not principal.is_admin:
@@ -105,6 +116,14 @@ async def update_note(
 	note = await _get_note(note_id, session, principal)
 
 	update_data = note_in.model_dump(exclude_unset=True, by_alias=True)
+	new_project_id = update_data.get("project_id")
+	if new_project_id is not None and str(new_project_id) != str(note.project_id or ""):
+		await require_project_access(
+			new_project_id,
+			session,
+			principal,
+			required_level=AccessLevel.EDITOR,
+		)
 	for key, value in update_data.items():
 		setattr(note, key, value)
 
@@ -119,5 +138,8 @@ async def delete_note(
 	principal: Principal,
 ) -> None:
 	note = await _get_note(note_id, session, principal)
-	await session.delete(note)
+	if settings.soft_delete.notes:
+		note.soft_delete()
+	else:
+		await session.delete(note)
 	await session.commit()

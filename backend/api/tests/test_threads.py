@@ -17,9 +17,21 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID, new_typeid
+
+
+def _principal(user: User) -> Principal:
+	return Principal(
+		user=user,
+		group_ids=(),
+		permissions=frozenset(),
+		global_action_permissions=frozenset(
+			settings.default_permissions.action_permissions
+		),
+	)
 
 
 @pytest.mark.asyncio
@@ -259,7 +271,7 @@ async def test_soft_deleted_threads_hidden(
 	assert admin_hidden_list.status_code == 200
 	admin_user = await db_session.get(User, admin_auth["user"]["id"])
 	assert admin_user is not None
-	admin_principal = Principal(user=admin_user, group_ids=(), permissions=frozenset())
+	admin_principal = _principal(admin_user)
 	all_threads = list(
 		(
 			await db_session.scalars(
@@ -463,7 +475,7 @@ async def test_create_thread_invalid_project(
 	}
 	resp = await client.post("/v1/threads", json=thread_payload, headers=headers)
 	assert resp.status_code == 404
-	assert "Projects not found" in resp.json()["detail"]
+	assert "projects not found" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -484,7 +496,7 @@ async def test_service_create_thread(db_session: AsyncSession) -> None:
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 
 	thread_in = ThreadCreate(
 		owner_id=user.id,
@@ -610,7 +622,7 @@ async def test_service_create_thread_missing_owner(db_session: AsyncSession) -> 
 	)
 	db_session.add(admin)
 	await db_session.commit()
-	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	principal = _principal(admin)
 
 	with pytest.raises(HTTPException):
 		await thread_service.create_thread(
@@ -627,7 +639,7 @@ async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
 	db_session.add_all([owner, editor])
 	await db_session.commit()
 
-	owner_principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	owner_principal = _principal(owner)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=owner.id, title="guard"),
 		db_session,
@@ -644,7 +656,7 @@ async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
 	db_session.add(rule)
 	await db_session.commit()
 
-	editor_principal = Principal(user=editor, group_ids=(), permissions=frozenset())
+	editor_principal = _principal(editor)
 	with pytest.raises(HTTPException):
 		await thread_service.update_thread(
 			thread.id,
@@ -664,7 +676,7 @@ async def test_update_thread_new_owner_missing(db_session: AsyncSession) -> None
 	)
 	db_session.add(admin)
 	await db_session.commit()
-	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	principal = _principal(admin)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=admin.id, title="missing-owner"),
 		db_session,
@@ -693,7 +705,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 	db_session.add_all([owner, new_owner])
 	await db_session.commit()
 
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	principal = _principal(owner)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=owner.id, title="handoff"),
 		db_session,
@@ -756,7 +768,7 @@ async def test_create_message_sender_guard(db_session: AsyncSession) -> None:
 	db_session.add_all([owner, other])
 	await db_session.commit()
 
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	principal = _principal(owner)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=owner.id, title="sender-guard"),
 		db_session,
@@ -792,7 +804,7 @@ async def test_get_thread_not_found_service(db_session: AsyncSession) -> None:
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 
 	with pytest.raises(HTTPException) as exc:
 		await thread_service.get_thread("nonexistent", db_session, principal=principal)
@@ -815,7 +827,7 @@ async def test_create_thread_invalid_user_service(db_session: AsyncSession) -> N
 	db_session.add(admin)
 	await db_session.commit()
 	await db_session.refresh(admin)
-	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	admin_principal = _principal(admin)
 
 	thread_in = ThreadCreate(owner_id=new_typeid("user"), title="Test")
 	with pytest.raises(HTTPException) as exc:
@@ -845,7 +857,7 @@ async def test_create_thread_invalid_project_service(
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 
 	thread_in = ThreadCreate(
 		owner_id=user.id,
@@ -875,7 +887,7 @@ async def test_list_threads_filter_owner(
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 
 	thread_in = ThreadCreate(owner_id=user.id, title="Test")
 	await thread_service.create_thread(thread_in, db_session, principal=principal)
@@ -924,7 +936,7 @@ async def test_update_thread_owner_service(
 	await db_session.commit()
 	await db_session.refresh(u1)
 	await db_session.refresh(u2)
-	principal = Principal(user=u1, group_ids=(), permissions=frozenset())
+	principal = _principal(u1)
 
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=u1.id, title="T"),
@@ -959,7 +971,7 @@ async def test_update_thread_fields_service(
 	db_session.add(owner)
 	await db_session.commit()
 	await db_session.refresh(owner)
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	principal = _principal(owner)
 
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=owner.id, title="initial", tags=["t1"]),
@@ -1018,14 +1030,14 @@ async def test_admin_update_owner_and_create_message(
 	await db_session.refresh(new_owner)
 	await db_session.refresh(admin)
 
-	owner_principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	owner_principal = _principal(owner)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=owner.id, title="admin-transfer"),
 		db_session,
 		principal=owner_principal,
 	)
 
-	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	admin_principal = _principal(admin)
 	updated = await thread_service.update_thread(
 		thread.id,
 		ThreadUpdate(owner_id=new_owner.id),
@@ -1061,7 +1073,7 @@ async def test_create_message_types_service(
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=user.id, title="T"),
 		db_session,
@@ -1121,7 +1133,7 @@ async def test_create_message_unknown_type_service(
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=user.id, title="Unknown"),
 		db_session,
@@ -1159,7 +1171,7 @@ async def test_list_messages_service(
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 	thread = await thread_service.create_thread(
 		ThreadCreate(owner_id=user.id, title="T"),
 		db_session,
@@ -1203,7 +1215,7 @@ async def test_list_threads_no_filter(
 
 	user_orm = await db_session.get(UserORM, user["id"])
 	assert user_orm is not None
-	principal = Principal(user=user_orm, group_ids=(), permissions=frozenset())
+	principal = _principal(user_orm)
 
 	thread_in = ThreadCreate(owner_id=user_orm.id, title="Test")
 	await thread_service.create_thread(thread_in, db_session, principal=principal)
@@ -1237,7 +1249,7 @@ async def test_update_thread_projects(
 	db_session.add(user)
 	await db_session.commit()
 	await db_session.refresh(user)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = _principal(user)
 
 	# Create project
 	from api.models.project import Project

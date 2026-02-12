@@ -13,14 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.database import AsyncSessionLocal
+from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
 from api.models.event import Event
 from api.models.message import Message as MessageORM
 from api.models.model import Model
+from api.permissions import ResourceType
 from api.schemas.message import MessageCreate
 from api.schemas.runs import ClientContext
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_resource_access
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import resolve_filters
 from api.v1.service.chat.hooks import resolve_hooks
@@ -227,6 +230,16 @@ async def run_agent(
 	blocked on the database.
 	"""
 	run_id = new_typeid("run")
+
+	# authorize: principal must have READER+ on the agent
+	await require_resource_access(
+		str(agent_id),
+		session,
+		principal,
+		ResourceType.AGENT,
+		required_level=AccessLevel.READER,
+	)
+
 	if input is not None and input.strip():
 		user_msg = await thread_service.create_message(
 			thread_id,

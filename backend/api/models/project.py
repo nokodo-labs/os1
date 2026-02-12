@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
 	from api.models.event import Event
 	from api.models.file import File
+	from api.models.note import Note
+	from api.models.reminder import ReminderList
 	from api.models.thread import Thread
 	from api.models.user import User
 
@@ -55,5 +57,13 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	files: Mapped[list[File]] = relationship(
 		"File",
+		back_populates="project",
+	)
+	notes: Mapped[list[Note]] = relationship(
+		"Note",
+		back_populates="project",
+	)
+	reminder_lists: Mapped[list[ReminderList]] = relationship(
+		"ReminderList",
 		back_populates="project",
 	)

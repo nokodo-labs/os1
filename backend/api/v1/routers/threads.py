@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
-from api.models.access_rule import AccessRule
+from api.models.access_rule import AccessLevel, AccessRule
 from api.models.agent import Agent
 from api.models.event import Event
 from api.models.message import Message
@@ -41,7 +41,10 @@ from api.schemas.thread import (
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import resource_access_predicate
+from api.v1.service.authorization import (
+	require_thread_access,
+	resource_access_predicate,
+)
 from api.v1.service.chat import run_agent as chat_run_agent
 from api.v1.service.chat.models import (
 	build_chat_model,
@@ -313,6 +316,10 @@ async def run_thread(
 	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
 	"""stream a thread run via sse events."""
+	# thread service checks thread access (EDITOR required for runs)
+	await require_thread_access(
+		str(thread_id), db, principal, required_level=AccessLevel.EDITOR
+	)
 	stream = chat_run_agent(
 		thread_id,
 		req.agent_id,

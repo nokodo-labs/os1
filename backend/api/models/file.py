@@ -37,7 +37,6 @@ class FileStatus(StrEnum):
 
 	PENDING = "pending"
 	AVAILABLE = "available"
-	DELETED = "deleted"
 
 
 class File(

@@ -16,6 +16,11 @@ HOOK_REGISTRY: dict[str, AppHook] = {
 }
 
 
+def get_registered_names() -> frozenset[str]:
+	"""return registered hook names."""
+	return frozenset(hook.name for hook in HOOK_REGISTRY.values())
+
+
 def resolve_hooks(hook_ids: list[str]) -> list[AppHook]:
 	"""resolve hook ids to instantiated sdk Hook objects."""
 	hooks: list[AppHook] = []
@@ -30,5 +35,6 @@ def resolve_hooks(hook_ids: list[str]) -> list[AppHook]:
 __all__ = [
 	"Hook",
 	"HOOK_REGISTRY",
+	"get_registered_names",
 	"resolve_hooks",
 ]

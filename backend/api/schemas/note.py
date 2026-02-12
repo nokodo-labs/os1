@@ -16,6 +16,7 @@ class NoteBase(MetadataModel):
 	title: str = Field(max_length=255)
 	content: str = ""
 	labels: list[str] = Field(default_factory=list)
+	project_id: TypeID | None = None
 
 
 class NoteCreate(NoteBase):
@@ -30,6 +31,7 @@ class NoteUpdate(MetadataModel):
 	title: str | None = None
 	content: str | None = None
 	labels: list[str] | None = None
+	project_id: TypeID | None = None
 
 
 class Note(NoteBase, TimestampedModel):

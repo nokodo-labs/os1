@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.task import Task, TaskStatus
 from api.schemas.task import TaskCreate, TaskUpdate
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission
 from api.v1.service.sorting import SortDir, apply_sort
 
 
@@ -38,6 +39,7 @@ async def create_task(
 	*,
 	principal: Principal,
 ) -> Task:
+	require_permission(principal, "tasks:create")
 	data = task_in.model_dump(by_alias=True)
 	if not principal.is_admin:
 		data["user_id"] = principal.user.id

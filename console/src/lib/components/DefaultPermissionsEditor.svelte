@@ -34,6 +34,38 @@
 		items: Array<{ value: ActionPermission; label: string }>
 	}> = [
 		{
+			title: 'resource creation',
+			items: [
+				{ value: 'threads:create', label: 'threads' },
+				{ value: 'projects:create', label: 'projects' },
+				{ value: 'notes:create', label: 'notes' },
+				{ value: 'groups:create', label: 'groups' },
+				{ value: 'reminders:create', label: 'reminders' },
+				{ value: 'memories:create', label: 'memories' },
+				{ value: 'tasks:create', label: 'tasks' },
+				{ value: 'files:create', label: 'files' },
+				{ value: 'agents:create', label: 'agents' },
+			],
+		},
+		{
+			title: 'agents',
+			items: [{ value: 'agents:manage', label: 'manage all agents' }],
+		},
+		{
+			title: 'plugins',
+			items: [
+				{ value: 'plugins:read', label: 'read' },
+				{ value: 'plugins:manage', label: 'manage' },
+			],
+		},
+		{
+			title: 'prompts',
+			items: [
+				{ value: 'prompts:read', label: 'read' },
+				{ value: 'prompts:manage', label: 'manage' },
+			],
+		},
+		{
 			title: 'roles',
 			items: [
 				{ value: 'roles:read', label: 'read' },
@@ -51,7 +83,7 @@
 			title: 'settings',
 			items: [
 				{ value: 'settings:read', label: 'read' },
-				{ value: 'settings:write', label: 'write' },
+				{ value: 'settings:manage', label: 'manage' },
 			],
 		},
 		{
@@ -62,43 +94,13 @@
 			],
 		},
 		{
-			title: 'agents',
+			title: 'models / providers',
 			items: [
-				{ value: 'agents:read', label: 'read' },
-				{ value: 'agents:manage', label: 'manage' },
+				{ value: 'models:read', label: 'read models' },
+				{ value: 'models:manage', label: 'manage models' },
+				{ value: 'providers:read', label: 'read providers' },
+				{ value: 'providers:manage', label: 'manage providers' },
 			],
-		},
-		{
-			title: 'models',
-			items: [
-				{ value: 'models:read', label: 'read' },
-				{ value: 'models:manage', label: 'manage' },
-			],
-		},
-		{
-			title: 'providers',
-			items: [
-				{ value: 'providers:read', label: 'read' },
-				{ value: 'providers:manage', label: 'manage' },
-			],
-		},
-		{
-			title: 'plugins',
-			items: [
-				{ value: 'plugins:read', label: 'read' },
-				{ value: 'plugins:manage', label: 'manage' },
-			],
-		},
-		{
-			title: 'prompts',
-			items: [
-				{ value: 'prompts:read', label: 'read' },
-				{ value: 'prompts:manage', label: 'manage' },
-			],
-		},
-		{
-			title: 'features',
-			items: [{ value: 'files:upload', label: 'file uploads' }],
 		},
 		{
 			title: 'app access',

@@ -60,7 +60,7 @@ async def create_agent(
 	*,
 	principal: Principal,
 ) -> Agent:
-	require_permission(principal, "agents:manage")
+	require_permission(principal, "agents:create")
 	await _ensure_model(agent_in.model_id, session)
 	agent = Agent(**agent_in.model_dump(by_alias=True))
 	session.add(agent)

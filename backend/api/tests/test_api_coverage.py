@@ -42,6 +42,8 @@ class _FakePrincipal:
 		self.global_action_permissions: frozenset[str] = frozenset()
 
 	def has_permission(self, permission: str) -> bool:
+		if self.is_admin:
+			return True
 		return permission == "any"
 
 
@@ -198,13 +200,15 @@ async def test_openai_router_handles_all_roles(monkeypatch):
 @pytest.mark.asyncio
 async def test_prompts_router_delegates(monkeypatch):
 	fake_prompt = SimpleNamespace(id="1", command="/a", content="hi")
+	admin = _FakePrincipal(is_admin=True)
 
-	async def fake_create(prompt_in, db):
+	async def fake_create(prompt_in, db, *, principal):
 		return fake_prompt
 
 	async def fake_list(
 		db,
 		*,
+		principal,
 		skip=0,
 		limit=50,
 		sort_by="command",
@@ -212,13 +216,13 @@ async def test_prompts_router_delegates(monkeypatch):
 	):
 		return [fake_prompt]
 
-	async def fake_get(prompt_id, db):
+	async def fake_get(prompt_id, db, *, principal):
 		return fake_prompt
 
-	async def fake_update(prompt_id, prompt_in, db):
+	async def fake_update(prompt_id, prompt_in, db, *, principal):
 		return fake_prompt
 
-	async def fake_delete(prompt_id, db):
+	async def fake_delete(prompt_id, db, *, principal):
 		fake_delete.called = prompt_id  # type: ignore[attr-defined]
 
 	monkeypatch.setattr(prompts_router.prompt_service, "create_prompt", fake_create)
@@ -227,11 +231,15 @@ async def test_prompts_router_delegates(monkeypatch):
 	monkeypatch.setattr(prompts_router.prompt_service, "update_prompt", fake_update)
 	monkeypatch.setattr(prompts_router.prompt_service, "delete_prompt", fake_delete)
 
-	out_create = await prompts_router.create_prompt(fake_prompt, db=None)
-	out_list = await prompts_router.list_prompts(db=None)
-	out_get = await prompts_router.get_prompt("1", db=None)
-	out_update = await prompts_router.update_prompt("1", fake_prompt, db=None)
-	await prompts_router.delete_prompt("1", db=None)
+	out_create = await prompts_router.create_prompt(
+		fake_prompt, principal=admin, db=None
+	)
+	out_list = await prompts_router.list_prompts(principal=admin, db=None)
+	out_get = await prompts_router.get_prompt("1", principal=admin, db=None)
+	out_update = await prompts_router.update_prompt(
+		"1", fake_prompt, principal=admin, db=None
+	)
+	await prompts_router.delete_prompt("1", principal=admin, db=None)
 
 	assert out_create is fake_prompt
 	assert out_list == [fake_prompt]
@@ -318,6 +326,12 @@ async def test_threads_router_delegates(monkeypatch):
 
 	monkeypatch.setattr(threads_router, "chat_run_agent", _chat_run_agent)
 
+	# patch require_thread_access (run_thread calls this before chat)
+	async def _no_op_access(*_args, **_kwargs):
+		pass
+
+	monkeypatch.setattr(threads_router, "require_thread_access", _no_op_access)
+
 	created = await threads_router.create_thread(
 		SimpleNamespace(owner_id="u"),
 		principal=principal,
@@ -346,6 +360,8 @@ async def test_threads_router_delegates(monkeypatch):
 			agent_id=new_typeid("agent"),
 			stream=True,
 			input=None,
+			parent_id=None,
+			client_context=None,
 		),
 		principal=principal,
 		db=None,
@@ -486,7 +502,9 @@ async def test_prompts_service_validation_paths(monkeypatch):
 	prompt_obj = SimpleNamespace(id="3", command="/ok", content="fine")
 	session_get = _FakeSession(prompt_obj)
 	prompt_in = prompt_service.PromptUpdate()
-	result = await prompt_service.update_prompt("3", prompt_in, session_get)
+	result = await prompt_service.update_prompt(
+		"3", prompt_in, session_get, principal=_FakePrincipal(is_admin=True)
+	)
 	assert result is prompt_obj
 
 
@@ -515,14 +533,15 @@ async def test_prompts_service_list_and_get(monkeypatch):
 	session.execute = exec_prompts  # type: ignore[assignment]
 	session.get = lambda *_args, **_kwargs: prompt_obj  # type: ignore[assignment]
 
-	listed = await prompt_service.list_prompts(session)
+	admin = _FakePrincipal(is_admin=True)
+	listed = await prompt_service.list_prompts(session, principal=admin)
 	assert listed == [prompt_obj]
 
 	async def fake_get_prompt(pid, s):
 		return prompt_obj
 
 	monkeypatch.setattr(prompt_service, "_get_prompt", fake_get_prompt)
-	fetched = await prompt_service.get_prompt("1", session)
+	fetched = await prompt_service.get_prompt("1", session, principal=admin)
 	assert fetched is prompt_obj
 
 
@@ -547,14 +566,18 @@ async def test_prompts_service_update_and_delete(monkeypatch):
 
 	session = _FakeSession()
 
+	admin = _FakePrincipal(is_admin=True)
 	updated = await prompt_service.update_prompt(
-		"1", prompt_service.PromptUpdate(command="/new", content="updated"), session
+		"1",
+		prompt_service.PromptUpdate(command="/new", content="updated"),
+		session,
+		principal=admin,
 	)
 	assert updated.command == "/new"
 	assert calls["unique"] == ("/new", "1")
 	assert calls["validated"] == ("1", "/new", "updated")
 
-	await prompt_service.delete_prompt("1", session)
+	await prompt_service.delete_prompt("1", session, principal=admin)
 	assert session.deleted == [prompt_obj]
 
 

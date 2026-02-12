@@ -8,19 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.prompt import Prompt
 from api.schemas.prompt import PromptCreate, PromptUpdate
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission
 from api.v1.service.prompt_runtime import (
 	PromptValidationError,
 	http_error_from_validation,
 	validate_prompt_content,
 )
 from api.v1.service.sorting import SortDir, apply_sort
+from nokodo_ai.utils.typeid import TypeID
 
 
 async def _ensure_unique_command(
 	session: AsyncSession,
 	*,
 	command: str,
-	exclude_prompt_id: str | None = None,
+	exclude_prompt_id: TypeID | None = None,
 ) -> None:
 	stmt = select(Prompt).where(Prompt.command == command)
 	if exclude_prompt_id is not None:
@@ -37,7 +40,7 @@ async def _ensure_unique_command(
 async def _validate_prompt_template(
 	session: AsyncSession,
 	*,
-	prompt_id: str | None,
+	prompt_id: TypeID | None,
 	command: str,
 	content: str,
 ) -> None:
@@ -54,7 +57,7 @@ async def _validate_prompt_template(
 		raise http_error_from_validation(err) from err
 
 
-async def _get_prompt(prompt_id: str, session: AsyncSession) -> Prompt:
+async def _get_prompt(prompt_id: TypeID, session: AsyncSession) -> Prompt:
 	prompt = await session.get(Prompt, prompt_id)
 	if not prompt:
 		raise HTTPException(
@@ -64,7 +67,13 @@ async def _get_prompt(prompt_id: str, session: AsyncSession) -> Prompt:
 	return prompt
 
 
-async def create_prompt(prompt_in: PromptCreate, session: AsyncSession) -> Prompt:
+async def create_prompt(
+	prompt_in: PromptCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Prompt:
+	require_permission(principal, "prompts:manage")
 	data = prompt_in.model_dump(by_alias=True)
 	await _ensure_unique_command(session, command=data["command"])
 	await _validate_prompt_template(
@@ -83,11 +92,14 @@ async def create_prompt(prompt_in: PromptCreate, session: AsyncSession) -> Promp
 
 async def list_prompts(
 	session: AsyncSession,
+	*,
+	principal: Principal,
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: str = "command",
 	sort_dir: SortDir = "asc",
 ) -> list[Prompt]:
+	require_permission(principal, "prompts:read")
 	stmt = (
 		apply_sort(
 			select(Prompt),
@@ -107,15 +119,24 @@ async def list_prompts(
 	return list(result.scalars().all())
 
 
-async def get_prompt(prompt_id: str, session: AsyncSession) -> Prompt:
+async def get_prompt(
+	prompt_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Prompt:
+	require_permission(principal, "prompts:read")
 	return await _get_prompt(prompt_id, session)
 
 
 async def update_prompt(
-	prompt_id: str,
+	prompt_id: TypeID,
 	prompt_in: PromptUpdate,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Prompt:
+	require_permission(principal, "prompts:manage")
 	prompt = await _get_prompt(prompt_id, session)
 	updates = prompt_in.model_dump(exclude_unset=True, by_alias=True)
 	if not updates:
@@ -147,7 +168,13 @@ async def update_prompt(
 	return prompt
 
 
-async def delete_prompt(prompt_id: str, session: AsyncSession) -> None:
+async def delete_prompt(
+	prompt_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	require_permission(principal, "prompts:manage")
 	prompt = await _get_prompt(prompt_id, session)
 	await session.delete(prompt)
 	await session.commit()

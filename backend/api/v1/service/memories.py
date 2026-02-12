@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate, MemoryUpdate
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission
 from api.v1.service.embeddings import (
 	build_embedding_model,
 	resolve_embedding_model,
@@ -54,6 +55,7 @@ async def create_memory(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Memory:
+	require_permission(principal, "memories:create")
 	data = memory_in.model_dump(by_alias=True)
 	if not principal.is_admin:
 		data["user_id"] = principal.user.id

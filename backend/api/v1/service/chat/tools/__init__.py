@@ -29,6 +29,11 @@ for tool in _TOOLS:
 	TOOL_REGISTRY[tool.name] = tool
 
 
+def get_registered_names() -> frozenset[str]:
+	"""return registered tool names."""
+	return frozenset(tool.name for tool in TOOL_REGISTRY.values())
+
+
 async def resolve_tools(
 	tool_ids: list[str],
 	*,
@@ -59,5 +64,6 @@ __all__ = [
 	"SendNotificationTool",
 	"ThinkingTool",
 	"TOOL_REGISTRY",
+	"get_registered_names",
 	"resolve_tools",
 ]

@@ -3,13 +3,30 @@
 enums and the DefaultPermissions model live here so both
 ``api.models`` and ``api.settings`` can import them without
 introducing a cross-layer dependency.
+
+design rules:
+- resources with an access-rule system do NOT get read action
+  permissions. reading/managing existing objects is governed by
+  access rules (READER / EDITOR / ADMIN levels).
+- creating NEW objects of a resource type that has access rules
+  requires a ``{domain}:create`` action permission, because no
+  resource exists yet to attach rules to.
+- ``{domain}:manage`` is an admin-override that bypasses access
+  rules for update/delete of all instances.
+- resources WITHOUT access rules only need ``{domain}:read`` and
+  ``{domain}:manage``. manage includes creation, so no separate
+  create permission is needed.
 """
 
 from __future__ import annotations
 
+import logging
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+logger = logging.getLogger(__name__)
 
 
 class AccessLevel(StrEnum):
@@ -31,7 +48,7 @@ class ActionPermission(StrEnum):
 
 	# role management
 	ROLES_READ = "roles:read"
-	ROLES_ADMIN = "roles:manage"
+	ROLES_MANAGE = "roles:manage"
 
 	# user management
 	USERS_READ = "users:read"
@@ -39,32 +56,37 @@ class ActionPermission(StrEnum):
 
 	# settings
 	SETTINGS_READ = "settings:read"
-	SETTINGS_WRITE = "settings:write"
+	SETTINGS_MANAGE = "settings:manage"
 
 	# events
 	EVENTS_READ = "events:read"
 	EVENTS_MANAGE = "events:manage"
 
-	# agents
-	AGENTS_READ = "agents:read"
+	# resource creation (for types governed by access rules)
+	THREADS_CREATE = "threads:create"
+	PROJECTS_CREATE = "projects:create"
+	NOTES_CREATE = "notes:create"
+	GROUPS_CREATE = "groups:create"
+	REMINDERS_CREATE = "reminders:create"
+	MEMORIES_CREATE = "memories:create"
+	TASKS_CREATE = "tasks:create"
+	AGENTS_CREATE = "agents:create"
+	FILES_CREATE = "files:create"
+
+	# resource admin-override (bypass access rules)
 	AGENTS_MANAGE = "agents:manage"
 
-	# models / providers
+	# admin-managed resources (no access rules, manage includes create)
+	PLUGINS_READ = "plugins:read"
+	PLUGINS_MANAGE = "plugins:manage"
+	PROMPTS_READ = "prompts:read"
+	PROMPTS_MANAGE = "prompts:manage"
+
+	# models / providers (admin-only, no access rules)
 	MODELS_READ = "models:read"
 	MODELS_MANAGE = "models:manage"
 	PROVIDERS_READ = "providers:read"
 	PROVIDERS_MANAGE = "providers:manage"
-
-	# plugins
-	PLUGINS_READ = "plugins:read"
-	PLUGINS_MANAGE = "plugins:manage"
-
-	# prompts
-	PROMPTS_READ = "prompts:read"
-	PROMPTS_MANAGE = "prompts:manage"
-
-	# features
-	FILES_UPLOAD = "files:upload"
 
 	# app access
 	FRONTEND_ACCESS = "frontend:access"
@@ -155,9 +177,9 @@ class DefaultResourceAccess(BaseModel):
 	def get(self, resource_type: ResourceType) -> AccessLevel | None:
 		"""look up the access level for a resource type."""
 		field_name = resource_type.value
-		if field_name not in self.model_fields:
+		if field_name not in type(self).model_fields:
 			return None
-		return getattr(self, field_name)
+		return self.__dict__.get(field_name)
 
 	def merge(self, other: DefaultResourceAccess) -> DefaultResourceAccess:
 		"""merge two access models, keeping the higher level for each."""
@@ -167,6 +189,25 @@ class DefaultResourceAccess(BaseModel):
 				for rt in DEFAULT_ACCESS_RESOURCE_TYPES
 			}
 		)
+
+
+def strip_unknown_action_permissions(v: object) -> object:
+	"""silently discard permission values that no longer exist.
+
+	use as the body of a pydantic ``field_validator(mode="before")``
+	on any field typed as ``set[ActionPermission]`` or
+	``list[ActionPermission]``.
+
+	this prevents deserialization failures when stored data contains
+	permissions that were renamed or removed.
+	"""
+	if isinstance(v, (list, set, frozenset)):
+		known = {p.value for p in ActionPermission}
+		dropped = {x for x in v if isinstance(x, str) and x not in known}
+		if dropped:
+			logger.debug("ignoring unknown action permissions: %s", dropped)
+		return {x for x in v if isinstance(x, str) and x in known}
+	return v
 
 
 class DefaultPermissions(BaseModel):
@@ -185,3 +226,8 @@ class DefaultPermissions(BaseModel):
 	action_permissions: set[ActionPermission] = Field(
 		default_factory=set,
 	)
+
+	@field_validator("action_permissions", mode="before")
+	@classmethod
+	def _strip_unknown(cls, v: object) -> object:
+		return strip_unknown_action_permissions(v)

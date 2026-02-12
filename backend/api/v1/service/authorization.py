@@ -24,6 +24,7 @@ from api.models.task import Task
 from api.models.thread import Thread
 from api.permissions import ResourceType
 from api.v1.service.auth import Principal
+from nokodo_ai.utils.typeid import TypeID
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,7 +422,7 @@ async def require_thread_access(
 
 
 async def require_project_access(
-	project_id: str,
+	project_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	*,

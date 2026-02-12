@@ -25,7 +25,7 @@
 
 	// storage format: markdown (in notes store)
 	// normal mode: tiptap rich text editor (stores markdown via turndown)
-	// raw mode: textarea showing raw markdown source
+	// markdown mode: textarea showing raw markdown source
 
 	interface Props {
 		noteId: string
@@ -143,7 +143,7 @@
 
 	function undo(): void {
 		if (isRawMode) {
-			// raw mode doesn't have undo support for now
+			// markdown mode doesn't have undo support for now
 			return
 		}
 		richEditor?.undo()
@@ -151,7 +151,7 @@
 
 	function redo(): void {
 		if (isRawMode) {
-			// raw mode doesn't have redo support for now
+			// markdown mode doesn't have redo support for now
 			return
 		}
 		richEditor?.redo()
@@ -181,7 +181,7 @@
 		console.log('show properties for:', noteId)
 	}
 
-	// keyboard shortcuts for raw mode
+	// keyboard shortcuts for markdown mode
 	function handleRawKeyDown(event: KeyboardEvent): void {
 		const isMod = event.metaKey || event.ctrlKey
 		if (isMod && event.key === 'z' && !event.shiftKey) {
@@ -252,7 +252,7 @@
 						>
 							<Code class="h-4 w-4" />
 						</span>
-						<span class="flex-1 truncate">raw mode</span>
+						<span class="flex-1 truncate">markdown mode</span>
 						<Switch checked={isRawMode} />
 					</button>
 					<div class="my-1 h-px w-full bg-white/10"></div>

@@ -16,6 +16,11 @@ FILTER_REGISTRY: dict[str, AppFilter] = {
 }
 
 
+def get_registered_names() -> frozenset[str]:
+	"""return registered filter names."""
+	return frozenset(filter_.name for filter_ in FILTER_REGISTRY.values())
+
+
 def resolve_filters(filter_ids: list[str]) -> list[AppFilter]:
 	"""resolve filter ids to instantiated sdk Filter objects."""
 	filters: list[AppFilter] = []
@@ -31,5 +36,6 @@ __all__ = [
 	"Filter",
 	"MemoryContextFilter",
 	"FILTER_REGISTRY",
+	"get_registered_names",
 	"resolve_filters",
 ]

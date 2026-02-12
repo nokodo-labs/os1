@@ -13,6 +13,7 @@ from api.permissions import ResourceType
 from api.schemas.group import GroupCreate, GroupMembershipCreate, GroupUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	require_permission,
 	require_resource_access,
 	resource_access_predicate,
 )
@@ -95,6 +96,7 @@ async def create_group(
 	principal: Principal,
 ) -> Group:
 	"""create a new group. the creator becomes the owner."""
+	require_permission(principal, "groups:create")
 	group = Group(
 		name=group_in.name,
 		description=group_in.description,

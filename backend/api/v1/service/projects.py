@@ -1,16 +1,40 @@
-"""project service helpers."""
+"""service layer for project operations."""
 
 from __future__ import annotations
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
 from api.models.project import Project
+from api.permissions import ResourceType
+from api.schemas.project import ProjectCreate, ProjectUpdate
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import project_access_predicate
+from api.v1.service.authorization import (
+	require_permission,
+	require_resource_access,
+	resource_access_predicate,
+)
+from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
+
+
+async def _get_project(project_id: TypeID, session: AsyncSession) -> Project:
+	"""fetch a project by id (no access check)."""
+	result = await session.execute(
+		select(Project)
+		.where(Project.id == project_id)
+		.options(selectinload(Project.threads))
+	)
+	project = result.scalars().one_or_none()
+	if not project:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="project not found",
+		)
+	return project
 
 
 async def load_projects(
@@ -24,10 +48,12 @@ async def load_projects(
 	if not project_ids:
 		return []
 
-	stmt = select(Project).where(Project.id.in_(project_ids))
-	stmt = stmt.where(
-		project_access_predicate(principal, required_level=required_level)
+	predicate = resource_access_predicate(
+		principal,
+		ResourceType.PROJECT,
+		required_level=required_level,
 	)
+	stmt = select(Project).where(Project.id.in_(project_ids), predicate)
 	result = await session.scalars(stmt)
 	projects = list(result.all())
 	found = {project.id for project in projects}
@@ -35,6 +61,118 @@ async def load_projects(
 	if missing:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
-			detail=f"Projects not found: {missing}",
+			detail=f"projects not found: {missing}",
 		)
 	return projects
+
+
+async def create_project(
+	project_in: ProjectCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Project:
+	"""create a new project. the caller becomes the owner."""
+	require_permission(principal, "projects:create")
+	data = project_in.model_dump(by_alias=True)
+	data["owner_id"] = principal.user_id
+	project = Project(**data)
+	session.add(project)
+	await session.commit()
+	await session.refresh(project)
+	return await _get_project(TypeID(project.id), session)
+
+
+async def list_projects(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	skip: int = 0,
+	limit: int = 50,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
+) -> list[Project]:
+	"""list projects accessible by the principal."""
+	predicate = resource_access_predicate(
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.READER,
+	)
+	stmt = apply_sort(
+		select(Project).where(predicate).options(selectinload(Project.threads)),
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"created_at": Project.created_at,
+			"updated_at": Project.updated_at,
+			"name": Project.name,
+		},
+		tie_breaker=Project.id,
+	)
+	result = await session.execute(stmt.offset(skip).limit(limit))
+	return list(result.scalars().unique().all())
+
+
+async def get_project(
+	project_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Project:
+	"""get a project by id (requires reader access)."""
+	await require_resource_access(
+		str(project_id),
+		session,
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.READER,
+	)
+	return await _get_project(project_id, session)
+
+
+async def update_project(
+	project_id: TypeID,
+	project_in: ProjectUpdate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Project:
+	"""update a project (requires editor access)."""
+	await require_resource_access(
+		str(project_id),
+		session,
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.EDITOR,
+	)
+	project = await _get_project(project_id, session)
+	updates = project_in.model_dump(exclude_unset=True, by_alias=True)
+	for field, value in updates.items():
+		setattr(project, field, value)
+	await session.commit()
+	await session.refresh(project)
+	return await _get_project(TypeID(project.id), session)
+
+
+async def delete_project(
+	project_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	"""delete a project (requires editor access + ownership or admin)."""
+	await require_resource_access(
+		str(project_id),
+		session,
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.EDITOR,
+	)
+	project = await _get_project(project_id, session)
+	if not principal.is_admin and project.owner_id != principal.user_id:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	await session.delete(project)
+	await session.commit()

@@ -1,24 +1,105 @@
-"""Service layer for plugin operations (admin-only)."""
+"""service layer for plugin operations."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, overload
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.plugin import Plugin
-from api.schemas.plugin import PluginCreate, PluginInfo, PluginUpdate
-from api.v1.service.chat.filters import FILTER_REGISTRY
-from api.v1.service.chat.hooks import HOOK_REGISTRY
-from api.v1.service.chat.tools import TOOL_REGISTRY
+from api.schemas.plugin import PluginCreate, PluginInfo, PluginTypeStr, PluginUpdate
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission
+from api.v1.service.chat.filters import (
+	FILTER_REGISTRY,
+)
+from api.v1.service.chat.filters import (
+	get_registered_names as get_filter_names,
+)
+from api.v1.service.chat.hooks import (
+	HOOK_REGISTRY,
+)
+from api.v1.service.chat.hooks import (
+	get_registered_names as get_hook_names,
+)
+from api.v1.service.chat.tools import (
+	TOOL_REGISTRY,
+)
+from api.v1.service.chat.tools import (
+	get_registered_names as get_tool_names,
+)
+from nokodo_ai.utils.typeid import TypeID
 
 
 PluginTypeFilter = Literal["tool", "filter", "hook"] | None
 
 
-async def _get_plugin(plugin_id: str, session: AsyncSession) -> Plugin:
+# ---------------------------------------------------------------------------
+# internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_native_info(
+	plugin_id: str,
+	obj: object,
+	plugin_type: PluginTypeStr,
+) -> PluginInfo:
+	"""build a PluginInfo from a native registry entry."""
+	name: str = getattr(obj, "name", plugin_id)
+	description: str = getattr(obj, "description", "") or ""
+	if not description:
+		doc = getattr(obj, "__doc__", None)
+		if doc:
+			description = doc.strip().split("\n")[0]
+		else:
+			description = f"{obj.__class__.__name__} {plugin_type}"
+	return PluginInfo(
+		id=plugin_id,
+		name=name,
+		description=description,
+		type=plugin_type,
+		is_native=True,
+	)
+
+
+def _list_native(plugin_type: PluginTypeFilter = None) -> list[PluginInfo]:
+	"""list native (built-in) plugins, optionally filtered by type."""
+	plugins: list[PluginInfo] = []
+	if plugin_type is None or plugin_type == "tool":
+		for tid, tool in TOOL_REGISTRY.items():
+			plugins.append(_build_native_info(tid, tool, "tool"))
+	if plugin_type is None or plugin_type == "filter":
+		for fid, fobj in FILTER_REGISTRY.items():
+			plugins.append(_build_native_info(fid, fobj, "filter"))
+	if plugin_type is None or plugin_type == "hook":
+		for hid, hobj in HOOK_REGISTRY.items():
+			plugins.append(_build_native_info(hid, hobj, "hook"))
+	return plugins
+
+
+def _get_native(plugin_id: str) -> PluginInfo | None:
+	"""look up a single native plugin by id."""
+	if plugin_id in TOOL_REGISTRY:
+		return _build_native_info(plugin_id, TOOL_REGISTRY[plugin_id], "tool")
+	if plugin_id in FILTER_REGISTRY:
+		return _build_native_info(plugin_id, FILTER_REGISTRY[plugin_id], "filter")
+	if plugin_id in HOOK_REGISTRY:
+		return _build_native_info(plugin_id, HOOK_REGISTRY[plugin_id], "hook")
+	return None
+
+
+def _is_native_name(name: str) -> bool:
+	"""check if a name collides with any native plugin name."""
+	return (
+		name in get_tool_names()
+		or name in get_filter_names()
+		or name in get_hook_names()
+	)
+
+
+async def _get_db_plugin(plugin_id: TypeID, session: AsyncSession) -> Plugin:
 	plugin = await session.get(Plugin, plugin_id)
 	if not plugin:
 		raise HTTPException(
@@ -28,12 +109,28 @@ async def _get_plugin(plugin_id: str, session: AsyncSession) -> Plugin:
 	return plugin
 
 
+def _db_plugin_to_info(plugin: Plugin) -> PluginInfo:
+	"""convert a db Plugin ORM object to a PluginInfo response."""
+	return PluginInfo(
+		id=str(plugin.id),
+		name=plugin.name,
+		description=plugin.description or "",
+		type=plugin.type.value,
+		is_native=False,
+	)
+
+
 async def _ensure_name_available(
 	name: str,
 	session: AsyncSession,
 	*,
-	exclude_id: str | None = None,
+	exclude_id: TypeID | None = None,
 ) -> None:
+	if _is_native_name(name):
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail="plugin name conflicts with a native plugin",
+		)
 	stmt = select(Plugin.id).where(Plugin.name == name)
 	if exclude_id is not None:
 		stmt = stmt.where(Plugin.id != exclude_id)
@@ -44,7 +141,18 @@ async def _ensure_name_available(
 		)
 
 
-async def create_plugin(plugin_in: PluginCreate, session: AsyncSession) -> Plugin:
+# ---------------------------------------------------------------------------
+# public API
+# ---------------------------------------------------------------------------
+
+
+async def create_plugin(
+	plugin_in: PluginCreate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> Plugin:
+	require_permission(principal, "plugins:manage")
 	await _ensure_name_available(plugin_in.name, session)
 
 	plugin = Plugin(
@@ -59,25 +167,127 @@ async def create_plugin(plugin_in: PluginCreate, session: AsyncSession) -> Plugi
 
 	session.add(plugin)
 	await session.commit()
-	return await _get_plugin(str(plugin.id), session)
+	await session.refresh(plugin)
+	return plugin
 
 
-async def list_plugins(session: AsyncSession) -> list[Plugin]:
+@overload
+async def list_plugins(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_native: Literal[False] = ...,
+	plugin_type: PluginTypeFilter = ...,
+	skip: int = ...,
+	limit: int = ...,
+) -> list[Plugin]: ...
+
+
+@overload
+async def list_plugins(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_native: Literal[True],
+	plugin_type: PluginTypeFilter = ...,
+	skip: int = ...,
+	limit: int = ...,
+) -> list[PluginInfo]: ...
+
+
+async def list_plugins(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_native: bool = False,
+	plugin_type: PluginTypeFilter = None,
+	skip: int = 0,
+	limit: int = 50,
+) -> list[Plugin] | list[PluginInfo]:
+	"""list plugins.
+
+	when include_native is False, returns only database Plugin ORM objects.
+	when include_native is True, returns a merged list of PluginInfo (native + db).
+	"""
+	require_permission(principal, "plugins:read")
+
+	if not include_native:
+		stmt = select(Plugin).order_by(Plugin.created_at.desc())
+		if plugin_type is not None:
+			stmt = stmt.where(Plugin.type == plugin_type)
+		result = await session.execute(stmt.offset(skip).limit(limit))
+		return list(result.scalars().all())
+
+	# merged mode: native + database as PluginInfo
+	plugins: list[PluginInfo] = _list_native(plugin_type)
+
 	stmt = select(Plugin).order_by(Plugin.created_at.desc())
+	if plugin_type is not None:
+		stmt = stmt.where(Plugin.type == plugin_type)
 	result = await session.execute(stmt)
-	return list(result.scalars().all())
+
+	for db_plugin in result.scalars().all():
+		plugins.append(_db_plugin_to_info(db_plugin))
+
+	plugins.sort(key=lambda p: p.name)
+	return plugins[skip : skip + limit]
 
 
-async def get_plugin(plugin_id: str, session: AsyncSession) -> Plugin:
-	return await _get_plugin(plugin_id, session)
+@overload
+async def get_plugin(
+	plugin_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_native: Literal[False] = ...,
+) -> Plugin: ...
+
+
+@overload
+async def get_plugin(
+	plugin_id: TypeID | str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_native: Literal[True],
+) -> PluginInfo: ...
+
+
+async def get_plugin(
+	plugin_id: TypeID | str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	include_native: bool = False,
+) -> Plugin | PluginInfo:
+	"""get a single plugin.
+
+	when include_native is True, checks native registry first and returns
+	PluginInfo. falls back to the database and wraps the result as PluginInfo.
+	when include_native is False, looks up only database plugins and returns
+	the Plugin ORM object.
+	"""
+	require_permission(principal, "plugins:read")
+
+	if include_native:
+		native = _get_native(str(plugin_id))
+		if native:
+			return native
+		db_plugin = await _get_db_plugin(TypeID(plugin_id), session)
+		return _db_plugin_to_info(db_plugin)
+
+	return await _get_db_plugin(TypeID(plugin_id), session)
 
 
 async def update_plugin(
-	plugin_id: str,
+	plugin_id: TypeID,
 	plugin_in: PluginUpdate,
 	session: AsyncSession,
+	*,
+	principal: Principal,
 ) -> Plugin:
-	plugin = await _get_plugin(plugin_id, session)
+	require_permission(principal, "plugins:manage")
+	plugin = await _get_db_plugin(plugin_id, session)
 
 	update_data = plugin_in.model_dump(exclude_unset=True)
 	if "metadata" in update_data:
@@ -87,175 +297,24 @@ async def update_plugin(
 		await _ensure_name_available(
 			plugin_in.name,
 			session,
-			exclude_id=str(plugin.id),
+			exclude_id=plugin_id,
 		)
 
 	for field, value in update_data.items():
 		setattr(plugin, field, value)
 
-	session.add(plugin)
 	await session.commit()
-	# ensure server-side updated columns (e.g., updated_at) are loaded
 	await session.refresh(plugin)
-	return await _get_plugin(str(plugin.id), session)
+	return plugin
 
 
-async def delete_plugin(plugin_id: str, session: AsyncSession) -> None:
-	plugin = await _get_plugin(plugin_id, session)
+async def delete_plugin(
+	plugin_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> None:
+	require_permission(principal, "plugins:manage")
+	plugin = await _get_db_plugin(plugin_id, session)
 	await session.delete(plugin)
 	await session.commit()
-
-
-def list_native_plugins(plugin_type: PluginTypeFilter = None) -> list[PluginInfo]:
-	"""list all available native (built-in) plugins.
-
-	args:
-		plugin_type: optional filter by type ('tool', 'filter', 'hook')
-
-	returns:
-		list of native plugins, optionally filtered by type
-	"""
-	plugins: list[PluginInfo] = []
-
-	# add tools
-	if plugin_type is None or plugin_type == "tool":
-		for tool_id, tool in TOOL_REGISTRY.items():
-			plugins.append(
-				PluginInfo(
-					id=tool_id,
-					name=tool.name,
-					description=tool.description,
-					type="tool",
-					is_native=True,
-				)
-			)
-
-	# add filters
-	if plugin_type is None or plugin_type == "filter":
-		for filter_id, filter_instance in FILTER_REGISTRY.items():
-			description = filter_instance.description
-			if not description:
-				if filter_instance.__doc__:
-					description = filter_instance.__doc__.strip().split("\n")[0]
-				else:
-					description = f"{filter_instance.__class__.__name__} filter"
-
-			plugins.append(
-				PluginInfo(
-					id=filter_id,
-					name=filter_instance.name,
-					description=description,
-					type="filter",
-					is_native=True,
-				)
-			)
-
-	# add hooks
-	if plugin_type is None or plugin_type == "hook":
-		for hook_id, hook_instance in HOOK_REGISTRY.items():
-			description = hook_instance.description
-			if not description:
-				if hook_instance.__doc__:
-					description = hook_instance.__doc__.strip().split("\n")[0]
-				else:
-					description = f"{hook_instance.__class__.__name__} hook"
-
-			plugins.append(
-				PluginInfo(
-					id=hook_id,
-					name=hook_instance.name,
-					description=description,
-					type="hook",
-					is_native=True,
-				)
-			)
-
-	return plugins
-
-
-def get_native_plugin(plugin_id: str) -> PluginInfo | None:
-	"""get a single native plugin by id."""
-	# check tools
-	if plugin_id in TOOL_REGISTRY:
-		tool = TOOL_REGISTRY[plugin_id]
-		return PluginInfo(
-			id=plugin_id,
-			name=tool.name,
-			description=tool.description,
-			type="tool",
-			is_native=True,
-		)
-
-	# check filters
-	if plugin_id in FILTER_REGISTRY:
-		filter_instance = FILTER_REGISTRY[plugin_id]
-		description = filter_instance.description
-		if not description:
-			if filter_instance.__doc__:
-				description = filter_instance.__doc__.strip().split("\n")[0]
-			else:
-				description = f"{filter_instance.__class__.__name__} filter"
-
-		return PluginInfo(
-			id=plugin_id,
-			name=filter_instance.name,
-			description=description,
-			type="filter",
-			is_native=True,
-		)
-
-	# check hooks
-	if plugin_id in HOOK_REGISTRY:
-		hook_instance = HOOK_REGISTRY[plugin_id]
-		description = hook_instance.description
-		if not description:
-			if hook_instance.__doc__:
-				description = hook_instance.__doc__.strip().split("\n")[0]
-			else:
-				description = f"{hook_instance.__class__.__name__} hook"
-
-		return PluginInfo(
-			id=plugin_id,
-			name=hook_instance.name,
-			description=description,
-			type="hook",
-			is_native=True,
-		)
-
-	return None
-
-
-async def list_available_plugins(
-	session: AsyncSession,
-	plugin_type: PluginTypeFilter = None,
-) -> list[PluginInfo]:
-	"""list all available plugins (both native and user-defined).
-
-	args:
-		session: database session
-		plugin_type: optional filter by type ('tool', 'filter', 'hook')
-
-	returns:
-		combined list of native plugins + database plugins
-	"""
-	# get native plugins
-	plugins = list_native_plugins(plugin_type)
-
-	# get database plugins
-	stmt = select(Plugin).order_by(Plugin.created_at.desc())
-	if plugin_type is not None:
-		stmt = stmt.where(Plugin.type == plugin_type)
-	result = await session.execute(stmt)
-
-	for db_plugin in result.scalars().all():
-		plugins.append(
-			PluginInfo(
-				id=str(db_plugin.id),
-				name=db_plugin.name,
-				description=db_plugin.description or "",
-				type=db_plugin.type.value,
-				is_native=False,
-			)
-		)
-
-	return plugins

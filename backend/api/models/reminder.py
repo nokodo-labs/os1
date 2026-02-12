@@ -19,6 +19,7 @@ from api.models.mixins import (
 
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
+	from api.models.project import Project
 	from api.models.thread import Thread
 	from api.models.user import User
 
@@ -45,8 +46,17 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 	color: Mapped[str | None] = mapped_column(String(7))  # hex color e.g. #FF5733
 	icon: Mapped[str | None] = mapped_column(String(50))  # emoji or icon name
 	position: Mapped[float] = mapped_column(Float, default=0.0)
+	project_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("projects.id", ondelete="SET NULL"),
+		index=True,
+	)
 
 	owner: Mapped[User] = relationship("User", back_populates="reminder_lists")
+	project: Mapped[Project | None] = relationship(
+		"Project",
+		back_populates="reminder_lists",
+	)
 	reminders: Mapped[list[Reminder]] = relationship(
 		"Reminder",
 		back_populates="reminder_list",

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas.memory import MemoryCreate
 from api.schemas.user import UserCreate
+from api.settings import settings
 from api.v1.service import memories as memory_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
@@ -213,7 +214,14 @@ async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> 
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	principal = Principal(
+		user=owner,
+		group_ids=(),
+		permissions=frozenset(),
+		global_action_permissions=frozenset(
+			settings.default_permissions.action_permissions
+		),
+	)
 
 	await memory_service.create_memory(
 		MemoryCreate(user_id=owner.id, content="owner-memory"),

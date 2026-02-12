@@ -27,6 +27,7 @@ from api.schemas.preferences import (
 	AIPreferences,
 	UserPreferences,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -160,7 +161,7 @@ def validate_prompt_content(
 	command: str,
 	content: str,
 	max_depth: int = _MAX_DEPTH,
-	self_id: str | None = None,
+	self_id: TypeID | None = None,
 ) -> None:
 	prompt_map: dict[str, str] = {}
 	for p in all_prompts:

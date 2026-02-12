@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import cache
 from typing import Any, Final, Literal, Self
 
@@ -15,6 +16,7 @@ from pydantic_settings import (
 from api.permissions import (
 	ActionPermission,
 	DefaultResourceAccess,
+	strip_unknown_action_permissions,
 )
 from api.schemas.preferences import BackgroundType
 from nokodo_ai.utils.typing import extract_literal_values
@@ -22,6 +24,8 @@ from nokodo_ai.utils.typing import extract_literal_values
 
 FieldFlag = Literal["private", "write_locked"]
 
+
+_settings_logger = logging.getLogger(__name__)
 
 ENV_PREFIX: Final[str] = "NOKODO__"
 ENV_NESTED_DELIMITER: Final[str] = "__"
@@ -348,6 +352,23 @@ class SecuritySettings(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# soft-delete section
+# ---------------------------------------------------------------------------
+
+
+class SoftDeleteSettings(BaseModel):
+	"""per-resource soft-delete toggles.
+
+	when enabled, deleting a resource sets its deleted_at timestamp
+	instead of removing the row from the database.
+	"""
+
+	threads: bool = Field(default=True, description="soft-delete threads")
+	notes: bool = Field(default=True, description="soft-delete notes")
+	files: bool = Field(default=True, description="soft-delete files")
+
+
+# ---------------------------------------------------------------------------
 # default permissions section
 # ---------------------------------------------------------------------------
 
@@ -363,14 +384,22 @@ class DefaultPermissionsSettings(BaseModel):
 	action_permissions: list[ActionPermission] = Field(
 		default_factory=lambda: [
 			ActionPermission.SETTINGS_READ,
-			ActionPermission.AGENTS_READ,
-			ActionPermission.FILES_UPLOAD,
+			ActionPermission.THREADS_CREATE,
+			ActionPermission.PROJECTS_CREATE,
+			ActionPermission.NOTES_CREATE,
+			ActionPermission.GROUPS_CREATE,
+			ActionPermission.REMINDERS_CREATE,
+			ActionPermission.MEMORIES_CREATE,
+			ActionPermission.TASKS_CREATE,
+			ActionPermission.FILES_CREATE,
 		],
-		description=(
-			"action permissions granted by default, "
-			"e.g. ['agents:read', 'prompts:read']"
-		),
+		description="action permissions granted by default",
 	)
+
+	@field_validator("action_permissions", mode="before")
+	@classmethod
+	def _strip_unknown(cls, v: object) -> object:
+		return strip_unknown_action_permissions(v)
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +423,7 @@ class Settings(BaseSettings):
 	assets: AssetsSettings = Field(default_factory=AssetsSettings)
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)
+	soft_delete: SoftDeleteSettings = Field(default_factory=SoftDeleteSettings)
 	default_permissions: DefaultPermissionsSettings = Field(
 		default_factory=DefaultPermissionsSettings
 	)
