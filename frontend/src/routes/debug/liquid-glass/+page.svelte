@@ -6,12 +6,12 @@
 
 	// --- tunable parameters (slider-driven) ---
 	let bezelWidth = $state(28)
-	let thickness = $state(18)
-	let refractionStrength = $state(1.0)
-	let blurRadius = $state(8)
+	let thickness = $state(40)
+	let refractionStrength = $state(2.0)
+	let blurRadius = $state(2)
 	let specularOpacity = $state(0.4)
 	let specularAngle = $state(315)
-	let glassBgOpacity = $state(0.12)
+	let glassBgOpacity = $state(0.06)
 	let cornerRadius = $state(24)
 
 	// version b SVG filter IDs + sizes
