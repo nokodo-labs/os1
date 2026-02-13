@@ -8,6 +8,7 @@
 	let bezelWidth = $state(28)
 	let thickness = $state(40)
 	let refractionStrength = $state(2.0)
+	let innerRefraction = $state(0.12)
 	let blurRadius = $state(2)
 	let specularOpacity = $state(0.4)
 	let specularAngle = $state(315)
@@ -89,6 +90,7 @@
 	{bezelWidth}
 	{thickness}
 	{refractionStrength}
+	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
 	{specularAngle}
@@ -102,6 +104,7 @@
 	{bezelWidth}
 	{thickness}
 	{refractionStrength}
+	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
 	{specularAngle}
@@ -115,6 +118,7 @@
 	{bezelWidth}
 	{thickness}
 	{refractionStrength}
+	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
 	{specularAngle}
@@ -128,6 +132,7 @@
 	{bezelWidth}
 	{thickness}
 	{refractionStrength}
+	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
 	{specularAngle}
@@ -386,6 +391,22 @@
 					/>
 					<span class="w-8 text-right font-mono text-white/50"
 						>{refractionStrength.toFixed(1)}</span
+					>
+				</label>
+
+				<!-- inner refraction -->
+				<label class="flex items-center gap-2">
+					<span class="w-28 shrink-0 text-white/60">inner refraction</span>
+					<input
+						type="range"
+						min="0"
+						max="0.5"
+						step="0.01"
+						bind:value={innerRefraction}
+						class="flex-1"
+					/>
+					<span class="w-8 text-right font-mono text-white/50"
+						>{innerRefraction.toFixed(2)}</span
 					>
 				</label>
 

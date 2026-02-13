@@ -10,6 +10,8 @@ export interface DisplacementMapConfig {
 	surfaceFn: SurfaceFunction
 	cornerRadius?: number
 	samples?: number
+	/** normalized refraction strength for the flat interior (0-1) */
+	innerRefraction?: number
 }
 
 export interface DisplacementResult {
@@ -64,6 +66,12 @@ function roundedRectSDF(
 	return { dist, nx, ny }
 }
 
+function smootherstep(edge0: number, edge1: number, x: number): number {
+	if (edge0 === edge1) return x < edge0 ? 0 : 1
+	const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
+	return t * t * t * (t * (t * 6 - 15) + 10)
+}
+
 /**
  * generate SVG displacement map from refraction calculations.
  * uses RED channel for X-axis, GREEN channel for Y-axis.
@@ -74,11 +82,19 @@ function roundedRectSDF(
  * min(width,height)/2 for a pill / circle shape).
  */
 export function generateDisplacementMap(config: DisplacementMapConfig): DisplacementResult {
-	const { width, height, bezelWidth, thickness, surfaceFn, samples = 127 } = config
+	const {
+		width,
+		height,
+		bezelWidth,
+		thickness,
+		surfaceFn,
+		samples = 127,
+		innerRefraction = 0,
+	} = config
 	const cornerRadius = config.cornerRadius ?? Math.min(width, height) / 2
 
 	const surfaceName = surfaceFn.name || 'custom'
-	const cacheKey = `${width}-${height}-${bezelWidth}-${thickness}-${cornerRadius}-${surfaceName}`
+	const cacheKey = `${width}-${height}-${bezelWidth}-${thickness}-${cornerRadius}-${surfaceName}-${innerRefraction}`
 
 	const cached = getCachedDisplacementMap(cacheKey)
 	if (cached) {
@@ -96,7 +112,8 @@ export function generateDisplacementMap(config: DisplacementMapConfig): Displace
 		thickness,
 		surfaceFn,
 		cornerRadius,
-		samples
+		samples,
+		innerRefraction
 	)
 
 	setCachedDisplacementMap(cacheKey, result)
@@ -110,7 +127,8 @@ function generateDisplacementMapInternal(
 	thickness: number,
 	surfaceFn: SurfaceFunction,
 	cornerRadius: number,
-	samples: number
+	samples: number,
+	innerRefraction: number
 ): DisplacementResult {
 	// pre-calculate displacement magnitudes along one radius
 	const displacements: number[] = []
@@ -135,15 +153,38 @@ function generateDisplacementMapInternal(
 
 	for (let y = 0; y < height; y++) {
 		for (let x = 0; x < width; x++) {
-			const { dist, nx, ny } = roundedRectSDF(x + 0.5, y + 0.5, width, height, cornerRadius)
+			const px = x + 0.5
+			const py = y + 0.5
+			const { dist, nx, ny } = roundedRectSDF(px, py, width, height, cornerRadius)
 			const distFromEdge = -dist // positive inside the shape
 
 			const idx = (y * width + x) * 4
 
-			if (distFromEdge <= 0 || distFromEdge >= bezelWidth) {
-				// outside shape or past bezel into flat center: neutral
+			if (distFromEdge <= 0) {
+				// outside shape: neutral
 				imageData.data[idx] = 128
 				imageData.data[idx + 1] = 128
+				imageData.data[idx + 2] = 128
+				imageData.data[idx + 3] = 255
+			} else if (distFromEdge >= bezelWidth) {
+				const cx = width / 2
+				const cy = height / 2
+				const dx = px - cx
+				const dy = py - cy
+				const centerLen = Math.max(1e-4, Math.sqrt(dx * dx + dy * dy))
+				const centerDirX = dx / centerLen
+				const centerDirY = dy / centerLen
+				const innerBlend = Math.min(bezelWidth, 24)
+				const innerRamp = smootherstep(0, innerBlend, distFromEdge - bezelWidth)
+				const centerFalloff = Math.max(1, Math.min(width, height) / 2 - bezelWidth)
+				const centerMask = 1 - smootherstep(0, centerFalloff, centerLen)
+
+				const magnitude = innerRefraction * innerRamp * centerMask
+				const displaceX = magnitude * centerDirX
+				const displaceY = magnitude * centerDirY
+
+				imageData.data[idx] = Math.round(128 + displaceX * 127)
+				imageData.data[idx + 1] = Math.round(128 + displaceY * 127)
 				imageData.data[idx + 2] = 128
 				imageData.data[idx + 3] = 255
 			} else {

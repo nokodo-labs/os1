@@ -14,6 +14,8 @@
 		surfaceFn?: SurfaceFunction
 		/** multiplier on top of physics-based displacement (crank for stronger edges) */
 		refractionStrength?: number
+		/** normalized refraction strength for the flat interior (0-1) */
+		innerRefraction?: number
 		/** gaussian blur radius for the flat interior (px) */
 		blurRadius?: number
 		/** specular highlight intensity (0-1) */
@@ -35,6 +37,7 @@
 		cornerRadius,
 		surfaceFn = squircleSurface,
 		refractionStrength = 2.0,
+		innerRefraction = 0.12,
 		blurRadius = 2,
 		specularOpacity = 0.4,
 		specularAngle = 315,
@@ -57,6 +60,7 @@
 			thickness,
 			surfaceFn,
 			cornerRadius: resolvedCornerRadius,
+			innerRefraction,
 		})
 
 		displacementUrl = displacement.imageDataUrl
@@ -74,13 +78,23 @@
 	}
 
 	$effect(() => {
-		void [width, height, bezelWidth, thickness, cornerRadius, specularAngle, specularFalloff]
+		void [
+			width,
+			height,
+			bezelWidth,
+			thickness,
+			cornerRadius,
+			innerRefraction,
+			specularAngle,
+			specularFalloff,
+		]
 		regenerateMaps()
 	})
 
 	// SVG spec: offset = scale × (channel/255 − 0.5), so range is [−scale/2, +scale/2].
 	// our max encoded value maps to scale/2 pixels — double to get full maxDisplacement.
 	const computedScale = $derived(maxDisplacement * refractionStrength * 2)
+	const filterPadding = $derived(Math.max(bezelWidth, blurRadius * 2))
 </script>
 
 <!--
@@ -90,7 +104,15 @@
 -->
 <svg width="0" height="0" style="position: absolute;" color-interpolation-filters="sRGB">
 	<defs>
-		<filter id={filterId} x="-5%" y="-5%" width="110%" height="110%">
+		<filter
+			id={filterId}
+			x={-filterPadding}
+			y={-filterPadding}
+			width={width + filterPadding * 2}
+			height={height + filterPadding * 2}
+			filterUnits="userSpaceOnUse"
+			primitiveUnits="userSpaceOnUse"
+		>
 			<!-- 1. displacement map image -->
 			<feImage
 				href={displacementUrl}
