@@ -1,18 +1,20 @@
 <script lang="ts">
-	import { liquidGlass } from '$lib/liquid-glass/a/action'
 	import LiquidGlassFilter from '$lib/liquid-glass/b/LiquidGlassFilter.svelte'
+	import LiquidSlider from '$lib/liquid-glass/b/LiquidSlider.svelte'
+	import LiquidSwitch from '$lib/liquid-glass/b/LiquidSwitch.svelte'
 
 	const BG_IMAGE = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&q=80'
 
-	// --- tunable parameters (slider-driven) ---
-	let bezelWidth = $state(28)
+	// --- tunable parameters (slider-driven, matching reference defaults) ---
+	let bezelWidth = $state(20)
 	let thickness = $state(40)
-	let refractionStrength = $state(2.0)
+	let glassThickness = $state(40)
+	let refractionStrength = $state(1.0)
 	let innerRefraction = $state(0.12)
-	let blurRadius = $state(2)
-	let specularOpacity = $state(0.4)
+	let blurRadius = $state(0.2)
+	let specularOpacity = $state(1.0)
+	let specularSaturation = $state(4)
 	let specularAngle = $state(315)
-	let glassBgOpacity = $state(0.06)
 	let cornerRadius = $state(24)
 
 	// version b SVG filter IDs + sizes
@@ -33,19 +35,16 @@
 	// pill always uses its own half-height radius for true pill shape
 	const pillRadius = $derived(Math.min(pillW, pillH) / 2)
 
-	// draggable glass container state (version A)
-	let dragAX = $state(40)
-	let dragAY = $state(340)
-	let draggingA = $state(false)
-	let dragAOffsetX = 0
-	let dragAOffsetY = 0
-
 	// draggable glass container state (version B)
 	let dragBX = $state(40)
 	let dragBY = $state(340)
 	let draggingB = $state(false)
 	let dragBOffsetX = 0
 	let dragBOffsetY = 0
+
+	// liquid switch/slider demo state
+	let switchChecked = $state(false)
+	let sliderValue = $state(50)
 
 	function startDrag(
 		e: PointerEvent,
@@ -89,12 +88,13 @@
 	cornerRadius={pillRadius}
 	{bezelWidth}
 	{thickness}
+	{glassThickness}
 	{refractionStrength}
 	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
+	{specularSaturation}
 	{specularAngle}
-	{glassBgOpacity}
 />
 <LiquidGlassFilter
 	filterId={btnFilterId}
@@ -103,12 +103,13 @@
 	{cornerRadius}
 	{bezelWidth}
 	{thickness}
+	{glassThickness}
 	{refractionStrength}
 	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
+	{specularSaturation}
 	{specularAngle}
-	{glassBgOpacity}
 />
 <LiquidGlassFilter
 	filterId={panelFilterId}
@@ -117,12 +118,13 @@
 	{cornerRadius}
 	{bezelWidth}
 	{thickness}
+	{glassThickness}
 	{refractionStrength}
 	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
+	{specularSaturation}
 	{specularAngle}
-	{glassBgOpacity}
 />
 <LiquidGlassFilter
 	filterId={dragFilterId}
@@ -131,109 +133,63 @@
 	{cornerRadius}
 	{bezelWidth}
 	{thickness}
+	{glassThickness}
 	{refractionStrength}
 	{innerRefraction}
 	{blurRadius}
 	{specularOpacity}
+	{specularSaturation}
 	{specularAngle}
-	{glassBgOpacity}
 />
 
 <div class="flex h-dvh w-full flex-col overflow-auto lg:flex-row">
-	<!-- left half: version A -->
+	<!-- left half: liquid glass components on plain background -->
 	<section class="relative min-h-80 flex-1 border-b border-white/10 lg:border-r lg:border-b-0">
-		<div class="absolute top-3 left-4 z-30">
-			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white/80">
-				version a - css action
-			</div>
-		</div>
-
 		<img
 			src={BG_IMAGE}
-			alt="background for glass demo"
+			alt="background for component demo"
 			class="absolute inset-0 h-full w-full object-cover"
 			draggable="false"
 		/>
 
-		<!-- fixed glass elements -->
-		<div class="pointer-events-none absolute inset-0 z-10 p-5 pt-12">
-			<div class="pointer-events-auto grid gap-3">
-				<div
-					use:liquidGlass={'nav'}
-					class="w-full max-w-md rounded-full px-5 py-3 text-sm text-white/90"
-				>
-					navigation pill
-				</div>
-				<div class="flex gap-3">
-					<button
-						type="button"
-						use:liquidGlass={'subtle'}
-						class="rounded-2xl px-4 py-2.5 text-xs text-white/85"
-					>
-						subtle button
-					</button>
-					<button
-						type="button"
-						use:liquidGlass={'heavy'}
-						class="rounded-2xl px-4 py-2.5 text-xs text-white/85"
-					>
-						heavy button
-					</button>
-				</div>
-				<div
-					use:liquidGlass={'panel'}
-					class="max-w-sm rounded-3xl px-5 py-4 text-xs text-white/80"
-				>
-					<div class="font-medium text-white/90">glass panel</div>
-					<div class="mt-1.5 text-white/60">focus the input to see state change</div>
-					<input
-						class="mt-2.5 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 outline-none"
-						placeholder="type here"
-					/>
-				</div>
+		<div class="absolute top-3 left-4 z-30">
+			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white/80">
+				liquid glass components
 			</div>
 		</div>
 
-		<!-- draggable A -->
 		<div
-			class="absolute z-20 cursor-grab rounded-3xl select-none active:cursor-grabbing"
-			style="left: {dragAX}px; top: {dragAY}px; width: {dragW}px; height: {dragH}px;"
-			role="slider"
-			tabindex="-1"
-			aria-label="draggable glass pane"
-			aria-valuemin={0}
-			aria-valuemax={100}
-			aria-valuenow={50}
-			onpointerdown={(e) =>
-				startDrag(
-					e,
-					(v) => (draggingA = v),
-					(ox, oy) => {
-						dragAOffsetX = ox
-						dragAOffsetY = oy
-					}
-				)}
-			onpointermove={(e) =>
-				moveDrag(
-					e,
-					draggingA,
-					dragAOffsetX,
-					dragAOffsetY,
-					(x, y) => {
-						dragAX = x
-						dragAY = y
-					},
-					dragW,
-					dragH
-				)}
-			onpointerup={() => (draggingA = false)}
-			onpointercancel={() => (draggingA = false)}
+			class="relative z-10 flex h-full w-full flex-col items-center justify-center gap-12 px-8 py-16"
 		>
-			<div
-				use:liquidGlass={'heavy'}
-				class="grid h-full w-full place-items-center rounded-3xl text-xs text-white/70"
-			>
-				drag me
+			<div class="grid gap-3 text-center">
+				<div class="text-xs font-semibold tracking-wider text-white/60 uppercase">
+					switch
+				</div>
+				<LiquidSwitch size="lg" bind:checked={switchChecked} />
+				<div class="text-xs text-white/50">
+					{switchChecked ? 'on' : 'off'}
+				</div>
+			</div>
+
+			<div class="grid gap-3 text-center">
+				<div class="text-xs font-semibold tracking-wider text-white/60 uppercase">
+					slider
+				</div>
+				<LiquidSlider size="md" bind:value={sliderValue} />
+				<div class="text-xs text-white/50">
+					{sliderValue}
+				</div>
+			</div>
+
+			<div class="grid gap-3 text-center">
+				<div class="text-xs font-semibold tracking-wider text-white/60 uppercase">
+					switch sizes
+				</div>
+				<div class="flex items-center gap-6">
+					<LiquidSwitch size="sm" checked={true} />
+					<LiquidSwitch size="md" />
+					<LiquidSwitch size="lg" checked={true} />
+				</div>
 			</div>
 		</div>
 	</section>
@@ -364,9 +320,9 @@
 					<span class="w-8 text-right font-mono text-white/50">{bezelWidth}</span>
 				</label>
 
-				<!-- glass thickness -->
+				<!-- glass thickness (bezel height) -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-white/60">glass thickness</span>
+					<span class="w-28 shrink-0 text-white/60">bezel height</span>
 					<input
 						type="range"
 						min="1"
@@ -378,19 +334,33 @@
 					<span class="w-8 text-right font-mono text-white/50">{thickness}</span>
 				</label>
 
+				<!-- flat glass thickness -->
+				<label class="flex items-center gap-2">
+					<span class="w-28 shrink-0 text-white/60">glass thickness</span>
+					<input
+						type="range"
+						min="0"
+						max="200"
+						step="1"
+						bind:value={glassThickness}
+						class="flex-1"
+					/>
+					<span class="w-8 text-right font-mono text-white/50">{glassThickness}</span>
+				</label>
+
 				<!-- refraction strength -->
 				<label class="flex items-center gap-2">
 					<span class="w-28 shrink-0 text-white/60">refraction</span>
 					<input
 						type="range"
 						min="0"
-						max="5"
-						step="0.1"
+						max="3"
+						step="0.05"
 						bind:value={refractionStrength}
 						class="flex-1"
 					/>
 					<span class="w-8 text-right font-mono text-white/50"
-						>{refractionStrength.toFixed(1)}</span
+						>{refractionStrength.toFixed(2)}</span
 					>
 				</label>
 
@@ -416,8 +386,8 @@
 					<input
 						type="range"
 						min="0"
-						max="40"
-						step="0.5"
+						max="10"
+						step="0.1"
 						bind:value={blurRadius}
 						class="flex-1"
 					/>
@@ -442,6 +412,22 @@
 					>
 				</label>
 
+				<!-- specular saturation -->
+				<label class="flex items-center gap-2">
+					<span class="w-28 shrink-0 text-white/60">saturation</span>
+					<input
+						type="range"
+						min="1"
+						max="20"
+						step="0.5"
+						bind:value={specularSaturation}
+						class="flex-1"
+					/>
+					<span class="w-8 text-right font-mono text-white/50"
+						>{specularSaturation.toFixed(1)}</span
+					>
+				</label>
+
 				<!-- specular angle -->
 				<label class="flex items-center gap-2">
 					<span class="w-28 shrink-0 text-white/60">specular angle</span>
@@ -454,22 +440,6 @@
 						class="flex-1"
 					/>
 					<span class="w-8 text-right font-mono text-white/50">{specularAngle}</span>
-				</label>
-
-				<!-- glass bg opacity -->
-				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-white/60">glass bg opacity</span>
-					<input
-						type="range"
-						min="0"
-						max="0.5"
-						step="0.01"
-						bind:value={glassBgOpacity}
-						class="flex-1"
-					/>
-					<span class="w-8 text-right font-mono text-white/50"
-						>{glassBgOpacity.toFixed(2)}</span
-					>
 				</label>
 			</div>
 		</div>

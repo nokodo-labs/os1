@@ -1,6 +1,9 @@
 /**
- * snell-descartes law implementation for refraction calculations
- * n1 * sin(θ1) = n2 * sin(θ2)
+ * snell-descartes law implementation for refraction calculations.
+ * uses vector refraction matching the kube.io reference implementation:
+ *   eta = n1 / n2
+ *   refract(normal, incident) → refracted direction vector
+ *   displacement = refractedX * remainingHeight / refractedY
  */
 
 export interface RefractionParams {
@@ -63,24 +66,66 @@ export function calculateNormal(
 	}
 }
 
+/**
+ * vector refraction for a vertical incident ray [0, 1] hitting a surface
+ * with the given normal. matches the reference implementation exactly.
+ *
+ * @returns [refractedX, refractedY] or null for total internal reflection
+ */
+function vectorRefract(normalX: number, normalY: number, eta: number): [number, number] | null {
+	// incident ray is [0, 1], dot product with normal is just normalY
+	const dot = normalY
+	const k = 1 - eta * eta * (1 - dot * dot)
+	if (k < 0) return null // total internal reflection
+
+	const kSqrt = Math.sqrt(k)
+	return [-(eta * dot + kSqrt) * normalX, eta - (eta * dot + kSqrt) * normalY]
+}
+
+/**
+ * calculate pixel displacement at a given distance from the shape border.
+ * uses vector refraction and accounts for remaining glass height
+ * (bezel surface height + flat glass body thickness).
+ *
+ * @param glassThickness - thickness of the flat glass body beyond the bezel (px).
+ *   this is the main parameter controlling displacement strength.
+ *   the refracted ray travels through both the bezel surface AND this flat body.
+ */
 export function calculateDisplacement(
 	distanceFromBorder: number,
 	bezelWidth: number,
 	surfaceFn: SurfaceFunction,
 	thickness: number,
 	n1 = 1.0,
-	n2 = 1.5
+	n2 = 1.5,
+	glassThickness = 0
 ): number {
 	if (distanceFromBorder >= bezelWidth) return 0
 
 	const t = distanceFromBorder / bezelWidth
-	const normal = calculateNormal(surfaceFn, t, thickness, bezelWidth)
-	const incidentAngle = Math.acos(normal.y)
+	const eta = n1 / n2
 
-	const refractedAngle = calculateRefractionAngle({ n1, n2, incidentAngle })
-	if (refractedAngle === null) return 0
+	// normalized surface height (0..1) — matches reference convention
+	const y = surfaceFn(t, 1)
 
-	// ray travels through local glass height at this point, not max thickness
-	const localHeight = surfaceFn(t, thickness)
-	return localHeight * Math.tan(incidentAngle - refractedAngle)
+	// normalized derivative for slope calculation (reference uses normalized coords)
+	const epsilon = 0.0001
+	const y2 = surfaceFn(Math.min(1, t + epsilon), 1)
+	const derivative = (y2 - y) / epsilon
+
+	// normal pointing INTO the glass (reference convention: negative y)
+	const magnitude = Math.sqrt(derivative * derivative + 1)
+	const normalX = -derivative / magnitude
+	const normalY = -1 / magnitude
+
+	const refracted = vectorRefract(normalX, normalY, eta)
+	if (!refracted) return 0
+	if (Math.abs(refracted[1]) < 1e-10) return 0
+
+	// remaining height = bezel surface height + flat glass body
+	// reference: remainingHeight = y * bezelWidth + glassThickness
+	// our equivalent: y * thickness + glassThickness
+	const remainingHeight = y * thickness + glassThickness
+
+	return refracted[0] * (remainingHeight / refracted[1])
 }

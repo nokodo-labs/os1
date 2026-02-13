@@ -12,6 +12,8 @@ export interface DisplacementMapConfig {
 	samples?: number
 	/** normalized refraction strength for the flat interior (0-1) */
 	innerRefraction?: number
+	/** thickness of the flat glass body beyond the bezel (px) */
+	glassThickness?: number
 }
 
 export interface DisplacementResult {
@@ -90,11 +92,12 @@ export function generateDisplacementMap(config: DisplacementMapConfig): Displace
 		surfaceFn,
 		samples = 127,
 		innerRefraction = 0,
+		glassThickness = 0,
 	} = config
 	const cornerRadius = config.cornerRadius ?? Math.min(width, height) / 2
 
 	const surfaceName = surfaceFn.name || 'custom'
-	const cacheKey = `${width}-${height}-${bezelWidth}-${thickness}-${cornerRadius}-${surfaceName}-${innerRefraction}`
+	const cacheKey = `${width}-${height}-${bezelWidth}-${thickness}-${cornerRadius}-${surfaceName}-${innerRefraction}-${glassThickness}`
 
 	const cached = getCachedDisplacementMap(cacheKey)
 	if (cached) {
@@ -113,7 +116,8 @@ export function generateDisplacementMap(config: DisplacementMapConfig): Displace
 		surfaceFn,
 		cornerRadius,
 		samples,
-		innerRefraction
+		innerRefraction,
+		glassThickness
 	)
 
 	setCachedDisplacementMap(cacheKey, result)
@@ -128,7 +132,8 @@ function generateDisplacementMapInternal(
 	surfaceFn: SurfaceFunction,
 	cornerRadius: number,
 	samples: number,
-	innerRefraction: number
+	innerRefraction: number,
+	glassThickness: number
 ): DisplacementResult {
 	// pre-calculate displacement magnitudes along one radius
 	const displacements: number[] = []
@@ -136,7 +141,15 @@ function generateDisplacementMapInternal(
 
 	for (let i = 0; i <= samples; i++) {
 		const distance = (i / samples) * bezelWidth
-		const displacement = calculateDisplacement(distance, bezelWidth, surfaceFn, thickness)
+		const displacement = calculateDisplacement(
+			distance,
+			bezelWidth,
+			surfaceFn,
+			thickness,
+			1.0,
+			1.5,
+			glassThickness
+		)
 		displacements.push(displacement)
 		maxDisplacement = Math.max(maxDisplacement, Math.abs(displacement))
 	}
@@ -167,6 +180,8 @@ function generateDisplacementMapInternal(
 				imageData.data[idx + 2] = 128
 				imageData.data[idx + 3] = 255
 			} else if (distFromEdge >= bezelWidth) {
+				// interior (flat region) — our extra feature: subtle inner refraction
+				// direction points INWARD (toward center) for lens-like magnification
 				const cx = width / 2
 				const cy = height / 2
 				const dx = px - cx
@@ -180,8 +195,9 @@ function generateDisplacementMapInternal(
 				const centerMask = 1 - smootherstep(0, centerFalloff, centerLen)
 
 				const magnitude = innerRefraction * innerRamp * centerMask
-				const displaceX = magnitude * centerDirX
-				const displaceY = magnitude * centerDirY
+				// negate direction: inward pull (matching bezel convention)
+				const displaceX = -magnitude * centerDirX
+				const displaceY = -magnitude * centerDirY
 
 				imageData.data[idx] = Math.round(128 + displaceX * 127)
 				imageData.data[idx + 1] = Math.round(128 + displaceY * 127)
@@ -194,9 +210,10 @@ function generateDisplacementMapInternal(
 				)
 				const magnitude = normalized[sampleIdx]
 
-				// displacement direction = outward normal from nearest edge
-				const displaceX = magnitude * nx
-				const displaceY = magnitude * ny
+				// displacement direction = INWARD (negated outward normal)
+				// this matches the reference: -cos * distance (inward pull for convex glass)
+				const displaceX = -magnitude * nx
+				const displaceY = -magnitude * ny
 
 				imageData.data[idx] = Math.round(128 + displaceX * 127)
 				imageData.data[idx + 1] = Math.round(128 + displaceY * 127)

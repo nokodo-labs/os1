@@ -12,37 +12,40 @@
 		thickness?: number
 		cornerRadius?: number
 		surfaceFn?: SurfaceFunction
-		/** multiplier on top of physics-based displacement (crank for stronger edges) */
+		/** multiplier on the displacement scale (1.0 = physics-accurate) */
 		refractionStrength?: number
 		/** normalized refraction strength for the flat interior (0-1) */
 		innerRefraction?: number
-		/** gaussian blur radius for the flat interior (px) */
+		/** thickness of the flat glass body beyond the bezel (px) — main displacement control */
+		glassThickness?: number
+		/** gaussian blur radius applied before displacement (px) */
 		blurRadius?: number
 		/** specular highlight intensity (0-1) */
 		specularOpacity?: number
+		/** color saturation boost in specular region (1 = no boost) */
+		specularSaturation?: number
 		/** specular highlight light angle in degrees */
 		specularAngle?: number
 		/** specular highlight falloff exponent */
 		specularFalloff?: number
-		/** semi-transparent background overlay opacity (0-1) */
-		glassBgOpacity?: number
 	}
 
 	let {
 		filterId,
 		width,
 		height,
-		bezelWidth = 40,
+		bezelWidth = 20,
 		thickness = 40,
 		cornerRadius,
 		surfaceFn = squircleSurface,
-		refractionStrength = 2.0,
+		refractionStrength = 1.0,
 		innerRefraction = 0.12,
-		blurRadius = 2,
-		specularOpacity = 0.4,
+		glassThickness = 40,
+		blurRadius = 0.2,
+		specularOpacity = 1.0,
+		specularSaturation = 4,
 		specularAngle = 315,
 		specularFalloff = 2.0,
-		glassBgOpacity = 0.06,
 	}: Props = $props()
 
 	let displacementUrl = $state('')
@@ -61,6 +64,7 @@
 			surfaceFn,
 			cornerRadius: resolvedCornerRadius,
 			innerRefraction,
+			glassThickness,
 		})
 
 		displacementUrl = displacement.imageDataUrl
@@ -71,7 +75,7 @@
 			height,
 			bezelWidth,
 			cornerRadius: resolvedCornerRadius,
-			intensity: 1, // full strength, we control via feComponentTransfer
+			intensity: 1,
 			lightAngle: specularAngle,
 			falloff: specularFalloff,
 		})
@@ -85,15 +89,17 @@
 			thickness,
 			cornerRadius,
 			innerRefraction,
+			glassThickness,
 			specularAngle,
 			specularFalloff,
 		]
 		regenerateMaps()
 	})
 
-	// SVG spec: offset = scale × (channel/255 − 0.5), so range is [−scale/2, +scale/2].
-	// our max encoded value maps to scale/2 pixels — double to get full maxDisplacement.
-	const computedScale = $derived(maxDisplacement * refractionStrength * 2)
+	// scale = maxDisplacement * refractionStrength (matches reference: maximumDisplacement * scaleRatio)
+	// the SVG spec gives offset = scale × (channel/255 − 0.5), range [−scale/2, +scale/2].
+	// at max encoded ±127/255, actual offset ≈ ±scale*0.498 ≈ ±maxDisplacement*0.5
+	const computedScale = $derived(maxDisplacement * refractionStrength)
 	const filterPadding = $derived(Math.max(bezelWidth, blurRadius * 2))
 </script>
 
@@ -113,7 +119,10 @@
 			filterUnits="userSpaceOnUse"
 			primitiveUnits="userSpaceOnUse"
 		>
-			<!-- 1. displacement map image -->
+			<!-- 1. blur source before displacement (reference: single blur) -->
+			<feGaussianBlur in="SourceGraphic" stdDeviation={blurRadius} result="blurred" />
+
+			<!-- 2. displacement map image -->
 			<feImage
 				href={displacementUrl}
 				x="0"
@@ -124,40 +133,58 @@
 				preserveAspectRatio="none"
 			/>
 
-			<!-- 2. apply refraction displacement to the SHARP source (not blurred!) -->
+			<!-- 3. apply refraction displacement -->
 			<feDisplacementMap
-				in="SourceGraphic"
+				in="blurred"
 				in2="dispMap"
 				scale={computedScale}
 				xChannelSelector="R"
 				yChannelSelector="G"
-				result="refracted"
+				result="displaced"
 			/>
 
-			<!-- 3. light blur AFTER displacement — softens the refracted image for glass feel -->
-			<feGaussianBlur in="refracted" stdDeviation={blurRadius} result="blurred" />
+			<!-- 4. boost color saturation on displaced image -->
+			<feColorMatrix
+				in="displaced"
+				type="saturate"
+				values={specularSaturation.toString()}
+				result="displaced_saturated"
+			/>
 
-			<!-- 4. tint overlay: semi-transparent white fill for glass body -->
-			<feFlood flood-color="white" flood-opacity={glassBgOpacity} result="tint" />
-			<feComposite in="tint" in2="blurred" operator="over" result="tinted" />
-
-			<!-- 5. specular highlight image, controlled by opacity -->
+			<!-- 5. specular highlight image -->
 			<feImage
 				href={specularUrl}
 				x="0"
 				y="0"
 				{width}
 				{height}
-				result="specRaw"
+				result="specular_layer"
 				preserveAspectRatio="none"
 			/>
-			<!-- scale specular intensity -->
-			<feComponentTransfer in="specRaw" result="specular">
+
+			<!-- 6. clip saturated displaced to specular shape (saturation only where highlight exists) -->
+			<feComposite
+				in="displaced_saturated"
+				in2="specular_layer"
+				operator="in"
+				result="specular_saturated"
+			/>
+
+			<!-- 7. fade specular highlight by opacity -->
+			<feComponentTransfer in="specular_layer" result="specular_faded">
 				<feFuncA type="linear" slope={specularOpacity} />
 			</feComponentTransfer>
 
-			<!-- 6. composite specular on top -->
-			<feComposite in="specular" in2="tinted" operator="over" result="final" />
+			<!-- 8. blend saturated specular region back onto displaced -->
+			<feBlend
+				in="specular_saturated"
+				in2="displaced"
+				mode="normal"
+				result="withSaturation"
+			/>
+
+			<!-- 9. blend faded specular highlight on top -->
+			<feBlend in="specular_faded" in2="withSaturation" mode="normal" />
 		</filter>
 	</defs>
 </svg>

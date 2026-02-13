@@ -1,7 +1,8 @@
 /**
- * generate rim light specular highlight for glass edges.
- * uses rounded-rectangle SDF so highlights follow the actual shape
- * (pill, rounded rect, circle) instead of always being circular.
+ * generate rim-light specular highlight for glass edges.
+ * matches the reference implementation: a thin highlight
+ * at the outer edge (~1-2px) using rounded-rectangle SDF
+ * and directional dot product.
  */
 
 export interface SpecularConfig {
@@ -15,8 +16,7 @@ export interface SpecularConfig {
 }
 
 /**
- * rounded rectangle SDF — same as displacement-map.ts.
- * returns outward normal direction at each point.
+ * rounded rectangle SDF — returns signed distance and outward normal.
  */
 function roundedRectSDF(
 	px: number,
@@ -73,19 +73,29 @@ export function generateSpecularHighlight(config: SpecularConfig): string {
 	for (let y = 0; y < height; y++) {
 		for (let x = 0; x < width; x++) {
 			const { dist, nx, ny } = roundedRectSDF(x + 0.5, y + 0.5, width, height, cornerRadius)
-			const distFromEdge = -dist
+			const distFromEdge = -dist // positive inside
 
 			const idx = (y * width + x) * 4
 
-			if (distFromEdge > 0 && distFromEdge < bezelWidth) {
-				const dot = nx * lightDir.x + ny * lightDir.y
-				const clamped = Math.max(0, dot)
-				const highlightValue = Math.pow(clamped, falloff) * intensity * 255
+			// check if we're in the bezel region (between outer edge and bezelWidth inside)
+			if (distFromEdge > -1 && distFromEdge < bezelWidth) {
+				const dot = Math.abs(nx * lightDir.x + ny * lightDir.y)
 
-				imageData.data[idx] = highlightValue
-				imageData.data[idx + 1] = highlightValue
-				imageData.data[idx + 2] = highlightValue
-				imageData.data[idx + 3] = highlightValue
+				// anti-aliasing at outer edge
+				const opacity = distFromEdge >= 0 ? 1 : 1 - Math.min(1, Math.max(0, -distFromEdge))
+
+				// thin edge coefficient — only significant within ~1px of outer edge
+				// matches reference: coefficient = dotProduct * sqrt(1 - (1 - d)^2)
+				const edgeT = Math.min(1, Math.max(0, distFromEdge))
+				const coefficient = dot * Math.sqrt(1 - (1 - edgeT) * (1 - edgeT))
+
+				const color = 255 * coefficient * intensity
+				const finalOpacity = color * Math.pow(coefficient, falloff) * opacity
+
+				imageData.data[idx] = color
+				imageData.data[idx + 1] = color
+				imageData.data[idx + 2] = color
+				imageData.data[idx + 3] = finalOpacity
 			} else {
 				imageData.data[idx] = 0
 				imageData.data[idx + 1] = 0
