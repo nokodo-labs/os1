@@ -391,7 +391,7 @@
 			? 'pointer-events-none -translate-x-full'
 			: 'translate-x-0'}"
 	style="background-color: var(--accent-bg); view-transition-name: chat-sidebar;"
-	aria-hidden={device.isMobile ? !sidebar.isChatSidebarOpen : false}
+	inert={device.isMobile ? !sidebar.isChatSidebarOpen : undefined}
 	onclick={(event) => {
 		if (device.isMobile) return
 		if (sidebar.isChatSidebarOpen) return

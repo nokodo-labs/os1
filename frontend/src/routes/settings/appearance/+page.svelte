@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Eye from '$lib/components/icons/Eye.svelte'
-	import { RadioGroup, Switch } from '$lib/components/primitives'
+	import { RadioGroup } from '$lib/components/primitives'
+	import { Switch } from '$lib/components/primitives/liquid-glass'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, selectableAccentColors } from '$lib/contexts/themeContext.svelte'
 	import { background } from '$lib/stores/background.svelte'
@@ -104,7 +105,7 @@
 						accent colors change automatically based on the current page.
 					</div>
 				</div>
-				<Switch checked={autoAccentColors} onchange={setAutoAccentColors} />
+				<Switch size="md" checked={autoAccentColors} onchange={setAutoAccentColors} />
 			</div>
 
 			{#if !autoAccentColors}
@@ -160,7 +161,7 @@
 						wallpaper changes automatically based on the current page.
 					</div>
 				</div>
-				<Switch checked={autoBackground} onchange={setAutoBackground} />
+				<Switch size="md" checked={autoBackground} onchange={setAutoBackground} />
 			</div>
 
 			{#if !autoBackground}

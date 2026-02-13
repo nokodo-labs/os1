@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Home from '$lib/components/icons/Home.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
 	import UserProfileTrigger from '$lib/components/system/UserProfileTrigger.svelte'
@@ -37,8 +38,9 @@
 	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null)
 </script>
 
-<header
-	class="liquid-glass overflow-visible rounded-full px-[clamp(5px,2vw,14px)] py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+<LiquidGlass
+	tag="header"
+	class="overflow-visible rounded-full px-[clamp(5px,2vw,14px)] py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	style="view-transition-name: island;"
 >
 	<div
@@ -91,7 +93,7 @@
 			<UserProfileTrigger user={session.userDisplay} placement="header" isExpanded={false} />
 		</div>
 	</div>
-</header>
+</LiquidGlass>
 
 <style>
 	/* only target direct children of context actions, not nested dropdown menus */

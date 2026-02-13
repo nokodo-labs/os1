@@ -16,7 +16,8 @@
 	import Share from '$lib/components/icons/Share.svelte'
 	import Strikethrough from '$lib/components/icons/Strikethrough.svelte'
 	import Underline from '$lib/components/icons/Underline.svelte'
-	import { MenuItem, Switch } from '$lib/components/primitives'
+	import { MenuItem } from '$lib/components/primitives'
+	import { Switch } from '$lib/components/primitives/liquid-glass'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
@@ -253,7 +254,7 @@
 							<Code class="h-4 w-4" />
 						</span>
 						<span class="flex-1 truncate">markdown mode</span>
-						<Switch checked={isRawMode} />
+						<Switch size="sm" checked={isRawMode} />
 					</button>
 					<div class="my-1 h-px w-full bg-white/10"></div>
 					<MenuItem onclick={handleShare}>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Brain from '$lib/components/icons/Brain.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import { Switch } from '$lib/components/primitives/liquid-glass'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -71,7 +71,7 @@
 						AI bio.
 					</div>
 				</div>
-				<Switch checked={useAccountBio} onchange={setUseAccountBio} />
+				<Switch size="md" checked={useAccountBio} onchange={setUseAccountBio} />
 			</div>
 
 			{#if !useAccountBio}
@@ -109,14 +109,14 @@
 			<div class="mt-4 space-y-3">
 				<div class="flex items-center justify-between">
 					<span class="text-sm text-white/70">enable memories</span>
-					<Switch checked={memoriesEnabled} onchange={setMemoriesEnabled} />
+					<Switch size="md" checked={memoriesEnabled} onchange={setMemoriesEnabled} />
 				</div>
 
 				{#if memoriesEnabled}
 					<div transition:slide={{ duration: 200 }}>
 						<div class="flex items-center justify-between">
 							<span class="text-sm text-white/70">chat recall</span>
-							<Switch checked={chatRecall} onchange={setChatRecall} />
+							<Switch size="md" checked={chatRecall} onchange={setChatRecall} />
 						</div>
 						<div class="mt-1 pl-0 text-xs text-white/40">
 							allow the AI to reference previous conversations for context.

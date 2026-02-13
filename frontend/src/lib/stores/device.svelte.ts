@@ -61,6 +61,7 @@ export const device = $state({
 	language: '',
 	os: '',
 	browserName: '',
+	isChromium: false,
 	pwaInstalled: false,
 })
 
@@ -103,6 +104,7 @@ function resetDeviceState() {
 	device.language = ''
 	device.os = ''
 	device.browserName = ''
+	device.isChromium = false
 	device.pwaInstalled = false
 }
 
@@ -171,6 +173,20 @@ function detectBrowser(): string {
 		return ''
 	} catch {
 		return ''
+	}
+}
+
+function detectChromium(): boolean {
+	try {
+		const nav = navigator as Navigator & {
+			userAgentData?: { brands?: Array<{ brand: string }> }
+		}
+		if (nav.userAgentData?.brands) {
+			return nav.userAgentData.brands.some((b) => b.brand === 'Chromium')
+		}
+		return /Chrome\//.test(navigator.userAgent) && !/Firefox/.test(navigator.userAgent)
+	} catch {
+		return false
 	}
 }
 
@@ -421,6 +437,7 @@ export function initDevice(): void {
 	device.language = detectLanguage()
 	device.os = detectOS()
 	device.browserName = detectBrowser()
+	device.isChromium = detectChromium()
 	device.pwaInstalled = detectPwaInstalled()
 
 	const offMobile = addMqListener(mqMobile, onEvent)

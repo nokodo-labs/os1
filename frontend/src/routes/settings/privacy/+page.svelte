@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Lock from '$lib/components/icons/Lock.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import { Switch } from '$lib/components/primitives/liquid-glass'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 
@@ -37,7 +37,7 @@
 							responses
 						</div>
 					</div>
-					<Switch checked={useDeviceContext} onchange={setUseDeviceContext} />
+					<Switch size="md" checked={useDeviceContext} onchange={setUseDeviceContext} />
 				</div>
 				<div class="flex items-center justify-between gap-3">
 					<div>
@@ -46,7 +46,7 @@
 							share your location with the AI for location-aware responses
 						</div>
 					</div>
-					<Switch checked={useLocation} onchange={setUseLocation} />
+					<Switch size="md" checked={useLocation} onchange={setUseLocation} />
 				</div>
 			</div>
 		</div>
