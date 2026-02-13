@@ -79,8 +79,10 @@
 	const scaleRatio = $derived((active ? 0.9 : 0.4) * 1.0)
 
 	const ratio = $derived((value - min) / (max - min))
-	const trackWidth = $derived(sliderW - thumbW + thumbWidthRest / 3)
-	const thumbLeft = $derived(ratio * trackWidth - thumbWidthRest / 3)
+	// travel = full range of the thumb center, accounting for visual thumb width at rest scale
+	const travel = $derived(sliderW - thumbWidthRest)
+	// position so visual thumb edges align with track edges at min/max
+	const thumbLeft = $derived(ratio * travel - (thumbW - thumbWidthRest) / 2)
 
 	const bgOpacity = $derived(active ? 0.1 : 1)
 

@@ -15,6 +15,8 @@
 	let specularSaturation = $state(4)
 	let specularAngle = $state(315)
 	let cornerRadius = $state(24)
+	let chromaticAberration = $state(0.04)
+	let glassTint = $state(0.02)
 
 	// version b SVG filter IDs + sizes
 	const pillFilterId = 'lg-b-pill'
@@ -95,6 +97,8 @@
 	{specularOpacity}
 	{specularSaturation}
 	{specularAngle}
+	{chromaticAberration}
+	{glassTint}
 />
 <LiquidGlassFilter
 	filterId={btnFilterId}
@@ -110,6 +114,8 @@
 	{specularOpacity}
 	{specularSaturation}
 	{specularAngle}
+	{chromaticAberration}
+	{glassTint}
 />
 <LiquidGlassFilter
 	filterId={panelFilterId}
@@ -125,6 +131,8 @@
 	{specularOpacity}
 	{specularSaturation}
 	{specularAngle}
+	{chromaticAberration}
+	{glassTint}
 />
 <LiquidGlassFilter
 	filterId={dragFilterId}
@@ -140,11 +148,15 @@
 	{specularOpacity}
 	{specularSaturation}
 	{specularAngle}
+	{chromaticAberration}
+	{glassTint}
 />
 
 <div class="flex h-dvh w-full flex-col overflow-auto lg:flex-row">
 	<!-- left half: liquid glass components on transparent background (webgl behind) -->
-	<section class="relative min-h-80 flex-1 border-b border-white/10 lg:border-r lg:border-b-0">
+	<section
+		class="relative min-h-80 flex-1 overflow-hidden border-b border-white/10 lg:border-r lg:border-b-0"
+	>
 		<div class="absolute top-3 left-4 z-30">
 			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white/80">
 				liquid glass components
@@ -198,7 +210,7 @@
 	</section>
 
 	<!-- right half: version B -->
-	<section class="relative min-h-80 flex-1">
+	<section class="relative min-h-80 flex-1 overflow-hidden">
 		<div class="absolute top-3 left-4 z-30">
 			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white/80">
 				version b - svg displacement
@@ -501,6 +513,48 @@
 						max="360"
 						step="5"
 						bind:value={specularAngle}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
+				</label>
+
+				<!-- chromatic aberration -->
+				<label class="flex items-center gap-2">
+					<span class="w-28 shrink-0 text-white/60">chromatic</span>
+					<input
+						type="range"
+						min="0"
+						max="0.3"
+						step="0.01"
+						bind:value={chromaticAberration}
+						class="flex-1"
+					/>
+					<input
+						type="number"
+						min="0"
+						max="0.3"
+						step="0.01"
+						bind:value={chromaticAberration}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
+				</label>
+
+				<!-- glass tint -->
+				<label class="flex items-center gap-2">
+					<span class="w-28 shrink-0 text-white/60">glass tint</span>
+					<input
+						type="range"
+						min="0"
+						max="0.15"
+						step="0.005"
+						bind:value={glassTint}
+						class="flex-1"
+					/>
+					<input
+						type="number"
+						min="0"
+						max="0.15"
+						step="0.005"
+						bind:value={glassTint}
 						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
 					/>
 				</label>

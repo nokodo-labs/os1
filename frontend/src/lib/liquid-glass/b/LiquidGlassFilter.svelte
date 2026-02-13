@@ -28,24 +28,30 @@
 		specularAngle?: number
 		/** specular highlight falloff exponent */
 		specularFalloff?: number
+		/** chromatic aberration strength (0 = off, 0.03-0.1 = subtle, >0.1 = strong) */
+		chromaticAberration?: number
+		/** subtle glass body tint brightness boost (0 = off, 0.02-0.05 = subtle) */
+		glassTint?: number
 	}
 
 	let {
 		filterId,
 		width,
 		height,
-		bezelWidth = 20,
-		thickness = 40,
+		bezelWidth = 44,
+		thickness = 33,
 		cornerRadius,
 		surfaceFn = squircleSurface,
 		refractionStrength = 1.0,
-		innerRefraction = 0.12,
-		glassThickness = 40,
-		blurRadius = 0.2,
+		innerRefraction = 0.2,
+		glassThickness = 140,
+		blurRadius = 0.3,
 		specularOpacity = 1.0,
 		specularSaturation = 4,
 		specularAngle = 315,
 		specularFalloff = 1.0,
+		chromaticAberration = 0.2,
+		glassTint = 0.08,
 	}: Props = $props()
 
 	let displacementUrl = $state('')
@@ -101,6 +107,13 @@
 	// at max encoded ±127/255, actual offset ≈ ±scale*0.498 ≈ ±maxDisplacement*0.5
 	const computedScale = $derived(maxDisplacement * refractionStrength)
 	const filterPadding = $derived(Math.max(bezelWidth, blurRadius * 2))
+	const caEnabled = $derived(chromaticAberration > 0)
+	// chromatic aberration scale offsets for R (over-refracted) and B (under-refracted)
+	const scaleR = $derived(computedScale * (1 + chromaticAberration))
+	const scaleB = $derived(computedScale * (1 - chromaticAberration))
+	// glass tint: slight brightness boost for interior depth
+	const tintSlope = $derived(1 + glassTint)
+	const tintIntercept = $derived(glassTint * 0.3)
 </script>
 
 <!--
@@ -119,7 +132,7 @@
 			filterUnits="userSpaceOnUse"
 			primitiveUnits="userSpaceOnUse"
 		>
-			<!-- 1. blur source before displacement (reference: single blur) -->
+			<!-- 1. blur source before displacement -->
 			<feGaussianBlur in="SourceGraphic" stdDeviation={blurRadius} result="blurred" />
 
 			<!-- 2. displacement map image -->
@@ -133,17 +146,78 @@
 				preserveAspectRatio="none"
 			/>
 
-			<!-- 3. apply refraction displacement -->
-			<feDisplacementMap
-				in="blurred"
-				in2="dispMap"
-				scale={computedScale}
-				xChannelSelector="R"
-				yChannelSelector="G"
-				result="displaced"
-			/>
+			{#if caEnabled}
+				<!-- 3a. chromatic aberration: 3 displacements at different scales -->
+				<feDisplacementMap
+					in="blurred"
+					in2="dispMap"
+					scale={scaleR}
+					xChannelSelector="R"
+					yChannelSelector="G"
+					result="d_over"
+				/>
+				<feDisplacementMap
+					in="blurred"
+					in2="dispMap"
+					scale={computedScale}
+					xChannelSelector="R"
+					yChannelSelector="G"
+					result="d_base"
+				/>
+				<feDisplacementMap
+					in="blurred"
+					in2="dispMap"
+					scale={scaleB}
+					xChannelSelector="R"
+					yChannelSelector="G"
+					result="d_under"
+				/>
 
-			<!-- 4. boost color saturation on displaced image -->
+				<!-- isolate R from over-displaced, G from base, B from under-displaced -->
+				<feColorMatrix
+					in="d_over"
+					type="matrix"
+					values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+					result="r_ch"
+				/>
+				<feColorMatrix
+					in="d_base"
+					type="matrix"
+					values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+					result="g_ch"
+				/>
+				<feColorMatrix
+					in="d_under"
+					type="matrix"
+					values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+					result="b_ch"
+				/>
+
+				<!-- recombine channels via screen blend (non-overlapping channels add correctly) -->
+				<feBlend in="r_ch" in2="g_ch" mode="screen" result="rg_ch" />
+				<feBlend in="rg_ch" in2="b_ch" mode="screen" result="displaced" />
+			{:else}
+				<!-- 3b. standard single displacement -->
+				<feDisplacementMap
+					in="blurred"
+					in2="dispMap"
+					scale={computedScale}
+					xChannelSelector="R"
+					yChannelSelector="G"
+					result="displaced"
+				/>
+			{/if}
+
+			<!-- 4. subtle glass body brightness/tint for depth (makes interior less purely transparent) -->
+			{#if glassTint > 0}
+				<feComponentTransfer in="displaced" result="displaced">
+					<feFuncR type="linear" slope={tintSlope} intercept={tintIntercept} />
+					<feFuncG type="linear" slope={tintSlope} intercept={tintIntercept} />
+					<feFuncB type="linear" slope={tintSlope} intercept={tintIntercept} />
+				</feComponentTransfer>
+			{/if}
+
+			<!-- 5. boost color saturation on displaced image -->
 			<feColorMatrix
 				in="displaced"
 				type="saturate"
@@ -151,7 +225,7 @@
 				result="displaced_saturated"
 			/>
 
-			<!-- 5. specular highlight image -->
+			<!-- 6. specular highlight image -->
 			<feImage
 				href={specularUrl}
 				x="0"
@@ -162,7 +236,7 @@
 				preserveAspectRatio="none"
 			/>
 
-			<!-- 6. clip saturated displaced to specular shape (saturation only where highlight exists) -->
+			<!-- 7. clip saturated displaced to specular shape -->
 			<feComposite
 				in="displaced_saturated"
 				in2="specular_layer"
@@ -170,12 +244,12 @@
 				result="specular_saturated"
 			/>
 
-			<!-- 7. fade specular highlight by opacity -->
+			<!-- 8. fade specular highlight by opacity -->
 			<feComponentTransfer in="specular_layer" result="specular_faded">
 				<feFuncA type="linear" slope={specularOpacity} />
 			</feComponentTransfer>
 
-			<!-- 8. blend saturated specular region back onto displaced -->
+			<!-- 9. blend saturated specular region back onto displaced -->
 			<feBlend
 				in="specular_saturated"
 				in2="displaced"
@@ -183,7 +257,7 @@
 				result="withSaturation"
 			/>
 
-			<!-- 9. blend faded specular highlight on top -->
+			<!-- 10. blend faded specular highlight on top -->
 			<feBlend in="specular_faded" in2="withSaturation" mode="normal" />
 		</filter>
 	</defs>

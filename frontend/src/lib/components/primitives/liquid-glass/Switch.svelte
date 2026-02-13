@@ -90,7 +90,8 @@
 		return (checked ? 1 : 0) * TRAVEL
 	})
 
-	const bgColor = $derived(checked ? '#3BBF4EEE' : '#94949F77')
+	const visuallyChecked = $derived(isDragging ? dragRatio > 0.5 : checked)
+	const bgColor = $derived(visuallyChecked ? '#3BBF4EEE' : '#94949F77')
 	const bgOpacity = $derived(active ? 0.1 : 1)
 
 	function toggle() {

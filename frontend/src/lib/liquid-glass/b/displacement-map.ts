@@ -68,12 +68,6 @@ function roundedRectSDF(
 	return { dist, nx, ny }
 }
 
-function smootherstep(edge0: number, edge1: number, x: number): number {
-	if (edge0 === edge1) return x < edge0 ? 0 : 1
-	const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
-	return t * t * t * (t * (t * 6 - 15) + 10)
-}
-
 /**
  * generate SVG displacement map from refraction calculations.
  * uses RED channel for X-axis, GREEN channel for Y-axis.
@@ -180,27 +174,34 @@ function generateDisplacementMapInternal(
 				imageData.data[idx + 2] = 128
 				imageData.data[idx + 3] = 255
 			} else if (distFromEdge >= bezelWidth) {
-				// interior (flat region) — our extra feature: subtle inner refraction
-				// direction points INWARD (toward center) for lens-like magnification
+				// interior (flat region) — lens-like magnification
+				// displacement proportional to distance from center, pointing inward
+				// this creates a uniform zoom effect through the flat glass body
 				const cx = width / 2
 				const cy = height / 2
 				const dx = px - cx
 				const dy = py - cy
-				const centerLen = Math.max(1e-4, Math.sqrt(dx * dx + dy * dy))
-				const centerDirX = dx / centerLen
-				const centerDirY = dy / centerLen
-				const innerBlend = Math.min(bezelWidth, 24)
-				const innerRamp = smootherstep(0, innerBlend, distFromEdge - bezelWidth)
-				const centerFalloff = Math.max(1, Math.min(width, height) / 2 - bezelWidth)
-				const centerMask = 1 - smootherstep(0, centerFalloff, centerLen)
+				const centerLen = Math.sqrt(dx * dx + dy * dy)
+				const maxRadius = Math.max(1, Math.min(width, height) / 2 - bezelWidth)
+				const normalizedDist = Math.min(1, centerLen / maxRadius)
 
-				const magnitude = innerRefraction * innerRamp * centerMask
-				// negate direction: inward pull (matching bezel convention)
-				const displaceX = -magnitude * centerDirX
-				const displaceY = -magnitude * centerDirY
+				if (centerLen > 0.001 && innerRefraction > 0) {
+					// magnitude scales linearly with distance from center (like a real lens)
+					// direction is inward (toward center) for magnification
+					const magnitude = innerRefraction * normalizedDist
+					const displaceX = -magnitude * (dx / centerLen)
+					const displaceY = -magnitude * (dy / centerLen)
 
-				imageData.data[idx] = Math.round(128 + displaceX * 127)
-				imageData.data[idx + 1] = Math.round(128 + displaceY * 127)
+					imageData.data[idx] = Math.round(
+						Math.max(0, Math.min(255, 128 + displaceX * 127))
+					)
+					imageData.data[idx + 1] = Math.round(
+						Math.max(0, Math.min(255, 128 + displaceY * 127))
+					)
+				} else {
+					imageData.data[idx] = 128
+					imageData.data[idx + 1] = 128
+				}
 				imageData.data[idx + 2] = 128
 				imageData.data[idx + 3] = 255
 			} else {
