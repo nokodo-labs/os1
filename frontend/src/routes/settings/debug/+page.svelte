@@ -46,6 +46,19 @@
 			</div>
 
 			<div class="rounded-container bg-white/5 p-5">
+				<div class="text-sm font-semibold text-white/85">liquid glass lab</div>
+				<div class="mt-1 text-sm text-white/55">open the comparison demo.</div>
+				<div class="mt-4 flex flex-wrap gap-2">
+					<a
+						href="/debug/liquid-glass"
+						class="rounded-pill border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/75 transition hover:border-white/20 hover:bg-white/8"
+					>
+						open lab
+					</a>
+				</div>
+			</div>
+
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">device insights</div>
 				<div class="mt-1 text-sm text-white/55">
 					computed device metrics and gpu tier signal breakdown.

@@ -3,6 +3,7 @@
 @import 'tw-animate-css';
 
 @import './lib/styles/liquid-glass.css';
+@import './lib/styles/liquid-glass-action.css';
 @import './lib/styles/liquid-metal.css';
 
 /* ensure Streamdown's built-in Tailwind classes are included (Tailwind v4 @source). */
