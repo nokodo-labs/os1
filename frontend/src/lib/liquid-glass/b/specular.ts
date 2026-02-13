@@ -58,7 +58,7 @@ function roundedRectSDF(
 }
 
 export function generateSpecularHighlight(config: SpecularConfig): string {
-	const { width, height, bezelWidth, intensity = 0.6, lightAngle = 135, falloff = 2.0 } = config
+	const { width, height, bezelWidth, intensity = 1, lightAngle = 135, falloff = 1 } = config
 	const cornerRadius = config.cornerRadius ?? Math.min(width, height) / 2
 
 	const canvas = document.createElement('canvas')
@@ -77,20 +77,26 @@ export function generateSpecularHighlight(config: SpecularConfig): string {
 
 			const idx = (y * width + x) * 4
 
-			// check if we're in the bezel region (between outer edge and bezelWidth inside)
-			if (distFromEdge > -1 && distFromEdge < bezelWidth) {
+			// specular only within bezel region
+			if (distFromEdge > 0 && distFromEdge < bezelWidth) {
 				const dot = Math.abs(nx * lightDir.x + ny * lightDir.y)
 
-				// anti-aliasing at outer edge
-				const opacity = distFromEdge >= 0 ? 1 : 1 - Math.min(1, Math.max(0, -distFromEdge))
+				// reference formula: coefficient = dotProduct * sqrt(1 - (1 - d)^2)
+				// where d = distFromEdge in pixels. naturally creates a ~2px wide
+				// highlight peaking at 1px from edge, dropping to 0 at 0 and 2px.
+				// beyond 2px: inner term goes negative → skip
+				const inner = 1 - (1 - distFromEdge) * (1 - distFromEdge)
+				if (inner <= 0) {
+					imageData.data[idx] = 0
+					imageData.data[idx + 1] = 0
+					imageData.data[idx + 2] = 0
+					imageData.data[idx + 3] = 0
+					continue
+				}
 
-				// thin edge coefficient — only significant within ~1px of outer edge
-				// matches reference: coefficient = dotProduct * sqrt(1 - (1 - d)^2)
-				const edgeT = Math.min(1, Math.max(0, distFromEdge))
-				const coefficient = dot * Math.sqrt(1 - (1 - edgeT) * (1 - edgeT))
-
+				const coefficient = dot * Math.sqrt(inner)
 				const color = 255 * coefficient * intensity
-				const finalOpacity = color * Math.pow(coefficient, falloff) * opacity
+				const finalOpacity = color * Math.pow(coefficient, falloff)
 
 				imageData.data[idx] = color
 				imageData.data[idx + 1] = color

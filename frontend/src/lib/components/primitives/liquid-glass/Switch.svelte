@@ -1,6 +1,6 @@
 <script lang="ts">
-	import LiquidGlassFilter from './LiquidGlassFilter.svelte'
-	import { lipSurface } from './physics'
+	import LiquidGlassFilter from '$lib/liquid-glass/b/LiquidGlassFilter.svelte'
+	import { lipSurface } from '$lib/liquid-glass/b/physics'
 
 	interface Props {
 		size?: 'sm' | 'md' | 'lg' | 'xl'

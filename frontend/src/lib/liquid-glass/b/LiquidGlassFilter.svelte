@@ -45,7 +45,7 @@
 		specularOpacity = 1.0,
 		specularSaturation = 4,
 		specularAngle = 315,
-		specularFalloff = 2.0,
+		specularFalloff = 1.0,
 	}: Props = $props()
 
 	let displacementUrl = $state('')

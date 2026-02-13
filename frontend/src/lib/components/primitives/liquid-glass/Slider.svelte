@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LiquidGlassFilter from './LiquidGlassFilter.svelte'
+	import LiquidGlassFilter from '$lib/liquid-glass/b/LiquidGlassFilter.svelte'
 
 	interface Props {
 		size?: 'xs' | 'sm' | 'md' | 'lg'

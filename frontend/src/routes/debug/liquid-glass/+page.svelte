@@ -1,7 +1,6 @@
 <script lang="ts">
+	import { SearchBar, Slider, Switch } from '$lib/components/primitives/liquid-glass'
 	import LiquidGlassFilter from '$lib/liquid-glass/b/LiquidGlassFilter.svelte'
-	import LiquidSlider from '$lib/liquid-glass/b/LiquidSlider.svelte'
-	import LiquidSwitch from '$lib/liquid-glass/b/LiquidSwitch.svelte'
 
 	const BG_IMAGE = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&q=80'
 
@@ -45,6 +44,7 @@
 	// liquid switch/slider demo state
 	let switchChecked = $state(false)
 	let sliderValue = $state(50)
+	let searchQuery = $state('')
 
 	function startDrag(
 		e: PointerEvent,
@@ -143,15 +143,8 @@
 />
 
 <div class="flex h-dvh w-full flex-col overflow-auto lg:flex-row">
-	<!-- left half: liquid glass components on plain background -->
+	<!-- left half: liquid glass components on transparent background (webgl behind) -->
 	<section class="relative min-h-80 flex-1 border-b border-white/10 lg:border-r lg:border-b-0">
-		<img
-			src={BG_IMAGE}
-			alt="background for component demo"
-			class="absolute inset-0 h-full w-full object-cover"
-			draggable="false"
-		/>
-
 		<div class="absolute top-3 left-4 z-30">
 			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white/80">
 				liquid glass components
@@ -163,9 +156,19 @@
 		>
 			<div class="grid gap-3 text-center">
 				<div class="text-xs font-semibold tracking-wider text-white/60 uppercase">
+					search bar
+				</div>
+				<SearchBar bind:value={searchQuery} width={340} height={48} />
+				<div class="text-xs text-white/50">
+					{searchQuery || 'type to search...'}
+				</div>
+			</div>
+
+			<div class="grid gap-3 text-center">
+				<div class="text-xs font-semibold tracking-wider text-white/60 uppercase">
 					switch
 				</div>
-				<LiquidSwitch size="lg" bind:checked={switchChecked} />
+				<Switch size="lg" bind:checked={switchChecked} />
 				<div class="text-xs text-white/50">
 					{switchChecked ? 'on' : 'off'}
 				</div>
@@ -175,7 +178,7 @@
 				<div class="text-xs font-semibold tracking-wider text-white/60 uppercase">
 					slider
 				</div>
-				<LiquidSlider size="md" bind:value={sliderValue} />
+				<Slider size="md" bind:value={sliderValue} />
 				<div class="text-xs text-white/50">
 					{sliderValue}
 				</div>
@@ -186,9 +189,9 @@
 					switch sizes
 				</div>
 				<div class="flex items-center gap-6">
-					<LiquidSwitch size="sm" checked={true} />
-					<LiquidSwitch size="md" />
-					<LiquidSwitch size="lg" checked={true} />
+					<Switch size="sm" checked={true} />
+					<Switch size="md" />
+					<Switch size="lg" checked={true} />
 				</div>
 			</div>
 		</div>
@@ -286,7 +289,7 @@
 
 		<!-- controls panel -->
 		<div
-			class="absolute right-3 bottom-3 z-30 w-72 rounded-2xl border border-white/10 bg-black/80 p-4 backdrop-blur-md"
+			class="absolute right-3 bottom-3 z-30 max-h-[calc(100%-24px)] w-72 overflow-y-auto rounded-2xl border border-white/10 bg-black/80 p-4 backdrop-blur-md"
 		>
 			<div class="mb-3 text-xs font-semibold tracking-wider text-white/70 uppercase">
 				version b controls
@@ -303,7 +306,14 @@
 						bind:value={cornerRadius}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50">{cornerRadius}</span>
+					<input
+						type="number"
+						min="4"
+						max="100"
+						step="1"
+						bind:value={cornerRadius}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- bezel width -->
@@ -317,7 +327,14 @@
 						bind:value={bezelWidth}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50">{bezelWidth}</span>
+					<input
+						type="number"
+						min="4"
+						max="80"
+						step="1"
+						bind:value={bezelWidth}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- glass thickness (bezel height) -->
@@ -331,7 +348,14 @@
 						bind:value={thickness}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50">{thickness}</span>
+					<input
+						type="number"
+						min="1"
+						max="60"
+						step="1"
+						bind:value={thickness}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- flat glass thickness -->
@@ -345,7 +369,14 @@
 						bind:value={glassThickness}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50">{glassThickness}</span>
+					<input
+						type="number"
+						min="0"
+						max="200"
+						step="1"
+						bind:value={glassThickness}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- refraction strength -->
@@ -359,9 +390,14 @@
 						bind:value={refractionStrength}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50"
-						>{refractionStrength.toFixed(2)}</span
-					>
+					<input
+						type="number"
+						min="0"
+						max="3"
+						step="0.05"
+						bind:value={refractionStrength}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- inner refraction -->
@@ -375,9 +411,14 @@
 						bind:value={innerRefraction}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50"
-						>{innerRefraction.toFixed(2)}</span
-					>
+					<input
+						type="number"
+						min="0"
+						max="0.5"
+						step="0.01"
+						bind:value={innerRefraction}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- blur radius -->
@@ -391,9 +432,14 @@
 						bind:value={blurRadius}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50"
-						>{blurRadius.toFixed(1)}</span
-					>
+					<input
+						type="number"
+						min="0"
+						max="10"
+						step="0.1"
+						bind:value={blurRadius}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- specular opacity -->
@@ -407,9 +453,14 @@
 						bind:value={specularOpacity}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50"
-						>{specularOpacity.toFixed(2)}</span
-					>
+					<input
+						type="number"
+						min="0"
+						max="1"
+						step="0.01"
+						bind:value={specularOpacity}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- specular saturation -->
@@ -423,9 +474,14 @@
 						bind:value={specularSaturation}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50"
-						>{specularSaturation.toFixed(1)}</span
-					>
+					<input
+						type="number"
+						min="1"
+						max="20"
+						step="0.5"
+						bind:value={specularSaturation}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 
 				<!-- specular angle -->
@@ -439,7 +495,14 @@
 						bind:value={specularAngle}
 						class="flex-1"
 					/>
-					<span class="w-8 text-right font-mono text-white/50">{specularAngle}</span>
+					<input
+						type="number"
+						min="0"
+						max="360"
+						step="5"
+						bind:value={specularAngle}
+						class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-right font-mono text-white/60 outline-none"
+					/>
 				</label>
 			</div>
 		</div>
