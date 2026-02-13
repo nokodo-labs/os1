@@ -4,19 +4,19 @@
 
 	const BG_IMAGE = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&q=80'
 
-	// --- tunable parameters (slider-driven, matching reference defaults) ---
-	let bezelWidth = $state(20)
-	let thickness = $state(40)
-	let glassThickness = $state(40)
-	let refractionStrength = $state(1.0)
-	let innerRefraction = $state(0.12)
-	let blurRadius = $state(0.2)
+	// --- tunable parameters (slider-driven, matching LiquidGlassFilter defaults) ---
+	let bezelWidth = $state(44)
+	let thickness = $state(33)
+	let glassThickness = $state(140)
+	let refractionStrength = $state(1.8)
+	let innerRefraction = $state(0)
+	let blurRadius = $state(0.3)
 	let specularOpacity = $state(1.0)
 	let specularSaturation = $state(4)
 	let specularAngle = $state(315)
 	let cornerRadius = $state(24)
-	let chromaticAberration = $state(0.04)
-	let glassTint = $state(0.02)
+	let chromaticAberration = $state(0.13)
+	let glassTint = $state(0.08)
 
 	// version b SVG filter IDs + sizes
 	const pillFilterId = 'lg-b-pill'

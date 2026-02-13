@@ -129,10 +129,12 @@ function generateDisplacementMapInternal(
 	innerRefraction: number,
 	glassThickness: number
 ): DisplacementResult {
-	// pre-calculate displacement magnitudes along one radius
-	const displacements: number[] = []
-	let maxDisplacement = 0
+	// maximum possible distance from nearest edge (at element center)
+	const maxDist = Math.min(width, height) / 2
+	const interiorWidth = Math.max(0, maxDist - bezelWidth)
 
+	// --- phase 1: bezel refraction profile [0 .. bezelWidth] ---
+	const bezelProfile: number[] = []
 	for (let i = 0; i <= samples; i++) {
 		const distance = (i / samples) * bezelWidth
 		const displacement = calculateDisplacement(
@@ -144,14 +146,32 @@ function generateDisplacementMapInternal(
 			1.5,
 			glassThickness
 		)
-		displacements.push(displacement)
-		maxDisplacement = Math.max(maxDisplacement, Math.abs(displacement))
+		bezelProfile.push(displacement)
 	}
 
+	// --- phase 2: interior lens profile [bezelWidth .. maxDist] ---
+	// models a gentle convex dome in the flat glass body for magnification.
+	// quadratic ease-in (t²) ensures zero derivative at the boundary
+	// for a seamless C1-continuous join with the bezel profile.
+	const interiorSamples = Math.max(1, Math.min(127, Math.ceil(interiorWidth)))
+	const interiorProfile: number[] = []
+
+	for (let i = 0; i <= interiorSamples; i++) {
+		const t = i / interiorSamples // 0 = boundary, 1 = center
+		const magnitude = innerRefraction * t * t * interiorWidth
+		interiorProfile.push(magnitude)
+	}
+
+	// --- phase 3: global normalization (both profiles share one dynamic range) ---
+	let maxDisplacement = 0
+	for (const d of bezelProfile) maxDisplacement = Math.max(maxDisplacement, Math.abs(d))
+	for (const d of interiorProfile) maxDisplacement = Math.max(maxDisplacement, Math.abs(d))
 	if (maxDisplacement === 0) maxDisplacement = 1
 
-	const normalized = displacements.map((d) => d / maxDisplacement)
+	const normBezel = bezelProfile.map((d) => d / maxDisplacement)
+	const normInterior = interiorProfile.map((d) => d / maxDisplacement)
 
+	// --- phase 4: render unified displacement map ---
 	const canvas = document.createElement('canvas')
 	canvas.width = width
 	canvas.height = height
@@ -173,54 +193,40 @@ function generateDisplacementMapInternal(
 				imageData.data[idx + 1] = 128
 				imageData.data[idx + 2] = 128
 				imageData.data[idx + 3] = 255
-			} else if (distFromEdge >= bezelWidth) {
-				// interior (flat region) — lens-like magnification
-				// displacement proportional to distance from center, pointing inward
-				// this creates a uniform zoom effect through the flat glass body
-				const cx = width / 2
-				const cy = height / 2
-				const dx = px - cx
-				const dy = py - cy
-				const centerLen = Math.sqrt(dx * dx + dy * dy)
-				const maxRadius = Math.max(1, Math.min(width, height) / 2 - bezelWidth)
-				const normalizedDist = Math.min(1, centerLen / maxRadius)
-
-				if (centerLen > 0.001 && innerRefraction > 0) {
-					// magnitude scales linearly with distance from center (like a real lens)
-					// direction is inward (toward center) for magnification
-					const magnitude = innerRefraction * normalizedDist
-					const displaceX = -magnitude * (dx / centerLen)
-					const displaceY = -magnitude * (dy / centerLen)
-
-					imageData.data[idx] = Math.round(
-						Math.max(0, Math.min(255, 128 + displaceX * 127))
-					)
-					imageData.data[idx + 1] = Math.round(
-						Math.max(0, Math.min(255, 128 + displaceY * 127))
-					)
-				} else {
-					imageData.data[idx] = 128
-					imageData.data[idx + 1] = 128
-				}
-				imageData.data[idx + 2] = 128
-				imageData.data[idx + 3] = 255
-			} else {
-				const sampleIdx = Math.min(
-					Math.floor((distFromEdge / bezelWidth) * samples),
-					samples
-				)
-				const magnitude = normalized[sampleIdx]
-
-				// displacement direction = INWARD (negated outward normal)
-				// this matches the reference: -cos * distance (inward pull for convex glass)
-				const displaceX = -magnitude * nx
-				const displaceY = -magnitude * ny
-
-				imageData.data[idx] = Math.round(128 + displaceX * 127)
-				imageData.data[idx + 1] = Math.round(128 + displaceY * 127)
-				imageData.data[idx + 2] = 128
-				imageData.data[idx + 3] = 255
+				continue
 			}
+
+			let magnitude: number
+
+			if (distFromEdge < bezelWidth) {
+				// bezel region: physics-based refraction from pre-computed profile
+				const si = Math.min(Math.floor((distFromEdge / bezelWidth) * samples), samples)
+				magnitude = normBezel[si]
+			} else if (innerRefraction > 0 && interiorWidth > 0) {
+				// interior: gentle lens magnification from pre-computed profile
+				const t = Math.min(1, (distFromEdge - bezelWidth) / interiorWidth)
+				const si = Math.min(Math.floor(t * interiorSamples), interiorSamples)
+				magnitude = normInterior[si]
+			} else {
+				// interior with no lens effect: neutral
+				imageData.data[idx] = 128
+				imageData.data[idx + 1] = 128
+				imageData.data[idx + 2] = 128
+				imageData.data[idx + 3] = 255
+				continue
+			}
+
+			// unified direction: inward (negated outward SDF normal).
+			// bezel: creates edge refraction (compression).
+			// interior: creates magnification (pulling toward nearest edge).
+			// both use identical direction convention → no seams.
+			const displaceX = -magnitude * nx
+			const displaceY = -magnitude * ny
+
+			imageData.data[idx] = Math.round(Math.max(0, Math.min(255, 128 + displaceX * 127)))
+			imageData.data[idx + 1] = Math.round(Math.max(0, Math.min(255, 128 + displaceY * 127)))
+			imageData.data[idx + 2] = 128
+			imageData.data[idx + 3] = 255
 		}
 	}
 

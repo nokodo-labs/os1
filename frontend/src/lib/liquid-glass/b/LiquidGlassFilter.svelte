@@ -42,15 +42,15 @@
 		thickness = 33,
 		cornerRadius,
 		surfaceFn = squircleSurface,
-		refractionStrength = 1.0,
-		innerRefraction = 0.2,
+		refractionStrength = 1.8,
+		innerRefraction = 0,
 		glassThickness = 140,
 		blurRadius = 0.3,
 		specularOpacity = 1.0,
 		specularSaturation = 4,
 		specularAngle = 315,
 		specularFalloff = 1.0,
-		chromaticAberration = 0.2,
+		chromaticAberration = 0.13,
 		glassTint = 0.08,
 	}: Props = $props()
 
