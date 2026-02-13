@@ -192,7 +192,6 @@ def upgrade() -> None:
 				nullable=False,
 			)
 		)
-		batch_op.drop_column("default_resource_access")
 		batch_op.drop_column("permissions")
 
 	with op.batch_alter_table("users", schema=None) as batch_op:
@@ -219,15 +218,6 @@ def downgrade() -> None:
 			sa.Column(
 				"permissions",
 				postgresql.JSON(astext_type=sa.Text()),
-				autoincrement=False,
-				nullable=False,
-			)
-		)
-		batch_op.add_column(
-			sa.Column(
-				"default_resource_access",
-				postgresql.JSON(astext_type=sa.Text()),
-				server_default=sa.text("'{}'::json"),
 				autoincrement=False,
 				nullable=False,
 			)

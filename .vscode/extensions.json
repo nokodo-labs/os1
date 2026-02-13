@@ -26,7 +26,6 @@
 		"eamodio.gitlens",
 
 		// AI assistants
-		"github.copilot",
 		"github.copilot-chat",
 		"ms-vscode.vscode-websearchforcopilot",
 		"anthropic.claude-code",
