@@ -1681,6 +1681,11 @@ export interface components {
              * @description whether haptic feedback is enabled on compatible devices
              */
             hapticFeedback?: boolean | null;
+            /**
+             * Svgliquidglass
+             * @description whether to enable svg-based liquid glass when supported by the browser
+             */
+            svgLiquidGlass?: boolean | null;
         };
         /**
          * AccountPreferences

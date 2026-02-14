@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Eye from '$lib/components/icons/Eye.svelte'
-	import { RadioGroup } from '$lib/components/primitives'
-	import { Switch } from '$lib/components/primitives/liquid-glass'
+	import { RadioGroup, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, selectableAccentColors } from '$lib/contexts/themeContext.svelte'
 	import { background } from '$lib/stores/background.svelte'

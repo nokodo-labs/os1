@@ -188,6 +188,13 @@ class AccessibilityPreferences(BaseModel):
 		alias="hapticFeedback",
 		description="whether haptic feedback is enabled on compatible devices",
 	)
+	svg_liquid_glass: bool | None = Field(
+		default=None,
+		alias="svgLiquidGlass",
+		description=(
+			"whether to enable svg-based liquid glass when supported by the browser"
+		),
+	)
 
 
 # the main preferences schema

@@ -7,6 +7,7 @@
 
 import { getAccessToken } from '$lib/auth/session.svelte'
 import { getClientContext } from '$lib/stores/device.svelte'
+import { preferences } from '$lib/stores/preferences.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
 
 /** Content part in a message. */
@@ -81,6 +82,8 @@ export async function* runChatStream(
 	const streamUrl = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/run`
 
 	const doRequest = async (token: string | null): Promise<Response> => {
+		const clientContext = preferences.data.privacy.useDeviceContext ? getClientContext() : null
+
 		return fetch(streamUrl, {
 			method: 'POST',
 			credentials: 'include',
@@ -93,7 +96,7 @@ export async function* runChatStream(
 				agent_id: opts.agentId,
 				input: opts.input,
 				parent_id: opts.parentId,
-				clientContext: getClientContext(),
+				...(clientContext ? { clientContext } : {}),
 			}),
 			signal: opts.signal,
 		})

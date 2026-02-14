@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Brain from '$lib/components/icons/Brain.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import { Switch } from '$lib/components/primitives/liquid-glass'
+	import { Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { SearchBar, Slider, Switch } from '$lib/components/primitives/liquid-glass'
+	import { Slider, Switch } from '$lib/components/primitives'
+	import { SearchBar } from '$lib/components/primitives/liquid-glass'
 	import LiquidGlassFilter from '$lib/liquid-glass/b/LiquidGlassFilter.svelte'
 
 	const BG_IMAGE = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&q=80'

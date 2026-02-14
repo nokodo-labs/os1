@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Lock from '$lib/components/icons/Lock.svelte'
-	import { Switch } from '$lib/components/primitives/liquid-glass'
+	import { Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 

@@ -1,6 +1,7 @@
 import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
+import { device } from '$lib/stores/device.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { settingsState } from '$lib/stores/settings.svelte'
 import { deepMerge, isPlainObject } from '$lib/utils'
@@ -112,11 +113,15 @@ function createPreferencesStore() {
 		},
 		accessibility: {
 			hapticFeedback: true,
+			svgLiquidGlass: true,
 		},
 	})
 
 	// user preferences → defaults (which already include admin settings)
 	const data: Resolved = $derived(deepMerge(structuredClone(defaults), raw as Partial<Resolved>))
+	const useSvgLiquidGlass = $derived.by(
+		() => device.isChromium && (data.accessibility.svgLiquidGlass ?? true)
+	)
 
 	// ──────────────────────────────────────────────────────
 	// auto-sync with session
@@ -234,6 +239,9 @@ function createPreferencesStore() {
 		// state (reactive getters)
 		get data() {
 			return data
+		},
+		get useSvgLiquidGlass() {
+			return useSvgLiquidGlass
 		},
 		get loading() {
 			return loading

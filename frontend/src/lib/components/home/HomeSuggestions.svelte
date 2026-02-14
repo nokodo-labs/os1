@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import SearchIcon from '$lib/components/icons/Search.svelte'
 	import '$lib/styles/liquid-glass.css'
 
@@ -24,8 +25,9 @@
 </script>
 
 {#if open && suggestions.length > 0}
-	<div
-		class="liquid-glass rounded-container overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+	<LiquidGlass
+		tag="div"
+		class="rounded-container overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
 		<div class="relative z-10">
 			<div class="p-2" role="listbox" aria-label="suggestions">
@@ -61,5 +63,5 @@
 				{/each}
 			</div>
 		</div>
-	</div>
+	</LiquidGlass>
 {/if}

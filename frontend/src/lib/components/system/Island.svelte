@@ -42,6 +42,7 @@
 	tag="header"
 	class="overflow-visible rounded-full px-[clamp(5px,2vw,14px)] py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	style="view-transition-name: island;"
+	blurRadius={4}
 >
 	<div
 		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"

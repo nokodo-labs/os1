@@ -1,5 +1,4 @@
 import { browser } from '$app/environment'
-import { preferences } from '$lib/stores/preferences.svelte'
 
 export const DEVICE_MOBILE_BREAKPOINT_PX = 888
 
@@ -482,9 +481,7 @@ export function destroyDevice(): void {
 	resetDeviceState()
 }
 
-/** build the client context payload for agent run requests.
- * respects user privacy preferences — omits device info or location
- * when the corresponding toggle is disabled. */
+/** build the client context payload for agent run requests. */
 export function getClientContext(): {
 	timezone: string
 	language: string
@@ -495,17 +492,14 @@ export function getClientContext(): {
 	screenHeight: number
 	isMobile: boolean
 } {
-	const privacy = preferences.data.privacy
-	const sendDevice = privacy.useDeviceContext
-
 	return {
-		timezone: sendDevice ? device.timezone : '',
-		language: sendDevice ? device.language : '',
-		os: sendDevice ? device.os : '',
-		browser: sendDevice ? device.browserName : '',
-		pwaInstalled: sendDevice ? device.pwaInstalled : false,
-		screenWidth: sendDevice ? device.width : 0,
-		screenHeight: sendDevice ? device.height : 0,
-		isMobile: sendDevice ? device.isMobile : false,
+		timezone: device.timezone,
+		language: device.language,
+		os: device.os,
+		browser: device.browserName,
+		pwaInstalled: device.pwaInstalled,
+		screenWidth: device.width,
+		screenHeight: device.height,
+		isMobile: device.isMobile,
 	}
 }

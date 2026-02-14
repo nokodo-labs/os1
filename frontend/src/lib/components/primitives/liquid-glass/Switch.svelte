@@ -8,6 +8,9 @@
 		onchange?: (checked: boolean) => void
 		disabled?: boolean
 		forceActive?: boolean
+		id?: string
+		ariaLabel?: string
+		ariaLabelledbyId?: string
 		glassThickness?: number
 		bezelWidth?: number
 		refractiveIndex?: number
@@ -52,6 +55,9 @@
 		onchange,
 		disabled = false,
 		forceActive = false,
+		id = '',
+		ariaLabel = '',
+		ariaLabelledbyId = '',
 		glassThickness: customGlassThickness,
 		bezelWidth: customBezelWidth,
 		refractiveIndex = 1.5,
@@ -155,6 +161,9 @@
 	style="width: {sliderW}px; height: {sliderH}px;"
 	role="switch"
 	aria-checked={checked}
+	aria-label={ariaLabel || undefined}
+	aria-labelledby={ariaLabelledbyId || undefined}
+	id={id || undefined}
 	tabindex="0"
 	onkeydown={(e) => {
 		if (e.key === 'Enter' || e.key === ' ') {

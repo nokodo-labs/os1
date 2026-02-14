@@ -2,6 +2,7 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Bolt from '$lib/components/icons/Bolt.svelte'
 	import Bookmark from '$lib/components/icons/Bookmark.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
@@ -342,12 +343,15 @@
 								await app.action()
 							}}
 						>
-							<div
-								class="liquid-glass flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[box-shadow,ring-color] duration-150 group-hover:ring-white/15 group-active:scale-[0.96] {iconShape ===
+							<LiquidGlass
+								tag="div"
+								class="flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[box-shadow,ring-color,transform] duration-300 ease-in-out group-hover:scale-[1.03] group-hover:ring-white/20 group-active:translate-y-px group-active:scale-[0.92] group-active:shadow-[0_16px_36px_rgba(12,10,30,0.6)] {iconShape ===
 								'circle'
 									? 'rounded-full'
 									: 'rounded-container'}"
 								style="width: {tilePx}px; height: {tilePx}px; background-color: var(--accent-bg); --icon-px: {iconPx}px;"
+								specularOpacity={0.2}
+								specularSaturation={1}
 							>
 								<div
 									class="relative z-10"
@@ -360,7 +364,7 @@
 								>
 									<Icon variant="solid" class="h-(--icon-px) w-(--icon-px)" />
 								</div>
-							</div>
+							</LiquidGlass>
 							<div
 								class="text-center text-xs font-medium text-white/70 transition-colors duration-150 group-hover:text-white/85"
 								style="margin-top: {tileToLabelGapPx}px; line-height: {labelPx}px; height: {labelPx}px;"

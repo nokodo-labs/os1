@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { useTheme } from '$lib/contexts/themeContext.svelte'
 	import { generateDisplacementMap } from './displacement-map'
 	import type { SurfaceFunction } from './physics'
 	import { squircleSurface } from './physics'
@@ -111,9 +112,12 @@
 	// chromatic aberration scale offsets for R (over-refracted) and B (under-refracted)
 	const scaleR = $derived(computedScale * (1 + chromaticAberration))
 	const scaleB = $derived(computedScale * (1 - chromaticAberration))
-	// glass tint: slight brightness boost for interior depth
-	const tintSlope = $derived(1 + glassTint)
-	const tintIntercept = $derived(glassTint * 0.3)
+	const theme = useTheme()
+	const tintAmount = $derived(Math.abs(glassTint))
+	const tintSigned = $derived((theme.resolvedMode === 'dark' ? -1 : 1) * tintAmount)
+	// glass tint: brighten in light mode, darken in dark mode
+	const tintSlope = $derived(1 + tintSigned)
+	const tintIntercept = $derived(tintSigned * 0.3)
 </script>
 
 <!--
@@ -209,7 +213,7 @@
 			{/if}
 
 			<!-- 4. subtle glass body brightness/tint for depth (makes interior less purely transparent) -->
-			{#if glassTint > 0}
+			{#if tintAmount > 0}
 				<feComponentTransfer in="displaced" result="displaced">
 					<feFuncR type="linear" slope={tintSlope} intercept={tintIntercept} />
 					<feFuncG type="linear" slope={tintSlope} intercept={tintIntercept} />

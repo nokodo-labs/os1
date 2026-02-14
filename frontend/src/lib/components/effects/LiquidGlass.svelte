@@ -1,7 +1,7 @@
 <script lang="ts">
 	import LiquidGlassFilter from '$lib/liquid-glass/b/LiquidGlassFilter.svelte'
 	import type { SurfaceFunction } from '$lib/liquid-glass/b/physics'
-	import { device } from '$lib/stores/device.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
 	import type { Snippet } from 'svelte'
 
 	interface Props {
@@ -13,6 +13,17 @@
 		cornerRadius?: number
 		/** pass-through glass filter props */
 		surfaceFn?: SurfaceFunction
+		// filter customisation (forwarded to LiquidGlassFilter)
+		blurRadius?: number
+		specularOpacity?: number
+		specularSaturation?: number
+		specularAngle?: number
+		specularFalloff?: number
+		chromaticAberration?: number
+		glassTint?: number
+		bezelWidth?: number
+		glassThickness?: number
+		refractionStrength?: number
 		children: Snippet
 		[key: string]: unknown
 	}
@@ -23,6 +34,16 @@
 		style: userStyle = '',
 		cornerRadius,
 		surfaceFn,
+		blurRadius,
+		specularOpacity,
+		specularSaturation,
+		specularAngle,
+		specularFalloff,
+		chromaticAberration,
+		glassTint,
+		bezelWidth,
+		glassThickness,
+		refractionStrength,
 		children,
 		...rest
 	}: Props = $props()
@@ -32,7 +53,7 @@
 	let height = $state(0)
 
 	const filterId = `lg-${Math.random().toString(36).slice(2, 8)}`
-	const useFilter = $derived(device.isChromium && width > 0 && height > 0)
+	const useFilter = $derived.by(() => preferences.useSvgLiquidGlass && width > 0 && height > 0)
 
 	const combinedStyle = $derived.by(() => {
 		const parts: string[] = []
@@ -66,7 +87,23 @@
 </script>
 
 {#if useFilter}
-	<LiquidGlassFilter {filterId} {width} {height} {cornerRadius} {surfaceFn} />
+	<LiquidGlassFilter
+		{filterId}
+		{width}
+		{height}
+		{cornerRadius}
+		{surfaceFn}
+		{blurRadius}
+		{specularOpacity}
+		{specularSaturation}
+		{specularAngle}
+		{specularFalloff}
+		{chromaticAberration}
+		{glassTint}
+		{bezelWidth}
+		{glassThickness}
+		{refractionStrength}
+	/>
 {/if}
 
 <svelte:element
