@@ -164,10 +164,7 @@
 
 		pendingApproval = false
 		if (token) {
-			// access gate: show pending approval if user lacks frontend access.
-			// wait for permissions to load before deciding — avoids race where the
-			// gate briefly renders the full app, or where a failed refresh incorrectly
-			// locks out the user (fail open: if refresh fails, assume access).
+			// access gate
 			await permissions.refresh()
 			if (permissions.list !== null && !permissions.hasPermission('frontend:access')) {
 				pendingApproval = true

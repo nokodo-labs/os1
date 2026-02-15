@@ -3,13 +3,15 @@
 	import { goto, onNavigate } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { apiClient } from '$lib/api/client'
-	import { getJwtUserId } from '$lib/auth/jwt'
+	import { runCreateAndRunStream } from '$lib/api/streaming'
 	import { getAccessToken } from '$lib/auth/session.svelte'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
+	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
+	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
 	import TemporaryChatToggleButton from '$lib/components/chat/TemporaryChatToggleButton.svelte'
+	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
 		type HomeSuggestion,
@@ -23,11 +25,13 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { agents } from '$lib/stores/agents.svelte'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { fade } from 'svelte/transition'
@@ -38,6 +42,10 @@
 	let showSuggestions = $state(false)
 	let highlightedIndex = $state(-1)
 	let isSuggestionNavigationActive = $state(false)
+
+	// optimistic chat state shown while create_and_run is streaming
+	let optimisticContent = $state<string | null>(null)
+	let createAndRunAbort = $state<AbortController | null>(null)
 
 	const chrome = useSystemChrome()
 	const debugUi = useDebugUi()
@@ -122,6 +130,13 @@
 			}, 420) as unknown as number
 		} else {
 			showChatBanner = false
+			// abort any in-progress create_and_run when leaving chat mode
+			if (createAndRunAbort) {
+				createAndRunAbort.abort()
+				createAndRunAbort = null
+				isGenerating = false
+				optimisticContent = null
+			}
 		}
 		return () => {
 			if (timeoutId !== null) window.clearTimeout(timeoutId)
@@ -193,10 +208,6 @@
 	})
 
 	// ============ NAVIGATION HELPERS ============
-	async function navigateToChat(threadId: string) {
-		await goto(resolve(`/c/${threadId}`), { keepFocus: true, noScroll: true })
-	}
-
 	async function setHomeChatMode(mode: Exclude<ChatMode, null>, opts?: { replace?: boolean }) {
 		chatStartError = null
 		const navOpts = {
@@ -213,29 +224,72 @@
 
 	async function createThreadAndNavigate(content: string): Promise<void> {
 		const token = getAccessToken()
-		const userId = token ? getJwtUserId(token) : null
-		if (!token || !userId) {
+		if (!token) {
 			chatStartError = 'please log in again'
 			inputValue = content
 			return
 		}
-		const { data, error } = await apiClient().POST('/v1/threads', {
-			body: {
-				owner_id: userId,
-				is_archived: false,
-				is_temporary: isTemporaryChatMode,
-				tags: [],
-				project_ids: [],
-			},
-		})
-		if (error || !data) {
-			chatStartError = 'could not start chat. try again.'
+
+		if (!selectedAgent.id) {
+			chatStartError = 'select an agent first'
 			inputValue = content
 			return
 		}
-		chat.activeThread = data
-		chat.pendingChatStart = { threadId: data.id, content }
-		await navigateToChat(data.id)
+
+		// show optimistic UI immediately
+		optimisticContent = content
+		isGenerating = true
+		inputValue = ''
+
+		const controller = new AbortController()
+		createAndRunAbort = controller
+
+		try {
+			const generator = runCreateAndRunStream({
+				agentId: selectedAgent.id,
+				input: content,
+				isTemporary: isTemporaryChatMode,
+				signal: controller.signal,
+			})
+
+			const first = await generator.next()
+			if (first.done || !first.value || first.value.event !== 'thread_created') {
+				throw new Error('could not start chat')
+			}
+
+			const thread = first.value.data as unknown as import('$lib/stores/chat.svelte').Thread
+			chat.threadCache.set(thread)
+			chat.activeThread = thread
+			createAndRunAbort = null
+
+			// hand off the live generator so the chat page continues consuming
+			// the same stream — no abort, no duplicate run request.
+			// thread_created was already consumed; remaining events are ChatStreamDelta.
+			chat.pendingCreateAndRun = {
+				threadId: thread.id,
+				stream: generator as AsyncGenerator<
+					import('$lib/api/streaming').ChatStreamDelta,
+					void,
+					unknown
+				>,
+			}
+
+			// navigate seamlessly — replaceState so back goes to home, not /?chat=new
+			await goto(resolve(`/c/${thread.id}`), {
+				keepFocus: true,
+				noScroll: true,
+				replaceState: true,
+			})
+			return
+		} catch (e) {
+			if (!controller.signal.aborted) {
+				chatStartError = e instanceof Error ? e.message : 'could not start chat. try again.'
+				inputValue = content
+			}
+			isGenerating = false
+			optimisticContent = null
+			createAndRunAbort = null
+		}
 	}
 
 	function handleSendMessage(content: string) {
@@ -249,7 +303,9 @@
 	}
 
 	function handleStopGeneration() {
+		createAndRunAbort?.abort()
 		isGenerating = false
+		optimisticContent = null
 	}
 
 	function selectSuggestion(suggestion: HomeSuggestion) {
@@ -329,18 +385,51 @@
 
 {#if isChatMode}
 	<!-- ═══════════════ CHAT MODE LAYOUT ═══════════════ -->
-
-	<!-- keep everything inside the main content column so it aligns with the island and shifts with the sidebar -->
-	<div class="flex min-h-0 flex-1 flex-col">
+	<!-- absolute positioning mirrors the chat page layout so content aligns
+	     exactly during the view transition (the main shell's padding is bypassed). -->
+	<div class="absolute inset-0 flex flex-col">
 		<!-- scrollable content area -->
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div
-				class="mx-auto flex min-h-full w-full flex-col pt-[clamp(12px,4vw,32px)] pb-8 {device.isMobile
-					? ''
-					: 'max-w-7xl'}"
-				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+				class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
+				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: 96px;"
 			>
-				{#if showChatBanner}
+				{#if optimisticContent}
+					<!-- optimistic chat: user message + loading assistant -->
+					<div class="flex flex-1 flex-col gap-6 py-4">
+						<div class="space-y-3">
+							<UserChatMessage
+								content={optimisticContent}
+								timestamp={new Date()}
+								tailStyle={preferences.data.appearance.bubbleTailStyle ?? 'none'}
+								showTail={preferences.data.appearance.bubbleTailStyle !== 'none'}
+							/>
+						</div>
+						<div class="space-y-3">
+							<AssistantChatMessage
+								content=""
+								isLastMessage={true}
+								isRunActive={true}
+								isStreaming={true}
+								showStreamingPlaceholder={false}
+								modelName={agents.list.find((a) => a.id === selectedAgent.id)
+									?.name ?? 'assistant'}
+								avatarUrl={agents.list.find((a) => a.id === selectedAgent.id)
+									?.profile_image_url ?? null}
+							>
+								{#snippet lead()}
+									<div
+										class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
+									>
+										<div class="my-3">
+											<ChatGptLoadingIndicator />
+										</div>
+									</div>
+								{/snippet}
+							</AssistantChatMessage>
+						</div>
+					</div>
+				{:else if showChatBanner}
 					<div
 						class="flex flex-1 items-center justify-center py-16"
 						in:fade={{ duration: 220 }}
@@ -357,9 +446,7 @@
 								{/if}
 							</div>
 							{#if isTemporaryChatMode}
-								<h2 class="text-2xl font-semibold text-white/90">
-									temporary chat
-								</h2>
+								<h2 class="text-2xl font-semibold text-white/90">temporary chat</h2>
 								<p class="mt-2 text-sm text-white/60">
 									messages here won't be saved
 								</p>
@@ -372,8 +459,8 @@
 			</div>
 		</div>
 
-		<!-- bottom input (non-fixed; stays aligned with island/sidebar) -->
-		<div class="shrink-0 pt-4 pb-4">
+		<!-- bottom input (absolute bottom, matching chat page layout) -->
+		<div class="absolute right-0 bottom-0 left-0 z-10 shrink-0 pt-4 pb-4">
 			<div
 				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"

@@ -5,6 +5,7 @@
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import type { ToastItem } from '$lib/stores/notifications.svelte'
+	import { SvelteMap } from 'svelte/reactivity'
 
 	interface Props {
 		toasts: ToastItem[]
@@ -17,7 +18,7 @@
 
 	// --- auto-dismiss (component-managed so exit animation plays) ---
 	const AUTO_DISMISS_MS = 5000
-	let dismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
+	let dismissTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
 
 	$effect(() => {
 		const currentIds = new Set(toasts.map((t) => t.id))

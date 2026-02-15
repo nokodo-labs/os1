@@ -4,57 +4,44 @@
  */
 
 import { apiClient } from '$lib/api/client'
-import { eventStreamClient, runChatStream, type StreamEvent } from '$lib/api/streaming'
+import {
+	eventStreamClient,
+	runChatStream,
+	type ChatStreamDelta,
+	type StreamEvent,
+	type UnknownSseEvent,
+} from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { agents } from '$lib/stores/agents.svelte'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
+import { notifications } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { session } from '$lib/stores/session.svelte'
-import {
-	ToolExecutionTracker,
-	parseToolCalls,
-	parseToolEvent,
-	parseToolResult,
-	type ToolCall,
-} from '$lib/tools'
+import { ToolExecutionTracker, parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
 import { hapticFeedback } from '$lib/utils/haptics'
 import { tick } from 'svelte'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import {
+	blockHasStreamingAssistant,
+	buildAgentLookup,
+	buildMessageChildren,
+	buildRunBlocks,
 	computeIsAtBottom,
 	contentPartsToText,
+	getBlockFirstAssistant,
+	getBlockResponseItems,
 	getMessageCreatedAt,
-	getRunId,
 	sdkPartsToText,
+	upsertToolCalls,
+	type RunBlock,
+	type StreamingAssistantState,
 } from './chatHelpers'
 
 export type ApiMessage = components['schemas']['Message']
 type ApiEvent = components['schemas']['Event']
 
-export type RunItem =
-	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-	| { kind: 'optimistic_user'; content: string; timestamp: Date }
-	| { kind: 'assistant'; message: ApiMessage }
-	| { kind: 'tool'; toolCallId: string }
-	| { kind: 'streaming_assistant' }
-	| { kind: 'streaming_tool'; toolCallId: string }
-
-export interface RunBlock {
-	runId: string
-	title: string
-	startedAt: Date
-	items: RunItem[]
-	responseRootId: string | null
-}
-
-export interface StreamingAssistantState {
-	runId: string | null
-	messageId: string
-	content: string
-	timestamp: Date
-	senderAgentId: string | null
-	toolCalls: ToolCall[]
-}
+// re-export types moved to chatHelpers for backward compatibility
+export type { RunBlock, RunItem, StreamingAssistantState } from './chatHelpers'
 
 /**
  * creates the reactive chat state for a thread page.
@@ -126,25 +113,7 @@ export function createChatState() {
 	const showThreadLoader = $derived(isThreadLoading)
 	const currentUserId = $derived(session.currentUser?.id ?? null)
 
-	const messageChildren = $derived.by(() => {
-		const map = new SvelteMap<string | null, string[]>()
-		for (const msg of messageTree.values()) {
-			const pid = msg.parent_id ?? null
-			const existing = map.get(pid) ?? []
-			existing.push(msg.id)
-			map.set(pid, existing)
-		}
-		// Sort children by created_at
-		for (const [, kids] of map) {
-			kids.sort((a, b) => {
-				const ma = messageTree.get(a)
-				const mb = messageTree.get(b)
-				if (!ma || !mb) return 0
-				return getMessageCreatedAt(ma).getTime() - getMessageCreatedAt(mb).getTime()
-			})
-		}
-		return map
-	})
+	const messageChildren = $derived.by(() => buildMessageChildren(messageTree.values()))
 
 	// reconstruct the active branch from root to currentLeafId
 	const messages = $derived.by(() => {
@@ -164,177 +133,29 @@ export function createChatState() {
 		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null || runError
 	)
 
-	const agentNameById = $derived(new SvelteMap(agents.list.map((a) => [a.id, a.name])))
+	const agentNameById = $derived(buildAgentLookup(agents.list, (a) => a.name))
 	const agentAvatarById = $derived(
-		new SvelteMap(agents.list.map((a) => [a.id, a.profile_image_url ?? null]))
+		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
 	)
-	// ─────────────────────────────────────────────────────────────────────────────
-	// tool call helpers
-	// ─────────────────────────────────────────────────────────────────────────────
-	function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCall[] {
-		const out = new SvelteMap(existing.map((tc) => [tc.id, tc]))
-		if (!Array.isArray(incoming)) return Array.from(out.values())
-		for (const item of incoming) {
-			if (!item || typeof item !== 'object') continue
-			const tc = item as Record<string, unknown>
-			const id = typeof tc.id === 'string' ? tc.id : null
-			const name = typeof tc.name === 'string' ? tc.name : null
-			const args =
-				tc.arguments && typeof tc.arguments === 'object' && tc.arguments !== null
-					? (tc.arguments as Record<string, unknown>)
-					: {}
-			if (!id || !name) continue
-			out.set(id, { id, name, arguments: args })
-		}
-		return Array.from(out.values())
-	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
 	// run block management
 	// ─────────────────────────────────────────────────────────────────────────────
 	function rebuildRunBlocks(): void {
-		const sorted = messages.slice().sort((a, b) => {
-			return getMessageCreatedAt(a).getTime() - getMessageCreatedAt(b).getTime()
+		const result = buildRunBlocks({
+			messages,
+			userId: currentUserId,
+			streamingAssistant,
+			optimisticUserMessage,
+			viewingStreamingBranch,
 		})
 
-		const blocks: RunBlock[] = []
-		const byRun = new SvelteMap<string, RunBlock>()
-		const seenToolCalls = new SvelteMap<string, SvelteSet<string>>()
-		const userId = currentUserId
+		// apply side effects: register tool calls and results
+		for (const tc of result.toolCalls) toolTracker.registerToolCall(tc)
+		for (const tr of result.toolResults) toolTracker.registerResult(tr)
+		if (result.toolCalls.length > 0 || result.toolResults.length > 0) toolTick++
 
-		const ensureBlock = (runId: string, startedAt: Date, title: string): RunBlock => {
-			const existing = byRun.get(runId)
-			if (existing) return existing
-			const block: RunBlock = {
-				runId,
-				startedAt,
-				title,
-				items: [],
-				responseRootId: null,
-			}
-			byRun.set(runId, block)
-			blocks.push(block)
-			return block
-		}
-
-		for (const msg of sorted) {
-			// skip the message currently being streamed - the streaming overlay handles it
-			if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
-
-			const runId = getRunId(msg)
-			const block = ensureBlock(runId, getMessageCreatedAt(msg), 'assistant')
-			let seen = seenToolCalls.get(runId)
-			if (!seen) {
-				seen = new SvelteSet()
-				seenToolCalls.set(runId, seen)
-			}
-
-			if (msg.type === 'user') {
-				const align: 'left' | 'right' =
-					userId && msg.sender_user_id && msg.sender_user_id !== userId ? 'left' : 'right'
-				block.items.push({ kind: 'user', message: msg, align })
-				continue
-			}
-
-			// mark the first assistant/tool message as the response root for branch navigation
-			if (block.responseRootId === null) {
-				block.responseRootId = msg.id
-			}
-
-			if (msg.type === 'assistant') {
-				// add text content first (text comes before tool calls in a turn)
-				const text = contentPartsToText(msg.content).trim()
-				if (text.length > 0) block.items.push({ kind: 'assistant', message: msg })
-				// then add tool calls
-				for (const tc of parseToolCalls(msg)) {
-					toolTracker.registerToolCall(tc)
-					if (!seen.has(tc.id)) {
-						seen.add(tc.id)
-						block.items.push({ kind: 'tool', toolCallId: tc.id })
-					}
-				}
-				continue
-			}
-
-			if (msg.type === 'tool') {
-				const result = parseToolResult(msg)
-				if (result) toolTracker.registerResult(result)
-				continue
-			}
-		}
-
-		if (streamingAssistant && viewingStreamingBranch) {
-			const runId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
-			const block = ensureBlock(runId, streamingAssistant.timestamp, 'assistant')
-
-			// add optimistic user message to this run block (before assistant response)
-			// this ensures user message and streaming assistant appear in correct order
-			if (optimisticUserMessage) {
-				block.items.push({
-					kind: 'optimistic_user',
-					content: optimisticUserMessage.content,
-					timestamp: optimisticUserMessage.timestamp,
-				})
-			}
-
-			if (block.responseRootId === null) {
-				block.responseRootId = streamingAssistant.messageId
-			}
-
-			let seen = seenToolCalls.get(runId)
-			if (!seen) {
-				seen = new SvelteSet()
-				seenToolCalls.set(runId, seen)
-			}
-			block.items.push({ kind: 'streaming_assistant' })
-			for (const tc of streamingAssistant.toolCalls) {
-				toolTracker.registerToolCall(tc)
-				if (!seen.has(tc.id)) {
-					seen.add(tc.id)
-					block.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
-				}
-			}
-		} else if (optimisticUserMessage && viewingStreamingBranch) {
-			// optimistic user message exists but no streaming assistant yet
-			// create a standalone block for the pending user message
-			const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
-			const block = ensureBlock(runId, optimisticUserMessage.timestamp, 'pending')
-			block.items.push({
-				kind: 'optimistic_user',
-				content: optimisticUserMessage.content,
-				timestamp: optimisticUserMessage.timestamp,
-			})
-		}
-
-		runBlocks = blocks
-	}
-
-	function getBlockResponseItems(
-		block: RunBlock
-	): Array<
-		| { kind: 'assistant'; message: ApiMessage }
-		| { kind: 'tool'; toolCallId: string }
-		| { kind: 'streaming_assistant' }
-		| { kind: 'streaming_tool'; toolCallId: string }
-	> {
-		return block.items.filter(
-			(
-				item
-			): item is Exclude<
-				RunItem,
-				| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-				| { kind: 'optimistic_user'; content: string; timestamp: Date }
-			> => item.kind !== 'user' && item.kind !== 'optimistic_user'
-		)
-	}
-
-	function getBlockFirstAssistant(block: RunBlock): ApiMessage | null {
-		const item = block.items.find((i) => i.kind === 'assistant')
-		return item?.kind === 'assistant' ? item.message : null
-	}
-
-	function blockHasStreamingAssistant(block: RunBlock): boolean {
-		return block.items.some((item) => item.kind === 'streaming_assistant')
+		runBlocks = result.blocks
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -679,9 +500,236 @@ export function createChatState() {
 		return true
 	}
 
+	/**
+	 * process a single SSE delta event.
+	 *
+	 * returns 'done' when the stream should stop, 'continue' otherwise.
+	 */
+	function processDelta(
+		delta: ChatStreamDelta,
+		ctx: {
+			runId: number
+			threadId: string
+			getAssistantParentId: () => string | null
+			setAssistantParentId: (id: string | null) => void
+		}
+	): 'done' | 'continue' {
+		switch (delta.event) {
+			case 'error':
+				throw new Error(delta.data.message || 'generation failed')
+			case 'done':
+				return 'done'
+			case 'message_created': {
+				const msg = delta.data as unknown as ApiMessage
+				if (msg.type === 'user') {
+					optimisticUserMessage = null
+				}
+				messageTree.set(msg.id, msg)
+				streamingLeafId = msg.id
+				if (viewingStreamingBranch) {
+					currentLeafId = msg.id
+				}
+				ctx.setAssistantParentId(msg.id)
+				streamingAssistantParentId = msg.id
+				return 'continue'
+			}
+			case 'delta': {
+				const env = delta.data
+				const d = env.delta as Record<string, unknown>
+				const messageId = env.message_id
+
+				// agent done sentinel
+				if (d && d.done === true) return 'done'
+
+				// tool results
+				if (d && typeof d === 'object' && d.tool) {
+					const tool = d.tool as Record<string, unknown>
+					const toolCallId =
+						typeof tool.tool_call_id === 'string' ? tool.tool_call_id : null
+					const output = typeof tool.tool_output === 'string' ? tool.tool_output : ''
+					const isError = tool.is_error === true
+					if (toolCallId) {
+						toolTracker.registerResult({ toolCallId, output, isError })
+						toolTick++
+					}
+				}
+
+				// assistant streaming
+				if (d && typeof d === 'object' && d.chat && messageId) {
+					const chat = d.chat as Record<string, unknown>
+					const msg = (chat.message ?? null) as Record<string, unknown> | null
+					const parts = msg ? msg.content : null
+					const chunkText = sdkPartsToText(parts)
+					const toolCalls = msg ? msg.tool_calls : null
+					const isDone = chat.done === true
+
+					const isNewStreamingMessage =
+						!streamingAssistant || streamingAssistant.messageId !== messageId
+					if (isNewStreamingMessage) {
+						hapticFeedback()
+						const runId = typeof env.run_id === 'string' ? env.run_id : null
+						streamingAssistant = {
+							runId,
+							messageId,
+							content: '',
+							timestamp: new SvelteDate(),
+							senderAgentId: selectedAgent.id,
+							toolCalls: [],
+						}
+						if (!messageTree.has(messageId)) {
+							const now = new SvelteDate().toISOString()
+							messageTree.set(messageId, {
+								id: messageId,
+								thread_id: ctx.threadId,
+								parent_id: ctx.getAssistantParentId(),
+								type: 'assistant',
+								content: [],
+								tool_calls: [],
+								metadata_: runId ? { run_id: runId } : undefined,
+								sender_agent_id: selectedAgent.id,
+								sender_user_id: null,
+								created_at: now,
+								updated_at: now,
+							} satisfies ApiMessage)
+						}
+						streamingLeafId = messageId
+						// keep currentLeafId pointing to the streaming message so
+						// the messages derived includes the entire branch
+						if (viewingStreamingBranch) {
+							currentLeafId = messageId
+						}
+					}
+					const streaming = streamingAssistant
+					if (!streaming) return 'continue'
+
+					if (chunkText) streaming.content += chunkText
+
+					let toolCallsChanged = false
+					if (Array.isArray(toolCalls)) {
+						const prev = streaming.toolCalls
+						const prevSig = prev
+							.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
+							.join('|')
+						const next = upsertToolCalls(prev, toolCalls)
+						const nextSig = next
+							.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
+							.join('|')
+						toolCallsChanged = prevSig !== nextSig
+						streaming.toolCalls = next
+						if (toolCallsChanged) {
+							for (const tc of streaming.toolCalls) toolTracker.registerToolCall(tc)
+							toolTick++
+						}
+					}
+
+					if (isNewStreamingMessage || toolCallsChanged) {
+						rebuildRunBlocks()
+					}
+
+					if (isDone) {
+						const content = streaming.content.trim()
+						const now = new SvelteDate().toISOString()
+						const finalized = {
+							id: streaming.messageId,
+							thread_id: ctx.threadId,
+							parent_id: ctx.getAssistantParentId(),
+							type: 'assistant',
+							content: content ? [{ type: 'text', text: content }] : [],
+							tool_calls: streaming.toolCalls.map((tc) => ({
+								id: tc.id,
+								name: tc.name,
+								arguments: tc.arguments,
+							})),
+							metadata_: streaming.runId ? { run_id: streaming.runId } : undefined,
+							sender_agent_id: streaming.senderAgentId,
+							sender_user_id: null,
+							created_at: now,
+							updated_at: now,
+						} satisfies ApiMessage
+						messageTree.set(finalized.id, finalized)
+						streamingLeafId = finalized.id
+						if (viewingStreamingBranch) {
+							currentLeafId = finalized.id
+						}
+						const parentId = finalized.id
+						ctx.setAssistantParentId(parentId)
+						streamingAssistantParentId = parentId
+
+						if (streaming.toolCalls.length > 0) {
+							streamingAssistant = {
+								runId: streaming.runId,
+								messageId: `pending-next-${ctx.runId}`,
+								content: '',
+								timestamp: new SvelteDate(),
+								senderAgentId: streaming.senderAgentId,
+								toolCalls: [],
+							}
+						} else {
+							streamingAssistant = null
+						}
+						rebuildRunBlocks()
+					}
+				}
+				return 'continue'
+			}
+			case 'unknown': {
+				// future-proofing: log and show transient banner for unrecognized events
+				const unknownData = delta.data as UnknownSseEvent
+				console.warn(`unknown SSE event: ${unknownData.eventType}`, unknownData.rawData)
+				notifications.toasts = [
+					...notifications.toasts,
+					{
+						id: `unknown-sse-${Date.now()}`,
+						title: 'unknown event',
+						body: `received unrecognized event: ${unknownData.eventType}`,
+						iconUrl: null,
+						addedAt: Date.now(),
+					},
+				]
+				return 'continue'
+			}
+			default:
+				return 'continue'
+		}
+	}
+
 	// ─────────────────────────────────────────────────────────────────────────────
 	// streaming
 	// ─────────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * consume any async generator of chat deltas, processing each through the
+	 * standard processDelta pipeline. decoupled from the HTTP transport so it
+	 * can be fed a generator from runChatStream, runCreateAndRunStream, or
+	 * any other source.
+	 */
+	async function consumeStream(
+		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
+		opts: { runId: number; threadId: string; parentId: string | null }
+	): Promise<void> {
+		let assistantParentId = opts.parentId
+		streamingAssistantParentId = assistantParentId
+
+		const ctx = {
+			runId: opts.runId,
+			threadId: opts.threadId,
+			getAssistantParentId: () => assistantParentId,
+			setAssistantParentId: (id: string | null) => {
+				assistantParentId = id
+			},
+		}
+
+		for await (const delta of stream) {
+			if (opts.runId !== activeRun) {
+				runAbortController?.abort()
+				return
+			}
+
+			const result = processDelta(delta, ctx)
+			if (result === 'done') return
+		}
+	}
+
 	async function runThreadStream(opts: {
 		threadId: string
 		agentId: string
@@ -692,191 +740,70 @@ export function createChatState() {
 		runAbortController?.abort()
 		runAbortController = new AbortController()
 
-		let assistantParentId = opts.parentId ?? currentLeafId
-		streamingAssistantParentId = assistantParentId
+		const parentId = opts.parentId ?? currentLeafId
 
 		// when retrying, switch view to parent so new response replaces old branch
 		if (!opts.input) {
-			if (assistantParentId) currentLeafId = assistantParentId
+			if (parentId) currentLeafId = parentId
 			else currentLeafId = null
 		}
 
-		for await (const delta of runChatStream({
+		const stream = runChatStream({
 			threadId: opts.threadId,
 			agentId: opts.agentId,
 			input: opts.input,
-			parentId: assistantParentId,
+			parentId,
 			signal: runAbortController.signal,
-		})) {
-			if (opts.runId !== activeRun) {
-				runAbortController.abort()
-				return
-			}
+		})
 
-			switch (delta.event) {
-				case 'error':
-					throw new Error(delta.data.message || 'generation failed')
-				case 'done':
-					return
-				case 'message_created': {
-					const msg = delta.data as unknown as ApiMessage
-					if (msg.type === 'user') {
-						optimisticUserMessage = null
-					}
-					messageTree.set(msg.id, msg)
-					streamingLeafId = msg.id
-					if (viewingStreamingBranch) {
-						currentLeafId = msg.id
-					}
-					// keep parent chain updated for subsequent messages in this run
-					assistantParentId = msg.id
-					streamingAssistantParentId = msg.id
-					break
-				}
-				case 'delta': {
-					const env = delta.data
-					const d = env.delta as Record<string, unknown>
-					const messageId = env.message_id
+		await consumeStream(stream, {
+			runId: opts.runId,
+			threadId: opts.threadId,
+			parentId,
+		})
+	}
 
-					// agent done sentinel
-					if (d && d.done === true) return
+	/**
+	 * resume a create_and_run stream that was started on another page.
+	 * the generator has already yielded `thread_created` — this consumes
+	 * the remaining run deltas (message_created, delta, done, etc).
+	 */
+	async function resumeCreateAndRun(
+		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
+		threadId: string
+	): Promise<void> {
+		runAbortController?.abort()
+		runAbortController = new AbortController()
 
-					// tool results (register against tool_call_id)
-					if (d && typeof d === 'object' && d.tool) {
-						const tool = d.tool as Record<string, unknown>
-						const toolCallId =
-							typeof tool.tool_call_id === 'string' ? tool.tool_call_id : null
-						const output = typeof tool.tool_output === 'string' ? tool.tool_output : ''
-						const isError = tool.is_error === true
-						if (toolCallId) {
-							toolTracker.registerResult({ toolCallId, output, isError })
-							toolTick++
-						}
-					}
+		const runId = ++activeRun
+		isGenerating = true
+		viewingStreamingBranch = true
+		streamingLeafId = null
+		streamingAssistant = {
+			runId: null,
+			messageId: `pending-${runId}`,
+			content: '',
+			timestamp: new SvelteDate(),
+			senderAgentId: selectedAgent.id,
+			toolCalls: [],
+		}
+		rebuildRunBlocks()
 
-					// assistant streaming
-					if (d && typeof d === 'object' && d.chat && messageId) {
-						const chat = d.chat as Record<string, unknown>
-						const msg = (chat.message ?? null) as Record<string, unknown> | null
-						const parts = msg ? msg.content : null
-						const chunkText = sdkPartsToText(parts)
-						const toolCalls = msg ? msg.tool_calls : null
-						const isDone = chat.done === true
-
-						const isNewStreamingMessage =
-							!streamingAssistant || streamingAssistant.messageId !== messageId
-						if (isNewStreamingMessage) {
-							hapticFeedback()
-							const runId = typeof env.run_id === 'string' ? env.run_id : null
-							streamingAssistant = {
-								runId,
-								messageId,
-								content: '',
-								timestamp: new SvelteDate(),
-								senderAgentId: selectedAgent.id,
-								toolCalls: [],
-							}
-							// insert placeholder into tree so branch nav works immediately
-							if (!messageTree.has(messageId)) {
-								const now = new SvelteDate().toISOString()
-								messageTree.set(messageId, {
-									id: messageId,
-									thread_id: opts.threadId,
-									parent_id: assistantParentId,
-									type: 'assistant',
-									content: [],
-									tool_calls: [],
-									metadata_: runId ? { run_id: runId } : undefined,
-									sender_agent_id: selectedAgent.id,
-									sender_user_id: null,
-									created_at: now,
-									updated_at: now,
-								} satisfies ApiMessage)
-							}
-							streamingLeafId = messageId
-						}
-						const streaming = streamingAssistant
-						if (!streaming) break
-
-						if (chunkText) streaming.content += chunkText
-
-						// only force rerenders/remounts when tool state changes
-						let toolCallsChanged = false
-						if (Array.isArray(toolCalls)) {
-							const prev = streaming.toolCalls
-							const prevSig = prev
-								.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
-								.join('|')
-							const next = upsertToolCalls(prev, toolCalls)
-							const nextSig = next
-								.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
-								.join('|')
-							toolCallsChanged = prevSig !== nextSig
-							streaming.toolCalls = next
-							if (toolCallsChanged) {
-								for (const tc of streaming.toolCalls)
-									toolTracker.registerToolCall(tc)
-								toolTick++
-							}
-						}
-
-						// only rebuild blocks when structure changes
-						if (isNewStreamingMessage || toolCallsChanged) {
-							rebuildRunBlocks()
-						}
-
-						if (isDone) {
-							const content = streaming.content.trim()
-							const now = new SvelteDate().toISOString()
-							const finalized = {
-								id: streaming.messageId,
-								thread_id: opts.threadId,
-								parent_id: assistantParentId,
-								type: 'assistant',
-								content: content ? [{ type: 'text', text: content }] : [],
-								tool_calls: streaming.toolCalls.map((tc) => ({
-									id: tc.id,
-									name: tc.name,
-									arguments: tc.arguments,
-								})),
-								metadata_: streaming.runId
-									? { run_id: streaming.runId }
-									: undefined,
-								sender_agent_id: streaming.senderAgentId,
-								sender_user_id: null,
-								created_at: now,
-								updated_at: now,
-							} satisfies ApiMessage
-							messageTree.set(finalized.id, finalized)
-							streamingLeafId = finalized.id
-							if (viewingStreamingBranch) {
-								currentLeafId = finalized.id
-							}
-							// update parent chain for next message in this run
-							assistantParentId = finalized.id
-							streamingAssistantParentId = finalized.id
-
-							// if this message had tool calls, the agent will continue after
-							// tool execution - keep a skeleton so the pulsing ball renders
-							// during the gap before the next assistant message streams
-							if (streaming.toolCalls.length > 0) {
-								streamingAssistant = {
-									runId: streaming.runId,
-									messageId: `pending-next-${opts.runId}`,
-									content: '',
-									timestamp: new SvelteDate(),
-									senderAgentId: streaming.senderAgentId,
-									toolCalls: [],
-								}
-							} else {
-								streamingAssistant = null
-							}
-							rebuildRunBlocks()
-						}
-					}
-					break
-				}
-			}
+		try {
+			await consumeStream(stream, { runId, threadId, parentId: currentLeafId })
+			if (runId !== activeRun) return
+			runError = false
+			optimisticUserMessage = null
+			streamingAssistant = null
+			rebuildRunBlocks()
+		} catch (e) {
+			console.error('failed to resume create_and_run stream', e)
+			runError = true
+			optimisticUserMessage = null
+			streamingAssistant = null
+			rebuildRunBlocks()
+		} finally {
+			if (runId === activeRun) isGenerating = false
 		}
 	}
 
@@ -1318,6 +1245,7 @@ export function createChatState() {
 		handleRegenerateMessage,
 		handleStopGeneration,
 		handleEditMessage,
+		resumeCreateAndRun,
 		requestDeleteUserMessage,
 		deleteUserMessage,
 		setThread,

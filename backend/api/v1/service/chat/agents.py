@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from collections.abc import AsyncIterator
 
@@ -41,6 +40,7 @@ from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.tool import Tool
+from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -180,9 +180,8 @@ async def inject_system_instructions(
 
 
 def _sse_event(*, event: str, data: dict[str, object]) -> bytes:
-	"""format an sse event."""
-	payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
-	return f"event: {event}\ndata: {payload}\n\n".encode()
+	"""format an sse event (delegates to sse utils)."""
+	return sse_encode(event=event, data=data)
 
 
 def _message_to_sse_data(msg: MessageORM) -> dict[str, object]:

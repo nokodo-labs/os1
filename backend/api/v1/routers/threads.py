@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,7 +27,7 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
-from api.schemas.runs import ThreadRunRequest
+from api.schemas.runs import ThreadCreateAndRunRequest, ThreadRunRequest
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.thread import (
 	Thread as ThreadSchema,
@@ -50,6 +51,7 @@ from api.v1.service.chat.models import (
 	build_chat_model,
 	resolve_chat_model,
 )
+from nokodo_ai.utils.sse import sse_encode, sse_response
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -70,6 +72,52 @@ async def create_thread(
 ) -> Thread:
 	"""Create a new thread."""
 	return await thread_service.create_thread(thread_in, db, principal=principal)
+
+
+@router.post("/create_and_run")
+async def create_and_run(
+	req: ThreadCreateAndRunRequest,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+	"""create a thread and immediately start an agent run, all via one SSE stream.
+
+	the first event is ``thread_created`` with the full thread payload so the
+	client can capture the thread id. subsequent events are the normal run
+	events (message_created, delta, done).
+	"""
+	owner_id = TypeID(principal.user.id)
+
+	thread = await thread_service.create_thread(
+		ThreadCreate(
+			owner_id=owner_id,
+			is_temporary=req.is_temporary,
+			tags=req.tags,
+			project_ids=req.project_ids,
+		),
+		db,
+		principal=principal,
+	)
+
+	thread_id = TypeID(thread.id)
+
+	async def _stream() -> AsyncIterator[bytes]:
+		# emit the newly created thread so the frontend knows the id
+		thread_schema = ThreadSchema.model_validate(thread)
+		yield sse_encode(event="thread_created", data=thread_schema)
+
+		# delegate to the normal run_agent generator
+		async for chunk in chat_run_agent(
+			thread_id,
+			req.agent_id,
+			db,
+			principal,
+			input=req.input,
+			client_context=req.client_context,
+		):
+			yield chunk
+
+	return sse_response(_stream())
 
 
 @router.get("", response_model=list[ThreadSchema])
@@ -329,15 +377,7 @@ async def run_thread(
 		parent_id=req.parent_id,
 		client_context=req.client_context,
 	)
-	return StreamingResponse(
-		stream,
-		media_type="text/event-stream",
-		headers={
-			"Cache-Control": "no-cache",
-			"Connection": "keep-alive",
-			"X-Accel-Buffering": "no",
-		},
-	)
+	return sse_response(stream)
 
 
 @router.post("/{thread_id}/switch", response_model=ThreadSwitchResponse)

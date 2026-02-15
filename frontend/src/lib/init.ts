@@ -19,6 +19,7 @@ import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
 import { initDevice } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
+import { session } from '$lib/stores/session.svelte'
 import { loadSettings } from '$lib/stores/settings.svelte'
 
 export interface InitResult {
@@ -54,7 +55,12 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 	// 3. mark auth as ready (unblocks any waiting API requests)
 	markAuthReady()
 
-	// 4 & 5. load settings, connect event stream if authenticated
+	// 4. load user data once. all downstream consumers read from session
+	if (token) {
+		await session.refreshUser()
+	}
+
+	// 5 & 6. load settings, connect event stream if authenticated
 	void loadSettings()
 	if (token) {
 		eventStreamClient.connect()

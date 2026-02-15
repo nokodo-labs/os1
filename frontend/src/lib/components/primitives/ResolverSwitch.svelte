@@ -15,7 +15,6 @@
 		ariaLabel?: string
 		glassThickness?: number
 		bezelWidth?: number
-		refractiveIndex?: number
 		blur?: number
 		specularOpacity?: number
 		specularSaturation?: number
@@ -35,7 +34,6 @@
 		ariaLabel = '',
 		glassThickness,
 		bezelWidth,
-		refractiveIndex,
 		blur,
 		specularOpacity,
 		specularSaturation,
@@ -56,7 +54,6 @@
 		{ariaLabel}
 		{glassThickness}
 		{bezelWidth}
-		{refractiveIndex}
 		{blur}
 		{specularOpacity}
 		{specularSaturation}
@@ -73,7 +70,6 @@
 		{ariaLabel}
 		{glassThickness}
 		{bezelWidth}
-		{refractiveIndex}
 		{blur}
 		{specularOpacity}
 		{specularSaturation}

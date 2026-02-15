@@ -61,9 +61,7 @@
 		wasGenerating = generating
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: agents loading
-	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!device.ready) return
 		if (device.isMobile) return
@@ -91,9 +89,7 @@
 		selectedAgent.set(selectedAgent.resolveDefault(agents.list))
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: thread loading and management
-	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		const threadId = page.params.id
 		return untrack(() => {
@@ -101,6 +97,7 @@
 				chat.clearThread()
 				return
 			}
+
 			let cancelled = false
 			chat.isThreadLoading = true
 			chat.hasLoadedBranch = false
@@ -122,25 +119,29 @@
 		})
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: Island context actions for agent selector
-	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
 		return () => chrome.setContextActions(null)
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: tool events subscription
-	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.thread) return
 		return chat.subscribeToToolEvents(chat.thread.id)
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
-	// effects: pending chat start
-	// ─────────────────────────────────────────────────────────────────────────────
+	// effects: pending create-and-run stream handoff
+	$effect(() => {
+		if (!chat.thread) return
+		const pending = chatStore.pendingCreateAndRun
+		if (!pending || pending.threadId !== chat.thread.id) return
+		const stream = chatStore.consumePendingCreateAndRun(chat.thread.id)
+		if (!stream) return
+		chat.resumeCreateAndRun(stream, chat.thread.id)
+	})
+
+	// effects: pending chat start (for non-streaming handoffs)
 	$effect(() => {
 		if (!chat.thread) return
 		const pending = chatStore.pendingChatStart
@@ -161,9 +162,7 @@
 		chat.handleSendMessage(content)
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: input draft persistence
-	// ─────────────────────────────────────────────────────────────────────────────
 	// restore draft on mount
 	$effect(() => {
 		const threadId = page.params.id
@@ -178,9 +177,7 @@
 		chatStore.setDraft(threadId, chat.inputValue)
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: input overlay height tracking
-	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!chat.inputOverlay) {
 			chat.inputOverlayHeight = 0
@@ -196,9 +193,7 @@
 		return () => ro.disconnect()
 	})
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// effects: auto-scroll
-	// ─────────────────────────────────────────────────────────────────────────────
 	$effect(() => {
 		const threadId = page.params.id
 		if (!threadId) return
@@ -271,7 +266,7 @@
 	>
 		<div
 			class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: calc(var(--chrome-island-offset, 0px) + 16px); padding-bottom: {Math.max(
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: {Math.max(
 				96,
 				chat.inputOverlayHeight + 24
 			)}px;"
@@ -388,159 +383,153 @@
 							{/each}
 
 							<!-- agent run: render ALL items in chronological order -->
-							{#if true}
+							{#if chat.getBlockResponseItems(block).length > 0 || (chat.blockHasStreamingAssistant(block) && chat.streamingAssistant)}
 								{@const responseItems = chat.getBlockResponseItems(block)}
 								{@const firstAssistant = chat.getBlockFirstAssistant(block)}
 								{@const isStreamingBlock =
 									chat.blockHasStreamingAssistant(block) &&
 									chat.streamingAssistant}
+								{@const rootId = block.responseRootId}
+								{@const blockParentId =
+									(rootId
+										? (chat.messageTree.get(rootId)?.parent_id ?? null)
+										: null) ??
+									(isStreamingBlock ? chat.streamingAssistantParentId : null)}
+								{@const assistantSiblings =
+									chat.messageChildren.get(blockParentId) ?? []}
+								{@const currentSiblingIndex = rootId
+									? isStreamingBlock && !chat.messageTree.has(rootId)
+										? assistantSiblings.length
+										: assistantSiblings.indexOf(rootId)
+									: 0}
+								{@const siblingCount =
+									assistantSiblings.length +
+									(isStreamingBlock && !chat.messageTree.has(rootId ?? '')
+										? 1
+										: 0)}
+								{@const displayAgent =
+									firstAssistant?.sender_agent_id ??
+									chat.streamingAssistant?.senderAgentId ??
+									null}
 
-								{#if responseItems.length > 0 || isStreamingBlock}
-									{@const rootId = block.responseRootId}
-									{@const blockParentId =
-										(rootId
-											? (chat.messageTree.get(rootId)?.parent_id ?? null)
-											: null) ??
-										(isStreamingBlock ? chat.streamingAssistantParentId : null)}
-									{@const assistantSiblings =
-										chat.messageChildren.get(blockParentId) ?? []}
-									{@const currentSiblingIndex = rootId
-										? isStreamingBlock && !chat.messageTree.has(rootId)
-											? assistantSiblings.length
-											: assistantSiblings.indexOf(rootId)
-										: 0}
-									{@const siblingCount =
-										assistantSiblings.length +
-										(isStreamingBlock && !chat.messageTree.has(rootId ?? '')
-											? 1
-											: 0)}
-									{@const displayAgent =
-										firstAssistant?.sender_agent_id ??
-										chat.streamingAssistant?.senderAgentId ??
-										null}
-
-									<AssistantChatMessage
-										isLastMessage={i === chat.runBlocks.length - 1 &&
-											!chat.runError}
-										{siblingCount}
-										{currentSiblingIndex}
-										onPrevious={() =>
-											rootId && chat.switchBranch(rootId, 'prev')}
-										onNext={() => rootId && chat.switchBranch(rootId, 'next')}
-										content=""
-										timestamp={firstAssistant
-											? chat.getMessageCreatedAt(firstAssistant)
-											: isStreamingBlock
-												? (chat.streamingAssistant?.timestamp ?? new Date())
-												: undefined}
-										isStreaming={Boolean(isStreamingBlock)}
-										isRunActive={chat.isGenerating}
-										showStreamingPlaceholder={false}
-										modelName={displayAgent
-											? (chat.agentNameById.get(displayAgent) ?? 'assistant')
-											: 'assistant'}
-										avatarUrl={displayAgent
-											? (chat.agentAvatarById.get(displayAgent) ?? null)
-											: null}
-									>
-										{#snippet lead()}
-											{#each responseItems as item, idx (idx)}
-												{#if item.kind === 'assistant'}
+								<AssistantChatMessage
+									isLastMessage={i === chat.runBlocks.length - 1 &&
+										!chat.runError}
+									{siblingCount}
+									{currentSiblingIndex}
+									onPrevious={() => rootId && chat.switchBranch(rootId, 'prev')}
+									onNext={() => rootId && chat.switchBranch(rootId, 'next')}
+									content=""
+									timestamp={firstAssistant
+										? chat.getMessageCreatedAt(firstAssistant)
+										: isStreamingBlock
+											? (chat.streamingAssistant?.timestamp ?? new Date())
+											: undefined}
+									isStreaming={Boolean(isStreamingBlock)}
+									isRunActive={chat.isGenerating}
+									showStreamingPlaceholder={false}
+									modelName={displayAgent
+										? (chat.agentNameById.get(displayAgent) ?? 'assistant')
+										: 'assistant'}
+									avatarUrl={displayAgent
+										? (chat.agentAvatarById.get(displayAgent) ?? null)
+										: null}
+								>
+									{#snippet lead()}
+										{#each responseItems as item, idx (idx)}
+											{#if item.kind === 'assistant'}
+												<div
+													class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+												>
+													<MarkdownRenderer
+														content={chat.contentPartsToText(
+															item.message.content
+														)}
+														isStreaming={false}
+													/>
+												</div>
+											{:else if item.kind === 'tool'}
+												{#key chat.toolTick}
+													{@const exec = chat.getToolExecution(
+														item.toolCallId
+													)}
+													{#if exec}
+														<ToolExecutionCard execution={exec} />
+													{/if}
+												{/key}
+											{:else if item.kind === 'streaming_tool'}
+												{#key chat.toolTick}
+													{@const exec = chat.getToolExecution(
+														item.toolCallId
+													)}
+													{#if exec}
+														<ToolExecutionCard execution={exec} />
+													{/if}
+												{/key}
+											{:else if item.kind === 'streaming_assistant' && chat.streamingAssistant}
+												{#if chat.streamingAssistant.content.trim()}
 													<div
 														class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
 													>
 														<MarkdownRenderer
-															content={chat.contentPartsToText(
-																item.message.content
-															)}
-															isStreaming={false}
+															content={chat.streamingAssistant
+																.content}
+															isStreaming={true}
 														/>
 													</div>
-												{:else if item.kind === 'tool'}
-													{#key chat.toolTick}
-														{@const exec = chat.getToolExecution(
-															item.toolCallId
-														)}
-														{#if exec}
-															<ToolExecutionCard execution={exec} />
-														{/if}
-													{/key}
-												{:else if item.kind === 'streaming_tool'}
-													{#key chat.toolTick}
-														{@const exec = chat.getToolExecution(
-															item.toolCallId
-														)}
-														{#if exec}
-															<ToolExecutionCard execution={exec} />
-														{/if}
-													{/key}
-												{:else if item.kind === 'streaming_assistant' && chat.streamingAssistant}
-													{#if chat.streamingAssistant.content.trim()}
-														<div
-															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-														>
-															<MarkdownRenderer
-																content={chat.streamingAssistant
-																	.content}
-																isStreaming={true}
-															/>
+												{:else if !chat.hasActiveStreamingToolCalls}
+													<div
+														class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
+													>
+														<div class="my-3">
+															<ChatGptLoadingIndicator />
 														</div>
-													{:else if !chat.hasActiveStreamingToolCalls}
-														<div
-															class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
-														>
-															<div class="my-3">
-																<ChatGptLoadingIndicator />
-															</div>
-														</div>
-													{/if}
+													</div>
 												{/if}
-											{/each}
-										{/snippet}
-
-										{#snippet actions()}
-											<CopyButton
-												content={() => {
-													const allText = responseItems
-														.filter(
-															(
-																i
-															): i is {
-																kind: 'assistant'
-																message: ApiMessage
-															} => i.kind === 'assistant'
-														)
-														.map((i) =>
-															chat.contentPartsToText(
-																i.message.content
-															)
-														)
-														.join('\n\n')
-													const streamText = isStreamingBlock
-														? (chat.streamingAssistant?.content ?? '')
-														: ''
-													return (
-														allText +
-														(streamText ? '\n\n' + streamText : '')
-													)
-												}}
-											/>
-											{#if !isStreamingBlock}
-												<MessageActionButton
-													onclick={() => {
-														// pass the user message ID so new responses branch from there
-														const userMessageId =
-															chat.findRunUserMessage(block)
-														chat.handleRegenerateMessage(userMessageId)
-													}}
-													ariaLabel="retry"
-												>
-													<ArrowPath class="h-4 w-4" strokeWidth="2" />
-												</MessageActionButton>
 											{/if}
-										{/snippet}
-									</AssistantChatMessage>
-								{/if}
+										{/each}
+									{/snippet}
+
+									{#snippet actions()}
+										<CopyButton
+											content={() => {
+												const allText = responseItems
+													.filter(
+														(
+															i
+														): i is {
+															kind: 'assistant'
+															message: ApiMessage
+														} => i.kind === 'assistant'
+													)
+													.map((i) =>
+														chat.contentPartsToText(i.message.content)
+													)
+													.join('\n\n')
+												const streamText = isStreamingBlock
+													? (chat.streamingAssistant?.content ?? '')
+													: ''
+												return (
+													allText +
+													(streamText ? '\n\n' + streamText : '')
+												)
+											}}
+										/>
+										{#if !isStreamingBlock}
+											<MessageActionButton
+												onclick={() => {
+													// pass the user message ID so new responses branch from there
+													const userMessageId =
+														chat.findRunUserMessage(block)
+													chat.handleRegenerateMessage(userMessageId)
+												}}
+												ariaLabel="retry"
+											>
+												<ArrowPath class="h-4 w-4" strokeWidth="2" />
+											</MessageActionButton>
+										{/if}
+									{/snippet}
+								</AssistantChatMessage>
 							{/if}
 						</div>
 					{/each}

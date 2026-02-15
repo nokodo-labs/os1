@@ -127,9 +127,9 @@
 			showActions = false
 			isHovered = false
 		}
-		window.addEventListener(ACTIONS_EVENT, handler as EventListener)
+		window.addEventListener(ACTIONS_EVENT, handler as globalThis.EventListener)
 		return () => {
-			window.removeEventListener(ACTIONS_EVENT, handler as EventListener)
+			window.removeEventListener(ACTIONS_EVENT, handler as globalThis.EventListener)
 		}
 	})
 

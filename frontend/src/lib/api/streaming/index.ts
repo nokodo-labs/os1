@@ -5,13 +5,18 @@
  */
 export {
 	runChatStream,
+	runCreateAndRunStream,
 	type ChatStreamDelta,
 	type ChatStreamOptions,
 	type ContentPart,
+	type CreateAndRunStreamDelta,
+	type CreateAndRunStreamOptions,
+	type CreateAndRunThread,
 	type StreamedMessage,
 	type StreamError,
 	type TextDelta,
 	type ToolResultDelta,
+	type UnknownSseEvent,
 } from './chatStream'
 export {
 	EventStreamClient,

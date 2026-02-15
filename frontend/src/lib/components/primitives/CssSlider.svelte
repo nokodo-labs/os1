@@ -12,7 +12,6 @@
 		forceActive?: boolean
 		glassThickness?: number
 		bezelWidth?: number
-		refractiveIndex?: number
 	}
 
 	const SIZES = {

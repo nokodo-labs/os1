@@ -12,7 +12,6 @@
 		forceActive?: boolean
 		glassThickness?: number
 		bezelWidth?: number
-		refractiveIndex?: number
 	}
 
 	const SIZES = {
@@ -56,7 +55,6 @@
 		forceActive = false,
 		glassThickness: customGlassThickness,
 		bezelWidth: customBezelWidth,
-		refractiveIndex = 1.5,
 	}: Props = $props()
 
 	const sizeConfig = $derived(SIZES[size])

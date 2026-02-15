@@ -14,7 +14,6 @@
 		forceActive?: boolean
 		glassThickness?: number
 		bezelWidth?: number
-		refractiveIndex?: number
 	}
 
 	let {
@@ -28,7 +27,6 @@
 		forceActive = false,
 		glassThickness,
 		bezelWidth,
-		refractiveIndex,
 	}: Props = $props()
 </script>
 
@@ -44,7 +42,6 @@
 		{forceActive}
 		{glassThickness}
 		{bezelWidth}
-		{refractiveIndex}
 	/>
 {:else}
 	<CssSlider
@@ -58,6 +55,5 @@
 		{forceActive}
 		{glassThickness}
 		{bezelWidth}
-		{refractiveIndex}
 	/>
 {/if}

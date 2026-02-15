@@ -68,7 +68,7 @@
 					<a
 						href={link.href}
 						target="_blank"
-						rel="noopener noreferrer"
+						rel="external noopener noreferrer"
 						class="rounded-pill flex items-center gap-3 px-3 py-2.5 text-sm text-white/70 no-underline transition-all hover:bg-white/8 hover:text-white/90"
 					>
 						{#if link.icon === 'github'}
@@ -87,7 +87,7 @@
 			<div class="text-sm font-semibold text-white">community</div>
 			<div class="mt-3 flex flex-wrap gap-2">
 				{#each shields as badge (badge.label)}
-					<a href={badge.href} target="_blank" rel="noopener noreferrer">
+					<a href={badge.href} target="_blank" rel="external noopener noreferrer">
 						<img src={badge.src} alt={badge.label} class="h-5" />
 					</a>
 				{/each}

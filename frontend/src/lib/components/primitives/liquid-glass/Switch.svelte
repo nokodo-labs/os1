@@ -13,7 +13,6 @@
 		ariaLabelledbyId?: string
 		glassThickness?: number
 		bezelWidth?: number
-		refractiveIndex?: number
 		blur?: number
 		specularOpacity?: number
 		specularSaturation?: number
@@ -60,7 +59,6 @@
 		ariaLabelledbyId = '',
 		glassThickness: customGlassThickness,
 		bezelWidth: customBezelWidth,
-		refractiveIndex = 1.5,
 		blur = 0.2,
 		specularOpacity = 0.5,
 		specularSaturation = 6,

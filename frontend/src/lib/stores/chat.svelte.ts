@@ -1,5 +1,6 @@
 import { browser, dev } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import type { ChatStreamDelta } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -7,6 +8,10 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export type Thread = components['schemas']['Thread']
 export type PendingChatStart = { threadId: string; content: string }
+export type PendingCreateAndRun = {
+	threadId: string
+	stream: AsyncGenerator<ChatStreamDelta, void, unknown>
+}
 type ApiMessage = components['schemas']['Message']
 
 // cache TTL in milliseconds
@@ -145,6 +150,7 @@ class ChatStore {
 	recentThreads = $state<Thread[]>([])
 	activeThread = $state<Thread | null>(null)
 	pendingChatStart = $state<PendingChatStart | null>(null)
+	pendingCreateAndRun = $state<PendingCreateAndRun | null>(null)
 	isLoadingThreads = $state(false)
 
 	/** in-memory drafts keyed by context id (thread id or 'home') */
@@ -171,6 +177,7 @@ class ChatStore {
 		this.recentThreads = []
 		this.activeThread = null
 		this.pendingChatStart = null
+		this.pendingCreateAndRun = null
 		this.isLoadingThreads = false
 		this.drafts.clear()
 	}
@@ -180,6 +187,15 @@ class ChatStore {
 		if (!value || value.threadId !== threadId) return null
 		this.pendingChatStart = null
 		return value.content
+	}
+
+	consumePendingCreateAndRun = (
+		threadId: string
+	): AsyncGenerator<ChatStreamDelta, void, unknown> | null => {
+		const value = this.pendingCreateAndRun
+		if (!value || value.threadId !== threadId) return null
+		this.pendingCreateAndRun = null
+		return value.stream
 	}
 
 	removeRecentThread = (threadId: string) => {

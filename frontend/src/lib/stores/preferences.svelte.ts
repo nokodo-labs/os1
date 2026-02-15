@@ -154,9 +154,6 @@ function createPreferencesStore() {
 					}
 
 					raw = stored
-
-					// then fetch fresh from API (no await, just fire)
-					refresh()
 				}
 			})
 		})

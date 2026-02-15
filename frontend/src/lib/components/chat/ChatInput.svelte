@@ -42,9 +42,11 @@
 		if (!focusToken) return
 		if (disabled) return
 		requestAnimationFrame(() => {
-			textarea.focus()
-			const end = textarea.value.length
-			textarea.setSelectionRange(end, end)
+			const target = textarea
+			if (!target) return
+			target.focus()
+			const end = target.value.length
+			target.setSelectionRange(end, end)
 		})
 	})
 

@@ -14,7 +14,6 @@
 		tooltip?: boolean | string
 		glassThickness?: number
 		bezelWidth?: number
-		refractiveIndex?: number
 		blur?: number
 		specularOpacity?: number
 		specularSaturation?: number

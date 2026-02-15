@@ -73,6 +73,27 @@ class ThreadRunRequest(BaseModel):
 	)
 
 
+class ThreadCreateAndRunRequest(BaseModel):
+	"""payload to create a thread and immediately run it with an agent.
+
+	combines thread creation + run initiation in a single request so the
+	frontend can start streaming without a separate thread-creation round-trip.
+	the SSE stream emits a ``thread_created`` event first with the new thread
+	data, followed by the normal run events (message_created, delta, done).
+	"""
+
+	agent_id: TypeID
+	input: str
+	is_temporary: bool = False
+	tags: list[str] = Field(default_factory=list)
+	project_ids: list[TypeID] = Field(default_factory=list)
+	client_context: ClientContext | None = Field(
+		default=None,
+		alias="clientContext",
+		description="optional device/environment context from the client",
+	)
+
+
 class ThreadRunResponse(BaseModel):
 	"""
 	response containing all messages produced by a run.
