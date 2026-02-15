@@ -18,7 +18,10 @@ import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
 import { initDevice } from '$lib/stores/device.svelte'
+import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
+import { initNetwork } from '$lib/stores/network.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
+import { initServiceWorker } from '$lib/stores/serviceWorker.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { loadSettings } from '$lib/stores/settings.svelte'
 
@@ -42,6 +45,11 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 	// keep any browser-derived reactive state in sync,
 	// but only after hydration (initApp is called from onMount).
 	initDevice()
+
+	// initialize PWA stores (network, service worker, install prompt)
+	initNetwork()
+	initServiceWorker()
+	initInstallPrompt()
 
 	// 1. ensure API origin is ready
 	await apiOriginReady

@@ -1,12 +1,26 @@
 <script lang="ts">
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
+	import { getMediaUrls } from '$lib/config/media'
 
-	export let isChatSidebarOpen: boolean
-	export let isCompactLayout: boolean
-	export let showTopLabels: boolean
-	export let onHomeClick: () => void
-	export let onCloseClick: () => void
+	const {
+		isChatSidebarOpen,
+		isCompactLayout,
+		showTopLabels,
+		onHomeClick,
+		onCloseClick,
+	}: {
+		isChatSidebarOpen: boolean
+		isCompactLayout: boolean
+		showTopLabels: boolean
+		onHomeClick: () => void
+		onCloseClick: () => void
+	} = $props()
+
+	const mediaUrls = $derived(getMediaUrls())
+	const sidebarLogoSrc = $derived(
+		mediaUrls.sidebarLogo ?? 'https://nokodo.net/media/images/logo_full.svg'
+	)
 </script>
 
 <!-- logo / brand with close button -->
@@ -37,7 +51,7 @@
 		aria-hidden={!showTopLabels}
 	>
 		<img
-			src="https://nokodo.net/media/images/logo_full.svg"
+			src={sidebarLogoSrc}
 			alt="nokodo logo"
 			class="h-7 w-auto -translate-y-1.25 object-contain"
 		/>

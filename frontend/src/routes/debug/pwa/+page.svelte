@@ -1,0 +1,170 @@
+<script lang="ts">
+	import { resolve } from '$app/paths'
+	import WifiSlash from '$lib/components/icons/WifiSlash.svelte'
+	import { installPrompt } from '$lib/stores/installPrompt.svelte'
+	import { network } from '$lib/stores/network.svelte'
+	import { swUpdate } from '$lib/stores/serviceWorker.svelte'
+
+	let offlineOverride = $state(false)
+	let updateOverride = $state(false)
+	let installOverride = $state(false)
+
+	// stash originals so we can restore on toggle-off
+	let stashedOnline: boolean | null = $state(null)
+	let stashedUpdate: boolean | null = $state(null)
+	let stashedCanInstall: boolean | null = $state(null)
+
+	function toggleOffline() {
+		if (!offlineOverride) {
+			stashedOnline = network.online
+			network.online = false
+			offlineOverride = true
+		} else {
+			network.online = stashedOnline ?? true
+			stashedOnline = null
+			offlineOverride = false
+		}
+	}
+
+	function toggleUpdate() {
+		if (!updateOverride) {
+			stashedUpdate = swUpdate.updateAvailable
+			swUpdate.updateAvailable = true
+			updateOverride = true
+		} else {
+			swUpdate.updateAvailable = stashedUpdate ?? false
+			stashedUpdate = null
+			updateOverride = false
+		}
+	}
+
+	function toggleInstall() {
+		if (!installOverride) {
+			stashedCanInstall = installPrompt.canInstall
+			installPrompt.canInstall = true
+			installPrompt.dismissed = false
+			installOverride = true
+		} else {
+			installPrompt.canInstall = stashedCanInstall ?? false
+			stashedCanInstall = null
+			installOverride = false
+		}
+	}
+</script>
+
+<div class="mx-auto w-full max-w-4xl px-6 pt-10 pb-24">
+	<div class="mb-6 flex items-center gap-3">
+		<a href={resolve('/debug')} class="text-sm text-white/50 transition hover:text-white/75">
+			← debug
+		</a>
+	</div>
+
+	<h1 class="text-xl font-semibold">pwa debug</h1>
+	<p class="text-muted-foreground mt-2 text-sm">
+		test PWA ui components: offline banner, update toast, install prompt.
+	</p>
+
+	<div class="mt-8 space-y-4">
+		<!-- offline banner trigger -->
+		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+			<div class="flex items-center justify-between">
+				<div>
+					<div class="flex items-center gap-2 text-sm font-semibold text-white/85">
+						<WifiSlash class="h-4 w-4" />
+						offline banner
+					</div>
+					<div class="mt-1 text-sm text-white/55">
+						toggles <code class="text-xs">network.online</code> to show/hide the banner.
+					</div>
+				</div>
+				<button
+					type="button"
+					class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {offlineOverride
+						? 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+						: 'border-white/10 bg-white/5 text-white/75 hover:bg-white/10'}"
+					onclick={toggleOffline}
+				>
+					{offlineOverride ? 'restore' : 'simulate offline'}
+				</button>
+			</div>
+			<div class="mt-3 text-xs text-white/40">
+				actual: <span class="text-white/60">{navigator.onLine ? 'online' : 'offline'}</span>
+				· store: <span class="text-white/60">{network.online ? 'online' : 'offline'}</span>
+			</div>
+		</div>
+
+		<!-- update toast trigger -->
+		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+			<div class="flex items-center justify-between">
+				<div>
+					<div class="text-sm font-semibold text-white/85">update toast</div>
+					<div class="mt-1 text-sm text-white/55">
+						toggles <code class="text-xs">swUpdate.updateAvailable</code> to show/hide the
+						toast.
+					</div>
+				</div>
+				<button
+					type="button"
+					class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {updateOverride
+						? 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+						: 'border-white/10 bg-white/5 text-white/75 hover:bg-white/10'}"
+					onclick={toggleUpdate}
+				>
+					{updateOverride ? 'restore' : 'simulate update'}
+				</button>
+			</div>
+			<div class="mt-3 text-xs text-white/40">
+				store: <span class="text-white/60"
+					>{swUpdate.updateAvailable ? 'update available' : 'up to date'}</span
+				>
+			</div>
+		</div>
+
+		<!-- install prompt trigger -->
+		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+			<div class="flex items-center justify-between">
+				<div>
+					<div class="text-sm font-semibold text-white/85">install prompt</div>
+					<div class="mt-1 text-sm text-white/55">
+						toggles <code class="text-xs">installPrompt.canInstall</code> to show/hide the
+						dialog.
+					</div>
+				</div>
+				<button
+					type="button"
+					class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {installOverride
+						? 'border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20'
+						: 'border-white/10 bg-white/5 text-white/75 hover:bg-white/10'}"
+					onclick={toggleInstall}
+				>
+					{installOverride ? 'restore' : 'simulate prompt'}
+				</button>
+			</div>
+			<div class="mt-3 text-xs text-white/40">
+				canInstall: <span class="text-white/60">{installPrompt.canInstall}</span>
+				· isInstalled: <span class="text-white/60">{installPrompt.isInstalled}</span>
+				· dismissed: <span class="text-white/60">{installPrompt.dismissed}</span>
+			</div>
+		</div>
+
+		<!-- offline page link -->
+		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+			<div class="flex items-center justify-between">
+				<div>
+					<div class="text-sm font-semibold text-white/85">offline page</div>
+					<div class="mt-1 text-sm text-white/55">
+						preview the static offline fallback served by the service worker.
+					</div>
+				</div>
+				<a
+					href="/offline.html"
+					target="_blank"
+					rel="noopener"
+					class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/75 transition hover:bg-white/10"
+				>
+					open offline page
+				</a>
+			</div>
+		</div>
+	</div>
+</div>

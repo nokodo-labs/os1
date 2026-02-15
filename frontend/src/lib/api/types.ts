@@ -177,6 +177,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/create_and_run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create And Run
+         * @description create a thread and immediately start an agent run, all via one SSE stream.
+         *
+         *     the first event is ``thread_created`` with the full thread payload so the
+         *     client can capture the thread id. subsequent events are the normal run
+         *     events (message_created, delta, done).
+         */
+        post: operations["create_and_run_threads_create_and_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}": {
         parameters: {
             query?: never;
@@ -811,6 +835,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Projects
+         * @description list projects accessible by the caller.
+         */
+        get: operations["list_projects_projects_get"];
+        put?: never;
+        /**
+         * Create Project
+         * @description create a new project.
+         */
+        post: operations["create_project_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Project
+         * @description fetch a project by id.
+         */
+        get: operations["get_project_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Project
+         * @description delete a project.
+         */
+        delete: operations["delete_project_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Project
+         * @description update a project.
+         */
+        patch: operations["update_project_projects__project_id__patch"];
+        trace?: never;
+    };
     "/projects/{project_id}/access-rules": {
         parameters: {
             query?: never;
@@ -828,6 +904,82 @@ export interface paths {
          * @description replace access rules for a project.
          */
         put: operations["set_project_access_rules_projects__project_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Files
+         * @description list files accessible by the caller.
+         */
+        get: operations["list_files_files_get"];
+        put?: never;
+        /**
+         * Create File
+         * @description register a new file record.
+         */
+        post: operations["create_file_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get File
+         * @description fetch a file by id.
+         */
+        get: operations["get_file_files__file_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete File
+         * @description soft-delete a file.
+         */
+        delete: operations["delete_file_files__file_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update File
+         * @description update file metadata.
+         */
+        patch: operations["update_file_files__file_id__patch"];
+        trace?: never;
+    };
+    "/files/{file_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List File Access Rules
+         * @description list access rules for a file.
+         */
+        get: operations["list_file_access_rules_files__file_id__access_rules_get"];
+        /**
+         * Set File Access Rules
+         * @description replace access rules for a file.
+         */
+        put: operations["set_file_access_rules_files__file_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1267,13 +1419,13 @@ export interface paths {
         };
         /**
          * List Prompts
-         * @description List prompts.
+         * @description list prompts.
          */
         get: operations["list_prompts_prompts_get"];
         put?: never;
         /**
          * Create Prompt
-         * @description Create a prompt.
+         * @description create a prompt.
          */
         post: operations["create_prompt_prompts_post"];
         delete?: never;
@@ -1291,21 +1443,21 @@ export interface paths {
         };
         /**
          * Get Prompt
-         * @description Fetch a prompt.
+         * @description fetch a prompt.
          */
         get: operations["get_prompt_prompts__prompt_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Prompt
-         * @description Delete a prompt.
+         * @description delete a prompt.
          */
         delete: operations["delete_prompt_prompts__prompt_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Prompt
-         * @description Update a prompt.
+         * @description update a prompt.
          */
         patch: operations["update_prompt_prompts__prompt_id__patch"];
         trace?: never;
@@ -1379,13 +1531,13 @@ export interface paths {
         };
         /**
          * List Plugins
-         * @description List all plugin records.
+         * @description list all plugin records.
          */
         get: operations["list_plugins_plugins_get"];
         put?: never;
         /**
          * Create Plugin
-         * @description Create a plugin record.
+         * @description create a plugin record.
          */
         post: operations["create_plugin_plugins_post"];
         delete?: never;
@@ -1403,21 +1555,21 @@ export interface paths {
         };
         /**
          * Get Plugin
-         * @description Fetch a plugin record by id.
+         * @description fetch a plugin record by id.
          */
         get: operations["get_plugin_plugins__plugin_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Plugin
-         * @description Delete a plugin record.
+         * @description delete a plugin record.
          */
         delete: operations["delete_plugin_plugins__plugin_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Plugin
-         * @description Update plugin fields.
+         * @description update plugin fields.
          */
         patch: operations["update_plugin_plugins__plugin_id__patch"];
         trace?: never;
@@ -1719,7 +1871,7 @@ export interface components {
          *     naming convention: {domain}:{action}
          * @enum {string}
          */
-        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:write" | "events:read" | "events:manage" | "agents:read" | "agents:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "files:upload" | "frontend:access" | "console:access";
+        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "frontend:access" | "console:access";
         /**
          * Agent
          * @description Agent response schema - returns IDs only, no hydrated relationships.
@@ -2101,7 +2253,7 @@ export interface components {
             resource_access?: components["schemas"]["DefaultResourceAccess"];
             /**
              * Action Permissions
-             * @description action permissions granted by default, e.g. ['agents:read', 'prompts:read']
+             * @description action permissions granted by default
              */
             action_permissions?: components["schemas"]["ActionPermission"][];
         };
@@ -2247,6 +2399,53 @@ export interface components {
             enable_file_uploads?: boolean | null;
         };
         /**
+         * File
+         * @description file response schema.
+         */
+        File: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /** Filename */
+            filename?: string | null;
+            /** Mime Type */
+            mime_type?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
+            source: components["schemas"]["FileSource"];
+            /** Storage Backend */
+            storage_backend: string;
+            /** Storage Key */
+            storage_key: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Checksum Sha256 */
+            checksum_sha256?: string | null;
+            status: components["schemas"]["FileStatus"];
+            /** Message Id */
+            message_id?: string | null;
+            /** Deleted At */
+            deleted_at?: string | null;
+        };
+        /**
          * FileContent
          * @description file attachment content.
          *
@@ -2272,6 +2471,53 @@ export interface components {
             filename?: string | null;
             /** Media Type */
             media_type?: string | null;
+        };
+        /**
+         * FileCreate
+         * @description payload to register a new file record.
+         */
+        FileCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Filename */
+            filename?: string | null;
+            /** Mime Type */
+            mime_type?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** @default upload */
+            source: components["schemas"]["FileSource"];
+            /** Storage Backend */
+            storage_backend: string;
+            /** Storage Key */
+            storage_key: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Checksum Sha256 */
+            checksum_sha256?: string | null;
+        };
+        /**
+         * FileSource
+         * @description How a file entered the system.
+         * @enum {string}
+         */
+        FileSource: "upload" | "generated" | "import";
+        /**
+         * FileStatus
+         * @description Lifecycle status for a file pointer.
+         * @enum {string}
+         */
+        FileStatus: "pending" | "available";
+        /**
+         * FileUpdate
+         * @description payload to update a file record.
+         */
+        FileUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Filename */
+            filename?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            status?: components["schemas"]["FileStatus"] | null;
         };
         /**
          * Group
@@ -2472,6 +2718,75 @@ export interface components {
              * @description rate limit/min
              */
             rate_limit_requests_per_minute?: number | null;
+        };
+        /**
+         * MediaSettings
+         * @description external media / asset URLs.
+         *
+         *     base_url provides a common prefix for well-known asset filenames.
+         *     individual url fields override the base_url + filename convention.
+         *
+         *     resolution order per asset: individual field > base_url/filename > null.
+         *
+         *     well-known filenames (appended to base_url):
+         *             favicon.ico, apple-touch-icon.png, sidebar-logo.svg, splash-logo.svg
+         */
+        MediaSettings: {
+            /**
+             * Base Url
+             * @description base url for all media assets
+             * @example https://cdn.example.com/brand/
+             * @example https://raw.githubusercontent.com/org/repo/branch/path/to/assets/
+             */
+            base_url?: string | null;
+            /**
+             * Favicon Url
+             * @description favicon url override
+             */
+            favicon_url?: string | null;
+            /**
+             * Apple Touch Icon Url
+             * @description apple touch icon url override
+             */
+            apple_touch_icon_url?: string | null;
+            /**
+             * Sidebar Logo Url
+             * @description sidebar banner logo url override
+             */
+            sidebar_logo_url?: string | null;
+            /**
+             * Splash Logo Url
+             * @description splash screen logo url override
+             */
+            splash_logo_url?: string | null;
+        };
+        /** MediaSettingsPatch */
+        MediaSettingsPatch: {
+            /**
+             * Base Url
+             * @description base url for all media assets
+             */
+            base_url?: string | null;
+            /**
+             * Favicon Url
+             * @description favicon url override
+             */
+            favicon_url?: string | null;
+            /**
+             * Apple Touch Icon Url
+             * @description apple touch icon url override
+             */
+            apple_touch_icon_url?: string | null;
+            /**
+             * Sidebar Logo Url
+             * @description sidebar banner logo url override
+             */
+            sidebar_logo_url?: string | null;
+            /**
+             * Splash Logo Url
+             * @description splash screen logo url override
+             */
+            splash_logo_url?: string | null;
         };
         /**
          * Memory
@@ -2791,6 +3106,8 @@ export interface components {
             content: string;
             /** Labels */
             labels?: string[];
+            /** Project Id */
+            project_id?: string | null;
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -2819,6 +3136,8 @@ export interface components {
             content: string;
             /** Labels */
             labels?: string[];
+            /** Project Id */
+            project_id?: string | null;
             /** User Id */
             user_id?: string | null;
         };
@@ -2834,6 +3153,8 @@ export interface components {
             content?: string | null;
             /** Labels */
             labels?: string[] | null;
+            /** Project Id */
+            project_id?: string | null;
         };
         /**
          * Notification
@@ -3311,6 +3632,28 @@ export interface components {
             thread_ids?: string[];
         };
         /**
+         * ProjectCreate
+         * @description Schema for creating a project.
+         */
+        ProjectCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+        };
+        /**
+         * ProjectUpdate
+         * @description Schema for updating a project.
+         */
+        ProjectUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /**
          * Prompt
          * @description Response schema.
          */
@@ -3609,6 +3952,8 @@ export interface components {
              * @default 0
              */
             position: number;
+            /** Project Id */
+            project_id?: string | null;
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -3639,6 +3984,8 @@ export interface components {
              * @default 0
              */
             position: number;
+            /** Project Id */
+            project_id?: string | null;
         };
         /**
          * ReminderListUpdate
@@ -3656,6 +4003,8 @@ export interface components {
             icon?: string | null;
             /** Position */
             position?: number | null;
+            /** Project Id */
+            project_id?: string | null;
         };
         /**
          * ReminderListWithCounts
@@ -3686,6 +4035,8 @@ export interface components {
              * @default 0
              */
             position: number;
+            /** Project Id */
+            project_id?: string | null;
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -4021,9 +4372,11 @@ export interface components {
             features?: components["schemas"]["FeaturesSettings"];
             ai?: components["schemas"]["AISettings"];
             branding?: components["schemas"]["BrandingSettings"];
+            media?: components["schemas"]["MediaSettings"];
             assets?: components["schemas"]["AssetsSettings"];
             limits?: components["schemas"]["LimitsSettings"];
             security?: components["schemas"]["SecuritySettings"];
+            soft_delete?: components["schemas"]["SoftDeleteSettings"];
             default_permissions?: components["schemas"]["DefaultPermissionsSettings"];
         };
         /** SettingsPatch */
@@ -4032,9 +4385,11 @@ export interface components {
             features?: components["schemas"]["FeaturesSettingsPatch"] | null;
             ai?: components["schemas"]["AISettingsPatch"] | null;
             branding?: components["schemas"]["BrandingSettingsPatch"] | null;
+            media?: components["schemas"]["MediaSettingsPatch"] | null;
             assets?: components["schemas"]["AssetsSettingsPatch"] | null;
             limits?: components["schemas"]["LimitsSettingsPatch"] | null;
             security?: components["schemas"]["SecuritySettingsPatch"] | null;
+            soft_delete?: components["schemas"]["SoftDeleteSettingsPatch"] | null;
             default_permissions?: components["schemas"]["DefaultPermissionsSettingsPatch"] | null;
         };
         /** SettingsResponse */
@@ -4070,6 +4425,11 @@ export interface components {
              */
             branding: number;
             /**
+             * Media
+             * @default 0
+             */
+            media: number;
+            /**
              * Assets
              * @default 0
              */
@@ -4085,10 +4445,60 @@ export interface components {
              */
             security: number;
             /**
+             * Soft Delete
+             * @default 0
+             */
+            soft_delete: number;
+            /**
              * Default Permissions
              * @default 0
              */
             default_permissions: number;
+        };
+        /**
+         * SoftDeleteSettings
+         * @description per-resource soft-delete toggles.
+         *
+         *     when enabled, deleting a resource sets its deleted_at timestamp
+         *     instead of removing the row from the database.
+         */
+        SoftDeleteSettings: {
+            /**
+             * Threads
+             * @description soft-delete threads
+             * @default true
+             */
+            threads: boolean;
+            /**
+             * Notes
+             * @description soft-delete notes
+             * @default true
+             */
+            notes: boolean;
+            /**
+             * Files
+             * @description soft-delete files
+             * @default true
+             */
+            files: boolean;
+        };
+        /** SoftDeleteSettingsPatch */
+        SoftDeleteSettingsPatch: {
+            /**
+             * Threads
+             * @description soft-delete threads
+             */
+            threads?: boolean | null;
+            /**
+             * Notes
+             * @description soft-delete notes
+             */
+            notes?: boolean | null;
+            /**
+             * Files
+             * @description soft-delete files
+             */
+            files?: boolean | null;
         };
         /** @enum {string} */
         SortDir: "asc" | "desc";
@@ -4296,6 +4706,35 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+        };
+        /**
+         * ThreadCreateAndRunRequest
+         * @description payload to create a thread and immediately run it with an agent.
+         *
+         *     combines thread creation + run initiation in a single request so the
+         *     frontend can start streaming without a separate thread-creation round-trip.
+         *     the SSE stream emits a ``thread_created`` event first with the new thread
+         *     data, followed by the normal run events (message_created, delta, done).
+         */
+        ThreadCreateAndRunRequest: {
+            /**
+             * Agent Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            agent_id: string;
+            /** Input */
+            input: string;
+            /**
+             * Is Temporary
+             * @default false
+             */
+            is_temporary: boolean;
+            /** Tags */
+            tags?: string[];
+            /** Project Ids */
+            project_ids?: string[];
+            /** @description optional device/environment context from the client */
+            clientContext?: components["schemas"]["ClientContext"] | null;
         };
         /**
          * ThreadMetadataGenerateRequest
@@ -5617,6 +6056,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_and_run_threads_create_and_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadCreateAndRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description bad request */
@@ -10011,6 +10546,483 @@ export interface operations {
             };
         };
     };
+    list_projects_projects_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                sort_by?: string;
+                sort_dir?: components["schemas"]["SortDir"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_project_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_project_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_project_projects__project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_project_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_project_access_rules_projects__project_id__access_rules_get: {
         parameters: {
             query?: never;
@@ -10111,6 +11123,676 @@ export interface operations {
             header?: never;
             path: {
                 project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_files_files_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                skip?: number;
+                limit?: number;
+                sort_by?: string;
+                sort_dir?: components["schemas"]["SortDir"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_file_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_file_files__file_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_file_files__file_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_file_files__file_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_file_access_rules_files__file_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_file_access_rules_files__file_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
             };
             cookie?: never;
         };

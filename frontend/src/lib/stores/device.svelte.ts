@@ -40,6 +40,16 @@ const GPU_DIAGNOSTICS_DEFAULT: GpuDiagnostics = {
 	notes: [],
 }
 
+/**
+ * synchronous pre-init values from media queries.
+ * these run at module load (before any $effect or onMount) so the first
+ * render already uses the correct layout, preventing flashes on mobile.
+ */
+const preInitMobile = browser ? window.innerWidth < DEVICE_MOBILE_BREAKPOINT_PX : false
+const preInitTouch = browser ? window.matchMedia('(pointer: coarse)').matches : false
+const preInitCoarsePointer = preInitTouch
+const preInitHasHover = browser ? window.matchMedia('(hover: hover)').matches : true
+
 export const device = $state({
 	ready: false,
 	width: 0,
@@ -48,10 +58,10 @@ export const device = $state({
 	viewportHeight: 0,
 	dpr: 1,
 	breakpointPx: DEVICE_MOBILE_BREAKPOINT_PX,
-	isMobile: false,
-	isTouch: false,
-	isCoarsePointer: false,
-	hasHover: true,
+	isMobile: preInitMobile,
+	isTouch: preInitTouch,
+	isCoarsePointer: preInitCoarsePointer,
+	hasHover: preInitHasHover,
 	gpuTier: 'mid' as GpuTier,
 	gpuDiagnostics: { ...GPU_DIAGNOSTICS_DEFAULT },
 
@@ -93,10 +103,10 @@ function resetDeviceState() {
 	device.viewportWidth = 0
 	device.viewportHeight = 0
 	device.dpr = 1
-	device.isMobile = false
-	device.isTouch = false
-	device.isCoarsePointer = false
-	device.hasHover = true
+	device.isMobile = preInitMobile
+	device.isTouch = preInitTouch
+	device.isCoarsePointer = preInitCoarsePointer
+	device.hasHover = preInitHasHover
 	device.gpuTier = 'mid'
 	device.gpuDiagnostics = { ...GPU_DIAGNOSTICS_DEFAULT }
 	device.timezone = ''

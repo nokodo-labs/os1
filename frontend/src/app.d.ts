@@ -11,6 +11,11 @@ declare global {
 		}
 		// interface Platform {}
 	}
+
+	// splash screen bridge (set by inline script in app.html)
+	interface Window {
+		__nokodoSplash?: { shimmerStarted: Promise<void> }
+	}
 }
 
 export {}

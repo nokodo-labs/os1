@@ -45,6 +45,31 @@ class FeaturesSettingsPatch(BaseModel):
 	)
 
 
+class MediaSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	base_url: str | None = Field(
+		default=None,
+		description="base url for all media assets",
+	)
+	favicon_url: str | None = Field(
+		default=None,
+		description="favicon url override",
+	)
+	apple_touch_icon_url: str | None = Field(
+		default=None,
+		description="apple touch icon url override",
+	)
+	sidebar_logo_url: str | None = Field(
+		default=None,
+		description="sidebar banner logo url override",
+	)
+	splash_logo_url: str | None = Field(
+		default=None,
+		description="splash screen logo url override",
+	)
+
+
 class AssetsSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -254,6 +279,7 @@ class SettingsPatch(BaseModel):
 	features: FeaturesSettingsPatch | None = None
 	ai: AISettingsPatch | None = None
 	branding: BrandingSettingsPatch | None = None
+	media: MediaSettingsPatch | None = None
 	assets: AssetsSettingsPatch | None = None
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
@@ -268,6 +294,7 @@ class SettingsVersions(BaseModel):
 	features: int = 0
 	ai: int = 0
 	branding: int = 0
+	media: int = 0
 	assets: int = 0
 	limits: int = 0
 	security: int = 0

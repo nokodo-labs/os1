@@ -100,6 +100,7 @@
 	$effect(() => {
 		if (!browser) return
 		const handler = () => {
+			if (device.isMobile) return
 			focusToken += 1
 		}
 		window.addEventListener('focus:chat-input', handler)

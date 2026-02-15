@@ -501,6 +501,20 @@ export function createChatState() {
 	}
 
 	/**
+	 * sync the current in-memory message tree and leaf pointer back to the
+	 * thread cache so navigating away and back renders all messages.
+	 */
+	function syncCacheAfterRun(): void {
+		if (!thread) return
+		// update cached thread's current_message_id to the live leaf
+		const updatedThread = { ...thread, current_message_id: currentLeafId ?? null }
+		chatStore.threadCache.set(updatedThread)
+		// write all in-memory messages back to cache
+		const allMessages = Array.from(messageTree.values())
+		chatStore.threadCache.setMessages(thread.id, allMessages, !hasMoreMessages)
+	}
+
+	/**
 	 * process a single SSE delta event.
 	 *
 	 * returns 'done' when the stream should stop, 'continue' otherwise.
@@ -796,6 +810,7 @@ export function createChatState() {
 			optimisticUserMessage = null
 			streamingAssistant = null
 			rebuildRunBlocks()
+			syncCacheAfterRun()
 		} catch (e) {
 			console.error('failed to resume create_and_run stream', e)
 			runError = true
@@ -858,6 +873,7 @@ export function createChatState() {
 			optimisticUserMessage = null
 			streamingAssistant = null
 			rebuildRunBlocks()
+			syncCacheAfterRun()
 		} catch (e) {
 			console.error('failed to run thread', e)
 			runError = true
@@ -908,6 +924,7 @@ export function createChatState() {
 			streamingAssistant = null
 			streamingAssistantParentId = null
 			rebuildRunBlocks()
+			syncCacheAfterRun()
 		} catch (e) {
 			console.error('failed to retry run', e)
 			runError = true

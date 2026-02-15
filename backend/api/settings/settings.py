@@ -200,6 +200,44 @@ class LimitsSettings(BaseModel):
 	)
 
 
+class MediaSettings(BaseModel):
+	"""external media / asset URLs.
+
+	base_url provides a common prefix for well-known asset filenames.
+	individual url fields override the base_url + filename convention.
+
+	resolution order per asset: individual field > base_url/filename > null.
+
+	well-known filenames (appended to base_url):
+		favicon.ico, apple-touch-icon.png, sidebar-logo.svg, splash-logo.svg
+	"""
+
+	base_url: HttpUrl | None = Field(
+		default=None,
+		description="base url for all media assets",
+		examples=[
+			"https://cdn.example.com/brand/",
+			"https://raw.githubusercontent.com/org/repo/branch/path/to/assets/",
+		],
+	)
+	favicon_url: HttpUrl | None = Field(
+		default=None,
+		description="favicon url override",
+	)
+	apple_touch_icon_url: HttpUrl | None = Field(
+		default=None,
+		description="apple touch icon url override",
+	)
+	sidebar_logo_url: HttpUrl | None = Field(
+		default=None,
+		description="sidebar banner logo url override",
+	)
+	splash_logo_url: HttpUrl | None = Field(
+		default=None,
+		description="splash screen logo url override",
+	)
+
+
 class AssetsSettings(BaseModel):
 	default_embedding_model_id: str | None = Field(
 		default=None,
@@ -420,6 +458,7 @@ class Settings(BaseSettings):
 	features: FeaturesSettings = Field(default_factory=FeaturesSettings)
 	ai: AISettings = Field(default_factory=AISettings)
 	branding: BrandingSettings = Field(default_factory=BrandingSettings)
+	media: MediaSettings = Field(default_factory=MediaSettings)
 	assets: AssetsSettings = Field(default_factory=AssetsSettings)
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)

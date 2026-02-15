@@ -13,6 +13,7 @@
 	import Island from '$lib/components/system/Island.svelte'
 	import NotificationToast from '$lib/components/system/NotificationToast.svelte'
 	import PendingApproval from '$lib/components/system/PendingApproval.svelte'
+	import { getMediaUrls } from '$lib/config/media'
 	import { createDebugUiContext } from '$lib/contexts/debugUiContext.svelte'
 	import { createSidebarContext, useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { createSystemChromeContext } from '$lib/contexts/systemChromeContext.svelte'
@@ -94,9 +95,10 @@
 	// access gate state
 	let pendingApproval = $state<boolean>(false)
 
+	// reactive media asset URLs from settings
+	const mediaUrls = $derived(getMediaUrls())
 	let { children } = $props()
 
-	// Island offset tracking for fixed positioning with blur effect
 	let mainContentShell = $state<HTMLElement | null>(null)
 	let islandShell = $state<HTMLElement | null>(null)
 
@@ -296,9 +298,19 @@
 
 <svelte:head>
 	<title>{pageTitleStore.pageFullTitle}</title>
-	{#if settingsState.data?.branding?.pwa_manifest_url}
-		<link rel="manifest" href={settingsState.data.branding.pwa_manifest_url} />
+	{#if mediaUrls.manifest}
+		<link rel="manifest" href={mediaUrls.manifest} />
 	{/if}
+	{#if mediaUrls.favicon}
+		<link rel="icon" href={mediaUrls.favicon} />
+	{/if}
+	{#if mediaUrls.appleTouchIcon}
+		<link rel="apple-touch-icon" href={mediaUrls.appleTouchIcon} />
+	{/if}
+	<meta
+		name="apple-mobile-web-app-title"
+		content={settingsState.data?.branding?.site_name ?? 'nokodo'}
+	/>
 </svelte:head>
 
 <SplashController />
