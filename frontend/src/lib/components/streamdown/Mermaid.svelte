@@ -29,6 +29,9 @@
 	}
 
 	let mermaid = $state<MermaidApi | null>(null)
+	let mermaidConfigKey = ''
+	let lastRenderedCode = ''
+	let renderSeq = 0
 	onMount(async () => {
 		mermaid = (await import('mermaid')).default
 	})
@@ -129,6 +132,12 @@
 			// Remove trailing semicolons that might break parsing
 			sanitized = sanitized.replace(/;+\s*$/gm, '')
 
+			// Normalize common edge label syntax: "A -- Yes --> B" -> "A --|Yes|--> B"
+			sanitized = sanitized.replace(
+				/--\s*(?!\|)(?!")([^\n]+?)\s*-->/g,
+				(_, label: string) => `--|${label.trim()}|-->`
+			)
+
 			// Ensure proper spacing in flowchart syntax
 			sanitized = sanitized.replace(
 				/([A-Za-z0-9_]+)(--|-->|-\.-|-\.->|==|==>|=\.=>|=\.->)/g,
@@ -154,6 +163,8 @@
 			if (!mermaid) return
 			// Sanitize the code first
 			const sanitizedCode = sanitizeMermaidCode(code)
+			const svgTarget = element.querySelector('[data-mermaid-svg]') as SVGElement | null
+			if (sanitizedCode === lastRenderedCode && svgTarget?.innerHTML) return
 
 			// Default configuration
 			const defaultConfig: MermaidConfig = {
@@ -171,20 +182,26 @@
 				...(streamdown.mermaidConfig || {}),
 			}
 
-			// Initialize mermaid with merged config
-			mermaid.initialize(defaultConfig)
+			const nextConfigKey = JSON.stringify(defaultConfig)
+			if (nextConfigKey !== mermaidConfigKey) {
+				mermaid.initialize(defaultConfig)
+				mermaidConfigKey = nextConfigKey
+			}
 
 			const chartHash = code.split('').reduce((acc, char) => {
 				return ((acc << 5) - acc + char.charCodeAt(0)) | 0
 			}, 0)
 
-			const uniqueId = `mermaid-${Math.abs(chartHash)}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+			const uniqueId = `mermaid-${Math.abs(chartHash)}-${Date.now()}-${Math.random()
+				.toString(36)
+				.substring(2, 9)}`
+			const seq = ++renderSeq
 
 			// Render the diagram
 			const { svg: svgString } = await mermaid.render(uniqueId, sanitizedCode)
+			if (seq !== renderSeq) return
 
 			// Insert the SVG into the target element
-			const svgTarget = element.querySelector('[data-mermaid-svg]') as SVGElement
 			if (svgTarget) {
 				svgTarget.innerHTML = svgString
 				svgTarget.id = uniqueId
@@ -201,7 +218,7 @@
 				})
 
 				panzoom.zoomToFit()
-				panzoom.zoomToFit()
+				lastRenderedCode = sanitizedCode
 			}
 		} catch (err) {
 			console.warn('Mermaid rendering error:', err)
