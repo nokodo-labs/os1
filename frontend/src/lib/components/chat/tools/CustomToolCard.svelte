@@ -14,13 +14,13 @@
 	{#snippet body()}
 		{#if execution.events.length > 0}
 			<div class="mb-3">
-				<h4 class="mb-1 text-xs font-medium tracking-wide text-white/40 uppercase">
+				<h4 class="mb-1 text-xs font-medium tracking-wide text-white/50 uppercase">
 					timeline
 				</h4>
 				<div class="space-y-1">
 					{#each execution.events as event (event.id)}
 						<div class="flex items-start gap-2 text-xs">
-							<span class="text-white/30">{event.timestamp.toLocaleTimeString()}</span
+							<span class="text-white/45">{event.timestamp.toLocaleTimeString()}</span
 							>
 							<span class="text-white/60">{formatToolEventLine(event)}</span>
 						</div>
@@ -31,7 +31,7 @@
 
 		{#if execution.events.length === 0 && Object.keys(execution.toolCall.arguments).length > 0}
 			<div class="mb-3">
-				<h4 class="mb-1 text-xs font-medium tracking-wide text-white/40 uppercase">
+				<h4 class="mb-1 text-xs font-medium tracking-wide text-white/50 uppercase">
 					arguments
 				</h4>
 				<pre
@@ -45,7 +45,7 @@
 
 		{#if execution.events.length === 0 && execution.result}
 			<div>
-				<h4 class="mb-1 text-xs font-medium tracking-wide text-white/40 uppercase">
+				<h4 class="mb-1 text-xs font-medium tracking-wide text-white/50 uppercase">
 					result
 				</h4>
 				<pre

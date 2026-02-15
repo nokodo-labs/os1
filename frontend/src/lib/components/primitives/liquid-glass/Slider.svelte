@@ -134,7 +134,7 @@
 
 <div
 	class="relative"
-	style="width: {sliderW}px; height: {thumbH}px;"
+	style="width: {sliderW}px; height: {thumbH}px; touch-action: none;"
 	role="slider"
 	aria-valuemin={min}
 	aria-valuemax={max}

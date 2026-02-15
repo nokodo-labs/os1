@@ -99,9 +99,9 @@
 							></div>
 						</div>
 					{/if}
-					<span class="text-xs text-white/40">{statusLabel}</span>
+					<span class="text-xs text-white/50">{statusLabel}</span>
 					<span
-						class="text-white/40 transition-transform duration-200"
+						class="text-white/50 transition-transform duration-200"
 						class:rotate-180={isExpanded}
 					>
 						▾
@@ -146,7 +146,7 @@
 							></div>
 						</div>
 					{/if}
-					<span class="text-xs text-white/40">{statusLabel}</span>
+					<span class="text-xs text-white/50">{statusLabel}</span>
 				</div>
 			</div>
 		{/if}

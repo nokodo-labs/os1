@@ -61,7 +61,7 @@
 	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
 	let justRevealed = false
 	const instanceId = Math.random().toString(36).slice(2)
-	const ACTIONS_EVENT = 'nokodo:chat-message-actions-open'
+	const ACTIONS_EVENT = 'chat-message-actions-open'
 	let touchStartX = 0
 	let touchStartY = 0
 	let touchMoved = false
@@ -192,7 +192,7 @@
 			{#if timestamp}
 				<Timestamp
 					{timestamp}
-					className="text-xs text-white/40 transition-opacity duration-200 {isHovered
+					className="text-xs text-white/50 transition-opacity duration-200 {isHovered
 						? 'opacity-100'
 						: 'opacity-0'}"
 				/>

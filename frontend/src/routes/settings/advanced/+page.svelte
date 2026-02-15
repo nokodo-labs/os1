@@ -83,10 +83,10 @@
 						<Icon class="h-4.5 w-4.5 shrink-0 text-white/50" />
 						<div class="min-w-0 flex-1">
 							<div class="font-medium text-white/80">{action.label}</div>
-							<div class="text-xs text-white/40">{action.description}</div>
+							<div class="text-xs text-white/50">{action.description}</div>
 						</div>
 						<span
-							class="rounded-pill bg-white/5 px-2 py-0.5 text-[0.65rem] text-white/30"
+							class="rounded-pill bg-white/5 px-2 py-0.5 text-[0.65rem] text-white/45"
 							>soon</span
 						>
 					</button>
@@ -122,10 +122,10 @@
 							>
 								{action.label}
 							</div>
-							<div class="text-xs text-white/40">{action.description}</div>
+							<div class="text-xs text-white/50">{action.description}</div>
 						</div>
 						<span
-							class="rounded-pill bg-white/5 px-2 py-0.5 text-[0.65rem] text-white/30"
+							class="rounded-pill bg-white/5 px-2 py-0.5 text-[0.65rem] text-white/45"
 							>soon</span
 						>
 					</button>
@@ -147,7 +147,7 @@
 					</div>
 				</div>
 				<ChevronDown
-					class="h-4.5 w-4.5 text-white/40 transition-transform duration-200 {owuiExpanded
+					class="h-4.5 w-4.5 text-white/50 transition-transform duration-200 {owuiExpanded
 						? 'rotate-180'
 						: ''}"
 				/>
@@ -155,7 +155,7 @@
 
 			{#if owuiExpanded}
 				<div
-					class="border-t border-white/8 px-5 pt-4 pb-5"
+					class="border-t border-white/14 px-5 pt-4 pb-5"
 					transition:slide={{ duration: 200 }}
 				>
 					<form class="space-y-3" onsubmit={(e) => e.preventDefault()} autocomplete="off">
@@ -167,7 +167,7 @@
 							<input
 								id="owui-host"
 								type="url"
-								class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+								class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 								placeholder="https://your-open-webui.example.com"
 								bind:value={owuiHost}
 							/>
@@ -181,7 +181,7 @@
 								id="owui-jwt"
 								type="password"
 								autocomplete="off"
-								class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+								class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 								placeholder="paste your open webui JWT here"
 								bind:value={owuiJwt}
 							/>
@@ -203,17 +203,17 @@
 								import all memories
 							</button>
 						</div>
-						<p class="text-xs text-white/30">coming soon</p>
+						<p class="text-xs text-white/45">coming soon</p>
 					</form>
 
-					<div class="mt-5 border-t border-white/8 pt-4">
-						<div class="text-xs font-medium text-white/40">
+					<div class="mt-5 border-t border-white/14 pt-4">
+						<div class="text-xs font-medium text-white/50">
 							more imports coming soon
 						</div>
 						<div class="mt-2 flex flex-wrap gap-2">
 							{#each ['ChatGPT', 'Claude', 'Gemini', 'LibreChat'] as platform (platform)}
 								<span
-									class="rounded-pill border border-white/8 bg-white/3 px-3 py-1 text-xs text-white/30"
+									class="rounded-pill border border-white/14 bg-white/3 px-3 py-1 text-xs text-white/45"
 								>
 									{platform}
 								</span>
@@ -241,7 +241,7 @@
 				>
 					delete account
 				</button>
-				<p class="mt-2 text-xs text-white/30">
+				<p class="mt-2 text-xs text-white/45">
 					this will permanently delete your account and all associated data. coming soon.
 				</p>
 			</div>

@@ -358,14 +358,13 @@
 							</div>
 							{#if isTemporaryChatMode}
 								<h2 class="text-2xl font-semibold text-white/90">
-									temporary chat enabled
+									temporary chat
 								</h2>
 								<p class="mt-2 text-sm text-white/60">
-									send a message to start. messages here won't be saved.
+									messages here won't be saved
 								</p>
 							{:else}
 								<h2 class="text-2xl font-semibold text-white/90">new chat</h2>
-								<p class="mt-2 text-sm text-white/60">send a message to begin.</p>
 							{/if}
 						</div>
 					</div>

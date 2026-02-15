@@ -32,7 +32,7 @@
 
 		{#if supportEmail || adminEmail}
 			<div class="space-y-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
-				<p class="text-xs font-medium text-white/40">need help?</p>
+				<p class="text-xs font-medium text-white/50">need help?</p>
 				{#if supportEmail}
 					<a
 						href="mailto:{supportEmail}"

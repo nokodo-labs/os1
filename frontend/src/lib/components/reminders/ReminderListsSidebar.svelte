@@ -33,6 +33,8 @@
 	let openListMenuId = $state<string | null>(null)
 	let listMenuEl: HTMLDivElement | null = $state(null)
 	let listMenuButtonEl: HTMLButtonElement | null = $state(null)
+	let menuFixedTop = $state(0)
+	let menuFixedRight = $state(0)
 
 	let editListId = $state<string | null>(null)
 	const editList = $derived(editListId ? reminders.getListById(editListId) : null)
@@ -77,8 +79,14 @@
 	}
 
 	function toggleListMenu(listId: string, buttonEl?: HTMLButtonElement | null) {
-		openListMenuId = openListMenuId === listId ? null : listId
+		const opening = openListMenuId !== listId
+		openListMenuId = opening ? listId : null
 		if (buttonEl) listMenuButtonEl = buttonEl
+		if (opening && buttonEl) {
+			const rect = buttonEl.getBoundingClientRect()
+			menuFixedTop = rect.bottom + 4
+			menuFixedRight = window.innerWidth - rect.right
+		}
 	}
 
 	function closeListMenu() {
@@ -123,8 +131,8 @@
 		const handler = () => {
 			void startInlineAddList()
 		}
-		window.addEventListener('nokodo:reminders:list-add', handler)
-		return () => window.removeEventListener('nokodo:reminders:list-add', handler)
+		window.addEventListener('reminders:list-add', handler)
+		return () => window.removeEventListener('reminders:list-add', handler)
 	})
 </script>
 
@@ -187,7 +195,8 @@
 								transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 								bind:this={listMenuEl}
 								data-reminders-list-menu
-								class="animate-popup-right rounded-container absolute top-full right-2 z-50 mt-2 w-52 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+								class="animate-popup-right liquid-metal rounded-container fixed z-50 min-w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+								style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
 							>
 								<button
 									type="button"
@@ -227,7 +236,7 @@
 				{/each}
 
 				{#if isAddingList}
-					<div class="rounded-pill border border-white/10 bg-white/6 px-3 py-2.5">
+					<div class="rounded-pill border border-white/14 bg-white/6 px-3 py-2.5">
 						<input
 							bind:this={addListInputEl}
 							type="text"

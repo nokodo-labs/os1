@@ -82,7 +82,7 @@
 						id="current-password"
 						type="password"
 						autocomplete="current-password"
-						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 						placeholder="enter current password"
 						bind:value={currentPassword}
 						disabled={saving}
@@ -96,7 +96,7 @@
 						id="new-password"
 						type="password"
 						autocomplete="new-password"
-						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 						placeholder="enter new password (min 8 characters)"
 						bind:value={newPassword}
 						disabled={saving}
@@ -135,11 +135,11 @@
 				<button
 					type="button"
 					disabled
-					class="rounded-pill border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/40 transition-colors"
+					class="rounded-pill border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/50 transition-colors"
 				>
 					connect OIDC provider
 				</button>
-				<p class="mt-2 text-xs text-white/30">coming soon</p>
+				<p class="mt-2 text-xs text-white/45">coming soon</p>
 			</div>
 		</div>
 	</div>

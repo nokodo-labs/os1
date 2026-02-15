@@ -67,7 +67,7 @@
 			{@render master({ isMobile: false })}
 			<!-- separator (doesn't reach top/bottom) -->
 			<div
-				class="pointer-events-none absolute top-[clamp(28px,4vw,44px)] right-0 bottom-[clamp(28px,4vw,44px)] w-px bg-linear-to-b from-transparent via-white/10 to-transparent"
+				class="pointer-events-none absolute top-[clamp(28px,4vw,44px)] right-0 bottom-[clamp(28px,4vw,44px)] w-px bg-linear-to-b from-transparent via-white/16 to-transparent"
 				aria-hidden="true"
 			></div>
 		</div>

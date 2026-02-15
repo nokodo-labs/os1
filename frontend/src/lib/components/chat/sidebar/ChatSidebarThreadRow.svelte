@@ -56,7 +56,7 @@
 					timestamp={new Date(thread.last_activity_at ?? '')}
 					mode="relative"
 					minUnit="hour"
-					className="shrink-0 text-xs text-white/50"
+					className="shrink-0 text-xs text-white/55"
 				/>
 			</div>
 		</div>
@@ -64,14 +64,14 @@
 		{#snippet actions()}
 			<button
 				type="button"
-				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/50 transition-all duration-200 hover:bg-white/10 hover:text-white"
+				class="rounded-circle inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/65 transition-all duration-200 hover:bg-white/10 hover:text-white"
 				onclick={(e) => {
 					e.stopPropagation()
 					onToggleMenu(thread.id)
 				}}
 				aria-label="thread actions"
 			>
-				<EllipsisHorizontal class="h-4 w-4" />
+				<EllipsisHorizontal class="h-5 w-5" />
 			</button>
 		{/snippet}
 	</SidebarListItem>
@@ -122,7 +122,7 @@
 				<ArchiveBox class="h-4 w-4" />
 				archive
 			</button>
-			<div class="my-1 h-px w-full bg-white/10"></div>
+			<div class="my-1 h-px w-full bg-white/15"></div>
 			<div class="mt-1">
 				<DeleteButton
 					confirm={true}

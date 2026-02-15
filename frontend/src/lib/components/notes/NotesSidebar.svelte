@@ -20,6 +20,8 @@
 	let { selectedNoteId, isMobile = false }: Props = $props()
 
 	let openMenuId: string | null = $state(null)
+	let menuFixedTop = $state(0)
+	let menuFixedRight = $state(0)
 
 	$effect(() => {
 		void notes.load()
@@ -89,7 +91,12 @@
 	}
 </script>
 
-<div class="flex h-full min-h-0 flex-col" style="gap: var(--spacing-header-content);">
+<div
+	class="flex min-h-0 flex-col {isMobile
+		? 'min-h-[calc(100vh-var(--chrome-island-offset,0px)-var(--spacing-island-content)-2.5rem)]'
+		: 'h-full'}"
+	style="gap: var(--spacing-header-content);"
+>
 	<header
 		class="{isMobile
 			? 'mt-0'
@@ -115,7 +122,7 @@
 		{#if noteList.length === 0}
 			<div class="flex flex-1 items-center justify-center">
 				<div
-					class="rounded-container w-full overflow-hidden border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+					class="rounded-container w-full overflow-hidden border border-white/14 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
 				>
 					no notes yet
 				</div>
@@ -136,7 +143,7 @@
 								>
 									{labelForNote(note.title)}
 								</span>
-								<span class="min-w-0 truncate text-xs text-white/45">
+								<span class="min-w-0 truncate text-xs text-white/55">
 									{note.content.trim().length > 0
 										? note.content.trim().slice(0, 60)
 										: 'empty note'}
@@ -147,14 +154,21 @@
 								<button
 									type="button"
 									data-note-menu
-									class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/55 transition-all duration-150 hover:bg-white/8 hover:text-white"
+									class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white"
 									onclick={(e) => {
 										e.stopPropagation()
+										if (openMenuId !== note.id) {
+											const rect = (
+												e.currentTarget as HTMLElement
+											).getBoundingClientRect()
+											menuFixedTop = rect.bottom + 4
+											menuFixedRight = window.innerWidth - rect.right
+										}
 										openMenuId = openMenuId === note.id ? null : note.id
 									}}
 									aria-label="note options"
 								>
-									<EllipsisHorizontal class="h-4 w-4" />
+									<EllipsisHorizontal class="h-5 w-5" />
 								</button>
 							{/snippet}
 						</SidebarListItem>
@@ -163,7 +177,8 @@
 							<div
 								data-note-menu
 								transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-								class="liquid-metal rounded-container animate-popup-right absolute top-full right-2 z-50 mt-1 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+								class="liquid-metal rounded-container animate-popup-right fixed z-50 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+								style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
 							>
 								<MenuItem onclick={() => handleShare(note.id)}>
 									{#snippet icon()}<Share class="h-4 w-4" />{/snippet}

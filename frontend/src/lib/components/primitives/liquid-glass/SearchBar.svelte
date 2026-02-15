@@ -83,7 +83,7 @@
 		{disabled}
 		onfocus={() => (isFocused = true)}
 		onblur={() => (isFocused = false)}
-		class="h-full w-full bg-transparent pr-4 pl-11 text-sm text-white/80 outline-none placeholder:text-white/30"
+		class="h-full w-full bg-transparent pr-4 pl-11 text-sm text-white/80 outline-none placeholder:text-white/40"
 		style="border-radius: {radius}px;"
 	/>
 </div>

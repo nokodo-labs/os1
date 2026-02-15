@@ -76,7 +76,7 @@
 
 			{#if !useAccountBio}
 				<div
-					class="mt-5 border-t border-white/10 pt-5"
+					class="mt-5 border-t border-white/15 pt-5"
 					transition:slide={{ duration: 200 }}
 				>
 					<div class="text-sm font-semibold text-white">AI bio</div>
@@ -85,7 +85,7 @@
 						helps personalize responses.
 					</div>
 					<textarea
-						class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 						rows="4"
 						placeholder="e.g., i'm a software engineer interested in AI and design..."
 						value={aiBio}
@@ -124,7 +124,7 @@
 					</div>
 
 					<div
-						class="mt-3 border-t border-white/10 pt-3"
+						class="mt-3 border-t border-white/15 pt-3"
 						transition:slide={{ duration: 200 }}
 					>
 						<div class="flex items-center justify-between">
@@ -151,7 +151,7 @@
 				conversation.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 				rows="4"
 				placeholder="e.g., always respond in a casual tone, prefer code examples in TypeScript..."
 				value={customInstructions}
@@ -166,7 +166,7 @@
 				describe how you'd like the AI to communicate - its tone, style, and character.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 				rows="3"
 				placeholder="e.g., friendly and concise, like talking to a knowledgeable colleague..."
 				value={personality}

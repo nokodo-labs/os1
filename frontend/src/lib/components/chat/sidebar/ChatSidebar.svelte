@@ -354,6 +354,19 @@
 		return () => document.removeEventListener('click', handleDocClick)
 	})
 
+	/** svelte action: adds a click listener that expands the collapsed sidebar on desktop. */
+	function expandOnClick(node: HTMLElement) {
+		const handler = (event: MouseEvent) => {
+			if (device.isMobile) return
+			if (sidebar.isChatSidebarOpen) return
+			const target = event.target as HTMLElement | null
+			if (target?.closest('button, [role="button"], a')) return
+			sidebar.openChatSidebar()
+		}
+		node.addEventListener('click', handler)
+		return { destroy: () => node.removeEventListener('click', handler) }
+	}
+
 	async function deleteThread(threadId: string): Promise<number | null> {
 		const { response } = await apiClient().DELETE('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
@@ -363,9 +376,12 @@
 </script>
 
 {#if device.isMobile && sidebar.isChatSidebarOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 z-40 bg-black/40" onclick={() => sidebar.closeChatSidebar()}></div>
+	<button
+		type="button"
+		class="fixed inset-0 z-40 border-none bg-black/40"
+		aria-label="close sidebar"
+		onclick={() => sidebar.closeChatSidebar()}
+	></button>
 
 	<!-- right-edge swipe catcher to close fullscreen sidebar (mobile only) -->
 	<div
@@ -379,7 +395,7 @@
 {/if}
 
 <aside
-	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/10 backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
+	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/14 backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
 		? ''
 		: 'group'} {device.isMobile
 		? 'w-full'
@@ -392,22 +408,14 @@
 			: 'translate-x-0'}"
 	style="background-color: var(--accent-bg); view-transition-name: chat-sidebar;"
 	inert={device.isMobile ? !sidebar.isChatSidebarOpen : undefined}
-	onclick={(event) => {
-		if (device.isMobile) return
-		if (sidebar.isChatSidebarOpen) return
-		const target = event.target as HTMLElement | null
-		if (target?.closest('button, [role="button"], a')) return
-		// allow clicking anywhere in the collapsed sidebar to open it.
-		// buttons will still run their own actions.
-		sidebar.openChatSidebar()
-	}}
+	use:expandOnClick
 >
 	<!-- gradient overlay (replaces ::before pseudo-element) -->
 	<div
-		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/10 via-white/5 to-transparent opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/12 via-white/7 to-transparent opacity-70 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 	<div
-		class="pointer-events-none absolute inset-0 bg-white/3 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+		class="pointer-events-none absolute inset-0 bg-white/5 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 
 	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-3 pt-4 pb-0">
@@ -428,7 +436,7 @@
 
 		<div class="w-full px-3" aria-hidden="true">
 			<div
-				class="h-px w-full bg-linear-to-r from-transparent via-white/12 to-transparent"
+				class="h-px w-full bg-linear-to-r from-transparent via-white/18 to-transparent"
 			></div>
 		</div>
 

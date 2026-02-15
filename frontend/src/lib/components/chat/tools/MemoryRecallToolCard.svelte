@@ -40,7 +40,7 @@
 	{#snippet body()}
 		{#if recallQuery}
 			<div class="mb-3 text-sm text-white/60">
-				<span class="text-white/40">searching for:</span> "{recallQuery}"
+				<span class="text-white/50">searching for:</span> "{recallQuery}"
 			</div>
 		{/if}
 
@@ -60,7 +60,7 @@
 			<div class="mt-3 space-y-1">
 				{#each execution.events as event (event.id)}
 					<div class="flex items-start gap-2 text-xs text-white/60">
-						<span class="text-white/30">{event.timestamp.toLocaleTimeString()}</span>
+						<span class="text-white/45">{event.timestamp.toLocaleTimeString()}</span>
 						<span>{formatToolEventLine(event)}</span>
 					</div>
 				{/each}

@@ -94,7 +94,7 @@
 					<input
 						id="display-name"
 						type="text"
-						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 						placeholder="your name"
 						bind:value={displayName}
 						oninput={() => saveDisplayName(displayName)}
@@ -110,7 +110,7 @@
 				your email address for notifications and account recovery.
 			</div>
 			<div
-				class="rounded-pill mt-3 flex w-full items-center border border-white/8 bg-white/3 px-4 py-2.5 text-sm text-white/60"
+				class="rounded-pill mt-3 flex w-full items-center border border-white/14 bg-white/3 px-4 py-2.5 text-sm text-white/60"
 			>
 				{email}
 			</div>
@@ -152,7 +152,7 @@
 				a short description about yourself. visible on your profile.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 				rows="3"
 				placeholder="tell others a bit about yourself..."
 				bind:value={bio}

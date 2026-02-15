@@ -200,7 +200,7 @@
 					</span>
 
 					<ChevronRight
-						class="h-4 w-4 text-white/35 transition-colors group-hover:text-white/55"
+						class="h-4 w-4 text-white/50 transition-colors group-hover:text-white/55"
 					/>
 				</div>
 			{/each}

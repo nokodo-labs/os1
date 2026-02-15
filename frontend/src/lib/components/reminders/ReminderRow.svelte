@@ -51,6 +51,8 @@
 	let titleInputEl: HTMLInputElement | null = $state(null)
 
 	let isMenuOpen = $state(false)
+	let menuFixedTop = $state(0)
+	let menuFixedRight = $state(0)
 
 	let editedTitle = $state('')
 	let editedDescription = $state('')
@@ -269,7 +271,7 @@
 		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
 		: undefined}
 	class="reminder-row group relative cursor-pointer overflow-visible transition-colors duration-150 {props.expanded
-		? 'rounded-container border border-white/10 bg-white/6'
+		? 'rounded-container border border-white/14 bg-white/6'
 		: 'rounded-pill border border-transparent hover:bg-white/6'} {isCompleted
 		? 'is-completed opacity-65'
 		: ''} {isMotionIn ? 'is-incoming' : ''} {isMotionOutComplete
@@ -346,17 +348,22 @@
 				<button
 					bind:this={menuButtonEl}
 					type="button"
-					class="rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center text-white/55 transition-all duration-150 hover:bg-white/8 hover:text-white {device.isTouch ||
+					class="rounded-circle flex h-9 w-9 cursor-pointer items-center justify-center text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white {device.isTouch ||
 					!device.hasHover
 						? 'opacity-100'
 						: 'opacity-0 group-hover:opacity-100'}"
 					onclick={(event) => {
 						event.stopPropagation()
+						if (!isMenuOpen && menuButtonEl) {
+							const rect = menuButtonEl.getBoundingClientRect()
+							menuFixedTop = rect.bottom + 4
+							menuFixedRight = window.innerWidth - rect.right
+						}
 						isMenuOpen = !isMenuOpen
 					}}
 					aria-label="reminder actions"
 				>
-					<EllipsisHorizontal class="h-4 w-4" />
+					<EllipsisHorizontal class="h-5 w-5" />
 				</button>
 			</div>
 		{/if}
@@ -377,11 +384,11 @@
 				<div class="flex flex-wrap items-center gap-2 pl-9">
 					<button
 						type="button"
-						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs transition-colors hover:bg-white/8 {hasDueDate
+						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/14 bg-white/4 px-3 py-1.5 text-xs transition-colors hover:bg-white/8 {hasDueDate
 							? isOverdue
 								? 'text-red-400'
 								: 'text-white/70'
-							: 'text-white/45'}"
+							: 'text-white/55'}"
 					>
 						<Calendar variant="solid" class="h-3.5 w-3.5" />
 						<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
@@ -389,7 +396,7 @@
 
 					<button
 						type="button"
-						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/10 bg-white/4 px-3 py-1.5 text-xs text-white/45 transition-colors hover:bg-white/8"
+						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-white/14 bg-white/4 px-3 py-1.5 text-xs text-white/55 transition-colors hover:bg-white/8"
 					>
 						<ArrowPath class="h-3.5 w-3.5" />
 						<span>repeat</span>
@@ -398,7 +405,7 @@
 					{#if props.kind === 'create'}
 						<button
 							type="button"
-							class="rounded-pill ml-auto cursor-pointer border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-medium text-white/85 transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-45"
+							class="rounded-pill ml-auto cursor-pointer border border-white/14 bg-white/8 px-3 py-1.5 text-xs font-medium text-white/85 transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-45"
 							onclick={(event) => {
 								event.stopPropagation()
 								void submitCreate()
@@ -416,7 +423,7 @@
 	{#if props.kind === 'edit' && (hasDueDate || props.reminder.description) && !props.expanded}
 		<div class="flex items-center gap-2 px-3 pb-2 pl-11">
 			{#if hasDueDate}
-				<span class="text-xs {isOverdue ? 'text-red-400' : 'text-white/45'}">
+				<span class="text-xs {isOverdue ? 'text-red-400' : 'text-white/55'}">
 					{formattedDueDate}
 				</span>
 			{/if}
@@ -427,7 +434,8 @@
 		<div
 			transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
 			bind:this={menuEl}
-			class="animate-popup-right rounded-container absolute top-full right-2 z-50 mt-2 w-56 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+			class="animate-popup-right liquid-metal rounded-container fixed z-50 w-56 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+			style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
 		>
 			<div class="px-3 pt-2 pb-1 text-xs font-medium text-white/55">move</div>
 			<div class="max-h-44 overflow-auto">

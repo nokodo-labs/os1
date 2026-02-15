@@ -109,7 +109,7 @@
 
 			{#if !autoAccentColors}
 				<div
-					class="mt-5 border-t border-white/10 pt-5"
+					class="mt-5 border-t border-white/15 pt-5"
 					transition:slide={{ duration: 200 }}
 				>
 					<div class="text-sm font-semibold text-white">accent color</div>
@@ -165,7 +165,7 @@
 
 			{#if !autoBackground}
 				<div
-					class="mt-5 border-t border-white/10 pt-5"
+					class="mt-5 border-t border-white/15 pt-5"
 					transition:slide={{ duration: 200 }}
 				>
 					<div class="text-sm font-semibold text-white">wallpaper</div>
@@ -203,7 +203,7 @@
 
 					{#if selectedBackground === 'static'}
 						<div
-							class="mt-4 flex items-center gap-3 border-t border-white/10 pt-4"
+							class="mt-4 flex items-center gap-3 border-t border-white/15 pt-4"
 							transition:slide={{ duration: 200 }}
 						>
 							<label class="text-sm font-medium text-white/60" for="static-color"

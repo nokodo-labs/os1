@@ -24,12 +24,12 @@ export interface DebugUiContext {
 	setStreamdownAnimation(next: Partial<StreamdownAnimationOptions>): void
 }
 
-const STORAGE_KEY = 'nokodo.debug.appsGridIconShape'
+const STORAGE_KEY = 'debug.appsGridIconShape'
 
-const STREAMDOWN_ANIMATION_ENABLED_KEY = 'nokodo.debug.streamdown.animation.enabled'
-const STREAMDOWN_ANIMATION_TYPE_KEY = 'nokodo.debug.streamdown.animation.type'
-const STREAMDOWN_ANIMATION_TOKENIZE_KEY = 'nokodo.debug.streamdown.animation.tokenize'
-const STREAMDOWN_ANIMATION_DURATION_KEY = 'nokodo.debug.streamdown.animation.duration'
+const STREAMDOWN_ANIMATION_ENABLED_KEY = 'debug.streamdown.animation.enabled'
+const STREAMDOWN_ANIMATION_TYPE_KEY = 'debug.streamdown.animation.type'
+const STREAMDOWN_ANIMATION_TOKENIZE_KEY = 'debug.streamdown.animation.tokenize'
+const STREAMDOWN_ANIMATION_DURATION_KEY = 'debug.streamdown.animation.duration'
 
 function readStoredShape(): AppsGridIconShape {
 	if (!browser) return 'default'

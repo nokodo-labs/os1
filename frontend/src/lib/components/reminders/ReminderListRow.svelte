@@ -74,14 +74,14 @@
 		{#if onMenu}
 			<button
 				type="button"
-				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/65 transition-all duration-150 hover:border-white/10 hover:bg-white/5 hover:text-white"
+				class="rounded-circle inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/70 transition-all duration-150 hover:border-white/10 hover:bg-white/8 hover:text-white"
 				aria-label="list options"
 				onclick={(event) => {
 					event.stopPropagation()
 					onMenu(event)
 				}}
 			>
-				<EllipsisHorizontal class="h-4 w-4" />
+				<EllipsisHorizontal class="h-5 w-5" />
 			</button>
 		{/if}
 	{/snippet}

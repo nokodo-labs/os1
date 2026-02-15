@@ -40,7 +40,7 @@
 	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
 	let justRevealed = false
 	const instanceId = Math.random().toString(36).slice(2)
-	const ACTIONS_EVENT = 'nokodo:chat-message-actions-open'
+	const ACTIONS_EVENT = 'chat-message-actions-open'
 	let touchStartX = 0
 	let touchStartY = 0
 	let touchMoved = false

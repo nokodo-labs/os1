@@ -32,7 +32,7 @@
 				<div class="flex items-center justify-between gap-3">
 					<div>
 						<div class="text-sm text-white/70">device information</div>
-						<div class="text-xs text-white/40">
+						<div class="text-xs text-white/50">
 							share timezone, device type, and browser to help the AI personalise
 							responses
 						</div>
@@ -42,7 +42,7 @@
 				<div class="flex items-center justify-between gap-3">
 					<div>
 						<div class="text-sm text-white/70">precise location</div>
-						<div class="text-xs text-white/40">
+						<div class="text-xs text-white/50">
 							share your location with the AI for location-aware responses
 						</div>
 					</div>

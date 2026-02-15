@@ -53,14 +53,14 @@
 				<span class="h-1.5 w-1.5 rounded-full bg-blue-400"></span>
 			{/if}
 		</div>
-		<div class="truncate text-[0.8125rem] {isUnread ? 'text-white/60' : 'text-white/45'}">
+		<div class="truncate text-[0.8125rem] {isUnread ? 'text-white/60' : 'text-white/55'}">
 			{body}
 		</div>
 		<Timestamp
 			{timestamp}
 			mode="relative"
 			minUnit="minute"
-			className="mt-1 block text-[0.6875rem] text-white/40"
+			className="mt-1 block text-[0.6875rem] text-white/50"
 		/>
 	</div>
 	<div

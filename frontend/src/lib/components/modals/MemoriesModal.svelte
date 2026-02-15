@@ -210,7 +210,7 @@
 				/>
 				<input
 					type="text"
-					class="rounded-pill w-full border border-white/10 bg-white/5 py-2 pr-3 pl-9 text-sm text-white/90 placeholder-white/30 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+					class="rounded-pill w-full border border-white/10 bg-white/5 py-2 pr-3 pl-9 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
 					placeholder="search memories..."
 					value={search}
 					oninput={(e) => onSearchInput(e.currentTarget.value)}
@@ -285,7 +285,7 @@
 										<p class="text-sm leading-relaxed text-white/80">
 											{memory.content}
 										</p>
-										<p class="mt-1.5 text-xs text-white/35">
+										<p class="mt-1.5 text-xs text-white/50">
 											{formatDate(memory.updated_at)}
 										</p>
 									</div>

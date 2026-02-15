@@ -123,7 +123,7 @@
 <Tooltip content={tooltipContent} placement="top">
 	<div
 		class="relative"
-		style="width: {sliderW}px; height: {sliderH}px;"
+		style="width: {sliderW}px; height: {sliderH}px; touch-action: none;"
 		role="switch"
 		aria-checked={checked}
 		aria-label={ariaLabel || undefined}

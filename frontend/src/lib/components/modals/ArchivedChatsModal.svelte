@@ -54,7 +54,7 @@
 							</div>
 							<div class="truncate text-sm text-white/55">{chat.summary}</div>
 						</div>
-						<div class="shrink-0 text-xs text-white/45">{chat.archivedAt}</div>
+						<div class="shrink-0 text-xs text-white/55">{chat.archivedAt}</div>
 					</button>
 				{/each}
 			</div>

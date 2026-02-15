@@ -4,6 +4,7 @@
 	import ArrowUturnRight from '$lib/components/icons/ArrowUturnRight.svelte'
 	import Bold from '$lib/components/icons/Bold.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
+	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import Code from '$lib/components/icons/Code.svelte'
 	import CodeBracket from '$lib/components/icons/CodeBracket.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
@@ -19,6 +20,7 @@
 	import { MenuItem, Switch } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
 	import { onDestroy } from 'svelte'
 	import { scale } from 'svelte/transition'
@@ -29,9 +31,10 @@
 
 	interface Props {
 		noteId: string
+		onBack?: () => void | Promise<void>
 	}
 
-	let { noteId }: Props = $props()
+	let { noteId, onBack }: Props = $props()
 
 	const chrome = useSystemChrome()
 
@@ -199,6 +202,17 @@
 
 {#snippet islandContextActions()}
 	<div class="relative flex items-center gap-1">
+		{#if onBack && device.isMobile}
+			<button
+				type="button"
+				class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+				onclick={() => onBack?.()}
+				aria-label="back to notes"
+			>
+				<ChevronLeft class="h-5 w-5" strokeWidth="2" />
+			</button>
+		{/if}
+
 		<!-- undo/redo buttons -->
 		<button
 			type="button"
@@ -284,7 +298,7 @@
 				<!-- title row -->
 				<div class="mb-2 flex w-full items-center">
 					<input
-						class="w-full bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/35"
+						class="w-full bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/42"
 						placeholder="title"
 						bind:value={title}
 					/>
@@ -300,7 +314,7 @@
 						if (target instanceof HTMLElement) target.scrollLeft += event.deltaY
 					}}
 				>
-					<div class="flex w-fit items-center gap-1 text-xs font-medium text-white/45">
+					<div class="flex w-fit items-center gap-1 text-xs font-medium text-white/55">
 						<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 							<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
 							<Timestamp
@@ -439,7 +453,7 @@
 				{#if isRawMode}
 					<textarea
 						bind:this={textareaEl}
-						class="min-h-[56vh] w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/35"
+						class="min-h-[56vh] w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
 						placeholder="write something..."
 						bind:value={content}
 						onkeydown={handleRawKeyDown}

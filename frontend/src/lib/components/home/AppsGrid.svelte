@@ -387,7 +387,7 @@
 				type="button"
 				class="cursor-pointer transition-all duration-200 {index === currentPage
 					? 'h-2 w-6 rounded-full bg-white/80'
-					: 'h-2 w-2 rounded-full bg-white/30 hover:bg-white/45'}"
+					: 'h-2 w-2 rounded-full bg-white/40 hover:bg-white/45'}"
 				aria-label={`page ${index + 1} (${_page.length})`}
 				aria-current={index === currentPage ? 'page' : undefined}
 				onclick={() => {

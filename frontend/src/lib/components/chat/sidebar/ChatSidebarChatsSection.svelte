@@ -29,19 +29,19 @@
 	aria-hidden={!expandedContentVisible}
 >
 	<div class="w-full px-3" aria-hidden="true">
-		<div class="h-px w-full bg-linear-to-r from-transparent via-white/12 to-transparent"></div>
+		<div class="h-px w-full bg-linear-to-r from-transparent via-white/18 to-transparent"></div>
 	</div>
 	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden">
 		<div class="mt-2 mb-1 flex items-center gap-2 px-5">
-			<ChatBubble class="h-4 w-4 shrink-0 text-white/60" />
-			<h3 class="text-xs font-semibold text-white/50 uppercase">chats</h3>
+			<ChatBubble class="h-4 w-4 shrink-0 text-white/70" />
+			<h3 class="text-xs font-semibold text-white/60 uppercase">chats</h3>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div class="flex min-h-full flex-col space-y-0.5 px-3">
 				{#if !isLoggedIn}
 					<div class="flex flex-1 flex-col items-center justify-center">
 						<div
-							class="rounded-container w-full overflow-hidden border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+							class="rounded-container w-full overflow-hidden border border-white/14 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
 						>
 							log in to see your recent chats
 						</div>
@@ -49,7 +49,7 @@
 				{:else if threads.length === 0}
 					<div class="flex flex-1 flex-col items-center justify-center">
 						<div
-							class="rounded-container w-full overflow-hidden border border-white/10 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+							class="rounded-container w-full overflow-hidden border border-white/14 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
 						>
 							no chats yet
 						</div>
