@@ -21,7 +21,7 @@
 	"devDependencies": {
 		"@eslint/js": "^9.39.2",
 		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.50.1",
+		"@sveltejs/kit": "^2.52.0",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tailwindcss/postcss": "^4.1.18",
 		"@testing-library/jest-dom": "^6.9.1",
