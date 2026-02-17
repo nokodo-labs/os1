@@ -135,8 +135,11 @@ export function createChatState() {
 	const messages = $derived.by(() => {
 		if (!currentLeafId) return []
 		const branch: ApiMessage[] = []
+		const visited = new SvelteSet<string>()
 		let curr: string | null = currentLeafId
 		while (curr) {
+			if (visited.has(curr)) break
+			visited.add(curr)
 			const msg = messageTree.get(curr)
 			if (!msg) break
 			branch.unshift(msg)
@@ -189,8 +192,11 @@ export function createChatState() {
 			// only if we are sitting at the parent (waiting for it)
 			return streamingAssistantParentId ? leafId === streamingAssistantParentId : true
 		}
+		const visited = new SvelteSet<string>()
 		let curr: string | null = streamingLeafId
 		while (curr) {
+			if (visited.has(curr)) break
+			visited.add(curr)
 			if (curr === leafId) return true
 			const msg = messageTree.get(curr)
 			if (!msg) break
@@ -273,8 +279,11 @@ export function createChatState() {
 		const firstResponse = messageTree.get(firstResponseId)
 		if (!firstResponse) return null
 		// Walk up to find the user message
+		const visited = new SvelteSet<string>()
 		let parentId = firstResponse.parent_id
 		while (parentId) {
+			if (visited.has(parentId)) break
+			visited.add(parentId)
 			const parent = messageTree.get(parentId)
 			if (!parent) break
 			if (parent.type === 'user') return parent.id

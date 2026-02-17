@@ -22,7 +22,7 @@ export type {
 	AppearancePreferences,
 	NotificationPreferences,
 	PrivacyPreferences,
-	UserPreferences
+	UserPreferences,
 }
 
 export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
@@ -143,6 +143,20 @@ function createPreferencesStore() {
 	// auto-sync with session
 
 	function startSync(): () => void {
+		// immediately hydrate from the current user if available.
+		// $effect is scheduled (deferred), so without this the splash would
+		// fade before preferences are applied, causing a visual pop.
+		const user = session.currentUser
+		if (user && userId !== user.id) {
+			userId = user.id
+			let stored = readStorage(user.id)
+			if (user.preferences) {
+				stored = user.preferences
+				writeStorage(user.id, stored)
+			}
+			raw = stored
+		}
+
 		// $effect.root lets us run effects outside component context
 		const cleanup = $effect.root(() => {
 			$effect(() => {
