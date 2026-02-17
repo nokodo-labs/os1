@@ -10,9 +10,9 @@ import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import HTTPException, WebSocket, status
+from fastapi import Header, HTTPException, WebSocket, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,10 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 logger = logging.getLogger(__name__)
+
+# shared annotated type — add to any router param that mutates resources.
+# FastAPI maps the parameter name x_session_id → header X-Session-ID.
+SessionId = Annotated[str | None, Header()]
 
 
 if TYPE_CHECKING:
@@ -75,7 +79,12 @@ class ConnectionManager:
 			except Exception:
 				logger.debug("failed to broadcast to user %s", user_id)
 
-	async def broadcast_event(self, event: EventModel) -> None:
+	async def broadcast_event(
+		self,
+		event: EventModel,
+		*,
+		origin_session_id: str | None = None,
+	) -> None:
 		event_data: dict[str, Any] = {
 			"id": str(event.id),
 			"type": event.type,
@@ -91,6 +100,7 @@ class ConnectionManager:
 			"task_id": str(event.task_id) if event.task_id else None,
 			"project_id": str(event.project_id) if event.project_id else None,
 			"created_at": event.created_at.isoformat() if event.created_at else None,
+			"origin_session_id": origin_session_id,
 		}
 
 		if event.user_id:
@@ -173,12 +183,13 @@ async def publish_event(
 	session: AsyncSession,
 	*,
 	event: Event,
+	origin_session_id: str | None = None,
 ) -> Event:
 	"""persist an event and broadcast it."""
 	session.add(event)
 	await session.commit()
 	await session.refresh(event)
-	await event_connections.broadcast_event(event)
+	await event_connections.broadcast_event(event, origin_session_id=origin_session_id)
 	return event
 
 

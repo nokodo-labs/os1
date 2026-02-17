@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.group import Group, GroupMembership
 from api.permissions import ResourceType
 from api.schemas.group import GroupCreate, GroupMembershipCreate, GroupUpdate
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
@@ -94,6 +97,7 @@ async def create_group(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Group:
 	"""create a new group. the creator becomes the owner."""
 	require_permission(principal, "groups:create")
@@ -113,8 +117,21 @@ async def create_group(
 		role="owner",
 	)
 	session.add(membership)
-	await session.commit()
+	await session.flush()
 	await session.refresh(group)
+	group_id = str(group.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.GROUP_CREATED,
+		data={"group_id": group_id, "name": group.name},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return group
 
 
@@ -124,6 +141,7 @@ async def update_group(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Group:
 	"""update group details (requires editor access)."""
 	await require_resource_access(
@@ -141,8 +159,20 @@ async def update_group(
 	if group_in.metadata is not None:
 		group.metadata_ = group_in.metadata
 	session.add(group)
-	await session.commit()
+	await session.flush()
 	await session.refresh(group)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.GROUP_UPDATED,
+		data={"group_id": group_id, "name": group.name},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return group
 
 
@@ -151,6 +181,7 @@ async def delete_group(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a group (requires admin access)."""
 	await require_resource_access(
@@ -162,7 +193,18 @@ async def delete_group(
 	)
 	group = await _load_group(group_id, session)
 	await session.delete(group)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.GROUP_DELETED,
+		data={"group_id": group_id},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 
 
 # ---- membership management ----
@@ -174,6 +216,7 @@ async def add_member(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> GroupMembership:
 	"""add a user to a group (requires editor access on the group)."""
 	await require_resource_access(
@@ -200,8 +243,24 @@ async def add_member(
 		role=member_in.role,
 	)
 	session.add(membership)
-	await session.commit()
+	await session.flush()
 	await session.refresh(membership)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.GROUP_MEMBER_ADDED,
+		data={
+			"group_id": group_id,
+			"user_id": str(member_in.user_id),
+			"role": member_in.role,
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return membership
 
 
@@ -211,6 +270,7 @@ async def remove_member(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""remove a user from a group (requires editor access)."""
 	await require_resource_access(
@@ -233,7 +293,21 @@ async def remove_member(
 			detail="membership not found",
 		)
 	await session.delete(membership)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.GROUP_MEMBER_REMOVED,
+		data={
+			"group_id": group_id,
+			"user_id": str(user_id),
+		},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 
 
 # ---- internal helpers ----

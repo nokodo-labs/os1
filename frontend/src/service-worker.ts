@@ -26,10 +26,12 @@ const RUNTIME_MAX_ENTRIES = 128
 
 // all assets produced by the build + static files + prerendered pages
 const PRECACHE_ASSETS = [
-	...build,
-	...files.filter((f) => !f.startsWith('/icons/')),
-	...prerendered,
-	'/offline.html',
+	...new Set([
+		...build,
+		...files.filter((f) => !f.startsWith('/icons/')),
+		...prerendered,
+		'/offline.html',
+	]),
 ]
 
 // O(1) lookup for precache hits

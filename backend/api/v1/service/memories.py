@@ -8,8 +8,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate, MemoryUpdate
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 from api.v1.service.embeddings import (
@@ -54,6 +57,8 @@ async def create_memory(
 	memory_in: MemoryCreate,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> Memory:
 	require_permission(principal, "memories:create")
 	data = memory_in.model_dump(by_alias=True)
@@ -61,8 +66,21 @@ async def create_memory(
 		data["user_id"] = principal.user.id
 	memory = Memory(**data)
 	session.add(memory)
-	await session.commit()
+	await session.flush()
 	await session.refresh(memory)
+	memory_id = TypeID(memory.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_CREATED,
+		data={"memory_id": str(memory_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 
 	embedding_model = build_embedding_model(await resolve_embedding_model(session))
 	embeddings = await embedding_model.embed([memory.content])
@@ -79,7 +97,7 @@ async def create_memory(
 	memory.embedding = _embedding_to_bytes(embedding)
 	await session.commit()
 
-	return await _get_memory(TypeID(memory.id), session, principal)
+	return await _get_memory(memory_id, session, principal)
 
 
 async def list_memories(
@@ -134,6 +152,8 @@ async def update_memory(
 	memory_in: MemoryUpdate,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> Memory:
 	"""update a memory and sync with vectorstore if content changed."""
 	memory = await _get_memory(memory_id, session, principal)
@@ -163,7 +183,18 @@ async def update_memory(
 		await add_chunks(collection=collection, chunks=[chunk])
 		memory.embedding = _embedding_to_bytes(embedding)
 
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_UPDATED,
+		data={"memory_id": str(memory_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return await _get_memory(memory_id, session, principal)
 
 
@@ -171,6 +202,8 @@ async def delete_memory(
 	memory_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a memory and remove from vectorstore."""
 	memory = await _get_memory(memory_id, session, principal)
@@ -180,12 +213,25 @@ async def delete_memory(
 	await delete_chunks(collection=collection, chunks=[chunk])
 
 	await session.delete(memory)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_DELETED,
+		data={"memory_id": str(memory_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 
 
 async def delete_all_memories(
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""delete all memories for the current user and wipe vectorstore."""
 	user_id = TypeID(principal.user.id)
@@ -201,4 +247,15 @@ async def delete_all_memories(
 		await delete_chunks(collection=collection, chunks=chunks)
 
 		await session.execute(delete(Memory).where(Memory.user_id == user_id))
-		await session.commit()
+		event = Event(
+			scope=EventScope.USER,
+			scope_id=principal.user_id,
+			type=EventType.MEMORY_DELETED,
+			data={"all": True, "user_id": str(user_id)},
+			user_id=principal.user_id,
+		)
+		await event_service.publish_event(
+			session,
+			event=event,
+			origin_session_id=origin_session_id,
+		)

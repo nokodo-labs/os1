@@ -15,6 +15,7 @@ from api.v1.schemas.settings import (
 from api.v1.service import settings as svc
 from api.v1.service.auth import Principal, get_current_principal, get_optional_user
 from api.v1.service.authorization import require_permission
+from api.v1.service.events import SessionId
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -43,6 +44,7 @@ async def update_settings(
 	body: SettingsUpdateRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> SettingsResponse:
 	"""partial update settings (admin only)."""
 	require_permission(principal, "settings:manage")
@@ -53,6 +55,7 @@ async def update_settings(
 			body.data,
 			expected_versions=body.expected_versions,
 			changed_by_id=principal.user_id,
+			origin_session_id=x_session_id,
 		)
 		await db.commit()
 		settings.reload()

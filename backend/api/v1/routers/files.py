@@ -16,6 +16,7 @@ from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import files as file_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -27,9 +28,15 @@ async def create_file(
 	file_in: FileCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> File:
 	"""register a new file record."""
-	return await file_service.create_file(file_in, db, principal=principal)
+	return await file_service.create_file(
+		file_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.get("", response_model=list[FileSchema])
@@ -70,9 +77,16 @@ async def update_file(
 	file_in: FileUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> File:
 	"""update file metadata."""
-	return await file_service.update_file(file_id, file_in, db, principal=principal)
+	return await file_service.update_file(
+		file_id,
+		file_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -80,9 +94,15 @@ async def delete_file(
 	file_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""soft-delete a file."""
-	await file_service.delete_file(file_id, db, principal=principal)
+	await file_service.delete_file(
+		file_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 # ---- access rules ----

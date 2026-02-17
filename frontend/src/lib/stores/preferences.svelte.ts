@@ -1,5 +1,6 @@
 import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { device } from '$lib/stores/device.svelte'
 import { session } from '$lib/stores/session.svelte'
@@ -21,7 +22,7 @@ export type {
 	AppearancePreferences,
 	NotificationPreferences,
 	PrivacyPreferences,
-	UserPreferences,
+	UserPreferences
 }
 
 export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
@@ -40,9 +41,7 @@ type Resolved = {
 
 const STORAGE_KEY = 'user-preferences:'
 
-// ────────────────────────────────────────────────────────────
 // local storage helpers
-// ────────────────────────────────────────────────────────────
 
 function readStorage(userId: string): UserPreferences {
 	if (!browser) return {}
@@ -65,9 +64,7 @@ function writeStorage(userId: string, prefs: UserPreferences): void {
 	}
 }
 
-// ────────────────────────────────────────────────────────────
 // store
-// ────────────────────────────────────────────────────────────
 
 function createPreferencesStore() {
 	let raw = $state<UserPreferences>({})
@@ -123,9 +120,27 @@ function createPreferencesStore() {
 		() => device.isChromium && (data.accessibility.svgLiquidGlass ?? true)
 	)
 
-	// ──────────────────────────────────────────────────────
+	// event stream integration
+
+	let prefsUnsub: (() => void) | null = null
+
+	function handlePreferencesEvent(message: StreamMessage): void {
+		if (message.type !== 'user.preferences_updated') return
+
+		const data = (message.data ?? message) as Record<string, unknown>
+		const incoming = data.preferences as UserPreferences | undefined
+		if (!incoming || !userId) return
+
+		raw = incoming
+		writeStorage(userId, incoming)
+
+		// keep session.currentUser in sync
+		if (session.currentUser) {
+			session.currentUser = { ...session.currentUser, preferences: incoming }
+		}
+	}
+
 	// auto-sync with session
-	// ──────────────────────────────────────────────────────
 
 	function startSync(): () => void {
 		// $effect.root lets us run effects outside component context
@@ -158,12 +173,19 @@ function createPreferencesStore() {
 			})
 		})
 
-		return cleanup
+		// subscribe to event stream for cross-session preference updates
+		if (!prefsUnsub) {
+			prefsUnsub = eventStreamClient.subscribe(handlePreferencesEvent)
+		}
+
+		return () => {
+			cleanup()
+			prefsUnsub?.()
+			prefsUnsub = null
+		}
 	}
 
-	// ──────────────────────────────────────────────────────
 	// api
-	// ──────────────────────────────────────────────────────
 
 	async function refresh(): Promise<void> {
 		const uid = userId
@@ -210,12 +232,12 @@ function createPreferencesStore() {
 		writeStorage(uid, nextRaw)
 		error = null
 
-		const { data: res, error: err } = await apiClient().PATCH('/v1/users/{user_id}', {
+		const { error: err } = await apiClient().PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { preferences: nextRaw },
 		})
 
-		if (err || !res) {
+		if (err) {
 			// rollback
 			raw = prevRaw
 			writeStorage(uid, prevRaw)
@@ -223,12 +245,7 @@ function createPreferencesStore() {
 			return false
 		}
 
-		// server is truth
-		const saved = (res.preferences ?? {}) as UserPreferences
-		raw = saved
-		writeStorage(uid, saved)
-		session.currentUser = { ...res }
-
+		// WS event delivers authoritative state
 		return true
 	}
 

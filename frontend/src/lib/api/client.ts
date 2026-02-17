@@ -6,6 +6,7 @@ import {
 } from '$lib/auth/session.svelte'
 import createClient from 'openapi-fetch'
 import { apiOriginReady, getApiOrigin } from './origin'
+import { getSessionId } from './sessionId'
 import type { paths } from './types'
 
 type PrefixedPaths<P, Prefix extends string> = {
@@ -37,6 +38,7 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 	if (token && !headers.has('Authorization')) {
 		headers.set('Authorization', `Bearer ${token}`)
 	}
+	headers.set('X-Session-ID', getSessionId())
 
 	const res = await fetch(new Request(req, { headers, credentials: 'include' }))
 	if (res.status !== 401) return res

@@ -14,6 +14,7 @@ from api.schemas.note import NoteCreate, NoteUpdate
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.v1.service import notes as note_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -28,12 +29,14 @@ async def create_note(
 	note_in: NoteCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Note:
 	"""create a new note."""
 	return await note_service.create_note(
 		note_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -77,6 +80,7 @@ async def update_note(
 	note_in: NoteUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Note:
 	"""update a note."""
 	return await note_service.update_note(
@@ -84,6 +88,7 @@ async def update_note(
 		note_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -92,6 +97,12 @@ async def delete_note(
 	note_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a note."""
-	await note_service.delete_note(note_id, db, principal=principal)
+	await note_service.delete_note(
+		note_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)

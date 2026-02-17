@@ -51,6 +51,7 @@ from api.v1.service.chat.models import (
 	build_chat_model,
 	resolve_chat_model,
 )
+from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_encode, sse_response
 from nokodo_ai.utils.typeid import TypeID
 
@@ -69,9 +70,12 @@ async def create_thread(
 	thread_in: ThreadCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Thread:
 	"""Create a new thread."""
-	return await thread_service.create_thread(thread_in, db, principal=principal)
+	return await thread_service.create_thread(
+		thread_in, db, principal=principal, origin_session_id=x_session_id
+	)
 
 
 @router.post("/create_and_run")
@@ -79,6 +83,7 @@ async def create_and_run(
 	req: ThreadCreateAndRunRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> StreamingResponse:
 	"""create a thread and immediately start an agent run, all via one SSE stream.
 
@@ -97,6 +102,7 @@ async def create_and_run(
 		),
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 	thread_id = TypeID(thread.id)
@@ -166,6 +172,7 @@ async def update_thread(
 	thread_in: ThreadUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Thread:
 	"""Update thread metadata."""
 	return await thread_service.update_thread(
@@ -173,6 +180,7 @@ async def update_thread(
 		thread_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -182,6 +190,7 @@ async def generate_thread_metadata(
 	req: ThreadMetadataGenerateRequest | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Thread:
 	"""Generate thread title/tags using an LLM.
 
@@ -218,6 +227,7 @@ async def generate_thread_metadata(
 		chat_model=chat_model,
 		principal=principal,
 		replace=request.replace,
+		origin_session_id=x_session_id,
 	)
 	if updated is not None:
 		return updated
@@ -229,9 +239,12 @@ async def delete_thread(
 	thread_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""Delete a thread."""
-	await thread_service.delete_thread(thread_id, db, principal=principal)
+	await thread_service.delete_thread(
+		thread_id, db, principal=principal, origin_session_id=x_session_id
+	)
 
 
 @router.get("/{thread_id}/messages", response_model=list[MessageSchema])
@@ -323,6 +336,7 @@ async def create_message(
 	message_in: MessageCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Message:
 	"""Append a message to a thread."""
 	return await thread_service.create_message(
@@ -330,6 +344,7 @@ async def create_message(
 		message_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -342,6 +357,7 @@ async def delete_user_message_turn(
 	message_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a user message and its generated response(s).
 
@@ -353,6 +369,7 @@ async def delete_user_message_turn(
 		message_id,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -386,6 +403,7 @@ async def switch_branch(
 	req: ThreadSwitchRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> ThreadSwitchResponse:
 	"""Switch the active branch to the subtree rooted at message_id."""
 	thread = await thread_service.switch_branch(
@@ -393,6 +411,7 @@ async def switch_branch(
 		req.message_id,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 	return ThreadSwitchResponse(ok=True, current_message_id=thread.current_message_id)
 

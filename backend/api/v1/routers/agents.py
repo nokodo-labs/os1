@@ -16,6 +16,8 @@ from api.v1.service import access_rules as access_rules_service
 from api.v1.service import agents as agent_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.events import SessionId
+from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -26,9 +28,15 @@ async def create_agent(
 	agent_in: AgentCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Agent:
 	"""Register a new agent."""
-	return await agent_service.create_agent(agent_in, db, principal=principal)
+	return await agent_service.create_agent(
+		agent_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.get("", response_model=list[AgentSchema])
@@ -42,7 +50,7 @@ async def list_agents(
 
 @router.get("/{agent_id}", response_model=AgentSchema)
 async def get_agent(
-	agent_id: str,
+	agent_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Agent:
@@ -52,23 +60,36 @@ async def get_agent(
 
 @router.patch("/{agent_id}", response_model=AgentSchema)
 async def update_agent(
-	agent_id: str,
+	agent_id: TypeID,
 	agent_in: AgentUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Agent:
 	"""Update an agent."""
-	return await agent_service.update_agent(agent_id, agent_in, db, principal=principal)
+	return await agent_service.update_agent(
+		agent_id,
+		agent_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
-	agent_id: str,
+	agent_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""Delete an agent."""
-	await agent_service.delete_agent(agent_id, db, principal=principal)
+	await agent_service.delete_agent(
+		agent_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.get("/{agent_id}/access-rules", response_model=list[AccessRuleResponse])

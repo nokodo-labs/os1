@@ -4,11 +4,12 @@
 	import { resolve } from '$app/paths'
 	import { apiClient } from '$lib/api/client'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
+	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
-	import { reminders } from '$lib/stores/reminders.svelte'
+	import { reminders, type ReminderListsSortMode } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import { scale } from 'svelte/transition'
 	import Pencil from '../icons/Pencil.svelte'
@@ -29,6 +30,29 @@
 	let newListName = $state('')
 	let isSubmittingList = $state(false)
 	let addListInputEl: HTMLInputElement | null = $state(null)
+
+	// sort menu state
+	let isSortMenuOpen = $state(false)
+	let sortMenuEl: HTMLDivElement | null = $state(null)
+	let sortButtonEl: HTMLButtonElement | null = $state(null)
+
+	const sortOptions: { value: ReminderListsSortMode; label: string }[] = [
+		{ value: 'position:asc', label: 'manual order' },
+		{ value: 'name:asc', label: 'name a-z' },
+		{ value: 'name:desc', label: 'name z-a' },
+		{ value: 'created_at:desc', label: 'newest' },
+		{ value: 'created_at:asc', label: 'oldest' },
+	]
+
+	function closeSortMenu() {
+		isSortMenuOpen = false
+		sortMenuEl = null
+	}
+
+	function toggleSortMenu() {
+		isSortMenuOpen = !isSortMenuOpen
+		if (isSortMenuOpen) closeListMenu()
+	}
 
 	let openListMenuId = $state<string | null>(null)
 	let listMenuEl: HTMLDivElement | null = $state(null)
@@ -103,19 +127,27 @@
 	}
 
 	$effect(() => {
-		if (!openListMenuId) return
+		if (!openListMenuId && !isSortMenuOpen) return
 
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== 'Escape') return
 			event.preventDefault()
 			closeListMenu()
+			closeSortMenu()
 		}
 
 		const onPointerDown = (event: PointerEvent) => {
 			const path = event.composedPath()
-			if (listMenuEl && path.includes(listMenuEl)) return
-			if (listMenuButtonEl && path.includes(listMenuButtonEl)) return
+			if (openListMenuId) {
+				if (listMenuEl && path.includes(listMenuEl)) return
+				if (listMenuButtonEl && path.includes(listMenuButtonEl)) return
+			}
+			if (isSortMenuOpen) {
+				if (sortMenuEl && path.includes(sortMenuEl)) return
+				if (sortButtonEl && path.includes(sortButtonEl)) return
+			}
 			closeListMenu()
+			closeSortMenu()
 		}
 
 		window.addEventListener('keydown', onKeyDown)
@@ -148,14 +180,56 @@
 				lists
 			</h2>
 		</div>
-		<button
-			type="button"
-			class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-			onclick={handleCreateList}
-			aria-label="create list"
-		>
-			<Plus class="h-6 w-6" />
-		</button>
+		{#if !isMobile}
+			<div class="flex items-center gap-1">
+				<div class="relative">
+					<button
+						type="button"
+						bind:this={sortButtonEl}
+						class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						onclick={toggleSortMenu}
+						aria-label="sort lists"
+						aria-haspopup="menu"
+						aria-expanded={isSortMenuOpen}
+					>
+						<ArrowsUpDown variant="solid" class="h-5 w-5" />
+					</button>
+
+					{#if isSortMenuOpen}
+						<div
+							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+							bind:this={sortMenuEl}
+							role="menu"
+							class="animate-popup-right rounded-container absolute top-full right-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+						>
+							{#each sortOptions as option (option.value)}
+								<button
+									type="button"
+									role="menuitem"
+									class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+									onclick={() => {
+										reminders.setListsSortMode(option.value)
+										closeSortMenu()
+									}}
+								>
+									{option.label}{reminders.listsSortMode === option.value
+										? ' ✓'
+										: ''}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<button
+					type="button"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					onclick={handleCreateList}
+					aria-label="create list"
+				>
+					<Plus class="h-6 w-6" />
+				</button>
+			</div>
+		{/if}
 	</header>
 
 	{#if isLoading}

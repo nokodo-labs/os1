@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.project import Project
 from api.permissions import ResourceType
 from api.schemas.project import ProjectCreate, ProjectUpdate
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
@@ -71,6 +74,7 @@ async def create_project(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Project:
 	"""create a new project. the caller becomes the owner."""
 	require_permission(principal, "projects:create")
@@ -78,9 +82,23 @@ async def create_project(
 	data["owner_id"] = principal.user_id
 	project = Project(**data)
 	session.add(project)
-	await session.commit()
+	await session.flush()
 	await session.refresh(project)
-	return await _get_project(TypeID(project.id), session)
+	project_id = TypeID(project.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.PROJECT_CREATED,
+		data={"project_id": str(project_id), "name": project.name},
+		user_id=principal.user_id,
+		project_id=str(project_id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	return await _get_project(project_id, session)
 
 
 async def list_projects(
@@ -136,6 +154,7 @@ async def update_project(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Project:
 	"""update a project (requires editor access)."""
 	await require_resource_access(
@@ -149,9 +168,22 @@ async def update_project(
 	updates = project_in.model_dump(exclude_unset=True, by_alias=True)
 	for field, value in updates.items():
 		setattr(project, field, value)
-	await session.commit()
+	await session.flush()
 	await session.refresh(project)
-	return await _get_project(TypeID(project.id), session)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.PROJECT_UPDATED,
+		data={"project_id": str(project_id), "name": project.name},
+		user_id=principal.user_id,
+		project_id=str(project_id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	return await _get_project(project_id, session)
 
 
 async def delete_project(
@@ -159,6 +191,7 @@ async def delete_project(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a project (requires editor access + ownership or admin)."""
 	await require_resource_access(
@@ -175,4 +208,16 @@ async def delete_project(
 			detail="forbidden",
 		)
 	await session.delete(project)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.PROJECT_DELETED,
+		data={"project_id": str(project_id)},
+		user_id=principal.user_id,
+		project_id=str(project_id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)

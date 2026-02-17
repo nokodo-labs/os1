@@ -14,6 +14,7 @@ from api.schemas.memory import MemoryCreate, MemoryUpdate
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,12 +34,14 @@ async def create_memory(
 	memory_in: MemoryCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Memory:
 	"""capture a new memory."""
 	return await memory_service.create_memory(
 		memory_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -83,6 +86,7 @@ async def update_memory(
 	memory_in: MemoryUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Memory:
 	"""update a memory."""
 	return await memory_service.update_memory(
@@ -90,6 +94,7 @@ async def update_memory(
 		memory_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -98,15 +103,26 @@ async def delete_memory(
 	memory_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a memory."""
-	await memory_service.delete_memory(memory_id, db, principal=principal)
+	await memory_service.delete_memory(
+		memory_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_all_memories(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete all memories for the current user."""
-	await memory_service.delete_all_memories(db, principal=principal)
+	await memory_service.delete_all_memories(
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)

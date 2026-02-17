@@ -3,12 +3,14 @@
  * this is THE SINGLE entry point for all app startup logic.
  *
  * order of operations:
- * 1. ensure API origin is configured
- * 2. attempt token refresh (restore session)
- * 3. mark auth as ready (unblocks API requests)
- * 4. load settings (public + user)
- * 5. connect event stream (if authenticated)
+ * 1. init device/PWA state (sync, browser-only)
+ * 2. ensure API origin is configured
+ * 3. attempt token refresh (restore session)
+ * 4. mark auth as ready (unblocks API requests)
+ * 5. concurrently fetch all critical data (user, settings)
+ * 6. connect event stream + start preference sync
  *
+ * the splash screen stays up until initApp completes via appReadiness blocker.
  * call initApp() once from the root layout's onMount.
  */
 
@@ -17,6 +19,7 @@ import { refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
+import { appReadiness } from '$lib/stores/appReadiness.svelte'
 import { initDevice } from '$lib/stores/device.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
@@ -33,6 +36,8 @@ export interface InitResult {
 /**
  * initializes the application.
  * handles auth restoration, settings loading, and event stream connection.
+ * holds the splash screen via an appReadiness blocker until all critical
+ * data is loaded — no visual pops.
  *
  * @param options.skipAuthRestore - skip token refresh (e.g., on 404 pages)
  * @returns whether user is authenticated and their token
@@ -42,42 +47,45 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		return { authenticated: false, token: null }
 	}
 
-	// keep any browser-derived reactive state in sync,
-	// but only after hydration (initApp is called from onMount).
-	initDevice()
+	const initBlocker = appReadiness.createBlocker()
 
-	// initialize PWA stores (network, service worker, install prompt)
-	initNetwork()
-	initServiceWorker()
-	initInstallPrompt()
+	try {
+		// 1. sync device/PWA state (browser-only, after hydration)
+		initDevice()
+		initNetwork()
+		initServiceWorker()
+		initInstallPrompt()
 
-	// 1. ensure API origin is ready
-	await apiOriginReady
+		// 2. ensure API origin is configured
+		await apiOriginReady
 
-	// 2. attempt to restore session from refresh token
-	let token = getAccessToken()
-	if (!options?.skipAuthRestore && !token) {
-		token = await refreshAccessToken()
-	}
+		// 3. restore session from refresh token cookie
+		let token = getAccessToken()
+		if (!options?.skipAuthRestore && !token) {
+			token = await refreshAccessToken()
+		}
 
-	// 3. mark auth as ready (unblocks any waiting API requests)
-	markAuthReady()
+		// 4. unblock authenticated API requests
+		markAuthReady()
 
-	// 4. load user data once. all downstream consumers read from session
-	if (token) {
-		await session.refreshUser()
-	}
+		// 5. concurrently load all critical data.
+		//    settings are public (loaded regardless of auth).
+		//    user data + event stream only when authenticated.
+		if (token) {
+			await Promise.all([session.refreshUser(), loadSettings()])
 
-	// 5 & 6. load settings, connect event stream if authenticated
-	void loadSettings()
-	if (token) {
-		eventStreamClient.connect()
-	}
+			// 6. event stream + preferences (needs user data from step 5)
+			eventStreamClient.connect()
+			preferences.startSync()
+		} else {
+			await loadSettings()
+		}
 
-	preferences.startSync()
-
-	return {
-		authenticated: Boolean(token),
-		token,
+		return {
+			authenticated: Boolean(token),
+			token,
+		}
+	} finally {
+		initBlocker.done()
 	}
 }

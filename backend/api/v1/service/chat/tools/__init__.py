@@ -11,13 +11,14 @@ if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 
-from api.v1.service.chat.tools.memory_recall import MemoryRecallTool
+from api.v1.service.chat.tools.memories import MemoryCreateTool, MemoryRecallTool
 from api.v1.service.chat.tools.send_notification import SendNotificationTool
 from api.v1.service.chat.tools.think import ThinkingTool
 
 
 _TOOLS: list[Tool[AppContext]] = [
 	MemoryRecallTool(),
+	MemoryCreateTool(),
 	SendNotificationTool(),
 	ThinkingTool(),
 ]
@@ -61,6 +62,7 @@ async def resolve_tools(
 
 __all__ = [
 	"MemoryRecallTool",
+	"MemoryCreateTool",
 	"SendNotificationTool",
 	"ThinkingTool",
 	"TOOL_REGISTRY",

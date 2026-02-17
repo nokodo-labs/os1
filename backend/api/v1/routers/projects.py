@@ -19,6 +19,7 @@ from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -30,9 +31,15 @@ async def create_project(
 	project_in: ProjectCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Project:
 	"""create a new project."""
-	return await project_service.create_project(project_in, db, principal=principal)
+	return await project_service.create_project(
+		project_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 @router.get("", response_model=list[ProjectSchema])
@@ -71,10 +78,15 @@ async def update_project(
 	project_in: ProjectUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Project:
 	"""update a project."""
 	return await project_service.update_project(
-		project_id, project_in, db, principal=principal
+		project_id,
+		project_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -83,9 +95,15 @@ async def delete_project(
 	project_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a project."""
-	await project_service.delete_project(project_id, db, principal=principal)
+	await project_service.delete_project(
+		project_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
 
 
 # ---- access rules ----

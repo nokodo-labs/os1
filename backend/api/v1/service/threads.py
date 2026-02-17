@@ -21,6 +21,7 @@ from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.sorting import CommonSortBy
+from api.schemas.thread import Thread as ThreadOut
 from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.settings.settings import settings
 from api.v1.service import events as event_service
@@ -70,6 +71,7 @@ async def generate_thread_metadata(
 	principal: Principal | None = None,
 	replace: bool = False,
 	emit_event: bool = True,
+	origin_session_id: str | None = None,
 ) -> Thread | None:
 	"""generate thread metadata and persist via update_thread.
 
@@ -170,6 +172,7 @@ async def generate_thread_metadata(
 		session,
 		principal=principal,
 		emit_event=emit_event,
+		origin_session_id=origin_session_id,
 	)
 
 
@@ -285,6 +288,7 @@ async def create_thread(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Thread:
 	require_permission(principal, "threads:create")
 	owner_id = thread_in.owner_id
@@ -307,21 +311,22 @@ async def create_thread(
 	thread.projects = projects
 	session.add(thread)
 	await session.flush()
+	await session.refresh(
+		thread, attribute_names=["created_at", "updated_at", "last_activity_at"]
+	)
 
 	# emit thread.created event
 	event = Event(
 		scope=EventScope.THREAD,
 		scope_id=thread.id,
 		type=EventType.THREAD_CREATED,
-		data={
-			"thread_id": str(thread.id),
-			"title": thread.title,
-			"owner_id": str(owner_id),
-		},
+		data=ThreadOut.model_validate(thread).model_dump(mode="json"),
 		user_id=str(owner_id),
 		thread_id=thread.id,
 	)
-	await event_service.publish_event(session, event=event)
+	await event_service.publish_event(
+		session, event=event, origin_session_id=origin_session_id
+	)
 
 	return await _load_thread(TypeID(thread.id), session, None, include_hidden=True)
 
@@ -400,6 +405,7 @@ async def update_thread(
 	*,
 	principal: Principal,
 	emit_event: bool = True,
+	origin_session_id: str | None = None,
 ) -> Thread:
 	thread = await _load_thread(
 		thread_id,
@@ -451,20 +457,32 @@ async def update_thread(
 
 	# emit thread.updated event
 	if emit_event:
+		await session.refresh(
+			thread, attribute_names=["updated_at", "last_activity_at"]
+		)
+		# partial event: only changed fields + id + timestamps
+		event_data = thread_in.model_dump(
+			mode="json", exclude_unset=True, by_alias=True
+		)
+		event_data.pop("project_ids", None)
+		event_data["id"] = str(thread.id)
+		event_data["updated_at"] = thread.updated_at.isoformat()
+		event_data["last_activity_at"] = thread.last_activity_at.isoformat()
+		if project_ids is not None:
+			event_data["projects"] = [
+				{"id": str(p.id), "name": p.name} for p in thread.projects
+			]
 		event = Event(
 			scope=EventScope.THREAD,
 			scope_id=thread.id,
 			type=EventType.THREAD_UPDATED,
-			data={
-				"thread_id": str(thread.id),
-				"title": thread.title,
-				"owner_id": str(thread.owner_id),
-				"updated_fields": list(thread_in.model_dump(exclude_unset=True).keys()),
-			},
+			data=event_data,
 			user_id=str(thread.owner_id),
 			thread_id=thread.id,
 		)
-		await event_service.publish_event(session, event=event)
+		await event_service.publish_event(
+			session, event=event, origin_session_id=origin_session_id
+		)
 
 	if (
 		owner_changed
@@ -486,6 +504,7 @@ async def delete_thread(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	thread = await _load_thread(
 		thread_id,
@@ -501,7 +520,6 @@ async def delete_thread(
 		)
 
 	owner_id = str(thread.owner_id)
-	thread_title = thread.title
 
 	if settings.soft_delete.threads:
 		thread.soft_delete()
@@ -514,14 +532,13 @@ async def delete_thread(
 		scope=EventScope.THREAD,
 		scope_id=str(thread_id),
 		type=EventType.THREAD_DELETED,
-		data={
-			"thread_id": str(thread_id),
-			"title": thread_title,
-		},
+		data={"id": str(thread_id)},
 		user_id=owner_id,
 		thread_id=str(thread_id),
 	)
-	await event_service.publish_event(session, event=event)
+	await event_service.publish_event(
+		session, event=event, origin_session_id=origin_session_id
+	)
 
 
 async def list_messages(
@@ -717,6 +734,7 @@ async def switch_branch(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Thread:
 	"""Set current_message_id to the deepest leaf descending from message_id."""
 	thread = await _load_thread(
@@ -745,6 +763,25 @@ async def switch_branch(
 		leaf_id = TypeID(children[-1].id)
 
 	thread.current_message_id = leaf_id
+
+	# emit thread.updated event for branch switch
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.THREAD_UPDATED,
+		data={
+			"id": str(thread_id),
+			"current_message_id": str(leaf_id),
+		},
+		user_id=principal.user_id,
+		thread_id=str(thread_id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
 	await session.commit()
 	return thread
 
@@ -756,6 +793,7 @@ async def create_message(
 	*,
 	principal: Principal,
 	message_id: TypeID | None = None,
+	origin_session_id: str | None = None,
 ) -> Message:
 	thread = await _load_thread(
 		thread_id,
@@ -806,6 +844,27 @@ async def create_message(
 	session.add(message)
 	await session.flush()
 	thread.current_message_id = message.id
+
+	# emit message.created event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MESSAGE_CREATED,
+		data={
+			"thread_id": str(thread_id),
+			"message_id": str(message.id),
+			"type": str(message_in.type),
+		},
+		user_id=principal.user_id,
+		thread_id=str(thread_id),
+		message_id=str(message.id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
 	await session.commit()
 	await session.refresh(message)
 	return message
@@ -817,6 +876,7 @@ async def delete_user_message_turn(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a user message and its generated response(s) on the active branch.
 
@@ -893,4 +953,24 @@ async def delete_user_message_turn(
 			thread.current_message_id = parent_id
 
 	thread.last_activity_at = datetime.now(tz=UTC)
+
+	# emit message.deleted event
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MESSAGE_DELETED,
+		data={
+			"thread_id": str(thread_id),
+			"message_id": str(message_id),
+			"deleted_ids": [str(d) for d in deleted_ids],
+		},
+		user_id=principal.user_id,
+		thread_id=str(thread_id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
 	await session.commit()

@@ -7,11 +7,14 @@ from sqlalchemy import delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.many_to_many import user_role_association
 from api.models.user import User
 from api.permissions import ActionPermission
 from api.schemas.user import UserCreate, UserUpdate
 from api.settings import settings
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.security import hash_password
@@ -195,6 +198,7 @@ async def update_user(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> User:
 	if not principal.is_admin and str(user_id) != str(principal.user.id):
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
@@ -275,4 +279,21 @@ async def update_user(
 			detail=f"invalid reference: {exc.orig}",
 		) from None
 	await session.refresh(user)
+
+	# emit user.preferences_updated event when preferences changed
+	if user_in.preferences is not None:
+		event = Event(
+			scope=EventScope.USER,
+			scope_id=str(user.id),
+			type=EventType.USER_PREFERENCES_UPDATED,
+			data={
+				"user_id": str(user.id),
+				"preferences": user.preferences,
+			},
+			user_id=str(user.id),
+		)
+		await event_service.publish_event(
+			session, event=event, origin_session_id=origin_session_id
+		)
+
 	return user

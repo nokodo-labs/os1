@@ -6,9 +6,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.setting import SettingsDocument
 from api.settings import Settings, check_writable
 from api.v1.schemas.settings import SettingsPatch, SettingsVersions
+from api.v1.service import events as event_service
 from nokodo_ai.utils.dicts import deep_merge
 
 
@@ -39,6 +42,7 @@ async def update(
 	*,
 	expected_versions: SettingsVersions | None = None,
 	changed_by_id: str | None = None,
+	origin_session_id: str | None = None,
 ) -> SettingsVersions:
 	"""apply patch to db overrides, return new versions."""
 	updates = {
@@ -86,4 +90,20 @@ async def update(
 			doc = await _get_doc(db, section)
 			new_versions[section] = doc.version if doc else 0
 
-	return SettingsVersions.model_validate(new_versions)
+	versions_out = SettingsVersions.model_validate(new_versions)
+
+	# emit settings.updated event
+	event = Event(
+		scope=EventScope.SYSTEM,
+		type=EventType.SETTINGS_UPDATED,
+		data={
+			"updated_sections": list(updates.keys()),
+			"versions": new_versions,
+		},
+		user_id=changed_by_id,
+	)
+	await event_service.publish_event(
+		db, event=event, origin_session_id=origin_session_id
+	)
+
+	return versions_out

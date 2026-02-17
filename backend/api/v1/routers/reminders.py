@@ -25,6 +25,7 @@ from api.schemas.reminder import (
 )
 from api.v1.service import reminders as reminder_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.events import SessionId
 from api.v1.service.sorting import SortDir
 from nokodo_ai.utils.typeid import TypeID
 
@@ -47,9 +48,12 @@ async def create_reminder_list(
 	data: ReminderListCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> ReminderList:
 	"""create a new reminder list."""
-	return await reminder_service.create_reminder_list(data, db, principal=principal)
+	return await reminder_service.create_reminder_list(
+		data, db, principal=principal, origin_session_id=x_session_id
+	)
 
 
 @router.get("/lists")
@@ -102,10 +106,11 @@ async def update_reminder_list(
 	data: ReminderListUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> ReminderList:
 	"""update a reminder list."""
 	return await reminder_service.update_reminder_list(
-		list_id, data, db, principal=principal
+		list_id, data, db, principal=principal, origin_session_id=x_session_id
 	)
 
 
@@ -114,9 +119,12 @@ async def delete_reminder_list(
 	list_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a reminder list and all its reminders."""
-	await reminder_service.delete_reminder_list(list_id, db, principal=principal)
+	await reminder_service.delete_reminder_list(
+		list_id, db, principal=principal, origin_session_id=x_session_id
+	)
 
 
 # --- Reminder endpoints ---
@@ -127,9 +135,12 @@ async def create_reminder(
 	data: ReminderCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""create a new reminder."""
-	return await reminder_service.create_reminder(data, db, principal=principal)
+	return await reminder_service.create_reminder(
+		data, db, principal=principal, origin_session_id=x_session_id
+	)
 
 
 @router.get("")
@@ -180,10 +191,11 @@ async def update_reminder(
 	data: ReminderUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""update a reminder."""
 	return await reminder_service.update_reminder(
-		reminder_id, data, db, principal=principal
+		reminder_id, data, db, principal=principal, origin_session_id=x_session_id
 	)
 
 
@@ -193,10 +205,12 @@ async def complete_reminder(
 	cascade: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""mark a reminder as completed, optionally cascading to subtasks."""
 	return await reminder_service.complete_reminder(
-		reminder_id, db, principal=principal, cascade=cascade
+		reminder_id, db, principal=principal, cascade=cascade,
+		origin_session_id=x_session_id,
 	)
 
 
@@ -205,9 +219,12 @@ async def delete_reminder(
 	reminder_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a reminder."""
-	await reminder_service.delete_reminder(reminder_id, db, principal=principal)
+	await reminder_service.delete_reminder(
+		reminder_id, db, principal=principal, origin_session_id=x_session_id
+	)
 
 
 @router.post("/{reminder_id}/move", response_model=ReminderSchema)
@@ -217,8 +234,10 @@ async def move_reminder(
 	position: float | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""move a reminder to a different list (or default list if null)."""
 	return await reminder_service.move_reminder(
-		reminder_id, target_list_id, db, principal=principal, position=position
+		reminder_id, target_list_id, db, principal=principal, position=position,
+		origin_session_id=x_session_id,
 	)

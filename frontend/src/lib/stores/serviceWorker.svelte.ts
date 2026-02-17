@@ -1,7 +1,8 @@
 /**
  * service worker update detection.
  *
- * registers the service worker, detects when a new version is waiting,
+ * registration is handled natively by SvelteKit.
+ * this module detects when a new version is waiting
  * and exposes a reactive flag + apply function.
  *
  * call initServiceWorker() once during app init.
@@ -32,8 +33,9 @@ export function initServiceWorker(): void {
 		window.location.reload()
 	}
 
-	navigator.serviceWorker
-		.register('/service-worker.js')
+	// SvelteKit registers the service worker natively.
+	// we just hook into the registration to detect updates.
+	navigator.serviceWorker.ready
 		.then((reg) => {
 			registration = reg
 
@@ -60,7 +62,7 @@ export function initServiceWorker(): void {
 			}, UPDATE_CHECK_INTERVAL)
 		})
 		.catch((err) => {
-			console.warn('service worker registration failed:', err)
+			console.warn('service worker ready failed:', err)
 		})
 
 	navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)

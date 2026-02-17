@@ -77,7 +77,5 @@ export const session = new SessionStore()
 if (browser) {
 	onAccessTokenChanged((token) => {
 		session.accessToken = token
-		if (token) eventStreamClient.connect()
-		else eventStreamClient.disconnect()
 	})
 }

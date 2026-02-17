@@ -223,7 +223,7 @@
 					<div
 						class="flex h-48 items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500"
 					>
-						chart coming soon — requires TimescaleDB or aggregation tables
+						chart coming soon
 					</div>
 				</CardContent>
 			</Card>
@@ -242,7 +242,7 @@
 					<div
 						class="flex h-48 items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500"
 					>
-						chart coming soon — requires usage tracking pipeline
+						charts coming soon
 					</div>
 				</CardContent>
 			</Card>

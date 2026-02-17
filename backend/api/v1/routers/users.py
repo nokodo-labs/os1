@@ -18,6 +18,7 @@ from api.v1.service.auth import (
 	get_current_principal,
 	get_optional_principal,
 )
+from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -96,6 +97,9 @@ async def update_user(
 	body: UserUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> User:
 	"""update user."""
-	return await user_service.update_user(user_id, body, db, principal=principal)
+	return await user_service.update_user(
+		user_id, body, db, principal=principal, origin_session_id=x_session_id
+	)

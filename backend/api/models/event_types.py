@@ -58,7 +58,8 @@ class EventType(StrEnum):
 	PROJECT_DELETED = "project.deleted"
 
 	# --- file events ---
-	FILE_UPLOADED = "file.uploaded"
+	FILE_CREATED = "file.created"
+	FILE_UPDATED = "file.updated"
 	FILE_DELETED = "file.deleted"
 	FILE_PROCESSING = "file.processing"
 	FILE_READY = "file.ready"
@@ -72,6 +73,24 @@ class EventType(StrEnum):
 	MEMORY_CREATED = "memory.created"
 	MEMORY_UPDATED = "memory.updated"
 	MEMORY_DELETED = "memory.deleted"
+
+	# --- note events ---
+	NOTE_CREATED = "note.created"
+	NOTE_UPDATED = "note.updated"
+	NOTE_DELETED = "note.deleted"
+
+	# --- group events ---
+	GROUP_CREATED = "group.created"
+	GROUP_UPDATED = "group.updated"
+	GROUP_DELETED = "group.deleted"
+	GROUP_MEMBER_ADDED = "group.member_added"
+	GROUP_MEMBER_REMOVED = "group.member_removed"
+
+	# --- settings events ---
+	SETTINGS_UPDATED = "settings.updated"
+
+	# --- user events ---
+	USER_PREFERENCES_UPDATED = "user.preferences_updated"
 
 	# --- tool events (scoped to tool_call_id) ---
 	TOOL_PROGRESS = "tool.progress"
@@ -99,6 +118,14 @@ TYPING_EVENTS = {
 	EventType.TYPING_AGENT_STOP,
 }
 
+SETTINGS_EVENTS = {
+	EventType.SETTINGS_UPDATED,
+}
+
+USER_EVENTS = {
+	EventType.USER_PREFERENCES_UPDATED,
+}
+
 NOTIFICATION_EVENTS = {
 	EventType.NOTIFICATION_CUSTOM,
 	EventType.NOTIFICATION_AGENT,
@@ -108,4 +135,61 @@ TOOL_EVENTS = {
 	EventType.TOOL_PROGRESS,
 	EventType.TOOL_CUSTOM,
 	EventType.TOOL_NOTIFICATION,
+}
+
+PROJECT_EVENTS = {
+	EventType.PROJECT_CREATED,
+	EventType.PROJECT_UPDATED,
+	EventType.PROJECT_DELETED,
+}
+
+AGENT_EVENTS = {
+	EventType.AGENT_CREATED,
+	EventType.AGENT_UPDATED,
+	EventType.AGENT_DELETED,
+}
+
+FILE_EVENTS = {
+	EventType.FILE_CREATED,
+	EventType.FILE_UPDATED,
+	EventType.FILE_DELETED,
+	EventType.FILE_PROCESSING,
+	EventType.FILE_READY,
+}
+
+MEMORY_EVENTS = {
+	EventType.MEMORY_CREATED,
+	EventType.MEMORY_UPDATED,
+	EventType.MEMORY_DELETED,
+}
+
+NOTE_EVENTS = {
+	EventType.NOTE_CREATED,
+	EventType.NOTE_UPDATED,
+	EventType.NOTE_DELETED,
+}
+
+GROUP_EVENTS = {
+	EventType.GROUP_CREATED,
+	EventType.GROUP_UPDATED,
+	EventType.GROUP_DELETED,
+	EventType.GROUP_MEMBER_ADDED,
+	EventType.GROUP_MEMBER_REMOVED,
+}
+
+REMINDER_EVENTS = {
+	EventType.REMINDER_CREATED,
+	EventType.REMINDER_UPDATED,
+	EventType.REMINDER_COMPLETED,
+	EventType.REMINDER_DELETED,
+	EventType.REMINDER_LIST_CREATED,
+	EventType.REMINDER_LIST_UPDATED,
+	EventType.REMINDER_LIST_DELETED,
+}
+
+TASK_EVENTS = {
+	EventType.TASK_CREATED,
+	EventType.TASK_UPDATED,
+	EventType.TASK_COMPLETED,
+	EventType.TASK_FAILED,
 }

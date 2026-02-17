@@ -41,6 +41,7 @@ export interface StreamEvent extends StreamMessage {
 	task_id: string | null
 	project_id: string | null
 	created_at: string | null
+	origin_session_id: string | null
 }
 
 type EventHandler = (message: StreamMessage) => void

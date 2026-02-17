@@ -1,6 +1,7 @@
 import { browser, dev } from '$app/environment'
 import { apiClient } from '$lib/api/client'
 import type { ChatStreamDelta } from '$lib/api/streaming'
+import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -156,6 +157,8 @@ class ChatStore {
 	/** in-memory drafts keyed by context id (thread id or 'home') */
 	readonly drafts = new SvelteMap<string, string>()
 
+	#unsubscribe: (() => void) | null = null
+
 	getDraft = (key: string): string => {
 		return this.drafts.get(key) ?? ''
 	}
@@ -170,6 +173,63 @@ class ChatStore {
 
 	clearDraft = (key: string): void => {
 		this.drafts.delete(key)
+	}
+
+	// event stream integration
+
+	#handleStreamEvent = (message: StreamMessage): void => {
+		const data = message.data as Record<string, unknown> | undefined
+		if (!data) return
+
+		if (message.type === 'thread.created') {
+			const thread = data as unknown as Thread
+			if (!thread?.id || thread.is_temporary) return
+			// update cache + prepend to recent threads (dedup)
+			this.threadCache.set(thread)
+			if (!this.recentThreads.some((t) => t.id === thread.id)) {
+				this.recentThreads = [thread, ...this.recentThreads]
+			}
+		} else if (message.type === 'thread.updated') {
+			const threadId = (data.id as string) ?? (message.thread_id as string)
+			if (!threadId) return
+
+			// merge partial update into cached thread
+			const cached = this.threadCache.get(threadId)
+			if (cached) {
+				this.threadCache.set({ ...cached, ...(data as Partial<Thread>) } as Thread)
+			} else {
+				this.threadCache.invalidate(threadId)
+			}
+
+			this.updateRecentThread(threadId, (t) => ({
+				...t,
+				...(data as Partial<Thread>),
+			}))
+
+			if (this.activeThread?.id === threadId) {
+				this.activeThread = {
+					...this.activeThread,
+					...(data as Partial<Thread>),
+				}
+			}
+		} else if (message.type === 'thread.deleted') {
+			const threadId = (data.id as string) ?? (message.thread_id as string)
+			if (!threadId) return
+
+			this.threadCache.invalidateAll(threadId)
+			this.removeRecentThread(threadId)
+		}
+	}
+
+	initEvents = (): void => {
+		if (!this.#unsubscribe) {
+			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+		}
+	}
+
+	cleanupEvents = (): void => {
+		this.#unsubscribe?.()
+		this.#unsubscribe = null
 	}
 
 	clear = () => {
@@ -248,6 +308,11 @@ export const chat = new ChatStore()
 
 if (browser) {
 	onAccessTokenChanged((token) => {
-		if (!token) chat.clear()
+		if (token) {
+			chat.initEvents()
+		} else {
+			chat.cleanupEvents()
+			chat.clear()
+		}
 	})
 }

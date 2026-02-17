@@ -7,10 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.file import File
 from api.permissions import ResourceType
 from api.schemas.file import FileCreate, FileUpdate
 from api.settings.settings import settings
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
@@ -41,6 +44,7 @@ async def create_file(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> File:
 	"""register a new file record."""
 	require_permission(principal, "files:create")
@@ -55,8 +59,21 @@ async def create_file(
 	data["owner_id"] = principal.user_id
 	file = File(**data)
 	session.add(file)
-	await session.commit()
+	await session.flush()
 	await session.refresh(file)
+	file_id = str(file.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.FILE_CREATED,
+		data={"file_id": file_id, "filename": file.filename},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return file
 
 
@@ -120,6 +137,7 @@ async def update_file(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> File:
 	"""update file metadata (requires editor access)."""
 	await require_resource_access(
@@ -141,8 +159,20 @@ async def update_file(
 		)
 	for field, value in updates.items():
 		setattr(file, field, value)
-	await session.commit()
+	await session.flush()
 	await session.refresh(file)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.FILE_UPDATED,
+		data={"file_id": str(file_id), "filename": file.filename},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return file
 
 
@@ -151,6 +181,7 @@ async def delete_file(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a file (soft or hard based on settings)."""
 	await require_resource_access(
@@ -165,4 +196,15 @@ async def delete_file(
 		file.soft_delete()
 	else:
 		await session.delete(file)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.FILE_DELETED,
+		data={"file_id": str(file_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)

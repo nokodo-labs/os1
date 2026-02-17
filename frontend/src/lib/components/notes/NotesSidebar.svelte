@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
+	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
@@ -9,7 +10,7 @@
 	import { MenuItem } from '$lib/components/primitives'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
-	import { notes } from '$lib/stores/notes.svelte'
+	import { notes, type NotesSortMode } from '$lib/stores/notes.svelte'
 	import { scale } from 'svelte/transition'
 
 	interface Props {
@@ -23,24 +24,50 @@
 	let menuFixedTop = $state(0)
 	let menuFixedRight = $state(0)
 
+	// sort menu state
+	let isSortMenuOpen = $state(false)
+	let sortMenuEl: HTMLDivElement | null = $state(null)
+	let sortButtonEl: HTMLButtonElement | null = $state(null)
+
+	const sortOptions: { value: NotesSortMode; label: string }[] = [
+		{ value: 'updated_at:desc', label: 'last updated' },
+		{ value: 'updated_at:asc', label: 'first updated' },
+		{ value: 'title:asc', label: 'title a-z' },
+		{ value: 'title:desc', label: 'title z-a' },
+	]
+
+	function closeSortMenu() {
+		isSortMenuOpen = false
+		sortMenuEl = null
+	}
+
+	function toggleSortMenu() {
+		isSortMenuOpen = !isSortMenuOpen
+	}
+
 	$effect(() => {
 		void notes.load()
 	})
 
 	// close menu on outside click/escape
 	$effect(() => {
-		if (!openMenuId) return
+		if (!openMenuId && !isSortMenuOpen) return
 
 		const onPointerDown = (event: PointerEvent) => {
 			const target = event.target as HTMLElement
-			if (target.closest('[data-note-menu]')) return
+			if (openMenuId && target.closest('[data-note-menu]')) return
+			if (isSortMenuOpen && sortMenuEl && event.composedPath().includes(sortMenuEl)) return
+			if (isSortMenuOpen && sortButtonEl && event.composedPath().includes(sortButtonEl))
+				return
 			openMenuId = null
+			closeSortMenu()
 		}
 
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === 'Escape') {
 				event.preventDefault()
 				openMenuId = null
+				closeSortMenu()
 			}
 		}
 
@@ -108,14 +135,54 @@
 				notes
 			</h2>
 		</div>
-		<button
-			type="button"
-			onclick={createNote}
-			class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-			aria-label="create note"
-		>
-			<Plus class="h-6 w-6" />
-		</button>
+		{#if !isMobile}
+			<div class="flex items-center gap-1">
+				<div class="relative">
+					<button
+						type="button"
+						bind:this={sortButtonEl}
+						class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						onclick={toggleSortMenu}
+						aria-label="sort notes"
+						aria-haspopup="menu"
+						aria-expanded={isSortMenuOpen}
+					>
+						<ArrowsUpDown variant="solid" class="h-5 w-5" />
+					</button>
+
+					{#if isSortMenuOpen}
+						<div
+							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+							bind:this={sortMenuEl}
+							role="menu"
+							class="animate-popup-right rounded-container absolute top-full right-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+						>
+							{#each sortOptions as option (option.value)}
+								<button
+									type="button"
+									role="menuitem"
+									class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+									onclick={() => {
+										notes.sortMode = option.value
+										closeSortMenu()
+									}}
+								>
+									{option.label}{notes.sortMode === option.value ? ' ✓' : ''}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<button
+					type="button"
+					onclick={createNote}
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					aria-label="create note"
+				>
+					<Plus class="h-6 w-6" />
+				</button>
+			</div>
+		{/if}
 	</header>
 
 	<nav class="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2">

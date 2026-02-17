@@ -7,9 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.agent import Agent
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
 from api.schemas.agent import AgentCreate, AgentUpdate
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
@@ -59,13 +62,28 @@ async def create_agent(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Agent:
 	require_permission(principal, "agents:create")
 	await _ensure_model(agent_in.model_id, session)
 	agent = Agent(**agent_in.model_dump(by_alias=True))
 	session.add(agent)
-	await session.commit()
-	return await _get_agent(TypeID(agent.id), session)
+	await session.flush()
+	await session.refresh(agent)
+	agent_id = TypeID(agent.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.AGENT_CREATED,
+		data={"agent_id": str(agent_id), "name": agent.name},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	return await _get_agent(agent_id, session)
 
 
 async def list_agents(
@@ -112,6 +130,7 @@ async def update_agent(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> Agent:
 	require_permission(principal, "agents:manage")
 	agent = await _get_agent(agent_id, session)
@@ -123,8 +142,21 @@ async def update_agent(
 		setattr(agent, field, value)
 
 	session.add(agent)
-	await session.commit()
-	return await _get_agent(TypeID(agent.id), session)
+	await session.flush()
+	await session.refresh(agent)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.AGENT_UPDATED,
+		data={"agent_id": str(agent_id), "name": agent.name},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	return await _get_agent(agent_id, session)
 
 
 async def delete_agent(
@@ -132,8 +164,20 @@ async def delete_agent(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> None:
 	require_permission(principal, "agents:manage")
 	agent = await _get_agent(agent_id, session)
 	await session.delete(agent)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.AGENT_DELETED,
+		data={"agent_id": str(agent_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)

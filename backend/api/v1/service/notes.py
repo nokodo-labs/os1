@@ -7,9 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.note import Note
+from api.schemas.note import Note as NoteOut
 from api.schemas.note import NoteCreate, NoteUpdate
 from api.settings.settings import settings
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission, require_project_access
 from api.v1.service.sorting import SortDir, apply_sort
@@ -38,6 +42,8 @@ async def create_note(
 	note_in: NoteCreate,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> Note:
 	require_permission(principal, "notes:create")
 	if note_in.project_id is not None:
@@ -54,9 +60,22 @@ async def create_note(
 
 	note = Note(**data)
 	session.add(note)
-	await session.commit()
+	await session.flush()
 	await session.refresh(note)
-	return await _get_note(TypeID(note.id), session, principal)
+	note_id = TypeID(note.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.NOTE_CREATED,
+		data=NoteOut.model_validate(note).model_dump(mode="json"),
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	return await _get_note(note_id, session, principal)
 
 
 async def list_notes(
@@ -112,6 +131,8 @@ async def update_note(
 	note_in: NoteUpdate,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> Note:
 	note = await _get_note(note_id, session, principal)
 
@@ -127,8 +148,25 @@ async def update_note(
 	for key, value in update_data.items():
 		setattr(note, key, value)
 
-	await session.commit()
+	await session.flush()
 	await session.refresh(note)
+
+	# partial event: only changed fields + id + updated_at
+	event_data = note_in.model_dump(mode="json", exclude_unset=True, by_alias=True)
+	event_data["id"] = str(note.id)
+	event_data["updated_at"] = note.updated_at.isoformat()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.NOTE_UPDATED,
+		data=event_data,
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return await _get_note(note_id, session, principal)
 
 
@@ -136,10 +174,23 @@ async def delete_note(
 	note_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
 ) -> None:
 	note = await _get_note(note_id, session, principal)
 	if settings.soft_delete.notes:
 		note.soft_delete()
 	else:
 		await session.delete(note)
-	await session.commit()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.NOTE_DELETED,
+		data={"id": str(note_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
