@@ -70,7 +70,7 @@
 			<div class="flex items-center justify-between">
 				<div>
 					<div class="flex items-center gap-2 text-sm font-semibold text-white/85">
-						<WifiSlash class="h-4 w-4" />
+						<WifiSlash />
 						offline banner
 					</div>
 					<div class="mt-1 text-sm text-white/55">

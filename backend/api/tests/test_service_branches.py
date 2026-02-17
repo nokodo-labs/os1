@@ -41,7 +41,14 @@ def _user(is_admin: bool = False, *, active: bool = True) -> User:
 	)
 
 
-def _principal(user: User) -> Principal:
+async def _principal(
+	user: User,
+	*,
+	session: AsyncSession | None = None,
+) -> Principal:
+	if session is not None and user.id is None:
+		session.add(user)
+		await session.flush()
 	return Principal(user=user, group_ids=(), permissions=frozenset())
 
 
@@ -82,7 +89,7 @@ async def test_authorization_require_access(db_session: AsyncSession) -> None:
 	user = _user()
 	db_session.add(user)
 	await db_session.commit()
-	principal = _principal(user)
+	principal = await _principal(user, session=db_session)
 	with pytest.raises(HTTPException):
 		await authorization.require_thread_access(
 			new_typeid("thread"), db_session, principal=principal
@@ -95,7 +102,7 @@ async def test_authorization_require_access(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> None:
-	admin = _principal(_user(is_admin=True))
+	admin = await _principal(_user(is_admin=True), session=db_session)
 	with pytest.raises(HTTPException):
 		await agents.create_agent(
 			agent_in=AgentCreate(
@@ -122,7 +129,7 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 	)
 	db_session.add_all([owner, private_agent])
 	await db_session.commit()
-	non_admin = _principal(owner)
+	non_admin = await _principal(owner, session=db_session)
 	with pytest.raises(HTTPException):
 		await agents.get_agent(private_agent.id, db_session, principal=non_admin)
 
@@ -145,12 +152,12 @@ async def test_notifications_guards(db_session: AsyncSession) -> None:
 	)
 	db_session.add(note)
 	await db_session.commit()
-	principal_b = _principal(user_b)
+	principal_b = await _principal(user_b, session=db_session)
 	with pytest.raises(HTTPException):
 		await notifications.mark_notification_read(
 			note.id, db_session, principal=principal_b
 		)
-	principal_a = _principal(user_a)
+	principal_a = await _principal(user_a, session=db_session)
 	marked = await notifications.mark_notification_read(
 		note.id, db_session, principal=principal_a
 	)
@@ -166,7 +173,7 @@ async def test_tasks_update_no_changes(db_session: AsyncSession) -> None:
 	user = _user()
 	db_session.add(user)
 	await db_session.commit()
-	principal = _principal(user)
+	principal = await _principal(user, session=db_session)
 	task = Task(
 		id=TypeID(new_typeid("task")),
 		user_id=user.id,
@@ -193,7 +200,7 @@ async def test_memories_admin_user_filter(db_session: AsyncSession) -> None:
 	other_user = _user()
 	db_session.add_all([admin_user, other_user])
 	await db_session.commit()
-	principal = _principal(admin_user)
+	principal = await _principal(admin_user, session=db_session)
 	memory = Memory(
 		id=TypeID(new_typeid("mem")),
 		user_id=other_user.id,
@@ -212,7 +219,7 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 	user = _user()
 	db_session.add(user)
 	await db_session.commit()
-	principal = _principal(user)
+	principal = await _principal(user, session=db_session)
 	with pytest.raises(HTTPException):
 		await users.list_users(db_session, principal=principal)
 
@@ -256,7 +263,7 @@ async def test_thread_update_owner_and_create_message(db_session: AsyncSession) 
 	)
 	db_session.add(thread)
 	await db_session.commit()
-	admin = _principal(_user(is_admin=True))
+	admin = await _principal(_user(is_admin=True), session=db_session)
 	updated = await threads.update_thread(
 		thread.id,
 		threads.ThreadUpdate(owner_id=new_owner.id),

@@ -21,13 +21,19 @@ from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
-def _admin_principal() -> Principal:
-	user = User(email="admin@example.com", hashed_password="x", is_superuser=True)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
-
-
-def _user_principal() -> Principal:
-	user = User(email="user@example.com", hashed_password="x", is_superuser=False)
+async def _principal(
+	session: AsyncSession,
+	*,
+	is_admin: bool,
+) -> Principal:
+	user = User(
+		email=f"{new_typeid('user')}@example.com",
+		hashed_password="x",
+		is_superuser=is_admin,
+	)
+	session.add(user)
+	await session.flush()
+	await session.refresh(user)
 	return Principal(user=user, group_ids=(), permissions=frozenset())
 
 
@@ -41,10 +47,11 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		plugin_ids=[],
 		config={},
 	)
+	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
 		agent_in,
 		db_session,
-		principal=_admin_principal(),
+		principal=principal,
 	)
 	assert agent.name == "test-agent"
 
@@ -52,7 +59,7 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_list_agents(db_session: AsyncSession) -> None:
 	"""Test listing agents."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	# Create agents
 	await agent_service.create_agent(
 		AgentCreate(
@@ -83,7 +90,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_get_agent(db_session: AsyncSession) -> None:
 	"""Test getting an agent."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-get",
@@ -103,7 +110,7 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_update_agent(db_session: AsyncSession) -> None:
 	"""Test updating an agent."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-update",
@@ -130,7 +137,7 @@ async def test_update_agent(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_delete_agent(db_session: AsyncSession) -> None:
 	"""Test deleting an agent."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-delete",
@@ -153,7 +160,7 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
 	"""Test creating an agent with invalid model (non-existent model_id)."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	agent_in = AgentCreate(
 		name="agent-invalid-model",
 		plugin_ids=[],
@@ -168,7 +175,7 @@ async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None:
 	"""Test updating an agent with invalid model."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
 		AgentCreate(
 			name="agent-update-model",
@@ -195,7 +202,7 @@ async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None
 @pytest.mark.asyncio
 async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 	"""Test creating an agent explicitly without a model."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	agent_in = AgentCreate(
 		name="agent-no-model",
 		plugin_ids=[],
@@ -209,17 +216,14 @@ async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_agent_hidden_without_access_rule(db_session: AsyncSession) -> None:
 	"""non-admin cannot get an agent unless an access rule grants access."""
-	admin = _admin_principal()
+	admin = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
 		AgentCreate(name="hidden-agent", plugin_ids=[], config={}),
 		db_session,
 		principal=admin,
 	)
 
-	user = _user_principal().user
-	db_session.add(user)
-	await db_session.commit()
-	non_admin = Principal(user=user, group_ids=(), permissions=frozenset())
+	non_admin = await _principal(db_session, is_admin=False)
 	with pytest.raises(HTTPException):
 		await agent_service.get_agent(agent.id, db_session, principal=non_admin)
 
@@ -227,7 +231,7 @@ async def test_agent_hidden_without_access_rule(db_session: AsyncSession) -> Non
 @pytest.mark.asyncio
 async def test_create_agent_with_model(db_session: AsyncSession) -> None:
 	"""Test creating an agent with a valid model."""
-	principal = _admin_principal()
+	principal = await _principal(db_session, is_admin=True)
 	# Create provider
 	provider = await provider_service.create_provider(
 		ProviderCreate(name="P_Agent_Test", adapter_type="openai"),
@@ -281,7 +285,7 @@ async def test_list_agents_filters_by_access_rules(
 	db_session: AsyncSession,
 ) -> None:
 	"""non-admin sees only agents with a matching access rule."""
-	admin_principal = _admin_principal()
+	admin_principal = await _principal(db_session, is_admin=True)
 	accessible = await agent_service.create_agent(
 		AgentCreate(name="list-accessible", plugin_ids=[], config={}),
 		db_session,
@@ -293,9 +297,8 @@ async def test_list_agents_filters_by_access_rules(
 		principal=admin_principal,
 	)
 
-	non_admin_user = _user_principal().user
-	db_session.add(non_admin_user)
-	await db_session.flush()
+	non_admin_principal = await _principal(db_session, is_admin=False)
+	non_admin_user = non_admin_principal.user
 
 	# grant reader access to one agent
 	db_session.add(
@@ -308,8 +311,5 @@ async def test_list_agents_filters_by_access_rules(
 	)
 	await db_session.commit()
 
-	non_admin_principal = Principal(
-		user=non_admin_user, group_ids=(), permissions=frozenset()
-	)
 	visible = await agent_service.list_agents(db_session, principal=non_admin_principal)
 	assert [agent.id for agent in visible] == [accessible.id]
