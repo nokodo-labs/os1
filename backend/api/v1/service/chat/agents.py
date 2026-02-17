@@ -553,7 +553,6 @@ async def run_agent(
 				# mark which message tool events should correlate to
 				if delta.chat.done:
 					active_message_id_for_events = current_assistant_id
-					streaming_parent_id = current_assistant_id
 					await message_queue.put((current_assistant_id, assistant_accum))
 					# record finalized assistant message in run status
 					content_parts: list[dict[str, object]] = []
@@ -574,7 +573,6 @@ async def run_agent(
 			if delta.tool is not None:
 				tool_message_id = _alloc_message_id()
 				message_id = tool_message_id
-				streaming_parent_id = tool_message_id
 				await message_queue.put((tool_message_id, delta.tool))
 				# record tool message in run status
 				tool_content: list[dict[str, object]] = []
@@ -598,6 +596,14 @@ async def run_agent(
 			)
 			await run_status_store.publish(run_id_str, frame)
 			yield frame
+
+			# advance the parent chain AFTER emitting the frame so the
+			# envelope carries the parent of the current message, not the
+			# message itself (which would create a self-reference).
+			if delta.chat is not None and delta.chat.done and message_id:
+				streaming_parent_id = message_id
+			if delta.tool is not None and message_id:
+				streaming_parent_id = message_id
 
 	except GeneratorExit:
 		# client disconnected mid-stream — clean up the run so other
