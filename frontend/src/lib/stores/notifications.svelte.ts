@@ -24,17 +24,12 @@ export interface ToastItem {
 const NOTIFICATION_EVENT_TYPES = ['notification.custom', 'notification.agent']
 const THREAD_EVENT_TYPES = ['thread.created', 'thread.updated', 'thread.deleted']
 const MESSAGE_EVENT_TYPES = ['message.created', 'message.updated', 'message.deleted']
-const TYPING_EVENT_TYPES = [
-	'typing.user.start',
-	'typing.user.stop',
-	'typing.agent.start',
-	'typing.agent.stop',
-]
+const TYPING_EVENT_TYPES = ['typing.user.start', 'typing.user.stop']
+const RUN_EVENT_TYPES = ['run.started', 'run.completed', 'runs.active']
 
 export interface TypingIndicator {
 	threadId: string
 	userId?: string
-	agentId?: string
 	isAgent: boolean
 	startedAt: number
 }
@@ -122,24 +117,12 @@ class NotificationsStore {
 				this.typingIndicators = this.typingIndicators.filter(
 					(t) => !(t.threadId === threadId && t.userId === userId)
 				)
-			} else if (eventType === 'typing.agent.start') {
-				const agentId = (data?.agent_id as string) || ''
-				if (
-					!this.typingIndicators.find(
-						(t) => t.threadId === threadId && t.agentId === agentId
-					)
-				) {
-					this.typingIndicators = [
-						...this.typingIndicators,
-						{ threadId, agentId, isAgent: true, startedAt: Date.now() },
-					]
-				}
-			} else if (eventType === 'typing.agent.stop') {
-				const agentId = (data?.agent_id as string) || ''
-				this.typingIndicators = this.typingIndicators.filter(
-					(t) => !(t.threadId === threadId && t.agentId === agentId)
-				)
 			}
+		}
+
+		// run events are forwarded via the generic stream — no further handling here
+		if (RUN_EVENT_TYPES.includes(eventType)) {
+			// no-op: handled by chat.svelte.ts subscribeToAgentRunEvents
 		}
 	}
 

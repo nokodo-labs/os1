@@ -65,6 +65,17 @@ class ConnectionManager:
 			except Exception:
 				logger.debug("failed to send to websocket for user %s", user_id)
 
+	async def send_to_users(
+		self,
+		user_ids: list[str],
+		data: dict[str, Any],
+		*,
+		exclude_user_id: str | None = None,
+	) -> None:
+		"""send to all sessions of multiple users concurrently."""
+		targets = (uid for uid in user_ids if uid != exclude_user_id)
+		await asyncio.gather(*(self.send_to_user(uid, data) for uid in targets))
+
 	async def broadcast(self, data: dict[str, Any]) -> None:
 		async with self._lock:
 			all_connections = [

@@ -71,6 +71,39 @@ class ThreadCache {
 		this.#messageCache.delete(threadId)
 	}
 
+	/** append a message to the cached array (if thread is cached). */
+	addMessage(threadId: string, message: ApiMessage): void {
+		const entry = this.#messageCache.get(threadId)
+		if (!entry) return
+		// avoid duplicates
+		if (entry.messages.some((m) => m.id === message.id)) return
+		this.#messageCache.set(threadId, {
+			...entry,
+			messages: [...entry.messages, message],
+		})
+	}
+
+	/** merge a partial update into a cached message. */
+	updateMessage(threadId: string, messageId: string, patch: Partial<ApiMessage>): void {
+		const entry = this.#messageCache.get(threadId)
+		if (!entry) return
+		const idx = entry.messages.findIndex((m) => m.id === messageId)
+		if (idx === -1) return
+		const updated = [...entry.messages]
+		updated[idx] = { ...updated[idx], ...patch }
+		this.#messageCache.set(threadId, { ...entry, messages: updated })
+	}
+
+	/** remove messages by id from the cached array. */
+	removeMessages(threadId: string, messageIds: string[]): void {
+		const entry = this.#messageCache.get(threadId)
+		if (!entry) return
+		const idSet = new Set(messageIds)
+		const filtered = entry.messages.filter((m) => !idSet.has(m.id))
+		if (filtered.length === entry.messages.length) return
+		this.#messageCache.set(threadId, { ...entry, messages: filtered })
+	}
+
 	clear(): void {
 		this.#threadCache.clear()
 		this.#messageCache.clear()
@@ -218,6 +251,37 @@ class ChatStore {
 
 			this.threadCache.invalidateAll(threadId)
 			this.removeRecentThread(threadId)
+		} else if (message.type === 'message.created') {
+			const threadId =
+				(data.thread_id as string) ?? (message.thread_id as string)
+			if (!threadId) return
+			// add to cached messages if we have data with an id
+			if (data.id && typeof data.id === 'string') {
+				this.threadCache.addMessage(threadId, data as unknown as ApiMessage)
+			} else {
+				this.threadCache.invalidateMessages(threadId)
+			}
+		} else if (message.type === 'message.updated') {
+			const threadId =
+				(data.thread_id as string) ?? (message.thread_id as string)
+			const msgId = (data.id as string) ?? (message.message_id as string)
+			if (!threadId || !msgId) return
+			this.threadCache.updateMessage(
+				threadId,
+				msgId,
+				data as Partial<ApiMessage>,
+			)
+		} else if (message.type === 'message.deleted') {
+			const threadId =
+				(data.thread_id as string) ?? (message.thread_id as string)
+			if (!threadId) return
+			const deletedIds = data.deleted_ids as string[] | undefined
+			const msgId = (data.message_id as string) ?? (message.message_id as string)
+			if (deletedIds) {
+				this.threadCache.removeMessages(threadId, deletedIds)
+			} else if (msgId) {
+				this.threadCache.removeMessages(threadId, [msgId])
+			}
 		}
 	}
 

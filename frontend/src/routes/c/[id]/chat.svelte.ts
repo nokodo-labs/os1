@@ -4,11 +4,14 @@
  */
 
 import { apiClient } from '$lib/api/client'
+import { isOwnEvent } from '$lib/api/sessionId'
 import {
 	eventStreamClient,
+	resumeRunStream,
 	runChatStream,
 	type ChatStreamDelta,
 	type StreamEvent,
+	type StreamMessage,
 	type UnknownSseEvent,
 } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
@@ -40,6 +43,13 @@ import {
 export type ApiMessage = components['schemas']['Message']
 type ApiEvent = components['schemas']['Event']
 
+/** lightweight pointer for a run signal received over WS. */
+interface RunSignal {
+	thread_id: string
+	run_id: string
+	agent_id: string
+}
+
 // re-export types moved to chatHelpers for backward compatibility
 export type { RunBlock, RunItem, StreamingAssistantState } from './chatHelpers'
 
@@ -48,9 +58,7 @@ export type { RunBlock, RunItem, StreamingAssistantState } from './chatHelpers'
  * returns an object with all state and methods needed by the UI.
  */
 export function createChatState() {
-	// ─────────────────────────────────────────────────────────────────────────────
 	// core state
-	// ─────────────────────────────────────────────────────────────────────────────
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
@@ -103,12 +111,20 @@ export function createChatState() {
 	let isDeletingMessage = $state(false)
 	let deleteMessageError = $state<string | null>(null)
 
+	// typing indicators (other users typing in this thread)
+	const typingUsers = new SvelteSet<string>()
+
+	// active agent runs in this thread (from other sessions or catchup)
+	// keyed by run_id → full run info mirroring backend RunStatus shape
+	const activeAgentRuns = new SvelteMap<
+		string,
+		{ threadId: string; runId: string; agentId: string }
+	>()
+
 	// abort controller for streaming
 	let runAbortController: AbortController | null = null
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// derived state
-	// ─────────────────────────────────────────────────────────────────────────────
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
 	const currentUserId = $derived(session.currentUser?.id ?? null)
@@ -138,9 +154,7 @@ export function createChatState() {
 		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
 	)
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// run block management
-	// ─────────────────────────────────────────────────────────────────────────────
 	function rebuildRunBlocks(): void {
 		const result = buildRunBlocks({
 			messages,
@@ -158,9 +172,7 @@ export function createChatState() {
 		runBlocks = result.blocks
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// branch navigation
-	// ─────────────────────────────────────────────────────────────────────────────
 	function getLatestLeaf(rootId: string): string {
 		let curr = rootId
 		while (true) {
@@ -271,9 +283,7 @@ export function createChatState() {
 		return null
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// scroll management
-	// ─────────────────────────────────────────────────────────────────────────────
 	function handleScroll() {
 		if (!scrollContainer) return
 		const atBottom = computeIsAtBottom(scrollContainer)
@@ -306,9 +316,7 @@ export function createChatState() {
 		})
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// data loading
-	// ─────────────────────────────────────────────────────────────────────────────
 	async function fetchToolEventsForThread(threadId: string, msgIds: string[]): Promise<void> {
 		if (msgIds.length === 0) return
 
@@ -592,10 +600,18 @@ export function createChatState() {
 						}
 						if (!messageTree.has(messageId)) {
 							const now = new SvelteDate().toISOString()
+							const deltaParent =
+								typeof env.parent_id === 'string' ? env.parent_id : null
+							const resolvedParent = deltaParent ?? ctx.getAssistantParentId()
+							if (resolvedParent) {
+								ctx.setAssistantParentId(resolvedParent)
+								streamingAssistantParentId = resolvedParent
+								currentLeafId = resolvedParent
+							}
 							messageTree.set(messageId, {
 								id: messageId,
 								thread_id: ctx.threadId,
-								parent_id: ctx.getAssistantParentId(),
+								parent_id: resolvedParent,
 								type: 'assistant',
 								content: [],
 								tool_calls: [],
@@ -643,10 +659,12 @@ export function createChatState() {
 					if (isDone) {
 						const content = streaming.content.trim()
 						const now = new SvelteDate().toISOString()
+						const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
+						const resolvedParent = deltaParent ?? ctx.getAssistantParentId()
 						const finalized = {
 							id: streaming.messageId,
 							thread_id: ctx.threadId,
-							parent_id: ctx.getAssistantParentId(),
+							parent_id: resolvedParent,
 							type: 'assistant',
 							content: content ? [{ type: 'text', text: content }] : [],
 							tool_calls: streaming.toolCalls.map((tc) => ({
@@ -707,9 +725,7 @@ export function createChatState() {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// streaming
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * consume any async generator of chat deltas, processing each through the
@@ -822,9 +838,7 @@ export function createChatState() {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// user actions
-	// ─────────────────────────────────────────────────────────────────────────────
 	async function handleSendMessage(content: string) {
 		const trimmed = content.trim()
 		if (!trimmed) return
@@ -985,9 +999,7 @@ export function createChatState() {
 		await handleRegenerateMessage(newMessage.id)
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// delete functionality
-	// ─────────────────────────────────────────────────────────────────────────────
 	function requestDeleteUserMessage(messageId: string) {
 		const msg = messages.find((m) => m.id === messageId)
 		const preview = msg ? contentPartsToText(msg.content).trim() : ''
@@ -1043,9 +1055,7 @@ export function createChatState() {
 		return true
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// thread loading effect setup
-	// ─────────────────────────────────────────────────────────────────────────────
 	function setThread(t: Thread | null) {
 		thread = t
 		chatStore.activeThread = t
@@ -1073,9 +1083,7 @@ export function createChatState() {
 		toolTracker.clear()
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// tool event subscription
-	// ─────────────────────────────────────────────────────────────────────────────
 	function subscribeToToolEvents(threadId: string): () => void {
 		return eventStreamClient.subscribe((msg) => {
 			if (!msg || typeof msg !== 'object') return
@@ -1096,9 +1104,243 @@ export function createChatState() {
 		})
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
+	// message event subscription (cross-device sync)
+	function subscribeToMessageEvents(threadId: string): () => void {
+		return eventStreamClient.subscribe((msg) => {
+			if (!msg || typeof msg !== 'object') return
+			const ev = msg as StreamEvent
+			if (!ev.type || typeof ev.type !== 'string') return
+			if (!ev.type.startsWith('message.')) return
+			if (ev.thread_id !== threadId) return
+			if (isOwnEvent(ev)) return
+
+			const data = (ev.data ?? {}) as Record<string, unknown>
+
+			if (ev.type === 'message.created') {
+				// add to tree if full payload present
+				if (data.id && typeof data.id === 'string') {
+					const newMsg = data as unknown as ApiMessage
+					// defense-in-depth: if this is a user message that matches the
+					// optimistic message, clear it to prevent double rendering
+					if (newMsg.type === 'user' && optimisticUserMessage) {
+						optimisticUserMessage = null
+					}
+					messageTree.set(newMsg.id, newMsg)
+					// if the new message extends the current branch, move leaf
+					if (newMsg.parent_id === currentLeafId) {
+						currentLeafId = newMsg.id
+					}
+					rebuildRunBlocks()
+				}
+			} else if (ev.type === 'message.updated') {
+				const msgId = (data.id as string) ?? ev.message_id
+				if (msgId && messageTree.has(msgId)) {
+					const existing = messageTree.get(msgId)!
+					messageTree.set(msgId, { ...existing, ...data } as ApiMessage)
+					rebuildRunBlocks()
+				}
+			} else if (ev.type === 'message.deleted') {
+				const deletedIds = data.deleted_ids as string[] | undefined
+				const msgId = (data.message_id as string) ?? ev.message_id
+				if (deletedIds) {
+					for (const id of deletedIds) messageTree.delete(id)
+				} else if (msgId) {
+					messageTree.delete(msgId)
+				}
+				// if the current leaf was deleted, walk up to find a valid one
+				if (currentLeafId && !messageTree.has(currentLeafId)) {
+					let validLeaf: string | null = null
+					for (const m of messageTree.values()) {
+						if (!validLeaf) {
+							validLeaf = m.id
+							continue
+						}
+						if (
+							getMessageCreatedAt(m).getTime() >=
+							getMessageCreatedAt(messageTree.get(validLeaf)!).getTime()
+						) {
+							validLeaf = m.id
+						}
+					}
+					currentLeafId = validLeaf
+				}
+				rebuildRunBlocks()
+			}
+		})
+	}
+
+	// typing event subscription
+	function subscribeToTypingEvents(threadId: string): () => void {
+		typingUsers.clear()
+		const timers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
+
+		const unsub = eventStreamClient.subscribe((msg) => {
+			if (!msg || typeof msg !== 'object') return
+			const ev = msg as StreamEvent
+			if (!ev.type || typeof ev.type !== 'string') return
+			if (!ev.type.startsWith('typing.')) return
+
+			const data = (ev.data ?? {}) as Record<string, unknown>
+			if (data.thread_id !== threadId) return
+			if (isOwnEvent(ev)) return
+
+			const userId = data.user_id as string | undefined
+			if (!userId) return
+
+			if (ev.type === 'typing.start' || ev.type === 'typing.user.start') {
+				typingUsers.add(userId)
+				// auto-expire after 8s if no further typing events arrive
+				const prev = timers.get(userId)
+				if (prev) clearTimeout(prev)
+				timers.set(
+					userId,
+					setTimeout(() => {
+						typingUsers.delete(userId)
+						timers.delete(userId)
+					}, 8000)
+				)
+			} else if (ev.type === 'typing.stop' || ev.type === 'typing.user.stop') {
+				typingUsers.delete(userId)
+				const prev = timers.get(userId)
+				if (prev) clearTimeout(prev)
+				timers.delete(userId)
+			}
+		})
+
+		return () => {
+			unsub()
+			for (const t of timers.values()) clearTimeout(t)
+			timers.clear()
+			typingUsers.clear()
+		}
+	}
+
+	/** notify other sessions that this user started/stopped typing */
+	function sendTypingEvent(threadId: string, typing: boolean): void {
+		eventStreamClient.send({
+			type: typing ? 'typing.start' : 'typing.stop',
+			thread_id: threadId,
+		})
+	}
+
+	/** subscribe to agent run events (run.started/run.completed) and active runs signal.
+	 * auto-resumes active runs via the resume SSE endpoint so the user sees
+	 * live streaming even if they navigated away and came back.
+	 */
+	function subscribeToAgentRunEvents(threadId: string): () => void {
+		activeAgentRuns.clear()
+
+		// abort controllers for active resume streams, keyed by run_id
+		const resumeAborts = new SvelteMap<string, AbortController>()
+
+		/** attempt to resume a run's SSE stream and feed it into consumeStream */
+		function tryResumeRun(runId: string, agentId: string) {
+			// skip if we're already streaming (initiator's own run)
+			if (isGenerating) return
+			// skip if already resuming this run
+			if (resumeAborts.has(runId)) return
+
+			const ac = new AbortController()
+			resumeAborts.set(runId, ac)
+
+			const runGen = ++activeRun
+			isGenerating = true
+			viewingStreamingBranch = true
+			streamingLeafId = null
+			streamingAssistantParentId = currentLeafId
+			streamingAssistant = {
+				runId: null,
+				messageId: `resume-${runId}`,
+				content: '',
+				timestamp: new SvelteDate(),
+				senderAgentId: agentId,
+				toolCalls: [],
+			}
+
+			const stream = resumeRunStream({
+				threadId,
+				runId,
+				signal: ac.signal,
+			})
+
+			consumeStream(stream, {
+				runId: runGen,
+				threadId,
+				parentId: null,
+			})
+				.catch(() => {
+					// aborted or network error — expected on navigate-away
+				})
+				.finally(() => {
+					resumeAborts.delete(runId)
+					if (activeRun === runGen) {
+						isGenerating = false
+					}
+				})
+		}
+
+		const unsub = eventStreamClient.subscribe((msg) => {
+			if (!msg || typeof msg !== 'object') return
+			const ev = msg as StreamMessage
+			if (!ev.type || typeof ev.type !== 'string') return
+
+			// handle active runs signal (single message with list of run pointers)
+			if (ev.type === 'runs.active') {
+				const runs = ((ev as Record<string, unknown>).data ?? []) as RunSignal[]
+				for (const run of runs) {
+					if (run.thread_id !== threadId) continue
+					if (run.run_id && run.agent_id) {
+						activeAgentRuns.set(run.run_id, {
+							threadId,
+							runId: run.run_id,
+							agentId: run.agent_id,
+						})
+						tryResumeRun(run.run_id, run.agent_id)
+					}
+				}
+				return
+			}
+
+			// handle run.started
+			if (ev.type === 'run.started') {
+				const data = ((ev as Record<string, unknown>).data ?? {}) as RunSignal
+				if (data.thread_id !== threadId) return
+				if (!data.run_id || !data.agent_id) return
+				activeAgentRuns.set(data.run_id, {
+					threadId,
+					runId: data.run_id,
+					agentId: data.agent_id,
+				})
+				tryResumeRun(data.run_id, data.agent_id)
+				return
+			}
+
+			// handle run.completed
+			if (ev.type === 'run.completed') {
+				const data = ((ev as Record<string, unknown>).data ?? {}) as RunSignal
+				if (data.thread_id !== threadId) return
+				if (!data.run_id) return
+				activeAgentRuns.delete(data.run_id)
+				// abort any active resume for this run (if SSE hasn't ended yet)
+				const ac = resumeAborts.get(data.run_id)
+				if (ac) {
+					ac.abort()
+					resumeAborts.delete(data.run_id)
+				}
+				return
+			}
+		})
+
+		return () => {
+			unsub()
+			activeAgentRuns.clear()
+			// abort all active resume streams on navigate-away
+			for (const ac of resumeAborts.values()) ac.abort()
+			resumeAborts.clear()
+		}
+	}
+
 	// return public interface
-	// ─────────────────────────────────────────────────────────────────────────────
 	return {
 		// state (getters for reactive access)
 		get inputValue() {
@@ -1268,6 +1510,16 @@ export function createChatState() {
 		setThread,
 		clearThread,
 		subscribeToToolEvents,
+		subscribeToMessageEvents,
+		subscribeToTypingEvents,
+		subscribeToAgentRunEvents,
+		sendTypingEvent,
+		get typingUsers() {
+			return typingUsers
+		},
+		get activeAgentRuns() {
+			return activeAgentRuns
+		},
 		contentPartsToText,
 		getMessageCreatedAt,
 	}

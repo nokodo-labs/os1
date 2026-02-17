@@ -10,6 +10,7 @@
 
 import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import { isOwnEvent } from '$lib/api/sessionId'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -206,6 +207,8 @@ function handleNoteEvent(message: StreamMessage): void {
 		}
 		if (fetchedAt === null) fetchedAt = Date.now()
 	} else if (message.type === 'note.updated') {
+		// skip own events: optimistic update already applied
+		if (isOwnEvent(message)) return
 		const id = data.id as string
 		if (!id) return
 		const existing = notesMap.get(id)

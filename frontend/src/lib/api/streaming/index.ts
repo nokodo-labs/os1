@@ -1,9 +1,10 @@
 /**
  * Manual types and clients for streaming endpoints not covered by OpenAPI codegen.
- * - SSE: /threads/{id}/run
+ * - SSE: /threads/{id}/runs, /threads/{id}/runs/{run_id}/stream
  * - WebSocket: /events/stream
  */
 export {
+	resumeRunStream,
 	runChatStream,
 	runCreateAndRunStream,
 	type ChatStreamDelta,
@@ -12,6 +13,7 @@ export {
 	type CreateAndRunStreamDelta,
 	type CreateAndRunStreamOptions,
 	type CreateAndRunThread,
+	type ResumeRunStreamOptions,
 	type StreamedMessage,
 	type StreamError,
 	type TextDelta,

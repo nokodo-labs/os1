@@ -8,6 +8,7 @@
 	import CopyButton from '$lib/components/chat/CopyButton.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
+	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
@@ -31,6 +32,7 @@
 
 	// initialize chat state
 	const chat = createChatState()
+	const threadId = $derived(chat.thread?.id ?? null)
 
 	// local UI state
 	let didLoadAgents = $state(false)
@@ -131,6 +133,24 @@
 		return chat.subscribeToToolEvents(chat.thread.id)
 	})
 
+	// effects: message events subscription (cross-device sync)
+	$effect(() => {
+		if (!chat.thread) return
+		return chat.subscribeToMessageEvents(chat.thread.id)
+	})
+
+	// effects: typing events subscription
+	$effect(() => {
+		if (!chat.thread) return
+		return chat.subscribeToTypingEvents(chat.thread.id)
+	})
+
+	// effects: agent run events subscription (run.started/completed + catchup + auto-resume)
+	$effect(() => {
+		if (!chat.thread) return
+		return chat.subscribeToAgentRunEvents(chat.thread.id)
+	})
+
 	// effects: pending create-and-run stream handoff
 	$effect(() => {
 		if (!chat.thread) return
@@ -175,6 +195,58 @@
 		const threadId = page.params.id
 		if (!threadId) return
 		chatStore.setDraft(threadId, chat.inputValue)
+	})
+
+	// effects: typing event emission
+	// fires typing.start every 3s while user is typing; typing.stop on idle/clear
+	const hasInput = $derived(chat.inputValue.trim().length > 0)
+	let typingStopTimeout: ReturnType<typeof setTimeout> | null = null
+	let typingRepeatInterval: ReturnType<typeof setInterval> | null = null
+	let isTyping = false
+	$effect(() => {
+		const tid = threadId
+		const typing = hasInput
+		if (!tid) return
+
+		if (typing) {
+			if (!isTyping) {
+				// start typing: fire immediately + start 3s repeat
+				isTyping = true
+				chat.sendTypingEvent(tid, true)
+				typingRepeatInterval = setInterval(() => {
+					chat.sendTypingEvent(tid, true)
+				}, 3000)
+			}
+			// reset idle stop timer on every keystroke
+			if (typingStopTimeout) clearTimeout(typingStopTimeout)
+			typingStopTimeout = setTimeout(() => {
+				if (isTyping && tid) {
+					isTyping = false
+					if (typingRepeatInterval) clearInterval(typingRepeatInterval)
+					typingRepeatInterval = null
+					chat.sendTypingEvent(tid, false)
+				}
+			}, 3000)
+		} else if (isTyping) {
+			// input cleared: stop immediately
+			isTyping = false
+			if (typingStopTimeout) clearTimeout(typingStopTimeout)
+			typingStopTimeout = null
+			if (typingRepeatInterval) clearInterval(typingRepeatInterval)
+			typingRepeatInterval = null
+			chat.sendTypingEvent(tid, false)
+		}
+
+		return () => {
+			if (typingStopTimeout) clearTimeout(typingStopTimeout)
+			if (typingRepeatInterval) clearInterval(typingRepeatInterval)
+			if (isTyping && tid) {
+				chat.sendTypingEvent(tid, false)
+				isTyping = false
+			}
+			typingStopTimeout = null
+			typingRepeatInterval = null
+		}
 	})
 
 	// effects: input overlay height tracking
@@ -223,8 +295,9 @@
 			return
 		}
 
-		// keep pinned while streaming if user was already at bottom
-		if (chat.isGenerating && chat.autoScroll) void chat.queueScrollToBottom('auto')
+		// keep pinned to bottom when user was already there. covers both
+		// local streaming and cross-session incoming messages
+		if (chat.autoScroll) void chat.queueScrollToBottom('auto')
 	})
 </script>
 
@@ -559,6 +632,8 @@
 					{/if}
 
 					<!-- streaming assistant is rendered within its run block -->
+
+					<TypingIndicator typingUserIds={chat.typingUsers} />
 				</div>
 			{:else}
 				<!-- while data is loading, keep layout stable; loader is rendered as an overlay -->

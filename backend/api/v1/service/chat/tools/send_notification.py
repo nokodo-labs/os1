@@ -6,8 +6,9 @@ from pydantic import Field
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
+from api.permissions import ResourceType
 from api.v1.service import notifications as notification_service
-from api.v1.service import threads as thread_service
+from api.v1.service.authorization import list_accessible_user_ids
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
@@ -92,10 +93,10 @@ class SendNotificationTool(Tool[AppContext]):
 		if target_user_id:
 			target_user_ids = [str(target_user_id)]
 		elif ctx.thread_id is not None:
-			target_user_ids = await thread_service.list_thread_recipient_user_ids(
-				ctx.thread_id,
+			target_user_ids = await list_accessible_user_ids(
+				ResourceType.THREAD,
+				str(ctx.thread_id),
 				session,
-				principal=ctx.principal,
 			)
 		else:
 			return self.error(

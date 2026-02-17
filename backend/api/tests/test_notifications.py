@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.event import Event, EventScope
 from api.models.notification import Notification
 from api.models.thread import Thread
+from api.permissions import ResourceType
 from api.schemas.user import UserCreate
 from api.v1.service import notifications as notification_service
-from api.v1.service import threads as thread_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import list_accessible_user_ids
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -270,11 +271,10 @@ async def test_send_agent_notification_thread_includes_owner_when_no_participant
 	await db_session.commit()
 	await db_session.refresh(thread)
 
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
-	user_ids = await thread_service.list_thread_recipient_user_ids(
-		TypeID(str(thread.id)),
+	user_ids = await list_accessible_user_ids(
+		ResourceType.THREAD,
+		str(thread.id),
 		db_session,
-		principal=principal,
 	)
 
 	notifications = await notification_service.send_agent_notification(

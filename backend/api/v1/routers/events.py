@@ -7,14 +7,16 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.core.database import AsyncSessionLocal, get_db
 from api.core.logging import get_logger
 from api.models.event import Event, EventScope
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventCreate
 from api.v1.service import auth as auth_service
 from api.v1.service import events as event_service
+from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.chat.run_status import get_active_runs_signal
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -76,11 +78,32 @@ async def events_stream(websocket: WebSocket) -> None:
 	await event_service.event_connections.connect(user_id, websocket)
 	await websocket.send_json({"type": "stream.connected", "user_id": user_id})
 
+	# send active runs signal so the client knows which runs to resume
+	try:
+		signal = await get_active_runs_signal(user_id)
+		if signal is not None:
+			await websocket.send_json(signal)
+	except Exception:
+		logger.debug("failed to send active runs signal for user %s", user_id)
+
 	try:
 		while True:
 			data = await websocket.receive_json()
-			if data.get("type") == "ping":
+			msg_type = data.get("type")
+			if msg_type == "ping":
 				await websocket.send_json({"type": "stream.pong"})
+			elif msg_type in ("typing.start", "typing.stop"):
+				thread_id = data.get("thread_id")
+				if not thread_id:
+					continue
+				# delegate to threads service (participant-scoped broadcast)
+				async with AsyncSessionLocal() as db_session:
+					await thread_service.handle_typing_event(
+						session=db_session,
+						user_id=user_id,
+						thread_id=thread_id,
+						typing=msg_type == "typing.start",
+					)
 	except WebSocketDisconnect:
 		logger.debug(f"websocket disconnected for user {user_id}")
 	except Exception as e:

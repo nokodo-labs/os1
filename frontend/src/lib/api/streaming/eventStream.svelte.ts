@@ -97,6 +97,17 @@ export class EventStreamClient {
 		return () => this.handlers.delete(handler)
 	}
 
+	/** send a JSON message to the server (typing events, etc.) */
+	send(message: Record<string, unknown>): void {
+		if (this.ws?.readyState === WebSocket.OPEN) {
+			try {
+				this.ws.send(JSON.stringify(message))
+			} catch {
+				//TODO: handle send failure
+			}
+		}
+	}
+
 	private async doConnect(): Promise<void> {
 		if (!this.isConnected) return
 

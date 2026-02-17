@@ -1,6 +1,6 @@
 /**
  * SSE client for chat run streaming.
- * POST /threads/{thread_id}/run and /threads/create_and_run
+ * POST /threads/{thread_id}/runs and /threads/create_and_run
  *
  * These types mirror backend schemas and SSE event payloads.
  */
@@ -9,15 +9,14 @@ import { getAccessToken } from '$lib/auth/session.svelte'
 import { getClientContext } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
+import { getSessionId } from '../sessionId'
 
 export interface RawSseFrame {
 	event: string
 	data: string
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // types
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** Content part in a message. */
 export interface ContentPart {
@@ -61,6 +60,7 @@ export interface ToolResultDelta {
 export interface AgentDeltaEnvelope {
 	run_id: string
 	message_id: string | null
+	parent_id: string | null
 	delta: unknown
 }
 
@@ -93,9 +93,7 @@ const KNOWN_RUN_EVENTS = new Set([
 // known event types for create_and_run streams (includes thread_created)
 const KNOWN_CREATE_AND_RUN_EVENTS = new Set([...KNOWN_RUN_EVENTS, 'thread_created'])
 
-// ─────────────────────────────────────────────────────────────────────────────
 // shared frame parsing
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * parses a raw SSE frame into a typed ChatStreamDelta.
@@ -148,9 +146,7 @@ function parseRunFrame(
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // shared streaming transport
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function streamSseFrames(opts: {
 	url: string
@@ -165,6 +161,7 @@ async function streamSseFrames(opts: {
 				'Content-Type': 'application/json',
 				Accept: 'text/event-stream',
 				...(token ? { Authorization: `Bearer ${token}` } : {}),
+				'X-Session-ID': getSessionId(),
 			},
 			body: JSON.stringify(opts.body),
 			signal: opts.signal,
@@ -184,6 +181,41 @@ async function streamSseFrames(opts: {
 
 	if (!response.ok || !response.body) {
 		throw new Error(`stream request failed: ${response.status}`)
+	}
+
+	return response.body.getReader()
+}
+
+async function streamSseGet(opts: {
+	url: string
+	signal?: AbortSignal
+}): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+	const doRequest = async (token: string | null): Promise<Response> => {
+		return fetch(opts.url, {
+			method: 'GET',
+			credentials: 'include',
+			headers: {
+				Accept: 'text/event-stream',
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+				'X-Session-ID': getSessionId(),
+			},
+			signal: opts.signal,
+		})
+	}
+
+	let token = getAccessToken()
+	let response = await doRequest(token)
+
+	if (response.status === 401) {
+		const refreshed = await refreshAccessToken()
+		if (refreshed) {
+			token = refreshed
+			response = await doRequest(token)
+		}
+	}
+
+	if (!response.ok || !response.body) {
+		throw new Error(`resume stream failed: ${response.status}`)
 	}
 
 	return response.body.getReader()
@@ -233,9 +265,7 @@ async function* readSseFrames(
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // run chat stream
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ChatStreamOptions {
 	threadId: string
@@ -252,7 +282,7 @@ export interface ChatStreamOptions {
 export async function* runChatStream(
 	opts: ChatStreamOptions
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
-	const url = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/run`
+	const url = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/runs`
 	const clientContext = preferences.data.privacy.useDeviceContext ? getClientContext() : null
 
 	const body: Record<string, unknown> = {
@@ -270,9 +300,7 @@ export async function* runChatStream(
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // create_and_run stream (thread creation + run in one request)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** thread data emitted as the first SSE event by create_and_run. */
 export interface CreateAndRunThread {
@@ -326,6 +354,31 @@ export async function* runCreateAndRunStream(
 		}
 
 		const { delta, terminal } = parseRunFrame(frame, KNOWN_CREATE_AND_RUN_EVENTS)
+		yield delta
+		if (terminal) return
+	}
+}
+
+// resume run stream (GET-based SSE for re-joining an active run)
+
+export interface ResumeRunStreamOptions {
+	threadId: string
+	runId: string
+	signal?: AbortSignal
+}
+
+/**
+ * async generator that yields typed SSE events from a resumed run stream.
+ * connects to GET /threads/{threadId}/runs/{runId}/stream which replays
+ * catchup frames followed by live deltas until the run completes.
+ */
+export async function* resumeRunStream(
+	opts: ResumeRunStreamOptions
+): AsyncGenerator<ChatStreamDelta, void, unknown> {
+	const url = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/runs/${opts.runId}/stream`
+	const reader = await streamSseGet({ url, signal: opts.signal })
+	for await (const frame of readSseFrames(reader)) {
+		const { delta, terminal } = parseRunFrame(frame, KNOWN_RUN_EVENTS)
 		yield delta
 		if (terminal) return
 	}

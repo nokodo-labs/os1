@@ -51,6 +51,7 @@ from api.v1.service.chat.models import (
 	build_chat_model,
 	resolve_chat_model,
 )
+from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_encode, sse_response
 from nokodo_ai.utils.typeid import TypeID
@@ -120,6 +121,7 @@ async def create_and_run(
 			principal,
 			input=req.input,
 			client_context=req.client_context,
+			origin_session_id=x_session_id,
 		):
 			yield chunk
 
@@ -373,12 +375,13 @@ async def delete_user_message_turn(
 	)
 
 
-@router.post("/{thread_id}/run")
+@router.post("/{thread_id}/runs")
 async def run_thread(
 	thread_id: TypeID,
 	req: ThreadRunRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> StreamingResponse:
 	"""stream a thread run via sse events."""
 	# thread service checks thread access (EDITOR required for runs)
@@ -393,8 +396,52 @@ async def run_thread(
 		input=req.input,
 		parent_id=req.parent_id,
 		client_context=req.client_context,
+		origin_session_id=x_session_id,
 	)
 	return sse_response(stream)
+
+
+@router.get("/{thread_id}/runs/{run_id}/stream")
+async def resume_run_stream(
+	thread_id: TypeID,
+	run_id: str,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+	"""resume an active agent run's SSE stream.
+
+	replays recorded SSE events from the run so far, then streams live
+	deltas until the run completes. returns 404 if the run doesn't exist
+	or has already finished.
+	"""
+	await require_thread_access(
+		str(thread_id), db, principal, required_level=AccessLevel.READER
+	)
+
+	result = await run_status_store.subscribe(run_id)
+	if result is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="run not found or already completed",
+		)
+
+	sse_log, live_queue = result
+
+	async def _stream() -> AsyncIterator[bytes]:
+		try:
+			# 1. replay recorded SSE frames (catchup)
+			for frame in sse_log:
+				yield frame
+			# 2. live frames until sentinel
+			while True:
+				frame = await live_queue.get()
+				if frame is None:
+					return
+				yield frame
+		finally:
+			await run_status_store.unsubscribe(run_id, live_queue)
+
+	return sse_response(_stream())
 
 
 @router.post("/{thread_id}/switch", response_model=ThreadSwitchResponse)

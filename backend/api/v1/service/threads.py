@@ -17,8 +17,9 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.message import Message, MessageType
 from api.models.thread import Thread
-from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
+from api.permissions import ResourceType
+from api.schemas.message import Message as MessageOut
 from api.schemas.message import MessageCreate
 from api.schemas.sorting import CommonSortBy
 from api.schemas.thread import Thread as ThreadOut
@@ -28,6 +29,7 @@ from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	list_accessible_user_ids,
 	require_permission,
 	require_thread_access,
 	thread_access_predicate,
@@ -174,50 +176,6 @@ async def generate_thread_metadata(
 		emit_event=emit_event,
 		origin_session_id=origin_session_id,
 	)
-
-
-async def list_thread_recipient_user_ids(
-	thread_id: TypeID,
-	session: AsyncSession,
-	*,
-	principal: Principal | None = None,
-	include_hidden: bool = False,
-) -> list[str]:
-	"""Return user ids that should receive notifications for this thread.
-
-	This always includes the thread owner, even if there are no participants.
-	When principal is provided, authz is checked. When None, runs unrestricted.
-	"""
-	if principal is not None:
-		_ensure_admin_for_hidden(include_hidden, principal)
-		thread = await _load_thread(
-			thread_id,
-			session,
-			principal,
-			required_level=AccessLevel.READER,
-			include_hidden=include_hidden,
-		)
-	else:
-		thread = await _load_thread(
-			thread_id, session, None, include_hidden=include_hidden
-		)
-
-	participant_stmt = select(ThreadParticipant.user_id).where(
-		ThreadParticipant.thread_id == thread_id,
-		ThreadParticipant.user_id.isnot(None),
-	)
-	participant_result = await session.execute(participant_stmt)
-	participant_ids = [str(uid) for uid in participant_result.scalars().all()]
-
-	ordered_ids = [str(thread.owner_id), *participant_ids]
-	seen: set[str] = set()
-	unique_ids: list[str] = []
-	for uid in ordered_ids:
-		if uid in seen:
-			continue
-		seen.add(uid)
-		unique_ids.append(uid)
-	return unique_ids
 
 
 @overload
@@ -844,17 +802,18 @@ async def create_message(
 	session.add(message)
 	await session.flush()
 	thread.current_message_id = message.id
+	await session.commit()
+	await session.refresh(message)
 
-	# emit message.created event
+	# emit message.created event with full message payload
+	message_data = MessageOut.model_validate(message).model_dump(
+		mode="json",
+	)
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.MESSAGE_CREATED,
-		data={
-			"thread_id": str(thread_id),
-			"message_id": str(message.id),
-			"type": str(message_in.type),
-		},
+		data=message_data,
 		user_id=principal.user_id,
 		thread_id=str(thread_id),
 		message_id=str(message.id),
@@ -865,8 +824,6 @@ async def create_message(
 		origin_session_id=origin_session_id,
 	)
 
-	await session.commit()
-	await session.refresh(message)
 	return message
 
 
@@ -974,3 +931,39 @@ async def delete_user_message_turn(
 	)
 
 	await session.commit()
+
+
+async def handle_typing_event(
+	*,
+	session: AsyncSession,
+	user_id: str,
+	thread_id: str,
+	typing: bool,
+) -> None:
+	"""broadcast a typing indicator to all users with access to a thread.
+
+	ephemeral: no event persistence, just fan-out over WS.
+	"""
+	recipient_ids = await list_accessible_user_ids(
+		ResourceType.THREAD,
+		thread_id,
+		session,
+	)
+
+	if not recipient_ids:
+		return
+
+	msg_type = "typing.start" if typing else "typing.stop"
+	payload = {
+		"type": msg_type,
+		"data": {
+			"thread_id": thread_id,
+			"user_id": user_id,
+		},
+	}
+
+	await event_service.event_connections.send_to_users(
+		recipient_ids,
+		payload,
+		exclude_user_id=user_id,
+	)

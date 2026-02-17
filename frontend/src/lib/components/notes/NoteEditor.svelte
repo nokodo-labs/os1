@@ -69,21 +69,34 @@
 	let lastNoteId: string | null = $state(null)
 	let isSyncingFromStore = false
 
-	// sync state from store when note changes
+	// sync state from store: new note selected OR foreign WS update to same note
 	$effect(() => {
 		const current = note
 		if (!current) return
-		if (current.id === lastNoteId) return
-		lastNoteId = current.id
 
-		isSyncingFromStore = true
-		title = current.title
-		content = current.content
-		isRawMode = false
-		menuOpen = false
-		queueMicrotask(() => {
-			isSyncingFromStore = false
-		})
+		if (current.id !== lastNoteId) {
+			// different note selected
+			lastNoteId = current.id
+			isSyncingFromStore = true
+			title = current.title
+			content = current.content
+			isRawMode = false
+			menuOpen = false
+			queueMicrotask(() => {
+				isSyncingFromStore = false
+			})
+			return
+		}
+
+		// same note: sync foreign updates (own events are skipped at the store level)
+		if (current.title !== title || current.content !== content) {
+			isSyncingFromStore = true
+			title = current.title
+			content = current.content
+			queueMicrotask(() => {
+				isSyncingFromStore = false
+			})
+		}
 	})
 
 	// inject island context actions
@@ -127,10 +140,10 @@
 	}
 
 	$effect(() => {
-		// auto-save on edits
+		// auto-save on edits (must NOT depend on `note` to avoid WS → save loops)
 		void title
 		void content
-		if (!note) return
+		if (!lastNoteId) return
 		if (isSyncingFromStore) return
 		scheduleSave()
 	})

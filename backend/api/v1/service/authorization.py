@@ -5,24 +5,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, exists, literal, or_, select, true
+from sqlalchemy import and_, exists, literal, or_, select, true, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
-from sqlalchemy.sql import ColumnElement
+from sqlalchemy.sql import ColumnElement, Select
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.agent import Agent
 from api.models.file import File
-from api.models.group import Group
+from api.models.group import Group, GroupMembership
+from api.models.many_to_many import user_role_association
 from api.models.memory import Memory
 from api.models.note import Note
 from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
 from api.models.reminder import ReminderList
+from api.models.role import Role
 from api.models.task import Task
 from api.models.thread import Thread
+from api.models.user import User
 from api.permissions import ResourceType
+from api.settings.settings import settings
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID
 
@@ -245,6 +249,105 @@ def resource_access_predicate(
 		base_access = or_(base_access, true())
 
 	return and_(base_access, visibility)
+
+
+async def list_accessible_user_ids(
+	resource_type: ResourceType,
+	resource_id: str,
+	session: AsyncSession,
+	*,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> list[str]:
+	"""return all user IDs that have at least *required_level* access to a resource.
+
+	resolves the same grant paths as ``resource_access_predicate`` but inverted:
+	owner, superusers, explicit user/group/role access rules, role resource
+	defaults, and global defaults.
+	"""
+	config = RESOURCE_CONFIG[resource_type]
+	allowed_levels = _allowed_levels(required_level)
+
+	queries: list[Select] = []
+
+	# 1. resource owner
+	if config.owner_fk is not None:
+		queries.append(select(config.owner_fk).where(config.id_col == resource_id))
+
+	# 2. superusers (implicit admin on everything)
+	queries.append(select(User.id).where(User.is_superuser.is_(True)))
+
+	# 3. direct user access rules
+	queries.append(
+		select(AccessRule.subject_user_id).where(
+			config.rule_fk == resource_id,
+			AccessRule.subject_user_id.is_not(None),
+			AccessRule.level.in_(allowed_levels),
+		)
+	)
+
+	# 4. group access rules → expand via GroupMembership
+	queries.append(
+		select(GroupMembership.user_id).where(
+			GroupMembership.group_id.in_(
+				select(AccessRule.subject_group_id).where(
+					config.rule_fk == resource_id,
+					AccessRule.subject_group_id.is_not(None),
+					AccessRule.level.in_(allowed_levels),
+				)
+			)
+		)
+	)
+
+	# 5. role access rules → expand via user_role_association
+	queries.append(
+		select(user_role_association.c.user_id).where(
+			user_role_association.c.role_id.in_(
+				select(AccessRule.subject_role_id).where(
+					config.rule_fk == resource_id,
+					AccessRule.subject_role_id.is_not(None),
+					AccessRule.level.in_(allowed_levels),
+				)
+			)
+		)
+	)
+
+	# 6. role resource defaults — roles whose default_permissions
+	#    grant sufficient access for this resource type
+	role_result = await session.execute(select(Role))
+	default_role_ids = [
+		str(r.id)
+		for r in role_result.scalars().all()
+		if _role_grants_default(r, resource_type, required_level)
+	]
+	if default_role_ids:
+		queries.append(
+			select(user_role_association.c.user_id).where(
+				user_role_association.c.role_id.in_(default_role_ids)
+			)
+		)
+
+	# 7. global defaults — if the server-wide settings grant access,
+	#    every active user qualifies
+	global_level = settings.default_permissions.resource_access.get(resource_type)
+	if global_level is not None and _level_satisfies(global_level, required_level):
+		queries.append(select(User.id).where(User.is_active.is_(True)))
+
+	if not queries:
+		return []
+
+	combined = union(*queries).subquery()
+	result = await session.execute(select(combined.c[0]))
+	return [str(row[0]) for row in result.all()]
+
+
+def _role_grants_default(
+	role: Role,
+	resource_type: ResourceType,
+	required_level: AccessLevel,
+) -> bool:
+	"""check whether a role's default_permissions grant sufficient access."""
+	level = role.get_default_permissions().resource_access.get(resource_type)
+	return level is not None and _level_satisfies(level, required_level)
 
 
 # backwards-compatible aliases

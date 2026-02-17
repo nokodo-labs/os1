@@ -319,7 +319,7 @@ async def test_threads_router_delegates(monkeypatch):
 		_return_access_rules,
 	)
 
-	# patch the chat runner for /threads/{id}/run (streaming-only)
+	# patch the chat runner for /threads/{id}/runs (streaming-only)
 	async def _chat_run_agent(*_args, **_kwargs):
 		if False:
 			yield b""

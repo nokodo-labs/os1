@@ -34,7 +34,7 @@ async def test_thread_run_stream_headers(
 	monkeypatch.setattr("api.v1.routers.threads.chat_run_agent", _stream)
 
 	resp = await client.post(
-		f"/v1/threads/{thread_id}/run",
+		f"/v1/threads/{thread_id}/runs",
 		headers=headers,
 		json={"agent_id": new_typeid("agent"), "input": None},
 	)

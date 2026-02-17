@@ -75,10 +75,10 @@ function createPreferencesStore() {
 	// defaults: admin settings → hardcoded fallbacks
 	const defaults: Resolved = $derived({
 		appearance: {
-			themeMode: (settingsState.data?.ui?.default_theme as ThemeMode) ?? 'system',
+			themeMode: (settingsState?.data?.ui?.default_theme as ThemeMode) ?? 'system',
 			accent: 'purple',
 			background:
-				(settingsState.data?.ui?.default_background as BackgroundType) ?? 'lightrays',
+				(settingsState?.data?.ui?.default_background as BackgroundType) ?? 'lightrays',
 			autoAccentColors: true,
 			autoBackground: true,
 			staticColor: '#171717',
@@ -90,7 +90,7 @@ function createPreferencesStore() {
 			gender: null,
 		},
 		ai: {
-			defaultAgentId: settingsState.data?.ai?.default_agent_id ?? null,
+			defaultAgentId: settingsState?.data?.ai?.default_agent_id ?? null,
 			bio: null,
 			useAccountBio: false,
 			memoriesEnabled: true,

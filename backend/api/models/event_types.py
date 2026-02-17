@@ -30,8 +30,10 @@ class EventType(StrEnum):
 	# --- typing indicators ---
 	TYPING_USER_START = "typing.user.start"
 	TYPING_USER_STOP = "typing.user.stop"
-	TYPING_AGENT_START = "typing.agent.start"
-	TYPING_AGENT_STOP = "typing.agent.stop"
+
+	# --- agent run lifecycle ---
+	RUN_STARTED = "run.started"
+	RUN_COMPLETED = "run.completed"
 
 	# --- notification events ---
 	NOTIFICATION_CUSTOM = "notification.custom"
@@ -114,8 +116,11 @@ MESSAGE_EVENTS = {
 TYPING_EVENTS = {
 	EventType.TYPING_USER_START,
 	EventType.TYPING_USER_STOP,
-	EventType.TYPING_AGENT_START,
-	EventType.TYPING_AGENT_STOP,
+}
+
+RUN_EVENTS = {
+	EventType.RUN_STARTED,
+	EventType.RUN_COMPLETED,
 }
 
 SETTINGS_EVENTS = {
