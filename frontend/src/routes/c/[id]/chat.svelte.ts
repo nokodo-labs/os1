@@ -583,6 +583,33 @@ export function createChatState() {
 						toolTracker.registerResult({ toolCallId, output, isError })
 						toolTick++
 					}
+
+					// add a tool message entry to the tree so the parent chain
+					// stays intact when the next assistant message references it
+					if (messageId && !messageTree.has(messageId)) {
+						const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
+						const resolvedParent = deltaParent ?? ctx.getAssistantParentId()
+						const now = new SvelteDate().toISOString()
+						messageTree.set(messageId, {
+							id: messageId,
+							thread_id: ctx.threadId,
+							parent_id: resolvedParent,
+							type: 'tool',
+							content: output ? [{ type: 'text', text: output }] : [],
+							tool_calls: [],
+							metadata_: toolCallId ? { tool_call_id: toolCallId } : undefined,
+							sender_agent_id: null,
+							sender_user_id: null,
+							created_at: now,
+							updated_at: now,
+						} satisfies ApiMessage)
+						streamingLeafId = messageId
+						if (viewingStreamingBranch) {
+							currentLeafId = messageId
+						}
+						ctx.setAssistantParentId(messageId)
+						streamingAssistantParentId = messageId
+					}
 				}
 
 				// assistant streaming
