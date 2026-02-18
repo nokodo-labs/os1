@@ -70,75 +70,65 @@
 		void notifications.delete(notifId)
 	}
 
-	function handleMarkAllRead(): void {
-		void notifications.markAllRead()
+	function handleDismissAll(): void {
+		void notifications.dismissAll()
+	}
+
+	function getNotificationImage(notif: NotificationType): string | null {
+		const data = notif.event?.data as Record<string, unknown> | undefined
+		return data && typeof data.image_url === 'string' ? data.image_url : null
 	}
 </script>
 
 <aside class="relative h-full w-full" aria-hidden={!chrome.isDockOpen}>
-	<div class="flex h-full flex-col gap-4">
-		<section
-			data-dock-panel
-			class="relative flex min-h-0 flex-col overflow-hidden rounded-2xl bg-white/5 px-5 py-4"
-			style={controlCenterHeightPx > 0
-				? `max-height: calc(100% - ${controlCenterHeightPx}px - 1rem);`
-				: undefined}
-			aria-label="notifications"
-		>
-			<div class="flex min-h-0 flex-col">
-				<div class="mb-2 flex items-center justify-between">
-					<div class="text-xs font-semibold tracking-wide text-white/60">
-						notifications
-						{#if notifications.unreadCount > 0}
-							<span
-								class="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/15 px-1.5 text-[0.6875rem] font-bold text-white/80"
-							>
-								{notifications.unreadCount}
-							</span>
-						{/if}
-					</div>
-					{#if notifications.unreadCount > 0}
-						<button
-							type="button"
-							class="text-xs text-white/50 transition-colors hover:text-white/80"
-							onclick={handleMarkAllRead}
-						>
-							mark all read
-						</button>
-					{/if}
-				</div>
-				<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-					{#if !session.isLoggedIn}
-						<div
-							class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50"
-						>
-							log in to see notifications
-						</div>
-					{:else if notifications.list.length === 0}
-						<div
-							class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50"
-						>
-							no notifications
-						</div>
-					{:else}
-						{#each notifications.list as notif (notif.id)}
-							<Notification
-								notification={notif}
-								iconUrl={getNotificationIcon(notif)}
-								title={getNotificationTitle(notif)}
-								body={getNotificationBody(notif)}
-								timestamp={new Date(notif.created_at)}
-								isUnread={!notif.read_at}
-								onMarkRead={handleMarkRead}
-								onDismiss={handleDismiss}
-							/>
-						{/each}
-					{/if}
-				</div>
+	<div class="flex h-full flex-col gap-4" data-dock-panel>
+		<div class="flex items-center justify-between px-5">
+			<div class="text-xs font-semibold tracking-wide text-white/60">
+				notifications
+				{#if notifications.unreadCount > 0}
+					<span
+						class="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/15 px-1.5 text-[0.6875rem] font-bold text-white/80"
+					>
+						{notifications.unreadCount}
+					</span>
+				{/if}
 			</div>
-		</section>
+			{#if notifications.list.length > 0}
+				<button
+					type="button"
+					class="text-xs text-white/50 transition-colors hover:text-white/80"
+					onclick={handleDismissAll}
+				>
+					dismiss all
+				</button>
+			{/if}
+		</div>
 
-		<div class="min-h-0 flex-1" aria-hidden="true"></div>
+		<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" aria-label="notifications">
+			{#if !session.isLoggedIn}
+				<div class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50">
+					log in to see notifications
+				</div>
+			{:else if notifications.list.length === 0}
+				<div class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50">
+					no notifications
+				</div>
+			{:else}
+				{#each notifications.list as notif (notif.id)}
+					<Notification
+						notification={notif}
+						iconUrl={getNotificationIcon(notif)}
+						imageUrl={getNotificationImage(notif)}
+						title={getNotificationTitle(notif)}
+						body={getNotificationBody(notif)}
+						timestamp={new Date(notif.created_at)}
+						isUnread={!notif.read_at}
+						onMarkRead={handleMarkRead}
+						onDismiss={handleDismiss}
+					/>
+				{/each}
+			{/if}
+		</div>
 
 		<section
 			data-dock-panel

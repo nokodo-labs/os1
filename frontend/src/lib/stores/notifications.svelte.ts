@@ -18,6 +18,7 @@ export interface ToastItem {
 	title: string
 	body: string
 	iconUrl?: string | null
+	imageUrl?: string | null
 	addedAt: number
 }
 
@@ -54,7 +55,7 @@ class NotificationsStore {
 
 	#refreshTimer: ReturnType<typeof setTimeout> | null = null
 	#unsubscribe: (() => void) | null = null
-	static readonly TOAST_DURATION_MS = 5000
+	static readonly TOAST_DURATION_MS = 12000
 
 	#scheduleRefresh = () => {
 		if (this.#refreshTimer) clearTimeout(this.#refreshTimer)
@@ -69,10 +70,11 @@ class NotificationsStore {
 		const title = (data?.title as string) || message.type || 'notification'
 		const body = (data?.body as string) || ''
 		const iconUrl = (data?.icon_url as string) || null
+		const imageUrl = (data?.image_url as string) || null
 		const id = typeof message.id === 'string' ? message.id : null
 		if (!id) return
 
-		this.toasts = [...this.toasts, { id, title, body, iconUrl, addedAt: Date.now() }]
+		this.toasts = [...this.toasts, { id, title, body, iconUrl, imageUrl, addedAt: Date.now() }]
 	}
 
 	dismissToast = (id: string) => {
@@ -238,6 +240,23 @@ class NotificationsStore {
 			await apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
 				params: { path: { notification_id: notificationId } },
 			})
+		} catch {
+			await this.refresh()
+		}
+	}
+
+	dismissAll = async (): Promise<void> => {
+		const ids = this.list.map((n) => n.id)
+		this.list = []
+
+		try {
+			await Promise.all(
+				ids.slice(0, 20).map((id) =>
+					apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
+						params: { path: { notification_id: id } },
+					})
+				)
+			)
 		} catch {
 			await this.refresh()
 		}

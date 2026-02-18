@@ -2,7 +2,9 @@
 	import { cubicOut } from 'svelte/easing'
 	import { fly } from 'svelte/transition'
 
+	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
+	import XMark from '$lib/components/icons/XMark.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import type { ToastItem } from '$lib/stores/notifications.svelte'
 	import { SvelteMap } from 'svelte/reactivity'
@@ -17,7 +19,7 @@
 	let { toasts, onDismiss, onSwipeDismiss, onClick }: Props = $props()
 
 	// --- auto-dismiss (component-managed so exit animation plays) ---
-	const AUTO_DISMISS_MS = 5000
+	const AUTO_DISMISS_MS = 12000
 	let dismissTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
 
 	$effect(() => {
@@ -188,17 +190,16 @@
 		<!-- mobile: full-width banners at top -->
 		<div class="fixed inset-x-0 top-0 z-60 flex flex-col gap-2 px-3 pt-3">
 			{#each toasts as toast (toast.id)}
-				<div
+				<LiquidGlass
+					class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left select-none"
+					style={toastStyle(toast.id)}
 					role="button"
 					tabindex="0"
-					class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl border border-white/10 bg-black/70 px-4 py-3 text-left backdrop-blur-xl select-none"
-					style={toastStyle(toast.id)}
-					in:fly={{ y: -80, duration: 300, easing: cubicOut }}
-					onpointerdown={(e) => onPointerDown(toast.id, e)}
-					onpointermove={(e) => onPointerMove(toast.id, e)}
+					onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
+					onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
 					onpointerup={() => onPointerUp(toast.id)}
 					onpointercancel={() => onPointerCancel(toast.id)}
-					onkeydown={(e) => {
+					onkeydown={(e: KeyboardEvent) => {
 						if (e.key === 'Enter') {
 							onClick?.(toast.id)
 							startDismiss(toast.id)
@@ -223,72 +224,79 @@
 							{toast.title}
 						</div>
 						{#if toast.body}
-							<div class="truncate text-sm text-white/60">{toast.body}</div>
+							<div class="line-clamp-2 text-sm text-white/60">{toast.body}</div>
+						{/if}
+						{#if toast.imageUrl}
+							<img
+								src={toast.imageUrl}
+								alt=""
+								class="mt-2 max-h-32 w-full rounded-lg object-cover"
+							/>
 						{/if}
 					</div>
-				</div>
+					<XMark
+						class="mt-0.5 size-5 shrink-0 cursor-pointer text-white/45 transition-all duration-150 hover:scale-[1.05] hover:text-white/80 active:scale-[0.97]"
+						onpointerdown={(e) => e.stopPropagation()}
+						onclick={() => handleButtonDismiss(toast.id)}
+					/>
+				</LiquidGlass>
 			{/each}
 		</div>
 	{:else}
 		<!-- desktop: top-right stack like macOS -->
 		<div class="fixed top-6 right-6 z-60 flex w-80 flex-col gap-2">
 			{#each toasts as toast (toast.id)}
-				<div
-					role="button"
-					tabindex="0"
-					class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl border border-white/8 bg-black/60 px-4 py-3 text-left shadow-lg shadow-black/20 backdrop-blur-xl select-none"
-					style={toastStyle(toast.id)}
-					in:fly={{ x: 200, duration: 300, easing: cubicOut }}
-					onpointerdown={(e) => onPointerDown(toast.id, e)}
-					onpointermove={(e) => onPointerMove(toast.id, e)}
-					onpointerup={() => onPointerUp(toast.id)}
-					onpointercancel={() => onPointerCancel(toast.id)}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							onClick?.(toast.id)
-							startDismiss(toast.id)
-						}
-					}}
-				>
-					<div
-						class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10"
+				<div in:fly={{ x: 200, duration: 300, easing: cubicOut }}>
+					<LiquidGlass
+						class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20 select-none"
+						style={toastStyle(toast.id)}
+						role="button"
+						tabindex="0"
+						onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
+						onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
+						onpointerup={() => onPointerUp(toast.id)}
+						onpointercancel={() => onPointerCancel(toast.id)}
+						onkeydown={(e: KeyboardEvent) => {
+							if (e.key === 'Enter') {
+								onClick?.(toast.id)
+								startDismiss(toast.id)
+							}
+						}}
 					>
-						{#if toast.iconUrl}
-							<img
-								src={toast.iconUrl}
-								alt=""
-								class="h-5 w-5 rounded-full object-cover"
-							/>
-						{:else}
-							<AppNotification class="h-4 w-4 text-white/80" />
-						{/if}
-					</div>
-					<div class="min-w-0 flex-1">
-						<div class="truncate text-sm font-semibold text-white/90">
-							{toast.title}
-						</div>
-						{#if toast.body}
-							<div class="truncate text-sm text-white/60">{toast.body}</div>
-						{/if}
-					</div>
-					<button
-						type="button"
-						aria-label="dismiss"
-						class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/40 transition-colors hover:text-white/70"
-						onpointerdown={(e) => e.stopPropagation()}
-						onclick={() => handleButtonDismiss(toast.id)}
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10"
 						>
-							<path d="M18 6L6 18M6 6l12 12" />
-						</svg>
-					</button>
+							{#if toast.iconUrl}
+								<img
+									src={toast.iconUrl}
+									alt=""
+									class="h-5 w-5 rounded-full object-cover"
+								/>
+							{:else}
+								<AppNotification class="h-4 w-4 text-white/80" />
+							{/if}
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="truncate text-sm font-semibold text-white/90">
+								{toast.title}
+							</div>
+							{#if toast.body}
+								<div class="line-clamp-2 text-sm text-white/60">{toast.body}</div>
+							{/if}
+							{#if toast.imageUrl}
+								<img
+									src={toast.imageUrl}
+									alt=""
+									class="mt-2 max-h-32 w-full rounded-lg object-cover"
+								/>
+							{/if}
+						</div>
+						<XMark
+							class="mt-0.5 size-5 shrink-0 cursor-pointer text-white/45 transition-all duration-150 hover:scale-[1.05] hover:text-white/80 active:scale-[0.97]"
+							onpointerdown={(e) => e.stopPropagation()}
+							onclick={() => handleButtonDismiss(toast.id)}
+						/>
+					</LiquidGlass>
 				</div>
 			{/each}
 		</div>
