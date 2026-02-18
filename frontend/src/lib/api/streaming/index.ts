@@ -23,6 +23,7 @@ export {
 export {
 	EventStreamClient,
 	eventStreamClient,
+	type ConnectionStatus,
 	type StreamEvent,
 	type StreamMessage,
 } from './eventStream.svelte'

@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { eventStreamClient } from '$lib/api/streaming'
 	import '$lib/styles/liquid-glass.css'
 	import { getUserInitials } from '$lib/utils'
 	import { onMount } from 'svelte'
 	import { scale } from 'svelte/transition'
+	import ConnectionIndicator from './ConnectionIndicator.svelte'
 	import UserProfilePanel from './UserProfilePanel.svelte'
 
 	interface UserProfileTriggerProps {
@@ -49,6 +51,7 @@
 	})
 	const isHeaderPlacement = $derived(placement === 'header')
 	const safeUser = $derived(user ?? { name: 'not signed in', email: '', avatar: null })
+	const wsStatus = $derived(eventStreamClient.state.status)
 </script>
 
 <div class="user-profile-trigger-container {isHeaderPlacement ? '' : 'mt-auto'}">
@@ -63,26 +66,34 @@
 		aria-label="User Profile"
 		aria-expanded={isOpen}
 	>
-		{#if safeUser.avatar}
-			<img
-				src={safeUser.avatar}
-				alt={safeUser.name}
-				class="{isExpanded
-					? 'h-10 w-10'
-					: 'h-9 w-9'} shrink-0 rounded-full transition-all duration-200"
-			/>
-		{:else}
-			<div
-				class="{isHeaderPlacement
-					? 'h-10 w-10 text-[0.875rem]'
-					: isExpanded
+		<span
+			class="relative inline-flex shrink-0"
+			style={isHeaderPlacement ? '--avatar-size: 2.5rem;' : ''}
+		>
+			{#if safeUser.avatar}
+				<img
+					src={safeUser.avatar}
+					alt={safeUser.name}
+					class="{isExpanded
+						? 'h-10 w-10'
+						: 'h-9 w-9'} shrink-0 rounded-full transition-all duration-200"
+				/>
+			{:else}
+				<div
+					class="{isHeaderPlacement
 						? 'h-10 w-10 text-[0.875rem]'
-						: 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
-				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
-			>
-				{getUserInitials(safeUser.name)}
-			</div>
-		{/if}
+						: isExpanded
+							? 'h-10 w-10 text-[0.875rem]'
+							: 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
+					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
+				>
+					{getUserInitials(safeUser.name)}
+				</div>
+			{/if}
+			{#if isHeaderPlacement}
+				<ConnectionIndicator status={wsStatus} />
+			{/if}
+		</span>
 		{#if isExpanded}
 			<div
 				class="flex min-w-0 flex-col text-left opacity-0 transition-opacity delay-100 duration-300 {isExpanded

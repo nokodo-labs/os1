@@ -1,9 +1,16 @@
 /**
- * WebSocket client for real-time event streaming.
+ * Enterprise-grade WebSocket client for real-time event streaming.
  * WS /v1/events/stream
  *
  * Authentication: uses httpOnly refresh_token cookie (auto-sent by browser).
  * No token in URL for security (avoids logging/history exposure).
+ *
+ * Reliability features:
+ * - infinite reconnect with exponential backoff + jitter (never gives up)
+ * - heartbeat ping every 15s with pong timeout (detects dead connections)
+ * - automatic reconnect on network recovery (navigator.onLine)
+ * - automatic reconnect on tab focus (visibilitychange)
+ * - clean state machine: disconnected → connecting → connected ↔ reconnecting
  *
  * Native Svelte 5 rune-based state (no svelte/store).
  */
@@ -46,15 +53,32 @@ export interface StreamEvent extends StreamMessage {
 
 type EventHandler = (message: StreamMessage) => void
 
+/** how often to send a heartbeat ping (ms) */
+const PING_INTERVAL_MS = 15_000
+/** how long to wait for pong before considering connection dead (ms) */
+const PONG_TIMEOUT_MS = 10_000
+/** minimum reconnect delay (ms) */
+const RECONNECT_BASE_MS = 500
+/** maximum reconnect delay (ms) */
+const RECONNECT_MAX_MS = 30_000
+/** after this many consecutive failures, we slow-tick but never stop */
+const RECONNECT_SLOW_THRESHOLD = 20
+
 export class EventStreamClient {
 	private ws: WebSocket | null = null
 	private isConnected = false
 	private reconnectAttempts = 0
-	private maxReconnectAttempts = 10
 	private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null
 	private pingIntervalId: ReturnType<typeof setInterval> | null = null
+	private pongTimeoutId: ReturnType<typeof setTimeout> | null = null
 	private handlers = new SvelteSet<EventHandler>()
 	private intentionalDisconnect = false
+	private awaitingPong = false
+	private connecting = false
+
+	// browser event handlers (bound so we can remove them)
+	private readonly onOnline = () => this.handleNetworkOnline()
+	private readonly onVisibilityChange = () => this.handleVisibilityChange()
 
 	readonly state = $state({
 		status: 'disconnected' as ConnectionStatus,
@@ -82,12 +106,14 @@ export class EventStreamClient {
 		this.isConnected = true
 		this.intentionalDisconnect = false
 		this.reconnectAttempts = 0
+		this.addBrowserListeners()
 		void this.doConnect()
 	}
 
 	disconnect(): void {
 		this.intentionalDisconnect = true
 		this.cleanup()
+		this.removeBrowserListeners()
 		this.isConnected = false
 		this.state.status = 'disconnected'
 	}
@@ -103,32 +129,45 @@ export class EventStreamClient {
 			try {
 				this.ws.send(JSON.stringify(message))
 			} catch {
-				//TODO: handle send failure
+				// send failure. pong timeout will catch dead connections
 			}
 		}
 	}
 
-	private async doConnect(): Promise<void> {
-		if (!this.isConnected) return
+	// connection lifecycle
 
-		this.state.status = this.state.status === 'disconnected' ? 'connecting' : 'reconnecting'
+	private async doConnect(): Promise<void> {
+		if (!this.isConnected || this.connecting) return
+		this.connecting = true
+
+		this.state.status = this.reconnectAttempts === 0 ? 'connecting' : 'reconnecting'
 
 		try {
 			this.ws = new WebSocket(await this.buildWsUrl())
 		} catch {
+			this.connecting = false
 			this.scheduleReconnect()
 			return
 		}
 
 		this.ws.onopen = () => {
+			this.connecting = false
 			this.state.status = 'connected'
 			this.reconnectAttempts = 0
+			this.awaitingPong = false
 			this.startPing()
 		}
 
 		this.ws.onmessage = (event) => {
 			try {
 				const message = JSON.parse(event.data) as StreamMessage
+
+				// handle pong: clear the pong timeout
+				if (message.type === 'stream.pong' || message.type === 'pong') {
+					this.awaitingPong = false
+					this.clearPongTimeout()
+				}
+
 				this.state.lastEvent = message
 				this.handlers.forEach((h) => h(message))
 			} catch {
@@ -137,7 +176,10 @@ export class EventStreamClient {
 		}
 
 		this.ws.onclose = (event) => {
+			this.connecting = false
 			this.stopPing()
+			this.clearPongTimeout()
+
 			if (event.code === 4001 || event.code === 4003) {
 				// 4001 = unauthorized, 4003 = origin not allowed
 				this.state.status = 'disconnected'
@@ -151,22 +193,31 @@ export class EventStreamClient {
 			}
 		}
 
-		this.ws.onerror = () => {}
+		this.ws.onerror = () => {
+			// errors always trigger onclose — no action needed here
+		}
 	}
+
+	// ── reconnect (infinite with exponential backoff + jitter) ──────────────────
 
 	private scheduleReconnect(): void {
 		if (this.intentionalDisconnect) return
-		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-			this.state.status = 'disconnected'
-			return
-		}
 
 		this.state.status = 'reconnecting'
 		this.reconnectAttempts++
 
-		const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000)
-		this.reconnectTimeoutId = setTimeout(() => this.doConnect(), delay)
+		// exponential backoff: 500, 1000, 2000, … capped at 30s
+		// after many failures, lock to max delay (slow-tick, never stop)
+		const exp = Math.min(this.reconnectAttempts - 1, RECONNECT_SLOW_THRESHOLD)
+		const base = Math.min(RECONNECT_BASE_MS * Math.pow(2, exp), RECONNECT_MAX_MS)
+		// add ±25% jitter to prevent thundering herd
+		const jitter = base * (0.75 + Math.random() * 0.5)
+		const delay = Math.round(jitter)
+
+		this.reconnectTimeoutId = setTimeout(() => void this.doConnect(), delay)
 	}
+
+	// ── heartbeat (ping / pong timeout) ───────────────────────────────────────
 
 	private startPing(): void {
 		this.stopPing()
@@ -174,11 +225,13 @@ export class EventStreamClient {
 			if (this.ws?.readyState === WebSocket.OPEN) {
 				try {
 					this.ws.send(JSON.stringify({ type: 'ping' }))
+					this.awaitingPong = true
+					this.startPongTimeout()
 				} catch {
-					// ignore
+					// send failed — pong timeout will catch it
 				}
 			}
-		}, 30000)
+		}, PING_INTERVAL_MS)
 	}
 
 	private stopPing(): void {
@@ -188,8 +241,70 @@ export class EventStreamClient {
 		}
 	}
 
+	private startPongTimeout(): void {
+		this.clearPongTimeout()
+		this.pongTimeoutId = setTimeout(() => {
+			if (this.awaitingPong) {
+				// server didn't respond — consider connection dead
+				this.forceReconnect()
+			}
+		}, PONG_TIMEOUT_MS)
+	}
+
+	private clearPongTimeout(): void {
+		if (this.pongTimeoutId) {
+			clearTimeout(this.pongTimeoutId)
+			this.pongTimeoutId = null
+		}
+	}
+
+	/** forcibly tear down current socket and reconnect immediately */
+	private forceReconnect(): void {
+		if (this.intentionalDisconnect || !this.isConnected) return
+		this.cleanup()
+		this.scheduleReconnect()
+	}
+
+	// ── browser event listeners (network recovery, tab focus) ───────────────
+
+	private addBrowserListeners(): void {
+		if (typeof window === 'undefined') return
+		window.addEventListener('online', this.onOnline)
+		document.addEventListener('visibilitychange', this.onVisibilityChange)
+	}
+
+	private removeBrowserListeners(): void {
+		if (typeof window === 'undefined') return
+		window.removeEventListener('online', this.onOnline)
+		document.removeEventListener('visibilitychange', this.onVisibilityChange)
+	}
+
+	private handleNetworkOnline(): void {
+		if (!this.isConnected || this.intentionalDisconnect) return
+		if (this.ws?.readyState === WebSocket.OPEN) return
+		// network just came back — reconnect immediately
+		this.reconnectAttempts = 0
+		this.cleanup()
+		void this.doConnect()
+	}
+
+	private handleVisibilityChange(): void {
+		if (document.visibilityState !== 'visible') return
+		if (!this.isConnected || this.intentionalDisconnect) return
+		if (this.ws?.readyState === WebSocket.OPEN) return
+		// tab became visible and socket is not open — reconnect immediately
+		this.reconnectAttempts = 0
+		this.cleanup()
+		void this.doConnect()
+	}
+
+	// ── cleanup ─────────────────────────────────────────────────────────────
+
 	private cleanup(): void {
 		this.stopPing()
+		this.clearPongTimeout()
+		this.awaitingPong = false
+		this.connecting = false
 		if (this.reconnectTimeoutId) {
 			clearTimeout(this.reconnectTimeoutId)
 			this.reconnectTimeoutId = null
