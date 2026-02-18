@@ -59,9 +59,9 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	me_data = me_resp.json()
 	assert me_data["email"] == user_payload["email"]
 
+	client.cookies.set("nokodo:refresh_token", refresh_cookie)
 	refresh_resp = await client.post(
 		"/v1/auth/refresh",
-		cookies={"nokodo:refresh_token": refresh_cookie},
 		headers={"Origin": "http://localhost:888"},
 	)
 	assert refresh_resp.status_code == 200
