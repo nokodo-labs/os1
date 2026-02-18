@@ -390,7 +390,7 @@
 	     exactly during the view transition (the main shell's padding is bypassed). -->
 	<div class="absolute inset-0 flex flex-col">
 		<!-- scrollable content area -->
-		<div class="min-h-0 flex-1 overflow-y-auto">
+		<div class="min-h-0 flex-1 overflow-y-auto" style="scrollbar-gutter: stable;">
 			<div
 				class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: 96px;"
@@ -461,7 +461,12 @@
 		</div>
 
 		<!-- bottom input (absolute bottom, matching chat page layout) -->
-		<div class="absolute right-0 bottom-0 left-0 z-10 shrink-0 pt-4 pb-4">
+		<div
+			class="absolute right-0 bottom-0 left-0 z-10 shrink-0 pt-4 {device.virtualKeyboardOpen &&
+			device.isMobile
+				? 'pb-2'
+				: 'pb-6'}"
+		>
 			<div
 				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
@@ -496,13 +501,17 @@
 			class="mx-auto flex w-full flex-1 flex-col pb-2 {device.isMobile ? '' : 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 		>
-			<!-- top spacer: pushes content toward vertical center -->
-			<div class="flex-[0.6]"></div>
+			<!-- top spacer: pushes content toward vertical center (hidden when keyboard open) -->
+			{#if !(device.virtualKeyboardOpen && device.isMobile)}
+				<div class="flex-[0.6]"></div>
+			{/if}
 
-			<!-- greeting -->
+			<!-- greeting: takes remaining space when keyboard open to center between Island and input -->
 			<div
 				style="view-transition-name: landing-greeting;"
-				class="mb-12 flex flex-col items-center justify-center gap-2 text-center"
+				class="{device.virtualKeyboardOpen && device.isMobile
+					? 'flex-1 justify-end'
+					: ''} mb-12 flex flex-col items-center justify-center gap-2 text-center"
 			>
 				<h1 class="text-4xl font-medium text-white">
 					hi <span
@@ -527,28 +536,43 @@
 				/>
 			</div>
 
-			<!-- apps grid: flex-1 fills remaining vertical space -->
-			<div
-				style="view-transition-name: apps-grid;"
-				class="relative min-h-0 flex-1 {device.isMobile ? 'mt-6' : 'mt-14'}"
-			>
-				<AppsGrid iconShape={debugUi.appsGridIconShape} fullWidth={device.isMobile} />
+			{#if device.virtualKeyboardOpen && device.isMobile}
+				<!-- suggestions: shown below input in normal flow when keyboard is open -->
+				<HomeSuggestions
+					open={showSuggestions}
+					query={inputValue}
+					{suggestions}
+					{highlightedIndex}
+					onHighlight={(i) => {
+						highlightedIndex = i
+						isSuggestionNavigationActive = true
+					}}
+					onSelect={selectSuggestion}
+				/>
+			{:else}
+				<!-- apps grid: shown when virtual keyboard is closed -->
+				<div
+					style="view-transition-name: apps-grid;"
+					class="relative min-h-0 flex-1 {device.isMobile ? 'mt-6' : 'mt-14'}"
+				>
+					<AppsGrid iconShape={debugUi.appsGridIconShape} fullWidth={device.isMobile} />
 
-				<!-- suggestions overlay: sits on TOP of apps grid -->
-				<div class="absolute top-0 right-0 left-0 z-20 -mt-10">
-					<HomeSuggestions
-						open={showSuggestions}
-						query={inputValue}
-						{suggestions}
-						{highlightedIndex}
-						onHighlight={(i) => {
-							highlightedIndex = i
-							isSuggestionNavigationActive = true
-						}}
-						onSelect={selectSuggestion}
-					/>
+					<!-- suggestions overlay: sits on TOP of apps grid -->
+					<div class="absolute top-0 right-0 left-0 z-20 -mt-10">
+						<HomeSuggestions
+							open={showSuggestions}
+							query={inputValue}
+							{suggestions}
+							{highlightedIndex}
+							onHighlight={(i) => {
+								highlightedIndex = i
+								isSuggestionNavigationActive = true
+							}}
+							onSelect={selectSuggestion}
+						/>
+					</div>
 				</div>
-			</div>
+			{/if}
 		</div>
 	</div>
 {/if}

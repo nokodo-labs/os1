@@ -3,6 +3,7 @@
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Stop from '$lib/components/icons/Stop.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { scale } from 'svelte/transition'
 
 	interface ChatInputProps {
@@ -130,6 +131,19 @@
 		isComposing = false
 	}
 
+	/**
+	 * on mobile, touching a button outside the textarea triggers the browser's
+	 * built-in "blur on touch elsewhere" before any click/pointer events fire.
+	 * touchstart fires FIRST in the event pipeline — calling preventDefault()
+	 * here stops the browser from ever initiating the focus transfer, so the
+	 * textarea keeps focus and the virtual keyboard stays up.
+	 */
+	function keepFocusOnTouch(e: TouchEvent) {
+		if (device.virtualKeyboardOpen) {
+			e.preventDefault()
+		}
+	}
+
 	function handleFormSubmit(event: SubmitEvent) {
 		event.preventDefault()
 		handleSubmit()
@@ -235,6 +249,7 @@
 							type="button"
 							aria-label="stop generating"
 							class="rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
+							ontouchstart={keepFocusOnTouch}
 							onclick={onStop}
 						>
 							<Stop class="h-3.5 w-3.5" />
@@ -249,6 +264,7 @@
 								? 'hover:brightness-110'
 								: 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
 							disabled={value.trim() === '' || disabled}
+							ontouchstart={keepFocusOnTouch}
 						>
 							<ArrowUp class="h-5 w-5" strokeWidth="2" />
 						</button>

@@ -13,6 +13,9 @@
 
 :root {
 	--radius-container-base: 2.5rem;
+	/* dynamic app height: defaults to 100dvh (adapts to browser chrome).
+	   overridden to visualViewport.height by device store when virtual keyboard is open. */
+	--app-height: 100dvh;
 	/* Island chrome offset: container top padding + Island height + container bottom padding.
 	   used by pages that need content to clear the sticky Island (e.g., chat). */
 	--chrome-island-offset: calc(clamp(12px, 4vw, 32px) + 88px + 16px);
@@ -145,6 +148,16 @@
 		overscroll-behavior: none;
 	}
 
+	/* when the virtual keyboard is open, lock html + body to the visible
+	   viewport so the user can't scroll into the dead space below.
+	   overflow:clip (not hidden) prevents scrolling without creating a new
+	   scroll container — internal overflow-y-auto areas keep working. */
+	html.virtual-keyboard-open,
+	html.virtual-keyboard-open body {
+		height: var(--app-height, 100dvh);
+		overflow: clip;
+	}
+
 	* {
 		@apply border-border outline-ring/50;
 	}
@@ -177,6 +190,12 @@
 		@apply active:scale-[0.97];
 		-webkit-tap-highlight-color: transparent;
 		user-select: none;
+	}
+
+	/* app viewport height: uses --app-height which adapts to
+	   browser chrome (100dvh) and virtual keyboard (visualViewport) */
+	.h-app {
+		height: var(--app-height, 100dvh);
 	}
 
 	/* subtle variant: lighter active state for small elements */

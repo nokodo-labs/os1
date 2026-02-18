@@ -327,24 +327,24 @@
 			adminEmail={settingsState.data?.branding?.admin_email ?? null}
 		/>
 	{:else if isAuthRoute}
-		<div class="relative z-1 flex h-screen">
+		<div class="h-app relative z-1 flex">
 			<div class="relative flex min-w-0 flex-1 flex-col">
 				{@render children()}
 			</div>
 		</div>
 	{:else}
-		<div class="relative z-1 flex h-screen">
+		<div class="h-app relative z-1 flex">
 			{#if isChatSwipeEligibleRoute}
 				<!-- sidebar (fixed; desktop reserves a rail, mobile uses overlay) -->
 				<ChatSidebar />
 				<div
-					class="h-screen shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
+					class="h-full shrink-0 transition-[width] duration-300 ease-in-out {sidebarSpacerWidthClass}"
 				></div>
 			{/if}
 
 			{#if hasLeftLayoutInset && !device.isMobile && chrome.layout.leftWidthClass}
 				<!-- generic left layout inset spacer (master/detail scaffolds render the actual sidebar) -->
-				<div class="h-screen shrink-0 {chrome.layout.leftWidthClass}"></div>
+				<div class="h-full shrink-0 {chrome.layout.leftWidthClass}"></div>
 			{/if}
 
 			<!-- main content -->

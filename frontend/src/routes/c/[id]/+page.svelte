@@ -284,6 +284,7 @@
 		const streamingContent = chat.streamingAssistant?.content ?? ''
 		const optimisticContent = chat.optimisticUserMessage?.content ?? ''
 		const blocksCount = chat.runBlocks.length
+		const keyboardOpen = device.virtualKeyboardOpen
 		void streamingContent
 		void optimisticContent
 		void blocksCount
@@ -293,6 +294,12 @@
 			chat.initialScrollDone = true
 			void chat.queueScrollToBottom('auto')
 			return
+		}
+
+		// when the virtual keyboard opens/closes the viewport shrinks/grows;
+		// re-pin to bottom so the latest messages stay visible.
+		if (keyboardOpen && chat.autoScroll) {
+			void chat.queueScrollToBottom('auto')
 		}
 
 		// keep pinned to bottom when user was already there. covers both
@@ -333,7 +340,7 @@
 
 	<div
 		class="relative flex-1 overflow-y-auto"
-		style="view-transition-name: thread-body;"
+		style="view-transition-name: thread-body; scrollbar-gutter: stable;"
 		bind:this={chat.scrollContainer}
 		onscroll={chat.handleScroll}
 	>
@@ -652,7 +659,13 @@
 		{/if}
 	</div>
 
-	<div class="absolute right-0 bottom-0 left-0 z-10 pt-4 pb-5" bind:this={chat.inputOverlay}>
+	<div
+		class="absolute right-0 bottom-0 left-0 z-10 pt-4 {device.virtualKeyboardOpen &&
+		device.isMobile
+			? 'pb-2'
+			: 'pb-6'}"
+		bind:this={chat.inputOverlay}
+	>
 		<div
 			class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"

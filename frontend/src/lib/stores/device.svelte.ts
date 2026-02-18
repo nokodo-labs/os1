@@ -72,6 +72,10 @@ export const device = $state({
 	browserName: '',
 	isChromium: false,
 	pwaInstalled: false,
+
+	// virtual keyboard state (mobile only)
+	virtualKeyboardOpen: false,
+	virtualKeyboardHeight: 0,
 })
 
 type Cleanup = () => void
@@ -81,6 +85,42 @@ let cleanup: Cleanup | null = null
 let rafId: number | null = null
 let dprMql: MediaQueryList | null = null
 let dprCleanup: Cleanup | null = null
+
+// virtual keyboard detection state
+let keyboardBaselineHeight = 0
+let keyboardBaselineWidth = 0
+
+/** input types that trigger the virtual keyboard on mobile */
+const KEYBOARD_INPUT_TYPES = new Set([
+	'text',
+	'email',
+	'number',
+	'password',
+	'search',
+	'tel',
+	'url',
+	'date',
+	'datetime-local',
+	'month',
+	'time',
+	'week',
+])
+
+/**
+ * check whether the currently focused element would trigger a virtual keyboard.
+ * uses a whitelist of known keyboard-triggering input types so unknown/new
+ * types default to "no keyboard" (safe) instead of false positives.
+ */
+function isEditableElementFocused(): boolean {
+	const el = document.activeElement
+	if (!el) return false
+	if (el instanceof HTMLTextAreaElement) return true
+	if (el instanceof HTMLElement && el.isContentEditable) return true
+	if (el instanceof HTMLInputElement) {
+		return KEYBOARD_INPUT_TYPES.has(el.type.toLowerCase())
+	}
+	return false
+}
 
 function addMqListener(mq: MediaQueryList, handler: () => void) {
 	if ('addEventListener' in mq) {
@@ -115,6 +155,8 @@ function resetDeviceState() {
 	device.browserName = ''
 	device.isChromium = false
 	device.pwaInstalled = false
+	device.virtualKeyboardOpen = false
+	device.virtualKeyboardHeight = 0
 }
 
 /**
@@ -397,6 +439,39 @@ function syncFromWindow(
 	const maxTouchPoints = navigator.maxTouchPoints || 0
 	device.isTouch = device.isCoarsePointer || (maxTouchPoints > 0 && !device.hasHover)
 	device.ready = true
+
+	// virtual keyboard detection
+	const vvHeight = window.visualViewport?.height ?? window.innerHeight
+
+	// reset baseline on orientation change (width shift > 100px)
+	if (Math.abs(window.innerWidth - keyboardBaselineWidth) > 100) {
+		keyboardBaselineHeight = vvHeight
+		keyboardBaselineWidth = window.innerWidth
+	}
+
+	// baseline ratchets up when viewport grows (keyboard closing, address bar hiding)
+	if (vvHeight > keyboardBaselineHeight) {
+		keyboardBaselineHeight = vvHeight
+	}
+
+	const kbDiff = keyboardBaselineHeight - vvHeight
+	const kbOpen = device.isMobile && kbDiff > 150 && isEditableElementFocused()
+
+	device.virtualKeyboardOpen = kbOpen
+	device.virtualKeyboardHeight = kbOpen ? Math.round(kbDiff) : 0
+
+	// drive layout height via CSS custom property:
+	// when keyboard is open, shrink to the actual visible area;
+	// otherwise, remove the override and let the CSS default (100dvh) apply.
+	if (kbOpen) {
+		document.documentElement.style.setProperty('--app-height', `${Math.round(vvHeight)}px`)
+	} else {
+		document.documentElement.style.removeProperty('--app-height')
+	}
+
+	// prevent overscrolling past the visible area when keyboard is open.
+	// the class locks html/body overflow via CSS.
+	document.documentElement.classList.toggle('virtual-keyboard-open', kbOpen)
 }
 
 function scheduleSync(syncNow: () => void) {
@@ -432,6 +507,10 @@ export function initDevice(): void {
 
 	const syncNow = () => syncFromWindow(mqMobile, mqCoarsePointer, mqHover)
 	const onEvent = () => scheduleSync(syncNow)
+
+	// set keyboard baseline before first sync
+	keyboardBaselineHeight = window.visualViewport?.height ?? window.innerHeight
+	keyboardBaselineWidth = window.innerWidth
 
 	// initial sync before any components read values
 	syncNow()
@@ -488,6 +567,10 @@ export function destroyDevice(): void {
 	cleanup?.()
 	cleanup = null
 	didInit = false
+	keyboardBaselineHeight = 0
+	keyboardBaselineWidth = 0
+	document.documentElement.style.removeProperty('--app-height')
+	document.documentElement.classList.remove('virtual-keyboard-open')
 	resetDeviceState()
 }
 
