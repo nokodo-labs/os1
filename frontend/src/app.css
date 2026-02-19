@@ -148,16 +148,6 @@
 		overscroll-behavior: none;
 	}
 
-	/* when the virtual keyboard is open, lock html + body to the visible
-	   viewport so the user can't scroll into the dead space below.
-	   overflow:clip (not hidden) prevents scrolling without creating a new
-	   scroll container — internal overflow-y-auto areas keep working. */
-	html.virtual-keyboard-open,
-	html.virtual-keyboard-open body {
-		height: var(--app-height, 100dvh);
-		overflow: clip;
-	}
-
 	* {
 		@apply border-border outline-ring/50;
 	}

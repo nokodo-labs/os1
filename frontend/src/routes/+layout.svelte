@@ -351,7 +351,7 @@
 			<div
 				class="main-content-shell relative flex min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
 				role="main"
-				style="touch-action: pan-y;"
+				style="touch-action: pan-y; overscroll-behavior-y: contain;"
 				bind:this={mainContentShell}
 				onpointerdown={onMainPointerDown}
 				onpointermove={onMainPointerMove}
