@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
+from api.core.database import AsyncSessionLocal
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
@@ -86,32 +87,34 @@ class SendNotificationTool(Tool[AppContext]):
 				__agent_context__,
 			)
 
-		session = ctx.session
 		agent_id = str(ctx.agent_id) if ctx.agent_id else None
 		thread_id = str(ctx.thread_id) if ctx.thread_id else None
 
-		if target_user_id:
-			target_user_ids = [str(target_user_id)]
-		elif ctx.thread_id is not None:
-			target_user_ids = await list_accessible_user_ids(
-				ResourceType.THREAD,
-				str(ctx.thread_id),
-				session,
-			)
-		else:
-			return self.error(
-				"no recipients: provide user_id or run inside a thread",
-				__agent_context__,
-			)
+		# use an isolated session to avoid dirtying the shared request session.
+		# if any DB operation fails, only this session is affected.
+		async with AsyncSessionLocal() as tool_session:
+			if target_user_id:
+				target_user_ids = [str(target_user_id)]
+			elif ctx.thread_id is not None:
+				target_user_ids = await list_accessible_user_ids(
+					ResourceType.THREAD,
+					str(ctx.thread_id),
+					tool_session,
+				)
+			else:
+				return self.error(
+					"no recipients: provide user_id or run inside a thread",
+					__agent_context__,
+				)
 
-		# thread-scoped by default; user_id is opt-in for single-user targeting
-		notifications = await notification_service.send_agent_notification(
-			session,
-			title=title,
-			body=body,
-			agent_id=agent_id,
-			user_ids=target_user_ids,
-		)
+			# thread-scoped by default; user_id is opt-in for single-user targeting
+			notifications = await notification_service.send_agent_notification(
+				tool_session,
+				title=title,
+				body=body,
+				agent_id=agent_id,
+				user_ids=target_user_ids,
+			)
 
 		# emit tool event for chat UI (with first notification ID for reference)
 		first_notification_id = str(notifications[0].id) if notifications else None

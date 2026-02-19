@@ -7,6 +7,7 @@ import logging
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from api.core.database import AsyncSessionLocal
 from api.models.memory import Memory
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -93,8 +94,6 @@ class MemoryRecallTool(Tool[AppContext]):
 
 		# simple keyword-based search for now
 		# TODO: implement semantic search with embeddings
-		session = __app_context__.session
-
 		stmt = (
 			select(Memory)
 			.where(Memory.user_id == user_id)
@@ -102,8 +101,9 @@ class MemoryRecallTool(Tool[AppContext]):
 			.limit(limit)
 		)
 
-		result = await session.execute(stmt)
-		memories = list(result.scalars().all())
+		async with AsyncSessionLocal() as tool_session:
+			result = await tool_session.execute(stmt)
+			memories = list(result.scalars().all())
 
 		if not memories:
 			return self.success("no relevant memories found", __agent_context__)
@@ -158,7 +158,9 @@ class MemoryCreateTool(Tool[AppContext]):
 				content=input_memory.content,
 				category=input_memory.category,
 			)
-			__app_context__.session.add(new_memory)
+			async with AsyncSessionLocal() as tool_session:
+				tool_session.add(new_memory)
+				await tool_session.commit()
 
 		except Exception as e:
 			logger.error(f"failed to create memory: {str(e)}", exc_info=True)

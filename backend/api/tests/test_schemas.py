@@ -14,7 +14,7 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.message import MessageCreate
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
-from api.schemas.runs import ThreadRunRequest
+from api.schemas.runs import RunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
 from nokodo_ai.utils.typeid import new_typeid
@@ -131,19 +131,27 @@ def test_prompt_schema_none_and_blank_commands() -> None:
 		PromptCreate(command="   ", content="x")
 
 
-def test_thread_run_request_requires_agent_id() -> None:
-	"""agent_id is now required for thread run requests."""
+def test_run_request_requires_agent_id() -> None:
+	"""agent_id is required for run requests."""
 	with pytest.raises(ValueError):
-		ThreadRunRequest()  # type: ignore[call-arg]
+		RunRequest()  # type: ignore[call-arg]
 
-	req = ThreadRunRequest(agent_id=new_typeid("agent"))
+	req = RunRequest(agent_id=new_typeid("agent"))
 	assert req.agent_id is not None
-	assert req.stream is True
 	assert req.input is None
+	assert req.thread_id is None
+	assert req.stream is True
 
-	req_with_input = ThreadRunRequest(agent_id=new_typeid("agent"), input="hello")
-	assert req_with_input.stream is True
+	req_with_input = RunRequest(agent_id=new_typeid("agent"), input="hello")
 	assert req_with_input.input == "hello"
+
+	# ThreadCreateAndRunRequest
+	from api.schemas.runs import ThreadCreateAndRunRequest
+
+	car_req = ThreadCreateAndRunRequest(agent_id=new_typeid("agent"), input="hi")
+	assert car_req.is_temporary is False
+	assert car_req.tags == []
+	assert car_req.stream is True
 
 
 def test_thread_schema_defaults_for_flags() -> None:

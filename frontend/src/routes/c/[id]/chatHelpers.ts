@@ -34,6 +34,8 @@ export interface StreamingAssistantState {
 	timestamp: Date
 	senderAgentId: string | null
 	toolCalls: ToolCall[]
+	isError: boolean
+	errorMessage: string | null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

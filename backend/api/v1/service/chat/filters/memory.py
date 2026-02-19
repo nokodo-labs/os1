@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 from sqlalchemy import select
 
+from api.core.database import AsyncSessionLocal
 from api.models.memory import Memory
 from api.v1.service.chat.filters.base import Filter
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
@@ -62,8 +63,9 @@ class MemoryContextFilter(Filter):
 			.limit(self.max_memories)
 		)
 
-		result = await context.session.execute(stmt)
-		items = list(result.scalars().all())
+		async with AsyncSessionLocal() as tool_session:
+			result = await tool_session.execute(stmt)
+			items = list(result.scalars().all())
 		return [mem for mem in items if isinstance(mem, Memory)]
 
 	def _format_memory_context(self, memories: list[Memory]) -> str:

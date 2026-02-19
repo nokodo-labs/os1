@@ -172,7 +172,7 @@
 		}
 		if (
 			chat.isGenerating ||
-			chat.runError ||
+			chat.streamingAssistant !== null ||
 			chat.optimisticUserMessage !== null ||
 			selectedAgent.id === ''
 		)
@@ -351,7 +351,7 @@
 				chat.inputOverlayHeight + 24
 			)}px;"
 		>
-			{#if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.runError}
+			{#if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.streamingAssistant}
 				<div class="flex flex-1 items-center justify-center py-16">
 					<div class="max-w-md text-center">
 						<div
@@ -493,19 +493,23 @@
 									null}
 
 								<AssistantChatMessage
-									isLastMessage={i === chat.runBlocks.length - 1 &&
-										!chat.runError}
+									isLastMessage={i === chat.runBlocks.length - 1}
 									{siblingCount}
 									{currentSiblingIndex}
 									onPrevious={() => rootId && chat.switchBranch(rootId, 'prev')}
 									onNext={() => rootId && chat.switchBranch(rootId, 'next')}
-									content=""
+									content={isStreamingBlock && chat.streamingAssistant?.isError
+										? (chat.streamingAssistant.errorMessage ?? 'something went wrong')
+										: ''}
+									tone={isStreamingBlock && chat.streamingAssistant?.isError
+										? 'error'
+										: 'default'}
 									timestamp={firstAssistant
 										? chat.getMessageCreatedAt(firstAssistant)
 										: isStreamingBlock
 											? (chat.streamingAssistant?.timestamp ?? new Date())
 											: undefined}
-									isStreaming={Boolean(isStreamingBlock)}
+									isStreaming={Boolean(isStreamingBlock) && !chat.streamingAssistant?.isError}
 									isRunActive={chat.isGenerating}
 									showStreamingPlaceholder={false}
 									modelName={displayAgent
@@ -554,10 +558,10 @@
 														<MarkdownRenderer
 															content={chat.streamingAssistant
 																.content}
-															isStreaming={true}
+															isStreaming={!chat.streamingAssistant.isError}
 														/>
 													</div>
-												{:else if !chat.hasActiveStreamingToolCalls}
+												{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
 													<div
 														class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
 													>
@@ -607,36 +611,20 @@
 											>
 												<ArrowPath class="h-4 w-4" strokeWidth="2" />
 											</MessageActionButton>
+										{:else if chat.streamingAssistant?.isError}
+											<button
+												type="button"
+												class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-white/70 transition-colors hover:text-white/95"
+												onclick={() => chat.handleRegenerateMessage()}
+											>
+												retry
+											</button>
 										{/if}
 									{/snippet}
 								</AssistantChatMessage>
 							{/if}
 						</div>
 					{/each}
-
-					{#if chat.runError}
-						<div in:fade={{ duration: 200 }}>
-							<AssistantChatMessage
-								content={selectedAgent.id
-									? 'there was an error generating a response.'
-									: 'select an agent to generate a response.'}
-								modelName={chat.agentNameById.get(selectedAgent.id) ?? 'assistant'}
-								isLastMessage={true}
-								isRunActive={chat.isGenerating}
-								tone="error"
-							>
-								{#snippet actions()}
-									<button
-										type="button"
-										class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-white/70 transition-colors hover:text-white/95"
-										onclick={() => chat.handleRegenerateMessage()}
-									>
-										retry
-									</button>
-								{/snippet}
-							</AssistantChatMessage>
-						</div>
-					{/if}
 
 					<!-- streaming assistant is rendered within its run block -->
 

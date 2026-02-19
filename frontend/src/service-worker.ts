@@ -38,7 +38,13 @@ const PRECACHE_ASSETS = [
 const PRECACHE_SET = new Set(PRECACHE_ASSETS)
 
 // patterns that must never be cached
-const NETWORK_ONLY_PATTERNS = [/\/v1\/auth\//, /\/v1\/token/, /\/health$/, /\/v1\/openapi\.json$/]
+const NETWORK_ONLY_PATTERNS = [
+	/\/v1\/auth\//,
+	/\/v1\/token/,
+	/\/health$/,
+	/\/v1\/openapi\.json$/,
+	/\/runs\/[^/]+\/stream$/, // SSE streaming endpoints must never be cached
+]
 
 // static asset extensions eligible for cache-first
 const STATIC_ASSET_RE = /\.(png|jpg|jpeg|gif|webp|avif|svg|ico|woff2?|ttf|eot|otf)$/i

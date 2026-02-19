@@ -344,6 +344,15 @@ class RunStatusStore:
 		async with self._lock:
 			return [rs for rs in self._runs.values() if rs.state == RunState.RUNNING]
 
+	async def get_runs_for_user(self, user_id: str) -> list[RunStatus]:
+		"""get all active runs owned by a specific user."""
+		async with self._lock:
+			return [
+				rs
+				for rs in self._runs.values()
+				if rs.user_id == user_id and rs.state == RunState.RUNNING
+			]
+
 
 # module-level singleton
 run_status_store = RunStatusStore()

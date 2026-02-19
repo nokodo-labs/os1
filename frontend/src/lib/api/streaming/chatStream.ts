@@ -1,8 +1,10 @@
 /**
  * SSE client for chat run streaming.
- * POST /threads/{thread_id}/runs and /threads/create_and_run
+ * POST /runs — run on an existing thread (or ephemeral, not yet implemented).
+ * POST /threads/create_and_run — create a new thread and run immediately.
+ * GET  /runs/{runId}/stream — resume an active run.
  *
- * These types mirror backend schemas and SSE event payloads.
+ * these types mirror backend schemas and SSE event payloads.
  */
 
 import { getAccessToken } from '$lib/auth/session.svelte'
@@ -18,7 +20,7 @@ export interface RawSseFrame {
 
 // types
 
-/** Content part in a message. */
+/** content part in a message. */
 export interface ContentPart {
 	type: 'text' | 'image' | string
 	text?: string
@@ -26,7 +28,7 @@ export interface ContentPart {
 	[key: string]: unknown
 }
 
-/** Message structure returned by message_created event. */
+/** message structure returned by message_created event. */
 export interface StreamedMessage {
 	id: string
 	thread_id: string
@@ -70,7 +72,7 @@ export interface UnknownSseEvent {
 	rawData: string
 }
 
-/** Discriminated union for all SSE events from the chat stream. */
+/** discriminated union for all SSE events from the chat stream. */
 export type ChatStreamDelta =
 	| { event: 'delta'; data: AgentDeltaEnvelope }
 	| { event: 'message_created'; data: StreamedMessage }
@@ -276,19 +278,22 @@ export interface ChatStreamOptions {
 }
 
 /**
- * Async generator that yields typed SSE events from a chat run stream.
- * Handles 401 refresh transparently via sseUtils.
+ * async generator that yields typed SSE events from a chat run stream.
+ * posts to /v1/runs with a thread_id to continue an existing thread.
+ * handles 401 refresh transparently via sseUtils.
  */
 export async function* runChatStream(
 	opts: ChatStreamOptions
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
-	const url = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/runs`
+	const url = `${getApiBaseUrl()}/v1/runs`
 	const clientContext = preferences.data.privacy.useDeviceContext ? getClientContext() : null
 
 	const body: Record<string, unknown> = {
 		agent_id: opts.agentId,
+		thread_id: opts.threadId,
 		input: opts.input,
 		parent_id: opts.parentId,
+		stream: true,
 	}
 	if (clientContext) body.clientContext = clientContext
 
@@ -326,8 +331,8 @@ export interface CreateAndRunStreamOptions {
 
 /**
  * async generator that yields typed SSE events from a create_and_run stream.
- * the first event is always `thread_created` with the new thread data,
- * followed by normal run events (message_created, delta, done).
+ * posts to /v1/threads/create_and_run — the backend creates a thread
+ * and emits a ``thread_created`` event first, followed by normal run events.
  */
 export async function* runCreateAndRunStream(
 	opts: CreateAndRunStreamOptions
@@ -341,6 +346,7 @@ export async function* runCreateAndRunStream(
 		is_temporary: opts.isTemporary ?? false,
 		tags: opts.tags ?? [],
 		project_ids: opts.projectIds ?? [],
+		stream: true,
 	}
 	if (clientContext) body.clientContext = clientContext
 
@@ -362,20 +368,19 @@ export async function* runCreateAndRunStream(
 // resume run stream (GET-based SSE for re-joining an active run)
 
 export interface ResumeRunStreamOptions {
-	threadId: string
 	runId: string
 	signal?: AbortSignal
 }
 
 /**
  * async generator that yields typed SSE events from a resumed run stream.
- * connects to GET /threads/{threadId}/runs/{runId}/stream which replays
- * catchup frames followed by live deltas until the run completes.
+ * connects to GET /runs/{runId}/stream which replays catchup frames
+ * followed by live deltas until the run completes.
  */
 export async function* resumeRunStream(
 	opts: ResumeRunStreamOptions
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
-	const url = `${getApiBaseUrl()}/v1/threads/${opts.threadId}/runs/${opts.runId}/stream`
+	const url = `${getApiBaseUrl()}/v1/runs/${opts.runId}/stream`
 	const reader = await streamSseGet({ url, signal: opts.signal })
 	for await (const frame of readSseFrames(reader)) {
 		const { delta, terminal } = parseRunFrame(frame, KNOWN_RUN_EVENTS)

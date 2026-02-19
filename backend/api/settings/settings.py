@@ -135,6 +135,26 @@ class AIChatContextSettings(BaseModel):
 	)
 
 
+class AITaskSettings(BaseModel):
+	"""per-task model overrides for background AI tasks.
+
+	resolution order: per-task model_id → default_model_id → error.
+	"""
+
+	default_model_id: str | None = Field(
+		default=None,
+		description="fallback model id for all background tasks",
+	)
+	thread_metadata_model_id: str | None = Field(
+		default=None,
+		description="model for thread metadata generation (title, tags)",
+	)
+	input_autocomplete_model_id: str | None = Field(
+		default=None,
+		description="model for input autocomplete suggestions",
+	)
+
+
 class AISettings(BaseModel):
 	default_agent_id: str | None = Field(default=None, description="default agent id")
 	memory: AIMemorySettings = Field(
@@ -142,6 +162,9 @@ class AISettings(BaseModel):
 	)
 	chat_context: AIChatContextSettings = Field(
 		default_factory=AIChatContextSettings, description="chat context settings"
+	)
+	tasks: AITaskSettings = Field(
+		default_factory=AITaskSettings, description="background task model settings"
 	)
 
 

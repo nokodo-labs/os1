@@ -26,7 +26,7 @@ class Thought(BaseModel):
 	)
 	summary: str = Field(
 		...,
-		max_length=30,
+		max_length=50,
 		description=(
 			"a very brief summary of this thought, ideally 3-5 words. "
 			"used for display purposes in the UI to give users a quick "

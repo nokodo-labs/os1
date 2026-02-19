@@ -1,6 +1,6 @@
 /**
- * Manual types and clients for streaming endpoints not covered by OpenAPI codegen.
- * - SSE: /threads/{id}/runs, /threads/{id}/runs/{run_id}/stream
+ * manual types and clients for streaming endpoints not covered by OpenAPI codegen.
+ * - SSE: /runs (POST), /threads/create_and_run (POST), /runs/{run_id}/stream (GET)
  * - WebSocket: /events/stream
  */
 export {

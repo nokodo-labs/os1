@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
-from api.models.access_rule import AccessLevel, AccessRule
-from api.models.agent import Agent
+from api.models.access_rule import AccessRule
 from api.models.event import Event
 from api.models.message import Message
-from api.models.model import Model
 from api.models.thread import Thread
 from api.permissions import ResourceType
 from api.schemas.access_rule import (
@@ -27,7 +22,7 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
-from api.schemas.runs import ThreadCreateAndRunRequest, ThreadRunRequest
+from api.schemas.runs import ThreadCreateAndRunRequest
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.thread import (
 	Thread as ThreadSchema,
@@ -40,20 +35,11 @@ from api.schemas.thread import (
 	ThreadUpdate,
 )
 from api.v1.service import access_rules as access_rules_service
+from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import (
-	require_thread_access,
-	resource_access_predicate,
-)
-from api.v1.service.chat import run_agent as chat_run_agent
-from api.v1.service.chat.models import (
-	build_chat_model,
-	resolve_chat_model,
-)
-from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
-from nokodo_ai.utils.sse import sse_encode, sse_response
+from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -92,40 +78,30 @@ async def create_and_run(
 	client can capture the thread id. subsequent events are the normal run
 	events (message_created, delta, done).
 	"""
-	owner_id = TypeID(principal.user.id)
+	if not req.stream:
+		raise HTTPException(
+			status_code=status.HTTP_501_NOT_IMPLEMENTED,
+			detail="non-streaming runs are not yet implemented",
+		)
 
-	thread = await thread_service.create_thread(
-		ThreadCreate(
-			owner_id=owner_id,
-			is_temporary=req.is_temporary,
-			tags=req.tags,
-			project_ids=req.project_ids,
-		),
+	if not req.input:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail="input is required when creating a new thread",
+		)
+
+	stream = await runs_service.create_thread_and_run_stream(
 		db,
 		principal=principal,
+		agent_id=req.agent_id,
+		input=req.input,
+		is_temporary=req.is_temporary,
+		tags=req.tags,
+		project_ids=req.project_ids,
+		client_context=req.client_context,
 		origin_session_id=x_session_id,
 	)
-
-	thread_id = TypeID(thread.id)
-
-	async def _stream() -> AsyncIterator[bytes]:
-		# emit the newly created thread so the frontend knows the id
-		thread_schema = ThreadSchema.model_validate(thread)
-		yield sse_encode(event="thread_created", data=thread_schema)
-
-		# delegate to the normal run_agent generator
-		async for chunk in chat_run_agent(
-			thread_id,
-			req.agent_id,
-			db,
-			principal,
-			input=req.input,
-			client_context=req.client_context,
-			origin_session_id=x_session_id,
-		):
-			yield chunk
-
-	return sse_response(_stream())
+	return sse_response(stream)
 
 
 @router.get("", response_model=list[ThreadSchema])
@@ -194,46 +170,19 @@ async def generate_thread_metadata(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Thread:
-	"""Generate thread title/tags using an LLM.
+	"""generate thread title/tags using an LLM.
 
-	When replace is false, only fills in missing metadata.
+	uses the task model configured in settings (ai.tasks).
+	when replace is false, only fills in missing metadata.
 	"""
 	request = req or ThreadMetadataGenerateRequest()
-
-	if request.model_id is not None:
-		chat_model = await resolve_chat_model(
-			db,
-			model_id=request.model_id,
-		)
-	else:
-		stmt = (
-			select(Agent)
-			.options(selectinload(Agent.model).selectinload(Model.provider))
-			.where(Agent.model_id.isnot(None))
-			.order_by(Agent.created_at.desc())
-		)
-		if not principal.is_admin:
-			stmt = stmt.where(resource_access_predicate(principal, ResourceType.AGENT))
-		result = await db.execute(stmt)
-		agent = result.scalars().first()
-		if agent is None or agent.model is None:
-			raise HTTPException(
-				status_code=status.HTTP_409_CONFLICT,
-				detail="no agent with a configured model",
-			)
-		chat_model = build_chat_model(agent.model)
-
-	updated = await thread_service.generate_thread_metadata(
+	return await thread_service.generate_thread_metadata(
 		db,
 		thread_id=thread_id,
-		chat_model=chat_model,
 		principal=principal,
 		replace=request.replace,
 		origin_session_id=x_session_id,
 	)
-	if updated is not None:
-		return updated
-	return await thread_service.get_thread(thread_id, db, principal=principal)
 
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -373,75 +322,6 @@ async def delete_user_message_turn(
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
-
-
-@router.post("/{thread_id}/runs")
-async def run_thread(
-	thread_id: TypeID,
-	req: ThreadRunRequest,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-	x_session_id: SessionId = None,
-) -> StreamingResponse:
-	"""stream a thread run via sse events."""
-	# thread service checks thread access (EDITOR required for runs)
-	await require_thread_access(
-		str(thread_id), db, principal, required_level=AccessLevel.EDITOR
-	)
-	stream = chat_run_agent(
-		thread_id,
-		req.agent_id,
-		db,
-		principal,
-		input=req.input,
-		parent_id=req.parent_id,
-		client_context=req.client_context,
-		origin_session_id=x_session_id,
-	)
-	return sse_response(stream)
-
-
-@router.get("/{thread_id}/runs/{run_id}/stream")
-async def resume_run_stream(
-	thread_id: TypeID,
-	run_id: str,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> StreamingResponse:
-	"""resume an active agent run's SSE stream.
-
-	replays recorded SSE events from the run so far, then streams live
-	deltas until the run completes. returns 404 if the run doesn't exist
-	or has already finished.
-	"""
-	await require_thread_access(
-		str(thread_id), db, principal, required_level=AccessLevel.READER
-	)
-
-	result = await run_status_store.subscribe(run_id)
-	if result is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="run not found or already completed",
-		)
-
-	sse_log, live_queue = result
-
-	async def _stream() -> AsyncIterator[bytes]:
-		try:
-			# 1. replay recorded SSE frames (catchup)
-			for frame in sse_log:
-				yield frame
-			# 2. live frames until sentinel
-			while True:
-				frame = await live_queue.get()
-				if frame is None:
-					return
-				yield frame
-		finally:
-			await run_status_store.unsubscribe(run_id, live_queue)
-
-	return sse_response(_stream())
 
 
 @router.post("/{thread_id}/switch", response_model=ThreadSwitchResponse)

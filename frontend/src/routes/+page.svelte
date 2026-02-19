@@ -285,10 +285,8 @@
 		} catch (e) {
 			if (!controller.signal.aborted) {
 				chatStartError = e instanceof Error ? e.message : 'could not start chat. try again.'
-				inputValue = content
 			}
 			isGenerating = false
-			optimisticContent = null
 			createAndRunAbort = null
 		}
 	}
@@ -307,6 +305,7 @@
 		createAndRunAbort?.abort()
 		isGenerating = false
 		optimisticContent = null
+		chatStartError = null
 	}
 
 	function selectSuggestion(suggestion: HomeSuggestion) {
@@ -390,13 +389,16 @@
 	     exactly during the view transition (the main shell's padding is bypassed). -->
 	<div class="absolute inset-0 flex flex-col">
 		<!-- scrollable content area -->
-		<div class="min-h-0 flex-1 overflow-y-auto" style="scrollbar-gutter: stable; overscroll-behavior-y: contain;">
+		<div
+			class="min-h-0 flex-1 overflow-y-auto"
+			style="scrollbar-gutter: stable; overscroll-behavior-y: contain;"
+		>
 			<div
 				class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: 96px;"
 			>
 				{#if optimisticContent}
-					<!-- optimistic chat: user message + loading assistant -->
+					<!-- optimistic chat: user message + assistant (loading / error) -->
 					<div class="flex flex-1 flex-col gap-6 py-4">
 						<div class="space-y-3">
 							<UserChatMessage
@@ -408,10 +410,11 @@
 						</div>
 						<div class="space-y-3">
 							<AssistantChatMessage
-								content=""
+								content={chatStartError ?? ''}
+								tone={chatStartError ? 'error' : 'default'}
 								isLastMessage={true}
-								isRunActive={true}
-								isStreaming={true}
+								isRunActive={!chatStartError && isGenerating}
+								isStreaming={!chatStartError && isGenerating}
 								showStreamingPlaceholder={false}
 								modelName={agents.list.find((a) => a.id === selectedAgent.id)
 									?.name ?? 'assistant'}
@@ -419,13 +422,29 @@
 									?.profile_image_url ?? null}
 							>
 								{#snippet lead()}
-									<div
-										class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
-									>
-										<div class="my-3">
-											<ChatGptLoadingIndicator />
+									{#if !chatStartError}
+										<div
+											class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
+										>
+											<div class="my-3">
+												<ChatGptLoadingIndicator />
+											</div>
 										</div>
-									</div>
+									{/if}
+								{/snippet}
+								{#snippet actions()}
+									{#if chatStartError}
+										<button
+											type="button"
+											class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-white/70 transition-colors hover:text-white/95"
+											onclick={() => {
+												chatStartError = null
+												optimisticContent = null
+											}}
+										>
+											dismiss
+										</button>
+									{/if}
 								{/snippet}
 							</AssistantChatMessage>
 						</div>
@@ -471,13 +490,6 @@
 				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 			>
-				{#if chatStartError}
-					<div
-						class="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70"
-					>
-						{chatStartError}
-					</div>
-				{/if}
 				<div style="view-transition-name: chat-input;">
 					<ChatInput
 						bind:value={inputValue}

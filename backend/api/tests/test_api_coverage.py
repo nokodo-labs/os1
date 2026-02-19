@@ -11,6 +11,7 @@ from api.models.message import MessageType as MessageTypeORM
 from api.schemas.message import MessageCreate
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
+from api.v1.routers import runs as runs_router
 from api.v1.routers import threads as threads_router
 from api.v1.service import authorization, prompt_runtime
 from api.v1.service import chat as chat_service
@@ -319,19 +320,6 @@ async def test_threads_router_delegates(monkeypatch):
 		_return_access_rules,
 	)
 
-	# patch the chat runner for /threads/{id}/runs (streaming-only)
-	async def _chat_run_agent(*_args, **_kwargs):
-		if False:
-			yield b""
-
-	monkeypatch.setattr(threads_router, "chat_run_agent", _chat_run_agent)
-
-	# patch require_thread_access (run_thread calls this before chat)
-	async def _no_op_access(*_args, **_kwargs):
-		pass
-
-	monkeypatch.setattr(threads_router, "require_thread_access", _no_op_access)
-
 	created = await threads_router.create_thread(
 		SimpleNamespace(owner_id="u"),
 		principal=principal,
@@ -351,18 +339,6 @@ async def test_threads_router_delegates(monkeypatch):
 	posted = await threads_router.create_message(
 		"t",
 		SimpleNamespace(type=None),
-		principal=principal,
-		db=None,
-	)
-	run_resp = await threads_router.run_thread(
-		new_typeid("thread"),
-		SimpleNamespace(
-			agent_id=new_typeid("agent"),
-			stream=True,
-			input=None,
-			parent_id=None,
-			client_context=None,
-		),
 		principal=principal,
 		db=None,
 	)
@@ -387,11 +363,40 @@ async def test_threads_router_delegates(monkeypatch):
 	assert branch == [fake_message]
 	assert tree == [fake_message]
 	assert posted is fake_message
-	assert run_resp.media_type == "text/event-stream"
-	assert run_resp.headers.get("X-Accel-Buffering") == "no"
 	assert switched.current_message_id is not None
 	assert rule_list == ["rule"]
 	assert rule_set == ["rule"]
+
+
+@pytest.mark.asyncio
+async def test_runs_router_delegates(monkeypatch):
+	principal = _FakePrincipal()
+
+	async def _fake_stream():
+		if False:
+			yield b""
+
+	async def _fake_start_thread_run(*_args, **_kwargs):
+		return _fake_stream()
+
+	monkeypatch.setattr(
+		runs_router.runs_service, "start_thread_run", _fake_start_thread_run
+	)
+
+	run_resp = await runs_router.create_run(
+		SimpleNamespace(
+			agent_id=new_typeid("agent"),
+			thread_id=new_typeid("thread"),
+			input=None,
+			parent_id=None,
+			client_context=None,
+			stream=True,
+		),
+		principal=principal,
+		db=None,
+	)
+	assert run_resp.media_type == "text/event-stream"
+	assert run_resp.headers.get("X-Accel-Buffering") == "no"
 
 
 @pytest.mark.asyncio

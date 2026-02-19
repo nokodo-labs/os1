@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -18,6 +19,9 @@ from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_sdk_adapter_config(
@@ -230,3 +234,44 @@ async def resolve_embedding_model(
 	if model is None:
 		raise HTTPException(status_code=404, detail="model not found")
 	return build_embedding_model(model)
+
+
+async def resolve_task_chat_model(
+	session: AsyncSession,
+	task: str,
+) -> ChatModel:
+	"""resolve the chat model for a background task from settings.
+
+	resolution: per-task model_id → default_model_id → error.
+	"""
+	from api.settings.settings import settings
+
+	task_settings = settings.ai.tasks
+
+	model_id_str: str | None = None
+	if task == "thread_metadata":
+		model_id_str = task_settings.thread_metadata_model_id
+	elif task == "input_autocomplete":
+		model_id_str = task_settings.input_autocomplete_model_id
+
+	if model_id_str is None:
+		model_id_str = task_settings.default_model_id
+
+	if model_id_str is None:
+		raise ValueError(
+			f"no task model configured for '{task}' — "
+			"set ai.tasks.default_model_id or a per-task override in settings"
+		)
+
+	model_typeid = TypeID(model_id_str)
+	stmt = (
+		select(Model)
+		.options(selectinload(Model.provider))
+		.where(Model.id == model_typeid)
+	)
+	result = await session.execute(stmt)
+	model = result.scalars().one_or_none()
+	if model is None:
+		raise ValueError(f"task model not found: {model_id_str}")
+
+	return build_chat_model(model)

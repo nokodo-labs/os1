@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 from datetime import UTC, datetime
 from typing import overload
 
@@ -12,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.database import AsyncSessionLocal
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -34,13 +37,18 @@ from api.v1.service.authorization import (
 	require_thread_access,
 	thread_access_predicate,
 )
-from api.v1.service.chat.models import run_chat_model_json_schema
+from api.v1.service.chat.models import (
+	resolve_task_chat_model,
+	run_chat_model_json_schema,
+)
 from api.v1.service.sorting import SortDir, apply_sort
-from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_admin_for_hidden(include_hidden: bool, principal: Principal) -> None:
@@ -66,116 +74,126 @@ class _ThreadMetadataOut(BaseModel):
 
 
 async def generate_thread_metadata(
-	session: AsyncSession,
+	session: AsyncSession | None = None,
 	*,
 	thread_id: TypeID,
-	chat_model: ChatModel,
-	principal: Principal | None = None,
+	principal: Principal,
 	replace: bool = False,
 	emit_event: bool = True,
 	origin_session_id: str | None = None,
-) -> Thread | None:
-	"""generate thread metadata and persist via update_thread.
+) -> Thread:
+	"""generate thread metadata (title/tags) and persist via update_thread.
 
-	when replace is false, only fills missing fields (title/tags).
+	when *replace* is false, only fills missing fields.
+	when *session* is ``None`` (fire-and-forget), an independent session is
+	created automatically.
+
+	raises on failure — never returns ``None``.
 	"""
-	if principal is not None:
+	async with contextlib.AsyncExitStack() as stack:
+		if session is None:
+			session = await stack.enter_async_context(AsyncSessionLocal())
+
+		# auth: caller must have admin-level access on the thread
 		await require_thread_access(
 			str(thread_id),
 			session,
 			principal,
-			required_level=AccessLevel.EDITOR,
+			required_level=AccessLevel.ADMIN,
 		)
 
-	thread = await session.get(
-		Thread,
-		thread_id,
-		options=[
-			selectinload(Thread.messages),
-		],
-	)
-	if not thread or thread.deleted_at or thread.is_temporary:
-		return None
+		chat_model = await resolve_task_chat_model(session, "thread_metadata")
 
-	existing_title = (thread.title or "").strip()
-	has_title = existing_title != ""
-	has_tags = bool(thread.tags) and len(thread.tags) > 0
-	should_update_title = replace or not has_title
-	should_update_tags = replace or not has_tags
-	if not should_update_title and not should_update_tags:
-		return None
+		thread = await session.get(
+			Thread,
+			thread_id,
+			options=[
+				selectinload(Thread.messages),
+				selectinload(Thread.projects),
+			],
+		)
+		if not thread or thread.deleted_at or thread.is_temporary:
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="thread not found or not eligible for metadata generation",
+			)
 
-	messages = sorted(thread.messages or [], key=lambda m: m.created_at)
-	first_user = next((m for m in messages if m.type == MessageType.USER), None)
-	first_assistant = next(
-		(m for m in messages if m.type == MessageType.ASSISTANT), None
-	)
-	if not first_assistant:
-		return None
+		existing_title = (thread.title or "").strip()
+		has_title = existing_title != ""
+		has_tags = bool(thread.tags) and len(thread.tags) > 0
+		should_update_title = replace or not has_title
+		should_update_tags = replace or not has_tags
+		if not should_update_title and not should_update_tags:
+			return thread
 
-	def extract_text(msg: Message | None) -> str:
-		if not msg:
+		messages = sorted(thread.messages or [], key=lambda m: m.created_at)
+		first_user = next((m for m in messages if m.type == MessageType.USER), None)
+		first_assistant = next(
+			(m for m in messages if m.type == MessageType.ASSISTANT), None
+		)
+		if not first_assistant:
+			raise HTTPException(
+				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				detail="cannot generate metadata: no assistant message in thread",
+			)
+
+		def extract_text(msg: Message | None) -> str:
+			if not msg:
+				return ""
+			for part in msg.content or []:
+				if isinstance(part, dict) and part.get("type") == "text":
+					return str(part.get("text", ""))[:500]
 			return ""
-		for part in msg.content or []:
-			if isinstance(part, dict) and part.get("type") == "text":
-				return str(part.get("text", ""))[:500]
-		return ""
 
-	payload = {
-		"user": extract_text(first_user),
-		"assistant": extract_text(first_assistant),
-	}
+		payload = {
+			"user": extract_text(first_user),
+			"assistant": extract_text(first_assistant),
+		}
 
-	sdk_thread = SDKThread(
-		messages=[
-			SDKSystemMessage.from_text(
-				"generate thread metadata. "
-				"title must be: one emoji + 1-3 lowercase words. "
-				"tags: 0-6 short lowercase labels. return only valid json."
+		sdk_thread = SDKThread(
+			messages=[
+				SDKSystemMessage.from_text(
+					"generate thread metadata. "
+					"title must be: one emoji + 1-3 lowercase words. "
+					"tags: 0-6 short lowercase labels. return only valid json."
+				),
+				SDKUserMessage.from_text(json.dumps(payload)),
+			]
+		)
+
+		data = await run_chat_model_json_schema(
+			chat_model,
+			thread=sdk_thread,
+			json_schema=_ThreadMetadataOut.model_json_schema(),
+		)
+		out = _ThreadMetadataOut.model_validate(data)
+
+		desired_title = out.title.strip().lower() or None
+		desired_tags = out.tags[:6]
+
+		update_in = ThreadUpdate(
+			title=(
+				desired_title
+				if should_update_title and desired_title != thread.title
+				else None
 			),
-			SDKUserMessage.from_text(json.dumps(payload)),
-		]
-	)
+			tags=(
+				desired_tags
+				if should_update_tags and desired_tags != (thread.tags or [])
+				else None
+			),
+		)
+		if update_in.title is None and update_in.tags is None:
+			return thread
 
-	data = await run_chat_model_json_schema(
-		chat_model,
-		thread=sdk_thread,
-		json_schema=_ThreadMetadataOut.model_json_schema(),
-	)
-	out = _ThreadMetadataOut.model_validate(data)
-
-	desired_title = out.title.strip().lower() or None
-	desired_tags = out.tags[:6]
-
-	update_in = ThreadUpdate(
-		title=(
-			desired_title
-			if should_update_title and desired_title != thread.title
-			else None
-		),
-		tags=(
-			desired_tags
-			if should_update_tags and desired_tags != (thread.tags or [])
-			else None
-		),
-	)
-	if update_in.title is None and update_in.tags is None:
-		return None
-
-	if principal is None:
-		owner = thread.owner or await session.get(User, thread.owner_id)
-		if owner is None:
-			return None
-		principal = Principal(user=owner, group_ids=(), permissions=frozenset())
-
-	return await update_thread(
-		thread_id,
-		update_in,
-		session,
-		principal=principal,
-		emit_event=emit_event,
-		origin_session_id=origin_session_id,
-	)
+		return await update_thread(
+			thread_id,
+			update_in,
+			session,
+			principal=principal,
+			emit_event=emit_event,
+			origin_session_id=origin_session_id,
+		)
 
 
 @overload

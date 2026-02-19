@@ -29,6 +29,7 @@ engine = create_async_engine(
 	boot_settings.DATABASE_URL,
 	echo=boot_settings.DEBUG,
 	future=True,
+	pool_pre_ping=True,
 )
 
 # Create async session factory

@@ -19,6 +19,7 @@ from api.v1.routers import (
 	providers,
 	reminders,
 	roles,
+	runs,
 	settings,
 	tasks,
 	threads,
@@ -31,6 +32,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(threads.router)
+api_router.include_router(runs.router)
 api_router.include_router(tasks.router)
 api_router.include_router(events.router)
 api_router.include_router(notifications.router)

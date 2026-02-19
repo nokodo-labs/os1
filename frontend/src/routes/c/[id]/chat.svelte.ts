@@ -67,7 +67,6 @@ export function createChatState() {
 	let streamingAssistantParentId = $state<string | null>(null)
 	let viewingStreamingBranch = $state(true)
 	let streamingLeafId = $state<string | null>(null)
-	let runError = $state(false)
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
 
@@ -149,7 +148,7 @@ export function createChatState() {
 	})
 
 	const hasRenderableMessages = $derived(
-		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null || runError
+		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null
 	)
 
 	const agentNameById = $derived(buildAgentLookup(agents.list, (a) => a.name))
@@ -633,6 +632,8 @@ export function createChatState() {
 							timestamp: new SvelteDate(),
 							senderAgentId: selectedAgent.id,
 							toolCalls: [],
+							isError: false,
+							errorMessage: null,
 						}
 						if (!messageTree.has(messageId)) {
 							const now = new SvelteDate().toISOString()
@@ -731,6 +732,8 @@ export function createChatState() {
 								timestamp: new SvelteDate(),
 								senderAgentId: streaming.senderAgentId,
 								toolCalls: [],
+								isError: false,
+								errorMessage: null,
 							}
 						} else {
 							streamingAssistant = null
@@ -852,22 +855,27 @@ export function createChatState() {
 			timestamp: new SvelteDate(),
 			senderAgentId: selectedAgent.id,
 			toolCalls: [],
+			isError: false,
+			errorMessage: null,
 		}
 		rebuildRunBlocks()
 
 		try {
 			await consumeStream(stream, { runId, threadId, parentId: currentLeafId })
 			if (runId !== activeRun) return
-			runError = false
 			optimisticUserMessage = null
 			streamingAssistant = null
 			rebuildRunBlocks()
 			syncCacheAfterRun()
 		} catch (e) {
 			console.error('failed to resume create_and_run stream', e)
-			runError = true
-			optimisticUserMessage = null
-			streamingAssistant = null
+			if (runId === activeRun && streamingAssistant) {
+				streamingAssistant = {
+					...streamingAssistant,
+					isError: true,
+					errorMessage: e instanceof Error ? e.message : 'something went wrong',
+				}
+			}
 			rebuildRunBlocks()
 		} finally {
 			if (runId === activeRun) isGenerating = false
@@ -881,12 +889,22 @@ export function createChatState() {
 		if (!thread) return
 		const runBaseMessage = trimmed
 		if (!selectedAgent) {
-			runError = true
 			lastRunInput = runBaseMessage
 			optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
+			viewingStreamingBranch = true
+			streamingAssistant = {
+				runId: null,
+				messageId: `pending-no-agent`,
+				content: '',
+				timestamp: new SvelteDate(),
+				senderAgentId: null,
+				toolCalls: [],
+				isError: true,
+				errorMessage: 'select an agent to generate a response.',
+			}
+			rebuildRunBlocks()
 			return
 		}
-		runError = false
 		lastRunInput = runBaseMessage
 		inputValue = ''
 		optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
@@ -902,6 +920,8 @@ export function createChatState() {
 			timestamp: new SvelteDate(),
 			senderAgentId: selectedAgent.id,
 			toolCalls: [],
+			isError: false,
+			errorMessage: null,
 		}
 		const runId = ++activeRun
 		rebuildRunBlocks()
@@ -919,16 +939,19 @@ export function createChatState() {
 				parentId: currentLeafId,
 			})
 			if (runId !== activeRun) return
-			runError = false
 			optimisticUserMessage = null
 			streamingAssistant = null
 			rebuildRunBlocks()
 			syncCacheAfterRun()
 		} catch (e) {
 			console.error('failed to run thread', e)
-			runError = true
-			optimisticUserMessage = null
-			streamingAssistant = null
+			if (runId === activeRun && streamingAssistant) {
+				streamingAssistant = {
+					...streamingAssistant,
+					isError: true,
+					errorMessage: e instanceof Error ? e.message : 'something went wrong',
+				}
+			}
 			rebuildRunBlocks()
 		} finally {
 			if (runId === activeRun) isGenerating = false
@@ -938,7 +961,6 @@ export function createChatState() {
 	async function handleRegenerateMessage(parentId: string | null = null) {
 		if (!thread) return
 		if (!selectedAgent.id) return
-		runError = false
 		isGenerating = true
 		viewingStreamingBranch = true
 		streamingLeafId = null
@@ -956,6 +978,8 @@ export function createChatState() {
 			timestamp: new SvelteDate(),
 			senderAgentId: selectedAgent.id,
 			toolCalls: [],
+			isError: false,
+			errorMessage: null,
 		}
 		const runId = ++activeRun
 		rebuildRunBlocks()
@@ -969,7 +993,6 @@ export function createChatState() {
 				parentId: resolvedParent,
 			})
 			if (runId !== activeRun) return
-			runError = false
 			optimisticUserMessage = null
 			streamingAssistant = null
 			streamingAssistantParentId = null
@@ -977,9 +1000,13 @@ export function createChatState() {
 			syncCacheAfterRun()
 		} catch (e) {
 			console.error('failed to retry run', e)
-			runError = true
-			streamingAssistant = null
-			streamingAssistantParentId = null
+			if (runId === activeRun && streamingAssistant) {
+				streamingAssistant = {
+					...streamingAssistant,
+					isError: true,
+					errorMessage: e instanceof Error ? e.message : 'something went wrong',
+				}
+			}
 			rebuildRunBlocks()
 		} finally {
 			if (runId === activeRun) isGenerating = false
@@ -1084,7 +1111,6 @@ export function createChatState() {
 			return false
 		}
 
-		runError = false
 		optimisticUserMessage = null
 		streamingAssistant = null
 		await loadTree(thread.id)
@@ -1105,7 +1131,6 @@ export function createChatState() {
 		isThreadLoading = false
 		hasLoadedBranch = false
 		// clear run state to prevent leaking to other chats
-		runError = false
 		optimisticUserMessage = null
 		streamingAssistant = null
 		streamingAssistantParentId = null
@@ -1291,10 +1316,11 @@ export function createChatState() {
 				timestamp: new SvelteDate(),
 				senderAgentId: agentId,
 				toolCalls: [],
+				isError: false,
+				errorMessage: null,
 			}
 
 			const stream = resumeRunStream({
-				threadId,
 				runId,
 				signal: ac.signal,
 			})
@@ -1396,9 +1422,6 @@ export function createChatState() {
 		},
 		get streamingAssistantParentId() {
 			return streamingAssistantParentId
-		},
-		get runError() {
-			return runError
 		},
 		get runBlocks() {
 			return runBlocks

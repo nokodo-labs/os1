@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -56,16 +56,19 @@ class ClientContext(BaseModel):
 	)
 
 
-class ThreadRunRequest(BaseModel):
-	"""
-	payload to run a thread with an agent,
-	optionally appending a new user message.
-	"""
+# base run fields shared across request types
+
+
+class _RunBase(BaseModel):
+	"""fields common to every run request."""
 
 	agent_id: TypeID
-	stream: Literal[True] = True
 	input: str | None = None
-	parent_id: TypeID | None = None
+	stream: bool = Field(
+		default=True,
+		description="when true (default) the response is an SSE stream; "
+		"when false a JSON response is returned (not yet implemented).",
+	)
 	client_context: ClientContext | None = Field(
 		default=None,
 		alias="clientContext",
@@ -73,36 +76,47 @@ class ThreadRunRequest(BaseModel):
 	)
 
 
-class ThreadCreateAndRunRequest(BaseModel):
-	"""payload to create a thread and immediately run it with an agent.
+# run request variants
 
-	combines thread creation + run initiation in a single request so the
-	frontend can start streaming without a separate thread-creation round-trip.
-	the SSE stream emits a ``thread_created`` event first with the new thread
-	data, followed by the normal run events (message_created, delta, done).
+
+class RunRequest(_RunBase):
+	"""POST /runs — run on an existing thread, or ephemeral (no thread).
+
+	when ``thread_id`` is present the run continues that thread.
+	when omitted the run is **ephemeral** — no thread is created or
+	persisted (not yet implemented).
+
+	``input`` is required for ephemeral runs and optional when continuing
+	an existing thread (omit for regeneration / retry).
 	"""
 
-	agent_id: TypeID
-	input: str
+	thread_id: TypeID | None = None
+	parent_id: TypeID | None = None
+
+
+class ThreadCreateAndRunRequest(_RunBase):
+	"""POST /threads/create_and_run — create a thread then run immediately.
+
+	``input`` is required (a new thread needs at least one user message).
+	the SSE stream emits a ``thread_created`` event before normal run events.
+	"""
+
 	is_temporary: bool = False
 	tags: list[str] = Field(default_factory=list)
 	project_ids: list[TypeID] = Field(default_factory=list)
-	client_context: ClientContext | None = Field(
-		default=None,
-		alias="clientContext",
-		description="optional device/environment context from the client",
-	)
+
+
+# response schemas
 
 
 class ThreadRunResponse(BaseModel):
-	"""
-	response containing all messages produced by a run.
+	"""response containing all messages produced by a run.
 
 	an agent run can produce multiple messages:
 	- assistant message with tool calls
 	- tool result messages
 	- more assistant messages
-	- ... repeat until final assistant message
+	- … repeat until final assistant message
 
 	the messages list contains all new messages produced during the run.
 	"""
@@ -110,3 +124,15 @@ class ThreadRunResponse(BaseModel):
 	thread_id: TypeID
 	user_message: Message | None = None
 	messages: list[Message]
+
+
+class ActiveRunOut(BaseModel):
+	"""lightweight snapshot of an in-memory active run."""
+
+	run_id: str
+	thread_id: str
+	agent_id: str
+	user_id: str
+	state: str
+	started_at: datetime
+	updated_at: datetime

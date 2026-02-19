@@ -31,12 +31,15 @@ async def test_thread_run_stream_headers(
 		if False:
 			yield b""
 
-	monkeypatch.setattr("api.v1.routers.threads.chat_run_agent", _stream)
+	async def _fake_start_thread_run(*_args, **_kwargs):
+		return _stream()
+
+	monkeypatch.setattr("api.v1.service.runs.chat_run_agent", _stream)
 
 	resp = await client.post(
-		f"/v1/threads/{thread_id}/runs",
+		"/v1/runs",
 		headers=headers,
-		json={"agent_id": new_typeid("agent"), "input": None},
+		json={"agent_id": new_typeid("agent"), "thread_id": thread_id, "input": None},
 	)
 	assert resp.status_code == 200
 	assert resp.headers.get("X-Accel-Buffering") == "no"
