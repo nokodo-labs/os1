@@ -104,7 +104,10 @@
 			{/if}
 		</div>
 
-		<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" aria-label="notifications">
+		<div
+			class="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto"
+			aria-label="notifications"
+		>
 			{#if !session.isLoggedIn}
 				<div class="rounded-pill bg-white/5 px-3 py-3 text-center text-sm text-white/50">
 					log in to see notifications
