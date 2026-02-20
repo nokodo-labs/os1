@@ -264,7 +264,7 @@
 			createAndRunAbort = null
 
 			// hand off the live generator so the chat page continues consuming
-			// the same stream — no abort, no duplicate run request.
+			// the same stream - no abort, no duplicate run request.
 			// thread_created was already consumed; remaining events are ChatStreamDelta.
 			chat.pendingCreateAndRun = {
 				threadId: thread.id,
@@ -275,7 +275,7 @@
 				>,
 			}
 
-			// navigate seamlessly — replaceState so back goes to home, not /?chat=new
+			// navigate seamlessly - replaceState so back goes to home, not /?chat=new
 			await goto(resolve(`/c/${thread.id}`), {
 				keepFocus: true,
 				noScroll: true,

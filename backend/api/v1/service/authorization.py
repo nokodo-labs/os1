@@ -311,7 +311,7 @@ async def list_accessible_user_ids(
 		)
 	)
 
-	# 6. role resource defaults — roles whose default_permissions
+	# 6. role resource defaults - roles whose default_permissions
 	#    grant sufficient access for this resource type
 	role_result = await session.execute(select(Role))
 	default_role_ids = [
@@ -326,7 +326,7 @@ async def list_accessible_user_ids(
 			)
 		)
 
-	# 7. global defaults — if the server-wide settings grant access,
+	# 7. global defaults - if the server-wide settings grant access,
 	#    every active user qualifies
 	global_level = settings.default_permissions.resource_access.get(resource_type)
 	if global_level is not None and _level_satisfies(global_level, required_level):

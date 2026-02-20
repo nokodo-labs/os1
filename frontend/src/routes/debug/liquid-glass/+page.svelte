@@ -5,7 +5,7 @@
 
 	const BG_IMAGE = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&q=80'
 
-	// --- tunable parameters (slider-driven, matching LiquidGlassFilter defaults) ---
+	// tunable parameters (slider-driven, matching LiquidGlassFilter defaults)
 	let bezelWidth = $state(44)
 	let thickness = $state(33)
 	let glassThickness = $state(140)

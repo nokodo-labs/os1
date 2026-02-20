@@ -1,15 +1,15 @@
 /**
- * background store — centralized resolver
+ * background store - centralized resolver
  *
  * single source of truth for the active background and static color.
  * resolves the final background based on (in priority order):
  *
- *   1. page-level override → any page can call `background.setPage(bg)`
+ *   1. page-level override -> any page can call `background.setPage(bg)`
  *   2. auto mode + device GPU tier:
- *        high  → darkveil
- *        mid   → lightrays
- *        low   → static (uses resolved static color)
- *   3. manual mode → user preference `appearance.background`
+ *        high  -> darkveil
+ *        mid   -> lightrays
+ *        low   -> static (uses resolved static color)
+ *   3. manual mode -> user preference `appearance.background`
  *
  * auth pages should use `background.auth` with `background.setPage` in an
  * `$effect` that returns `background.clearPage` for cleanup.
@@ -26,7 +26,7 @@ export const DEFAULT_STATIC_COLOR = '#171717'
 
 const DEFAULT_BACKGROUND: BackgroundType = 'lightrays'
 
-/** map GPU tier → default background for auto mode */
+/** map GPU tier -> default background for auto mode */
 const TIER_BACKGROUNDS: Record<string, BackgroundType> = {
 	high: 'darkveil',
 	mid: 'lightrays',
@@ -76,7 +76,7 @@ export const background = {
 		return _resolvedStaticColor
 	},
 
-	/** auth background from admin settings — use with `setPage` in auth pages */
+	/** auth background from admin settings - use with `setPage` in auth pages */
 	get auth() {
 		return _auth
 	},

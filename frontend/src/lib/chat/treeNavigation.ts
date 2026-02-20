@@ -1,5 +1,5 @@
 /**
- * message tree navigation — branch switching, leaf resolution, run user lookup.
+ * message tree navigation - branch switching, leaf resolution, run user lookup.
  */
 
 import { apiClient } from '$lib/api/client'

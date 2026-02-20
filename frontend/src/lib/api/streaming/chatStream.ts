@@ -1,8 +1,8 @@
 /**
  * SSE client for chat run streaming.
- * POST /runs — run on an existing thread (or ephemeral, not yet implemented).
- * POST /threads/create_and_run — create a new thread and run immediately.
- * GET  /runs/{runId}/stream — resume an active run.
+ * POST /runs - run on an existing thread (or ephemeral, not yet implemented).
+ * POST /threads/create_and_run - create a new thread and run immediately.
+ * GET  /runs/{runId}/stream - resume an active run.
  *
  * these types mirror backend schemas and SSE event payloads.
  */
@@ -331,7 +331,7 @@ export interface CreateAndRunStreamOptions {
 
 /**
  * async generator that yields typed SSE events from a create_and_run stream.
- * posts to /v1/threads/create_and_run — the backend creates a thread
+ * posts to /v1/threads/create_and_run - the backend creates a thread
  * and emits a ``thread_created`` event first, followed by normal run events.
  */
 export async function* runCreateAndRunStream(

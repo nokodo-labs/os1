@@ -135,7 +135,7 @@
 	/**
 	 * on mobile, touching a button outside the textarea triggers the browser's
 	 * built-in "blur on touch elsewhere" before any click/pointer events fire.
-	 * touchstart fires FIRST in the event pipeline — calling preventDefault()
+	 * touchstart fires FIRST in the event pipeline - calling preventDefault()
 	 * here stops the browser from ever initiating the focus transfer, so the
 	 * textarea keeps focus and the virtual keyboard stays up.
 	 */

@@ -1,4 +1,4 @@
-"""runs router — unified entry point for agent runs."""
+"""runs router - unified entry point for agent runs."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ async def create_run(
 		)
 		return sse_response(stream)
 
-	# ephemeral run — no thread_id
+	# ephemeral run - no thread_id
 	if not req.input:
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -178,9 +178,7 @@ def http_error_from_validation(err: PromptValidationError) -> HTTPException:
 	return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
 
 
-# ---------------------------------------------------------------------------
 # runtime prompt variable building
-# ---------------------------------------------------------------------------
 
 
 def _parse_preferences(user: User) -> UserPreferences:
@@ -302,10 +300,10 @@ def _build_date_variables(
 	utc_now = datetime.now(UTC)
 	variables: dict[str, object] = {}
 
-	# server time (UTC) — always available
+	# server time (UTC) - always available
 	variables.update(_build_date_set(utc_now, "server"))
 
-	# user time — only if client provides timezone
+	# user time - only if client provides timezone
 	user_now: datetime | None = None
 	if client_context and client_context.timezone:
 		try:
@@ -458,9 +456,7 @@ def build_prompt_variables(
 	return variables
 
 
-# ---------------------------------------------------------------------------
 # unified agent instruction rendering
-# ---------------------------------------------------------------------------
 
 
 async def render_agent_instructions(

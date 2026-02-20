@@ -16,7 +16,7 @@ export interface SpecularConfig {
 }
 
 /**
- * rounded rectangle SDF — returns signed distance and outward normal.
+ * rounded rectangle SDF - returns signed distance and outward normal.
  */
 function roundedRectSDF(
 	px: number,

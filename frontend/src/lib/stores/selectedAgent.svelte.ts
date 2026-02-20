@@ -30,7 +30,7 @@ class SelectedAgentStore {
 		if (agentList.length === 0) return ''
 		// already valid
 		if (this.id && agentList.some((a) => a.id === this.id)) return this.id
-		// admin default list — try each in order
+		// admin default list - try each in order
 		for (const defId of this.defaultIds) {
 			if (defId && agentList.some((a) => a.id === defId)) return defId
 		}

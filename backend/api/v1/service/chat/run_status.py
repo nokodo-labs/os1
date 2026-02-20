@@ -35,7 +35,7 @@ from nokodo_ai.utils.sse import sse_encode
 
 logger = logging.getLogger(__name__)
 
-# stale run TTL — auto-cleanup after this many seconds without updates
+# stale run TTL - auto-cleanup after this many seconds without updates
 _STALE_TTL_SECONDS = 600  # 10 minutes
 
 
@@ -102,7 +102,7 @@ class RunStatusStore:
 
 	thread-safe via asyncio.Lock. keyed by run_id.
 	a background cleanup task evicts orphaned runs after _STALE_TTL_SECONDS.
-	the cleanup loop starts lazily on first mutation — no external wiring needed.
+	the cleanup loop starts lazily on first mutation - no external wiring needed.
 
 	## pub/sub
 
@@ -131,7 +131,7 @@ class RunStatusStore:
 			try:
 				self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 			except RuntimeError:
-				# no running event loop yet — will be retried on next call
+				# no running event loop yet - will be retried on next call
 				pass
 
 	async def _cleanup_loop(self) -> None:
@@ -362,7 +362,7 @@ async def get_active_runs_signal(user_id: str) -> dict[str, Any] | None:
 	"""build a single WS signal listing active agent runs for the user.
 
 	returns a ready-to-send dict ``{type: 'runs.active', data: [...]}``
-	or None if there are no active runs.  this is NOT catchup data — it's
+	or None if there are no active runs.  this is NOT catchup data - it's
 	a lightweight pointer list so the client knows which runs to resume
 	via the SSE endpoint.
 	"""

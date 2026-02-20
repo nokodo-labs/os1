@@ -36,18 +36,14 @@ function buildCache(projects: Project[], fetchedAt: number): ProjectsCacheEntry 
 	return { data, fetchedAt }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // projects cache
-// ─────────────────────────────────────────────────────────────────────────────
 
 class ProjectsCache {
 	#cache = $state<ProjectsCacheEntry | null>(null)
 	#inFlight: Promise<Project[]> | null = null
 	#unsubscribe: (() => void) | null = null
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// event stream integration
-	// ─────────────────────────────────────────────────────────────────────────
 
 	init(): void {
 		if (!this.#unsubscribe) {
@@ -62,7 +58,7 @@ class ProjectsCache {
 
 	/**
 	 * handle incoming stream events for projects.
-	 * WS is the canonical source of truth — refetch on any project mutation.
+	 * WS is the canonical source of truth - refetch on any project mutation.
 	 */
 	#handleStreamEvent = (message: StreamMessage): void => {
 		if (PROJECT_EVENT_TYPES.includes(message.type)) {
@@ -74,9 +70,7 @@ class ProjectsCache {
 		return Date.now() - fetchedAt < CACHE_TTL_MS
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// reads
-	// ─────────────────────────────────────────────────────────────────────────
 
 	get list(): Project[] {
 		return this.#cache ? [...this.#cache.data.values()] : []
@@ -90,9 +84,7 @@ class ProjectsCache {
 		return this.#cache !== null && this.#isFresh(this.#cache.fetchedAt)
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// load
-	// ─────────────────────────────────────────────────────────────────────────
 
 	async load(options?: { force?: boolean }): Promise<Project[]> {
 		const force = options?.force ?? false
@@ -116,9 +108,7 @@ class ProjectsCache {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// mutations — return optimistic data for caller; WS delivers truth
-	// ─────────────────────────────────────────────────────────────────────────
+	// mutations - return optimistic data for caller; WS delivers truth
 
 	async create(params: ProjectCreate): Promise<Project | null> {
 		const { data, error } = await apiClient().POST('/projects', { body: params })
@@ -142,9 +132,7 @@ class ProjectsCache {
 		return !error
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// lifecycle
-	// ─────────────────────────────────────────────────────────────────────────
 
 	invalidate(): void {
 		this.#cache = null
@@ -155,9 +143,7 @@ class ProjectsCache {
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // singleton export
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const projects = new ProjectsCache()
 

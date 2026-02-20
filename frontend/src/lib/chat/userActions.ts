@@ -1,5 +1,5 @@
 /**
- * user-initiated chat actions — send, regenerate, stop, edit, delete.
+ * user-initiated chat actions - send, regenerate, stop, edit, delete.
  */
 
 import { apiClient } from '$lib/api/client'

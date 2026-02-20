@@ -109,9 +109,7 @@ class ResourceType(StrEnum):
 	REMINDER_LIST = "reminder_list"
 
 
-# ---------------------------------------------------------------------------
 # access-level rank helper
-# ---------------------------------------------------------------------------
 
 _LEVEL_RANK: dict[AccessLevel, int] = {
 	AccessLevel.READER: 0,
@@ -132,9 +130,7 @@ def higher_access(
 	return a if _LEVEL_RANK[a] >= _LEVEL_RANK[b] else b
 
 
-# ---------------------------------------------------------------------------
 # default resource access - typed model, one field per resource type
-# ---------------------------------------------------------------------------
 
 
 # resource types that support default resource access (user-owned content).

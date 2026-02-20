@@ -3,7 +3,7 @@
  *
  * Each ToolExecution is a deeply reactive object ($state). Components that
  * read `execution.status`, `execution.toolCall.arguments`, etc. will
- * automatically re-render when those values change — no manual tick counter
+ * automatically re-render when those values change - no manual tick counter
  * or {#key} block destruction needed.
  *
  * String argument fragments from streaming are accumulated in `rawArguments`
@@ -78,13 +78,13 @@ class ReactiveToolExecution {
  * Usage:
  * ```ts
  * const tracker = new ToolExecutionTracker()
- * // in template — reads are automatically tracked:
+ * // in template - reads are automatically tracked:
  * const exec = tracker.get(toolCallId)
  * // exec.status, exec.arguments, etc. are all reactive
  * ```
  */
 export class ToolExecutionTracker {
-	/** Reactive map — Svelte tracks .get(), .has(), iteration, etc. */
+	/** Reactive map - Svelte tracks .get(), .has(), iteration, etc. */
 	private readonly executions = new SvelteMap<string, ReactiveToolExecution>()
 
 	// ── registration ─────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ export class ToolExecutionTracker {
 	 *
 	 * Handles both:
 	 * - Object arguments (from finalized messages / API responses)
-	 * - String arguments (from streaming chunks — accumulated incrementally)
+	 * - String arguments (from streaming chunks - accumulated incrementally)
 	 */
 	registerToolCall(toolCall: ToolCall): void {
 		const existing = this.executions.get(toolCall.id)
@@ -106,7 +106,7 @@ export class ToolExecutionTracker {
 			// merge arguments
 			const incomingArgs = toolCall.arguments
 			if (typeof incomingArgs === 'string') {
-				// streaming string fragment — append
+				// streaming string fragment - append
 				existing.rawArguments += incomingArgs
 				existing.arguments = tryParseJson(existing.rawArguments)
 			} else if (Object.keys(incomingArgs).length > 0) {
@@ -203,7 +203,7 @@ export class ToolExecutionTracker {
 
 	/**
 	 * Get a reactive execution for a tool call.
-	 * The returned object is deeply reactive — reading any property in a
+	 * The returned object is deeply reactive - reading any property in a
 	 * Svelte template will create a fine-grained subscription.
 	 *
 	 * Returns `ToolExecution`-shaped object (the ReactiveToolExecution class
@@ -212,7 +212,7 @@ export class ToolExecutionTracker {
 	get(toolCallId: string): ToolExecution | undefined {
 		const exec = this.executions.get(toolCallId)
 		if (!exec) return undefined
-		// return the reactive object directly — components read $state fields
+		// return the reactive object directly - components read $state fields
 		return {
 			get toolCall() {
 				return {
@@ -296,7 +296,7 @@ export class ToolExecutionTracker {
 /**
  * Try to parse a (possibly incomplete) JSON string into an object.
  * Returns empty object if the string is unparseable.
- * Streaming chunks often produce partial JSON like `{"tho` — this
+ * Streaming chunks often produce partial JSON like `{"tho` - this
  * gracefully handles that case.
  */
 function tryParseJson(raw: string): Record<string, unknown> {
@@ -307,7 +307,7 @@ function tryParseJson(raw: string): Record<string, unknown> {
 			return parsed as Record<string, unknown>
 		}
 	} catch {
-		// partial JSON — attempt to extract complete key-value pairs
+		// partial JSON - attempt to extract complete key-value pairs
 		return extractPartialJsonFields(raw)
 	}
 	return {}
@@ -336,7 +336,7 @@ function extractPartialJsonFields(raw: string): Record<string, unknown> {
 		const valueStr = fullMatch.slice(colonIdx + 1).trim()
 
 		if (match[2] !== undefined) {
-			// string value — unescape
+			// string value - unescape
 			try {
 				result[key] = JSON.parse(match[2])
 			} catch {

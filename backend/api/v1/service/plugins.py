@@ -36,9 +36,7 @@ from nokodo_ai.utils.typeid import TypeID
 PluginTypeFilter = Literal["tool", "filter", "hook"] | None
 
 
-# ---------------------------------------------------------------------------
 # internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _build_native_info(
@@ -141,9 +139,7 @@ async def _ensure_name_available(
 		)
 
 
-# ---------------------------------------------------------------------------
 # public API
-# ---------------------------------------------------------------------------
 
 
 async def create_plugin(

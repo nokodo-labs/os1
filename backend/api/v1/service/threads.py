@@ -88,7 +88,7 @@ async def generate_thread_metadata(
 	when *session* is ``None`` (fire-and-forget), an independent session is
 	created automatically.
 
-	raises on failure — never returns ``None``.
+	raises on failure - never returns ``None``.
 	"""
 	async with contextlib.AsyncExitStack() as stack:
 		if session is None:

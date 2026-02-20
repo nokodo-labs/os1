@@ -18,7 +18,7 @@
 
 	let { toasts, onDismiss, onSwipeDismiss, onClick }: Props = $props()
 
-	// --- auto-dismiss (component-managed so exit animation plays) ---
+	// auto-dismiss (component-managed so exit animation plays)
 	const AUTO_DISMISS_MS = 12000
 	let dismissTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
 
@@ -47,7 +47,7 @@
 		}
 	})
 
-	// --- dismiss animation ---
+	// dismiss animation
 	let dismissing = $state<Record<string, 'up' | 'left' | 'right'>>({})
 
 	function startDismiss(id: string) {
@@ -66,7 +66,7 @@
 		}
 	}
 
-	// --- swipe / drag ---
+	// swipe / drag
 	const DRAG_THRESHOLD = 6
 	const SWIPE_THRESHOLD = 50
 

@@ -259,7 +259,7 @@ async def resolve_task_chat_model(
 
 	if model_id_str is None:
 		raise ValueError(
-			f"no task model configured for '{task}' — "
+			f"no task model configured for '{task}' - "
 			"set ai.tasks.default_model_id or a per-task override in settings"
 		)
 

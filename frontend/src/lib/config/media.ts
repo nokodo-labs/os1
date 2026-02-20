@@ -37,7 +37,7 @@ function resolve(
 	return null
 }
 
-/** resolved media URLs — reactive derivation from settings. */
+/** resolved media URLs - reactive derivation from settings. */
 export function getMediaUrls(): {
 	favicon: string | null
 	appleTouchIcon: string | null

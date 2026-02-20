@@ -203,7 +203,7 @@
 					<CardTitle>session</CardTitle>
 					<CardDescription>
 						{thread
-							? 'thread active — send messages below.'
+							? 'thread active - send messages below.'
 							: 'configure and create a thread.'}
 					</CardDescription>
 				</CardHeader>

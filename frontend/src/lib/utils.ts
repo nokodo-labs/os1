@@ -12,9 +12,7 @@ export type WithoutChildren<T> = T extends { children?: any } ? Omit<T, 'childre
 export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>
 export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null }
 
-// ────────────────────────────────────────────────────────────
 // object utilities
-// ────────────────────────────────────────────────────────────
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -58,9 +56,7 @@ export function deepMerge<T extends Record<string, unknown>>(
 	return out
 }
 
-// ────────────────────────────────────────────────────────────
 // string utilities
-// ────────────────────────────────────────────────────────────
 
 /** extract up to 2 uppercase initials from a display name. */
 export function getUserInitials(name: string): string {
@@ -72,9 +68,7 @@ export function getUserInitials(name: string): string {
 		.slice(0, 2)
 }
 
-// ────────────────────────────────────────────────────────────
 // function utilities
-// ────────────────────────────────────────────────────────────
 
 /** create a debounced version of `fn` that delays invocation by `delay` ms. */
 export function debounce<A extends unknown[]>(

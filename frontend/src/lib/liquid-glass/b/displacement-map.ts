@@ -133,7 +133,7 @@ function generateDisplacementMapInternal(
 	const maxDist = Math.min(width, height) / 2
 	const interiorWidth = Math.max(0, maxDist - bezelWidth)
 
-	// --- phase 1: bezel refraction profile [0 .. bezelWidth] ---
+	// phase 1: bezel refraction profile [0 .. bezelWidth]
 	const bezelProfile: number[] = []
 	for (let i = 0; i <= samples; i++) {
 		const distance = (i / samples) * bezelWidth
@@ -149,7 +149,7 @@ function generateDisplacementMapInternal(
 		bezelProfile.push(displacement)
 	}
 
-	// --- phase 2: interior lens profile [bezelWidth .. maxDist] ---
+	// phase 2: interior lens profile [bezelWidth .. maxDist]
 	// models a gentle convex dome in the flat glass body for magnification.
 	// quadratic ease-in (t²) ensures zero derivative at the boundary
 	// for a seamless C1-continuous join with the bezel profile.
@@ -162,7 +162,7 @@ function generateDisplacementMapInternal(
 		interiorProfile.push(magnitude)
 	}
 
-	// --- phase 3: global normalization (both profiles share one dynamic range) ---
+	// phase 3: global normalization (both profiles share one dynamic range)
 	let maxDisplacement = 0
 	for (const d of bezelProfile) maxDisplacement = Math.max(maxDisplacement, Math.abs(d))
 	for (const d of interiorProfile) maxDisplacement = Math.max(maxDisplacement, Math.abs(d))
@@ -171,7 +171,7 @@ function generateDisplacementMapInternal(
 	const normBezel = bezelProfile.map((d) => d / maxDisplacement)
 	const normInterior = interiorProfile.map((d) => d / maxDisplacement)
 
-	// --- phase 4: render unified displacement map ---
+	// phase 4: render unified displacement map
 	const canvas = document.createElement('canvas')
 	canvas.width = width
 	canvas.height = height

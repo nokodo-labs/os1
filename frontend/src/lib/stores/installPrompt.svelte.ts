@@ -104,5 +104,5 @@ export function destroyInstallPrompt(): void {
 	deferredPrompt = null
 	installPrompt.canInstall = false
 	installPrompt.dismissed = false
-	// intentionally leave isInstalled as-is — the app doesn't uninstall on HMR
+	// intentionally leave isInstalled as-is - the app doesn't uninstall on HMR
 }

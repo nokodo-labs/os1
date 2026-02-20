@@ -1,4 +1,4 @@
-"""runs service — orchestrates agent run lifecycle."""
+"""runs service - orchestrates agent run lifecycle."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ async def start_ephemeral_run(
 ) -> AsyncIterator[bytes]:
 	"""run a one-turn ephemeral inference (no persisted thread).
 
-	NOT IMPLEMENTED — placeholder for future work.
+	NOT IMPLEMENTED - placeholder for future work.
 	"""
 	raise HTTPException(
 		status_code=status.HTTP_501_NOT_IMPLEMENTED,

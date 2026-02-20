@@ -1,5 +1,5 @@
 /**
- * data loading — tool events, message ingestion, pagination, tree loading, cache sync.
+ * data loading - tool events, message ingestion, pagination, tree loading, cache sync.
  */
 
 import { apiClient } from '$lib/api/client'

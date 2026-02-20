@@ -83,9 +83,7 @@ async def delete_role(
 	await roles_service.delete_role(role_id, db, principal=principal)
 
 
-# ---------------------------------------------------------------------------
 # role members
-# ---------------------------------------------------------------------------
 
 
 @router.get("/{role_id}/members", response_model=list[UserSchema])

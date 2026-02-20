@@ -146,7 +146,7 @@ let settingsUnsub: (() => void) | null = null
 function handleSettingsEvent(message: StreamMessage): void {
 	if (message.type !== 'settings.updated') return
 
-	// settings updated (any session, including this one) — refetch
+	// settings updated (any session, including this one) - refetch
 	void loadSettings({ force: true })
 }
 

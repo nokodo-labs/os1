@@ -76,9 +76,7 @@ def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag,
 	}
 
 
-# ---------------------------------------------------------------------------
 # section models
-# ---------------------------------------------------------------------------
 
 
 class UISettings(BaseModel):
@@ -415,9 +413,7 @@ class SecuritySettings(BaseModel):
 		return v
 
 
-# ---------------------------------------------------------------------------
 # soft-delete section
-# ---------------------------------------------------------------------------
 
 
 class SoftDeleteSettings(BaseModel):
@@ -432,9 +428,7 @@ class SoftDeleteSettings(BaseModel):
 	files: bool = Field(default=True, description="soft-delete files")
 
 
-# ---------------------------------------------------------------------------
 # default permissions section
-# ---------------------------------------------------------------------------
 
 
 class DefaultPermissionsSettings(BaseModel):
@@ -466,9 +460,7 @@ class DefaultPermissionsSettings(BaseModel):
 		return strip_unknown_action_permissions(v)
 
 
-# ---------------------------------------------------------------------------
 # root settings
-# ---------------------------------------------------------------------------
 
 
 class Settings(BaseSettings):
@@ -530,8 +522,8 @@ class Settings(BaseSettings):
 	def reload(self) -> Self:
 		"""reload settings from all sources."""
 		new = Settings()
-		self.__dict__.update(new.__dict__)
-		self.__pydantic_fields_set__ = new.__pydantic_fields_set__
+		vars(self).update(vars(new))
+		self.__pydantic_fields_set__ = set(new.__pydantic_fields_set__)
 		return self
 
 	@classmethod

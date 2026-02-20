@@ -45,14 +45,12 @@
 	const canExpand = $derived(isBodyOverflowing || isTitleOverflowing || hasImage)
 
 	$effect(() => {
-		device.width
-		body
-		title
-		if (bodyMeasureRef) {
+		const shouldMeasure = device.width >= 0 || body.length >= 0 || title.length >= 0
+		if (bodyMeasureRef && shouldMeasure) {
 			expandedHeight = bodyMeasureRef.scrollHeight
 			isBodyOverflowing = expandedHeight > COLLAPSED_HEIGHT + 1
 		}
-		if (titleRef) {
+		if (titleRef && shouldMeasure) {
 			isTitleOverflowing = titleRef.scrollWidth > titleRef.clientWidth + 1
 		}
 	})

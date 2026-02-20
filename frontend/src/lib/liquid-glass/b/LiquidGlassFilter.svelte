@@ -17,7 +17,7 @@
 		refractionStrength?: number
 		/** normalized refraction strength for the flat interior (0-1) */
 		innerRefraction?: number
-		/** thickness of the flat glass body beyond the bezel (px) — main displacement control */
+		/** thickness of the flat glass body beyond the bezel (px) - main displacement control */
 		glassThickness?: number
 		/** gaussian blur radius applied before displacement (px) */
 		blurRadius?: number

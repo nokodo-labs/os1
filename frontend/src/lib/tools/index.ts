@@ -11,7 +11,7 @@
  * - Generic tools: rendered with a standard expandable tool call UI
  * - Tool events: real-time progress updates from tool execution
  * - Reactive tracking: ToolExecutionTracker uses Svelte 5 $state runes for
- *   fine-grained reactivity — no manual tick counters or {#key} blocks needed.
+ *   fine-grained reactivity - no manual tick counters or {#key} blocks needed.
  */
 
 import type { components } from '$lib/api/types'

@@ -194,7 +194,7 @@ export class EventStreamClient {
 		}
 
 		this.ws.onerror = () => {
-			// errors always trigger onclose — no action needed here
+			// errors always trigger onclose - no action needed here
 		}
 	}
 
@@ -228,7 +228,7 @@ export class EventStreamClient {
 					this.awaitingPong = true
 					this.startPongTimeout()
 				} catch {
-					// send failed — pong timeout will catch it
+					// send failed - pong timeout will catch it
 				}
 			}
 		}, PING_INTERVAL_MS)
@@ -245,7 +245,7 @@ export class EventStreamClient {
 		this.clearPongTimeout()
 		this.pongTimeoutId = setTimeout(() => {
 			if (this.awaitingPong) {
-				// server didn't respond — consider connection dead
+				// server didn't respond - consider connection dead
 				this.forceReconnect()
 			}
 		}, PONG_TIMEOUT_MS)
@@ -282,7 +282,7 @@ export class EventStreamClient {
 	private handleNetworkOnline(): void {
 		if (!this.isConnected || this.intentionalDisconnect) return
 		if (this.ws?.readyState === WebSocket.OPEN) return
-		// network just came back — reconnect immediately
+		// network just came back - reconnect immediately
 		this.reconnectAttempts = 0
 		this.cleanup()
 		void this.doConnect()
@@ -292,7 +292,7 @@ export class EventStreamClient {
 		if (document.visibilityState !== 'visible') return
 		if (!this.isConnected || this.intentionalDisconnect) return
 		if (this.ws?.readyState === WebSocket.OPEN) return
-		// tab became visible and socket is not open — reconnect immediately
+		// tab became visible and socket is not open - reconnect immediately
 		this.reconnectAttempts = 0
 		this.cleanup()
 		void this.doConnect()

@@ -26,8 +26,8 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 logger = logging.getLogger(__name__)
 
-# shared annotated type — add to any router param that mutates resources.
-# FastAPI maps the parameter name x_session_id → header X-Session-ID.
+# shared annotated type - add to any router param that mutates resources.
+# FastAPI maps the parameter name x_session_id -> header X-Session-ID.
 SessionId = Annotated[str | None, Header()]
 
 

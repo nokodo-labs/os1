@@ -1,5 +1,5 @@
 /**
- * SSE stream processing — processDelta, consumeStream, runThreadStream, resumeCreateAndRun.
+ * SSE stream processing - processDelta, consumeStream, runThreadStream, resumeCreateAndRun.
  */
 
 import { runChatStream, type ChatStreamDelta, type UnknownSseEvent } from '$lib/api/streaming'
@@ -151,7 +151,7 @@ export function processDelta(
 					toolCallsChanged =
 						next.length !== prev.length || next.some((tc, i) => tc.id !== prev[i]?.id)
 					streaming.toolCalls = next
-					// register each tool call — the reactive tracker handles dedup + accumulation
+					// register each tool call - the reactive tracker handles dedup + accumulation
 					for (const tc of next) ctx.toolTracker.registerToolCall(tc)
 				}
 
@@ -299,7 +299,7 @@ export async function runThreadStream(
 
 /**
  * resume a create_and_run stream that was started on another page.
- * the generator has already yielded `thread_created` — this consumes
+ * the generator has already yielded `thread_created` - this consumes
  * the remaining run deltas (message_created, delta, done, etc).
  */
 export async function resumeCreateAndRun(

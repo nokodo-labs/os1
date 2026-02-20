@@ -1,5 +1,5 @@
 /**
- * real-time event subscriptions — single unified listener that dispatches
+ * real-time event subscriptions - single unified listener that dispatches
  * tool, message, typing, and run events by prefix for performance.
  */
 
@@ -176,7 +176,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 
 		consumeStream(stream, { runId: runGen, threadId, parentId: null }, ctx)
 			.catch(() => {
-				// aborted or network error — expected on navigate-away
+				// aborted or network error - expected on navigate-away
 			})
 			.finally(() => {
 				resumeAborts.delete(runId)

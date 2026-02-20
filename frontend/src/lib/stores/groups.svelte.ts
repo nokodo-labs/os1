@@ -45,18 +45,14 @@ function buildCache(groups: Group[], fetchedAt: number): GroupsCacheEntry {
 	return { data, fetchedAt }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // groups cache
-// ─────────────────────────────────────────────────────────────────────────────
 
 class GroupsCache {
 	#cache = $state<GroupsCacheEntry | null>(null)
 	#inFlight: Promise<Group[]> | null = null
 	#unsubscribe: (() => void) | null = null
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// event stream integration
-	// ─────────────────────────────────────────────────────────────────────────
 
 	init(): void {
 		if (!this.#unsubscribe) {
@@ -71,7 +67,7 @@ class GroupsCache {
 
 	/**
 	 * handle incoming stream events for groups.
-	 * WS is the canonical source of truth — refetch on any group mutation.
+	 * WS is the canonical source of truth - refetch on any group mutation.
 	 */
 	#handleStreamEvent = (message: StreamMessage): void => {
 		if (GROUP_EVENT_TYPES.includes(message.type)) {
@@ -83,9 +79,7 @@ class GroupsCache {
 		return Date.now() - fetchedAt < CACHE_TTL_MS
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// reads
-	// ─────────────────────────────────────────────────────────────────────────
 
 	get list(): Group[] {
 		return this.#cache ? [...this.#cache.data.values()] : []
@@ -99,9 +93,7 @@ class GroupsCache {
 		return this.#cache !== null && this.#isFresh(this.#cache.fetchedAt)
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// load
-	// ─────────────────────────────────────────────────────────────────────────
 
 	async load(options?: { force?: boolean }): Promise<Group[]> {
 		const force = options?.force ?? false
@@ -125,9 +117,7 @@ class GroupsCache {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// mutations — return optimistic data for caller; WS delivers truth
-	// ─────────────────────────────────────────────────────────────────────────
+	// mutations - return optimistic data for caller; WS delivers truth
 
 	async create(params: GroupCreate): Promise<Group | null> {
 		const { data, error } = await apiClient().POST('/groups', { body: params })
@@ -170,9 +160,7 @@ class GroupsCache {
 		return !error
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// lifecycle
-	// ─────────────────────────────────────────────────────────────────────────
 
 	invalidate(): void {
 		this.#cache = null
@@ -183,9 +171,7 @@ class GroupsCache {
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // singleton export
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const groups = new GroupsCache()
 

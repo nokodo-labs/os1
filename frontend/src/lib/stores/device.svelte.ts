@@ -4,9 +4,9 @@ export const DEVICE_MOBILE_BREAKPOINT_PX = 888
 
 /**
  * graphical performance tier.
- * - high: discrete GPU or powerful integrated — can run WebGL shaders like darkveil
- * - mid: capable but not powerful — lighter shaders like lightrays
- * - low: integrated/software GPU, low-end mobile — prefer static color
+ * - high: discrete GPU or powerful integrated - can run WebGL shaders like darkveil
+ * - mid: capable but not powerful - lighter shaders like lightrays
+ * - low: integrated/software GPU, low-end mobile - prefer static color
  */
 export type GpuTier = 'high' | 'mid' | 'low'
 
@@ -338,7 +338,7 @@ function detectGpuTier(): { tier: GpuTier; diagnostics: GpuDiagnostics } {
 		notes.push('cores < 4 (-1)')
 	}
 
-	// device memory (gb) — chrome/edge only
+	// device memory (gb) - chrome/edge only
 	const memory = readDeviceMemory()
 	if (memory !== null) {
 		if (memory >= 16) {
@@ -623,7 +623,7 @@ export function requestGeolocation(): void {
 			device.longitude = position.coords.longitude
 		},
 		() => {
-			// permission denied or error — leave as null
+			// permission denied or error - leave as null
 			device.latitude = null
 			device.longitude = null
 			device.locationLabel = null

@@ -16,9 +16,7 @@
 
 	let { listId, showListTitle = false }: Props = $props()
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// state
-	// ─────────────────────────────────────────────────────────────────────────
 
 	let isLoading = $state(true)
 	let showCompleted = $state(false)
@@ -42,9 +40,7 @@
 
 	const MOTION_MS = 420
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// derived
-	// ─────────────────────────────────────────────────────────────────────────
 
 	const remindersList = $derived(reminders.getReminders(listId))
 	const completedCount = $derived(remindersList.filter((r) => r.status === 'completed').length)
@@ -74,9 +70,7 @@
 	const availableLists = $derived(reminders.lists)
 	const activeList = $derived(listId ? reminders.getListById(listId) : null)
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// helpers
-	// ─────────────────────────────────────────────────────────────────────────
 
 	function getReminderMotion(id: string): {
 		motion: 'in' | 'out-complete' | 'out-uncomplete' | null
@@ -96,9 +90,7 @@
 		return { motion: null }
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// actions
-	// ─────────────────────────────────────────────────────────────────────────
 
 	async function startInlineAdd() {
 		isAddingReminder = true
@@ -175,9 +167,7 @@
 		await reminders.updateReminder(reminder, updates)
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
 	// effects
-	// ─────────────────────────────────────────────────────────────────────────
 
 	$effect(() => {
 		void loadReminders()

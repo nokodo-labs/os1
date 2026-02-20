@@ -105,7 +105,7 @@ export function calculateDisplacement(
 	const t = distanceFromBorder / bezelWidth
 	const eta = n1 / n2
 
-	// normalized surface height (0..1) — matches reference convention
+	// normalized surface height (0..1) - matches reference convention
 	const y = surfaceFn(t, 1)
 
 	// normalized derivative for slope calculation (reference uses normalized coords)

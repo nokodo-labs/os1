@@ -95,8 +95,7 @@ class DelegateTool(Tool[AppContext]):
 		**kwargs: object,
 	) -> ToolMessage:
 		"""create a new sub-agent and delegate a task to it."""
-		request = DelegateRequest.model_validate(kwargs)
-		start_time = time()
+		DelegateRequest.model_validate(kwargs)
 		# TODO implement delegation logic to create sub-agent and delegate task
 		# for now, just return a placeholder response
 		response = {

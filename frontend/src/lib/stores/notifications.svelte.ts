@@ -122,7 +122,7 @@ class NotificationsStore {
 			}
 		}
 
-		// run events are forwarded via the generic stream — no further handling here
+		// run events are forwarded via the generic stream - no further handling here
 		if (RUN_EVENT_TYPES.includes(eventType)) {
 			// no-op: handled by chat.svelte.ts subscribeToAgentRunEvents
 		}

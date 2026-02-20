@@ -29,7 +29,7 @@ export function getSessionId(): string {
 
 /**
  * returns true when the event's origin_session_id matches this tab.
- * useful for UI hints — NOT for skipping data updates.
+ * useful for UI hints - NOT for skipping data updates.
  */
 export function isOwnEvent(message: StreamMessage): boolean {
 	const sid =

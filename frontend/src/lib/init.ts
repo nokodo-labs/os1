@@ -37,7 +37,7 @@ export interface InitResult {
  * initializes the application.
  * handles auth restoration, settings loading, and event stream connection.
  * holds the splash screen via an appReadiness blocker until all critical
- * data is loaded — no visual pops.
+ * data is loaded - no visual pops.
  *
  * @param options.skipAuthRestore - skip token refresh (e.g., on 404 pages)
  * @returns whether user is authenticated and their token

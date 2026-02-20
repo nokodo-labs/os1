@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte'
-
 	import Notification from '$lib/components/system/Notification.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
@@ -13,19 +11,6 @@
 	const chrome = useSystemChrome()
 
 	let controlCenterEl: HTMLElement | null = $state(null)
-	let controlCenterHeightPx = $state(0)
-
-	function syncControlCenterHeight(): void {
-		controlCenterHeightPx = controlCenterEl?.offsetHeight ?? 0
-	}
-
-	onMount(() => {
-		syncControlCenterHeight()
-		const ro = new ResizeObserver(() => syncControlCenterHeight())
-		if (controlCenterEl) ro.observe(controlCenterEl)
-
-		return () => ro.disconnect()
-	})
 
 	$effect(() => {
 		if (session.isLoggedIn) notifications.init()

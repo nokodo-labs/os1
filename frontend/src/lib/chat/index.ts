@@ -1,4 +1,4 @@
-// $lib/chat barrel — re-exports from all chat modules
+// $lib/chat barrel - re-exports from all chat modules
 
 // state factory
 export { createChatState } from './createChatState.svelte'

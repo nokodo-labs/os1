@@ -539,7 +539,8 @@ async def test_openai_chat_stream_tool_call_delta_missing_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_openai_stream_tool_call_metadata_and_created_at() -> None:
-	"""tool call deltas carry provider metadata, auto-generated SDK id, and timestamps."""
+	"""tool call deltas carry provider metadata, auto-generated SDK id, and
+	timestamps."""
 	chunks = [
 		_DummyOpenAIChunk(
 			choices=[

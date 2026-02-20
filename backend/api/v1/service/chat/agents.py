@@ -512,7 +512,7 @@ async def run_agent(
 				message_persisted[message_id_str] = asyncio.Event()
 				return message_id_str
 
-			# parent chain for the delta envelope — mirrors
+			# parent chain for the delta envelope - mirrors
 			# _persist_message_worker's last_parent_id so the frontend can
 			# place messages in the tree from deltas alone.
 			streaming_parent_id: str | None = (
@@ -626,7 +626,7 @@ async def run_agent(
 					streaming_parent_id = message_id
 
 		except GeneratorExit:
-			# client disconnected mid-stream — clean up the run so other
+			# client disconnected mid-stream - clean up the run so other
 			# participants receive run.completed and the store entry is freed.
 			await _safe_rollback(session)
 			await run_status_store.fail_run(run_id_str)

@@ -7,7 +7,7 @@
  * nokodo service worker.
  *
  * caching strategies:
- * - precache: app shell (HTML, CSS, JS, fonts) — versioned by build hash
+ * - precache: app shell (HTML, CSS, JS, fonts) - versioned by build hash
  * - cache-first: static assets (images, fonts from /static)
  * - stale-while-revalidate: API data calls (/v1/ except auth), capped at 128 entries
  * - network-only: auth/sensitive routes (/v1/auth/*)
@@ -49,12 +49,12 @@ const NETWORK_ONLY_PATTERNS = [
 // static asset extensions eligible for cache-first
 const STATIC_ASSET_RE = /\.(png|jpg|jpeg|gif|webp|avif|svg|ico|woff2?|ttf|eot|otf)$/i
 
-// ─── install: precache app shell ────────────────────────────────────────────
+// install: precache app shell
 self.addEventListener('install', (event) => {
 	event.waitUntil(caches.open(PRECACHE).then((cache) => cache.addAll(PRECACHE_ASSETS)))
 })
 
-// ─── activate: purge old caches, claim clients ─────────────────────────────
+// activate: purge old caches, claim clients
 self.addEventListener('activate', (event) => {
 	event.waitUntil(
 		caches
@@ -70,7 +70,7 @@ self.addEventListener('activate', (event) => {
 	)
 })
 
-// ─── fetch: route to appropriate caching strategy ──────────────────────────
+// fetch: route to appropriate caching strategy
 self.addEventListener('fetch', (event) => {
 	const { request } = event
 	const url = new URL(request.url)
@@ -107,7 +107,7 @@ self.addEventListener('fetch', (event) => {
 	}
 })
 
-// ─── caching strategy implementations ──────────────────────────────────────
+// caching strategy implementations
 
 /** cache-first: return cached response, falling back to network (and caching). */
 async function cacheFirst(request: Request, cacheName: string): Promise<Response> {
@@ -182,7 +182,7 @@ async function evictOldEntries(cache: Cache): Promise<void> {
 	await Promise.all(keys.slice(0, excess).map((key) => cache.delete(key)))
 }
 
-// ─── message handler: skip waiting on demand ───────────────────────────────
+// message handler: skip waiting on demand
 self.addEventListener('message', (event) => {
 	if (event.data?.type === 'SKIP_WAITING') {
 		self.skipWaiting()

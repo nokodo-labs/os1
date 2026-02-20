@@ -1,5 +1,5 @@
 /**
- * pure utility functions and types for chat — no reactive state, no side effects.
+ * pure utility functions and types for chat - no reactive state, no side effects.
  * moved from routes/c/[id]/chatHelpers.ts to $lib/chat/ for proper module boundaries.
  */
 
@@ -8,9 +8,7 @@ import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from 
 
 export type ApiMessage = components['schemas']['Message']
 
-// ─────────────────────────────────────────────────────────────────────────────
 // types
-// ─────────────────────────────────────────────────────────────────────────────
 
 export type RunItem =
 	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
@@ -39,9 +37,7 @@ export interface StreamingAssistantState {
 	errorMessage: string | null
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // message helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * convert message content parts to plain text.
@@ -123,15 +119,13 @@ export function computeIsAtBottom(element: HTMLElement): boolean {
 	return element.scrollHeight - element.scrollTop <= element.clientHeight + AUTO_SCROLL_BUFFER_PX
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // tool call helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * merge incoming tool call data into the existing list, creating or updating
  * entries by id. handles both object and string arguments from streaming.
  * string arguments are accumulated (appended) across chunks.
- * pure function — no reactive state.
+ * pure function - no reactive state.
  */
 export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCall[] {
 	const out = new Map(existing.map((tc) => [tc.id, tc]))
@@ -148,7 +142,7 @@ export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCa
 
 		let args: Record<string, unknown> | string
 		if (typeof rawArgs === 'string') {
-			// streaming string fragment — accumulate with previous
+			// streaming string fragment - accumulate with previous
 			const prevStr = prev ? (typeof prev.arguments === 'string' ? prev.arguments : '') : ''
 			args = prevStr + rawArgs
 		} else if (rawArgs && typeof rawArgs === 'object' && rawArgs !== null) {
@@ -162,9 +156,7 @@ export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCa
 	return Array.from(out.values())
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // message children map
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * build a parent_id → child_id[] map from a message iterable.
@@ -191,9 +183,7 @@ export function buildMessageChildren(messages: Iterable<ApiMessage>): Map<string
 	return map
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // run block building
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface BuildRunBlocksInput {
 	messages: ApiMessage[]
@@ -213,7 +203,7 @@ export interface BuildRunBlocksResult {
 
 /**
  * build run blocks from messages + streaming state.
- * pure function — no reactive state or side effects.
+ * pure function - no reactive state or side effects.
  */
 export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult {
 	const { messages, userId, streamingAssistant, optimisticUserMessage, viewingStreamingBranch } =
@@ -328,9 +318,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 	return { blocks, toolCalls: collectedToolCalls, toolResults: collectedToolResults }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // run block queries
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function getBlockResponseItems(
 	block: RunBlock
@@ -360,9 +348,7 @@ export function blockHasStreamingAssistant(block: RunBlock): boolean {
 	return block.items.some((item) => item.kind === 'streaming_assistant')
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // agent lookups
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * build a lookup map from agent id to a derived value.

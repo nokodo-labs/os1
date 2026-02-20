@@ -46,7 +46,7 @@ export interface ChatContext {
 	readonly scrollContainer: HTMLElement | null
 	autoScroll: boolean
 
-	// tools (reactive tracker — no tick counter needed)
+	// tools (reactive tracker - no tick counter needed)
 	readonly toolTracker: ToolExecutionTracker
 	readonly fetchedToolEventMessageIds: SvelteSet<string>
 	readonly toolEventsPendingIds: SvelteSet<string>
@@ -125,7 +125,7 @@ export interface ChatState extends ChatContext {
 	sendTypingEvent(threadId: string, typing: boolean): void
 }
 
-/** per-stream context for processDelta — tracks the assistant parent pointer */
+/** per-stream context for processDelta - tracks the assistant parent pointer */
 export interface StreamDeltaContext {
 	runId: number
 	threadId: string

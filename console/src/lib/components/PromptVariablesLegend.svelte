@@ -59,40 +59,40 @@
 			description:
 				"date/time in the user's local timezone with timezone info (falls back to UTC)",
 			variables: [
-				{ name: 'current_date', description: 'date — YYYY-MM-DD' },
-				{ name: 'current_date_full', description: 'date — January 15, 2025' },
-				{ name: 'current_date_short', description: 'date — 2025-01-15' },
-				{ name: 'current_date_weekday', description: 'date — Wednesday, January 15' },
+				{ name: 'current_date', description: 'date - YYYY-MM-DD' },
+				{ name: 'current_date_full', description: 'date - January 15, 2025' },
+				{ name: 'current_date_short', description: 'date - 2025-01-15' },
+				{ name: 'current_date_weekday', description: 'date - Wednesday, January 15' },
 				{
 					name: 'current_date_weekday_full',
-					description: 'date — Wednesday, January 15, 2025',
+					description: 'date - Wednesday, January 15, 2025',
 				},
-				{ name: 'current_date_month_day', description: 'date — January 15' },
-				{ name: 'current_day', description: 'day of week — Wednesday' },
+				{ name: 'current_date_month_day', description: 'date - January 15' },
+				{ name: 'current_day', description: 'day of week - Wednesday' },
 				{
 					name: 'current_time',
-					description: 'time — HH:MM with timezone (e.g. 14:30 EST (UTC-05:00))',
+					description: 'time - HH:MM with timezone (e.g. 14:30 EST (UTC-05:00))',
 				},
 				{
 					name: 'current_time_12h',
-					description: 'time — 2:30 PM with timezone',
+					description: 'time - 2:30 PM with timezone',
 				},
 				{
 					name: 'current_time_24h',
-					description: 'time — 14:30 with timezone',
+					description: 'time - 14:30 with timezone',
 				},
 				{
 					name: 'current_time_seconds',
-					description: 'time — 14:30:00 with timezone',
+					description: 'time - 14:30:00 with timezone',
 				},
 				{ name: 'current_datetime', description: 'ISO 8601 datetime (includes offset)' },
 				{
 					name: 'current_datetime_full',
-					description: 'full — Wednesday, January 15, 2025 at 2:30 PM EST (UTC-05:00)',
+					description: 'full - Wednesday, January 15, 2025 at 2:30 PM EST (UTC-05:00)',
 				},
 				{
 					name: 'current_datetime_short',
-					description: 'short — 2025-01-15 14:30 with timezone',
+					description: 'short - 2025-01-15 14:30 with timezone',
 				},
 				{
 					name: 'current_timezone',
@@ -104,40 +104,40 @@
 			label: 'server date/time',
 			description: 'date/time in UTC with timezone info (always available)',
 			variables: [
-				{ name: 'server_date', description: 'date — YYYY-MM-DD' },
-				{ name: 'server_date_full', description: 'date — January 15, 2025' },
-				{ name: 'server_date_short', description: 'date — 2025-01-15' },
-				{ name: 'server_date_weekday', description: 'date — Wednesday, January 15' },
+				{ name: 'server_date', description: 'date - YYYY-MM-DD' },
+				{ name: 'server_date_full', description: 'date - January 15, 2025' },
+				{ name: 'server_date_short', description: 'date - 2025-01-15' },
+				{ name: 'server_date_weekday', description: 'date - Wednesday, January 15' },
 				{
 					name: 'server_date_weekday_full',
-					description: 'date — Wednesday, January 15, 2025',
+					description: 'date - Wednesday, January 15, 2025',
 				},
-				{ name: 'server_date_month_day', description: 'date — January 15' },
-				{ name: 'server_day', description: 'day of week — Wednesday' },
+				{ name: 'server_date_month_day', description: 'date - January 15' },
+				{ name: 'server_day', description: 'day of week - Wednesday' },
 				{
 					name: 'server_time',
-					description: 'time — HH:MM with timezone (e.g. 19:30 UTC (UTC+00:00))',
+					description: 'time - HH:MM with timezone (e.g. 19:30 UTC (UTC+00:00))',
 				},
 				{
 					name: 'server_time_12h',
-					description: 'time — 7:30 PM with timezone',
+					description: 'time - 7:30 PM with timezone',
 				},
 				{
 					name: 'server_time_24h',
-					description: 'time — 19:30 with timezone',
+					description: 'time - 19:30 with timezone',
 				},
 				{
 					name: 'server_time_seconds',
-					description: 'time — 19:30:00 with timezone',
+					description: 'time - 19:30:00 with timezone',
 				},
 				{ name: 'server_datetime', description: 'ISO 8601 datetime (includes offset)' },
 				{
 					name: 'server_datetime_full',
-					description: 'full — Wednesday, January 15, 2025 at 7:30 PM UTC (UTC+00:00)',
+					description: 'full - Wednesday, January 15, 2025 at 7:30 PM UTC (UTC+00:00)',
 				},
 				{
 					name: 'server_datetime_short',
-					description: 'short — 2025-01-15 19:30 with timezone',
+					description: 'short - 2025-01-15 19:30 with timezone',
 				},
 				{
 					name: 'server_timezone',
