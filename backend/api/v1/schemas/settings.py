@@ -263,7 +263,9 @@ class AITaskSettingsPatch(BaseModel):
 class AISettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	default_agent_id: str | None = Field(default=None, description="default agent id")
+	default_agent_ids: list[str] | None = Field(
+		default=None, description="ordered list of default agent ids (tried in order)"
+	)
 	memory: AIMemorySettingsPatch | None = None
 	chat_context: AIChatContextSettingsPatch | None = None
 	tasks: AITaskSettingsPatch | None = None

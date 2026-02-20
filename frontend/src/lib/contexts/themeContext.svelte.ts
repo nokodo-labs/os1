@@ -27,10 +27,10 @@ export const accentColors: Record<
 		shadow: 'rgba(59, 130, 246, 0.25)',
 	},
 	green: {
-		primary: '#34c759', // messages green
-		bg: 'rgba(52, 199, 89, 0.02)',
-		border: 'rgba(52, 199, 89, 0.2)',
-		shadow: 'rgba(52, 199, 89, 0.25)',
+		primary: '#65C466', // messages green
+		bg: 'rgba(101, 196, 102, 0.02)',
+		border: 'rgba(101, 196, 102, 0.2)',
+		shadow: 'rgba(101, 196, 102, 0.25)',
 	},
 	orange: {
 		primary: '#f97316', // orange-500

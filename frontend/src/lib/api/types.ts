@@ -1760,10 +1760,10 @@ export interface components {
         /** AISettings */
         AISettings: {
             /**
-             * Default Agent Id
-             * @description default agent id
+             * Default Agent Ids
+             * @description ordered list of default agent ids (tried in order)
              */
-            default_agent_id?: string | null;
+            default_agent_ids?: string[];
             /** @description AI memory settings */
             memory?: components["schemas"]["AIMemorySettings"];
             /** @description chat context settings */
@@ -1774,10 +1774,10 @@ export interface components {
         /** AISettingsPatch */
         AISettingsPatch: {
             /**
-             * Default Agent Id
-             * @description default agent id
+             * Default Agent Ids
+             * @description ordered list of default agent ids (tried in order)
              */
-            default_agent_id?: string | null;
+            default_agent_ids?: string[] | null;
             memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
             tasks?: components["schemas"]["AITaskSettingsPatch"] | null;

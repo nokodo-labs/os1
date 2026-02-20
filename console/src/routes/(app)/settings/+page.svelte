@@ -25,7 +25,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Lock } from '@lucide/svelte'
+	import { ChevronDown, ChevronUp, Lock, X } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
 	type ThemeMode = 'light' | 'dark' | 'system'
@@ -82,7 +82,7 @@
 
 	type ChatContextMode = 'recent' | 'relevant' | 'pinned'
 
-	let aiDefaultAgentId = $state<string>('')
+	let aiDefaultAgentIds = $state<string[]>([])
 
 	let aiMemoryEnable = $state(false)
 	let aiMemorySimilarityThreshold = $state<string>('')
@@ -143,7 +143,7 @@
 		uiDefaultBackground: null as BackgroundType | null,
 		uiAuthPagesBackground: null as BackgroundType | null,
 		uiSidebarCollapsed: false,
-		aiDefaultAgentId: '',
+		aiDefaultAgentIds: [] as string[],
 		aiMemoryEnable: false,
 		aiMemorySimilarityThreshold: '',
 		aiMemoryTopK: '',
@@ -197,7 +197,7 @@
 			uiDefaultBackground !== original.uiDefaultBackground ||
 			uiAuthPagesBackground !== original.uiAuthPagesBackground ||
 			uiSidebarCollapsed !== original.uiSidebarCollapsed ||
-			aiDefaultAgentId !== original.aiDefaultAgentId ||
+			JSON.stringify(aiDefaultAgentIds) !== JSON.stringify(original.aiDefaultAgentIds) ||
 			aiMemoryEnable !== original.aiMemoryEnable ||
 			aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold ||
 			aiMemoryTopK !== original.aiMemoryTopK ||
@@ -264,10 +264,16 @@
 	}
 
 	const selectedAgentLabel = $derived(() => {
-		if (!aiDefaultAgentId) return 'none'
-		const a = agents.find((x) => x.id === aiDefaultAgentId)
-		return a ? agentLabel(a) : aiDefaultAgentId
+		if (aiDefaultAgentIds.length === 0) return 'none'
+		return aiDefaultAgentIds
+			.map((id) => {
+				const a = agents.find((x) => x.id === id)
+				return a ? agentLabel(a) : id
+			})
+			.join(', ')
 	})
+
+	const availableAgentsToAdd = $derived(agents.filter((a) => !aiDefaultAgentIds.includes(a.id)))
 
 	function parseCommaList(value: string): string[] {
 		return value
@@ -308,7 +314,7 @@
 		uiSidebarCollapsed = ui?.sidebar_collapsed ?? false
 
 		const ai = r.data.ai
-		aiDefaultAgentId = ai?.default_agent_id ?? ''
+		aiDefaultAgentIds = ai?.default_agent_ids ?? []
 
 		const memory = ai?.memory
 		aiMemoryEnable = memory?.enable_memory ?? false
@@ -377,7 +383,7 @@
 			uiDefaultBackground,
 			uiAuthPagesBackground,
 			uiSidebarCollapsed,
-			aiDefaultAgentId,
+			aiDefaultAgentIds: [...aiDefaultAgentIds],
 			aiMemoryEnable,
 			aiMemorySimilarityThreshold,
 			aiMemoryTopK,
@@ -465,7 +471,7 @@
 		uiDefaultBackground = original.uiDefaultBackground
 		uiAuthPagesBackground = original.uiAuthPagesBackground
 		uiSidebarCollapsed = original.uiSidebarCollapsed
-		aiDefaultAgentId = original.aiDefaultAgentId
+		aiDefaultAgentIds = original.aiDefaultAgentIds
 		aiMemoryEnable = original.aiMemoryEnable
 		aiMemorySimilarityThreshold = original.aiMemorySimilarityThreshold
 		aiMemoryTopK = original.aiMemoryTopK
@@ -547,7 +553,7 @@
 		}
 
 		if (
-			aiDefaultAgentId !== original.aiDefaultAgentId ||
+			JSON.stringify(aiDefaultAgentIds) !== JSON.stringify(original.aiDefaultAgentIds) ||
 			aiMemoryEnable !== original.aiMemoryEnable ||
 			aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold ||
 			aiMemoryTopK !== original.aiMemoryTopK ||
@@ -559,8 +565,8 @@
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId
 		) {
 			const aiPatch: NonNullable<NonNullable<SettingsUpdateRequest['data']>['ai']> = {}
-			if (aiDefaultAgentId !== original.aiDefaultAgentId)
-				aiPatch.default_agent_id = aiDefaultAgentId ? aiDefaultAgentId : null
+			if (JSON.stringify(aiDefaultAgentIds) !== JSON.stringify(original.aiDefaultAgentIds))
+				aiPatch.default_agent_ids = aiDefaultAgentIds.length > 0 ? aiDefaultAgentIds : null
 
 			if (
 				aiMemoryEnable !== original.aiMemoryEnable ||
@@ -916,27 +922,98 @@
 						<CardContent class="space-y-6">
 							<div class="space-y-2">
 								<div class="flex items-center justify-between gap-2">
-									<Label for="default_agent">default agent</Label>
+									<div>
+										<Label for="default_agents">default agents</Label>
+										<p class="text-xs text-zinc-500">
+											tried in order; first available agent is used.
+										</p>
+									</div>
 									{#if isFetchingAgents}
 										<span class="text-xs text-zinc-500">loading…</span>
 									{/if}
 								</div>
-								<Select
-									value={aiDefaultAgentId}
-									onValueChange={(v: string) => (aiDefaultAgentId = v)}
-								>
-									<SelectTrigger id="default_agent" class="rounded-xl">
-										<span class="truncate text-left"
-											>{selectedAgentLabel()}</span
-										>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="">none</SelectItem>
-										{#each agents as a (a.id)}
-											<SelectItem value={a.id}>{agentLabel(a)}</SelectItem>
+								{#if aiDefaultAgentIds.length > 0}
+									<ul class="space-y-1">
+										{#each aiDefaultAgentIds as agentId, idx (agentId)}
+											{@const label = agents.find((x) => x.id === agentId)}
+											<li
+												class="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+											>
+												<span
+													class="w-5 shrink-0 font-mono text-xs text-zinc-500"
+													>{idx + 1}.</span
+												>
+												<span class="flex-1 truncate"
+													>{label ? agentLabel(label) : agentId}</span
+												>
+												<button
+													class="text-zinc-500 hover:text-zinc-300 disabled:opacity-30"
+													disabled={idx === 0}
+													onclick={() => {
+														const copy = [...aiDefaultAgentIds]
+														;[copy[idx - 1], copy[idx]] = [
+															copy[idx],
+															copy[idx - 1],
+														]
+														aiDefaultAgentIds = copy
+													}}
+													title="move up"
+												>
+													<ChevronUp class="h-4 w-4" />
+												</button>
+												<button
+													class="text-zinc-500 hover:text-zinc-300 disabled:opacity-30"
+													disabled={idx === aiDefaultAgentIds.length - 1}
+													onclick={() => {
+														const copy = [...aiDefaultAgentIds]
+														;[copy[idx], copy[idx + 1]] = [
+															copy[idx + 1],
+															copy[idx],
+														]
+														aiDefaultAgentIds = copy
+													}}
+													title="move down"
+												>
+													<ChevronDown class="h-4 w-4" />
+												</button>
+												<button
+													class="text-zinc-500 hover:text-red-400"
+													onclick={() => {
+														aiDefaultAgentIds =
+															aiDefaultAgentIds.filter(
+																(_, i) => i !== idx
+															)
+													}}
+													title="remove"
+												>
+													<X class="h-4 w-4" />
+												</button>
+											</li>
 										{/each}
-									</SelectContent>
-								</Select>
+									</ul>
+								{:else}
+									<p class="text-xs text-zinc-500 italic">
+										no default agents configured
+									</p>
+								{/if}
+								{#if availableAgentsToAdd.length > 0}
+									<Select
+										value=""
+										onValueChange={(v: string) => {
+											if (v) aiDefaultAgentIds = [...aiDefaultAgentIds, v]
+										}}
+									>
+										<SelectTrigger id="default_agents" class="rounded-xl">
+											<span class="text-zinc-500">add agent…</span>
+										</SelectTrigger>
+										<SelectContent>
+											{#each availableAgentsToAdd as a (a.id)}
+												<SelectItem value={a.id}>{agentLabel(a)}</SelectItem
+												>
+											{/each}
+										</SelectContent>
+									</Select>
+								{/if}
 								{#if agentsError}
 									<p class="text-xs text-red-300">{agentsError}</p>
 								{/if}

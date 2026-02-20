@@ -156,7 +156,10 @@ class AITaskSettings(BaseModel):
 
 
 class AISettings(BaseModel):
-	default_agent_id: str | None = Field(default=None, description="default agent id")
+	default_agent_ids: list[str] = Field(
+		default_factory=list,
+		description="ordered list of default agent ids (tried in order)",
+	)
 	memory: AIMemorySettings = Field(
 		default_factory=AIMemorySettings, description="AI memory settings"
 	)
@@ -554,9 +557,7 @@ class Settings(BaseSettings):
 settings: Settings = Settings()
 
 
-# ---------------------------------------------------------------------------
 # public helpers
-# ---------------------------------------------------------------------------
 
 
 def check_writable(

@@ -16,23 +16,24 @@ function readStored(): string {
 class SelectedAgentStore {
 	id = $state<string>(readStored())
 
-	/** the admin-configured default agent id, or empty string */
-	get defaultId(): string {
-		return settingsState.data?.ai?.default_agent_id ?? ''
+	/** the admin-configured default agent ids (ordered), or empty array */
+	get defaultIds(): string[] {
+		return settingsState.data?.ai?.default_agent_ids ?? []
 	}
 
 	/**
 	 * resolve the best agent id from a list.
-	 * priority: current stored id → admin default → first in list.
+	 * priority: current stored id → admin default list (in order) → first in list.
 	 * returns the resolved id, or empty string if the list is empty.
 	 */
 	resolveDefault(agentList: { id: string }[]): string {
 		if (agentList.length === 0) return ''
 		// already valid
 		if (this.id && agentList.some((a) => a.id === this.id)) return this.id
-		// admin default
-		const def = this.defaultId
-		if (def && agentList.some((a) => a.id === def)) return def
+		// admin default list — try each in order
+		for (const defId of this.defaultIds) {
+			if (defId && agentList.some((a) => a.id === defId)) return defId
+		}
 		// first in list
 		return agentList[0].id
 	}

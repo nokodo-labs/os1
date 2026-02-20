@@ -93,7 +93,7 @@ function createPreferencesStore() {
 			gender: null,
 		},
 		ai: {
-			defaultAgentId: settingsState?.data?.ai?.default_agent_id ?? null,
+			defaultAgentId: settingsState?.data?.ai?.default_agent_ids?.[0] ?? null,
 			bio: null,
 			useAccountBio: false,
 			memoriesEnabled: true,
