@@ -91,10 +91,10 @@
 	} as const
 </script>
 
+<!-- trying to add static={!isStreaming} broke rendering of some types of markdown blocks. maybe fixed in future version of Streamdown -->
 <Streamdown
 	{content}
 	class={className}
-	static={!isStreaming}
 	parseIncompleteMarkdown={isStreaming}
 	renderHtml={false}
 	{defaultOrigin}

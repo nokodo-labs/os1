@@ -389,10 +389,7 @@
 	     exactly during the view transition (the main shell's padding is bypassed). -->
 	<div class="absolute inset-0 flex flex-col">
 		<!-- scrollable content area -->
-		<div
-			class="min-h-0 flex-1 overflow-y-auto"
-			style="scrollbar-gutter: stable; overscroll-behavior-y: contain;"
-		>
+		<div class="min-h-0 flex-1 overflow-y-auto" style="scrollbar-gutter: stable;">
 			<div
 				class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: 96px;"

@@ -114,7 +114,7 @@ export function getMessageCreatedAt(msg: ApiMessage): Date {
 /**
  * buffer distance for auto-scroll detection.
  */
-export const AUTO_SCROLL_BUFFER_PX = 50
+export const AUTO_SCROLL_BUFFER_PX = 5
 
 /**
  * check if scroll container is at bottom (within buffer).

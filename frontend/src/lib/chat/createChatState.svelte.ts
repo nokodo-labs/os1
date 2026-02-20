@@ -75,7 +75,6 @@ export function createChatState(): ChatState {
 	let lastThreadId = $state<string | null>(null)
 	let inputOverlayHeight = $state(0)
 	let scrollQueued = false
-	let lastScrollTop = 0
 
 	// ── tool tracking ────────────────────────────────────────────────────
 	const toolTracker = new ToolExecutionTracker()
@@ -153,22 +152,11 @@ export function createChatState(): ChatState {
 	}
 
 	// ── scroll management ────────────────────────────────────────────────
+	// position-based auto-scroll: every scroll event checks if we're at the
+	// bottom. if yes → autoScroll stays/becomes true. if no → false.
 	function handleScroll() {
 		if (!scrollContainer) return
-		const currTop = scrollContainer.scrollTop
-
-		if (autoScroll) {
-			// any upward movement from user disengages auto-scroll immediately
-			if (currTop < lastScrollTop) {
-				autoScroll = false
-			}
-		} else {
-			// re-engage only when user reaches the very bottom
-			const atBottom = computeIsAtBottom(scrollContainer)
-			if (atBottom) autoScroll = true
-		}
-
-		lastScrollTop = currTop
+		autoScroll = computeIsAtBottom(scrollContainer)
 
 		// avoid runaway paging during initial mount/auto-scroll.
 		// initialScrollDone is set once we have loaded and pinned to bottom.
@@ -185,8 +173,6 @@ export function createChatState(): ChatState {
 	function scrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
 		if (!scrollContainer) return
 		scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior })
-		// sync lastScrollTop so the next scroll event doesn't misinterpret
-		lastScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight
 	}
 
 	async function queueScrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
@@ -196,7 +182,6 @@ export function createChatState(): ChatState {
 		await tick()
 		requestAnimationFrame(() => {
 			scrollQueued = false
-			// if user disengaged autoScroll since we queued, skip
 			if (!autoScroll) return
 			scrollToBottom(behavior)
 		})

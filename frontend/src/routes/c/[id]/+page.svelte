@@ -330,7 +330,7 @@
 
 	<div
 		class="relative flex-1 overflow-y-auto"
-		style="view-transition-name: thread-body; scrollbar-gutter: stable; overscroll-behavior-y: contain;"
+		style="view-transition-name: thread-body; scrollbar-gutter: stable;"
 		bind:this={chat.scrollContainer}
 		onscroll={chat.handleScroll}
 	>
