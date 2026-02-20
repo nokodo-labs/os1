@@ -1,9 +1,12 @@
 // $lib/chat barrel — re-exports from all chat modules
 
-// types
-export type { ChatContext, StreamDeltaContext } from './types'
+// state factory
+export { createChatState } from './createChatState.svelte'
 
-// helpers (pure functions + types from the old chatHelpers)
+// types
+export type { ChatContext, ChatState, StreamDeltaContext } from './types'
+
+// helpers (pure functions + types)
 export {
 	AUTO_SCROLL_BUFFER_PX,
 	blockHasStreamingAssistant,

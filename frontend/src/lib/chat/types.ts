@@ -1,12 +1,14 @@
 /**
  * shared type definitions for the chat module.
- * ChatContext bridges reactive $state in the coordinator to extracted modules.
+ * ChatContext is the internal contract for extracted module functions.
+ * ChatState extends it with everything the page UI needs.
  */
 
+import type { ChatStreamDelta } from '$lib/api/streaming'
 import type { Thread } from '$lib/stores/chat.svelte'
-import type { ToolExecutionTracker } from '$lib/tools'
+import type { ToolExecution, ToolExecutionTracker } from '$lib/tools'
 import type { SvelteMap, SvelteSet } from 'svelte/reactivity'
-import type { ApiMessage, StreamingAssistantState } from './helpers'
+import type { ApiMessage, RunBlock, StreamingAssistantState } from './helpers'
 
 /**
  * reactive state proxy passed to all extracted chat module functions.
@@ -71,6 +73,57 @@ export interface ChatContext {
 	incrementActiveRun(): number
 	rebuildRunBlocks(): void
 	queueScrollToBottom(behavior?: 'auto' | 'smooth'): Promise<void>
+}
+
+/**
+ * full public state returned by createChatState().
+ * extends ChatContext with page-specific UI state, derived values, and action methods.
+ */
+export interface ChatState extends ChatContext {
+	// page-specific state
+	isThreadLoading: boolean
+	hasLoadedBranch: boolean
+	inputOverlay: HTMLElement | null
+	initialScrollDone: boolean
+	lastThreadId: string | null
+	inputOverlayHeight: number
+	scrollContainer: HTMLElement | null
+
+	// derived (readonly)
+	readonly runBlocks: RunBlock[]
+	readonly showThreadLoader: boolean
+	readonly hasRenderableMessages: boolean
+	readonly hasActiveStreamingToolCalls: boolean
+	readonly agentNameById: Map<string, string>
+	readonly agentAvatarById: Map<string, string | null>
+
+	// scroll
+	handleScroll(): void
+	scrollToBottom(behavior?: 'auto' | 'smooth'): void
+
+	// thread lifecycle
+	setThread(t: Thread | null): void
+	clearThread(): void
+
+	// tools
+	getToolExecution(toolCallId: string): ToolExecution | undefined
+
+	// delegated actions
+	loadTree(threadId: string): Promise<boolean>
+	handleSendMessage(content: string): Promise<void>
+	handleRegenerateMessage(parentId?: string | null): Promise<void>
+	handleStopGeneration(): void
+	handleEditMessage(messageId: string): Promise<void>
+	resumeCreateAndRun(
+		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
+		threadId: string
+	): Promise<void>
+	requestDeleteUserMessage(messageId: string): void
+	deleteUserMessage(messageId: string): Promise<boolean>
+	switchBranch(messageId: string, direction: 'prev' | 'next'): Promise<void>
+	findRunUserMessage(block: RunBlock): string | null
+	subscribeToChatEvents(threadId: string): () => void
+	sendTypingEvent(threadId: string, typing: boolean): void
 }
 
 /** per-stream context for processDelta — tracks the assistant parent pointer */

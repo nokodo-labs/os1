@@ -1,5 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import {
+		blockHasStreamingAssistant,
+		contentPartsToText,
+		createChatState,
+		getBlockFirstAssistant,
+		getBlockResponseItems,
+		getMessageCreatedAt,
+		type ApiMessage,
+	} from '$lib/chat'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
@@ -28,7 +37,6 @@
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { untrack } from 'svelte'
 	import { fade } from 'svelte/transition'
-	import { createChatState, type ApiMessage } from './chat.svelte'
 
 	// initialize chat state
 	const chat = createChatState()
@@ -393,8 +401,8 @@
 										chat.messageChildren.get(item.message.parent_id ?? null) ??
 										[]}
 									<UserChatMessage
-										content={chat.contentPartsToText(item.message.content)}
-										timestamp={chat.getMessageCreatedAt(item.message)}
+										content={contentPartsToText(item.message.content)}
+										timestamp={getMessageCreatedAt(item.message)}
 										align={item.align}
 										siblingCount={siblings.length}
 										currentSiblingIndex={siblings.indexOf(item.message.id)}
@@ -406,9 +414,7 @@
 									>
 										{#snippet actions()}
 											<CopyButton
-												content={chat.contentPartsToText(
-													item.message.content
-												)}
+												content={contentPartsToText(item.message.content)}
 											/>
 											{#if item.align === 'right'}
 												<MessageActionButton
@@ -445,12 +451,11 @@
 							{/each}
 
 							<!-- agent run: render ALL items in chronological order -->
-							{#if chat.getBlockResponseItems(block).length > 0 || (chat.blockHasStreamingAssistant(block) && chat.streamingAssistant)}
-								{@const responseItems = chat.getBlockResponseItems(block)}
-								{@const firstAssistant = chat.getBlockFirstAssistant(block)}
+							{#if getBlockResponseItems(block).length > 0 || (blockHasStreamingAssistant(block) && chat.streamingAssistant)}
+								{@const responseItems = getBlockResponseItems(block)}
+								{@const firstAssistant = getBlockFirstAssistant(block)}
 								{@const isStreamingBlock =
-									chat.blockHasStreamingAssistant(block) &&
-									chat.streamingAssistant}
+									blockHasStreamingAssistant(block) && chat.streamingAssistant}
 								{@const rootId = block.responseRootId}
 								{@const blockParentId =
 									(rootId
@@ -488,7 +493,7 @@
 										? 'error'
 										: 'default'}
 									timestamp={firstAssistant
-										? chat.getMessageCreatedAt(firstAssistant)
+										? getMessageCreatedAt(firstAssistant)
 										: isStreamingBlock
 											? (chat.streamingAssistant?.timestamp ?? new Date())
 											: undefined}
@@ -510,7 +515,7 @@
 													class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
 												>
 													<MarkdownRenderer
-														content={chat.contentPartsToText(
+														content={contentPartsToText(
 															item.message.content
 														)}
 														isStreaming={false}
@@ -572,7 +577,7 @@
 														} => i.kind === 'assistant'
 													)
 													.map((i) =>
-														chat.contentPartsToText(i.message.content)
+														contentPartsToText(i.message.content)
 													)
 													.join('\n\n')
 												const streamText = isStreamingBlock
