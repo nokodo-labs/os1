@@ -37,9 +37,7 @@ from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
-# ---------------------------------------------------------------------------
 # DefaultPermissions model tests
-# ---------------------------------------------------------------------------
 
 
 class TestDefaultPermissions:
@@ -152,9 +150,7 @@ class TestDefaultPermissions:
 		assert dp.action_permissions == {ActionPermission.AGENTS_CREATE}
 
 
-# ---------------------------------------------------------------------------
 # ActionPermission enum tests
-# ---------------------------------------------------------------------------
 
 
 class TestActionPermission:
@@ -202,9 +198,7 @@ class TestActionPermission:
 		assert expected == domains
 
 
-# ---------------------------------------------------------------------------
 # ResourceType enum tests
-# ---------------------------------------------------------------------------
 
 
 class TestResourceType:
@@ -223,9 +217,7 @@ class TestResourceType:
 		assert ResourceType.FILE == "file"
 
 
-# ---------------------------------------------------------------------------
 # Role model tests
-# ---------------------------------------------------------------------------
 
 
 class TestRoleModel:
@@ -306,9 +298,7 @@ class TestRoleModel:
 		assert "action_permissions" in raw
 
 
-# ---------------------------------------------------------------------------
 # Principal permission resolution tests
-# ---------------------------------------------------------------------------
 
 
 class TestPrincipalPermissions:
@@ -377,9 +367,7 @@ class TestPrincipalPermissions:
 		assert not p.has_permission("settings:manage")
 
 
-# ---------------------------------------------------------------------------
 # get_current_principal integration tests
-# ---------------------------------------------------------------------------
 
 
 class TestGetCurrentPrincipal:
@@ -495,9 +483,7 @@ class TestGetCurrentPrincipal:
 		assert "models:manage" in principal.permissions
 
 
-# ---------------------------------------------------------------------------
 # authorization predicate tests with role resource defaults
-# ---------------------------------------------------------------------------
 
 
 class TestResourceAccessPredicateWithDefaults:
@@ -594,9 +580,7 @@ class TestResourceAccessPredicateWithDefaults:
 		assert result.scalar_one_or_none() is None
 
 
-# ---------------------------------------------------------------------------
 # get_effective_access_level tests
-# ---------------------------------------------------------------------------
 
 
 class TestGetEffectiveAccessLevel:
@@ -831,9 +815,7 @@ class TestGetEffectiveAccessLevel:
 		assert level == AccessLevel.EDITOR
 
 
-# ---------------------------------------------------------------------------
 # require_permission tests
-# ---------------------------------------------------------------------------
 
 
 class TestRequirePermission:
@@ -891,9 +873,7 @@ class TestRequirePermission:
 		authorization.require_permission(principal, ActionPermission.SETTINGS_MANAGE)
 
 
-# ---------------------------------------------------------------------------
 # require_resource_access tests
-# ---------------------------------------------------------------------------
 
 
 class TestRequireResourceAccess:
@@ -993,9 +973,7 @@ class TestRequireResourceAccess:
 		)
 
 
-# ---------------------------------------------------------------------------
 # roles CRUD API tests
-# ---------------------------------------------------------------------------
 
 
 class TestRolesService:
@@ -1164,9 +1142,7 @@ class TestRolesService:
 		assert exc.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # access rules + role-scoped rule tests
-# ---------------------------------------------------------------------------
 
 
 class TestAccessRuleWithRole:
@@ -1230,9 +1206,7 @@ class TestAccessRuleWithRole:
 		assert level == AccessLevel.EDITOR
 
 
-# ---------------------------------------------------------------------------
 # edge case tests
-# ---------------------------------------------------------------------------
 
 
 class TestEdgeCases:

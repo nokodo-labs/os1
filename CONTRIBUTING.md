@@ -98,6 +98,11 @@ nokodo uses **lowercase typography** throughout. only use uppercase for:
 
 this applies to comments, docstrings, logging, and user-facing text.
 
+### comments and section headers
+
+- avoid decorative separator comments (e.g., long repeated dashes or banner lines).
+- keep section headers as short, plain comment lines.
+
 ## testing
 
 ### backend

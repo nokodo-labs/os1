@@ -4,74 +4,127 @@
 	import type { Thread } from '$lib/stores/chat.svelte'
 
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { scale } from 'svelte/transition'
 
-	export let thread: Thread
-	export let selected: boolean
-	export let onOpenThread: (threadId: string) => void | Promise<void>
-	export let onPrefetch: (threadId: string) => void
+	type Props = {
+		thread: Thread
+		selected: boolean
+		onOpenThread: (threadId: string) => void | Promise<void>
+		onPrefetch: (threadId: string) => void
+		openThreadMenuId: string | null
+		onToggleMenu: (threadId: string) => void
+		onCloseMenu: () => void
+		onRequestEdit: (thread: Thread) => void
+		onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
+	}
 
-	export let openThreadMenuId: string | null
-	export let onToggleMenu: (threadId: string) => void
-	export let onCloseMenu: () => void
+	let {
+		thread,
+		selected,
+		onOpenThread,
+		onPrefetch,
+		openThreadMenuId,
+		onToggleMenu,
+		onCloseMenu,
+		onRequestEdit,
+		onDeleteThread,
+	}: Props = $props()
 
-	export let onRequestEdit: (thread: Thread) => void
-	export let onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
+	const hasRun = $derived(activeRunsStore.hasActiveRuns(thread.id))
+	const isGeneratingTitle = $derived(hasRun && !thread.title)
+	const displayTitle = $derived(thread.title || 'new chat')
+	const hasTags = $derived(thread.tags && thread.tags.length > 0)
 </script>
 
 <div class="group/chat relative min-w-0" role="listitem">
 	<SidebarListItem
 		{selected}
 		radiusClass="rounded-container"
-		paddingClass="px-4 py-2"
+		paddingClass="px-5 py-2.5"
 		className="gap-2 text-white"
 		onPrefetch={() => onPrefetch(thread.id)}
 		onSelect={async () => {
 			await onOpenThread(thread.id)
 		}}
-		actionsVisibility={device.isTouch ? 'always' : 'hover'}
+		actionsVisibility={hasRun || device.isTouch ? 'always' : 'hover'}
 	>
-		<div class="min-w-0 overflow-hidden">
+		<div class="min-w-0 flex-1 overflow-hidden">
+			<!-- primary row: title + timestamp -->
 			<div class="flex items-center gap-2">
-				<span class="overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap">
-					{thread.title || 'untitled chat'}
-				</span>
-			</div>
-			<div class="mt-0.5 flex items-center gap-2">
-				{#if thread.tags && thread.tags.length > 0}
-					<span
-						class="min-w-0 flex-1 truncate text-xs text-white/45"
-						title={thread.tags.join(', ')}
+				{#if isGeneratingTitle}
+					<ShimmerText
+						className="min-w-0 flex-1 overflow-hidden text-sm font-medium leading-normal text-ellipsis whitespace-nowrap"
 					>
-						{thread.tags.join(' · ')}
+						generating
+					</ShimmerText>
+				{:else}
+					<span
+						class="min-w-0 flex-1 overflow-hidden text-sm leading-normal font-medium text-ellipsis whitespace-nowrap {thread.title
+							? 'text-white'
+							: 'text-white/40 italic'}"
+					>
+						{displayTitle}
 					</span>
 				{/if}
+
 				<Timestamp
 					timestamp={new Date(thread.last_activity_at ?? '')}
 					mode="relative"
 					minUnit="hour"
-					className="shrink-0 text-xs text-white/55"
+					className="ml-auto shrink-0 text-[11px] text-white/35"
 				/>
 			</div>
+
+			<!-- tags row: only when tags exist -->
+			{#if hasTags}
+				<div class="mt-1 flex items-center gap-1 overflow-hidden">
+					{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
+						<span
+							class="inline-flex max-w-20 shrink-0 items-center truncate rounded-full bg-white/8 px-1.5 py-px text-[10px] leading-tight text-white/50"
+							title={tag}
+						>
+							{tag}
+						</span>
+					{/each}
+					{#if (thread.tags ?? []).length > 3}
+						<span class="shrink-0 text-[10px] text-white/30">
+							+{(thread.tags ?? []).length - 3}
+						</span>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		{#snippet actions()}
 			<button
 				type="button"
-				class="rounded-circle inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/65 transition-all duration-200 hover:bg-white/10 hover:text-white"
+				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/55 transition-all duration-200 hover:bg-white/10 hover:text-white"
 				onclick={(e) => {
 					e.stopPropagation()
 					onToggleMenu(thread.id)
 				}}
-				aria-label="thread actions"
+				aria-label={hasRun ? 'active run' : 'thread actions'}
+				title={hasRun ? 'Agent is running...' : 'Menu'}
 			>
-				<EllipsisHorizontal class="h-5 w-5" />
+				{#if hasRun}
+					<div class="relative flex h-2 w-2 shrink-0 items-center justify-center">
+						<span
+							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-yellow-400 opacity-75"
+						></span>
+						<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-yellow-400"
+						></span>
+					</div>
+				{:else}
+					<EllipsisHorizontal class="h-4.5 w-4.5" />
+				{/if}
 			</button>
 		{/snippet}
 	</SidebarListItem>
@@ -129,7 +182,7 @@
 					stopPropagation={true}
 					modalText={{
 						title: 'delete chat?',
-						description: thread.title || 'untitled chat',
+						description: thread.title || 'new chat',
 					}}
 					onDelete={() => onDeleteThread(thread)}
 				/>

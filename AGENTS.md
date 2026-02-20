@@ -23,6 +23,11 @@ as an AI, your context is limited, thus overly verbose responses will directly a
 never attempt to run dev servers. always assume a dev server with hot reload is running and monitored live by the user.
 to test changes, use dedicated check commands or run proper tests instead.
 
+### ascii-only formatting
+
+- use only ASCII in comments/docstrings unless the file already uses non-ASCII and the user asks for it.
+- no em/en dashes or box-drawing separators; avoid decorative separators. use short plain comment headers and `-`.
+
 ### instruction files
 
 when you want to work on the codebase, you **must ALWAYS** find and read the **closest AGENTS.md file to your target** work area.

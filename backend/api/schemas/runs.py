@@ -15,7 +15,7 @@ class ClientContext(BaseModel):
 
 	the frontend collects device and environment data that the agent
 	can use to personalise responses (e.g. timezone-aware greetings).
-	all fields are optional — the backend gracefully handles missing data.
+	all fields are optional - the backend gracefully handles missing data.
 	"""
 
 	timezone: str | None = Field(
@@ -93,10 +93,10 @@ class _RunBase(BaseModel):
 
 
 class RunRequest(_RunBase):
-	"""POST /runs — run on an existing thread, or ephemeral (no thread).
+	"""POST /runs - run on an existing thread, or ephemeral (no thread).
 
 	when ``thread_id`` is present the run continues that thread.
-	when omitted the run is **ephemeral** — no thread is created or
+	when omitted the run is **ephemeral** - no thread is created or
 	persisted (not yet implemented).
 
 	``input`` is required for ephemeral runs and optional when continuing
@@ -108,7 +108,7 @@ class RunRequest(_RunBase):
 
 
 class ThreadCreateAndRunRequest(_RunBase):
-	"""POST /threads/create_and_run — create a thread then run immediately.
+	"""POST /threads/create_and_run - create a thread then run immediately.
 
 	``input`` is required (a new thread needs at least one user message).
 	the SSE stream emits a ``thread_created`` event before normal run events.

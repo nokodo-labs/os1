@@ -19,6 +19,7 @@ from api.v1.service.auth import (
 	get_optional_principal,
 )
 from api.v1.service.events import SessionId
+from api.v1.service.user_activity import user_activity_store
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,6 +34,13 @@ UserSortBy = Literal[
 ]
 
 
+def _user_with_online(user: User, active_ids: set[str]) -> UserSchema:
+	"""serialize a User ORM model with the computed is_online flag."""
+	schema = UserSchema.model_validate(user)
+	schema.is_online = str(user.id) in active_ids
+	return schema
+
+
 @router.get("", response_model=list[UserSchema])
 async def read_users(
 	skip: int = 0,
@@ -41,9 +49,9 @@ async def read_users(
 	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[User]:
+) -> list[UserSchema]:
 	"""retrieve users."""
-	return await user_service.list_users(
+	users = await user_service.list_users(
 		db,
 		principal=principal,
 		skip=skip,
@@ -51,6 +59,18 @@ async def read_users(
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 	)
+	active_ids = set(await user_activity_store.get_active_user_ids())
+	return [_user_with_online(u, active_ids) for u in users]
+
+
+@router.get("/active", response_model=list[str])
+async def read_active_user_ids(
+	principal: Principal = Depends(get_current_principal),
+) -> list[str]:
+	"""return IDs of users currently connected to the event stream."""
+	if not principal.is_admin:
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	return await user_activity_store.get_active_user_ids()
 
 
 @router.get("/{user_id}", response_model=UserSchema)
@@ -58,9 +78,11 @@ async def read_user(
 	user_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> User:
+) -> UserSchema:
 	"""get user by ID."""
-	return await user_service.get_user(user_id, db, principal=principal)
+	user = await user_service.get_user(user_id, db, principal=principal)
+	active_ids = set(await user_activity_store.get_active_user_ids())
+	return _user_with_online(user, active_ids)
 
 
 @router.post("", response_model=UserSchema, status_code=status.HTTP_201_CREATED)

@@ -8,6 +8,7 @@
 	import {
 		Brain,
 		CheckCircle,
+		Circle,
 		Clock,
 		Hash,
 		Mail,
@@ -15,6 +16,7 @@
 		Shield,
 		Sliders,
 		User as UserIcon,
+		Wifi,
 		X,
 		XCircle,
 	} from '@lucide/svelte'
@@ -213,6 +215,28 @@
 									{user.is_superuser ? 'yes' : 'no'}
 								</span>
 							</div>
+							{#if (user as Record<string, unknown>).is_online}
+								<div class="flex items-center gap-3 text-sm">
+									<Circle
+										class="h-4 w-4 shrink-0 fill-emerald-400 text-emerald-400"
+									/>
+									<span class="text-zinc-400">status</span>
+									<span class="ml-auto text-emerald-400">online</span>
+								</div>
+							{:else}
+								<div class="flex items-center gap-3 text-sm">
+									<Wifi class="h-4 w-4 shrink-0 text-zinc-500" />
+									<span class="text-zinc-400">last active</span>
+									<span class="ml-auto text-xs text-zinc-300">
+										{(user as Record<string, unknown>).last_active_at
+											? new Date(
+													(user as Record<string, unknown>)
+														.last_active_at as string
+												).toLocaleString()
+											: 'never'}
+									</span>
+								</div>
+							{/if}
 
 							<div class="h-px bg-zinc-800"></div>
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import AsyncSessionLocal, get_db
 from api.core.logging import get_logger
 from api.models.event import Event, EventScope
+from api.models.user import User
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventCreate
 from api.v1.service import auth as auth_service
@@ -17,6 +18,7 @@ from api.v1.service import events as event_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.chat.run_status import get_active_runs_signal
+from api.v1.service.user_activity import user_activity_store
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -76,6 +78,7 @@ async def events_stream(websocket: WebSocket) -> None:
 	user_id = str(user.id)
 
 	await event_service.event_connections.connect(user_id, websocket)
+	await user_activity_store.mark_active(user_id)
 	await websocket.send_json({"type": "stream.connected", "user_id": user_id})
 
 	# send active runs signal so the client knows which runs to resume
@@ -91,6 +94,7 @@ async def events_stream(websocket: WebSocket) -> None:
 			data = await websocket.receive_json()
 			msg_type = data.get("type")
 			if msg_type == "ping":
+				await user_activity_store.touch(user_id)
 				await websocket.send_json({"type": "stream.pong"})
 			elif msg_type in ("typing.start", "typing.stop"):
 				thread_id = data.get("thread_id")
@@ -110,3 +114,18 @@ async def events_stream(websocket: WebSocket) -> None:
 		logger.debug(f"websocket error for user {user_id}: {e}")
 	finally:
 		await event_service.event_connections.disconnect(user_id, websocket)
+		last_seen = await user_activity_store.mark_inactive(user_id)
+		# persist last_active_at to DB when user fully disconnects
+		if not await user_activity_store.is_active(user_id):
+			try:
+				async with AsyncSessionLocal() as db_session:
+					from sqlalchemy import update
+
+					await db_session.execute(
+						update(User)
+						.where(User.id == user_id)
+						.values(last_active_at=last_seen)
+					)
+					await db_session.commit()
+			except Exception:
+				logger.debug("failed to persist last_active_at for user %s", user_id)

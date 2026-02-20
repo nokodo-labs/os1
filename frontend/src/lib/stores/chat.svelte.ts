@@ -5,6 +5,7 @@ import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export type Thread = components['schemas']['Thread']
@@ -252,8 +253,7 @@ class ChatStore {
 			this.threadCache.invalidateAll(threadId)
 			this.removeRecentThread(threadId)
 		} else if (message.type === 'message.created') {
-			const threadId =
-				(data.thread_id as string) ?? (message.thread_id as string)
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (!threadId) return
 			// add to cached messages if we have data with an id
 			if (data.id && typeof data.id === 'string') {
@@ -262,18 +262,12 @@ class ChatStore {
 				this.threadCache.invalidateMessages(threadId)
 			}
 		} else if (message.type === 'message.updated') {
-			const threadId =
-				(data.thread_id as string) ?? (message.thread_id as string)
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			const msgId = (data.id as string) ?? (message.message_id as string)
 			if (!threadId || !msgId) return
-			this.threadCache.updateMessage(
-				threadId,
-				msgId,
-				data as Partial<ApiMessage>,
-			)
+			this.threadCache.updateMessage(threadId, msgId, data as Partial<ApiMessage>)
 		} else if (message.type === 'message.deleted') {
-			const threadId =
-				(data.thread_id as string) ?? (message.thread_id as string)
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (!threadId) return
 			const deletedIds = data.deleted_ids as string[] | undefined
 			const msgId = (data.message_id as string) ?? (message.message_id as string)
@@ -374,8 +368,10 @@ if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
 			chat.initEvents()
+			activeRunsStore.init()
 		} else {
 			chat.cleanupEvents()
+			activeRunsStore.cleanup()
 			chat.clear()
 		}
 	})

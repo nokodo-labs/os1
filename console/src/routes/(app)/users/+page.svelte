@@ -19,6 +19,7 @@
 	import {
 		ArrowDown,
 		ArrowUp,
+		Circle,
 		Clock,
 		Hash,
 		Mail,
@@ -299,6 +300,20 @@
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="min-w-0 flex-1 space-y-2">
 							<div class="flex flex-wrap items-center gap-2">
+								{#if (u as Record<string, unknown>).is_online}
+									<span class="relative flex h-2.5 w-2.5 shrink-0" title="online">
+										<span
+											class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
+										></span>
+										<span
+											class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"
+										></span>
+									</span>
+								{:else}
+									<Circle
+										class="h-2.5 w-2.5 shrink-0 fill-zinc-600 text-zinc-600"
+									/>
+								{/if}
 								<span class="truncate font-medium">
 									{u.display_name || u.email}
 								</span>
@@ -336,14 +351,27 @@
 									<span
 										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
 									>
-											<UserIcon class="h-3.5 w-3.5" />
+										<UserIcon class="h-3.5 w-3.5" />
 										{u.display_name}
 									</span>
 								{/if}
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
-							<div class="flex items-center gap-1">
+							{#if (u as Record<string, unknown>).is_online}
+								<div class="flex items-center gap-1 text-emerald-400">
+									<Circle class="h-3 w-3 fill-emerald-400" />
+									online now
+								</div>
+							{:else if (u as Record<string, unknown>).last_active_at}
+								<div class="flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									last active {new Date(
+										(u as Record<string, unknown>).last_active_at as string
+									).toLocaleString()}
+								</div>
+							{/if}
+							<div class="mt-1 flex items-center gap-1">
 								<Clock class="h-3.5 w-3.5" />
 								updated {new Date(u.updated_at).toLocaleString()}
 							</div>

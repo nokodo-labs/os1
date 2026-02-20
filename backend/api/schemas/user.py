@@ -1,5 +1,6 @@
 """user schemas."""
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
@@ -57,6 +58,8 @@ class User(UserBase, TimestampedModel):
 	"""schema for user response."""
 
 	id: TypeID
+	last_active_at: datetime | None = None
+	is_online: bool = False
 
 
 class UserPermissions(BaseModel):
