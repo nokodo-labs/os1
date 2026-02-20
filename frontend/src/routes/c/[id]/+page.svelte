@@ -318,9 +318,10 @@
 				type="button"
 				class="liquid-glass--frosted pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/85 transition-colors hover:bg-white/10 hover:text-white"
 				aria-label="scroll to bottom"
+				onpointerdown={(e) => e.preventDefault()}
 				onclick={() => {
+					chat.queueScrollToBottom('smooth')
 					chat.autoScroll = true
-					chat.scrollToBottom('smooth')
 				}}
 			>
 				<ArrowUp class="h-4 w-4 rotate-180" />
@@ -336,10 +337,7 @@
 	>
 		<div
 			class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: {Math.max(
-				96,
-				chat.inputOverlayHeight + 24
-			)}px;"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: {chat.inputOverlayHeight}px;"
 		>
 			{#if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.streamingAssistant}
 				<div class="flex flex-1 items-center justify-center py-16">

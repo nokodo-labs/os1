@@ -107,8 +107,9 @@
 
 	function handleKeyDown(event: KeyboardEvent) {
 		if (onKeyDown?.(event)) return
-		// Don't submit if composing (for IME input)
-		if (event.key === 'Enter' && !event.shiftKey && !isComposing) {
+		// on touch devices, enter inserts a newline (users need it for multiline).
+		// on desktop, bare enter sends the message.
+		if (event.key === 'Enter' && !event.shiftKey && !isComposing && !device.isTouch) {
 			event.preventDefault()
 			handleSubmit()
 		}
@@ -133,11 +134,9 @@
 	}
 
 	/**
-	 * on mobile, touching a button outside the textarea triggers the browser's
-	 * built-in "blur on touch elsewhere" before any click/pointer events fire.
-	 * touchstart fires FIRST in the event pipeline - calling preventDefault()
-	 * here stops the browser from ever initiating the focus transfer, so the
-	 * textarea keeps focus and the virtual keyboard stays up.
+	 * form submit handler. on mobile, the virtual keyboard may dismiss when
+	 * the user taps the send button (due to blur). re-focus the textarea
+	 * after the submit to keep the keyboard open.
 	 */
 	async function handleFormSubmit(event: SubmitEvent) {
 		event.preventDefault()
@@ -262,8 +261,6 @@
 								? 'hover:brightness-110'
 								: 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
 							disabled={value.trim() === '' || disabled}
-							ontouchstart={handleSubmit}
-							onclick={handleSubmit}
 						>
 							<ArrowUp class="h-5 w-5" strokeWidth="2" />
 						</button>

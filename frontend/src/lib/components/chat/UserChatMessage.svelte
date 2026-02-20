@@ -45,13 +45,20 @@
 	let touchStartY = 0
 	let touchMoved = false
 	let touchActive = false
+	// timestamp of the last touch interaction - used to ignore synthetic mouse
+	// events that mobile browsers fire after a touch sequence
+	let lastTouchTime = 0
+	let messageRef: HTMLElement | undefined = $state()
 
 	function handleMouseEnter() {
+		// ignore synthetic mouse events fired by the browser after a touch
+		if (Date.now() - lastTouchTime < 500) return
 		showActions = true
 		isHovered = true
 	}
 
 	function handleMouseLeave() {
+		if (Date.now() - lastTouchTime < 500) return
 		showActions = false
 		isHovered = false
 	}
@@ -68,6 +75,7 @@
 	}
 
 	function handleTouchStart(e: TouchEvent) {
+		lastTouchTime = Date.now()
 		if (showActions) return
 		if (e.touches.length !== 1) return
 		touchActive = true
@@ -111,6 +119,19 @@
 		}
 	})
 
+	// dismiss touch-revealed actions when tapping outside this message
+	$effect(() => {
+		if (!showActions) return
+		const dismiss = (e: TouchEvent) => {
+			lastTouchTime = Date.now()
+			if (messageRef?.contains(e.target as Node)) return
+			showActions = false
+			isHovered = false
+		}
+		document.addEventListener('touchstart', dismiss, { passive: true })
+		return () => document.removeEventListener('touchstart', dismiss)
+	})
+
 	const captureClick: Action = (node) => {
 		const handler = (e: Event) => {
 			if (justRevealed) {
@@ -129,6 +150,7 @@
 </script>
 
 <div
+	bind:this={messageRef}
 	class="flex max-w-[80%] animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2"
 	class:ml-auto={align === 'right'}
 	class:items-end={align === 'right'}
@@ -173,13 +195,7 @@
 	</div>
 
 	{#if actions || siblingCount > 1}
-		<div
-			class="flex items-center gap-1 px-1 transition-opacity duration-200 {showActions
-				? 'opacity-100'
-				: 'pointer-events-none opacity-0'}"
-			role="none"
-			use:captureClick
-		>
+		<div class="flex items-center gap-1 px-1" role="none">
 			{#if siblingCount > 1}
 				<div
 					class="mr-2 flex items-center text-xs font-medium text-black/50 select-none dark:text-white/50"
@@ -204,7 +220,14 @@
 				</div>
 			{/if}
 			{#if actions}
-				{@render actions()}
+				<div
+					class="flex items-center gap-1 transition-opacity duration-200 {showActions
+						? 'opacity-100'
+						: 'pointer-events-none opacity-0'}"
+					use:captureClick
+				>
+					{@render actions()}
+				</div>
 			{/if}
 		</div>
 	{/if}

@@ -237,6 +237,14 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 	for (const msg of sorted) {
 		if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
 
+		// tool results don't contribute visible items to blocks - handle early
+		// to avoid creating empty trailing blocks that break isLastMessage checks
+		if (msg.type === 'tool') {
+			const result = parseToolResult(msg)
+			if (result) collectedToolResults.push(result)
+			continue
+		}
+
 		const runId = getRunId(msg)
 		const block = ensureBlock(runId, getMessageCreatedAt(msg), 'assistant')
 		let seen = seenToolCalls.get(runId)
@@ -266,12 +274,6 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 					block.items.push({ kind: 'tool', toolCallId: tc.id })
 				}
 			}
-			continue
-		}
-
-		if (msg.type === 'tool') {
-			const result = parseToolResult(msg)
-			if (result) collectedToolResults.push(result)
 			continue
 		}
 	}

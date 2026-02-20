@@ -55,7 +55,8 @@
 
 	// derived visibility - keeps the template readable
 	let actionsVisible = $derived(!isStreaming && !isRunActive && (isLastMessage || showActions))
-	let branchNavVisible = $derived(siblingCount > 1 && (isLastMessage || showActions))
+	// tree/branch switcher is always visible when multiple siblings exist
+	let branchNavVisible = $derived(siblingCount > 1)
 
 	// intentionally non-reactive - synchronous flag between touch + click handlers.
 	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
@@ -66,13 +67,20 @@
 	let touchStartY = 0
 	let touchMoved = false
 	let touchActive = false
+	// timestamp of the last touch interaction - used to ignore synthetic mouse
+	// events that mobile browsers fire after a touch sequence
+	let lastTouchTime = 0
+	let messageRef: HTMLElement | undefined = $state()
 
 	function handleMouseEnter() {
+		// ignore synthetic mouse events fired by the browser after a touch
+		if (Date.now() - lastTouchTime < 500) return
 		showActions = true
 		isHovered = true
 	}
 
 	function handleMouseLeave() {
+		if (Date.now() - lastTouchTime < 500) return
 		showActions = false
 		isHovered = false
 	}
@@ -90,6 +98,7 @@
 	}
 
 	function handleTouchStart(e: TouchEvent) {
+		lastTouchTime = Date.now()
 		if (showActions || isLastMessage) return
 		if (e.touches.length !== 1) return
 		touchActive = true
@@ -133,6 +142,19 @@
 		}
 	})
 
+	// dismiss touch-revealed actions when tapping outside this message
+	$effect(() => {
+		if (!showActions || isLastMessage) return
+		const dismiss = (e: TouchEvent) => {
+			lastTouchTime = Date.now()
+			if (messageRef?.contains(e.target as Node)) return
+			showActions = false
+			isHovered = false
+		}
+		document.addEventListener('touchstart', dismiss, { passive: true })
+		return () => document.removeEventListener('touchstart', dismiss)
+	})
+
 	const captureClick: Action = (node) => {
 		const handler = (e: Event) => {
 			if (justRevealed) {
@@ -151,6 +173,7 @@
 </script>
 
 <div
+	bind:this={messageRef}
 	class="flex w-full animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] items-start gap-3 self-start
         {device.isMobile ? 'px-4' : ''}"
 	onmouseenter={handleMouseEnter}
