@@ -6,6 +6,7 @@
 		type BackgroundType,
 		type DefaultPermissionsSettings,
 		type DefaultPermissionsSettingsPatch,
+		type Model,
 		type SettingsResponse,
 		type SettingsUpdateRequest,
 	} from '$lib/api'
@@ -61,6 +62,10 @@
 	let agentsError = $state<string | null>(null)
 	let agents = $state<Agent[]>([])
 
+	let isFetchingModels = $state(false)
+	let modelsError = $state<string | null>(null)
+	let models = $state<Model[]>([])
+
 	// Read-only (env-only/write-locked) display values
 	let brandingAppVersion = $state<string>('')
 	let brandingAnalyticsKeyConfigured = $state<boolean>(false)
@@ -86,6 +91,10 @@
 
 	let aiChatContextMode = $state<ChatContextMode>('recent')
 	let aiChatContextTopK = $state<string>('')
+
+	let aiTaskDefaultModelId = $state<string>('')
+	let aiTaskThreadMetadataModelId = $state<string>('')
+	let aiTaskInputAutocompleteModelId = $state<string>('')
 
 	let brandingSiteName = $state('')
 	let brandingLogoUrl = $state('')
@@ -141,6 +150,9 @@
 		aiMemoryMessagesToConsider: '',
 		aiChatContextMode: 'recent' as ChatContextMode,
 		aiChatContextTopK: '',
+		aiTaskDefaultModelId: '',
+		aiTaskThreadMetadataModelId: '',
+		aiTaskInputAutocompleteModelId: '',
 		brandingSiteName: '',
 		brandingLogoUrl: '',
 		brandingFaviconUrl: '',
@@ -192,6 +204,9 @@
 			aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider ||
 			aiChatContextMode !== original.aiChatContextMode ||
 			aiChatContextTopK !== original.aiChatContextTopK ||
+			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
+			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
+			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 			brandingSiteName !== original.brandingSiteName ||
 			brandingLogoUrl !== original.brandingLogoUrl ||
 			brandingFaviconUrl !== original.brandingFaviconUrl ||
@@ -236,6 +251,16 @@
 
 	function agentLabel(a: Agent): string {
 		return a.name || a.id
+	}
+
+	function modelLabel(m: Model): string {
+		return m.display_name || m.name || m.id
+	}
+
+	function getModelLabel(modelId: string): string {
+		if (!modelId) return 'none'
+		const m = models.find((x) => x.id === modelId)
+		return m ? modelLabel(m) : modelId
 	}
 
 	const selectedAgentLabel = $derived(() => {
@@ -294,6 +319,11 @@
 		const chatContext = ai?.chat_context
 		aiChatContextMode = (chatContext?.mode ?? 'recent') as ChatContextMode
 		aiChatContextTopK = toStringOrEmpty(chatContext?.top_k)
+
+		const tasks = ai?.tasks
+		aiTaskDefaultModelId = tasks?.default_model_id ?? ''
+		aiTaskThreadMetadataModelId = tasks?.thread_metadata_model_id ?? ''
+		aiTaskInputAutocompleteModelId = tasks?.input_autocomplete_model_id ?? ''
 
 		const branding = r.data.branding
 		brandingSiteName = branding?.site_name ?? ''
@@ -354,6 +384,9 @@
 			aiMemoryMessagesToConsider,
 			aiChatContextMode,
 			aiChatContextTopK,
+			aiTaskDefaultModelId,
+			aiTaskThreadMetadataModelId,
+			aiTaskInputAutocompleteModelId,
 			brandingSiteName,
 			brandingLogoUrl,
 			brandingFaviconUrl,
@@ -413,6 +446,20 @@
 		}
 	}
 
+	async function fetchModels() {
+		isFetchingModels = true
+		modelsError = null
+		try {
+			const list = unwrap(await api.GET('/v1/models'))
+			models = [...list].sort((a, b) => modelLabel(a).localeCompare(modelLabel(b)))
+		} catch (e) {
+			console.error('Failed to fetch models', e)
+			modelsError = 'failed to load models'
+		} finally {
+			isFetchingModels = false
+		}
+	}
+
 	function resetDraft() {
 		uiDefaultTheme = original.uiDefaultTheme
 		uiDefaultBackground = original.uiDefaultBackground
@@ -425,6 +472,9 @@
 		aiMemoryMessagesToConsider = original.aiMemoryMessagesToConsider
 		aiChatContextMode = original.aiChatContextMode
 		aiChatContextTopK = original.aiChatContextTopK
+		aiTaskDefaultModelId = original.aiTaskDefaultModelId
+		aiTaskThreadMetadataModelId = original.aiTaskThreadMetadataModelId
+		aiTaskInputAutocompleteModelId = original.aiTaskInputAutocompleteModelId
 		brandingSiteName = original.brandingSiteName
 		brandingLogoUrl = original.brandingLogoUrl
 		brandingFaviconUrl = original.brandingFaviconUrl
@@ -503,11 +553,14 @@
 			aiMemoryTopK !== original.aiMemoryTopK ||
 			aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider ||
 			aiChatContextMode !== original.aiChatContextMode ||
-			aiChatContextTopK !== original.aiChatContextTopK
+			aiChatContextTopK !== original.aiChatContextTopK ||
+			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
+			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
+			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId
 		) {
-			data.ai = {}
+			const aiPatch: NonNullable<NonNullable<SettingsUpdateRequest['data']>['ai']> = {}
 			if (aiDefaultAgentId !== original.aiDefaultAgentId)
-				data.ai.default_agent_id = aiDefaultAgentId ? aiDefaultAgentId : null
+				aiPatch.default_agent_id = aiDefaultAgentId ? aiDefaultAgentId : null
 
 			if (
 				aiMemoryEnable !== original.aiMemoryEnable ||
@@ -515,29 +568,51 @@
 				aiMemoryTopK !== original.aiMemoryTopK ||
 				aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider
 			) {
-				data.ai.memory = {}
+				aiPatch.memory = {}
 				if (aiMemoryEnable !== original.aiMemoryEnable)
-					data.ai.memory.enable_memory = aiMemoryEnable
+					aiPatch.memory.enable_memory = aiMemoryEnable
 				if (aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold)
-					data.ai.memory.similarity_threshold = asNumberOrNull(
+					aiPatch.memory.similarity_threshold = asNumberOrNull(
 						aiMemorySimilarityThreshold
 					)
 				if (aiMemoryTopK !== original.aiMemoryTopK)
-					data.ai.memory.top_k = asNumberOrNull(aiMemoryTopK)
+					aiPatch.memory.top_k = asNumberOrNull(aiMemoryTopK)
 				if (aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider)
-					data.ai.memory.messages_to_consider = asNumberOrNull(aiMemoryMessagesToConsider)
+					aiPatch.memory.messages_to_consider = asNumberOrNull(aiMemoryMessagesToConsider)
 			}
 
 			if (
 				aiChatContextMode !== original.aiChatContextMode ||
 				aiChatContextTopK !== original.aiChatContextTopK
 			) {
-				data.ai.chat_context = {}
+				aiPatch.chat_context = {}
 				if (aiChatContextMode !== original.aiChatContextMode)
-					data.ai.chat_context.mode = aiChatContextMode
+					aiPatch.chat_context.mode = aiChatContextMode
 				if (aiChatContextTopK !== original.aiChatContextTopK)
-					data.ai.chat_context.top_k = asNumberOrNull(aiChatContextTopK)
+					aiPatch.chat_context.top_k = asNumberOrNull(aiChatContextTopK)
 			}
+
+			if (
+				aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
+				aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
+				aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId
+			) {
+				aiPatch.tasks = {}
+				if (aiTaskDefaultModelId !== original.aiTaskDefaultModelId)
+					aiPatch.tasks.default_model_id = aiTaskDefaultModelId
+						? aiTaskDefaultModelId
+						: null
+				if (aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId)
+					aiPatch.tasks.thread_metadata_model_id = aiTaskThreadMetadataModelId
+						? aiTaskThreadMetadataModelId
+						: null
+				if (aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId)
+					aiPatch.tasks.input_autocomplete_model_id = aiTaskInputAutocompleteModelId
+						? aiTaskInputAutocompleteModelId
+						: null
+			}
+
+			data.ai = aiPatch
 		}
 
 		if (
@@ -693,7 +768,7 @@
 	}
 
 	onMount(() => {
-		Promise.all([fetchSettings(), fetchAgents()])
+		Promise.all([fetchSettings(), fetchAgents(), fetchModels()])
 	})
 </script>
 
@@ -953,6 +1028,108 @@
 										/>
 									</div>
 								</div>
+							</div>
+
+							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+								<div class="mb-4 flex items-center justify-between">
+									<div>
+										<p class="text-sm font-medium">task models</p>
+										<p class="text-xs text-zinc-500">
+											overrides for background task runs.
+										</p>
+									</div>
+									{#if isFetchingModels}
+										<span class="text-xs text-zinc-500">loading…</span>
+									{/if}
+								</div>
+								<div class="grid gap-4 md:grid-cols-2">
+									<div class="space-y-2">
+										<Label for="task_default_model">default model</Label>
+										<Select
+											value={aiTaskDefaultModelId}
+											onValueChange={(v: string) =>
+												(aiTaskDefaultModelId = v)}
+										>
+											<SelectTrigger
+												id="task_default_model"
+												class="rounded-xl"
+											>
+												<span class="truncate text-left"
+													>{getModelLabel(aiTaskDefaultModelId)}</span
+												>
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="">none</SelectItem>
+												{#each models as model (model.id)}
+													<SelectItem value={model.id}>
+														{modelLabel(model)}
+													</SelectItem>
+												{/each}
+											</SelectContent>
+										</Select>
+									</div>
+									<div class="space-y-2">
+										<Label for="task_thread_metadata_model"
+											>thread metadata model</Label
+										>
+										<Select
+											value={aiTaskThreadMetadataModelId}
+											onValueChange={(v: string) =>
+												(aiTaskThreadMetadataModelId = v)}
+										>
+											<SelectTrigger
+												id="task_thread_metadata_model"
+												class="rounded-xl"
+											>
+												<span class="truncate text-left"
+													>{getModelLabel(
+														aiTaskThreadMetadataModelId
+													)}</span
+												>
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="">none</SelectItem>
+												{#each models as model (model.id)}
+													<SelectItem value={model.id}>
+														{modelLabel(model)}
+													</SelectItem>
+												{/each}
+											</SelectContent>
+										</Select>
+									</div>
+									<div class="space-y-2">
+										<Label for="task_input_autocomplete_model">
+											input autocomplete model
+										</Label>
+										<Select
+											value={aiTaskInputAutocompleteModelId}
+											onValueChange={(v: string) =>
+												(aiTaskInputAutocompleteModelId = v)}
+										>
+											<SelectTrigger
+												id="task_input_autocomplete_model"
+												class="rounded-xl"
+											>
+												<span class="truncate text-left"
+													>{getModelLabel(
+														aiTaskInputAutocompleteModelId
+													)}</span
+												>
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="">none</SelectItem>
+												{#each models as model (model.id)}
+													<SelectItem value={model.id}>
+														{modelLabel(model)}
+													</SelectItem>
+												{/each}
+											</SelectContent>
+										</Select>
+									</div>
+								</div>
+								{#if modelsError}
+									<p class="mt-3 text-xs text-red-300">{modelsError}</p>
+								{/if}
 							</div>
 						</CardContent>
 					</Card>

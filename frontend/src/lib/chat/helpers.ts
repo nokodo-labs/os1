@@ -129,7 +129,9 @@ export function computeIsAtBottom(element: HTMLElement): boolean {
 
 /**
  * merge incoming tool call data into the existing list, creating or updating
- * entries by id. pure function — no reactive state.
+ * entries by id. handles both object and string arguments from streaming.
+ * string arguments are accumulated (appended) across chunks.
+ * pure function — no reactive state.
  */
 export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCall[] {
 	const out = new Map(existing.map((tc) => [tc.id, tc]))
@@ -139,11 +141,22 @@ export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCa
 		const tc = item as Record<string, unknown>
 		const id = typeof tc.id === 'string' ? tc.id : null
 		const name = typeof tc.name === 'string' ? tc.name : null
-		const args =
-			tc.arguments && typeof tc.arguments === 'object' && tc.arguments !== null
-				? (tc.arguments as Record<string, unknown>)
-				: {}
 		if (!id || !name) continue
+
+		const prev = out.get(id)
+		const rawArgs = tc.arguments
+
+		let args: Record<string, unknown> | string
+		if (typeof rawArgs === 'string') {
+			// streaming string fragment — accumulate with previous
+			const prevStr = prev ? (typeof prev.arguments === 'string' ? prev.arguments : '') : ''
+			args = prevStr + rawArgs
+		} else if (rawArgs && typeof rawArgs === 'object' && rawArgs !== null) {
+			args = rawArgs as Record<string, unknown>
+		} else {
+			args = prev?.arguments ?? {}
+		}
+
 		out.set(id, { id, name, arguments: args })
 	}
 	return Array.from(out.values())

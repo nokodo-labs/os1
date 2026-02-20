@@ -46,9 +46,8 @@ export interface ChatContext {
 	readonly scrollContainer: HTMLElement | null
 	autoScroll: boolean
 
-	// tools
+	// tools (reactive tracker — no tick counter needed)
 	readonly toolTracker: ToolExecutionTracker
-	toolTick: number
 	readonly fetchedToolEventMessageIds: SvelteSet<string>
 	readonly toolEventsPendingIds: SvelteSet<string>
 	toolEventsInFlight: boolean

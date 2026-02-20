@@ -197,6 +197,19 @@ class AccessibilityPreferences(BaseModel):
 	)
 
 
+# debug preferences
+class DebugPreferences(BaseModel):
+	"""user debug preferences (admin-only section)."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	enable_debug_apps: bool | None = Field(
+		default=None,
+		alias="enableDebugApps",
+		description="when enabled, placeholder/debug apps are shown on the home screen",
+	)
+
+
 # the main preferences schema
 class UserPreferences(BaseModel):
 	"""complete user preferences schema.
@@ -233,4 +246,8 @@ class UserPreferences(BaseModel):
 	accessibility: AccessibilityPreferences | None = Field(
 		default=None,
 		description="accessibility preferences",
+	)
+	debug: DebugPreferences | None = Field(
+		default=None,
+		description="debug preferences (admin-only)",
 	)

@@ -78,7 +78,6 @@ export function createChatState(): ChatState {
 
 	// ── tool tracking ────────────────────────────────────────────────────
 	const toolTracker = new ToolExecutionTracker()
-	let toolTick = $state(0)
 	const fetchedToolEventMessageIds = new SvelteSet<string>()
 	const toolEventsPendingIds = new SvelteSet<string>()
 	let toolEventsInFlight = $state(false)
@@ -146,7 +145,6 @@ export function createChatState(): ChatState {
 		// apply side effects: register tool calls and results
 		for (const tc of result.toolCalls) toolTracker.registerToolCall(tc)
 		for (const tr of result.toolResults) toolTracker.registerResult(tr)
-		if (result.toolCalls.length > 0 || result.toolResults.length > 0) toolTick++
 
 		runBlocks = result.blocks
 	}
@@ -343,12 +341,6 @@ export function createChatState(): ChatState {
 		get toolTracker() {
 			return toolTracker
 		},
-		get toolTick() {
-			return toolTick
-		},
-		set toolTick(v) {
-			toolTick = v
-		},
 		get fetchedToolEventMessageIds() {
 			return fetchedToolEventMessageIds
 		},
@@ -409,10 +401,7 @@ export function createChatState(): ChatState {
 		get hasActiveStreamingToolCalls() {
 			if (!streamingAssistant) return false
 			if (streamingAssistant.toolCalls.length === 0) return false
-			return streamingAssistant.toolCalls.some((tc) => {
-				const exec = toolTracker.getExecution(tc.id)
-				return !exec || exec.status === 'pending' || exec.status === 'running'
-			})
+			return streamingAssistant.toolCalls.some((tc) => toolTracker.isActive(tc.id))
 		},
 		get agentNameById() {
 			return agentNameById
@@ -470,8 +459,7 @@ export function createChatState(): ChatState {
 		setThread,
 		clearThread,
 		getToolExecution(toolCallId: string) {
-			if (toolTick < 0) return undefined
-			return toolTracker.getExecution(toolCallId)
+			return toolTracker.get(toolCallId)
 		},
 
 		// ── delegated to $lib/chat modules ───────────────────────────────

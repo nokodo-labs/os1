@@ -23,6 +23,8 @@
 	import Users from '$lib/components/icons/Users.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { onDestroy, tick } from 'svelte'
 
 	type IconComponent = typeof Document
@@ -65,18 +67,6 @@
 		},
 		{ id: 'calendar', title: 'calendar', icon: Calendar },
 		{ id: 'messages', title: 'messages', icon: ChatBubbles, accent: 'green' },
-		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
-		{ id: 'automations', title: 'automations', icon: Bolt },
-		{ id: 'cloud', title: 'cloud', icon: Cloud },
-		{
-			id: 'settings',
-			title: 'settings',
-			icon: Cog6,
-			accent: 'gray',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('settings')))
-			},
-		},
 		{
 			id: 'library',
 			title: 'library',
@@ -86,6 +76,21 @@
 				await goto(resolve('/library'))
 			},
 		},
+		{
+			id: 'settings',
+			title: 'settings',
+			icon: Cog6,
+			accent: 'gray',
+			action: async () => {
+				await goto(resolve(appNavigation.getEntryRoute('settings')))
+			},
+		},
+	]
+
+	const debugApps: AppDefinition[] = [
+		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
+		{ id: 'automations', title: 'automations', icon: Bolt },
+		{ id: 'cloud', title: 'cloud', icon: Cloud },
 		{ id: 'database', title: 'database', icon: Database },
 		{ id: 'world', title: 'world', icon: GlobeAlt },
 		{ id: 'photos', title: 'photos', icon: Photo },
@@ -96,6 +101,10 @@
 		{ id: 'terminal', title: 'terminal', icon: CommandLine },
 		{ id: 'teams', title: 'teams', icon: Users },
 	]
+
+	const isAdmin = $derived(Boolean(session.currentUser?.is_superuser))
+	const showDebugApps = $derived(isAdmin && preferences.data.debug.enableDebugApps)
+	const visibleApps = $derived(showDebugApps ? [...apps, ...debugApps] : apps)
 
 	let tilePx = $state(76)
 	let labelPx = $state(18)
@@ -149,7 +158,7 @@
 		}
 
 		const appsPerPage = Math.max(1, cols * rows)
-		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
+		const pageCount = Math.max(1, Math.ceil(visibleApps.length / appsPerPage))
 		currentPage = clamp(currentPage, 0, pageCount - 1)
 		scrollToPage(currentPage, 'auto')
 	}
@@ -194,7 +203,7 @@
 		rows = nextRows
 
 		const appsPerPage = Math.max(1, cols * rows)
-		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
+		const pageCount = Math.max(1, Math.ceil(visibleApps.length / appsPerPage))
 		currentPage = clamp(currentPage, 0, pageCount - 1)
 		scrollToPage(currentPage, 'auto')
 
@@ -302,10 +311,10 @@
 
 	const pages = $derived.by(() => {
 		const appsPerPage = Math.max(1, cols * rows)
-		const pageCount = Math.max(1, Math.ceil(apps.length / appsPerPage))
+		const pageCount = Math.max(1, Math.ceil(visibleApps.length / appsPerPage))
 
 		return Array.from({ length: pageCount }, (_unused, pageIndex) =>
-			apps.slice(pageIndex * appsPerPage, (pageIndex + 1) * appsPerPage)
+			visibleApps.slice(pageIndex * appsPerPage, (pageIndex + 1) * appsPerPage)
 		)
 	})
 

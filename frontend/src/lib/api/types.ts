@@ -1780,6 +1780,7 @@ export interface components {
             default_agent_id?: string | null;
             memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
+            tasks?: components["schemas"]["AITaskSettingsPatch"] | null;
         };
         /**
          * AITaskSettings
@@ -1788,6 +1789,24 @@ export interface components {
          *     resolution order: per-task model_id → default_model_id → error.
          */
         AITaskSettings: {
+            /**
+             * Default Model Id
+             * @description fallback model id for all background tasks
+             */
+            default_model_id?: string | null;
+            /**
+             * Thread Metadata Model Id
+             * @description model for thread metadata generation (title, tags)
+             */
+            thread_metadata_model_id?: string | null;
+            /**
+             * Input Autocomplete Model Id
+             * @description model for input autocomplete suggestions
+             */
+            input_autocomplete_model_id?: string | null;
+        };
+        /** AITaskSettingsPatch */
+        AITaskSettingsPatch: {
             /**
              * Default Model Id
              * @description fallback model id for all background tasks
@@ -2301,6 +2320,17 @@ export interface components {
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
+        /**
+         * DebugPreferences
+         * @description user debug preferences (admin-only section).
+         */
+        DebugPreferences: {
+            /**
+             * Enabledebugapps
+             * @description when enabled, placeholder/debug apps are shown on the home screen
+             */
+            enableDebugApps?: boolean | null;
+        };
         /**
          * DefaultPermissions
          * @description default permissions model for both global settings and
@@ -5076,6 +5106,8 @@ export interface components {
             privacy?: components["schemas"]["PrivacyPreferences"] | null;
             /** @description accessibility preferences */
             accessibility?: components["schemas"]["AccessibilityPreferences"] | null;
+            /** @description debug preferences (admin-only) */
+            debug?: components["schemas"]["DebugPreferences"] | null;
         } & {
             [key: string]: unknown;
         };

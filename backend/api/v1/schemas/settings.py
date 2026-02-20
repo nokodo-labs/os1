@@ -243,12 +243,30 @@ class AIChatContextSettingsPatch(BaseModel):
 	)
 
 
+class AITaskSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	default_model_id: str | None = Field(
+		default=None,
+		description="fallback model id for all background tasks",
+	)
+	thread_metadata_model_id: str | None = Field(
+		default=None,
+		description="model for thread metadata generation (title, tags)",
+	)
+	input_autocomplete_model_id: str | None = Field(
+		default=None,
+		description="model for input autocomplete suggestions",
+	)
+
+
 class AISettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	default_agent_id: str | None = Field(default=None, description="default agent id")
 	memory: AIMemorySettingsPatch | None = None
 	chat_context: AIChatContextSettingsPatch | None = None
+	tasks: AITaskSettingsPatch | None = None
 
 
 class DefaultPermissionsSettingsPatch(BaseModel):

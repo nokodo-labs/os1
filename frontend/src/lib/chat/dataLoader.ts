@@ -55,7 +55,6 @@ export async function fetchToolEventsForThread(
 					})
 					if (toolEv) ctx.toolTracker.processEvent(toolEv)
 				}
-				ctx.toolTick++
 			}
 			for (const id of batch) ctx.fetchedToolEventMessageIds.add(id)
 		} finally {

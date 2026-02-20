@@ -50,7 +50,6 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		})
 		if (!toolEv) return
 		ctx.toolTracker.processEvent(toolEv)
-		ctx.toolTick++
 	}
 
 	// ── message events (cross-device sync) ───────────────────────────────

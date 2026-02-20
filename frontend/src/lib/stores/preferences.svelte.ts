@@ -14,12 +14,14 @@ type AIPreferences = components['schemas']['AIPreferences']
 type NotificationPreferences = components['schemas']['NotificationPreferences']
 type PrivacyPreferences = components['schemas']['PrivacyPreferences']
 type AccessibilityPreferences = components['schemas']['AccessibilityPreferences']
+type DebugPreferences = components['schemas']['DebugPreferences']
 
 export type {
 	AccessibilityPreferences,
 	AccountPreferences,
 	AIPreferences,
 	AppearancePreferences,
+	DebugPreferences,
 	NotificationPreferences,
 	PrivacyPreferences,
 	UserPreferences,
@@ -37,6 +39,7 @@ type Resolved = {
 	notifications: Required<NotificationPreferences>
 	privacy: Required<PrivacyPreferences>
 	accessibility: Required<AccessibilityPreferences>
+	debug: Required<DebugPreferences>
 }
 
 const STORAGE_KEY = 'user-preferences:'
@@ -111,6 +114,9 @@ function createPreferencesStore() {
 		accessibility: {
 			hapticFeedback: true,
 			svgLiquidGlass: true,
+		},
+		debug: {
+			enableDebugApps: false,
 		},
 	})
 

@@ -3,16 +3,21 @@
  *
  * This module provides a comprehensive, type-safe system for:
  * 1. Parsing tool calls from messages
- * 2. Tracking tool execution events
+ * 2. Tracking tool execution events (via reactive ToolExecutionTracker)
  * 3. Rendering appropriate UI components for different tool types
  *
  * Key concepts:
  * - Native tools: have dedicated UI components (e.g., send_notification, web_search)
  * - Generic tools: rendered with a standard expandable tool call UI
  * - Tool events: real-time progress updates from tool execution
+ * - Reactive tracking: ToolExecutionTracker uses Svelte 5 $state runes for
+ *   fine-grained reactivity — no manual tick counters or {#key} blocks needed.
  */
 
 import type { components } from '$lib/api/types'
+
+// re-export the reactive tracker
+export { ToolExecutionTracker } from './toolExecutionTracker.svelte'
 
 // ============================================================================
 // Core Types
@@ -22,7 +27,8 @@ import type { components } from '$lib/api/types'
 export interface ToolCall {
 	id: string
 	name: string
-	arguments: Record<string, unknown>
+	/** Parsed object arguments, or raw string from streaming (accumulated fragments). */
+	arguments: Record<string, unknown> | string
 }
 
 /** Tool execution status */
@@ -54,7 +60,8 @@ export interface ToolEventData {
 
 /** Aggregated tool execution state */
 export interface ToolExecution {
-	toolCall: ToolCall
+	/** Tool call with parsed arguments (always an object, never raw string). */
+	toolCall: { id: string; name: string; arguments: Record<string, unknown> }
 	status: ToolStatus
 	events: ToolEvent[]
 	startedAt?: Date
@@ -264,127 +271,6 @@ export function parseToolEvent(event: {
 			payload: data.payload as Record<string, unknown> | undefined,
 			description: data.description as string | undefined,
 		},
-	}
-}
-
-// ============================================================================
-// Tool Execution Tracker
-// ============================================================================
-
-/**
- * Manages tool execution state across multiple tool calls.
- * Tracks events and aggregates status for each tool.
- */
-export class ToolExecutionTracker {
-	private executions = new Map<string, ToolExecution>()
-
-	/** Register a tool call (from assistant message) */
-	registerToolCall(toolCall: ToolCall): void {
-		const existing = this.executions.get(toolCall.id)
-		if (existing) {
-			existing.toolCall = {
-				...existing.toolCall,
-				name: toolCall.name || existing.toolCall.name,
-				arguments: {
-					...existing.toolCall.arguments,
-					...toolCall.arguments,
-				},
-			}
-			return
-		}
-
-		this.executions.set(toolCall.id, {
-			toolCall,
-			status: 'pending',
-			events: [],
-			startedAt: new Date(),
-		})
-	}
-
-	/** Process a tool event */
-	processEvent(event: ToolEvent): void {
-		let execution = this.executions.get(event.toolCallId)
-
-		// create execution if not exists (event arrived before tool call)
-		if (!execution) {
-			execution = {
-				toolCall: {
-					id: event.toolCallId,
-					name: event.toolName,
-					arguments: {},
-				},
-				status: 'pending',
-				events: [],
-			}
-			this.executions.set(event.toolCallId, execution)
-		}
-
-		execution.events.push(event)
-
-		// backfill tool name from events (streaming can deliver tool calls without name)
-		if (!execution.toolCall.name && event.toolName) {
-			execution.toolCall.name = event.toolName
-		}
-
-		if (event.data.toolCallArgs) {
-			execution.toolCall.arguments = {
-				...event.data.toolCallArgs,
-				...execution.toolCall.arguments,
-			}
-		}
-
-		// update status based on event type
-		switch (event.type) {
-			case 'tool.progress':
-				execution.status = 'running'
-				if (event.data.progress !== undefined) {
-					execution.progress = event.data.progress
-				}
-				if (event.data.message) {
-					execution.lastMessage = event.data.message
-				}
-				break
-			case 'tool.custom':
-				// custom events don't imply completion; keep running if already running
-				if (execution.status === 'pending') execution.status = 'running'
-				if (event.data.description) execution.lastMessage = event.data.description
-				break
-
-			case 'tool.notification':
-				// notification is a side effect; status comes from tool result
-				if (event.data.description) execution.lastMessage = event.data.description
-				break
-		}
-	}
-
-	/** Register a tool result (from tool message) */
-	registerResult(result: ToolResult): void {
-		const execution = this.executions.get(result.toolCallId)
-		if (!execution) return
-
-		execution.result = result
-		if (result.isError) {
-			execution.status = 'error'
-			execution.error = result.output
-		} else {
-			execution.status = 'completed'
-		}
-		execution.completedAt = new Date()
-	}
-
-	/** Get execution state for a tool call */
-	getExecution(toolCallId: string): ToolExecution | undefined {
-		return this.executions.get(toolCallId)
-	}
-
-	/** Get all executions */
-	getAllExecutions(): ToolExecution[] {
-		return Array.from(this.executions.values())
-	}
-
-	/** Clear all tracked executions */
-	clear(): void {
-		this.executions.clear()
 	}
 }
 

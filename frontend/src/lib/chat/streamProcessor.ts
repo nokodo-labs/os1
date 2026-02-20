@@ -55,7 +55,6 @@ export function processDelta(
 				const isError = tool.is_error === true
 				if (toolCallId) {
 					ctx.toolTracker.registerResult({ toolCallId, output, isError })
-					ctx.toolTick++
 				}
 
 				// add a tool message entry to the tree so the parent chain
@@ -148,19 +147,12 @@ export function processDelta(
 				let toolCallsChanged = false
 				if (Array.isArray(toolCalls)) {
 					const prev = streaming.toolCalls
-					const prevSig = prev
-						.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
-						.join('|')
 					const next = upsertToolCalls(prev, toolCalls)
-					const nextSig = next
-						.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
-						.join('|')
-					toolCallsChanged = prevSig !== nextSig
+					toolCallsChanged =
+						next.length !== prev.length || next.some((tc, i) => tc.id !== prev[i]?.id)
 					streaming.toolCalls = next
-					if (toolCallsChanged) {
-						for (const tc of streaming.toolCalls) ctx.toolTracker.registerToolCall(tc)
-						ctx.toolTick++
-					}
+					// register each tool call — the reactive tracker handles dedup + accumulation
+					for (const tc of next) ctx.toolTracker.registerToolCall(tc)
 				}
 
 				if (isNewStreamingMessage || toolCallsChanged) {

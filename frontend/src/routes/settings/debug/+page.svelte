@@ -29,6 +29,26 @@
 	{:else}
 		<div class="space-y-4">
 			<div class="rounded-container bg-white/5 p-5">
+				<div class="text-sm font-semibold text-white/85">debug apps</div>
+				<div class="mt-1 text-sm text-white/55">
+					show placeholder apps on the home screen for testing.
+				</div>
+				<label class="mt-4 flex items-center justify-between gap-4">
+					<span class="text-sm text-white/75">enable debug apps</span>
+					<input
+						type="checkbox"
+						checked={preferences.data.debug.enableDebugApps}
+						onchange={(e) => {
+							const checked = (e.currentTarget as HTMLInputElement).checked
+							void preferences.update('debug', {
+								enableDebugApps: checked,
+							})
+						}}
+					/>
+				</label>
+			</div>
+
+			<div class="rounded-container bg-white/5 p-5">
 				<div class="text-sm font-semibold text-white/85">appearance</div>
 				<div class="mt-1 text-sm text-white/55">admin-only debug overrides.</div>
 				<label class="mt-4 flex items-center justify-between gap-4">

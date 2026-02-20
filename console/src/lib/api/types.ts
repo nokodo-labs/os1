@@ -177,6 +177,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/create_and_run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create And Run
+         * @description create a thread and immediately start an agent run, all via one SSE stream.
+         *
+         *     the first event is ``thread_created`` with the full thread payload so the
+         *     client can capture the thread id. subsequent events are the normal run
+         *     events (message_created, delta, done).
+         */
+        post: operations["create_and_run_threads_create_and_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}": {
         parameters: {
             query?: never;
@@ -216,9 +240,10 @@ export interface paths {
         put?: never;
         /**
          * Generate Thread Metadata
-         * @description Generate thread title/tags using an LLM.
+         * @description generate thread title/tags using an LLM.
          *
-         *     When replace is false, only fills in missing metadata.
+         *     uses the task model configured in settings (ai.tasks).
+         *     when replace is false, only fills in missing metadata.
          */
         post: operations["generate_thread_metadata_threads__thread_id__metadata_generate_post"];
         delete?: never;
@@ -334,26 +359,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/run": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Thread
-         * @description stream a thread run via sse events.
-         */
-        post: operations["run_thread_threads__thread_id__run_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/threads/{thread_id}/switch": {
         parameters: {
             query?: never;
@@ -391,6 +396,60 @@ export interface paths {
          * @description Replace access rules for a thread.
          */
         put: operations["set_thread_access_rules_threads__thread_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Runs
+         * @description list all in-memory runs owned by the current user.
+         */
+        get: operations["list_runs_runs_get"];
+        put?: never;
+        /**
+         * Create Run
+         * @description start an agent run.
+         *
+         *     when ``thread_id`` is present the run continues that thread (streaming).
+         *     when omitted the run is **ephemeral** (not yet implemented).
+         *
+         *     when ``stream`` is false a JSON response is returned instead of SSE
+         *     (not yet implemented).
+         */
+        post: operations["create_run_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resume Run Stream
+         * @description resume an active agent run's SSE stream.
+         *
+         *     replays recorded SSE events from the run so far, then streams live
+         *     deltas until the run completes. returns 404 if the run doesn't exist
+         *     or has already finished.
+         */
+        get: operations["resume_run_stream_runs__run_id__stream_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1709,6 +1768,8 @@ export interface components {
             memory?: components["schemas"]["AIMemorySettings"];
             /** @description chat context settings */
             chat_context?: components["schemas"]["AIChatContextSettings"];
+            /** @description background task model settings */
+            tasks?: components["schemas"]["AITaskSettings"];
         };
         /** AISettingsPatch */
         AISettingsPatch: {
@@ -1719,6 +1780,48 @@ export interface components {
             default_agent_id?: string | null;
             memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
+            tasks?: components["schemas"]["AITaskSettingsPatch"] | null;
+        };
+        /**
+         * AITaskSettings
+         * @description per-task model overrides for background AI tasks.
+         *
+         *     resolution order: per-task model_id → default_model_id → error.
+         */
+        AITaskSettings: {
+            /**
+             * Default Model Id
+             * @description fallback model id for all background tasks
+             */
+            default_model_id?: string | null;
+            /**
+             * Thread Metadata Model Id
+             * @description model for thread metadata generation (title, tags)
+             */
+            thread_metadata_model_id?: string | null;
+            /**
+             * Input Autocomplete Model Id
+             * @description model for input autocomplete suggestions
+             */
+            input_autocomplete_model_id?: string | null;
+        };
+        /** AITaskSettingsPatch */
+        AITaskSettingsPatch: {
+            /**
+             * Default Model Id
+             * @description fallback model id for all background tasks
+             */
+            default_model_id?: string | null;
+            /**
+             * Thread Metadata Model Id
+             * @description model for thread metadata generation (title, tags)
+             */
+            thread_metadata_model_id?: string | null;
+            /**
+             * Input Autocomplete Model Id
+             * @description model for input autocomplete suggestions
+             */
+            input_autocomplete_model_id?: string | null;
         };
         /**
          * AccessLevel
@@ -1809,6 +1912,11 @@ export interface components {
              * @description whether haptic feedback is enabled on compatible devices
              */
             hapticFeedback?: boolean | null;
+            /**
+             * Svgliquidglass
+             * @description whether to enable svg-based liquid glass when supported by the browser
+             */
+            svgLiquidGlass?: boolean | null;
         };
         /**
          * AccountPreferences
@@ -1843,6 +1951,32 @@ export interface components {
          * @enum {string}
          */
         ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "frontend:access" | "console:access";
+        /**
+         * ActiveRunOut
+         * @description lightweight snapshot of an in-memory active run.
+         */
+        ActiveRunOut: {
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+            /** Agent Id */
+            agent_id: string;
+            /** User Id */
+            user_id: string;
+            /** State */
+            state: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * Agent
          * @description Agent response schema - returns IDs only, no hydrated relationships.
@@ -2689,6 +2823,75 @@ export interface components {
              * @description rate limit/min
              */
             rate_limit_requests_per_minute?: number | null;
+        };
+        /**
+         * MediaSettings
+         * @description external media / asset URLs.
+         *
+         *     base_url provides a common prefix for well-known asset filenames.
+         *     individual url fields override the base_url + filename convention.
+         *
+         *     resolution order per asset: individual field > base_url/filename > null.
+         *
+         *     well-known filenames (appended to base_url):
+         *             favicon.ico, apple-touch-icon.png, sidebar-logo.svg, splash-logo.svg
+         */
+        MediaSettings: {
+            /**
+             * Base Url
+             * @description base url for all media assets
+             * @example https://cdn.example.com/brand/
+             * @example https://raw.githubusercontent.com/org/repo/branch/path/to/assets/
+             */
+            base_url?: string | null;
+            /**
+             * Favicon Url
+             * @description favicon url override
+             */
+            favicon_url?: string | null;
+            /**
+             * Apple Touch Icon Url
+             * @description apple touch icon url override
+             */
+            apple_touch_icon_url?: string | null;
+            /**
+             * Sidebar Logo Url
+             * @description sidebar banner logo url override
+             */
+            sidebar_logo_url?: string | null;
+            /**
+             * Splash Logo Url
+             * @description splash screen logo url override
+             */
+            splash_logo_url?: string | null;
+        };
+        /** MediaSettingsPatch */
+        MediaSettingsPatch: {
+            /**
+             * Base Url
+             * @description base url for all media assets
+             */
+            base_url?: string | null;
+            /**
+             * Favicon Url
+             * @description favicon url override
+             */
+            favicon_url?: string | null;
+            /**
+             * Apple Touch Icon Url
+             * @description apple touch icon url override
+             */
+            apple_touch_icon_url?: string | null;
+            /**
+             * Sidebar Logo Url
+             * @description sidebar banner logo url override
+             */
+            sidebar_logo_url?: string | null;
+            /**
+             * Splash Logo Url
+             * @description splash screen logo url override
+             */
+            splash_logo_url?: string | null;
         };
         /**
          * Memory
@@ -4126,6 +4329,38 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * RunRequest
+         * @description POST /runs — run on an existing thread, or ephemeral (no thread).
+         *
+         *     when ``thread_id`` is present the run continues that thread.
+         *     when omitted the run is **ephemeral** — no thread is created or
+         *     persisted (not yet implemented).
+         *
+         *     ``input`` is required for ephemeral runs and optional when continuing
+         *     an existing thread (omit for regeneration / retry).
+         */
+        RunRequest: {
+            /**
+             * Agent Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            agent_id: string;
+            /** Input */
+            input?: string | null;
+            /**
+             * Stream
+             * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
+             * @default true
+             */
+            stream: boolean;
+            /** @description optional device/environment context from the client */
+            clientContext?: components["schemas"]["ClientContext"] | null;
+            /** Thread Id */
+            thread_id?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+        };
         /** SecuritySettings */
         SecuritySettings: {
             /**
@@ -4274,6 +4509,7 @@ export interface components {
             features?: components["schemas"]["FeaturesSettings"];
             ai?: components["schemas"]["AISettings"];
             branding?: components["schemas"]["BrandingSettings"];
+            media?: components["schemas"]["MediaSettings"];
             assets?: components["schemas"]["AssetsSettings"];
             limits?: components["schemas"]["LimitsSettings"];
             security?: components["schemas"]["SecuritySettings"];
@@ -4286,6 +4522,7 @@ export interface components {
             features?: components["schemas"]["FeaturesSettingsPatch"] | null;
             ai?: components["schemas"]["AISettingsPatch"] | null;
             branding?: components["schemas"]["BrandingSettingsPatch"] | null;
+            media?: components["schemas"]["MediaSettingsPatch"] | null;
             assets?: components["schemas"]["AssetsSettingsPatch"] | null;
             limits?: components["schemas"]["LimitsSettingsPatch"] | null;
             security?: components["schemas"]["SecuritySettingsPatch"] | null;
@@ -4324,6 +4561,11 @@ export interface components {
              * @default 0
              */
             branding: number;
+            /**
+             * Media
+             * @default 0
+             */
+            media: number;
             /**
              * Assets
              * @default 0
@@ -4603,6 +4845,39 @@ export interface components {
             owner_id: string;
         };
         /**
+         * ThreadCreateAndRunRequest
+         * @description POST /threads/create_and_run — create a thread then run immediately.
+         *
+         *     ``input`` is required (a new thread needs at least one user message).
+         *     the SSE stream emits a ``thread_created`` event before normal run events.
+         */
+        ThreadCreateAndRunRequest: {
+            /**
+             * Agent Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            agent_id: string;
+            /** Input */
+            input?: string | null;
+            /**
+             * Stream
+             * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
+             * @default true
+             */
+            stream: boolean;
+            /** @description optional device/environment context from the client */
+            clientContext?: components["schemas"]["ClientContext"] | null;
+            /**
+             * Is Temporary
+             * @default false
+             */
+            is_temporary: boolean;
+            /** Tags */
+            tags?: string[];
+            /** Project Ids */
+            project_ids?: string[];
+        };
+        /**
          * ThreadMetadataGenerateRequest
          * @description Request body for generating thread metadata.
          */
@@ -4614,30 +4889,6 @@ export interface components {
             replace: boolean;
             /** Model Id */
             model_id?: string | null;
-        };
-        /**
-         * ThreadRunRequest
-         * @description payload to run a thread with an agent,
-         *     optionally appending a new user message.
-         */
-        ThreadRunRequest: {
-            /**
-             * Agent Id
-             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
-             */
-            agent_id: string;
-            /**
-             * Stream
-             * @default true
-             * @constant
-             */
-            stream: true;
-            /** Input */
-            input?: string | null;
-            /** Parent Id */
-            parent_id?: string | null;
-            /** @description optional device/environment context from the client */
-            clientContext?: components["schemas"]["ClientContext"] | null;
         };
         /**
          * ThreadSwitchRequest
@@ -5614,7 +5865,9 @@ export interface operations {
     update_user_users__user_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 user_id: string;
             };
@@ -5905,7 +6158,9 @@ export interface operations {
     create_thread_threads_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5922,6 +6177,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_and_run_threads_create_and_run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadCreateAndRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description bad request */
@@ -6097,7 +6450,9 @@ export interface operations {
     delete_thread_threads__thread_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 thread_id: string;
             };
@@ -6189,7 +6544,9 @@ export interface operations {
     update_thread_threads__thread_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 thread_id: string;
             };
@@ -6287,7 +6644,9 @@ export interface operations {
     generate_thread_metadata_threads__thread_id__metadata_generate_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 thread_id: string;
             };
@@ -6486,7 +6845,9 @@ export interface operations {
     create_message_threads__thread_id__messages_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 thread_id: string;
             };
@@ -6876,7 +7237,9 @@ export interface operations {
     delete_user_message_turn_threads__thread_id__messages__message_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 thread_id: string;
                 message_id: string;
@@ -6966,108 +7329,12 @@ export interface operations {
             };
         };
     };
-    run_thread_threads__thread_id__run_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ThreadRunRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
     switch_branch_threads__thread_id__switch_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 thread_id: string;
             };
@@ -7278,6 +7545,290 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_runs_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveRunOut"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_run_runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    resume_run_stream_runs__run_id__stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description bad request */
@@ -8509,7 +9060,9 @@ export interface operations {
     create_memory_memories_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8605,7 +9158,9 @@ export interface operations {
     delete_all_memories_memories_delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8789,7 +9344,9 @@ export interface operations {
     update_memory_memories__memory_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 memory_id: string;
             };
@@ -8887,7 +9444,9 @@ export interface operations {
     delete_memory_memories__memory_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 memory_id: string;
             };
@@ -9078,7 +9637,9 @@ export interface operations {
     create_note_notes_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9268,7 +9829,9 @@ export interface operations {
     update_note_notes__note_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 note_id: string;
             };
@@ -9366,7 +9929,9 @@ export interface operations {
     delete_note_notes__note_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 note_id: string;
             };
@@ -9556,7 +10121,9 @@ export interface operations {
     create_group_groups_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9746,7 +10313,9 @@ export interface operations {
     delete_group_groups__group_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 group_id: string;
             };
@@ -9838,7 +10407,9 @@ export interface operations {
     update_group_groups__group_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 group_id: string;
             };
@@ -9936,7 +10507,9 @@ export interface operations {
     add_member_groups__group_id__members_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 group_id: string;
             };
@@ -10034,7 +10607,9 @@ export interface operations {
     remove_member_groups__group_id__members__user_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 group_id: string;
                 user_id: string;
@@ -10416,7 +10991,9 @@ export interface operations {
     create_project_projects_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10606,7 +11183,9 @@ export interface operations {
     delete_project_projects__project_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -10698,7 +11277,9 @@ export interface operations {
     update_project_projects__project_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -11086,7 +11667,9 @@ export interface operations {
     create_file_files_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11276,7 +11859,9 @@ export interface operations {
     delete_file_files__file_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 file_id: string;
             };
@@ -11368,7 +11953,9 @@ export interface operations {
     update_file_files__file_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 file_id: string;
             };
@@ -11756,7 +12343,9 @@ export interface operations {
     create_reminder_list_reminders_lists_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11946,7 +12535,9 @@ export interface operations {
     delete_reminder_list_reminders_lists__list_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 list_id: string;
             };
@@ -12038,7 +12629,9 @@ export interface operations {
     update_reminder_list_reminders_lists__list_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 list_id: string;
             };
@@ -12332,7 +12925,9 @@ export interface operations {
     create_reminder_reminders_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12522,7 +13117,9 @@ export interface operations {
     delete_reminder_reminders__reminder_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 reminder_id: string;
             };
@@ -12614,7 +13211,9 @@ export interface operations {
     update_reminder_reminders__reminder_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 reminder_id: string;
             };
@@ -12714,7 +13313,9 @@ export interface operations {
             query?: {
                 cascade?: boolean;
             };
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 reminder_id: string;
             };
@@ -12811,7 +13412,9 @@ export interface operations {
                 target_list_id?: string | null;
                 position?: number | null;
             };
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 reminder_id: string;
             };
@@ -13851,7 +14454,9 @@ export interface operations {
     create_agent_agents_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -14041,7 +14646,9 @@ export interface operations {
     delete_agent_agents__agent_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 agent_id: string;
             };
@@ -14133,7 +14740,9 @@ export interface operations {
     update_agent_agents__agent_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path: {
                 agent_id: string;
             };
@@ -14426,7 +15035,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: string;
-                sort_dir?: string;
+                sort_dir?: components["schemas"]["SortDir"];
                 user_id?: string | null;
             };
             header?: never;
@@ -16421,7 +17030,9 @@ export interface operations {
     update_settings_settings_patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
