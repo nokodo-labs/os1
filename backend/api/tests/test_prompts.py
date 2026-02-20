@@ -1,4 +1,4 @@
-"""Prompt API tests."""
+"""prompt API tests."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ async def test_prompts_admin_only(
 	client: AsyncClient,
 	user_auth: dict[str, object],
 ) -> None:
-	"""Prompts are admin-only resources."""
+	"""prompts are admin-only resources."""
 	headers = user_auth["headers"]
 	assert isinstance(headers, dict)
 
@@ -27,21 +27,21 @@ async def test_list_prompts_sorting(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	"""List prompts supports server-side sort_by + sort_dir."""
+	"""list prompts supports server-side sort_by + sort_dir."""
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 
 	a = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/a", "content": "a"},
+		json={"command": "a", "content": "a"},
 	)
 	assert a.status_code == 201
 
 	b = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/b", "content": "b"},
+		json={"command": "b", "content": "b"},
 	)
 	assert b.status_code == 201
 
@@ -52,7 +52,7 @@ async def test_list_prompts_sorting(
 	)
 	assert resp.status_code == 200
 	items = resp.json()
-	assert items[0]["command"] == "/b"
+	assert items[0]["command"] == "b"
 
 
 @pytest.mark.asyncio
@@ -60,14 +60,14 @@ async def test_prompt_create_missing_reference_returns_error(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	"""Creating a prompt with missing referenced prompt should fail."""
+	"""creating a prompt with missing referenced prompt should fail."""
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 
 	resp = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/bad", "content": "{{PROMPTS.missing}}"},
+		json={"command": "bad", "content": "{{PROMPTS.missing}}"},
 	)
 	assert resp.status_code == 400
 	assert "does not exist" in resp.text
@@ -78,14 +78,14 @@ async def test_prompt_circular_dependency_returns_error(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	"""Circular prompt references are rejected."""
+	"""circular prompt references are rejected."""
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 
 	b = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/b", "content": "base"},
+		json={"command": "b", "content": "base"},
 	)
 	assert b.status_code == 201
 	b_id = b.json()["id"]
@@ -93,7 +93,7 @@ async def test_prompt_circular_dependency_returns_error(
 	a = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/a", "content": "{{PROMPTS.b}}"},
+		json={"command": "a", "content": "{{PROMPTS.b}}"},
 	)
 	assert a.status_code == 201
 
@@ -111,7 +111,7 @@ async def test_prompt_max_depth_returns_error(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	"""Excessive nesting depth is rejected."""
+	"""excessive nesting depth is rejected."""
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 
@@ -119,7 +119,7 @@ async def test_prompt_max_depth_returns_error(
 	end = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/p51", "content": "end"},
+		json={"command": "p51", "content": "end"},
 	)
 	assert end.status_code == 201
 
@@ -128,7 +128,7 @@ async def test_prompt_max_depth_returns_error(
 			"/v1/prompts",
 			headers=headers,
 			json={
-				"command": f"/p{idx}",
+				"command": f"p{idx}",
 				"content": f"{{{{PROMPTS.p{idx + 1}}}}}",
 			},
 		)
@@ -152,7 +152,7 @@ async def test_prompt_render_with_include_and_variables(
 	greeting = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/greeting", "content": "Hello {{ name }}"},
+		json={"command": "greeting", "content": "Hello {{ name }}"},
 	)
 	assert greeting.status_code == 201
 
@@ -171,21 +171,21 @@ async def test_prompt_render_legacy_prompts_syntax(
 	admin_auth: dict[str, object],
 	db_session: AsyncSession,
 ) -> None:
-	"""Legacy {{PROMPTS.x}} syntax still works via auto-conversion."""
+	"""legacy {{PROMPTS.x}} syntax still works via auto-conversion."""
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 
 	inner = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/inner", "content": "Inner"},
+		json={"command": "inner", "content": "Inner"},
 	)
 	assert inner.status_code == 201
 
 	outer = await client.post(
 		"/v1/prompts",
 		headers=headers,
-		json={"command": "/outer", "content": "[{{PROMPTS.inner}}]"},
+		json={"command": "outer", "content": "[{{PROMPTS.inner}}]"},
 	)
 	assert outer.status_code == 201
 

@@ -7,6 +7,7 @@
 		type AgentUpdate,
 		type Model,
 		type PluginInfo,
+		type Prompt,
 	} from '$lib/api'
 	import AclModal from '$lib/components/AclModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
@@ -31,6 +32,7 @@
 	let models = $state<Model[]>([])
 	let availableToolPlugins = $state<PluginInfo[]>([])
 	let availableFilterPlugins = $state<PluginInfo[]>([])
+	let legendPrompts = $state<Prompt[]>([])
 
 	let showModal = $state(false)
 	let modalMode = $state<'create' | 'edit'>('create')
@@ -56,20 +58,29 @@
 		isFetching = true
 		error = null
 		try {
-			const [agentsData, modelsData, toolPluginsData, filterPluginsData] = await Promise.all([
-				api.GET('/v1/agents').then((r) => unwrap(r)),
-				api.GET('/v1/models').then((r) => unwrap(r)),
-				api
-					.GET('/v1/plugins/available', { params: { query: { plugin_type: 'tool' } } })
-					.then((r) => unwrap(r)),
-				api
-					.GET('/v1/plugins/available', { params: { query: { plugin_type: 'filter' } } })
-					.then((r) => unwrap(r)),
-			])
+			const [agentsData, modelsData, toolPluginsData, filterPluginsData, promptsData] =
+				await Promise.all([
+					api.GET('/v1/agents').then((r) => unwrap(r)),
+					api.GET('/v1/models').then((r) => unwrap(r)),
+					api
+						.GET('/v1/plugins/available', {
+							params: { query: { plugin_type: 'tool' } },
+						})
+						.then((r) => unwrap(r)),
+					api
+						.GET('/v1/plugins/available', {
+							params: { query: { plugin_type: 'filter' } },
+						})
+						.then((r) => unwrap(r)),
+					api
+						.GET('/v1/prompts', { params: { query: { limit: 200 } } })
+						.then((r) => unwrap(r)),
+				])
 			agents = agentsData
 			models = modelsData
 			availableToolPlugins = toolPluginsData
 			availableFilterPlugins = filterPluginsData
+			legendPrompts = promptsData
 		} catch (e) {
 			console.error('Failed to load agents/models/plugins', e)
 			error = 'failed to load agents'
@@ -599,4 +610,4 @@
 	title="agent access rules"
 />
 
-<PromptVariablesLegend bind:open={showVariablesLegend} />
+<PromptVariablesLegend bind:open={showVariablesLegend} prompts={legendPrompts} />

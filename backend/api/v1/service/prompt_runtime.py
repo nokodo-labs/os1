@@ -40,7 +40,8 @@ _MAX_DEPTH = 50
 
 
 def normalize_command(command: str) -> str:
-	return command.lstrip("/")
+	"""strip any leading slash and spaces for consistent lookup keys."""
+	return command.lstrip("/").replace(" ", "-")
 
 
 def _prepare_template(text: str) -> str:
@@ -78,7 +79,7 @@ def _validate_graph(
 			return
 		content = prompt_map.get(current)
 		if content is None:
-			errors.append(f"referenced prompt '/{current}' does not exist")
+			errors.append(f"referenced prompt '{current}' does not exist")
 			return
 		next_path = path + [current]
 		for ref in _collect_includes(content):
@@ -113,7 +114,7 @@ def render_prompt_from_map(
 		template = env.get_template(key)
 	except TemplateNotFound as exc:
 		raise PromptValidationError(
-			f"referenced prompt '/{key}' does not exist"
+			f"referenced prompt '{key}' does not exist"
 		) from exc
 	return template.render(**(variables or {}))
 
@@ -215,11 +216,32 @@ def _compute_age(birth_date_str: str | None, now: datetime) -> str:
 		return ""
 
 
+def _tz_label(dt: datetime) -> str:
+	"""build a human-readable timezone label for a datetime."""
+	if dt.tzinfo is None:
+		return ""
+	abbr = dt.strftime("%Z") or ""
+	offset = dt.utcoffset()
+	if offset is not None:
+		total = int(offset.total_seconds())
+		sign = "+" if total >= 0 else "-"
+		h, rem = divmod(abs(total), 3600)
+		m = rem // 60
+		offset_str = f"UTC{sign}{h:02d}:{m:02d}"
+	else:
+		offset_str = ""
+	if abbr and offset_str:
+		return f"{abbr} ({offset_str})"
+	return abbr or offset_str
+
+
 def _build_date_set(dt: datetime, prefix: str) -> dict[str, object]:
 	"""build a full set of date/time variables for a given datetime and prefix."""
+	tz_label = _tz_label(dt)
+	tz_suffix = f" {tz_label}" if tz_label else ""
 	return {
 		f"{prefix}_date": dt.strftime("%Y-%m-%d"),
-		f"{prefix}_time": dt.strftime("%H:%M"),
+		f"{prefix}_time": dt.strftime("%H:%M") + tz_suffix,
 		f"{prefix}_datetime": dt.isoformat(),
 		f"{prefix}_day": dt.strftime("%A"),
 		f"{prefix}_date_full": dt.strftime("%B %d, %Y"),
@@ -227,13 +249,15 @@ def _build_date_set(dt: datetime, prefix: str) -> dict[str, object]:
 		f"{prefix}_date_weekday": dt.strftime("%A, %B %d"),
 		f"{prefix}_date_weekday_full": dt.strftime("%A, %B %d, %Y"),
 		f"{prefix}_date_month_day": dt.strftime("%B %d"),
-		f"{prefix}_time_12h": dt.strftime("%I:%M %p").lstrip("0"),
-		f"{prefix}_time_24h": dt.strftime("%H:%M"),
-		f"{prefix}_time_seconds": dt.strftime("%H:%M:%S"),
+		f"{prefix}_time_12h": dt.strftime("%I:%M %p").lstrip("0") + tz_suffix,
+		f"{prefix}_time_24h": dt.strftime("%H:%M") + tz_suffix,
+		f"{prefix}_time_seconds": dt.strftime("%H:%M:%S") + tz_suffix,
 		f"{prefix}_datetime_full": dt.strftime("%A, %B %d, %Y at %I:%M %p").replace(
 			" 0", " "
-		),
-		f"{prefix}_datetime_short": dt.strftime("%Y-%m-%d %H:%M"),
+		)
+		+ tz_suffix,
+		f"{prefix}_datetime_short": dt.strftime("%Y-%m-%d %H:%M") + tz_suffix,
+		f"{prefix}_timezone": tz_label or _NA,
 	}
 
 
@@ -308,6 +332,27 @@ def _build_date_variables(
 	return variables
 
 
+def _build_location_variables(
+	client_context: ClientContext | None,
+) -> dict[str, object]:
+	"""build location variables from client context."""
+	if (
+		client_context
+		and client_context.latitude is not None
+		and client_context.longitude is not None
+	):
+		return {
+			"client_latitude": str(client_context.latitude),
+			"client_longitude": str(client_context.longitude),
+			"client_location": client_context.location_label or _NA,
+		}
+	return {
+		"client_latitude": _NA,
+		"client_longitude": _NA,
+		"client_location": _NA,
+	}
+
+
 def _resolve_now(client_context: ClientContext | None) -> datetime:
 	"""resolve the current time, preferring the client's timezone if available."""
 	utc_now = datetime.now(UTC)
@@ -373,6 +418,9 @@ def build_prompt_variables(
 		}
 	)
 
+	# location variables (from browser geolocation)
+	variables.update(_build_location_variables(client_context))
+
 	if user is None:
 		variables.update(
 			{
@@ -383,7 +431,7 @@ def build_prompt_variables(
 				"user_birth_date": _NA,
 				"user_age": _NA,
 				"user_custom_instructions": _NA,
-				"user_personality": _NA,
+				"ai_personality": _NA,
 			}
 		)
 		return variables
@@ -403,7 +451,7 @@ def build_prompt_variables(
 			"user_birth_date": birth_date or _NA,
 			"user_age": age or _NA,
 			"user_custom_instructions": ai.custom_instructions or _NA,
-			"user_personality": ai.personality or _NA,
+			"ai_personality": ai.personality or _NA,
 		}
 	)
 

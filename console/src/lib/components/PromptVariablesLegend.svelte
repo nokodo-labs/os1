@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button'
-	import { BookOpen, Check, Copy } from '@lucide/svelte'
+	import { BookOpen, Check, Copy, Info } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	let {
 		open = $bindable(false),
+		prompts = [],
 	}: {
 		open?: boolean
+		prompts?: Array<{ command: string }>
 	} = $props()
 
 	let copiedVar = $state<string | null>(null)
@@ -27,7 +29,7 @@
 				{ name: 'user_birth_date', description: 'birth date (ISO format)' },
 				{ name: 'user_age', description: 'age in years (computed)' },
 				{ name: 'user_custom_instructions', description: 'custom AI instructions' },
-				{ name: 'user_personality', description: 'AI personality preference' },
+				{ name: 'ai_personality', description: 'AI personality / tone preference' },
 			],
 		},
 		{
@@ -54,7 +56,8 @@
 		},
 		{
 			label: 'user date/time',
-			description: "date/time in the user's local timezone (falls back to UTC)",
+			description:
+				"date/time in the user's local timezone with timezone info (falls back to UTC)",
 			variables: [
 				{ name: 'current_date', description: 'date — YYYY-MM-DD' },
 				{ name: 'current_date_full', description: 'date — January 15, 2025' },
@@ -66,21 +69,40 @@
 				},
 				{ name: 'current_date_month_day', description: 'date — January 15' },
 				{ name: 'current_day', description: 'day of week — Wednesday' },
-				{ name: 'current_time', description: 'time — HH:MM (24h)' },
-				{ name: 'current_time_12h', description: 'time — 2:30 PM' },
-				{ name: 'current_time_24h', description: 'time — 14:30' },
-				{ name: 'current_time_seconds', description: 'time — 14:30:00' },
-				{ name: 'current_datetime', description: 'ISO 8601 datetime' },
+				{
+					name: 'current_time',
+					description: 'time — HH:MM with timezone (e.g. 14:30 EST (UTC-05:00))',
+				},
+				{
+					name: 'current_time_12h',
+					description: 'time — 2:30 PM with timezone',
+				},
+				{
+					name: 'current_time_24h',
+					description: 'time — 14:30 with timezone',
+				},
+				{
+					name: 'current_time_seconds',
+					description: 'time — 14:30:00 with timezone',
+				},
+				{ name: 'current_datetime', description: 'ISO 8601 datetime (includes offset)' },
 				{
 					name: 'current_datetime_full',
-					description: 'full — Wednesday, January 15, 2025 at 2:30 PM',
+					description: 'full — Wednesday, January 15, 2025 at 2:30 PM EST (UTC-05:00)',
 				},
-				{ name: 'current_datetime_short', description: 'short — 2025-01-15 14:30' },
+				{
+					name: 'current_datetime_short',
+					description: 'short — 2025-01-15 14:30 with timezone',
+				},
+				{
+					name: 'current_timezone',
+					description: 'timezone label for current_* times (e.g. EST (UTC-05:00))',
+				},
 			],
 		},
 		{
 			label: 'server date/time',
-			description: 'date/time in UTC (always available)',
+			description: 'date/time in UTC with timezone info (always available)',
 			variables: [
 				{ name: 'server_date', description: 'date — YYYY-MM-DD' },
 				{ name: 'server_date_full', description: 'date — January 15, 2025' },
@@ -92,16 +114,35 @@
 				},
 				{ name: 'server_date_month_day', description: 'date — January 15' },
 				{ name: 'server_day', description: 'day of week — Wednesday' },
-				{ name: 'server_time', description: 'time — HH:MM (24h)' },
-				{ name: 'server_time_12h', description: 'time — 2:30 PM' },
-				{ name: 'server_time_24h', description: 'time — 14:30' },
-				{ name: 'server_time_seconds', description: 'time — 14:30:00' },
-				{ name: 'server_datetime', description: 'ISO 8601 datetime' },
+				{
+					name: 'server_time',
+					description: 'time — HH:MM with timezone (e.g. 19:30 UTC (UTC+00:00))',
+				},
+				{
+					name: 'server_time_12h',
+					description: 'time — 7:30 PM with timezone',
+				},
+				{
+					name: 'server_time_24h',
+					description: 'time — 19:30 with timezone',
+				},
+				{
+					name: 'server_time_seconds',
+					description: 'time — 19:30:00 with timezone',
+				},
+				{ name: 'server_datetime', description: 'ISO 8601 datetime (includes offset)' },
 				{
 					name: 'server_datetime_full',
-					description: 'full — Wednesday, January 15, 2025 at 2:30 PM',
+					description: 'full — Wednesday, January 15, 2025 at 7:30 PM UTC (UTC+00:00)',
 				},
-				{ name: 'server_datetime_short', description: 'short — 2025-01-15 14:30' },
+				{
+					name: 'server_datetime_short',
+					description: 'short — 2025-01-15 19:30 with timezone',
+				},
+				{
+					name: 'server_timezone',
+					description: 'timezone label for server_* times (e.g. UTC (UTC+00:00))',
+				},
 			],
 		},
 		{
@@ -122,20 +163,50 @@
 				{ name: 'client_pwa_installed', description: 'true/false or N/A' },
 			],
 		},
+		{
+			label: 'user location',
+			description:
+				'geolocation from the browser (requires user permission + use location enabled)',
+			variables: [
+				{
+					name: 'client_latitude',
+					description: 'latitude coordinate (e.g. 37.7749)',
+				},
+				{
+					name: 'client_longitude',
+					description: 'longitude coordinate (e.g. -122.4194)',
+				},
+				{
+					name: 'client_location',
+					description: 'human-readable location label if available',
+				},
+			],
+		},
 	]
 
 	function varSyntax(name: string): string {
 		return `{{ ${name} }}`
 	}
 
-	function copyVariable(name: string) {
-		const text = varSyntax(name)
+	function includeSyntax(command: string): string {
+		return `{% include '${command}' %}`
+	}
+
+	function copyText(text: string, key: string) {
 		navigator.clipboard.writeText(text)
-		copiedVar = name
+		copiedVar = key
 		clearTimeout(copyTimeout)
 		copyTimeout = setTimeout(() => {
 			copiedVar = null
 		}, 1500)
+	}
+
+	function copyVariable(name: string) {
+		copyText(varSyntax(name), name)
+	}
+
+	function copyPromptInclude(command: string) {
+		copyText(includeSyntax(command), `prompt:${command}`)
 	}
 </script>
 
@@ -158,6 +229,83 @@
 			</div>
 
 			<div class="flex-1 space-y-6 overflow-y-auto p-6 pt-4">
+				<!-- usage instructions -->
+				<div
+					class="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 text-sm text-zinc-300"
+				>
+					<h3 class="mb-2 flex items-center gap-2 font-semibold text-zinc-200">
+						<Info class="h-4 w-4 text-zinc-400" />
+						how to use prompts
+					</h3>
+					<ul class="list-inside list-disc space-y-1 text-xs text-zinc-400">
+						<li>
+							<strong>variables</strong>: insert dynamic values with
+							<code class="rounded bg-zinc-800 px-1 py-0.5"
+								>{'{{ variable_name }}'}</code
+							>
+						</li>
+						<li>
+							<strong>include a prompt</strong>: compose prompts by including others
+							with
+							<code class="rounded bg-zinc-800 px-1 py-0.5"
+								>{"{% include 'prompt-name' %}"}</code
+							>
+						</li>
+						<li>
+							<strong>legacy syntax</strong>:
+							<code class="rounded bg-zinc-800 px-1 py-0.5"
+								>{'{{ PROMPTS.prompt-name }}'}</code
+							>
+							is also supported (auto-converted to include)
+						</li>
+						<li>
+							prompts can include other prompts (composable), but circular references
+							are rejected
+						</li>
+					</ul>
+				</div>
+
+				<!-- available prompts as include targets -->
+				{#if prompts.length > 0}
+					<div>
+						<h3 class="text-sm font-semibold text-zinc-200">available prompts</h3>
+						<p class="mb-2 text-xs text-zinc-500">
+							include these prompts in templates. click to copy the include syntax.
+						</p>
+						<div
+							class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50"
+						>
+							{#each prompts as prompt, i}
+								<button
+									type="button"
+									class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-800/60 {i >
+									0
+										? 'border-t border-zinc-800/60'
+										: ''}"
+									onclick={() => copyPromptInclude(prompt.command)}
+									title="copy {includeSyntax(prompt.command)}"
+								>
+									<code
+										class="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-zinc-300"
+									>
+										{includeSyntax(prompt.command)}
+									</code>
+									<span class="min-w-0 flex-1 truncate text-xs text-zinc-400">
+										{prompt.command}
+									</span>
+									<span class="shrink-0 text-zinc-600">
+										{#if copiedVar === `prompt:${prompt.command}`}
+											<Check class="h-3.5 w-3.5 text-green-400" />
+										{:else}
+											<Copy class="h-3.5 w-3.5" />
+										{/if}
+									</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
 				{#each categories as category}
 					<div>
 						<h3 class="text-sm font-semibold text-zinc-200">{category.label}</h3>
@@ -200,7 +348,11 @@
 			<div class="shrink-0 border-t border-zinc-800 p-4">
 				<div class="flex items-center justify-between">
 					<span class="text-xs text-zinc-500">
-						{categories.reduce((sum, c) => sum + c.variables.length, 0)} variables available
+						{categories.reduce((sum, c) => sum + c.variables.length, 0)} variables
+						{#if prompts.length > 0}
+							+ {prompts.length} prompts
+						{/if}
+						available
 					</span>
 					<Button variant="outline" class="rounded-xl" onclick={() => (open = false)}>
 						close

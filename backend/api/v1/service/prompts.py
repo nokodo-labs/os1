@@ -13,6 +13,7 @@ from api.v1.service.authorization import require_permission
 from api.v1.service.prompt_runtime import (
 	PromptValidationError,
 	http_error_from_validation,
+	normalize_command,
 	validate_prompt_content,
 )
 from api.v1.service.sorting import SortDir, apply_sort
@@ -33,7 +34,7 @@ async def _ensure_unique_command(
 	if existing:
 		raise HTTPException(
 			status_code=status.HTTP_409_CONFLICT,
-			detail="Prompt command already exists",
+			detail="prompt command already exists",
 		)
 
 
@@ -55,6 +56,38 @@ async def _validate_prompt_template(
 		)
 	except PromptValidationError as err:
 		raise http_error_from_validation(err) from err
+
+
+async def _validate_all_prompts(
+	session: AsyncSession,
+	*,
+	prompt_map_override: dict[str, str] | None = None,
+) -> None:
+	"""validate that every prompt in the DB has valid references.
+
+	optionally accepts a prompt_map_override to inject pending changes
+	(e.g. a renamed or updated prompt) before validation.
+	"""
+	result = await session.execute(select(Prompt))
+	all_prompts = list(result.scalars().all())
+	prompt_map = {normalize_command(p.command): p.content for p in all_prompts}
+	if prompt_map_override:
+		prompt_map.update(prompt_map_override)
+	errors: list[str] = []
+	for cmd, content in prompt_map.items():
+		try:
+			validate_prompt_content(
+				all_prompts=all_prompts,
+				command=cmd,
+				content=content,
+			)
+		except PromptValidationError as err:
+			errors.append(f"'{cmd}': {err}")
+	if errors:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=f"prompt validation failed: {'; '.join(errors)}",
+		)
 
 
 async def _get_prompt(prompt_id: TypeID, session: AsyncSession) -> Prompt:
@@ -152,12 +185,23 @@ async def update_prompt(
 			exclude_prompt_id=prompt_id,
 		)
 
+	# validate the updated prompt's own references
 	await _validate_prompt_template(
 		session,
 		prompt_id=prompt_id,
 		command=new_command,
 		content=new_content,
 	)
+
+	# when the command is renamed, validate that ALL other prompts
+	# still resolve correctly (catches broken references)
+	old_command = normalize_command(prompt.command)
+	if "command" in updates and normalize_command(new_command) != old_command:
+		override = {normalize_command(new_command): new_content}
+		# remove the old command from the map by marking it absent
+		# (validate_all_prompts will rebuild from DB, which still has the old
+		# name, so we simulate the rename by injecting the new entry)
+		await _validate_all_prompts(session, prompt_map_override=override)
 
 	for field, value in updates.items():
 		setattr(prompt, field, value)

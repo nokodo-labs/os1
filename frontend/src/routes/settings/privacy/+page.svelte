@@ -2,6 +2,7 @@
 	import Lock from '$lib/components/icons/Lock.svelte'
 	import { Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
+	import { clearGeolocation, requestGeolocation } from '$lib/stores/device.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 
 	const useLocation = $derived(preferences.data.privacy.useLocation ?? false)
@@ -9,6 +10,11 @@
 
 	function setUseLocation(enabled: boolean): void {
 		void preferences.update('privacy', { useLocation: enabled })
+		if (enabled) {
+			requestGeolocation()
+		} else {
+			clearGeolocation()
+		}
 	}
 
 	function setUseDeviceContext(enabled: boolean): void {

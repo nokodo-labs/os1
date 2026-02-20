@@ -20,7 +20,7 @@ import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
 import { appReadiness } from '$lib/stores/appReadiness.svelte'
-import { initDevice } from '$lib/stores/device.svelte'
+import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
@@ -77,6 +77,11 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 			// 6. event stream + preferences (needs user data from step 5)
 			eventStreamClient.connect()
 			preferences.startSync()
+
+			// 7. request geolocation if user has useLocation enabled
+			if (preferences.data.privacy.useLocation) {
+				requestGeolocation()
+			}
 		} else {
 			await loadSettings()
 		}

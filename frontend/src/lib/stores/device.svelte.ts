@@ -73,6 +73,11 @@ export const device = $state({
 	isChromium: false,
 	pwaInstalled: false,
 
+	// geolocation (populated when useLocation is enabled)
+	latitude: null as number | null,
+	longitude: null as number | null,
+	locationLabel: null as string | null,
+
 	// virtual keyboard state (mobile only)
 	virtualKeyboardOpen: false,
 	virtualKeyboardHeight: 0,
@@ -584,6 +589,9 @@ export function getClientContext(): {
 	screenWidth: number
 	screenHeight: number
 	isMobile: boolean
+	latitude: number | null
+	longitude: number | null
+	locationLabel: string | null
 } {
 	return {
 		timezone: device.timezone,
@@ -594,5 +602,39 @@ export function getClientContext(): {
 		screenWidth: device.width,
 		screenHeight: device.height,
 		isMobile: device.isMobile,
+		latitude: device.latitude,
+		longitude: device.longitude,
+		locationLabel: device.locationLabel,
 	}
+}
+
+/**
+ * request geolocation from the browser and cache it in device state.
+ * call this when the user enables the useLocation privacy preference.
+ * silently does nothing if geolocation is unavailable or denied.
+ */
+export function requestGeolocation(): void {
+	if (!browser) return
+	if (!navigator.geolocation) return
+
+	navigator.geolocation.getCurrentPosition(
+		(position) => {
+			device.latitude = position.coords.latitude
+			device.longitude = position.coords.longitude
+		},
+		() => {
+			// permission denied or error — leave as null
+			device.latitude = null
+			device.longitude = null
+			device.locationLabel = null
+		},
+		{ enableHighAccuracy: false, timeout: 5000, maximumAge: 300_000 }
+	)
+}
+
+/** clear cached geolocation data. */
+export function clearGeolocation(): void {
+	device.latitude = null
+	device.longitude = null
+	device.locationLabel = null
 }

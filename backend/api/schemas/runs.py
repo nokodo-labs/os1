@@ -54,6 +54,19 @@ class ClientContext(BaseModel):
 		alias="isMobile",
 		description="whether the client is on a mobile device",
 	)
+	latitude: float | None = Field(
+		default=None,
+		description="device latitude from browser geolocation API",
+	)
+	longitude: float | None = Field(
+		default=None,
+		description="device longitude from browser geolocation API",
+	)
+	location_label: str | None = Field(
+		default=None,
+		alias="locationLabel",
+		description="human-readable location label (e.g. 'San Francisco, CA')",
+	)
 
 
 # base run fields shared across request types

@@ -22,7 +22,6 @@
 		BookOpen,
 		Clock,
 		Hash,
-		Pencil,
 		Plus,
 		Terminal,
 		Trash2,
@@ -60,6 +59,7 @@
 	let isSaving = $state(false)
 	let isDeleting = $state(false)
 	let error = $state<string | null>(null)
+	let modalError = $state<string | null>(null)
 	let hasNext = $state(false)
 
 	let showModal = $state(false)
@@ -153,6 +153,7 @@
 		editingId = null
 		formCommand = ''
 		formContent = ''
+		modalError = null
 		showModal = true
 	}
 
@@ -161,26 +162,28 @@
 		editingId = prompt.id
 		formCommand = prompt.command
 		formContent = prompt.content
+		modalError = null
 		showModal = true
 	}
 
 	function closeModal() {
 		showModal = false
+		modalError = null
 	}
 
 	async function handleSave() {
-		const trimmedCommand = formCommand.trim()
+		const trimmedCommand = formCommand.trim().replace(/\s+/g, '-')
 		if (!trimmedCommand) {
-			error = 'command is required'
+			modalError = 'command is required'
 			return
 		}
 		if (!formContent.trim()) {
-			error = 'content is required'
+			modalError = 'content is required'
 			return
 		}
 
 		isSaving = true
-		error = null
+		modalError = null
 		try {
 			if (modalMode === 'edit' && editingId) {
 				await unwrap(
@@ -205,7 +208,7 @@
 			refresh()
 			closeModal()
 		} catch (e: unknown) {
-			error = e instanceof Error ? e.message : 'failed to save prompt'
+			modalError = e instanceof Error ? e.message : 'failed to save prompt'
 		} finally {
 			isSaving = false
 		}
@@ -344,8 +347,10 @@
 				</div>
 			{:else}
 				{#each prompts as p (p.id)}
-					<div
-						class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+					<button
+						type="button"
+						class="w-full cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+						onclick={() => openEditModal(p)}
 					>
 						<div
 							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
@@ -384,16 +389,11 @@
 									<Button
 										variant="ghost"
 										size="icon"
-										class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
-										onclick={() => openEditModal(p)}
-									>
-										<Pencil class="h-4 w-4" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
 										class="h-8 w-8 text-zinc-400 hover:text-red-500"
-										onclick={() => handleDelete(p.id)}
+										onclick={(e: Event) => {
+											e.stopPropagation()
+											handleDelete(p.id)
+										}}
 										disabled={isDeleting}
 									>
 										<Trash2 class="h-4 w-4" />
@@ -401,7 +401,7 @@
 								</div>
 							</div>
 						</div>
-					</div>
+					</button>
 				{/each}
 			{/if}
 		</CardContent>
@@ -441,14 +441,27 @@
 				}}
 			>
 				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+					{#if modalError}
+						<div
+							class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
+						>
+							{modalError}
+						</div>
+					{/if}
 					<div class="space-y-2">
 						<Label for="command">command</Label>
 						<Input
 							id="command"
 							bind:value={formCommand}
-							placeholder="e.g. /summarize"
+							placeholder="e.g. summarize"
 							class="rounded-xl"
+							oninput={() => {
+								formCommand = formCommand.replace(/\s+/g, '-')
+							}}
 						/>
+						<p class="text-xs text-zinc-500">
+							letters, numbers, and dashes only. spaces are auto-converted to dashes.
+						</p>
 					</div>
 					<div class="space-y-2">
 						<div class="flex items-center justify-between">
@@ -492,4 +505,4 @@
 	</Dialog.Portal>
 </Dialog.Root>
 
-<PromptVariablesLegend bind:open={showVariablesLegend} />
+<PromptVariablesLegend bind:open={showVariablesLegend} {prompts} />

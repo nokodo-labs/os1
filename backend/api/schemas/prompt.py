@@ -1,4 +1,4 @@
-"""Prompt schemas."""
+"""prompt schemas."""
 
 from __future__ import annotations
 
@@ -9,22 +9,24 @@ from pydantic import Field, field_validator
 from api.schemas.common import MetadataModel, TimestampedModel
 
 
-_COMMAND_PATTERN = r"^/[a-zA-Z0-9][a-zA-Z0-9-_]*$"
+_COMMAND_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$"
 
 
 def _normalize_command(command: str) -> str:
 	command = command.strip()
 	if not command:
 		return command
-	if not command.startswith("/"):
-		command = f"/{command}"
+	# strip any leading slash (legacy format)
+	command = command.lstrip("/")
+	# auto-convert spaces to dashes
+	command = command.replace(" ", "-")
 	return command
 
 
 class PromptBase(MetadataModel):
-	"""Shared prompt fields."""
+	"""shared prompt fields."""
 
-	command: str = Field(..., description="Prompt identifier, e.g. '/my-prompt'")
+	command: str = Field(..., description="prompt identifier, e.g. 'my-prompt'")
 	content: str
 
 	@field_validator("command")
@@ -34,19 +36,20 @@ class PromptBase(MetadataModel):
 		# keep validation local to this module; the service layer enforces uniqueness.
 		if not re.match(_COMMAND_PATTERN, normalized):
 			raise ValueError(
-				"command must look like '/my-prompt' (letters, numbers, '-', '_' only)"
+				"command must look like 'my-prompt' "
+				"(letters, numbers, '-', '_' only; no leading slash)"
 			)
 		return normalized
 
 
 class PromptCreate(PromptBase):
-	"""Payload for prompt creation."""
+	"""payload for prompt creation."""
 
 	pass
 
 
 class PromptUpdate(MetadataModel):
-	"""Payload for prompt update."""
+	"""payload for prompt update."""
 
 	command: str | None = None
 	content: str | None = None
@@ -61,6 +64,6 @@ class PromptUpdate(MetadataModel):
 
 
 class Prompt(PromptBase, TimestampedModel):
-	"""Response schema."""
+	"""response schema."""
 
 	id: str
