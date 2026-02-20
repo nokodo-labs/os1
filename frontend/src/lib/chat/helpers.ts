@@ -1,5 +1,6 @@
 /**
- * Pure utility functions for chat page - no reactive state, no side effects.
+ * pure utility functions and types for chat — no reactive state, no side effects.
+ * moved from routes/c/[id]/chatHelpers.ts to $lib/chat/ for proper module boundaries.
  */
 
 import type { components } from '$lib/api/types'
@@ -43,7 +44,7 @@ export interface StreamingAssistantState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Convert message content parts to plain text.
+ * convert message content parts to plain text.
  */
 export function contentPartsToText(parts: ApiMessage['content']): string {
 	if (!parts || parts.length === 0) return ''
@@ -70,7 +71,7 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 }
 
 /**
- * Convert SDK message parts to plain text (used during streaming).
+ * convert SDK message parts to plain text (used during streaming).
  */
 export function sdkPartsToText(parts: unknown): string {
 	if (!Array.isArray(parts)) return ''
@@ -95,7 +96,7 @@ export function sdkPartsToText(parts: unknown): string {
 }
 
 /**
- * Extract run_id from message metadata, or generate a legacy fallback.
+ * extract run_id from message metadata, or generate a legacy fallback.
  */
 export function getRunId(msg: Pick<ApiMessage, 'metadata_' | 'id'>): string {
 	const runId =
@@ -104,19 +105,19 @@ export function getRunId(msg: Pick<ApiMessage, 'metadata_' | 'id'>): string {
 }
 
 /**
- * Parse message created_at to Date.
+ * parse message created_at to Date.
  */
 export function getMessageCreatedAt(msg: ApiMessage): Date {
 	return msg.created_at ? new Date(msg.created_at) : new Date(0)
 }
 
 /**
- * Buffer distance for auto-scroll detection.
+ * buffer distance for auto-scroll detection.
  */
 export const AUTO_SCROLL_BUFFER_PX = 50
 
 /**
- * Check if scroll container is at bottom (within buffer).
+ * check if scroll container is at bottom (within buffer).
  */
 export function computeIsAtBottom(element: HTMLElement): boolean {
 	return element.scrollHeight - element.scrollTop <= element.clientHeight + AUTO_SCROLL_BUFFER_PX

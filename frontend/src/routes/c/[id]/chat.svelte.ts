@@ -1,29 +1,9 @@
 /**
  * reactive chat state management using Svelte 5 runes.
- * encapsulates all chat page state and business logic.
+ * coordinates the modules in $lib/chat/ via a ChatContext object.
  */
 
-import { apiClient } from '$lib/api/client'
-import { isOwnEvent } from '$lib/api/sessionId'
-import {
-	eventStreamClient,
-	resumeRunStream,
-	runChatStream,
-	type ChatStreamDelta,
-	type StreamEvent,
-	type StreamMessage,
-	type UnknownSseEvent,
-} from '$lib/api/streaming'
-import type { components } from '$lib/api/types'
-import { agents } from '$lib/stores/agents.svelte'
-import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
-import { notifications } from '$lib/stores/notifications.svelte'
-import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
-import { session } from '$lib/stores/session.svelte'
-import { ToolExecutionTracker, parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
-import { hapticFeedback } from '$lib/utils/haptics'
-import { tick } from 'svelte'
-import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
+import type { ChatStreamDelta } from '$lib/api/streaming'
 import {
 	blockHasStreamingAssistant,
 	buildAgentLookup,
@@ -34,31 +14,50 @@ import {
 	getBlockFirstAssistant,
 	getBlockResponseItems,
 	getMessageCreatedAt,
-	sdkPartsToText,
-	upsertToolCalls,
+	type ApiMessage,
+	type ChatContext,
 	type RunBlock,
 	type StreamingAssistantState,
-} from './chatHelpers'
+} from '$lib/chat'
+import {
+	loadOlderMessages as _loadOlderMessages,
+	loadTree as _loadTree,
+} from '$lib/chat/dataLoader'
+import {
+	sendTypingEvent as _sendTypingEvent,
+	subscribeToChatEvents,
+} from '$lib/chat/eventSubscriptions'
+import { resumeCreateAndRun as _resumeCreateAndRun } from '$lib/chat/streamProcessor'
+import {
+	findRunUserMessage as _findRunUserMessage,
+	switchBranch as _switchBranch,
+} from '$lib/chat/treeNavigation'
+import {
+	deleteUserMessage as _deleteUserMessage,
+	handleEditMessage as _handleEditMessage,
+	handleRegenerateMessage as _handleRegenerateMessage,
+	handleSendMessage as _handleSendMessage,
+	handleStopGeneration as _handleStopGeneration,
+	requestDeleteUserMessage as _requestDeleteUserMessage,
+} from '$lib/chat/userActions'
+import { agents } from '$lib/stores/agents.svelte'
+import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
+import { session } from '$lib/stores/session.svelte'
+import { ToolExecutionTracker } from '$lib/tools'
+import { tick } from 'svelte'
+import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
-export type ApiMessage = components['schemas']['Message']
-type ApiEvent = components['schemas']['Event']
+export type { ApiMessage }
 
-/** lightweight pointer for a run signal received over WS. */
-interface RunSignal {
-	thread_id: string
-	run_id: string
-	agent_id: string
-}
-
-// re-export types moved to chatHelpers for backward compatibility
-export type { RunBlock, RunItem, StreamingAssistantState } from './chatHelpers'
+// re-export types for backward compatibility
+export type { RunBlock, RunItem, StreamingAssistantState } from '$lib/chat'
 
 /**
  * creates the reactive chat state for a thread page.
  * returns an object with all state and methods needed by the UI.
  */
 export function createChatState() {
-	// core state
+	// ── core state ───────────────────────────────────────────────────────
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
@@ -70,21 +69,21 @@ export function createChatState() {
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
 
-	// thread state
+	// ── thread state ─────────────────────────────────────────────────────
 	let thread = $state<Thread | null>(null)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
 
-	// message paging (latest-first from backend)
+	// ── message paging (latest-first from backend) ───────────────────────
 	let messageSkip = $state(0)
 	let hasMoreMessages = $state(true)
 	let isLoadingOlderMessages = $state(false)
 
-	// message tree (for branching)
+	// ── message tree (for branching) ─────────────────────────────────────
 	const messageTree = new SvelteMap<string, ApiMessage>()
 	let currentLeafId = $state<string | null>(null)
 
-	// scroll state
+	// ── scroll state ─────────────────────────────────────────────────────
 	let scrollContainer = $state<HTMLElement | null>(null)
 	let inputOverlay = $state<HTMLElement | null>(null)
 	let autoScroll = $state(true)
@@ -93,7 +92,7 @@ export function createChatState() {
 	let inputOverlayHeight = $state(0)
 	let scrollQueued = false
 
-	// tool tracking
+	// ── tool tracking ────────────────────────────────────────────────────
 	const toolTracker = new ToolExecutionTracker()
 	let toolTick = $state(0)
 	const fetchedToolEventMessageIds = new SvelteSet<string>()
@@ -105,25 +104,24 @@ export function createChatState() {
 		return toolTracker.getExecution(toolCallId)
 	}
 
-	// delete confirmation
+	// ── delete confirmation ──────────────────────────────────────────────
 	let confirmDeleteMessage = $state<{ id: string; preview: string } | null>(null)
 	let isDeletingMessage = $state(false)
 	let deleteMessageError = $state<string | null>(null)
 
-	// typing indicators (other users typing in this thread)
+	// ── typing indicators (other users typing in this thread) ────────────
 	const typingUsers = new SvelteSet<string>()
 
-	// active agent runs in this thread (from other sessions or catchup)
-	// keyed by run_id → full run info mirroring backend RunStatus shape
+	// ── active agent runs ────────────────────────────────────────────────
 	const activeAgentRuns = new SvelteMap<
 		string,
 		{ threadId: string; runId: string; agentId: string }
 	>()
 
-	// abort controller for streaming
+	// ── abort controller for streaming ───────────────────────────────────
 	let runAbortController: AbortController | null = null
 
-	// derived state
+	// ── derived state ────────────────────────────────────────────────────
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
 	const currentUserId = $derived(session.currentUser?.id ?? null)
@@ -156,7 +154,7 @@ export function createChatState() {
 		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
 	)
 
-	// run block management
+	// ── run block management ─────────────────────────────────────────────
 	function rebuildRunBlocks(): void {
 		const result = buildRunBlocks({
 			messages,
@@ -174,124 +172,7 @@ export function createChatState() {
 		runBlocks = result.blocks
 	}
 
-	// branch navigation
-	function getLatestLeaf(rootId: string): string {
-		let curr = rootId
-		while (true) {
-			const kids = messageChildren.get(curr)
-			if (!kids || kids.length === 0) return curr
-			curr = kids[kids.length - 1]
-		}
-	}
-
-	/** check if a leaf node is on the streaming branch by walking up to the streaming leaf */
-	function isOnStreamingBranch(leafId: string): boolean {
-		if (!streamingLeafId) {
-			// if we haven't created the message yet, we are on the streaming branch
-			// only if we are sitting at the parent (waiting for it)
-			return streamingAssistantParentId ? leafId === streamingAssistantParentId : true
-		}
-		const visited = new SvelteSet<string>()
-		let curr: string | null = streamingLeafId
-		while (curr) {
-			if (visited.has(curr)) break
-			visited.add(curr)
-			if (curr === leafId) return true
-			const msg = messageTree.get(curr)
-			if (!msg) break
-			curr = msg.parent_id ?? null
-		}
-		return false
-	}
-
-	async function switchBranch(messageId: string, direction: 'prev' | 'next') {
-		let parentId: string | null
-		let siblings: string[]
-		let idx: number
-		let pendingVirtual = false
-
-		const msg = messageTree.get(messageId)
-		if (msg) {
-			parentId = msg.parent_id ?? null
-			siblings = messageChildren.get(parentId) ?? []
-			idx = siblings.indexOf(messageId)
-		} else if (isGenerating && streamingAssistantParentId) {
-			// pending streaming placeholder not yet in the tree
-			parentId = streamingAssistantParentId
-			siblings = messageChildren.get(parentId) ?? []
-			idx = siblings.length // virtual last entry
-			pendingVirtual = true
-		} else {
-			return
-		}
-
-		if (idx === -1) return
-
-		const totalCount = siblings.length + (pendingVirtual ? 1 : 0)
-		if (totalCount <= 1) return
-
-		const targetIdx = direction === 'prev' ? idx - 1 : idx + 1
-		if (targetIdx < 0 || targetIdx >= totalCount) return
-
-		// navigating back to the virtual pending entry (only during the brief pre-delta window)
-		if (pendingVirtual && targetIdx >= siblings.length) {
-			viewingStreamingBranch = true
-			currentLeafId = streamingLeafId ?? streamingAssistantParentId
-			rebuildRunBlocks()
-			return
-		}
-
-		const targetId = siblings[targetIdx]
-		const newLeaf = getLatestLeaf(targetId)
-
-		if (isGenerating) {
-			const onStreaming = isOnStreamingBranch(newLeaf)
-			viewingStreamingBranch = onStreaming
-			currentLeafId = onStreaming && streamingLeafId ? streamingLeafId : newLeaf
-			rebuildRunBlocks()
-			return
-		}
-
-		currentLeafId = newLeaf
-		rebuildRunBlocks()
-
-		// persist branch selection to backend
-		if (thread) {
-			try {
-				await apiClient().PATCH('/v1/threads/{thread_id}', {
-					params: { path: { thread_id: thread.id } },
-					body: { current_message_id: newLeaf },
-				})
-				thread = { ...thread, current_message_id: newLeaf }
-			} catch (e) {
-				console.error('failed to persist branch selection', e)
-			}
-		}
-	}
-
-	/**
-	 * find the user message that started a run by walking up from the response root.
-	 */
-	function findRunUserMessage(block: RunBlock): string | null {
-		const firstResponseId = block.responseRootId
-		if (!firstResponseId) return null
-		const firstResponse = messageTree.get(firstResponseId)
-		if (!firstResponse) return null
-		// Walk up to find the user message
-		const visited = new SvelteSet<string>()
-		let parentId = firstResponse.parent_id
-		while (parentId) {
-			if (visited.has(parentId)) break
-			visited.add(parentId)
-			const parent = messageTree.get(parentId)
-			if (!parent) break
-			if (parent.type === 'user') return parent.id
-			parentId = parent.parent_id
-		}
-		return null
-	}
-
-	// scroll management
+	// ── scroll management ────────────────────────────────────────────────
 	function handleScroll() {
 		if (!scrollContainer) return
 		const atBottom = computeIsAtBottom(scrollContainer)
@@ -304,7 +185,7 @@ export function createChatState() {
 			if (!threadId) return
 			if (!hasMoreMessages) return
 			if (isLoadingOlderMessages) return
-			void loadOlderMessages(threadId)
+			void _loadOlderMessages(threadId, ctx)
 		}
 	}
 
@@ -324,800 +205,7 @@ export function createChatState() {
 		})
 	}
 
-	// data loading
-	async function fetchToolEventsForThread(threadId: string, msgIds: string[]): Promise<void> {
-		if (msgIds.length === 0) return
-
-		// queue IDs that haven't been fetched yet
-		for (const id of msgIds) {
-			if (!fetchedToolEventMessageIds.has(id)) {
-				toolEventsPendingIds.add(id)
-			}
-		}
-
-		// if already fetching, the current fetch will pick up queued IDs on completion
-		if (toolEventsInFlight) return
-
-		// process all pending IDs
-		while (toolEventsPendingIds.size > 0) {
-			const batch = Array.from(toolEventsPendingIds)
-			toolEventsPendingIds.clear()
-
-			toolEventsInFlight = true
-			try {
-				const { data, error } = await apiClient().POST(
-					'/v1/threads/{thread_id}/events/by-message-ids',
-					{
-						params: { path: { thread_id: threadId } },
-						body: { message_ids: batch },
-					}
-				)
-				if (!error && data) {
-					for (const ev of data as ApiEvent[]) {
-						const toolEv = parseToolEvent({
-							id: ev.id,
-							type: ev.type,
-							data: (ev.data ?? {}) as Record<string, unknown>,
-							created_at: ev.created_at ?? undefined,
-							message_id: ev.message_id ?? undefined,
-						})
-						if (toolEv) toolTracker.processEvent(toolEv)
-					}
-					toolTick++
-				}
-				for (const id of batch) fetchedToolEventMessageIds.add(id)
-			} finally {
-				toolEventsInFlight = false
-			}
-		}
-	}
-
-	function ingestMessages(msgs: ApiMessage[]): void {
-		for (const msg of msgs) {
-			messageTree.set(msg.id, msg)
-			if (msg.type === 'assistant') {
-				for (const tc of parseToolCalls(msg)) toolTracker.registerToolCall(tc)
-			}
-			if (msg.type === 'tool') {
-				const result = parseToolResult(msg)
-				if (result) toolTracker.registerResult(result)
-			}
-		}
-	}
-
-	async function loadOlderMessages(threadId: string): Promise<void> {
-		if (!scrollContainer) return
-		if (isLoadingOlderMessages) return
-		if (!hasMoreMessages) return
-
-		isLoadingOlderMessages = true
-		const prevScrollHeight = scrollContainer.scrollHeight
-		const prevScrollTop = scrollContainer.scrollTop
-
-		try {
-			const { data, error } = await apiClient().GET('/v1/threads/{thread_id}/messages', {
-				params: {
-					path: { thread_id: threadId },
-					query: { skip: messageSkip, limit: 120 },
-				},
-			})
-			if (error) return
-			const page = (data ?? []) as ApiMessage[]
-			if (page.length === 0) {
-				hasMoreMessages = false
-				return
-			}
-			messageSkip += page.length
-			ingestMessages(page)
-
-			await fetchToolEventsForThread(
-				threadId,
-				page.filter((m) => m.type === 'assistant').map((m) => m.id)
-			)
-
-			await tick()
-			const newScrollHeight = scrollContainer.scrollHeight
-			scrollContainer.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight)
-		} finally {
-			isLoadingOlderMessages = false
-		}
-	}
-
-	async function loadTree(threadId: string): Promise<boolean> {
-		// try cache first for instant load
-		const cachedThread = chatStore.threadCache.get(threadId)
-		const cachedMessages = chatStore.threadCache.getCachedMessages(threadId)
-
-		let threadData: typeof cachedThread
-		let messagesPage: ApiMessage[]
-
-		if (cachedThread && cachedMessages) {
-			// use cached data for instant render
-			threadData = cachedThread
-			messagesPage = cachedMessages
-		} else {
-			// fetch from API
-			const { data, error: threadError } = await apiClient().GET('/v1/threads/{thread_id}', {
-				params: { path: { thread_id: threadId } },
-			})
-			if (threadError) {
-				console.error('failed to load thread', threadError)
-				thread = null
-				chatStore.activeThread = null
-				toolTracker.clear()
-				messageTree.clear()
-				currentLeafId = null
-				rebuildRunBlocks()
-				return false
-			}
-			if (!data) {
-				thread = null
-				chatStore.activeThread = null
-				toolTracker.clear()
-				messageTree.clear()
-				currentLeafId = null
-				rebuildRunBlocks()
-				return true
-			}
-			threadData = data
-
-			const { data: msgData, error: msgError } = await apiClient().GET(
-				'/v1/threads/{thread_id}/messages',
-				{ params: { path: { thread_id: threadId }, query: { skip: 0, limit: 120 } } }
-			)
-			if (msgError) {
-				console.error('failed to load messages', msgError)
-				currentLeafId = null
-				return false
-			}
-			messagesPage = (msgData ?? []) as ApiMessage[]
-
-			// cache for future instant loads
-			chatStore.threadCache.set(threadData)
-			chatStore.threadCache.setMessages(threadId, messagesPage, messagesPage.length < 120)
-		}
-
-		thread = threadData
-		chatStore.activeThread = threadData
-
-		toolTracker.clear()
-		messageTree.clear()
-		messageSkip = messagesPage.length
-		// more messages exist if we got a full page (limit is 120)
-		hasMoreMessages = messagesPage.length >= 120
-		ingestMessages(messagesPage)
-
-		const preferredLeaf = threadData.current_message_id
-		if (preferredLeaf && messageTree.has(preferredLeaf)) {
-			currentLeafId = preferredLeaf
-		} else if (messageTree.size > 0) {
-			let latest: ApiMessage | null = null
-			for (const msg of messageTree.values()) {
-				if (!latest) {
-					latest = msg
-					continue
-				}
-				if (getMessageCreatedAt(msg).getTime() >= getMessageCreatedAt(latest).getTime()) {
-					latest = msg
-				}
-			}
-			currentLeafId = latest?.id ?? null
-		} else {
-			currentLeafId = null
-		}
-
-		await fetchToolEventsForThread(
-			threadId,
-			Array.from(messageTree.values())
-				.filter((m) => m.type === 'assistant')
-				.map((m) => m.id)
-		)
-		rebuildRunBlocks()
-		return true
-	}
-
-	/**
-	 * sync the current in-memory message tree and leaf pointer back to the
-	 * thread cache so navigating away and back renders all messages.
-	 */
-	function syncCacheAfterRun(): void {
-		if (!thread) return
-		// update cached thread's current_message_id to the live leaf
-		const updatedThread = { ...thread, current_message_id: currentLeafId ?? null }
-		chatStore.threadCache.set(updatedThread)
-		// write all in-memory messages back to cache
-		const allMessages = Array.from(messageTree.values())
-		chatStore.threadCache.setMessages(thread.id, allMessages, !hasMoreMessages)
-	}
-
-	/**
-	 * process a single SSE delta event.
-	 *
-	 * returns 'done' when the stream should stop, 'continue' otherwise.
-	 */
-	function processDelta(
-		delta: ChatStreamDelta,
-		ctx: {
-			runId: number
-			threadId: string
-			getAssistantParentId: () => string | null
-			setAssistantParentId: (id: string | null) => void
-		}
-	): 'done' | 'continue' {
-		switch (delta.event) {
-			case 'error':
-				throw new Error(delta.data.message || 'generation failed')
-			case 'done':
-				return 'done'
-			case 'message_created': {
-				const msg = delta.data as unknown as ApiMessage
-				if (msg.type === 'user') {
-					optimisticUserMessage = null
-				}
-				messageTree.set(msg.id, msg)
-				streamingLeafId = msg.id
-				if (viewingStreamingBranch) {
-					currentLeafId = msg.id
-				}
-				ctx.setAssistantParentId(msg.id)
-				streamingAssistantParentId = msg.id
-				return 'continue'
-			}
-			case 'delta': {
-				const env = delta.data
-				const d = env.delta as Record<string, unknown>
-				const messageId = env.message_id
-
-				// agent done sentinel
-				if (d && d.done === true) return 'done'
-
-				// tool results
-				if (d && typeof d === 'object' && d.tool) {
-					const tool = d.tool as Record<string, unknown>
-					const toolCallId =
-						typeof tool.tool_call_id === 'string' ? tool.tool_call_id : null
-					const output = typeof tool.tool_output === 'string' ? tool.tool_output : ''
-					const isError = tool.is_error === true
-					if (toolCallId) {
-						toolTracker.registerResult({ toolCallId, output, isError })
-						toolTick++
-					}
-
-					// add a tool message entry to the tree so the parent chain
-					// stays intact when the next assistant message references it
-					if (messageId && !messageTree.has(messageId)) {
-						const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
-						const resolvedParent = deltaParent ?? ctx.getAssistantParentId()
-						const now = new SvelteDate().toISOString()
-						messageTree.set(messageId, {
-							id: messageId,
-							thread_id: ctx.threadId,
-							parent_id: resolvedParent,
-							type: 'tool',
-							content: output ? [{ type: 'text', text: output }] : [],
-							tool_calls: [],
-							metadata_: toolCallId ? { tool_call_id: toolCallId } : undefined,
-							sender_agent_id: null,
-							sender_user_id: null,
-							created_at: now,
-							updated_at: now,
-						} satisfies ApiMessage)
-						streamingLeafId = messageId
-						if (viewingStreamingBranch) {
-							currentLeafId = messageId
-						}
-						ctx.setAssistantParentId(messageId)
-						streamingAssistantParentId = messageId
-					}
-				}
-
-				// assistant streaming
-				if (d && typeof d === 'object' && d.chat && messageId) {
-					const chat = d.chat as Record<string, unknown>
-					const msg = (chat.message ?? null) as Record<string, unknown> | null
-					const parts = msg ? msg.content : null
-					const chunkText = sdkPartsToText(parts)
-					const toolCalls = msg ? msg.tool_calls : null
-					const isDone = chat.done === true
-
-					const isNewStreamingMessage =
-						!streamingAssistant || streamingAssistant.messageId !== messageId
-					if (isNewStreamingMessage) {
-						hapticFeedback()
-						const runId = typeof env.run_id === 'string' ? env.run_id : null
-						streamingAssistant = {
-							runId,
-							messageId,
-							content: '',
-							timestamp: new SvelteDate(),
-							senderAgentId: selectedAgent.id,
-							toolCalls: [],
-							isError: false,
-							errorMessage: null,
-						}
-						if (!messageTree.has(messageId)) {
-							const now = new SvelteDate().toISOString()
-							const deltaParent =
-								typeof env.parent_id === 'string' ? env.parent_id : null
-							const resolvedParent = deltaParent ?? ctx.getAssistantParentId()
-							if (resolvedParent) {
-								ctx.setAssistantParentId(resolvedParent)
-								streamingAssistantParentId = resolvedParent
-								currentLeafId = resolvedParent
-							}
-							messageTree.set(messageId, {
-								id: messageId,
-								thread_id: ctx.threadId,
-								parent_id: resolvedParent,
-								type: 'assistant',
-								content: [],
-								tool_calls: [],
-								metadata_: runId ? { run_id: runId } : undefined,
-								sender_agent_id: selectedAgent.id,
-								sender_user_id: null,
-								created_at: now,
-								updated_at: now,
-							} satisfies ApiMessage)
-						}
-						streamingLeafId = messageId
-						// keep currentLeafId pointing to the streaming message so
-						// the messages derived includes the entire branch
-						if (viewingStreamingBranch) {
-							currentLeafId = messageId
-						}
-					}
-					const streaming = streamingAssistant
-					if (!streaming) return 'continue'
-
-					if (chunkText) streaming.content += chunkText
-
-					let toolCallsChanged = false
-					if (Array.isArray(toolCalls)) {
-						const prev = streaming.toolCalls
-						const prevSig = prev
-							.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
-							.join('|')
-						const next = upsertToolCalls(prev, toolCalls)
-						const nextSig = next
-							.map((tc) => `${tc.id}:${tc.name}:${JSON.stringify(tc.arguments)}`)
-							.join('|')
-						toolCallsChanged = prevSig !== nextSig
-						streaming.toolCalls = next
-						if (toolCallsChanged) {
-							for (const tc of streaming.toolCalls) toolTracker.registerToolCall(tc)
-							toolTick++
-						}
-					}
-
-					if (isNewStreamingMessage || toolCallsChanged) {
-						rebuildRunBlocks()
-					}
-
-					if (isDone) {
-						const content = streaming.content.trim()
-						const now = new SvelteDate().toISOString()
-						const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
-						const resolvedParent = deltaParent ?? ctx.getAssistantParentId()
-						const finalized = {
-							id: streaming.messageId,
-							thread_id: ctx.threadId,
-							parent_id: resolvedParent,
-							type: 'assistant',
-							content: content ? [{ type: 'text', text: content }] : [],
-							tool_calls: streaming.toolCalls.map((tc) => ({
-								id: tc.id,
-								name: tc.name,
-								arguments: tc.arguments,
-							})),
-							metadata_: streaming.runId ? { run_id: streaming.runId } : undefined,
-							sender_agent_id: streaming.senderAgentId,
-							sender_user_id: null,
-							created_at: now,
-							updated_at: now,
-						} satisfies ApiMessage
-						messageTree.set(finalized.id, finalized)
-						streamingLeafId = finalized.id
-						if (viewingStreamingBranch) {
-							currentLeafId = finalized.id
-						}
-						const parentId = finalized.id
-						ctx.setAssistantParentId(parentId)
-						streamingAssistantParentId = parentId
-
-						if (streaming.toolCalls.length > 0) {
-							streamingAssistant = {
-								runId: streaming.runId,
-								messageId: `pending-next-${ctx.runId}`,
-								content: '',
-								timestamp: new SvelteDate(),
-								senderAgentId: streaming.senderAgentId,
-								toolCalls: [],
-								isError: false,
-								errorMessage: null,
-							}
-						} else {
-							streamingAssistant = null
-						}
-						rebuildRunBlocks()
-					}
-				}
-				return 'continue'
-			}
-			case 'unknown': {
-				// future-proofing: log and show transient banner for unrecognized events
-				const unknownData = delta.data as UnknownSseEvent
-				console.warn(`unknown SSE event: ${unknownData.eventType}`, unknownData.rawData)
-				notifications.toasts = [
-					...notifications.toasts,
-					{
-						id: `unknown-sse-${Date.now()}`,
-						title: 'unknown event',
-						body: `received unrecognized event: ${unknownData.eventType}`,
-						iconUrl: null,
-						addedAt: Date.now(),
-					},
-				]
-				return 'continue'
-			}
-			default:
-				return 'continue'
-		}
-	}
-
-	// streaming
-
-	/**
-	 * consume any async generator of chat deltas, processing each through the
-	 * standard processDelta pipeline. decoupled from the HTTP transport so it
-	 * can be fed a generator from runChatStream, runCreateAndRunStream, or
-	 * any other source.
-	 */
-	async function consumeStream(
-		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
-		opts: { runId: number; threadId: string; parentId: string | null }
-	): Promise<void> {
-		let assistantParentId = opts.parentId
-		streamingAssistantParentId = assistantParentId
-
-		const ctx = {
-			runId: opts.runId,
-			threadId: opts.threadId,
-			getAssistantParentId: () => assistantParentId,
-			setAssistantParentId: (id: string | null) => {
-				assistantParentId = id
-			},
-		}
-
-		for await (const delta of stream) {
-			if (opts.runId !== activeRun) {
-				runAbortController?.abort()
-				return
-			}
-
-			const result = processDelta(delta, ctx)
-			if (result === 'done') return
-		}
-	}
-
-	async function runThreadStream(opts: {
-		threadId: string
-		agentId: string
-		input: string | null
-		runId: number
-		parentId?: string | null
-	}): Promise<void> {
-		runAbortController?.abort()
-		runAbortController = new AbortController()
-
-		const parentId = opts.parentId ?? currentLeafId
-
-		// when retrying, switch view to parent so new response replaces old branch
-		if (!opts.input) {
-			if (parentId) currentLeafId = parentId
-			else currentLeafId = null
-		}
-
-		const stream = runChatStream({
-			threadId: opts.threadId,
-			agentId: opts.agentId,
-			input: opts.input,
-			parentId,
-			signal: runAbortController.signal,
-		})
-
-		await consumeStream(stream, {
-			runId: opts.runId,
-			threadId: opts.threadId,
-			parentId,
-		})
-	}
-
-	/**
-	 * resume a create_and_run stream that was started on another page.
-	 * the generator has already yielded `thread_created` — this consumes
-	 * the remaining run deltas (message_created, delta, done, etc).
-	 */
-	async function resumeCreateAndRun(
-		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
-		threadId: string
-	): Promise<void> {
-		runAbortController?.abort()
-		runAbortController = new AbortController()
-
-		const runId = ++activeRun
-		isGenerating = true
-		viewingStreamingBranch = true
-		streamingLeafId = null
-		streamingAssistant = {
-			runId: null,
-			messageId: `pending-${runId}`,
-			content: '',
-			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent.id,
-			toolCalls: [],
-			isError: false,
-			errorMessage: null,
-		}
-		rebuildRunBlocks()
-
-		try {
-			await consumeStream(stream, { runId, threadId, parentId: currentLeafId })
-			if (runId !== activeRun) return
-			optimisticUserMessage = null
-			streamingAssistant = null
-			rebuildRunBlocks()
-			syncCacheAfterRun()
-		} catch (e) {
-			console.error('failed to resume create_and_run stream', e)
-			if (runId === activeRun && streamingAssistant) {
-				streamingAssistant = {
-					...streamingAssistant,
-					isError: true,
-					errorMessage: e instanceof Error ? e.message : 'something went wrong',
-				}
-			}
-			rebuildRunBlocks()
-		} finally {
-			if (runId === activeRun) isGenerating = false
-		}
-	}
-
-	// user actions
-	async function handleSendMessage(content: string) {
-		const trimmed = content.trim()
-		if (!trimmed) return
-		if (!thread) return
-		const runBaseMessage = trimmed
-		if (!selectedAgent) {
-			lastRunInput = runBaseMessage
-			optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
-			viewingStreamingBranch = true
-			streamingAssistant = {
-				runId: null,
-				messageId: `pending-no-agent`,
-				content: '',
-				timestamp: new SvelteDate(),
-				senderAgentId: null,
-				toolCalls: [],
-				isError: true,
-				errorMessage: 'select an agent to generate a response.',
-			}
-			rebuildRunBlocks()
-			return
-		}
-		lastRunInput = runBaseMessage
-		inputValue = ''
-		optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
-		const shouldAutoScroll = scrollContainer ? computeIsAtBottom(scrollContainer) : true
-		isGenerating = true
-		streamingAssistant = null
-		viewingStreamingBranch = true
-		streamingLeafId = null
-		streamingAssistant = {
-			runId: null,
-			messageId: `pending-${activeRun + 1}`,
-			content: '',
-			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent.id,
-			toolCalls: [],
-			isError: false,
-			errorMessage: null,
-		}
-		const runId = ++activeRun
-		rebuildRunBlocks()
-		if (shouldAutoScroll) {
-			autoScroll = true
-			void queueScrollToBottom('smooth')
-		}
-
-		try {
-			await runThreadStream({
-				threadId: thread.id,
-				agentId: selectedAgent.id,
-				input: runBaseMessage,
-				runId,
-				parentId: currentLeafId,
-			})
-			if (runId !== activeRun) return
-			optimisticUserMessage = null
-			streamingAssistant = null
-			rebuildRunBlocks()
-			syncCacheAfterRun()
-		} catch (e) {
-			console.error('failed to run thread', e)
-			if (runId === activeRun && streamingAssistant) {
-				streamingAssistant = {
-					...streamingAssistant,
-					isError: true,
-					errorMessage: e instanceof Error ? e.message : 'something went wrong',
-				}
-			}
-			rebuildRunBlocks()
-		} finally {
-			if (runId === activeRun) isGenerating = false
-		}
-	}
-
-	async function handleRegenerateMessage(parentId: string | null = null) {
-		if (!thread) return
-		if (!selectedAgent.id) return
-		isGenerating = true
-		viewingStreamingBranch = true
-		streamingLeafId = null
-
-		const resolvedParent = parentId ?? currentLeafId
-		streamingAssistantParentId = resolvedParent
-
-		// switch view to parent so old response leaves the visible branch
-		if (resolvedParent) currentLeafId = resolvedParent
-
-		streamingAssistant = {
-			runId: null,
-			messageId: `pending-${activeRun + 1}`,
-			content: '',
-			timestamp: new SvelteDate(),
-			senderAgentId: selectedAgent.id,
-			toolCalls: [],
-			isError: false,
-			errorMessage: null,
-		}
-		const runId = ++activeRun
-		rebuildRunBlocks()
-
-		try {
-			await runThreadStream({
-				threadId: thread.id,
-				agentId: selectedAgent.id,
-				input: optimisticUserMessage ? lastRunInput : null,
-				runId,
-				parentId: resolvedParent,
-			})
-			if (runId !== activeRun) return
-			optimisticUserMessage = null
-			streamingAssistant = null
-			streamingAssistantParentId = null
-			rebuildRunBlocks()
-			syncCacheAfterRun()
-		} catch (e) {
-			console.error('failed to retry run', e)
-			if (runId === activeRun && streamingAssistant) {
-				streamingAssistant = {
-					...streamingAssistant,
-					isError: true,
-					errorMessage: e instanceof Error ? e.message : 'something went wrong',
-				}
-			}
-			rebuildRunBlocks()
-		} finally {
-			if (runId === activeRun) isGenerating = false
-		}
-	}
-
-	function handleStopGeneration() {
-		runAbortController?.abort()
-		activeRun++
-		isGenerating = false
-		viewingStreamingBranch = true
-		streamingLeafId = null
-		optimisticUserMessage = null
-		streamingAssistant = null
-		streamingAssistantParentId = null
-		rebuildRunBlocks()
-	}
-
-	async function handleEditMessage(messageId: string) {
-		if (!thread) return
-		const msg = messages.find((m) => m.id === messageId)
-		if (!msg) return
-
-		const currentContent = contentPartsToText(msg.content)
-		const newContent = window.prompt('edit message', currentContent)
-
-		if (newContent === null || newContent.trim() === currentContent.trim()) return
-		if (!newContent.trim()) return
-
-		const body = {
-			content: newContent,
-			type: 'user',
-			parent_id: msg.parent_id ?? null,
-		} satisfies components['schemas']['MessageCreate']
-
-		const { data: newMessage, error } = await apiClient().POST(
-			'/v1/threads/{thread_id}/messages',
-			{
-				params: { path: { thread_id: thread.id } },
-				body,
-			}
-		)
-
-		if (error || !newMessage) {
-			console.error('failed to create edited message', error)
-			return
-		}
-
-		messageTree.set(newMessage.id, newMessage)
-		currentLeafId = newMessage.id
-		rebuildRunBlocks()
-
-		await handleRegenerateMessage(newMessage.id)
-	}
-
-	// delete functionality
-	function requestDeleteUserMessage(messageId: string) {
-		const msg = messages.find((m) => m.id === messageId)
-		const preview = msg ? contentPartsToText(msg.content).trim() : ''
-		confirmDeleteMessage = {
-			id: messageId,
-			preview: preview.length > 0 ? preview : 'this message',
-		}
-		deleteMessageError = null
-	}
-
-	async function deleteUserMessage(messageId: string): Promise<boolean> {
-		if (!thread) return false
-		if (isTemporaryChat) {
-			const start = messageTree.get(messageId)
-			if (!start || start.type !== 'user') return false
-
-			const idsToDelete: string[] = []
-			const stack: string[] = [messageId]
-			while (stack.length > 0) {
-				const id = stack.pop()
-				if (!id) continue
-				idsToDelete.push(id)
-				const kids = messageChildren.get(id) ?? []
-				for (const childId of kids) stack.push(childId)
-			}
-
-			for (const id of idsToDelete) messageTree.delete(id)
-			currentLeafId = start.parent_id ?? null
-			rebuildRunBlocks()
-			return true
-		}
-
-		const { response, error } = await apiClient().DELETE(
-			'/v1/threads/{thread_id}/messages/{message_id}',
-			{
-				params: {
-					path: {
-						thread_id: thread.id,
-						message_id: messageId,
-					},
-				},
-			}
-		)
-		if (!response.ok || error) {
-			console.error('failed to delete user message', error)
-			return false
-		}
-
-		optimisticUserMessage = null
-		streamingAssistant = null
-		await loadTree(thread.id)
-		return true
-	}
-
-	// thread loading effect setup
+	// ── thread lifecycle ─────────────────────────────────────────────────
 	function setThread(t: Thread | null) {
 		thread = t
 		chatStore.activeThread = t
@@ -1144,265 +232,175 @@ export function createChatState() {
 		toolTracker.clear()
 	}
 
-	// tool event subscription
-	function subscribeToToolEvents(threadId: string): () => void {
-		return eventStreamClient.subscribe((msg) => {
-			if (!msg || typeof msg !== 'object') return
-			const ev = msg as StreamEvent
-			if (!ev.type || typeof ev.type !== 'string') return
-			if (!ev.type.startsWith('tool.')) return
-			if (ev.thread_id !== threadId) return
-			const toolEv = parseToolEvent({
-				id: ev.id,
-				type: ev.type,
-				data: (ev.data ?? {}) as Record<string, unknown>,
-				created_at: ev.created_at ?? undefined,
-				message_id: ev.message_id ?? undefined,
-			})
-			if (!toolEv) return
-			toolTracker.processEvent(toolEv)
-			toolTick++
-		})
+	// ── ChatContext — bridges reactive $state to extracted modules ────────
+	const ctx: ChatContext = {
+		get thread() {
+			return thread
+		},
+		set thread(v) {
+			thread = v
+		},
+		get messageTree() {
+			return messageTree
+		},
+		get messageChildren() {
+			return messageChildren
+		},
+		get currentLeafId() {
+			return currentLeafId
+		},
+		set currentLeafId(v) {
+			currentLeafId = v
+		},
+		get messages() {
+			return messages
+		},
+		get isGenerating() {
+			return isGenerating
+		},
+		set isGenerating(v) {
+			isGenerating = v
+		},
+		get activeRun() {
+			return activeRun
+		},
+		set activeRun(v) {
+			activeRun = v
+		},
+		get streamingAssistant() {
+			return streamingAssistant
+		},
+		set streamingAssistant(v) {
+			streamingAssistant = v
+		},
+		get streamingAssistantParentId() {
+			return streamingAssistantParentId
+		},
+		set streamingAssistantParentId(v) {
+			streamingAssistantParentId = v
+		},
+		get streamingLeafId() {
+			return streamingLeafId
+		},
+		set streamingLeafId(v) {
+			streamingLeafId = v
+		},
+		get viewingStreamingBranch() {
+			return viewingStreamingBranch
+		},
+		set viewingStreamingBranch(v) {
+			viewingStreamingBranch = v
+		},
+		get optimisticUserMessage() {
+			return optimisticUserMessage
+		},
+		set optimisticUserMessage(v) {
+			optimisticUserMessage = v
+		},
+		get lastRunInput() {
+			return lastRunInput
+		},
+		set lastRunInput(v) {
+			lastRunInput = v
+		},
+		get inputValue() {
+			return inputValue
+		},
+		set inputValue(v) {
+			inputValue = v
+		},
+		get runAbortController() {
+			return runAbortController
+		},
+		set runAbortController(v) {
+			runAbortController = v
+		},
+		get messageSkip() {
+			return messageSkip
+		},
+		set messageSkip(v) {
+			messageSkip = v
+		},
+		get hasMoreMessages() {
+			return hasMoreMessages
+		},
+		set hasMoreMessages(v) {
+			hasMoreMessages = v
+		},
+		get isLoadingOlderMessages() {
+			return isLoadingOlderMessages
+		},
+		set isLoadingOlderMessages(v) {
+			isLoadingOlderMessages = v
+		},
+		get scrollContainer() {
+			return scrollContainer
+		},
+		get autoScroll() {
+			return autoScroll
+		},
+		set autoScroll(v) {
+			autoScroll = v
+		},
+		get toolTracker() {
+			return toolTracker
+		},
+		get toolTick() {
+			return toolTick
+		},
+		set toolTick(v) {
+			toolTick = v
+		},
+		get fetchedToolEventMessageIds() {
+			return fetchedToolEventMessageIds
+		},
+		get toolEventsPendingIds() {
+			return toolEventsPendingIds
+		},
+		get toolEventsInFlight() {
+			return toolEventsInFlight
+		},
+		set toolEventsInFlight(v) {
+			toolEventsInFlight = v
+		},
+		get confirmDeleteMessage() {
+			return confirmDeleteMessage
+		},
+		set confirmDeleteMessage(v) {
+			confirmDeleteMessage = v
+		},
+		get isDeletingMessage() {
+			return isDeletingMessage
+		},
+		set isDeletingMessage(v) {
+			isDeletingMessage = v
+		},
+		get deleteMessageError() {
+			return deleteMessageError
+		},
+		set deleteMessageError(v) {
+			deleteMessageError = v
+		},
+		get typingUsers() {
+			return typingUsers
+		},
+		get activeAgentRuns() {
+			return activeAgentRuns
+		},
+		get isTemporaryChat() {
+			return isTemporaryChat
+		},
+		get currentUserId() {
+			return currentUserId
+		},
+		incrementActiveRun() {
+			return ++activeRun
+		},
+		rebuildRunBlocks,
+		queueScrollToBottom,
 	}
 
-	// message event subscription (cross-device sync)
-	function subscribeToMessageEvents(threadId: string): () => void {
-		return eventStreamClient.subscribe((msg) => {
-			if (!msg || typeof msg !== 'object') return
-			const ev = msg as StreamEvent
-			if (!ev.type || typeof ev.type !== 'string') return
-			if (!ev.type.startsWith('message.')) return
-			if (ev.thread_id !== threadId) return
-			if (isOwnEvent(ev)) return
-
-			const data = (ev.data ?? {}) as Record<string, unknown>
-
-			if (ev.type === 'message.created') {
-				// add to tree if full payload present
-				if (data.id && typeof data.id === 'string') {
-					const newMsg = data as unknown as ApiMessage
-					// defense-in-depth: if this is a user message that matches the
-					// optimistic message, clear it to prevent double rendering
-					if (newMsg.type === 'user' && optimisticUserMessage) {
-						optimisticUserMessage = null
-					}
-					messageTree.set(newMsg.id, newMsg)
-					// if the new message extends the current branch, move leaf
-					if (newMsg.parent_id === currentLeafId) {
-						currentLeafId = newMsg.id
-					}
-					rebuildRunBlocks()
-				}
-			} else if (ev.type === 'message.updated') {
-				const msgId = (data.id as string) ?? ev.message_id
-				if (msgId && messageTree.has(msgId)) {
-					const existing = messageTree.get(msgId)!
-					messageTree.set(msgId, { ...existing, ...data } as ApiMessage)
-					rebuildRunBlocks()
-				}
-			} else if (ev.type === 'message.deleted') {
-				const deletedIds = data.deleted_ids as string[] | undefined
-				const msgId = (data.message_id as string) ?? ev.message_id
-				if (deletedIds) {
-					for (const id of deletedIds) messageTree.delete(id)
-				} else if (msgId) {
-					messageTree.delete(msgId)
-				}
-				// if the current leaf was deleted, walk up to find a valid one
-				if (currentLeafId && !messageTree.has(currentLeafId)) {
-					let validLeaf: string | null = null
-					for (const m of messageTree.values()) {
-						if (!validLeaf) {
-							validLeaf = m.id
-							continue
-						}
-						if (
-							getMessageCreatedAt(m).getTime() >=
-							getMessageCreatedAt(messageTree.get(validLeaf)!).getTime()
-						) {
-							validLeaf = m.id
-						}
-					}
-					currentLeafId = validLeaf
-				}
-				rebuildRunBlocks()
-			}
-		})
-	}
-
-	// typing event subscription
-	function subscribeToTypingEvents(threadId: string): () => void {
-		typingUsers.clear()
-		const timers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
-
-		const unsub = eventStreamClient.subscribe((msg) => {
-			if (!msg || typeof msg !== 'object') return
-			const ev = msg as StreamEvent
-			if (!ev.type || typeof ev.type !== 'string') return
-			if (!ev.type.startsWith('typing.')) return
-
-			const data = (ev.data ?? {}) as Record<string, unknown>
-			if (data.thread_id !== threadId) return
-			if (isOwnEvent(ev)) return
-
-			const userId = data.user_id as string | undefined
-			if (!userId) return
-
-			if (ev.type === 'typing.start' || ev.type === 'typing.user.start') {
-				typingUsers.add(userId)
-				// auto-expire after 8s if no further typing events arrive
-				const prev = timers.get(userId)
-				if (prev) clearTimeout(prev)
-				timers.set(
-					userId,
-					setTimeout(() => {
-						typingUsers.delete(userId)
-						timers.delete(userId)
-					}, 8000)
-				)
-			} else if (ev.type === 'typing.stop' || ev.type === 'typing.user.stop') {
-				typingUsers.delete(userId)
-				const prev = timers.get(userId)
-				if (prev) clearTimeout(prev)
-				timers.delete(userId)
-			}
-		})
-
-		return () => {
-			unsub()
-			for (const t of timers.values()) clearTimeout(t)
-			timers.clear()
-			typingUsers.clear()
-		}
-	}
-
-	/** notify other sessions that this user started/stopped typing */
-	function sendTypingEvent(threadId: string, typing: boolean): void {
-		eventStreamClient.send({
-			type: typing ? 'typing.start' : 'typing.stop',
-			thread_id: threadId,
-		})
-	}
-
-	/** subscribe to agent run events (run.started/run.completed) and active runs signal.
-	 * auto-resumes active runs via the resume SSE endpoint so the user sees
-	 * live streaming even if they navigated away and came back.
-	 */
-	function subscribeToAgentRunEvents(threadId: string): () => void {
-		activeAgentRuns.clear()
-
-		// abort controllers for active resume streams, keyed by run_id
-		const resumeAborts = new SvelteMap<string, AbortController>()
-
-		/** attempt to resume a run's SSE stream and feed it into consumeStream */
-		function tryResumeRun(runId: string, agentId: string) {
-			// skip if we're already streaming (initiator's own run)
-			if (isGenerating) return
-			// skip if already resuming this run
-			if (resumeAborts.has(runId)) return
-
-			const ac = new AbortController()
-			resumeAborts.set(runId, ac)
-
-			const runGen = ++activeRun
-			isGenerating = true
-			viewingStreamingBranch = true
-			streamingLeafId = null
-			streamingAssistantParentId = currentLeafId
-			streamingAssistant = {
-				runId: null,
-				messageId: `resume-${runId}`,
-				content: '',
-				timestamp: new SvelteDate(),
-				senderAgentId: agentId,
-				toolCalls: [],
-				isError: false,
-				errorMessage: null,
-			}
-
-			const stream = resumeRunStream({
-				runId,
-				signal: ac.signal,
-			})
-
-			consumeStream(stream, {
-				runId: runGen,
-				threadId,
-				parentId: null,
-			})
-				.catch(() => {
-					// aborted or network error — expected on navigate-away
-				})
-				.finally(() => {
-					resumeAborts.delete(runId)
-					if (activeRun === runGen) {
-						isGenerating = false
-					}
-				})
-		}
-
-		const unsub = eventStreamClient.subscribe((msg) => {
-			if (!msg || typeof msg !== 'object') return
-			const ev = msg as StreamMessage
-			if (!ev.type || typeof ev.type !== 'string') return
-
-			// handle active runs signal (single message with list of run pointers)
-			if (ev.type === 'runs.active') {
-				const runs = ((ev as Record<string, unknown>).data ?? []) as RunSignal[]
-				for (const run of runs) {
-					if (run.thread_id !== threadId) continue
-					if (run.run_id && run.agent_id) {
-						activeAgentRuns.set(run.run_id, {
-							threadId,
-							runId: run.run_id,
-							agentId: run.agent_id,
-						})
-						tryResumeRun(run.run_id, run.agent_id)
-					}
-				}
-				return
-			}
-
-			// handle run.started
-			if (ev.type === 'run.started') {
-				const data = ((ev as Record<string, unknown>).data ?? {}) as RunSignal
-				if (data.thread_id !== threadId) return
-				if (!data.run_id || !data.agent_id) return
-				activeAgentRuns.set(data.run_id, {
-					threadId,
-					runId: data.run_id,
-					agentId: data.agent_id,
-				})
-				tryResumeRun(data.run_id, data.agent_id)
-				return
-			}
-
-			// handle run.completed
-			if (ev.type === 'run.completed') {
-				const data = ((ev as Record<string, unknown>).data ?? {}) as RunSignal
-				if (data.thread_id !== threadId) return
-				if (!data.run_id) return
-				activeAgentRuns.delete(data.run_id)
-				// abort any active resume for this run (if SSE hasn't ended yet)
-				const ac = resumeAborts.get(data.run_id)
-				if (ac) {
-					ac.abort()
-					resumeAborts.delete(data.run_id)
-				}
-				return
-			}
-		})
-
-		return () => {
-			unsub()
-			activeAgentRuns.clear()
-			// abort all active resume streams on navigate-away
-			for (const ac of resumeAborts.values()) ac.abort()
-			resumeAborts.clear()
-		}
-	}
-
-	// return public interface
+	// ── public interface ─────────────────────────────────────────────────
 	return {
 		// state (getters for reactive access)
 		get inputValue() {
@@ -1548,31 +546,34 @@ export function createChatState() {
 		get agentAvatarById() {
 			return agentAvatarById
 		},
-		// methods
+
+		// methods (delegating to $lib/chat modules)
 		rebuildRunBlocks,
 		getBlockResponseItems,
 		getBlockFirstAssistant,
 		blockHasStreamingAssistant,
-		findRunUserMessage,
-		switchBranch,
+		findRunUserMessage: (block: RunBlock) => _findRunUserMessage(block, ctx),
+		switchBranch: (messageId: string, direction: 'prev' | 'next') =>
+			_switchBranch(messageId, direction, ctx),
 		handleScroll,
 		scrollToBottom,
 		queueScrollToBottom,
-		loadTree,
-		handleSendMessage,
-		handleRegenerateMessage,
-		handleStopGeneration,
-		handleEditMessage,
-		resumeCreateAndRun,
-		requestDeleteUserMessage,
-		deleteUserMessage,
+		loadTree: (threadId: string) => _loadTree(threadId, ctx),
+		handleSendMessage: (content: string) => _handleSendMessage(content, ctx),
+		handleRegenerateMessage: (parentId?: string | null) =>
+			_handleRegenerateMessage(parentId ?? null, ctx),
+		handleStopGeneration: () => _handleStopGeneration(ctx),
+		handleEditMessage: (messageId: string) => _handleEditMessage(messageId, ctx),
+		resumeCreateAndRun: (
+			stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
+			threadId: string
+		) => _resumeCreateAndRun(stream, threadId, ctx),
+		requestDeleteUserMessage: (messageId: string) => _requestDeleteUserMessage(messageId, ctx),
+		deleteUserMessage: (messageId: string) => _deleteUserMessage(messageId, ctx),
 		setThread,
 		clearThread,
-		subscribeToToolEvents,
-		subscribeToMessageEvents,
-		subscribeToTypingEvents,
-		subscribeToAgentRunEvents,
-		sendTypingEvent,
+		subscribeToChatEvents: (threadId: string) => subscribeToChatEvents(threadId, ctx),
+		sendTypingEvent: _sendTypingEvent,
 		get typingUsers() {
 			return typingUsers
 		},

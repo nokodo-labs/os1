@@ -127,28 +127,10 @@
 		return () => chrome.setContextActions(null)
 	})
 
-	// effects: tool events subscription
+	// effects: real-time event subscriptions (tool, message, typing, run events)
 	$effect(() => {
 		if (!chat.thread) return
-		return chat.subscribeToToolEvents(chat.thread.id)
-	})
-
-	// effects: message events subscription (cross-device sync)
-	$effect(() => {
-		if (!chat.thread) return
-		return chat.subscribeToMessageEvents(chat.thread.id)
-	})
-
-	// effects: typing events subscription
-	$effect(() => {
-		if (!chat.thread) return
-		return chat.subscribeToTypingEvents(chat.thread.id)
-	})
-
-	// effects: agent run events subscription (run.started/completed + catchup + auto-resume)
-	$effect(() => {
-		if (!chat.thread) return
-		return chat.subscribeToAgentRunEvents(chat.thread.id)
+		return chat.subscribeToChatEvents(chat.thread.id)
 	})
 
 	// effects: pending create-and-run stream handoff
@@ -499,7 +481,8 @@
 									onPrevious={() => rootId && chat.switchBranch(rootId, 'prev')}
 									onNext={() => rootId && chat.switchBranch(rootId, 'next')}
 									content={isStreamingBlock && chat.streamingAssistant?.isError
-										? (chat.streamingAssistant.errorMessage ?? 'something went wrong')
+										? (chat.streamingAssistant.errorMessage ??
+											'something went wrong')
 										: ''}
 									tone={isStreamingBlock && chat.streamingAssistant?.isError
 										? 'error'
@@ -509,7 +492,8 @@
 										: isStreamingBlock
 											? (chat.streamingAssistant?.timestamp ?? new Date())
 											: undefined}
-									isStreaming={Boolean(isStreamingBlock) && !chat.streamingAssistant?.isError}
+									isStreaming={Boolean(isStreamingBlock) &&
+										!chat.streamingAssistant?.isError}
 									isRunActive={chat.isGenerating}
 									showStreamingPlaceholder={false}
 									modelName={displayAgent
@@ -558,7 +542,8 @@
 														<MarkdownRenderer
 															content={chat.streamingAssistant
 																.content}
-															isStreaming={!chat.streamingAssistant.isError}
+															isStreaming={!chat.streamingAssistant
+																.isError}
 														/>
 													</div>
 												{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
