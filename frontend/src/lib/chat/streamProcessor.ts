@@ -5,7 +5,7 @@
 import { runChatStream, type ChatStreamDelta, type UnknownSseEvent } from '$lib/api/streaming'
 import { notifications } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
-import { hapticFeedback } from '$lib/utils/haptics'
+import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
 import { sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
@@ -142,7 +142,10 @@ export function processDelta(
 				const streaming = ctx.streamingAssistant
 				if (!streaming) return 'continue'
 
-				if (chunkText) streaming.content += chunkText
+				if (chunkText) {
+					streaming.content += chunkText
+					throttledHapticFeedback()
+				}
 
 				let toolCallsChanged = false
 				if (Array.isArray(toolCalls)) {

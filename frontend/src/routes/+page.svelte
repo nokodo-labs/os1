@@ -14,19 +14,14 @@
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
-		type HomeSuggestion,
+		type SuggestionAction,
 	} from '$lib/components/home/HomeSuggestions.svelte'
-	import AppNotification from '$lib/components/icons/AppNotification.svelte'
-	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
-	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
-	import Search from '$lib/components/icons/Search.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
-	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -39,13 +34,13 @@
 	let inputValue = $state(chat.getDraft('home'))
 	let isGenerating = $state(false)
 	let focusToken = $state(0)
-	let showSuggestions = $state(false)
-	let highlightedIndex = $state(-1)
-	let isSuggestionNavigationActive = $state(false)
 
 	// optimistic chat state shown while create_and_run is streaming
 	let optimisticContent = $state<string | null>(null)
 	let createAndRunAbort = $state<AbortController | null>(null)
+
+	// keyboard handler exposed by HomeSuggestions
+	let suggestionsKeyHandler = $state<((event: KeyboardEvent) => boolean) | undefined>(undefined)
 
 	const chrome = useSystemChrome()
 	const debugUi = useDebugUi()
@@ -77,6 +72,10 @@
 	// the root layout intentionally skips same-path navigations.
 	// home uses query params for in-place mode switches (e.g. /?chat=new), so we
 	// enable VT only for same-path navigations.
+	// we track the transition's finished promise so cross-page navigation can
+	// wait for the in-page animation to complete (avoids stacking two VTs).
+	let inPageTransitionDone: Promise<void> | null = null
+
 	onNavigate((navigation) => {
 		const start = document.startViewTransition
 		if (!start) return
@@ -88,10 +87,17 @@
 		if (from.search === to.search) return
 
 		return new Promise<void>((resolve) => {
-			start.call(document, async () => {
+			const vt = start.call(document, async () => {
 				resolve()
 				await navigation.complete
-			})
+			}) as { finished?: Promise<unknown> } | void
+
+			if (vt?.finished) {
+				inPageTransitionDone = vt.finished.then(
+					() => {},
+					() => {}
+				)
+			}
 		})
 	})
 
@@ -149,60 +155,7 @@
 		chat.setDraft('home', inputValue)
 	})
 
-	const normalizedQuery = $derived(inputValue.trim().toLowerCase())
-	const suggestions = $derived.by((): HomeSuggestion[] => {
-		if (!normalizedQuery) return []
-		const all: HomeSuggestion[] = [
-			{
-				id: 'search',
-				title: `search for "${inputValue.trim()}"`,
-				subtitle: 'use ↑↓ then enter to select',
-				icon: Search,
-			},
-			{
-				id: 'settings',
-				title: 'settings',
-				subtitle: 'open preferences',
-				icon: Cog6,
-			},
-			{
-				id: 'archived-chats',
-				title: 'archived chats',
-				subtitle: 'browse archived threads',
-				icon: ArchiveBox,
-			},
-			{
-				id: 'dock',
-				title: chrome.isDockOpen ? 'hide dock' : 'show dock',
-				subtitle: 'notifications + control center',
-				icon: AppNotification,
-			},
-		]
-		const scored = all
-			.map((s) => {
-				const hay = `${s.title} ${s.subtitle ?? ''}`.toLowerCase()
-				const score = s.title.toLowerCase().startsWith(normalizedQuery)
-					? 3
-					: hay.includes(normalizedQuery)
-						? 1
-						: 0
-				return { s, score }
-			})
-			.filter((x) => x.score > 0)
-			.sort((a, b) => b.score - a.score)
-			.map((x) => x.s)
-		return scored.slice(0, 6)
-	})
-
-	$effect(() => {
-		const hasQuery = inputValue.trim().length > 0
-		showSuggestions = hasQuery
-		isSuggestionNavigationActive = false
-		if (!hasQuery) highlightedIndex = -1
-		if (highlightedIndex >= suggestions.length) highlightedIndex = -1
-	})
-
-	// inject Island context actions (agent selector, sidebar toggle, temp chat toggle)
+	// inject island context actions
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
 		return () => chrome.setContextActions(null)
@@ -275,6 +228,13 @@
 				>,
 			}
 
+			// wait for any in-page view transition (home -> chat layout) to finish
+			// before starting cross-page navigation so the two VTs don't conflict
+			if (inPageTransitionDone) {
+				await inPageTransitionDone
+				inPageTransitionDone = null
+			}
+
 			// navigate seamlessly - replaceState so back goes to home, not /?chat=new
 			await goto(resolve(`/c/${thread.id}`), {
 				keepFocus: true,
@@ -308,67 +268,20 @@
 		chatStartError = null
 	}
 
-	function selectSuggestion(suggestion: HomeSuggestion) {
-		showSuggestions = false
-		highlightedIndex = -1
-		isSuggestionNavigationActive = false
-		if (suggestion.id === 'settings') {
+	function handleSuggestionAction(action: SuggestionAction) {
+		if (action.type === 'navigate') {
 			inputValue = ''
-			void goto(resolve(appNavigation.getEntryRoute('settings')), {
-				keepFocus: true,
-				noScroll: true,
-			})
-			return
-		}
-		if (suggestion.id === 'archived-chats') {
+			void goto(action.path, { keepFocus: true, noScroll: true })
+		} else if (action.type === 'modal') {
 			inputValue = ''
-			modals.open('archived-chats')
-			return
-		}
-		if (suggestion.id === 'dock') {
+			modals.open(action.id)
+		} else if (action.type === 'toggle-dock') {
 			inputValue = ''
 			chrome.toggleDock()
-			return
-		}
-		if (suggestion.id === 'search') {
-			chrome.setPulse(`search: ${inputValue.trim()}`)
+		} else if (action.type === 'pulse') {
+			chrome.setPulse(action.message)
 			window.setTimeout(() => chrome.setPulse(null), 1800)
-			return
 		}
-	}
-
-	function handleHomeInputKeyDown(event: KeyboardEvent): boolean {
-		if (!showSuggestions || suggestions.length === 0) return false
-		if (event.key === 'ArrowDown') {
-			event.preventDefault()
-			isSuggestionNavigationActive = true
-			highlightedIndex =
-				highlightedIndex < 0 ? 0 : (highlightedIndex + 1) % suggestions.length
-			return true
-		}
-		if (event.key === 'ArrowUp') {
-			event.preventDefault()
-			isSuggestionNavigationActive = true
-			highlightedIndex =
-				highlightedIndex < 0
-					? suggestions.length - 1
-					: (highlightedIndex - 1 + suggestions.length) % suggestions.length
-			return true
-		}
-		if (event.key === 'Escape') {
-			event.preventDefault()
-			showSuggestions = false
-			highlightedIndex = -1
-			isSuggestionNavigationActive = false
-			return true
-		}
-		if (event.key === 'Enter' && !event.shiftKey) {
-			if (!isSuggestionNavigationActive || highlightedIndex < 0) return false
-			event.preventDefault()
-			selectSuggestion(suggestions[highlightedIndex])
-			return true
-		}
-		return false
 	}
 </script>
 
@@ -389,7 +302,7 @@
 	     exactly during the view transition (the main shell's padding is bypassed). -->
 	<div class="absolute inset-0 flex flex-col">
 		<!-- scrollable content area -->
-		<div class="min-h-0 flex-1 overflow-y-auto" style="scrollbar-gutter: stable;">
+		<div class="relative flex-1 overflow-y-auto" style="scrollbar-gutter: stable;">
 			<div
 				class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: 96px;"
@@ -404,8 +317,6 @@
 								tailStyle={preferences.data.appearance.bubbleTailStyle ?? 'none'}
 								showTail={preferences.data.appearance.bubbleTailStyle !== 'none'}
 							/>
-						</div>
-						<div class="space-y-3">
 							<AssistantChatMessage
 								content={chatStartError ?? ''}
 								tone={chatStartError ? 'error' : 'default'}
@@ -478,7 +389,7 @@
 
 		<!-- bottom input (absolute bottom, matching chat page layout) -->
 		<div
-			class="absolute right-0 bottom-0 left-0 z-10 shrink-0 pt-4 {device.virtualKeyboardOpen &&
+			class="absolute right-0 bottom-0 left-0 z-10 pt-4 {device.virtualKeyboardOpen &&
 			device.isMobile
 				? 'pb-2'
 				: 'pb-6'}"
@@ -487,15 +398,16 @@
 				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 			>
-				<div style="view-transition-name: chat-input;">
+				<div class="transition-all duration-500 ease-in-out">
 					<ChatInput
 						bind:value={inputValue}
 						onSubmit={handleSendMessage}
 						onStop={handleStopGeneration}
-						onKeyDown={handleHomeInputKeyDown}
+						onKeyDown={(e) => suggestionsKeyHandler?.(e) || false}
 						{isGenerating}
 						placeholder="send a message"
 						{focusToken}
+						viewTransitionName="chat-input"
 					/>
 				</div>
 			</div>
@@ -538,50 +450,42 @@
 					bind:value={inputValue}
 					onSubmit={handleSendMessage}
 					onStop={handleStopGeneration}
-					onKeyDown={handleHomeInputKeyDown}
+					onKeyDown={(e) => suggestionsKeyHandler?.(e) || false}
 					{isGenerating}
 					placeholder="send a message"
 					{focusToken}
 				/>
 			</div>
 
-			{#if device.virtualKeyboardOpen && device.isMobile}
-				<!-- suggestions: shown below input in normal flow when keyboard is open -->
-				<HomeSuggestions
-					open={showSuggestions}
-					query={inputValue}
-					{suggestions}
-					{highlightedIndex}
-					onHighlight={(i) => {
-						highlightedIndex = i
-						isSuggestionNavigationActive = true
-					}}
-					onSelect={selectSuggestion}
-				/>
-			{:else}
-				<!-- apps grid: shown when virtual keyboard is closed -->
+			<!-- apps grid + suggestions -->
+			<div
+				class="relative {device.virtualKeyboardOpen && device.isMobile
+					? ''
+					: 'flex min-h-0 flex-1 flex-col'}"
+			>
+				<!-- suggestions: absolute on desktop, in-flow on mobile+keyboard -->
+				<div
+					class={device.virtualKeyboardOpen && device.isMobile
+						? ''
+						: 'absolute top-0 right-0 left-0 z-20'}
+				>
+					<HomeSuggestions
+						query={inputValue}
+						onAction={handleSuggestionAction}
+						bind:keyHandler={suggestionsKeyHandler}
+					/>
+				</div>
+
+				<!-- apps grid (hidden when keyboard open) -->
 				<div
 					style="view-transition-name: apps-grid;"
-					class="relative min-h-0 flex-1 {device.isMobile ? 'mt-6' : 'mt-14'}"
+					class="{device.virtualKeyboardOpen && device.isMobile
+						? 'hidden'
+						: 'flex min-h-0 flex-1 flex-col'} {device.isMobile ? 'mt-6' : 'mt-14'}"
 				>
 					<AppsGrid iconShape={debugUi.appsGridIconShape} fullWidth={device.isMobile} />
-
-					<!-- suggestions overlay: sits on TOP of apps grid -->
-					<div class="absolute top-0 right-0 left-0 z-20 -mt-10">
-						<HomeSuggestions
-							open={showSuggestions}
-							query={inputValue}
-							{suggestions}
-							{highlightedIndex}
-							onHighlight={(i) => {
-								highlightedIndex = i
-								isSuggestionNavigationActive = true
-							}}
-							onSelect={selectSuggestion}
-						/>
-					</div>
 				</div>
-			{/if}
+			</div>
 		</div>
 	</div>
 {/if}

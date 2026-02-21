@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { portal } from '$lib/actions/portal'
+	import XMark from '$lib/components/icons/XMark.svelte'
 
 	interface AppModalProps {
 		open: boolean
@@ -59,11 +60,21 @@
 			aria-label={title}
 		>
 			<div class="relative z-10 flex max-h-[calc(100vh-2rem)] flex-col p-6">
-				<header class="mb-5">
-					<div class="text-lg font-semibold text-white/95">{title}</div>
-					{#if description}
-						<div class="mt-1 text-sm text-white/60">{description}</div>
-					{/if}
+				<header class="mb-5 flex items-start justify-between gap-3">
+					<div class="min-w-0">
+						<div class="text-lg font-semibold text-white/95">{title}</div>
+						{#if description}
+							<div class="mt-1 text-sm text-white/60">{description}</div>
+						{/if}
+					</div>
+					<button
+						type="button"
+						class="interactive rounded-circle flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
+						onclick={onClose}
+						aria-label="close"
+					>
+						<XMark class="h-4 w-4" />
+					</button>
 				</header>
 
 				<div class="min-h-0 overflow-y-auto">

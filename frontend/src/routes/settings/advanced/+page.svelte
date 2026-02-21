@@ -1,11 +1,19 @@
 <script lang="ts">
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
+	import Calendar from '$lib/components/icons/Calendar.svelte'
+	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
+	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+	import Document from '$lib/components/icons/Document.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
-	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
+	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
+	import Users from '$lib/components/icons/Users.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import { Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
+	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
+	import { preferences } from '$lib/stores/preferences.svelte'
 	import { slide } from 'svelte/transition'
 
 	let owuiExpanded = $state(false)
@@ -60,6 +68,57 @@
 			action: () => {},
 		},
 	]
+
+	// homepage suggestion apps (icons + accents match AppsGrid)
+	const suggestionApps = [
+		{
+			key: 'chats' as const,
+			label: 'chats',
+			description: 'recent conversations',
+			icon: ChatBubbles,
+			accent: 'green' as AccentColorKey,
+		},
+		{
+			key: 'reminders' as const,
+			label: 'reminders',
+			description: 'upcoming reminders',
+			icon: CheckBox,
+			accent: 'reminders' as AccentColorKey,
+		},
+		{
+			key: 'notes' as const,
+			label: 'notes',
+			description: 'your notes',
+			icon: Document,
+			accent: 'notes' as AccentColorKey,
+		},
+		{
+			key: 'friends' as const,
+			label: 'friends',
+			description: 'contacts and people',
+			icon: Users,
+			accent: 'purple' as AccentColorKey,
+		},
+		{
+			key: 'library' as const,
+			label: 'library',
+			description: 'saved content',
+			icon: FinderFolder,
+			accent: 'yellow' as AccentColorKey,
+		},
+		{
+			key: 'calendar' as const,
+			label: 'calendar',
+			description: 'events and schedule',
+			icon: Calendar,
+			accent: 'blue' as AccentColorKey,
+		},
+	]
+
+	function toggleSuggestionApp(key: keyof typeof preferences.data.homepage): void {
+		const current = preferences.data.homepage[key]
+		void preferences.update('homepage', { [key]: !current })
+	}
 </script>
 
 <SettingsSectionLayout
@@ -68,6 +127,48 @@
 	description="data management, imports, and danger zone"
 >
 	<div class="space-y-4">
+		<!-- homepage suggestions -->
+		<div class="rounded-container bg-white/5 p-5">
+			<div class="text-sm font-semibold text-white">homepage suggestions</div>
+			<div class="mt-1 text-sm text-white/50">
+				choose which apps appear when you search on the home screen.
+			</div>
+			<div class="mt-4 space-y-2">
+				{#each suggestionApps as app (app.key)}
+					{@const Icon = app.icon}
+					{@const enabled = preferences.data.homepage[app.key]}
+					{@const color = accentColors[app.accent]?.primary}
+					<label
+						class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-white/10 px-4 py-3 text-left text-sm transition-all hover:border-white/15 {enabled
+							? 'bg-white/5'
+							: 'bg-white/2'}"
+					>
+						<div
+							class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center"
+							style={enabled && color ? `color: ${color};` : ''}
+						>
+							<Icon
+								class="h-4.5 w-4.5"
+								variant="solid"
+								style={enabled ? '' : 'opacity: 0.3;'}
+							/>
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="font-medium {enabled ? 'text-white/80' : 'text-white/40'}">
+								{app.label}
+							</div>
+							<div class="text-xs text-white/50">{app.description}</div>
+						</div>
+						<Switch
+							checked={enabled ?? true}
+							size="sm"
+							onchange={() => toggleSuggestionApp(app.key)}
+						/>
+					</label>
+				{/each}
+			</div>
+		</div>
+
 		<!-- data export -->
 		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white">data export</div>
@@ -227,7 +328,7 @@
 		<!-- danger zone -->
 		<div class="rounded-container border border-red-500/20 bg-red-500/5 p-5">
 			<div class="flex items-center gap-2">
-				<GarbageBin class="h-4.5 w-4.5 text-red-400/70" />
+				<Trash class="h-4.5 w-4.5 text-red-400/70" />
 				<div class="text-sm font-semibold text-red-400">danger zone</div>
 			</div>
 			<div class="mt-1 text-sm text-white/50">

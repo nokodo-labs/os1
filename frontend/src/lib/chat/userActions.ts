@@ -154,6 +154,10 @@ export async function handleRegenerateMessage(
 
 /** abort the current generation and reset streaming state */
 export function handleStopGeneration(ctx: ChatContext): void {
+	// capture run info before resetting state
+	const runId = ctx.streamingAssistant?.runId
+	const threadId = ctx.thread?.id
+
 	ctx.runAbortController?.abort()
 	ctx.activeRun++
 	ctx.isGenerating = false
@@ -163,6 +167,26 @@ export function handleStopGeneration(ctx: ChatContext): void {
 	ctx.streamingAssistant = null
 	ctx.streamingAssistantParentId = null
 	ctx.rebuildRunBlocks()
+
+	// cancel signal to backend - authenticated request with proper error handling.
+	// the SSE stream handles the run-stopped signal; this HTTP call provides
+	// the error contract for status codes and potential retry.
+	if (runId && threadId) {
+		void sendCancelSignal(threadId, runId)
+	}
+}
+
+async function sendCancelSignal(threadId: string, runId: string): Promise<void> {
+	try {
+		const { error } = await apiClient().POST('/v1/threads/{thread_id}/runs/{run_id}/cancel', {
+			params: { path: { thread_id: threadId, run_id: runId } },
+		})
+		if (error) {
+			console.error('cancel run failed', error)
+		}
+	} catch (err) {
+		console.error('cancel run request failed', err)
+	}
 }
 
 /** edit a message and regenerate the response */

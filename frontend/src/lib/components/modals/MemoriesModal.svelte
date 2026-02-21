@@ -3,10 +3,10 @@
 	import type { components } from '$lib/api/types'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
-	import Search from '$lib/components/icons/Search.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import ModalListLayout from '$lib/components/modals/ModalListLayout.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce } from '$lib/utils'
 
@@ -21,6 +21,15 @@
 
 	const PAGE_SIZE = 20
 
+	const sortOptions = [
+		{ label: 'latest updated', value: 'updated_at-desc' },
+		{ label: 'oldest updated', value: 'updated_at-asc' },
+		{ label: 'latest created', value: 'created_at-desc' },
+		{ label: 'oldest created', value: 'created_at-asc' },
+		{ label: 'longest', value: 'content_length-desc' },
+		{ label: 'shortest', value: 'content_length-asc' },
+	] as const
+
 	type SortField =
 		| 'updated_at'
 		| 'created_at'
@@ -29,19 +38,13 @@
 		| 'last_accessed_at'
 		| 'confidence'
 
-	type SortOption = {
-		label: string
-		sort_by: SortField
-		sort_dir: 'asc' | 'desc'
-	}
-
-	const sortOptions: SortOption[] = [
-		{ label: 'latest updated', sort_by: 'updated_at', sort_dir: 'desc' },
-		{ label: 'oldest updated', sort_by: 'updated_at', sort_dir: 'asc' },
-		{ label: 'latest created', sort_by: 'created_at', sort_dir: 'desc' },
-		{ label: 'oldest created', sort_by: 'created_at', sort_dir: 'asc' },
-		{ label: 'longest', sort_by: 'content_length', sort_dir: 'desc' },
-		{ label: 'shortest', sort_by: 'content_length', sort_dir: 'asc' },
+	const sortParsed: { sort_by: SortField; sort_dir: 'asc' | 'desc' }[] = [
+		{ sort_by: 'updated_at', sort_dir: 'desc' },
+		{ sort_by: 'updated_at', sort_dir: 'asc' },
+		{ sort_by: 'created_at', sort_dir: 'desc' },
+		{ sort_by: 'created_at', sort_dir: 'asc' },
+		{ sort_by: 'content_length', sort_dir: 'desc' },
+		{ sort_by: 'content_length', sort_dir: 'asc' },
 	]
 
 	let memories = $state<MemorySchema[]>([])
@@ -52,10 +55,9 @@
 	let editingId = $state<string | null>(null)
 	let editContent = $state('')
 	let deletingAll = $state(false)
-	let scrollContainer = $state<HTMLDivElement | null>(null)
 	let hasMore = $state(true)
 
-	const currentSort = $derived(sortOptions[sortIndex])
+	const currentSort = $derived(sortParsed[sortIndex])
 
 	async function fetchMemories(opts: { reset?: boolean } = {}): Promise<void> {
 		const userId = session.currentUser?.id
@@ -125,16 +127,6 @@
 		}
 	})
 
-	// infinite scroll
-	function onScroll(e: Event): void {
-		const el = e.currentTarget as HTMLDivElement
-		if (!el || loadingMore || !hasMore) return
-		const threshold = 100
-		if (el.scrollHeight - el.scrollTop - el.clientHeight < threshold) {
-			void fetchMemories()
-		}
-	}
-
 	// edit
 	function startEdit(memory: MemorySchema): void {
 		editingId = memory.id
@@ -201,156 +193,108 @@
 	{onClose}
 	widthClassName="max-w-2xl"
 >
-	<div class="flex flex-col gap-3">
-		<!-- toolbar: search + sort + delete all -->
-		<div class="flex items-center gap-2">
-			<div class="relative flex-1">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-white/40"
-				/>
-				<input
-					type="text"
-					class="rounded-pill w-full border border-white/10 bg-white/5 py-2 pr-3 pl-9 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
-					placeholder="search memories..."
-					value={search}
-					oninput={(e) => onSearchInput(e.currentTarget.value)}
-				/>
-			</div>
-			<select
-				class="rounded-pill border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 transition-colors outline-none focus:border-white/20 [&>option]:bg-neutral-900 [&>option]:text-white/90"
-				value={sortIndex}
-				onchange={(e) => onSortChange(Number(e.currentTarget.value))}
-			>
-				{#each sortOptions as opt, i (opt.sort_by + opt.sort_dir)}
-					<option value={i}>{opt.label}</option>
-				{/each}
-			</select>
-		</div>
-
-		<!-- memories list -->
-		<div
-			bind:this={scrollContainer}
-			class="max-h-80 min-h-40 overflow-y-auto"
-			onscroll={onScroll}
-		>
-			{#if loading}
-				<div class="flex items-center justify-center py-12">
-					<div
-						class="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white/60"
-					></div>
-				</div>
-			{:else if memories.length === 0}
-				<div class="rounded-xl border border-white/8 bg-white/3 p-6">
-					<p class="text-center text-sm text-white/40">
-						{search
-							? 'no memories match your search.'
-							: 'no memories yet. the AI will remember things as you chat.'}
-					</p>
-				</div>
-			{:else}
-				<div class="space-y-2">
-					{#each memories as memory (memory.id)}
-						<div
-							class="group rounded-xl border border-white/8 bg-white/3 px-4 py-3 transition-colors hover:bg-white/5"
-						>
-							{#if editingId === memory.id}
-								<!-- editing mode -->
-								<textarea
-									class="w-full resize-none rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none focus:border-white/25"
-									rows="3"
-									bind:value={editContent}
-								></textarea>
-								<div class="mt-2 flex items-center justify-end gap-1.5">
-									<button
-										type="button"
-										class="rounded-pill flex items-center gap-1 border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/60 transition-colors hover:bg-white/10 hover:text-white/80"
-										onclick={cancelEdit}
-									>
-										<XMark class="h-3.5 w-3.5" />
-										cancel
-									</button>
-									<button
-										type="button"
-										class="rounded-pill flex items-center gap-1 border border-white/10 bg-white/10 px-2.5 py-1 text-xs text-white/80 transition-colors hover:bg-white/15"
-										onclick={() => void saveEdit(memory.id)}
-									>
-										<Check class="h-3.5 w-3.5" />
-										save
-									</button>
-								</div>
-							{:else}
-								<!-- display mode -->
-								<div class="flex items-start justify-between gap-3">
-									<div class="min-w-0 flex-1">
-										<p class="text-sm leading-relaxed text-white/80">
-											{memory.content}
-										</p>
-										<p class="mt-1.5 text-xs text-white/50">
-											{formatDate(memory.updated_at)}
-										</p>
-									</div>
-									<div
-										class="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-									>
-										<button
-											type="button"
-											class="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
-											onclick={() => startEdit(memory)}
-											aria-label="edit memory"
-										>
-											<Pencil class="h-3.5 w-3.5" />
-										</button>
-										<button
-											type="button"
-											class="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-red-500/15 hover:text-red-400"
-											onclick={() => void deleteMemory(memory.id)}
-											aria-label="delete memory"
-										>
-											<Trash class="h-3.5 w-3.5" />
-										</button>
-									</div>
-								</div>
-							{/if}
+	<ModalListLayout
+		{search}
+		searchPlaceholder="search memories..."
+		{sortOptions}
+		{sortIndex}
+		{loading}
+		{loadingMore}
+		{hasMore}
+		isEmpty={memories.length === 0}
+		emptyMessage="no memories yet. the AI will remember things as you chat."
+		emptySearchMessage="no memories match your search."
+		{onSearchInput}
+		{onSortChange}
+		onLoadMore={() => void fetchMemories()}
+	>
+		{#snippet items()}
+			{#each memories as memory (memory.id)}
+				<div
+					class="group rounded-container border border-white/8 bg-white/3 px-4 py-3 transition-colors hover:bg-white/5"
+				>
+					{#if editingId === memory.id}
+						<!-- editing mode -->
+						<textarea
+							class="w-full resize-none rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none focus:border-white/25"
+							rows="3"
+							bind:value={editContent}
+						></textarea>
+						<div class="mt-2 flex items-center justify-end gap-1.5">
+							<button
+								type="button"
+								class="rounded-pill flex items-center gap-1 border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/60 transition-colors hover:bg-white/10 hover:text-white/80"
+								onclick={cancelEdit}
+							>
+								<XMark class="h-3.5 w-3.5" />
+								cancel
+							</button>
+							<button
+								type="button"
+								class="rounded-pill flex items-center gap-1 border border-white/10 bg-white/10 px-2.5 py-1 text-xs text-white/80 transition-colors hover:bg-white/15"
+								onclick={() => void saveEdit(memory.id)}
+							>
+								<Check class="h-3.5 w-3.5" />
+								save
+							</button>
 						</div>
-					{/each}
-
-					{#if loadingMore}
-						<div class="flex items-center justify-center py-3">
+					{:else}
+						<!-- display mode -->
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0 flex-1">
+								<p class="text-sm leading-relaxed text-white/80">
+									{memory.content}
+								</p>
+								<p class="mt-1.5 text-xs text-white/50">
+									created {formatDate(memory.created_at)}{memory.updated_at !==
+									memory.created_at
+										? ` · updated ${formatDate(memory.updated_at)}`
+										: ''}
+								</p>
+							</div>
 							<div
-								class="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white/60"
-							></div>
+								class="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+							>
+								<button
+									type="button"
+									class="rounded-circle flex h-7 w-7 cursor-pointer items-center justify-center text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
+									onclick={() => startEdit(memory)}
+									aria-label="edit memory"
+								>
+									<Pencil class="h-3.5 w-3.5" />
+								</button>
+								<button
+									type="button"
+									class="rounded-circle flex h-7 w-7 cursor-pointer items-center justify-center text-white/40 transition-colors hover:bg-red-500/15 hover:text-red-400"
+									onclick={() => void deleteMemory(memory.id)}
+									aria-label="delete memory"
+								>
+									<Trash class="h-3.5 w-3.5" />
+								</button>
+							</div>
 						</div>
 					{/if}
 				</div>
-			{/if}
-		</div>
+			{/each}
+		{/snippet}
 
-		<!-- footer: count + delete all -->
-		<div class="flex items-center justify-between border-t border-white/10 pt-3">
-			<span class="text-xs text-white/40">
-				{memories.length}
-				{memories.length === 1 ? 'memory' : 'memories'}
-			</span>
-			<div class="flex items-center gap-2">
-				{#if memories.length > 0}
-					<button
-						type="button"
-						class="rounded-pill flex items-center gap-1.5 border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/20 disabled:opacity-50"
-						disabled={deletingAll}
-						onclick={() => void deleteAll()}
-					>
-						<Trash class="h-3.5 w-3.5" />
-						{deletingAll ? 'deleting...' : 'delete all'}
-					</button>
-				{/if}
+		{#snippet footerLeft()}
+			{memories.length}
+			{memories.length === 1 ? 'memory' : 'memories'}
+		{/snippet}
+
+		{#snippet footerRight()}
+			{#if memories.length > 0}
 				<button
 					type="button"
-					class="rounded-pill border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white/85 transition-colors hover:bg-white/15"
-					onclick={onClose}
+					class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/20 disabled:opacity-50"
+					disabled={deletingAll}
+					onclick={() => void deleteAll()}
 				>
-					close
+					<Trash class="h-3.5 w-3.5" />
+					{deletingAll ? 'deleting...' : 'delete all'}
 				</button>
-			</div>
-		</div>
-	</div>
+			{/if}
+		{/snippet}
+	</ModalListLayout>
 </BaseModal>

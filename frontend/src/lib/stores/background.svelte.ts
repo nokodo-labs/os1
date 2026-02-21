@@ -11,8 +11,9 @@
  *        low   -> static (uses resolved static color)
  *   3. manual mode -> user preference `appearance.background`
  *
- * auth pages should use `background.auth` with `background.setPage` in an
- * `$effect` that returns `background.clearPage` for cleanup.
+ * auth pages should use `background.setPage` / `background.clearPage`
+ * inside an `$effect` with an if/else pattern (no cleanup return) to
+ * avoid race conditions with the BackgroundManager transition guard.
  */
 
 import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
@@ -113,11 +114,11 @@ export const background = {
 
 	/**
 	 * set a per-page background override.
-	 * use inside `$effect` and return `clearPage` for cleanup:
+	 * use inside `$effect` with if/else (not cleanup return):
 	 * ```
 	 * $effect(() => {
-	 *   background.setPage(background.auth)
-	 *   return background.clearPage
+	 *   if (condition) background.setPage(bg)
+	 *   else background.clearPage()
 	 * })
 	 * ```
 	 */

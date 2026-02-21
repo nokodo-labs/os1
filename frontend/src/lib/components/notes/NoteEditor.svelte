@@ -466,7 +466,7 @@
 				{#if isRawMode}
 					<textarea
 						bind:this={textareaEl}
-						class="min-h-[56vh] w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
+						class="min-h-24 w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
 						placeholder="write something..."
 						bind:value={content}
 						onkeydown={handleRawKeyDown}
@@ -477,7 +477,7 @@
 						value={content}
 						placeholder="write something..."
 						onchange={handleContentChange}
-						class="min-h-[56vh] text-[0.95rem] leading-relaxed"
+						class="min-h-24 text-[0.95rem] leading-relaxed"
 					/>
 				{/if}
 			</div>

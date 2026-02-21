@@ -1,5 +1,16 @@
 <script lang="ts">
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
+	import { apiClient } from '$lib/api/client'
+	import type { components } from '$lib/api/types'
+	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import ModalListLayout from '$lib/components/modals/ModalListLayout.svelte'
+	import { chat } from '$lib/stores/chat.svelte'
+	import { session } from '$lib/stores/session.svelte'
+	import { debounce } from '$lib/utils'
+
+	type Thread = components['schemas']['Thread']
 
 	interface ArchivedChatsModalProps {
 		open: boolean
@@ -8,27 +19,150 @@
 
 	let { open, onClose }: ArchivedChatsModalProps = $props()
 
-	type ArchivedChat = {
-		id: string
-		title: string
-		summary: string
-		archivedAt: string
+	const PAGE_SIZE = 20
+
+	const sortOptions = [
+		{ label: 'latest activity', value: 'last_activity_at-desc' },
+		{ label: 'oldest activity', value: 'last_activity_at-asc' },
+		{ label: 'newest created', value: 'created_at-desc' },
+		{ label: 'oldest created', value: 'created_at-asc' },
+		{ label: 'title a-z', value: 'title-asc' },
+		{ label: 'title z-a', value: 'title-desc' },
+	] as const
+
+	const sortParsed: {
+		sort_by: 'last_activity_at' | 'created_at' | 'title'
+		sort_dir: 'asc' | 'desc'
+	}[] = [
+		{ sort_by: 'last_activity_at', sort_dir: 'desc' },
+		{ sort_by: 'last_activity_at', sort_dir: 'asc' },
+		{ sort_by: 'created_at', sort_dir: 'desc' },
+		{ sort_by: 'created_at', sort_dir: 'asc' },
+		{ sort_by: 'title', sort_dir: 'asc' },
+		{ sort_by: 'title', sort_dir: 'desc' },
+	]
+
+	let threads = $state<Thread[]>([])
+	let loading = $state(false)
+	let loadingMore = $state(false)
+	let search = $state('')
+	let sortIndex = $state(0)
+	let hasMore = $state(true)
+	let unarchivingId = $state<string | null>(null)
+
+	const currentSort = $derived(sortParsed[sortIndex])
+
+	// client-side search filter (backend list_threads has no search param)
+	const filteredThreads = $derived.by(() => {
+		if (!search) return threads
+		const q = search.toLowerCase()
+		return threads.filter((t) => t.title?.toLowerCase().includes(q))
+	})
+
+	async function fetchThreads(opts: { reset?: boolean } = {}): Promise<void> {
+		const userId = session.currentUser?.id
+		if (!userId) return
+
+		const isReset = opts.reset ?? false
+		if (isReset) {
+			loading = true
+		} else {
+			loadingMore = true
+		}
+
+		try {
+			const skip = isReset ? 0 : threads.length
+			const { data } = await apiClient().GET('/v1/threads', {
+				params: {
+					query: {
+						owner_id: userId,
+						is_archived: true,
+						skip,
+						limit: PAGE_SIZE,
+						sort_by: currentSort.sort_by,
+						sort_dir: currentSort.sort_dir,
+					},
+				},
+			})
+			if (data) {
+				const items = data as Thread[]
+				if (isReset) {
+					threads = items
+				} else {
+					threads = [...threads, ...items]
+				}
+				hasMore = items.length >= PAGE_SIZE
+			}
+		} finally {
+			loading = false
+			loadingMore = false
+		}
 	}
 
-	const archivedChats: ArchivedChat[] = [
-		{
-			id: 'a-1',
-			title: 'prototype backlog',
-			summary: 'next steps for search + modals',
-			archivedAt: 'today',
-		},
-		{
-			id: 'a-2',
-			title: 'design exploration',
-			summary: 'liquid glass + motion notes',
-			archivedAt: 'yesterday',
-		},
-	]
+	function reload(): void {
+		void fetchThreads({ reset: true })
+	}
+
+	const debouncedSearch = debounce(() => {}, 400)
+
+	function onSearchInput(value: string): void {
+		search = value
+		// client-side filter; debounce just to avoid churn
+		debouncedSearch()
+	}
+
+	function onSortChange(index: number): void {
+		sortIndex = index
+		reload()
+	}
+
+	// load on open
+	$effect(() => {
+		if (open) {
+			threads = []
+			hasMore = true
+			search = ''
+			sortIndex = 0
+			unarchivingId = null
+			reload()
+		}
+	})
+
+	async function unarchiveThread(threadId: string): Promise<void> {
+		unarchivingId = threadId
+		try {
+			const { error } = await apiClient().PATCH('/v1/threads/{thread_id}', {
+				params: { path: { thread_id: threadId } },
+				body: { is_archived: false },
+			})
+			if (error) {
+				console.error('failed to unarchive thread', error)
+				return
+			}
+			threads = threads.filter((t) => t.id !== threadId)
+			// refresh sidebar so unarchived thread appears
+			void chat.refreshThreads()
+		} finally {
+			unarchivingId = null
+		}
+	}
+
+	function openThread(threadId: string): void {
+		onClose()
+		void goto(resolve(`/c/${threadId}`))
+	}
+
+	function formatDate(dateStr: string): string {
+		const d = new Date(dateStr)
+		const now = new Date()
+		const diffMs = now.getTime() - d.getTime()
+		const diffDays = Math.floor(diffMs / 86400000)
+		if (diffDays === 0) return 'today'
+		if (diffDays === 1) return 'yesterday'
+		if (diffDays < 7) return `${diffDays}d ago`
+		if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+		return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+	}
 </script>
 
 <BaseModal
@@ -38,36 +172,94 @@
 	{onClose}
 	widthClassName="max-w-3xl"
 >
-	<div class="space-y-3">
-		{#if archivedChats.length === 0}
-			<div class="rounded-pill bg-white/5 p-4 text-sm text-white/60">no archived chats</div>
-		{:else}
-			<div class="space-y-2">
-				{#each archivedChats as chat (chat.id)}
+	<ModalListLayout
+		{search}
+		searchPlaceholder="search archived chats..."
+		{sortOptions}
+		{sortIndex}
+		{loading}
+		{loadingMore}
+		{hasMore}
+		isEmpty={filteredThreads.length === 0}
+		emptyMessage="no archived chats"
+		emptySearchMessage="no archived chats match your search."
+		{onSearchInput}
+		{onSortChange}
+		onLoadMore={() => void fetchThreads()}
+	>
+		{#snippet items()}
+			{#each filteredThreads as thread (thread.id)}
+				<div
+					class="group rounded-container flex items-center gap-3 border border-white/8 bg-white/3 px-5 py-2.5 transition-colors hover:bg-white/5"
+				>
 					<button
 						type="button"
-						class="rounded-pill flex w-full items-start justify-between gap-4 border-none bg-white/5 px-4 py-3 text-left transition-colors hover:bg-white/8"
+						class="min-w-0 flex-1 cursor-pointer text-left"
+						onclick={() => openThread(thread.id)}
 					>
-						<div class="min-w-0">
-							<div class="truncate text-sm font-semibold text-white/85">
-								{chat.title}
-							</div>
-							<div class="truncate text-sm text-white/55">{chat.summary}</div>
+						<!-- primary row: title + timestamp -->
+						<div class="flex items-center gap-2">
+							<span
+								class="min-w-0 flex-1 overflow-hidden text-sm leading-normal font-medium text-ellipsis whitespace-nowrap {thread.title
+									? 'text-white/85'
+									: 'text-white/40 italic'}"
+							>
+								{thread.title || 'untitled'}
+							</span>
+							<span class="ml-auto shrink-0 text-[11px] text-white/35">
+								{formatDate(thread.last_activity_at)}
+							</span>
 						</div>
-						<div class="shrink-0 text-xs text-white/55">{chat.archivedAt}</div>
+						<!-- tags row -->
+						{#if thread.tags && thread.tags.length > 0}
+							<div class="mt-1 flex items-center gap-1 overflow-hidden">
+								{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
+									<span
+										class="inline-flex max-w-20 shrink-0 items-center truncate rounded-full bg-white/8 px-1.5 py-px text-[10px] leading-tight text-white/50"
+										title={tag}
+									>
+										{tag}
+									</span>
+								{/each}
+								{#if (thread.tags ?? []).length > 3}
+									<span class="shrink-0 text-[10px] text-white/30">
+										+{(thread.tags ?? []).length - 3}
+									</span>
+								{/if}
+							</div>
+						{/if}
+						<!-- created date -->
+						<div class="mt-0.5 text-[11px] text-white/30">
+							created {formatDate(thread.created_at)}
+						</div>
 					</button>
-				{/each}
-			</div>
-		{/if}
+					<button
+						type="button"
+						class="rounded-circle flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center text-white/40 transition-colors hover:bg-white/10 hover:text-white/70 disabled:opacity-40"
+						disabled={unarchivingId === thread.id}
+						onclick={() => void unarchiveThread(thread.id)}
+						aria-label="unarchive thread"
+						title="unarchive"
+					>
+						{#if unarchivingId === thread.id}
+							<div
+								class="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white/60"
+							></div>
+						{:else}
+							<ArrowUpTray class="h-4 w-4" />
+						{/if}
+					</button>
+				</div>
+			{/each}
+		{/snippet}
 
-		<div class="flex justify-end">
-			<button
-				type="button"
-				class="rounded-pill border-none bg-white/10 px-4 py-2 text-sm font-semibold text-white/85 transition-colors hover:bg-white/15"
-				onclick={onClose}
-			>
-				close
-			</button>
-		</div>
-	</div>
+		{#snippet footerLeft()}
+			{filteredThreads.length}
+			{filteredThreads.length === 1 ? 'thread' : 'threads'}
+		{/snippet}
+
+		{#snippet footerRight()}
+			<!-- close handled by BaseModal X button -->
+		{/snippet}
+	</ModalListLayout>
 </BaseModal>

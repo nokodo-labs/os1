@@ -19,6 +19,7 @@
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
 	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
+	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
@@ -314,18 +315,20 @@
 			class="pointer-events-none absolute inset-x-0 z-20 flex justify-center"
 			style={`bottom: ${Math.max(24, chat.inputOverlayHeight + 16)}px;`}
 		>
-			<button
+			<LiquidGlass
+				tag="button"
 				type="button"
-				class="liquid-glass--frosted pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+				class="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+				cornerRadius={18}
 				aria-label="scroll to bottom"
-				onpointerdown={(e) => e.preventDefault()}
+				onpointerdown={(e: PointerEvent) => e.preventDefault()}
 				onclick={() => {
 					chat.queueScrollToBottom('smooth')
 					chat.autoScroll = true
 				}}
 			>
 				<ArrowUp class="h-4 w-4 rotate-180" />
-			</button>
+			</LiquidGlass>
 		</div>
 	{/if}
 

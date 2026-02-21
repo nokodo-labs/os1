@@ -73,14 +73,15 @@
 			isTransitioning = true
 			previousBg = currentBg
 
-			// Short delay for cross-fade
-			setTimeout(() => {
+			// Use rAF to batch the state update with the next paint,
+			// then a single timeout for the cross-fade duration.
+			requestAnimationFrame(() => {
 				currentBg = type
 				setTimeout(() => {
 					previousBg = null
 					isTransitioning = false
-				}, 300) // Match CSS transition duration
-			}, 50)
+				}, 300) // match CSS transition duration
+			})
 		}
 	})
 

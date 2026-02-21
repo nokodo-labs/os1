@@ -119,9 +119,7 @@
 </script>
 
 <div
-	class="flex min-h-0 flex-col {isMobile
-		? 'min-h-[calc(100vh-var(--chrome-island-offset,0px)-var(--spacing-island-content)-2.5rem)]'
-		: 'h-full'}"
+	class="flex min-h-0 flex-col {isMobile ? '' : 'h-full'}"
 	style="gap: var(--spacing-header-content);"
 >
 	<header
@@ -187,7 +185,7 @@
 
 	<nav class="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2">
 		{#if noteList.length === 0}
-			<div class="flex flex-1 items-center justify-center">
+			<div class="py-4">
 				<div
 					class="rounded-container w-full overflow-hidden border border-white/14 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
 				>

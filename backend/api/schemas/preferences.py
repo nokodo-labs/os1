@@ -210,6 +210,40 @@ class DebugPreferences(BaseModel):
 	)
 
 
+# homepage preferences
+class HomepagePreferences(BaseModel):
+	"""user homepage preferences
+
+	controls which suggestion apps appear on the home screen."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	chats: bool | None = Field(
+		default=None,
+		description="show chats in homepage suggestions",
+	)
+	reminders: bool | None = Field(
+		default=None,
+		description="show reminders in homepage suggestions",
+	)
+	notes: bool | None = Field(
+		default=None,
+		description="show notes in homepage suggestions",
+	)
+	friends: bool | None = Field(
+		default=None,
+		description="show friends in homepage suggestions",
+	)
+	library: bool | None = Field(
+		default=None,
+		description="show library in homepage suggestions",
+	)
+	calendar: bool | None = Field(
+		default=None,
+		description="show calendar in homepage suggestions",
+	)
+
+
 # the main preferences schema
 class UserPreferences(BaseModel):
 	"""complete user preferences schema.
@@ -250,4 +284,8 @@ class UserPreferences(BaseModel):
 	debug: DebugPreferences | None = Field(
 		default=None,
 		description="debug preferences (admin-only)",
+	)
+	homepage: HomepagePreferences | None = Field(
+		default=None,
+		description="homepage suggestion preferences",
 	)

@@ -179,6 +179,15 @@
 		return path === '/login' || path === '/signup'
 	})
 
+	// auth pages use the admin-configured auth background
+	$effect(() => {
+		if (isAuthRoute) {
+			background.setPage(background.auth)
+		} else {
+			background.clearPage()
+		}
+	})
+
 	const isChatSwipeEligibleRoute = $derived.by(() => {
 		const path = page.url.pathname
 		return path === '/' || path.startsWith('/c/')
@@ -328,7 +337,10 @@
 		/>
 	{:else if isAuthRoute}
 		<div class="h-app relative z-1 flex">
-			<div class="relative flex min-w-0 flex-1 flex-col">
+			<div
+				class="relative flex min-w-0 flex-1 flex-col overflow-y-auto"
+				style="touch-action: pan-y; overscroll-behavior-y: contain;"
+			>
 				{@render children()}
 			</div>
 		</div>

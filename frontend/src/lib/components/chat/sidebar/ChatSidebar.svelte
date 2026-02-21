@@ -375,23 +375,16 @@
 	}
 </script>
 
-{#if device.isMobile && sidebar.isChatSidebarOpen}
+{#if device.isMobile}
 	<button
 		type="button"
-		class="fixed inset-0 z-40 border-none bg-black/40"
+		class="fixed inset-0 z-40 border-none bg-black/40 transition-opacity duration-300 ease-in-out {sidebar.isChatSidebarOpen
+			? 'opacity-100'
+			: 'pointer-events-none opacity-0'}"
 		aria-label="close sidebar"
 		onclick={() => sidebar.closeChatSidebar()}
+		tabindex={sidebar.isChatSidebarOpen ? 0 : -1}
 	></button>
-
-	<!-- right-edge swipe catcher to close fullscreen sidebar (mobile only) -->
-	<div
-		class="fixed right-0 bottom-0 z-60 w-8"
-		role="presentation"
-		style="touch-action: pan-y; top: 5rem;"
-		onpointerdown={onCloseSwipePointerDown}
-		onpointerup={onCloseSwipePointerUp}
-		onpointercancel={onCloseSwipePointerCancel}
-	></div>
 {/if}
 
 <aside
@@ -406,7 +399,9 @@
 		: device.isMobile
 			? 'pointer-events-none -translate-x-full'
 			: 'translate-x-0'}"
-	style="background-color: var(--accent-bg); view-transition-name: chat-sidebar;"
+	style="background-color: var(--accent-bg);{device.isMobile
+		? ''
+		: ' view-transition-name: chat-sidebar;'}"
 	inert={device.isMobile ? !sidebar.isChatSidebarOpen : undefined}
 	use:expandOnClick
 >

@@ -5,7 +5,6 @@
 	import { page } from '$app/state'
 	import { apiClient } from '$lib/api/client'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import { background } from '$lib/stores/background.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
@@ -28,12 +27,6 @@
 
 	const allowSignups = $derived(settingsState.data?.security?.allow_signups ?? true)
 	const oidcOnly = $derived(settingsState.data?.security?.oidc?.only ?? false)
-
-	// auth pages use the admin-configured auth background
-	$effect(() => {
-		background.setPage(background.auth)
-		return background.clearPage
-	})
 
 	$effect(() => {
 		if (!browser) return

@@ -347,6 +347,7 @@ class ChatStore {
 				params: {
 					query: {
 						owner_id: userId,
+						is_archived: false,
 						limit: options?.limit ?? 20,
 						skip: 0,
 						sort_by: 'last_activity_at',
