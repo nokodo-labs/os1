@@ -1140,7 +1140,7 @@ async def test_create_message_unknown_type_service(
 		principal=principal,
 	)
 	message_in = MessageCreate.model_construct(
-		content="Fallback",
+		content=[{"type": "text", "text": "Fallback"}],
 		sender_user_id=user.id,
 		type=cast(Any, "custom"),
 	)

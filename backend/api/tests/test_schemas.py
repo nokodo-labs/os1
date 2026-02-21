@@ -114,10 +114,10 @@ def test_message_create_normalizes_content_variants() -> None:
 
 def test_prompt_schema_validates_and_normalizes() -> None:
 	valid = PromptCreate(command="my-prompt", content="body")
-	assert valid.command == "/my-prompt"
+	assert valid.command == "my-prompt"
 
 	updated = PromptUpdate(command="/next", content="x")
-	assert updated.command == "/next"
+	assert updated.command == "next"
 
 	with pytest.raises(ValueError):
 		PromptCreate(command="not ok!", content="bad")

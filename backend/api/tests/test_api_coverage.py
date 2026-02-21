@@ -578,9 +578,9 @@ async def test_prompts_service_update_and_delete(monkeypatch):
 		session,
 		principal=admin,
 	)
-	assert updated.command == "/new"
-	assert calls["unique"] == ("/new", "1")
-	assert calls["validated"] == ("1", "/new", "updated")
+	assert updated.command == "new"
+	assert calls["unique"] == ("new", "1")
+	assert calls["validated"] == ("1", "new", "updated")
 
 	await prompt_service.delete_prompt("1", session, principal=admin)
 	assert session.deleted == [prompt_obj]
