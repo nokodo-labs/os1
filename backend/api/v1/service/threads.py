@@ -317,6 +317,7 @@ async def list_threads(
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 	include_hidden: bool = False,
+	is_archived: bool | None = None,
 ) -> list[Thread]:
 	_ensure_admin_for_hidden(include_hidden, principal)
 	stmt = (
@@ -336,6 +337,9 @@ async def list_threads(
 
 	if owner_id is not None:
 		stmt = stmt.where(Thread.owner_id == owner_id)
+
+	if is_archived is not None:
+		stmt = stmt.where(Thread.is_archived == is_archived)
 
 	if include_hidden:
 		stmt = stmt.execution_options(include_deleted=True)

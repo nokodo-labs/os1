@@ -2,7 +2,6 @@
 	import { Editor } from '@tiptap/core'
 	import Placeholder from '@tiptap/extension-placeholder'
 	import Typography from '@tiptap/extension-typography'
-	import Underline from '@tiptap/extension-underline'
 	import { StarterKit } from '@tiptap/starter-kit'
 	import { marked } from 'marked'
 	import { onDestroy, onMount } from 'svelte'
@@ -100,7 +99,6 @@
 				StarterKit.configure({
 					heading: { levels: [1, 2, 3] },
 				}),
-				Underline,
 				Typography,
 				Placeholder.configure({
 					placeholder,

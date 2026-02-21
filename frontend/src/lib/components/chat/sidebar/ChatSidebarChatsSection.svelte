@@ -26,7 +26,7 @@
 	class="flex min-h-0 w-full flex-1 flex-col transition-opacity duration-200 ease-out {expandedContentVisible
 		? 'opacity-100'
 		: 'pointer-events-none opacity-0'}"
-	aria-hidden={!expandedContentVisible}
+	inert={!expandedContentVisible || undefined}
 >
 	<div class="w-full px-3" aria-hidden="true">
 		<div class="h-px w-full bg-linear-to-r from-transparent via-white/18 to-transparent"></div>

@@ -112,6 +112,7 @@ async def list_threads(
 	sort_by: CommonSortBy | ThreadSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	include_hidden: bool = False,
+	is_archived: bool | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Thread]:
@@ -125,6 +126,7 @@ async def list_threads(
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 		include_hidden=include_hidden,
+		is_archived=is_archived,
 	)
 
 
