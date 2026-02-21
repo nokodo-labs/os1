@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Literal, overload
 import openai
 
 from ...messages import (
-	PROVIDER_DATA_KEY,
 	AssistantMessage,
 	ContentPart,
 	JsonContent,
@@ -23,6 +22,10 @@ from ...messages import (
 )
 from ...tool import ToolDefinition
 from ...types import JSONObject
+from ...utils.provider_meta import (
+	get_provider_tool_call_id,
+	provider_tool_call_metadata,
+)
 from ...utils.validators import validate
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
@@ -48,35 +51,6 @@ from .types import (
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
-
-
-def _provider_tool_call_metadata(*, provider: str, tool_call_id: str) -> JSONObject:
-	return {
-		PROVIDER_DATA_KEY: {
-			provider: {
-				"tool_call_id": tool_call_id,
-			}
-		}
-	}
-
-
-def _get_provider_tool_call_id(
-	*,
-	metadata: JSONObject | None,
-	provider: str,
-) -> str | None:
-	if not metadata:
-		return None
-	provider_data = metadata.get(PROVIDER_DATA_KEY)
-	if not isinstance(provider_data, dict):
-		return None
-	provider_entry = provider_data.get(provider)
-	if not isinstance(provider_entry, dict):
-		return None
-	tool_call_id = provider_entry.get("tool_call_id")
-	if isinstance(tool_call_id, str) and tool_call_id != "":
-		return tool_call_id
-	return None
 
 
 class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
@@ -168,7 +142,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 				ToolCall(
 					name=item.name,
 					arguments=item.arguments,
-					metadata=_provider_tool_call_metadata(
+					metadata=provider_tool_call_metadata(
 						provider="openai.responses",
 						tool_call_id=item.call_id,
 					),
@@ -257,7 +231,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 					idx_to_call_id[event.output_index] = call_id
 					tc_created_at[call_id] = now
 					tc_names[call_id] = item.name
-					tc_metadata[call_id] = _provider_tool_call_metadata(
+					tc_metadata[call_id] = provider_tool_call_metadata(
 						provider="openai.responses",
 						tool_call_id=call_id,
 					)
@@ -347,14 +321,14 @@ def _messages_to_openai_responses_input(
 					)
 				if message.tool_calls:
 					for tool_call in message.tool_calls:
-						openai_tool_call_id = _get_provider_tool_call_id(
-							metadata=tool_call.metadata,
-							provider="openai.responses",
-						)
-						if openai_tool_call_id is None:
-							raise ValueError(
-								"ToolCall missing provider tool_call_id in metadata"
+						openai_tool_call_id = (
+							get_provider_tool_call_id(
+								metadata=tool_call.metadata,
+								provider="openai.responses",
+								fallback_id=tool_call.id,
 							)
+							or tool_call.id
+						)
 						openai_messages.append(
 							OpenAIResponseFunctionToolCallParam(
 								type="function_call",
@@ -366,14 +340,14 @@ def _messages_to_openai_responses_input(
 							)
 						)
 			case ToolMessage():
-				openai_tool_call_id = _get_provider_tool_call_id(
-					metadata=message.metadata,
-					provider="openai.responses",
-				)
-				if openai_tool_call_id is None:
-					raise ValueError(
-						"ToolMessage missing provider tool_call_id in metadata"
+				openai_tool_call_id = (
+					get_provider_tool_call_id(
+						metadata=message.metadata,
+						provider="openai.responses",
+						fallback_id=message.tool_call_id,
 					)
+					or message.tool_call_id
+				)
 				openai_messages.append(
 					OpenAIResponseFunctionCallOutput(
 						type="function_call_output",

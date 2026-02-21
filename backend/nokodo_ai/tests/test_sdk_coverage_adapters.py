@@ -195,10 +195,11 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	assert msgs[0]["role"] == "user"
 	assert msgs[1]["role"] == "assistant"
 
-	with pytest.raises(ValueError, match="missing provider tool_call_id"):
-		_messages_to_anthropic(
-			[ToolMessage(tool_call_id="x", tool_output="out", metadata={})]
-		)
+	# tool message should fall back to tool_call_id when provider data missing
+	system_text2, msgs2 = _messages_to_anthropic(
+		[user, ToolMessage(tool_call_id="x", tool_output="out", metadata={})]
+	)
+	assert msgs2[1]["content"][0]["tool_use_id"] == "x"
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_anthropic([object()])  # type: ignore[list-item]
@@ -370,10 +371,14 @@ def test_openai_chat_helpers_cover_branches(
 	)
 	assert len(openai_msgs) == 3
 
-	with pytest.raises(ValueError, match="missing provider tool_call_id"):
-		_messages_to_openai_chatcompletions(
-			[ToolMessage(tool_call_id="x", tool_output="y")]
-		)
+	# tool message without provider data should fall back to sdk tool_call_id
+	tool_msgs = _messages_to_openai_chatcompletions(
+		[
+			assistant,
+			ToolMessage(tool_call_id="fallback_id", tool_output="y"),
+		]
+	)
+	assert tool_msgs[-1]["tool_call_id"] == "fallback_id"
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_openai_chatcompletions([object()])  # type: ignore[list-item]
@@ -867,16 +872,20 @@ async def test_openai_adapters_generate_and_embedding(
 
 
 def test_openai_responses_input_helpers_and_errors() -> None:
-	# assistant tool call requires provider tool_call_id
+	# assistant tool call should fall back to sdk ToolCall.id when provider data missing
 	assistant = AssistantMessage.from_text("a")
-	assistant.tool_calls = [ToolCall(name="t", arguments="{}", metadata={})]
-	with pytest.raises(ValueError, match="ToolCall missing provider tool_call_id"):
-		_messages_to_openai_responses_input([assistant])
+	assistant.tool_calls = [
+		ToolCall(id="sdk_tc_1", name="t", arguments="{}", metadata={})
+	]
+	items = _messages_to_openai_responses_input([assistant])
+	assert cast(Any, items[0])["type"] == "message"
+	assert cast(Any, items[1])["call_id"] == "sdk_tc_1"
 
-	with pytest.raises(ValueError, match="ToolMessage missing provider tool_call_id"):
-		_messages_to_openai_responses_input(
-			[ToolMessage(tool_call_id="x", tool_output="y")]
-		)
+	# tool message should fall back to sdk tool_call_id when provider data missing
+	tool_items = _messages_to_openai_responses_input(
+		[ToolMessage(tool_call_id="sdk_tc_2", tool_output="y")]
+	)
+	assert cast(Any, tool_items[0])["call_id"] == "sdk_tc_2"
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_openai_responses_input([object()])  # type: ignore[list-item]

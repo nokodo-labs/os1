@@ -6,12 +6,11 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
-from typing import TYPE_CHECKING, Literal, cast, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 import openai
 
 from ...messages import (
-	PROVIDER_DATA_KEY,
 	AssistantMessage,
 	ContentPart,
 	FinishReason,
@@ -25,6 +24,10 @@ from ...messages import (
 )
 from ...tool import ToolDefinition
 from ...types import JSONObject
+from ...utils.provider_meta import (
+	get_provider_tool_call_id,
+	provider_tool_call_metadata,
+)
 from ...utils.validators import validate
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
@@ -54,35 +57,6 @@ if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
 
 logger = logging.getLogger(__name__)
-
-
-def _provider_tool_call_metadata(*, provider: str, tool_call_id: str) -> JSONObject:
-	return {
-		PROVIDER_DATA_KEY: {
-			provider: {
-				"tool_call_id": tool_call_id,
-			}
-		}
-	}
-
-
-def _get_provider_tool_call_id(
-	*,
-	metadata: JSONObject | None,
-	provider: str,
-) -> str | None:
-	if not metadata:
-		return None
-	provider_data = metadata.get(PROVIDER_DATA_KEY)
-	if not isinstance(provider_data, dict):
-		return None
-	provider_entry = provider_data.get(provider)
-	if not isinstance(provider_entry, dict):
-		return None
-	tool_call_id = provider_entry.get("tool_call_id")
-	if isinstance(tool_call_id, str) and tool_call_id != "":
-		return tool_call_id
-	return None
 
 
 class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
@@ -384,7 +358,7 @@ async def _openai_stream_to_assistant_messages(
 					# first delta for this provider tool call
 					if provider_id and provider_id not in provider_to_sdk_id:
 						tc_created_at[provider_id] = now
-						tc_metadata[provider_id] = _provider_tool_call_metadata(
+						tc_metadata[provider_id] = provider_tool_call_metadata(
 							provider="openai.chat_completions",
 							tool_call_id=provider_id,
 						)
@@ -443,7 +417,7 @@ def _openai_tool_calls_to_tool_calls(
 		if not isinstance(openai_tool_call, OpenAIChatCompletionFunctionToolCall):
 			continue
 		raw_args = openai_tool_call.function.arguments or "{}"
-		metadata = _provider_tool_call_metadata(
+		metadata = provider_tool_call_metadata(
 			provider="openai.chat_completions",
 			tool_call_id=openai_tool_call.id,
 		)
@@ -531,13 +505,12 @@ def _messages_to_openai_chatcompletions(
 				if message.tool_calls:
 					openai_message["tool_calls"] = [
 						OpenAIChatCompletionFunctionToolCallParam(
-							id=cast(
-								str,
-								_get_provider_tool_call_id(
-									metadata=tool_call.metadata,
-									provider="openai.chat_completions",
-								),
-							),
+							id=get_provider_tool_call_id(
+								metadata=tool_call.metadata,
+								provider="openai.chat_completions",
+								fallback_id=tool_call.id,
+							)
+							or tool_call.id,
 							type="function",
 							function={
 								"name": tool_call.name,
@@ -550,18 +523,18 @@ def _messages_to_openai_chatcompletions(
 					]
 				openai_messages.append(openai_message)
 			case ToolMessage():
-				openai_tool_call_id = _get_provider_tool_call_id(
-					metadata=message.metadata,
-					provider="openai.chat_completions",
-				)
-				if openai_tool_call_id is None:
-					raise ValueError(
-						"ToolMessage missing provider tool_call_id in metadata"
+				openai_tool_call_id = (
+					get_provider_tool_call_id(
+						metadata=message.metadata,
+						provider="openai.chat_completions",
+						fallback_id=message.tool_call_id,
 					)
+					or message.tool_call_id
+				)
 				openai_messages.append(
 					OpenAIChatCompletionToolMessageParam(
 						role="tool",
-						tool_call_id=cast(str, openai_tool_call_id),
+						tool_call_id=openai_tool_call_id,
 						content=message.tool_output,
 					)
 				)

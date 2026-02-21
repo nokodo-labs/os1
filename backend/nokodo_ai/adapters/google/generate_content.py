@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Literal, overload
 from google.genai.types import FunctionCallingConfigMode
 
 from ...messages import (
-	PROVIDER_DATA_KEY,
 	AssistantMessage,
 	ContentPart,
 	SystemMessage,
@@ -22,6 +21,10 @@ from ...messages import (
 )
 from ...tool import ToolDefinition
 from ...types import JSONObject
+from ...utils.provider_meta import (
+	get_provider_tool_call_id,
+	provider_tool_call_metadata,
+)
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseGoogleAdapter
 from .types import (
@@ -41,31 +44,6 @@ if TYPE_CHECKING:
 
 
 PROVIDER_NAME = "google.generate_content"
-
-
-def _provider_tool_call_metadata(*, tool_call_id: str) -> JSONObject:
-	return {
-		PROVIDER_DATA_KEY: {
-			PROVIDER_NAME: {
-				"tool_call_id": tool_call_id,
-			}
-		}
-	}
-
-
-def _get_provider_tool_call_id(metadata: JSONObject | None) -> str | None:
-	if not metadata:
-		return None
-	provider_data = metadata.get(PROVIDER_DATA_KEY)
-	if not isinstance(provider_data, dict):
-		return None
-	provider_entry = provider_data.get(PROVIDER_NAME)
-	if not isinstance(provider_entry, dict):
-		return None
-	tool_call_id = provider_entry.get("tool_call_id")
-	if isinstance(tool_call_id, str) and tool_call_id != "":
-		return tool_call_id
-	return None
 
 
 def _tool_choice_to_google(tool_choice: str) -> GoogleToolConfig:
@@ -128,7 +106,9 @@ def _find_tool_name_from_history(
 			continue
 		for tc in msg.tool_calls:
 			# check provider metadata first
-			provider_id = _get_provider_tool_call_id(tc.metadata)
+			provider_id = get_provider_tool_call_id(
+				metadata=tc.metadata, provider=PROVIDER_NAME
+			)
 			if provider_id == tool_call_id:
 				return tc.name
 			# fallback to tool call id
@@ -259,7 +239,9 @@ def _response_to_assistant_message(
 				ToolCall(
 					name=name,
 					arguments=raw_args,
-					metadata=_provider_tool_call_metadata(tool_call_id=provider_id),
+					metadata=provider_tool_call_metadata(
+						provider=PROVIDER_NAME, tool_call_id=provider_id
+					),
 				)
 			)
 
@@ -456,7 +438,8 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 						raw_args = "{}"
 
 					provider_id = f"c{candidate_index}_p{part_index}"
-					metadata = _provider_tool_call_metadata(
+					metadata = provider_tool_call_metadata(
+						provider=PROVIDER_NAME,
 						tool_call_id=provider_id,
 					)
 
