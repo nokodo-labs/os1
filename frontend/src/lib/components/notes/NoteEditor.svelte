@@ -1,10 +1,13 @@
 <script lang="ts">
-	import RichTextEditor from '$lib/components/editor/RichTextEditor.svelte'
+	import type { DocParticipant } from '$lib/collaboration'
+	import SharedEditor from '$lib/components/editor/SharedEditor.svelte'
 	import ArrowUturnLeft from '$lib/components/icons/ArrowUturnLeft.svelte'
 	import ArrowUturnRight from '$lib/components/icons/ArrowUturnRight.svelte'
+	import Bars3BottomLeft from '$lib/components/icons/Bars3BottomLeft.svelte'
 	import Bold from '$lib/components/icons/Bold.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
+	import Cloud from '$lib/components/icons/Cloud.svelte'
 	import Code from '$lib/components/icons/Code.svelte'
 	import CodeBracket from '$lib/components/icons/CodeBracket.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
@@ -14,6 +17,7 @@
 	import Italic from '$lib/components/icons/Italic.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import NumberedList from '$lib/components/icons/NumberedList.svelte'
+	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Strikethrough from '$lib/components/icons/Strikethrough.svelte'
 	import Underline from '$lib/components/icons/Underline.svelte'
@@ -22,12 +26,15 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
+	import { session } from '$lib/stores/session.svelte'
+	import { getUserInitials } from '$lib/utils'
+	import { marked } from 'marked'
 	import { onDestroy } from 'svelte'
 	import { scale } from 'svelte/transition'
 
 	// storage format: markdown (in notes store)
-	// normal mode: tiptap rich text editor (stores markdown via turndown)
-	// markdown mode: textarea showing raw markdown source
+	// normal mode: shared collaborative tiptap editor (Yjs CRDT)
+	// markdown mode: textarea showing raw markdown source (manual save / Ctrl+S)
 
 	interface Props {
 		noteId: string
@@ -45,14 +52,32 @@
 	const note = $derived(notes.get(noteId))
 
 	let title = $state('')
-	let content = $state('') // markdown string (source of truth)
+	let content = $state('') // markdown string
 	let isRawMode = $state(false)
 	let menuOpen = $state(false)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
 	let menuEl: HTMLDivElement | null = $state(null)
 	let saveTimeout: number | null = null
 	let textareaEl: HTMLTextAreaElement | null = $state(null)
-	let richEditor: RichTextEditor | null = $state(null)
+	let sharedEditor: SharedEditor | null = $state(null)
+	let collabParticipants = $state<DocParticipant[]>([])
+	let rawDirty = $state(false) // track unsaved raw edits
+
+	const documentId = $derived(`note:${noteId}`)
+	// all participants except self (per-session: same user can appear multiple times)
+	const peers = $derived(collabParticipants.filter((p) => p.sessionId !== currentSessionId))
+	let currentSessionId: string = ''
+
+	// user info for awareness (cursor labels)
+	const userInfo = $derived.by(() => {
+		const u = session.currentUser
+		if (!u) return undefined
+		return {
+			id: String(u.id),
+			name: u.display_name ?? u.email?.split('@')[0] ?? 'user',
+			avatarUrl: u.avatar_url ?? null,
+		}
+	})
 
 	const wordCount = $derived.by(() => {
 		const text = content.trim()
@@ -68,19 +93,23 @@
 
 	let lastNoteId: string | null = $state(null)
 	let isSyncingFromStore = false
+	let lastSyncedTitle = ''
+	let lastSyncedContent = ''
 
-	// sync state from store: new note selected OR foreign WS update to same note
+	// sync state from store
 	$effect(() => {
 		const current = note
 		if (!current) return
 
 		if (current.id !== lastNoteId) {
-			// different note selected
 			lastNoteId = current.id
 			isSyncingFromStore = true
 			title = current.title
 			content = current.content
+			lastSyncedTitle = current.title
+			lastSyncedContent = current.content
 			isRawMode = false
+			rawDirty = false
 			menuOpen = false
 			queueMicrotask(() => {
 				isSyncingFromStore = false
@@ -88,11 +117,19 @@
 			return
 		}
 
-		// same note: sync foreign updates (own events are skipped at the store level)
-		if (current.title !== title || current.content !== content) {
+		const titleChanged = current.title !== lastSyncedTitle
+		const contentChanged = current.content !== lastSyncedContent
+		if (titleChanged || contentChanged) {
+			if (saveTimeout !== null) {
+				window.clearTimeout(saveTimeout)
+				saveTimeout = null
+			}
 			isSyncingFromStore = true
-			title = current.title
-			content = current.content
+			if (titleChanged) title = current.title
+			// in raw mode, don't overwrite user's edits
+			if (contentChanged && !isRawMode) content = current.content
+			lastSyncedTitle = current.title
+			lastSyncedContent = current.content
 			queueMicrotask(() => {
 				isSyncingFromStore = false
 			})
@@ -135,18 +172,27 @@
 		if (saveTimeout !== null) window.clearTimeout(saveTimeout)
 		saveTimeout = window.setTimeout(() => {
 			saveTimeout = null
+			lastSyncedTitle = title
+			lastSyncedContent = content
 			void notes.update(noteId, { title, content })
 		}, 200)
 	}
 
-	$effect(() => {
-		// auto-save on edits (must NOT depend on `note` to avoid WS → save loops)
-		void title
-		void content
-		if (!lastNoteId) return
-		if (isSyncingFromStore) return
-		scheduleSave()
-	})
+	/** manual save for raw mode (Ctrl+S) */
+	function saveRaw(): void {
+		if (!rawDirty) return
+		// push raw markdown into the SharedEditor's Yjs doc so it syncs to peers
+		const editor = sharedEditor?.getEditor()
+		if (editor) {
+			const html = String(marked.parse(content, { gfm: true, breaks: true }))
+			editor.commands.setContent(html)
+		}
+		rawDirty = false
+		// persist to API
+		lastSyncedTitle = title
+		lastSyncedContent = content
+		void notes.update(noteId, { title, content })
+	}
 
 	onDestroy(() => {
 		if (saveTimeout !== null) window.clearTimeout(saveTimeout)
@@ -155,145 +201,167 @@
 	function handleContentChange(markdown: string): void {
 		if (isSyncingFromStore) return
 		content = markdown
+		scheduleSave()
+	}
+
+	function handleTitleInput(): void {
+		if (isSyncingFromStore) return
+		scheduleSave()
+	}
+
+	function handleRawInput(): void {
+		if (isSyncingFromStore) return
+		rawDirty = true
 	}
 
 	function undo(): void {
-		if (isRawMode) {
-			// markdown mode doesn't have undo support for now
-			return
-		}
-		richEditor?.undo()
+		if (isRawMode) return
+		sharedEditor?.undo()
 	}
 
 	function redo(): void {
-		if (isRawMode) {
-			// markdown mode doesn't have redo support for now
-			return
-		}
-		richEditor?.redo()
+		if (isRawMode) return
+		sharedEditor?.redo()
 	}
 
 	function handleShare(): void {
 		menuOpen = false
-		// todo: implement share modal for notes
 		console.log('share note:', noteId)
 	}
 
 	function setRawMode(next: boolean): void {
 		if (next === isRawMode) return
-		isRawMode = next
 		if (next) {
-			// switching to raw: show markdown in textarea
+			// switching TO raw: grab latest markdown from SharedEditor
+			const md = sharedEditor?.getMarkdown()
+			if (md !== undefined) content = md
+			rawDirty = false
+			isRawMode = true
 			requestAnimationFrame(() => textareaEl?.focus())
 		} else {
-			// switching to rich: tiptap will sync from content automatically
-			queueMicrotask(() => richEditor?.focus())
+			// switching FROM raw: push raw edits into Yjs doc so they sync
+			if (rawDirty) {
+				saveRaw()
+			}
+			isRawMode = false
+			queueMicrotask(() => sharedEditor?.focus())
 		}
 	}
 
 	function handleProperties(): void {
 		menuOpen = false
-		// todo: implement properties panel for notes
 		console.log('show properties for:', noteId)
 	}
 
-	// keyboard shortcuts for markdown mode
+	// keyboard shortcuts for raw mode
 	function handleRawKeyDown(event: KeyboardEvent): void {
 		const isMod = event.metaKey || event.ctrlKey
-		if (isMod && event.key === 'z' && !event.shiftKey) {
+		if (isMod && event.key === 's') {
 			event.preventDefault()
-			// native browser undo in textarea
-		} else if (isMod && event.key === 'z' && event.shiftKey) {
-			event.preventDefault()
-			// native browser redo in textarea
-		} else if (isMod && event.key === 'y') {
-			event.preventDefault()
-			// native browser redo in textarea
+			saveRaw()
 		}
+	}
+
+	// capture session_id from provider for peer filtering
+	function handleSynced(): void {
+		const provider = sharedEditor?.getProvider()
+		if (provider) {
+			const sid = provider.getSessionId()
+			if (sid) currentSessionId = sid
+		}
+	}
+
+	// non-passive wheel handler: allows preventDefault for horizontal scroll redirect
+	function wheelToHScroll(node: HTMLElement): { destroy: () => void } {
+		function handler(event: WheelEvent): void {
+			if (event.deltaY === 0) return
+			event.preventDefault()
+			node.scrollLeft += event.deltaY
+		}
+		node.addEventListener('wheel', handler, { passive: false })
+		return { destroy: () => node.removeEventListener('wheel', handler) }
 	}
 </script>
 
 {#snippet islandContextActions()}
-	<div class="relative flex items-center gap-1">
-		{#if onBack && device.isMobile}
-			<button
-				type="button"
-				class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-				onclick={() => onBack?.()}
-				aria-label="back to notes"
-			>
-				<ChevronLeft class="h-5 w-5" strokeWidth="2" />
-			</button>
-		{/if}
-
-		<!-- undo/redo buttons -->
+	{#if onBack && device.isMobile}
 		<button
 			type="button"
-			class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
-			onclick={undo}
-			disabled={isRawMode || !canUndo}
-			aria-label="undo"
+			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+			onclick={() => onBack?.()}
+			aria-label="back to notes"
 		>
-			<ArrowUturnLeft class="h-5 w-5" />
+			<ChevronLeft strokeWidth="2" />
 		</button>
+	{/if}
+
+	<!-- undo/redo buttons -->
+	<button
+		type="button"
+		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+		onclick={undo}
+		disabled={isRawMode || !canUndo}
+		aria-label="undo"
+	>
+		<ArrowUturnLeft />
+	</button>
+	<button
+		type="button"
+		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+		onclick={redo}
+		disabled={isRawMode || !canRedo}
+		aria-label="redo"
+	>
+		<ArrowUturnRight />
+	</button>
+
+	<!-- 3-dot menu -->
+	<div class="relative">
 		<button
 			type="button"
-			class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
-			onclick={redo}
-			disabled={isRawMode || !canRedo}
-			aria-label="redo"
+			bind:this={menuButtonEl}
+			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			onclick={() => (menuOpen = !menuOpen)}
+			aria-label="note options"
+			aria-haspopup="menu"
+			aria-expanded={menuOpen}
 		>
-			<ArrowUturnRight class="h-5 w-5" />
+			<EllipsisHorizontal />
 		</button>
 
-		<!-- 3-dot menu -->
-		<div class="relative">
-			<button
-				type="button"
-				bind:this={menuButtonEl}
-				class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
-				onclick={() => (menuOpen = !menuOpen)}
-				aria-label="note options"
-				aria-haspopup="menu"
-				aria-expanded={menuOpen}
+		{#if menuOpen}
+			<div
+				transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+				bind:this={menuEl}
+				role="menu"
+				class="liquid-metal rounded-container animate-popup-right absolute top-full left-0 z-50 mt-2 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
 			>
-				<EllipsisHorizontal class="h-5 w-5" />
-			</button>
-
-			{#if menuOpen}
-				<div
-					transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-					bind:this={menuEl}
-					role="menu"
-					class="liquid-metal rounded-container animate-popup-right absolute top-full left-0 z-50 mt-2 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+				<button
+					type="button"
+					role="menuitemcheckbox"
+					aria-checked={isRawMode}
+					class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-white/85 transition-all duration-150 hover:bg-white/10 hover:text-white"
+					onclick={() => setRawMode(!isRawMode)}
 				>
-					<button
-						type="button"
-						role="menuitemcheckbox"
-						aria-checked={isRawMode}
-						class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-white/85 transition-all duration-150 hover:bg-white/10 hover:text-white"
-						onclick={() => setRawMode(!isRawMode)}
+					<span
+						class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
 					>
-						<span
-							class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
-						>
-							<Code class="h-4 w-4" />
-						</span>
-						<span class="flex-1 truncate">markdown mode</span>
-						<Switch size="sm" checked={isRawMode} />
-					</button>
-					<div class="my-1 h-px w-full bg-white/10"></div>
-					<MenuItem onclick={handleShare}>
-						{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-						share
-					</MenuItem>
-					<MenuItem onclick={handleProperties}>
-						{#snippet icon()}<CodeBracket class="h-4 w-4" />{/snippet}
-						properties
-					</MenuItem>
-				</div>
-			{/if}
-		</div>
+						<Code class="h-4 w-4" />
+					</span>
+					<span class="flex-1 truncate">markdown mode</span>
+					<Switch size="sm" checked={isRawMode} />
+				</button>
+				<div class="my-1 h-px w-full bg-white/10"></div>
+				<MenuItem onclick={handleShare}>
+					{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
+					share
+				</MenuItem>
+				<MenuItem onclick={handleProperties}>
+					{#snippet icon()}<CodeBracket class="h-4 w-4" />{/snippet}
+					properties
+				</MenuItem>
+			</div>
+		{/if}
 	</div>
 {/snippet}
 
@@ -306,27 +374,20 @@
 {:else}
 	<div class="w-full" id="note-editor">
 		<div class="flex w-full flex-col">
-			<!-- header section with background -->
-			<div class="rounded-container border border-white/10 bg-white/5 px-3 py-5 pb-6">
+			<!-- header section -->
+			<div class="rounded-container bg-white/5 px-5 py-5 pb-6">
 				<!-- title row -->
-				<div class="mb-2 flex w-full items-center">
+				<div class="mb-2 flex w-full items-center gap-2">
 					<input
-						class="w-full bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/42"
+						class="min-w-0 flex-1 bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/42"
 						placeholder="title"
 						bind:value={title}
+						oninput={handleTitleInput}
 					/>
 				</div>
 
 				<!-- meta row -->
-				<div
-					class="scrollbar-none flex w-full overflow-x-auto"
-					onwheel={(event) => {
-						if (event.deltaY === 0) return
-						event.preventDefault()
-						const target = event.currentTarget
-						if (target instanceof HTMLElement) target.scrollLeft += event.deltaY
-					}}
-				>
+				<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
 					<div class="flex w-fit items-center gap-1 text-xs font-medium text-white/55">
 						<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 							<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
@@ -335,30 +396,79 @@
 								mode="calendar"
 							/>
 						</div>
-						<div class="flex min-w-fit items-center gap-2 px-1">
+						<span class="text-white/25">·</span>
+						<div class="flex min-w-fit items-center gap-1 px-0.5 py-1">
+							<Bars3BottomLeft class="h-3 w-3" strokeWidth="2" />
 							<span>{wordCount} words</span>
-							<span>·</span>
+							<span class="text-white/25">·</span>
 							<span>{charCount} chars</span>
-							<span>·</span>
-							<span>autosaved</span>
 						</div>
+						<span class="text-white/25">·</span>
+						{#if isRawMode && rawDirty}
+							<div
+								class="flex min-w-fit items-center gap-1 px-0.5 py-1 text-amber-400/80"
+							>
+								<PencilSquare class="h-3 w-3" />
+								<span>unsaved</span>
+							</div>
+						{:else}
+							<div class="flex min-w-fit items-center gap-1 px-0.5 py-1">
+								<Cloud class="h-3 w-3" />
+								<span>autosaved</span>
+							</div>
+						{/if}
 					</div>
 				</div>
 
-				<!-- formatting toolbar row - uses max-height reveal animation -->
+				<!-- viewers row (sessions editing this document) -->
+				{#if peers.length > 0}
+					<div
+						class="scrollbar-none mt-3 flex items-center gap-3 overflow-x-auto pt-2"
+						use:wheelToHScroll
+					>
+						{#each peers as peer, idx (peer.sessionId + ':' + idx)}
+							{@const name = peer.userName || 'user'}
+							{@const initials = getUserInitials(name)}
+							{@const color = peer.color || '#85C1E9'}
+							<!-- TODO: clicking on a viewer should open the User Profile modal once implemented -->
+							<div class="flex shrink-0 items-center gap-2">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm"
+									style:background-color={color}
+								>
+									{#if peer.avatarUrl}
+										<img
+											src={peer.avatarUrl}
+											alt={name}
+											class="h-full w-full rounded-full object-cover"
+										/>
+									{:else}
+										{initials}
+									{/if}
+								</div>
+								<span class="text-sm font-bold whitespace-nowrap text-white/70"
+									>{name}</span
+								>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- formatting toolbar row - hidden in raw mode -->
 				<div
 					class="formatting-toolbar overflow-hidden transition-all duration-200 ease-out {isRawMode
 						? 'max-h-0 opacity-0'
 						: 'max-h-20 opacity-100'}"
 				>
 					<div
-						class="mt-3 flex items-center justify-between border-t border-white/10 pt-3"
+						class="scrollbar-none mt-3 flex items-center justify-between overflow-x-auto border-t border-white/10 pt-3"
+						use:wheelToHScroll
 					>
-						<div class="flex items-center gap-0.5">
+						<div class="flex min-w-fit items-center gap-0.5">
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleHeading(1)}
+								onclick={() => sharedEditor?.toggleHeading(1)}
 								title="heading 1"
 							>
 								<H1 class="h-4 w-4" />
@@ -366,7 +476,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleHeading(2)}
+								onclick={() => sharedEditor?.toggleHeading(2)}
 								title="heading 2"
 							>
 								<H2 class="h-4 w-4" />
@@ -374,7 +484,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleHeading(3)}
+								onclick={() => sharedEditor?.toggleHeading(3)}
 								title="heading 3"
 							>
 								<H3 class="h-4 w-4" />
@@ -385,7 +495,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleBold()}
+								onclick={() => sharedEditor?.toggleBold()}
 								title="bold (ctrl+b)"
 							>
 								<Bold class="h-4 w-4" />
@@ -393,7 +503,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleItalic()}
+								onclick={() => sharedEditor?.toggleItalic()}
 								title="italic (ctrl+i)"
 							>
 								<Italic class="h-4 w-4" />
@@ -401,7 +511,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleUnderline()}
+								onclick={() => sharedEditor?.toggleUnderline()}
 								title="underline (ctrl+u)"
 							>
 								<Underline class="h-4 w-4" />
@@ -409,7 +519,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleStrike()}
+								onclick={() => sharedEditor?.toggleStrike()}
 								title="strikethrough"
 							>
 								<Strikethrough class="h-4 w-4" />
@@ -420,7 +530,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleBulletList()}
+								onclick={() => sharedEditor?.toggleBulletList()}
 								title="bullet list"
 							>
 								<ListBullet class="h-4 w-4" />
@@ -428,7 +538,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleOrderedList()}
+								onclick={() => sharedEditor?.toggleOrderedList()}
 								title="numbered list"
 							>
 								<NumberedList class="h-4 w-4" />
@@ -439,7 +549,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleCode()}
+								onclick={() => sharedEditor?.toggleCode()}
 								title="inline code"
 							>
 								<CodeBracket class="h-4 w-4" />
@@ -447,7 +557,7 @@
 							<button
 								type="button"
 								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => richEditor?.toggleCodeBlock()}
+								onclick={() => sharedEditor?.toggleCodeBlock()}
 								title="code block"
 							>
 								<Code class="h-4 w-4" />
@@ -458,7 +568,7 @@
 				</div>
 			</div>
 
-			<!-- content area (no background) -->
+			<!-- content area -->
 			<div
 				class="relative w-full flex-1 overflow-auto px-3.5 pt-4 pb-20"
 				id="note-content-container"
@@ -466,20 +576,28 @@
 				{#if isRawMode}
 					<textarea
 						bind:this={textareaEl}
-						class="min-h-24 w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
-						placeholder="write something..."
+						class="h-full min-h-[60vh] w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
+						placeholder="write something... (Ctrl+S to save)"
 						bind:value={content}
+						oninput={handleRawInput}
 						onkeydown={handleRawKeyDown}
 					></textarea>
-				{:else}
-					<RichTextEditor
-						bind:this={richEditor}
-						value={content}
+				{/if}
+
+				<!-- SharedEditor stays mounted (hidden in raw mode) so Yjs stays connected -->
+				<div class={isRawMode ? 'hidden' : ''}>
+					<SharedEditor
+						bind:this={sharedEditor}
+						{documentId}
+						initialContent={content}
+						user={userInfo}
 						placeholder="write something..."
 						onchange={handleContentChange}
+						onparticipantschange={(p) => (collabParticipants = p)}
+						onsynced={handleSynced}
 						class="min-h-24 text-[0.95rem] leading-relaxed"
 					/>
-				{/if}
+				</div>
 			</div>
 		</div>
 	</div>

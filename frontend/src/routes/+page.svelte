@@ -55,12 +55,33 @@
 	const chatMode = $derived.by((): ChatMode => {
 		if (!browser) return null
 		const chat = page.url.searchParams.get('chat')
-		if (chat === 'new' || chat === 'temp') return chat
+		const q = page.url.searchParams.get('q')
+		if (chat === 'temp') return 'temp'
+		if (chat === 'new' || q) return 'new'
 		return null
 	})
 
 	const isChatMode = $derived(chatMode === 'new' || chatMode === 'temp')
 	const isTemporaryChatMode = $derived(chatMode === 'temp')
+
+	// auto-send ?q= query param as a new chat message (runs once per unique q value).
+	// the effect reactively waits for auth + agent readiness so it doesn't fire
+	// before initApp() completes or before an agent is resolved.
+	let lastAutoSentQuery = $state<string | null>(null)
+	$effect(() => {
+		if (!browser) return
+		const q = page.url.searchParams.get('q')
+		if (!q) return
+		if (q === lastAutoSentQuery) return
+
+		// reactive guards: re-runs automatically when token/agent become available
+		const token = getAccessToken()
+		if (!token) return
+		if (!selectedAgent.id) return
+
+		lastAutoSentQuery = q
+		handleSendMessage(q)
+	})
 
 	$effect(() => {
 		pageTitleStore.pageTitle = isChatMode ? 'new chat' : 'home'

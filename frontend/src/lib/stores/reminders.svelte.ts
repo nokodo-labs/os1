@@ -14,7 +14,7 @@ import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 // types from API
@@ -772,4 +772,10 @@ if (browser) {
 			reminders.clear()
 		}
 	})
+
+	// subscribe immediately if already authenticated
+	// (module may be imported after auth when navigating to /reminders)
+	if (getAccessToken()) {
+		reminders.init()
+	}
 }

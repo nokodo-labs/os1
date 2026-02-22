@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import AsyncSessionLocal, get_db
@@ -18,8 +19,16 @@ from api.v1.service import events as event_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.chat.run_status import get_active_runs_signal
+from api.v1.service.collaborative_documents import (
+	DocError,
+	handle_awareness,
+	handle_disconnect,
+	handle_join,
+	handle_leave,
+	handle_update,
+)
 from api.v1.service.user_activity import user_activity_store
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -77,9 +86,21 @@ async def events_stream(websocket: WebSocket) -> None:
 
 	user_id = str(user.id)
 
+	# reuse the per-tab session ID the client already generates (sent as
+	# X-Session-ID on HTTP requests). this keeps one identity per browser tab
+	# across both HTTP and WS. fall back to a server-generated ID if missing.
+	client_sid = websocket.query_params.get("session_id")
+	ws_session_id = client_sid if client_sid else str(new_typeid("ws"))
+
 	await event_service.event_connections.connect(user_id, websocket)
 	await user_activity_store.mark_active(user_id)
-	await websocket.send_json({"type": "stream.connected", "user_id": user_id})
+	await websocket.send_json(
+		{
+			"type": "stream.connected",
+			"user_id": user_id,
+			"session_id": ws_session_id,
+		}
+	)
 
 	# send active runs signal so the client knows which runs to resume
 	try:
@@ -108,19 +129,66 @@ async def events_stream(websocket: WebSocket) -> None:
 						thread_id=thread_id,
 						typing=msg_type == "typing.start",
 					)
+
+			# --- collaborative editing (doc.*) ---
+			elif msg_type == "doc.join":
+				document_id = data.get("document_id")
+				if not document_id:
+					continue
+				result = await handle_join(document_id, user, user_id, ws_session_id)
+				if isinstance(result, DocError):
+					await websocket.send_json(
+						{
+							"type": "doc.error",
+							"document_id": document_id,
+							"error": result.error,
+						}
+					)
+					continue
+				await websocket.send_json(
+					{
+						"type": "doc.state",
+						"document_id": document_id,
+						"session_id": ws_session_id,
+						"state": result.state_b64,
+						"participants": result.participants,
+					}
+				)
+			elif msg_type == "doc.leave":
+				document_id = data.get("document_id")
+				if not document_id:
+					continue
+				await handle_leave(document_id, user_id, ws_session_id)
+			elif msg_type == "doc.update":
+				document_id = data.get("document_id")
+				update_b64 = data.get("update")
+				if not document_id or not update_b64:
+					continue
+				await handle_update(document_id, update_b64, ws_session_id)
+			elif msg_type == "doc.awareness":
+				document_id = data.get("document_id")
+				awareness_data = data.get("data")
+				if not document_id or not awareness_data:
+					continue
+				await handle_awareness(
+					document_id,
+					awareness_data,
+					user_id,
+					ws_session_id,
+				)
 	except WebSocketDisconnect:
 		logger.debug(f"websocket disconnected for user {user_id}")
 	except Exception as e:
 		logger.debug(f"websocket error for user {user_id}: {e}")
 	finally:
+		# clean up document sessions
+		await handle_disconnect(user_id, ws_session_id)
 		await event_service.event_connections.disconnect(user_id, websocket)
 		last_seen = await user_activity_store.mark_inactive(user_id)
 		# persist last_active_at to DB when user fully disconnects
 		if not await user_activity_store.is_active(user_id):
 			try:
 				async with AsyncSessionLocal() as db_session:
-					from sqlalchemy import update
-
 					await db_session.execute(
 						update(User)
 						.where(User.id == user_id)

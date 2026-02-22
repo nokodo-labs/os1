@@ -12,7 +12,9 @@
 </script>
 
 {#if noteId}
-	<NoteEditor {noteId} onBack={handleBackToNotes} />
+	{#key noteId}
+		<NoteEditor {noteId} onBack={handleBackToNotes} />
+	{/key}
 {:else}
 	<div class="mx-auto mt-10 max-w-3xl">
 		<div class="rounded-container border border-white/10 bg-white/5 p-5 text-sm text-white/70">

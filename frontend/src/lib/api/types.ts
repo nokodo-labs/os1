@@ -109,6 +109,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Active User Ids
+         * @description return IDs of users currently connected to the event stream.
+         */
+        get: operations["read_active_user_ids_users_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{user_id}": {
         parameters: {
             query?: never;
@@ -2274,7 +2294,7 @@ export interface components {
          *
          *     the frontend collects device and environment data that the agent
          *     can use to personalise responses (e.g. timezone-aware greetings).
-         *     all fields are optional — the backend gracefully handles missing data.
+         *     all fields are optional - the backend gracefully handles missing data.
          */
         ClientContext: {
             /**
@@ -2317,6 +2337,21 @@ export interface components {
              * @description whether the client is on a mobile device
              */
             isMobile?: boolean | null;
+            /**
+             * Latitude
+             * @description device latitude from browser geolocation API
+             */
+            latitude?: number | null;
+            /**
+             * Longitude
+             * @description device longitude from browser geolocation API
+             */
+            longitude?: number | null;
+            /**
+             * Locationlabel
+             * @description human-readable location label (e.g. 'San Francisco, CA')
+             */
+            locationLabel?: string | null;
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
@@ -3771,7 +3806,7 @@ export interface components {
         };
         /**
          * Prompt
-         * @description Response schema.
+         * @description response schema.
          */
         Prompt: {
             /**
@@ -3787,7 +3822,7 @@ export interface components {
             metadata_?: components["schemas"]["JSONObject-Output"];
             /**
              * Command
-             * @description Prompt identifier, e.g. '/my-prompt'
+             * @description prompt identifier, e.g. 'my-prompt'
              */
             command: string;
             /** Content */
@@ -3797,13 +3832,13 @@ export interface components {
         };
         /**
          * PromptCreate
-         * @description Payload for prompt creation.
+         * @description payload for prompt creation.
          */
         PromptCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Command
-             * @description Prompt identifier, e.g. '/my-prompt'
+             * @description prompt identifier, e.g. 'my-prompt'
              */
             command: string;
             /** Content */
@@ -3811,7 +3846,7 @@ export interface components {
         };
         /**
          * PromptUpdate
-         * @description Payload for prompt update.
+         * @description payload for prompt update.
          */
         PromptUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -4342,10 +4377,10 @@ export interface components {
         };
         /**
          * RunRequest
-         * @description POST /runs — run on an existing thread, or ephemeral (no thread).
+         * @description POST /runs - run on an existing thread, or ephemeral (no thread).
          *
          *     when ``thread_id`` is present the run continues that thread.
-         *     when omitted the run is **ephemeral** — no thread is created or
+         *     when omitted the run is **ephemeral** - no thread is created or
          *     persisted (not yet implemented).
          *
          *     ``input`` is required for ephemeral runs and optional when continuing
@@ -4857,7 +4892,7 @@ export interface components {
         };
         /**
          * ThreadCreateAndRunRequest
-         * @description POST /threads/create_and_run — create a thread then run immediately.
+         * @description POST /threads/create_and_run - create a thread then run immediately.
          *
          *     ``input`` is required (a new thread needs at least one user message).
          *     the SSE stream emits a ``thread_created`` event before normal run events.
@@ -5052,6 +5087,13 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
+            /** Last Active At */
+            last_active_at?: string | null;
+            /**
+             * Is Online
+             * @default false
+             */
+            is_online: boolean;
         };
         /**
          * UserCreate
@@ -5705,6 +5747,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_active_user_ids_users_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
             /** @description bad request */

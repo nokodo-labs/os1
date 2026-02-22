@@ -85,53 +85,51 @@
 </script>
 
 {#snippet islandContextActions()}
-	<div class="relative flex items-center gap-1">
-		<div class="relative">
-			<button
-				type="button"
-				bind:this={sortButtonEl}
-				class="group rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
-				onclick={toggleSortMenu}
-				aria-label="sort lists"
-				aria-haspopup="menu"
-				aria-expanded={isSortMenuOpen}
-			>
-				<ArrowsUpDown variant="solid" class="h-5 w-5" />
-			</button>
-
-			{#if isSortMenuOpen}
-				<div
-					transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-					bind:this={sortMenuEl}
-					role="menu"
-					class="animate-popup-right rounded-container absolute top-full left-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
-				>
-					{#each sortOptions as option (option.value)}
-						<button
-							type="button"
-							role="menuitem"
-							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-							onclick={() => {
-								reminders.setListsSortMode(option.value)
-								closeSortMenu()
-							}}
-						>
-							{option.label}{reminders.listsSortMode === option.value ? ' ✓' : ''}
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-
+	<div class="relative">
 		<button
 			type="button"
-			class="group rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
-			onclick={handleCreateList}
-			aria-label="create list"
+			bind:this={sortButtonEl}
+			class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			onclick={toggleSortMenu}
+			aria-label="sort lists"
+			aria-haspopup="menu"
+			aria-expanded={isSortMenuOpen}
 		>
-			<Plus class="h-5 w-5" />
+			<ArrowsUpDown variant="solid" />
 		</button>
+
+		{#if isSortMenuOpen}
+			<div
+				transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+				bind:this={sortMenuEl}
+				role="menu"
+				class="animate-popup-right rounded-container absolute top-full left-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+			>
+				{#each sortOptions as option (option.value)}
+					<button
+						type="button"
+						role="menuitem"
+						class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+						onclick={() => {
+							reminders.setListsSortMode(option.value)
+							closeSortMenu()
+						}}
+					>
+						{option.label}{reminders.listsSortMode === option.value ? ' ✓' : ''}
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
+
+	<button
+		type="button"
+		class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		onclick={handleCreateList}
+		aria-label="create list"
+	>
+		<Plus />
+	</button>
 {/snippet}
 
 <!-- only show on mobile (layout handles desktop sidebar) -->

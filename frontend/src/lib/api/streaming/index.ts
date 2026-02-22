@@ -27,3 +27,4 @@ export {
 	type StreamEvent,
 	type StreamMessage,
 } from './eventStream.svelte'
+export { searchStream, type SearchResult, type SearchStreamOptions } from './searchStream'

@@ -17,6 +17,7 @@
 
 import { SvelteSet } from 'svelte/reactivity'
 import { getApiBaseUrl } from '../client'
+import { getSessionId } from '../sessionId'
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
@@ -83,12 +84,16 @@ export class EventStreamClient {
 	readonly state = $state({
 		status: 'disconnected' as ConnectionStatus,
 		lastEvent: null as StreamMessage | null,
+		/** WS session_id assigned by the server on stream.connected */
+		sessionId: null as string | null,
 	})
 
 	private async buildWsUrl(): Promise<string> {
 		const wsBase = getApiBaseUrl().replace(/^http/, 'ws')
-		// No token in URL \u2014 auth uses httpOnly cookie
-		return `${wsBase}/v1/events/stream`
+		// send the per-tab session ID so the server reuses it as the WS
+		// session identifier (same ID already sent as X-Session-ID on HTTP)
+		const sid = encodeURIComponent(getSessionId())
+		return `${wsBase}/v1/events/stream?session_id=${sid}`
 	}
 
 	/**
@@ -153,6 +158,7 @@ export class EventStreamClient {
 		this.ws.onopen = () => {
 			this.connecting = false
 			this.state.status = 'connected'
+			this.state.sessionId = getSessionId()
 			this.reconnectAttempts = 0
 			this.awaitingPong = false
 			this.startPing()
@@ -166,6 +172,11 @@ export class EventStreamClient {
 				if (message.type === 'stream.pong' || message.type === 'pong') {
 					this.awaitingPong = false
 					this.clearPongTimeout()
+				}
+
+				// capture session_id so providers created after WS open can read it
+				if (message.type === 'stream.connected' && typeof message.session_id === 'string') {
+					this.state.sessionId = message.session_id
 				}
 
 				this.state.lastEvent = message

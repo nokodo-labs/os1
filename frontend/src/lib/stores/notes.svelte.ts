@@ -10,10 +10,9 @@
 
 import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
-import { isOwnEvent } from '$lib/api/sessionId'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 // types from API
@@ -21,6 +20,7 @@ type ApiNote = components['schemas']['Note']
 
 export interface Note {
 	id: string
+	userId: string
 	title: string
 	content: string
 	labels: string[]
@@ -53,6 +53,7 @@ function isFresh(): boolean {
 function toNote(apiNote: ApiNote): Note {
 	return {
 		id: apiNote.id,
+		userId: apiNote.user_id,
 		title: apiNote.title,
 		content: apiNote.content,
 		labels: apiNote.labels ?? [],
@@ -207,8 +208,6 @@ function handleNoteEvent(message: StreamMessage): void {
 		}
 		if (fetchedAt === null) fetchedAt = Date.now()
 	} else if (message.type === 'note.updated') {
-		// skip own events: optimistic update already applied
-		if (isOwnEvent(message)) return
 		const id = data.id as string
 		if (!id) return
 		const existing = notesMap.get(id)
@@ -239,4 +238,10 @@ if (browser) {
 			fetchedAt = null
 		}
 	})
+
+	// subscribe immediately if already authenticated
+	// (module may be imported after auth when navigating to /notes)
+	if (getAccessToken() && !notesUnsub) {
+		notesUnsub = eventStreamClient.subscribe(handleNoteEvent)
+	}
 }

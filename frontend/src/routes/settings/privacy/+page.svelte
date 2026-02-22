@@ -24,8 +24,8 @@
 
 <SettingsSectionLayout
 	icon={Lock}
-	label="privacy & security"
-	description="control your data, permissions, and access settings"
+	label="privacy"
+	description="control your data sharing and personalization settings"
 >
 	<div class="space-y-4">
 		<!-- personalization -->

@@ -197,6 +197,14 @@
 		height: 60%;
 		width: auto;
 	}
+	/* handle trigger buttons nested inside wrapper elements (e.g. dropdown containers) */
+	:global(.island-context-actions > div > button) {
+		height: 100%;
+	}
+	:global(.island-context-actions > div > button > svg) {
+		height: 60%;
+		width: auto;
+	}
 
 	/* only target direct button children of right controls, not nested menus */
 	:global(.island-right-controls > button) {

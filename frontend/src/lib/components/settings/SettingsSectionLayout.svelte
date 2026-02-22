@@ -33,11 +33,11 @@
 {#snippet mobileBackAction()}
 	<button
 		type="button"
-		class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 		onclick={handleBack}
 		aria-label="back to settings"
 	>
-		<ChevronLeft class="h-5 w-5" strokeWidth="2" />
+		<ChevronLeft strokeWidth="2" />
 	</button>
 {/snippet}
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { portal } from '$lib/actions/portal'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { fade, scale } from 'svelte/transition'
 
 	interface AppModalProps {
 		open: boolean
@@ -18,11 +19,6 @@
 		widthClassName = 'max-w-xl',
 		children,
 	}: AppModalProps & { children?: import('svelte').Snippet } = $props()
-
-	function onBackdropMouseDown(event: MouseEvent) {
-		if (event.target !== event.currentTarget) return
-		onClose()
-	}
 
 	function onKeyDown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return
@@ -48,16 +44,27 @@
 {#if open}
 	<div
 		use:portal
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
 		role="presentation"
-		onmousedown={onBackdropMouseDown}
 		onpointerdown={onPointerDown}
 	>
+		<!-- backdrop (fades independently, click closes modal) -->
+		<button
+			type="button"
+			class="absolute inset-0 bg-black/30 backdrop-blur-sm"
+			transition:fade={{ duration: 180 }}
+			onmousedown={onClose}
+			aria-label="close modal"
+			tabindex="-1"
+		></button>
+
+		<!-- dialog panel -->
 		<div
-			class="liquid-glass w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
+			class="relative w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden border border-white/10 bg-black/75 shadow-[0_32px_64px_rgba(12,10,30,0.55)] backdrop-blur-xl"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
+			transition:scale={{ duration: 200, start: 0.97, opacity: 0 }}
 		>
 			<div class="relative z-10 flex max-h-[calc(100vh-2rem)] flex-col p-6">
 				<header class="mb-5 flex items-start justify-between gap-3">
@@ -69,11 +76,11 @@
 					</div>
 					<button
 						type="button"
-						class="interactive rounded-circle flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
+						class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent text-white/70 transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
 						onclick={onClose}
 						aria-label="close"
 					>
-						<XMark class="h-4 w-4" />
+						<XMark class="h-5 w-5" />
 					</button>
 				</header>
 

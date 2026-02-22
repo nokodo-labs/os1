@@ -20,6 +20,7 @@ from api.v1.routers import (
 	reminders,
 	roles,
 	runs,
+	search,
 	settings,
 	tasks,
 	threads,
@@ -42,6 +43,7 @@ api_router.include_router(groups.router)
 api_router.include_router(projects.router)
 api_router.include_router(files.router)
 api_router.include_router(reminders.router)
+api_router.include_router(search.router)
 api_router.include_router(providers.router)
 api_router.include_router(models.router)
 api_router.include_router(agents.router)

@@ -270,9 +270,9 @@
 	style={props.motionDelayMs
 		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
 		: undefined}
-	class="reminder-row group relative cursor-pointer overflow-visible transition-colors duration-150 {props.expanded
-		? 'rounded-container border border-white/14 bg-white/6'
-		: 'rounded-pill border border-transparent hover:bg-white/6'} {isCompleted
+	class="reminder-row group rounded-4xl relative cursor-pointer overflow-visible transition-colors duration-150 {props.expanded
+		? 'border border-white/14 bg-white/6'
+		: 'border border-transparent hover:bg-white/6'} {isCompleted
 		? 'is-completed opacity-65'
 		: ''} {isMotionIn ? 'is-incoming' : ''} {isMotionOutComplete
 		? 'is-out is-out-complete'

@@ -12,7 +12,7 @@ import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 export type Group = components['schemas']['Group']
@@ -184,4 +184,10 @@ if (browser) {
 			groups.clear()
 		}
 	})
+
+	// subscribe immediately if already authenticated
+	// (module may be imported after auth when navigating to a groups page)
+	if (getAccessToken()) {
+		groups.init()
+	}
 }

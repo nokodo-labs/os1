@@ -1,16 +1,20 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import DeleteButton from '$lib/components/DeleteButton.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
+	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import Trash from '$lib/components/icons/Trash.svelte'
+	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { MenuItem } from '$lib/components/primitives'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { notes, type NotesSortMode } from '$lib/stores/notes.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { scale } from 'svelte/transition'
 
 	interface Props {
@@ -23,6 +27,11 @@
 	let openMenuId: string | null = $state(null)
 	let menuFixedTop = $state(0)
 	let menuFixedRight = $state(0)
+
+	// delete confirmation modal state (managed here so it survives menu unmount)
+	let deleteTargetId: string | null = $state(null)
+	let isDeleting = $state(false)
+	let deleteError: string | null = $state(null)
 
 	// sort menu state
 	let isSortMenuOpen = $state(false)
@@ -81,6 +90,17 @@
 
 	const noteList = $derived(notes.all)
 
+	const currentUserId = $derived(session.currentUser?.id ?? null)
+	const myNotes = $derived(
+		currentUserId ? noteList.filter((n) => n.userId === currentUserId) : noteList
+	)
+	const sharedNotes = $derived(
+		currentUserId ? noteList.filter((n) => n.userId !== currentUserId) : []
+	)
+
+	let myNotesOpen = $state(true)
+	let sharedNotesOpen = $state(true)
+
 	function labelForNote(title: string): string {
 		const trimmed = title.trim()
 		return trimmed.length > 0 ? trimmed : 'untitled'
@@ -103,17 +123,40 @@
 		console.log('share note:', noteId)
 	}
 
-	async function handleDelete(noteId: string): Promise<void> {
-		const wasSelected = selectedNoteId === noteId
-		const remaining = noteList.filter((n) => n.id !== noteId)
-		await notes.remove(noteId)
-		// navigate away if the deleted note is currently selected
-		if (wasSelected) {
-			if (remaining.length > 0) {
-				void goto(resolve(`/notes/${remaining[0].id}`), { keepFocus: true, noScroll: true })
-			} else {
-				void goto(resolve('/notes'), { keepFocus: true, noScroll: true })
+	function requestDelete(noteId: string): void {
+		openMenuId = null
+		deleteError = null
+		deleteTargetId = noteId
+	}
+
+	async function confirmDelete(): Promise<void> {
+		if (!deleteTargetId) return
+		const noteId = deleteTargetId
+		isDeleting = true
+		deleteError = null
+		try {
+			const wasSelected = selectedNoteId === noteId
+			const remaining = noteList.filter((n) => n.id !== noteId)
+			const ok = await notes.remove(noteId)
+			if (!ok) {
+				deleteError = 'could not delete'
+				return
 			}
+			deleteTargetId = null
+			if (wasSelected) {
+				if (remaining.length > 0) {
+					void goto(resolve(`/notes/${remaining[0].id}`), {
+						keepFocus: true,
+						noScroll: true,
+					})
+				} else {
+					void goto(resolve('/notes'), { keepFocus: true, noScroll: true })
+				}
+			}
+		} catch {
+			deleteError = 'could not delete'
+		} finally {
+			isDeleting = false
 		}
 	}
 </script>
@@ -193,77 +236,184 @@
 				</div>
 			</div>
 		{:else}
-			<div class="space-y-1">
-				{#each noteList as note (note.id)}
-					<div class="group/note relative">
-						<SidebarListItem
-							selected={selectedNoteId === note.id}
-							onSelect={() => openNote(note.id)}
-							actionsVisibility={device.isTouch ? 'always' : 'hover'}
-							showChevron={true}
-						>
-							<span class="flex min-w-0 flex-col">
-								<span
-									class="min-w-0 truncate text-[0.95rem] font-medium text-white/90"
-								>
-									{labelForNote(note.title)}
-								</span>
-								<span class="min-w-0 truncate text-xs text-white/55">
-									{note.content.trim().length > 0
-										? note.content.trim().slice(0, 60)
-										: 'empty note'}
-								</span>
+			{#snippet noteItem(note: (typeof noteList)[0])}
+				<div class="group/note relative">
+					<SidebarListItem
+						selected={selectedNoteId === note.id}
+						onSelect={() => openNote(note.id)}
+						actionsVisibility={device.isTouch ? 'always' : 'hover'}
+						showChevron={true}
+					>
+						<span class="flex min-w-0 flex-col">
+							<span class="min-w-0 truncate text-[0.95rem] font-medium text-white/90">
+								{labelForNote(note.title)}
 							</span>
+							<span class="min-w-0 truncate text-xs text-white/55">
+								{note.content.trim().length > 0
+									? note.content.trim().slice(0, 60)
+									: 'empty note'}
+							</span>
+						</span>
 
-							{#snippet actions()}
-								<button
-									type="button"
-									data-note-menu
-									class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white"
-									onclick={(e) => {
-										e.stopPropagation()
-										if (openMenuId !== note.id) {
-											const rect = (
-												e.currentTarget as HTMLElement
-											).getBoundingClientRect()
-											menuFixedTop = rect.bottom + 4
-											menuFixedRight = window.innerWidth - rect.right
-										}
-										openMenuId = openMenuId === note.id ? null : note.id
-									}}
-									aria-label="note options"
-								>
-									<EllipsisHorizontal class="h-5 w-5" />
-								</button>
-							{/snippet}
-						</SidebarListItem>
-
-						{#if openMenuId === note.id}
-							<div
+						{#snippet actions()}
+							<button
+								type="button"
 								data-note-menu
-								transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-								class="liquid-metal rounded-container animate-popup-right fixed z-50 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
-								style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
+								class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white"
+								onclick={(e) => {
+									e.stopPropagation()
+									if (openMenuId !== note.id) {
+										const rect = (
+											e.currentTarget as HTMLElement
+										).getBoundingClientRect()
+										menuFixedTop = rect.bottom + 4
+										menuFixedRight = window.innerWidth - rect.right
+									}
+									openMenuId = openMenuId === note.id ? null : note.id
+								}}
+								aria-label="note options"
 							>
-								<MenuItem onclick={() => handleShare(note.id)}>
-									{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-									share
-								</MenuItem>
-								<DeleteButton
-									onDelete={() => handleDelete(note.id)}
-									modalText={{
-										title: 'delete note?',
-										description: 'this action cannot be undone.',
-									}}
-									onTrigger={() => {
-										openMenuId = null
-									}}
+								<EllipsisHorizontal class="h-5 w-5" />
+							</button>
+						{/snippet}
+					</SidebarListItem>
+
+					{#if openMenuId === note.id}
+						<div
+							data-note-menu
+							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+							class="liquid-metal rounded-container animate-popup-right fixed z-50 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+							style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
+						>
+							<MenuItem onclick={() => handleShare(note.id)}>
+								{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
+								share
+							</MenuItem>
+							<button
+								type="button"
+								class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+								onclick={() => requestDelete(note.id)}
+							>
+								<Trash
+									class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300"
 								/>
+								<span class="ml-2">delete</span>
+							</button>
+						</div>
+					{/if}
+				</div>
+			{/snippet}
+
+			{#if sharedNotes.length > 0}
+				<!-- sectioned: user owns some, others are shared -->
+				{#if myNotes.length > 0}
+					<div>
+						<button
+							type="button"
+							class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide text-white/70 uppercase transition-colors duration-150 hover:text-white/90"
+							onclick={() => (myNotesOpen = !myNotesOpen)}
+							aria-expanded={myNotesOpen}
+						>
+							<ChevronDown
+								class="h-3 w-3 transition-transform duration-200 {myNotesOpen
+									? ''
+									: '-rotate-90'}"
+							/>
+							your notes
+							<span class="font-normal text-white/50">({myNotes.length})</span>
+						</button>
+						{#if myNotesOpen}
+							<div class="space-y-1">
+								{#each myNotes as note (note.id)}
+									{@render noteItem(note)}
+								{/each}
 							</div>
 						{/if}
 					</div>
-				{/each}
-			</div>
+				{/if}
+
+				<div class="mt-3">
+					<button
+						type="button"
+						class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide text-white/70 uppercase transition-colors duration-150 hover:text-white/90"
+						onclick={() => (sharedNotesOpen = !sharedNotesOpen)}
+						aria-expanded={sharedNotesOpen}
+					>
+						<ChevronDown
+							class="h-3 w-3 transition-transform duration-200 {sharedNotesOpen
+								? ''
+								: '-rotate-90'}"
+						/>
+						shared with you
+						<span class="font-normal text-white/50">({sharedNotes.length})</span>
+					</button>
+					{#if sharedNotesOpen}
+						<div class="space-y-1">
+							{#each sharedNotes as note (note.id)}
+								{@render noteItem(note)}
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{:else}
+				<!-- no shared notes: flat list without section headers -->
+				<div class="space-y-1">
+					{#each myNotes as note (note.id)}
+						{@render noteItem(note)}
+					{/each}
+				</div>
+			{/if}
 		{/if}
 	</nav>
 </div>
+
+<BaseModal
+	open={deleteTargetId !== null}
+	title="delete note?"
+	description="this action cannot be undone."
+	onClose={() => {
+		if (isDeleting) return
+		deleteTargetId = null
+		deleteError = null
+	}}
+	widthClassName="max-w-sm"
+>
+	<div class="space-y-4">
+		{#if deleteError}
+			<div
+				class="rounded-container border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+			>
+				{deleteError}
+			</div>
+		{/if}
+
+		<div class="flex items-center justify-end gap-2">
+			<button
+				type="button"
+				class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+				disabled={isDeleting}
+				onclick={() => {
+					deleteTargetId = null
+					deleteError = null
+				}}
+			>
+				cancel
+			</button>
+			<button
+				type="button"
+				class="rounded-pill inline-flex items-center border border-red-500/25 bg-red-500/20 px-4 py-2 text-sm text-red-100 transition-colors duration-150 hover:bg-red-500/30 disabled:opacity-60"
+				disabled={isDeleting}
+				onclick={() => void confirmDelete()}
+			>
+				<Trash class="h-4 w-4" />
+				<span class="ml-2">
+					{#if isDeleting}
+						<ShimmerText className="inline-block">deleting</ShimmerText>
+					{:else}
+						delete
+					{/if}
+				</span>
+			</button>
+		</div>
+	</div>
+</BaseModal>
