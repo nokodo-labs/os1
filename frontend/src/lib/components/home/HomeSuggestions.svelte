@@ -1,5 +1,10 @@
 <script module lang="ts">
 	import type SearchIcon from '$lib/components/icons/Search.svelte'
+	import type {
+		NotesRouteId,
+		RemindersRouteId,
+		SettingsRouteId,
+	} from '$lib/stores/appNavigation.svelte'
 
 	type IconComponent = typeof SearchIcon
 
@@ -10,15 +15,16 @@
 		icon: IconComponent
 	}
 
+	type SuggestionRoute = `/c/${string}` | NotesRouteId | RemindersRouteId | SettingsRouteId
+
 	export type SuggestionAction =
-		| { type: 'navigate'; path: string }
+		| { type: 'navigate'; path: SuggestionRoute }
 		| { type: 'modal'; id: 'archived-chats' }
 		| { type: 'toggle-dock' }
 		| { type: 'pulse'; message: string }
 </script>
 
 <script lang="ts">
-	import { resolve } from '$app/paths'
 	import { searchStream, type SearchResult } from '$lib/api/streaming'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
@@ -216,7 +222,7 @@
 			} else if (type === 'reminder') {
 				onAction({
 					type: 'navigate',
-					path: resolve(appNavigation.getEntryRoute('reminders')),
+					path: appNavigation.getEntryRoute('reminders'),
 				})
 			}
 			return
@@ -225,7 +231,7 @@
 		if (suggestion.id === 'settings') {
 			onAction({
 				type: 'navigate',
-				path: resolve(appNavigation.getEntryRoute('settings')),
+				path: appNavigation.getEntryRoute('settings'),
 			})
 			return
 		}

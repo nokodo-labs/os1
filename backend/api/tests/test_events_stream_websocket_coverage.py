@@ -19,11 +19,17 @@ REFRESH_COOKIE_NAME = auth_service.REFRESH_COOKIE_NAME
 
 
 class _FakeWebSocket:
-	def __init__(self, incoming: list[object], cookies: dict[str, str] | None = None):
+	def __init__(
+		self,
+		incoming: list[object],
+		cookies: dict[str, str] | None = None,
+		query_params: dict[str, str] | None = None,
+	):
 		self._incoming = list(incoming)
 		self.sent: list[dict[str, object]] = []
 		self.closed: list[tuple[int, str | None]] = []
 		self.cookies = cookies or {}
+		self.query_params = query_params or {}
 		# Mock headers for Origin validation
 		self.headers = {"origin": ALLOWED_ORIGIN}
 

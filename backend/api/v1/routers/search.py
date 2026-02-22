@@ -8,6 +8,7 @@ from starlette.responses import StreamingResponse
 
 from api.core.database import get_db
 from api.schemas.search import SearchResultItem, SearchResultType
+from api.v1.service import search as search_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.sse import sse_response
 

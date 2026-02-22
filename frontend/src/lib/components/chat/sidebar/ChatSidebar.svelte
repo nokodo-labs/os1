@@ -50,11 +50,6 @@
 	let isSavingEdit = $state(false)
 	let editError = $state<string | null>(null)
 
-	let closeSwipePointerId = $state<number | null>(null)
-	let closeSwipeStartX = $state(0)
-	let closeSwipeStartY = $state(0)
-	let closeSwipeActive = $state(false)
-
 	const sidebarTransitionMs = 300
 
 	// these are intentionally decoupled from `sidebar.isChatSidebarOpen` so content can animate
@@ -311,47 +306,6 @@
 			return
 		}
 		if (sidebar.selectedChatId !== null) sidebar.selectChat(null)
-	})
-
-	function onCloseSwipePointerDown(event: PointerEvent) {
-		if (!device.isMobile) return
-		if (!sidebar.isChatSidebarOpen) return
-		closeSwipePointerId = event.pointerId
-		closeSwipeStartX = event.clientX
-		closeSwipeStartY = event.clientY
-		closeSwipeActive = true
-		;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
-	}
-
-	function onCloseSwipePointerUp(event: PointerEvent) {
-		if (!closeSwipeActive) return
-		if (closeSwipePointerId !== event.pointerId) return
-		const dx = event.clientX - closeSwipeStartX
-		const dy = event.clientY - closeSwipeStartY
-		closeSwipeActive = false
-		closeSwipePointerId = null
-
-		if (Math.abs(dx) <= 80) return
-		if (Math.abs(dx) <= Math.abs(dy)) return
-		// close gesture: right-to-left
-		if (dx < 0) sidebar.closeChatSidebar()
-	}
-
-	function onCloseSwipePointerCancel(event: PointerEvent) {
-		if (closeSwipePointerId !== event.pointerId) return
-		closeSwipeActive = false
-		closeSwipePointerId = null
-	}
-	$effect(() => {
-		if (!openThreadMenuId) return
-		const handleDocClick = (event: MouseEvent) => {
-			const target = event.target as HTMLElement | null
-			if (!target) return
-			if (target.closest('[data-thread-menu]')) return
-			openThreadMenuId = null
-		}
-		document.addEventListener('click', handleDocClick)
-		return () => document.removeEventListener('click', handleDocClick)
 	})
 
 	/** svelte action: adds a click listener that expands the collapsed sidebar on desktop. */

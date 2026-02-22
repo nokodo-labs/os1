@@ -46,6 +46,8 @@
 		onblur?: () => void
 	}
 
+	type CursorAwareness = Parameters<typeof yCursorPlugin>[0]
+
 	let {
 		documentId,
 		initialContent = '',
@@ -73,7 +75,6 @@
 	let editorElement: HTMLDivElement | null = $state(null)
 	let editorState = $state<{ editor: Editor | null }>({ editor: null })
 	let provider: CollaborationProvider | null = null
-	let isSynced = $state(false)
 	let lastEmittedMarkdown = ''
 
 	function markdownToHtml(md: string): string {
@@ -97,7 +98,6 @@
 			documentId,
 			user,
 			onSynced: () => {
-				isSynced = true
 				// if Yjs doc is empty AND we have initial content, migrate it
 				const fragment = provider?.doc.getXmlFragment('content')
 				if (fragment && fragment.length === 0 && initialContent) {
@@ -112,7 +112,7 @@
 		})
 
 		const fragment = provider.doc.getXmlFragment('content')
-		const awareness = provider.awareness
+		const awareness = provider.awareness as unknown as CursorAwareness
 
 		// custom cursor builder: renders each remote user's color for the caret + label.
 		// yCursorPlugin already skips the local awareness clientID, so our own
@@ -157,7 +157,7 @@
 			addProseMirrorPlugins() {
 				return [
 					ySyncPlugin(fragment),
-					yCursorPlugin(awareness as any, { cursorBuilder }),
+					yCursorPlugin(awareness, { cursorBuilder }),
 					yUndoPlugin(),
 					keymap({
 						'Mod-z': yUndo,

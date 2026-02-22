@@ -292,7 +292,7 @@
 	function handleSuggestionAction(action: SuggestionAction) {
 		if (action.type === 'navigate') {
 			inputValue = ''
-			void goto(action.path, { keepFocus: true, noScroll: true })
+			void goto(resolve(action.path), { keepFocus: true, noScroll: true })
 		} else if (action.type === 'modal') {
 			inputValue = ''
 			modals.open(action.id)
