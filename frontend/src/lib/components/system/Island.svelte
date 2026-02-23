@@ -86,6 +86,7 @@
 </script>
 
 <LiquidGlass
+	component="island"
 	tag="header"
 	class="overflow-visible rounded-full px-[clamp(5px,2vw,14px)] py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	style="view-transition-name: island;"

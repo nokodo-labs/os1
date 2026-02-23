@@ -24,6 +24,7 @@
 		bezelWidth?: number
 		glassThickness?: number
 		refractionStrength?: number
+		component?: string
 		children: Snippet
 		[key: string]: unknown
 	}
@@ -44,6 +45,7 @@
 		bezelWidth,
 		glassThickness,
 		refractionStrength,
+		component,
 		children,
 		...rest
 	}: Props = $props()
@@ -53,7 +55,13 @@
 	let height = $state(0)
 
 	const filterId = `lg-${Math.random().toString(36).slice(2, 8)}`
-	const useFilter = $derived.by(() => preferences.useSvgLiquidGlass && width > 0 && height > 0)
+	const useFilter = $derived.by(() => {
+		const enabled =
+			component === 'island'
+				? preferences.useSvgLiquidGlassIsland || preferences.useSvgLiquidGlass
+				: preferences.useSvgLiquidGlass
+		return enabled && width > 0 && height > 0
+	})
 
 	const combinedStyle = $derived.by(() => {
 		const parts: string[] = []

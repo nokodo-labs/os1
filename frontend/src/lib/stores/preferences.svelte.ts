@@ -14,12 +14,14 @@ type AIPreferences = components['schemas']['AIPreferences']
 type NotificationPreferences = components['schemas']['NotificationPreferences']
 type PrivacyPreferences = components['schemas']['PrivacyPreferences']
 type AccessibilityPreferences = components['schemas']['AccessibilityPreferences']
+type AdvancedPreferences = components['schemas']['AdvancedPreferences']
 type DebugPreferences = components['schemas']['DebugPreferences']
 type HomepagePreferences = components['schemas']['HomepagePreferences']
 
 export type {
 	AccessibilityPreferences,
 	AccountPreferences,
+	AdvancedPreferences,
 	AIPreferences,
 	AppearancePreferences,
 	DebugPreferences,
@@ -41,6 +43,7 @@ type Resolved = {
 	notifications: Required<NotificationPreferences>
 	privacy: Required<PrivacyPreferences>
 	accessibility: Required<AccessibilityPreferences>
+	advanced: Required<AdvancedPreferences>
 	debug: Required<DebugPreferences>
 	homepage: Required<HomepagePreferences>
 }
@@ -116,7 +119,10 @@ function createPreferencesStore() {
 		},
 		accessibility: {
 			hapticFeedback: true,
+		},
+		advanced: {
 			svgLiquidGlass: false,
+			svgLiquidGlassIsland: true,
 		},
 		debug: {
 			enableDebugApps: false,
@@ -134,7 +140,10 @@ function createPreferencesStore() {
 	// user preferences → defaults (which already include admin settings)
 	const data: Resolved = $derived(deepMerge(structuredClone(defaults), raw as Partial<Resolved>))
 	const useSvgLiquidGlass = $derived.by(
-		() => device.isChromium && (data.accessibility.svgLiquidGlass ?? true)
+		() => device.isChromium && (data.advanced.svgLiquidGlass ?? true)
+	)
+	const useSvgLiquidGlassIsland = $derived.by(
+		() => device.isChromium && (data.advanced.svgLiquidGlassIsland ?? true)
 	)
 
 	// event stream integration
@@ -287,6 +296,9 @@ function createPreferencesStore() {
 		},
 		get useSvgLiquidGlass() {
 			return useSvgLiquidGlass
+		},
+		get useSvgLiquidGlassIsland() {
+			return useSvgLiquidGlassIsland
 		},
 		get loading() {
 			return loading

@@ -270,7 +270,7 @@
 	style={props.motionDelayMs
 		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
 		: undefined}
-	class="reminder-row group rounded-4xl relative cursor-pointer overflow-visible transition-colors duration-150 {props.expanded
+	class="reminder-row group relative cursor-pointer overflow-visible rounded-4xl transition-colors duration-150 {props.expanded
 		? 'border border-white/14 bg-white/6'
 		: 'border border-transparent hover:bg-white/6'} {isCompleted
 		? 'is-completed opacity-65'

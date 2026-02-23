@@ -119,6 +119,19 @@
 		const current = preferences.data.homepage[key]
 		void preferences.update('homepage', { [key]: !current })
 	}
+
+	const svgLiquidGlassEnabled = $derived(preferences.data.advanced.svgLiquidGlass ?? false)
+	const svgLiquidGlassIslandEnabled = $derived(
+		preferences.data.advanced.svgLiquidGlassIsland ?? true
+	)
+
+	function setSvgLiquidGlass(enabled: boolean): void {
+		void preferences.update('advanced', { svgLiquidGlass: enabled })
+	}
+
+	function setSvgLiquidGlassIsland(enabled: boolean): void {
+		void preferences.update('advanced', { svgLiquidGlassIsland: enabled })
+	}
 </script>
 
 <SettingsSectionLayout
@@ -127,6 +140,49 @@
 	description="data management, imports, and danger zone"
 >
 	<div class="space-y-4">
+		<!-- experimental features -->
+		<div class="rounded-container bg-white/5 p-5">
+			<div class="text-sm font-semibold text-white/85">experimental features</div>
+			<div class="mt-1 text-sm text-white/55">
+				these features are experimental and may cause performance issues or bugs.
+			</div>
+
+			<div class="mt-6 flex items-center justify-between">
+				<div>
+					<span id="svg-liquid-glass-label" class="text-sm text-white/70"
+						>enable svg liquid glass globally</span
+					>
+					<div class="mt-1 text-xs text-white/40">
+						use svg-based liquid glass effects everywhere when your browser supports it.
+						this can be very heavy on performance.
+					</div>
+				</div>
+				<Switch
+					size="md"
+					checked={svgLiquidGlassEnabled}
+					onchange={setSvgLiquidGlass}
+					ariaLabelledbyId="svg-liquid-glass-label"
+				/>
+			</div>
+
+			<div class="mt-6 flex items-center justify-between">
+				<div>
+					<span id="svg-liquid-glass-island-label" class="text-sm text-white/70"
+						>enable svg liquid glass for island</span
+					>
+					<div class="mt-1 text-xs text-white/40">
+						use svg-based liquid glass effects specifically for the island component.
+					</div>
+				</div>
+				<Switch
+					size="md"
+					checked={svgLiquidGlassIslandEnabled}
+					onchange={setSvgLiquidGlassIsland}
+					ariaLabelledbyId="svg-liquid-glass-island-label"
+				/>
+			</div>
+		</div>
+
 		<!-- homepage suggestions -->
 		<div class="rounded-container bg-white/5 p-5">
 			<div class="text-sm font-semibold text-white">homepage suggestions</div>

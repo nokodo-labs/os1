@@ -6,6 +6,7 @@
 		Bot,
 		Box,
 		Brain,
+		Database,
 		FileText,
 		FlaskConical,
 		LayoutDashboard,
@@ -156,6 +157,17 @@
 			>
 				<Brain class="h-4 w-4" />
 				memories
+			</a>
+			<a
+				href={resolve('/(app)/vectors')}
+				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
+					'/vectors'
+				)
+					? 'bg-zinc-800 text-white'
+					: 'text-zinc-400 hover:text-zinc-200'}"
+			>
+				<Database class="h-4 w-4" />
+				vectors
 			</a>
 			<a
 				href={resolve('/users')}

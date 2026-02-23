@@ -32,13 +32,8 @@ from nokodo_ai.vectorstores import Vectorstore
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_TEMPLATE = "{model}_bm25"
-"""f-string template for the default collection name.
-
-the dense model slug is interpolated at runtime from the resolved
-embedding model. this keeps the collection tied to the model that
-produced the vectors it stores.
-"""
+# fallback only; real template comes from settings.assets.vector.collection_template
+_DEFAULT_COLLECTION_TEMPLATE = "{model}_bm25"
 
 DEFAULT_INDEXES: Index = {
 	"resource_type": "keyword",
@@ -118,7 +113,8 @@ def _slugify_model(name: str) -> str:
 
 def collection_name(model_name: str) -> str:
 	"""build the default collection name for a given model."""
-	return COLLECTION_TEMPLATE.format(model=_slugify_model(model_name))
+	tmpl = settings.assets.vector.collection_template or _DEFAULT_COLLECTION_TEMPLATE
+	return tmpl.format(model=_slugify_model(model_name))
 
 
 def resource_filter(
@@ -243,12 +239,15 @@ async def search(
 	limit: int = 10,
 	query_filter: ChunkFilter | None = None,
 	prefetch_limit: int | None = None,
-	fusion: str = "rrf",
-	normalize: bool = True,
+	fusion: str | None = None,
+	normalize: bool | None = None,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> list[ChunkSearchResult]:
-	"""search the given or default collection via the vectorstore facade."""
+	"""search the given or default collection via the vectorstore facade.
+
+	prefetch_limit, fusion, and normalize default to settings values when not set.
+	"""
 	coll = collection or await get_collection(session)
 	vs = store or get_vectorstore(collection=coll)
 	return await vs.search(
@@ -256,9 +255,17 @@ async def search(
 		text_query=text_query,
 		limit=limit,
 		query_filter=query_filter,
-		prefetch_limit=prefetch_limit,
-		fusion=fusion,
-		normalize=normalize,
+		prefetch_limit=(
+			prefetch_limit
+			if prefetch_limit is not None
+			else settings.assets.vector.prefetch_limit
+		),
+		fusion=fusion or settings.assets.vector.fusion_algorithm,
+		normalize=(
+			normalize
+			if normalize is not None
+			else settings.assets.vector.normalize_scores
+		),
 	)
 
 

@@ -27,18 +27,20 @@ async def embed_texts(
 	texts: list[str],
 	session: AsyncSession,
 	*,
-	batch_size: int = 64,
+	batch_size: int | None = None,
 	parallel: bool = True,
 ) -> list[list[float]]:
 	"""embed a list of texts in batches. preserves input order.
 
+	batch_size defaults to settings.assets.embeddings.batch_size when not set.
 	parallel=True (default): all batches are gathered concurrently.
 	parallel=False: sequential - useful for rate-limited or ordered paths.
 	"""
 	if not texts:
 		return []
 	model = build_embedding_model(await resolve_embedding_model(session))
-	batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+	actual_batch = batch_size or settings.assets.embeddings.batch_size
+	batches = [texts[i : i + actual_batch] for i in range(0, len(texts), actual_batch)]
 	if parallel:
 		nested = await asyncio.gather(*(model.embed(b) for b in batches))
 		return [vec for batch in nested for vec in batch]

@@ -81,6 +81,14 @@
 	let uiSidebarCollapsed = $state(false)
 
 	type ChatContextMode = 'recent' | 'relevant' | 'pinned'
+	type VectorDatabaseProvider =
+		| 'qdrant'
+		| 'pinecone'
+		| 'weaviate'
+		| 'milvus'
+		| 'pgvector'
+		| 'redis'
+		| 'opensearch'
 
 	let aiDefaultAgentIds = $state<string[]>([])
 
@@ -124,6 +132,26 @@
 	let securityOidcRedirectUri = $state('')
 	let securityOidcScopes = $state('')
 	let securityOidcOnly = $state(false)
+
+	// assets: vector, embeddings, rerank
+	let assetsDefaultEmbeddingModelId = $state('')
+	let assetsVectorDatabaseProvider = $state<VectorDatabaseProvider>('qdrant')
+	let assetsVectorDatabaseUrl = $state('')
+	let assetsVectorDatabaseQdrantApiKey = $state('')
+	let assetsVectorDatabasePineconeApiKey = $state('')
+	let assetsVectorDatabaseWeaviateApiKey = $state('')
+	let assetsVectorDatabaseMilvusToken = $state('')
+	let assetsVectorDatabaseRedisPassword = $state('')
+	let assetsVectorDatabaseOpensearchApiKey = $state('')
+	let assetsVectorCollectionTemplate = $state('')
+	let assetsVectorSparseEnabled = $state(true)
+	let assetsVectorPrefetchLimit = $state<string>('')
+	let assetsVectorFusionAlgorithm = $state('rrf')
+	let assetsVectorNormalizeScores = $state(true)
+	let assetsEmbeddingsVectorSize = $state<string>('')
+	let assetsEmbeddingsBatchSize = $state<string>('')
+	let assetsRerankDefaultStrategy = $state('native')
+	let assetsRerankTopK = $state<string>('')
 
 	let defaultPermissions = $state<DefaultPermissionsSettings>({
 		resource_access: {
@@ -179,6 +207,24 @@
 		securityOidcRedirectUri: '',
 		securityOidcScopes: '',
 		securityOidcOnly: false,
+		assetsDefaultEmbeddingModelId: '',
+		assetsVectorDatabaseProvider: 'qdrant' as VectorDatabaseProvider,
+		assetsVectorDatabaseUrl: '',
+		assetsVectorDatabaseQdrantApiKey: '',
+		assetsVectorDatabasePineconeApiKey: '',
+		assetsVectorDatabaseWeaviateApiKey: '',
+		assetsVectorDatabaseMilvusToken: '',
+		assetsVectorDatabaseRedisPassword: '',
+		assetsVectorDatabaseOpensearchApiKey: '',
+		assetsVectorCollectionTemplate: '',
+		assetsVectorSparseEnabled: true,
+		assetsVectorPrefetchLimit: '',
+		assetsVectorFusionAlgorithm: 'rrf',
+		assetsVectorNormalizeScores: true,
+		assetsEmbeddingsVectorSize: '',
+		assetsEmbeddingsBatchSize: '',
+		assetsRerankDefaultStrategy: 'native',
+		assetsRerankTopK: '',
 		defaultPermissions: {
 			resource_access: {
 				thread: null,
@@ -233,6 +279,25 @@
 			securityOidcRedirectUri !== original.securityOidcRedirectUri ||
 			securityOidcScopes !== original.securityOidcScopes ||
 			securityOidcOnly !== original.securityOidcOnly ||
+			assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId ||
+			assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider ||
+			assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+			assetsVectorDatabaseQdrantApiKey !== original.assetsVectorDatabaseQdrantApiKey ||
+			assetsVectorDatabasePineconeApiKey !== original.assetsVectorDatabasePineconeApiKey ||
+			assetsVectorDatabaseWeaviateApiKey !== original.assetsVectorDatabaseWeaviateApiKey ||
+			assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken ||
+			assetsVectorDatabaseRedisPassword !== original.assetsVectorDatabaseRedisPassword ||
+			assetsVectorDatabaseOpensearchApiKey !==
+				original.assetsVectorDatabaseOpensearchApiKey ||
+			assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate ||
+			assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled ||
+			assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit ||
+			assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
+			assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores ||
+			assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
+			assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize ||
+			assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
+			assetsRerankTopK !== original.assetsRerankTopK ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
 
@@ -373,6 +438,32 @@
 		securityEnableOauth = toBool(security?.enable_oauth)
 		securityCorsOrigins = (security?.cors_origins ?? []).join(', ')
 
+		const assets = r.data.assets
+		assetsDefaultEmbeddingModelId = assets?.default_embedding_model_id ?? ''
+		const vectorDatabase = assets?.vector_database
+		assetsVectorDatabaseProvider =
+			(vectorDatabase?.provider as VectorDatabaseProvider) ?? 'qdrant'
+		assetsVectorDatabaseUrl = vectorDatabase?.url ?? ''
+		const vectorDatabaseApiKeys = vectorDatabase?.api_keys
+		assetsVectorDatabaseQdrantApiKey = vectorDatabaseApiKeys?.qdrant_api_key ?? ''
+		assetsVectorDatabasePineconeApiKey = vectorDatabaseApiKeys?.pinecone_api_key ?? ''
+		assetsVectorDatabaseWeaviateApiKey = vectorDatabaseApiKeys?.weaviate_api_key ?? ''
+		assetsVectorDatabaseMilvusToken = vectorDatabaseApiKeys?.milvus_token ?? ''
+		assetsVectorDatabaseRedisPassword = vectorDatabaseApiKeys?.redis_password ?? ''
+		assetsVectorDatabaseOpensearchApiKey = vectorDatabaseApiKeys?.opensearch_api_key ?? ''
+		const vector = assets?.vector
+		assetsVectorCollectionTemplate = vector?.collection_template ?? ''
+		assetsVectorSparseEnabled = vector?.sparse_vectors_enabled ?? true
+		assetsVectorPrefetchLimit = toStringOrEmpty(vector?.prefetch_limit)
+		assetsVectorFusionAlgorithm = vector?.fusion_algorithm ?? 'rrf'
+		assetsVectorNormalizeScores = vector?.normalize_scores ?? true
+		const embeddings = assets?.embeddings
+		assetsEmbeddingsVectorSize = toStringOrEmpty(embeddings?.vector_size)
+		assetsEmbeddingsBatchSize = toStringOrEmpty(embeddings?.batch_size)
+		const rerank = assets?.rerank
+		assetsRerankDefaultStrategy = rerank?.default_strategy ?? 'native'
+		assetsRerankTopK = toStringOrEmpty(rerank?.top_k)
+
 		const defaults = r.data.default_permissions
 		defaultPermissions = normalizeDefaultPermissions(
 			defaults ?? { resource_access: {}, action_permissions: [] }
@@ -419,6 +510,24 @@
 			securityOidcRedirectUri,
 			securityOidcScopes,
 			securityOidcOnly,
+			assetsDefaultEmbeddingModelId,
+			assetsVectorDatabaseProvider,
+			assetsVectorDatabaseUrl,
+			assetsVectorDatabaseQdrantApiKey,
+			assetsVectorDatabasePineconeApiKey,
+			assetsVectorDatabaseWeaviateApiKey,
+			assetsVectorDatabaseMilvusToken,
+			assetsVectorDatabaseRedisPassword,
+			assetsVectorDatabaseOpensearchApiKey,
+			assetsVectorCollectionTemplate,
+			assetsVectorSparseEnabled,
+			assetsVectorPrefetchLimit,
+			assetsVectorFusionAlgorithm,
+			assetsVectorNormalizeScores,
+			assetsEmbeddingsVectorSize,
+			assetsEmbeddingsBatchSize,
+			assetsRerankDefaultStrategy,
+			assetsRerankTopK,
 			defaultPermissions,
 			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
 		}
@@ -507,6 +616,24 @@
 		securityOidcRedirectUri = original.securityOidcRedirectUri
 		securityOidcScopes = original.securityOidcScopes
 		securityOidcOnly = original.securityOidcOnly
+		assetsDefaultEmbeddingModelId = original.assetsDefaultEmbeddingModelId
+		assetsVectorDatabaseProvider = original.assetsVectorDatabaseProvider
+		assetsVectorDatabaseUrl = original.assetsVectorDatabaseUrl
+		assetsVectorDatabaseQdrantApiKey = original.assetsVectorDatabaseQdrantApiKey
+		assetsVectorDatabasePineconeApiKey = original.assetsVectorDatabasePineconeApiKey
+		assetsVectorDatabaseWeaviateApiKey = original.assetsVectorDatabaseWeaviateApiKey
+		assetsVectorDatabaseMilvusToken = original.assetsVectorDatabaseMilvusToken
+		assetsVectorDatabaseRedisPassword = original.assetsVectorDatabaseRedisPassword
+		assetsVectorDatabaseOpensearchApiKey = original.assetsVectorDatabaseOpensearchApiKey
+		assetsVectorCollectionTemplate = original.assetsVectorCollectionTemplate
+		assetsVectorSparseEnabled = original.assetsVectorSparseEnabled
+		assetsVectorPrefetchLimit = original.assetsVectorPrefetchLimit
+		assetsVectorFusionAlgorithm = original.assetsVectorFusionAlgorithm
+		assetsVectorNormalizeScores = original.assetsVectorNormalizeScores
+		assetsEmbeddingsVectorSize = original.assetsEmbeddingsVectorSize
+		assetsEmbeddingsBatchSize = original.assetsEmbeddingsBatchSize
+		assetsRerankDefaultStrategy = original.assetsRerankDefaultStrategy
+		assetsRerankTopK = original.assetsRerankTopK
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
@@ -732,6 +859,148 @@
 				if (securityOidcOnly !== original.securityOidcOnly)
 					data.security.oidc.only = securityOidcOnly
 			}
+		}
+
+		if (
+			assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId ||
+			assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider ||
+			assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+			assetsVectorDatabaseQdrantApiKey !== original.assetsVectorDatabaseQdrantApiKey ||
+			assetsVectorDatabasePineconeApiKey !== original.assetsVectorDatabasePineconeApiKey ||
+			assetsVectorDatabaseWeaviateApiKey !== original.assetsVectorDatabaseWeaviateApiKey ||
+			assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken ||
+			assetsVectorDatabaseRedisPassword !== original.assetsVectorDatabaseRedisPassword ||
+			assetsVectorDatabaseOpensearchApiKey !==
+				original.assetsVectorDatabaseOpensearchApiKey ||
+			assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate ||
+			assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled ||
+			assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit ||
+			assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
+			assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores ||
+			assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
+			assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize ||
+			assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
+			assetsRerankTopK !== original.assetsRerankTopK
+		) {
+			const assetsPatch: Record<string, unknown> = {}
+			if (assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId)
+				assetsPatch.default_embedding_model_id = assetsDefaultEmbeddingModelId || null
+
+			if (
+				assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider ||
+				assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+				assetsVectorDatabaseQdrantApiKey !== original.assetsVectorDatabaseQdrantApiKey ||
+				assetsVectorDatabasePineconeApiKey !==
+					original.assetsVectorDatabasePineconeApiKey ||
+				assetsVectorDatabaseWeaviateApiKey !==
+					original.assetsVectorDatabaseWeaviateApiKey ||
+				assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken ||
+				assetsVectorDatabaseRedisPassword !== original.assetsVectorDatabaseRedisPassword ||
+				assetsVectorDatabaseOpensearchApiKey !==
+					original.assetsVectorDatabaseOpensearchApiKey
+			) {
+				const vectorDatabasePatch: Record<string, unknown> = {}
+				if (assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider)
+					vectorDatabasePatch.provider = assetsVectorDatabaseProvider
+				if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+					vectorDatabasePatch.url = assetsVectorDatabaseUrl || null
+
+				if (
+					assetsVectorDatabaseQdrantApiKey !==
+						original.assetsVectorDatabaseQdrantApiKey ||
+					assetsVectorDatabasePineconeApiKey !==
+						original.assetsVectorDatabasePineconeApiKey ||
+					assetsVectorDatabaseWeaviateApiKey !==
+						original.assetsVectorDatabaseWeaviateApiKey ||
+					assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken ||
+					assetsVectorDatabaseRedisPassword !==
+						original.assetsVectorDatabaseRedisPassword ||
+					assetsVectorDatabaseOpensearchApiKey !==
+						original.assetsVectorDatabaseOpensearchApiKey
+				) {
+					const apiKeysPatch: Record<string, unknown> = {}
+					if (
+						assetsVectorDatabaseQdrantApiKey !==
+						original.assetsVectorDatabaseQdrantApiKey
+					)
+						apiKeysPatch.qdrant_api_key = assetsVectorDatabaseQdrantApiKey || null
+					if (
+						assetsVectorDatabasePineconeApiKey !==
+						original.assetsVectorDatabasePineconeApiKey
+					)
+						apiKeysPatch.pinecone_api_key = assetsVectorDatabasePineconeApiKey || null
+					if (
+						assetsVectorDatabaseWeaviateApiKey !==
+						original.assetsVectorDatabaseWeaviateApiKey
+					)
+						apiKeysPatch.weaviate_api_key = assetsVectorDatabaseWeaviateApiKey || null
+					if (
+						assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken
+					)
+						apiKeysPatch.milvus_token = assetsVectorDatabaseMilvusToken || null
+					if (
+						assetsVectorDatabaseRedisPassword !==
+						original.assetsVectorDatabaseRedisPassword
+					)
+						apiKeysPatch.redis_password = assetsVectorDatabaseRedisPassword || null
+					if (
+						assetsVectorDatabaseOpensearchApiKey !==
+						original.assetsVectorDatabaseOpensearchApiKey
+					)
+						apiKeysPatch.opensearch_api_key =
+							assetsVectorDatabaseOpensearchApiKey || null
+					vectorDatabasePatch.api_keys = apiKeysPatch
+				}
+
+				assetsPatch.vector_database = vectorDatabasePatch
+			}
+
+			if (
+				assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate ||
+				assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled ||
+				assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit ||
+				assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
+				assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores
+			) {
+				const vectorPatch: Record<string, unknown> = {}
+				if (assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate)
+					vectorPatch.collection_template = assetsVectorCollectionTemplate || null
+				if (assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled)
+					vectorPatch.sparse_vectors_enabled = assetsVectorSparseEnabled
+				if (assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit)
+					vectorPatch.prefetch_limit = asNumberOrNull(assetsVectorPrefetchLimit)
+				if (assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm)
+					vectorPatch.fusion_algorithm = assetsVectorFusionAlgorithm
+				if (assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores)
+					vectorPatch.normalize_scores = assetsVectorNormalizeScores
+				assetsPatch.vector = vectorPatch
+			}
+
+			if (
+				assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
+				assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize
+			) {
+				const embPatch: Record<string, unknown> = {}
+				if (assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize)
+					embPatch.vector_size = asNumberOrNull(assetsEmbeddingsVectorSize)
+				if (assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize)
+					embPatch.batch_size = asNumberOrNull(assetsEmbeddingsBatchSize)
+				assetsPatch.embeddings = embPatch
+			}
+
+			if (
+				assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
+				assetsRerankTopK !== original.assetsRerankTopK
+			) {
+				const rerankPatch: Record<string, unknown> = {}
+				if (assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy)
+					rerankPatch.default_strategy = assetsRerankDefaultStrategy || null
+				if (assetsRerankTopK !== original.assetsRerankTopK)
+					rerankPatch.top_k = asNumberOrNull(assetsRerankTopK)
+				assetsPatch.rerank = rerankPatch
+			}
+
+			data.assets = assetsPatch
 		}
 
 		if (defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey) {
@@ -1338,6 +1607,276 @@
 									external manifest.json for PWA configuration. served directly in
 									the frontend HTML.
 								</p>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>assets</CardTitle>
+							<CardDescription
+								>vector database, embeddings, and reranking configuration.</CardDescription
+							>
+						</CardHeader>
+						<CardContent class="space-y-6">
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="assets_embedding_model"
+										>default embedding model</Label
+									>
+									<Select
+										type="single"
+										value={assetsDefaultEmbeddingModelId}
+										onValueChange={(v: string) => {
+											assetsDefaultEmbeddingModelId = v ?? ''
+										}}
+									>
+										<SelectTrigger class="rounded-xl">
+											{getModelLabel(assetsDefaultEmbeddingModelId)}
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="">none</SelectItem>
+											{#each models as m (m.id)}
+												<SelectItem value={m.id}>{modelLabel(m)}</SelectItem
+												>
+											{/each}
+										</SelectContent>
+									</Select>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_vector_db_provider"
+										>vector database provider</Label
+									>
+									<Select
+										type="single"
+										value={assetsVectorDatabaseProvider}
+										onValueChange={(v: string) => {
+											assetsVectorDatabaseProvider = (v ??
+												'qdrant') as VectorDatabaseProvider
+										}}
+									>
+										<SelectTrigger class="rounded-xl">
+											{assetsVectorDatabaseProvider}
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="qdrant">qdrant</SelectItem>
+											<SelectItem value="pinecone">pinecone</SelectItem>
+											<SelectItem value="weaviate">weaviate</SelectItem>
+											<SelectItem value="milvus">milvus</SelectItem>
+											<SelectItem value="pgvector">pgvector</SelectItem>
+											<SelectItem value="redis">redis</SelectItem>
+											<SelectItem value="opensearch">opensearch</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+							<div class="space-y-2">
+								<Label for="assets_vector_db_url">vector database endpoint</Label>
+								<Input
+									id="assets_vector_db_url"
+									bind:value={assetsVectorDatabaseUrl}
+									placeholder="http://localhost:6333"
+									class="rounded-xl"
+								/>
+							</div>
+
+							<h4 class="pt-2 text-sm font-medium text-zinc-400">
+								vector database API keys
+							</h4>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="assets_qdrant_api_key">qdrant api key</Label>
+									<Input
+										id="assets_qdrant_api_key"
+										bind:value={assetsVectorDatabaseQdrantApiKey}
+										type="password"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_pinecone_api_key">pinecone api key</Label>
+									<Input
+										id="assets_pinecone_api_key"
+										bind:value={assetsVectorDatabasePineconeApiKey}
+										type="password"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_weaviate_api_key">weaviate api key</Label>
+									<Input
+										id="assets_weaviate_api_key"
+										bind:value={assetsVectorDatabaseWeaviateApiKey}
+										type="password"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_milvus_token">milvus token</Label>
+									<Input
+										id="assets_milvus_token"
+										bind:value={assetsVectorDatabaseMilvusToken}
+										type="password"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_redis_password">redis password</Label>
+									<Input
+										id="assets_redis_password"
+										bind:value={assetsVectorDatabaseRedisPassword}
+										type="password"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_opensearch_api_key">opensearch api key</Label
+									>
+									<Input
+										id="assets_opensearch_api_key"
+										bind:value={assetsVectorDatabaseOpensearchApiKey}
+										type="password"
+										class="rounded-xl"
+									/>
+								</div>
+							</div>
+
+							<h4 class="pt-2 text-sm font-medium text-zinc-400">vector settings</h4>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="assets_collection_template"
+										>collection name template</Label
+									>
+									<Input
+										id="assets_collection_template"
+										bind:value={assetsVectorCollectionTemplate}
+										placeholder="{'{model}'}_bm25"
+										class="rounded-xl"
+									/>
+									<p class="text-xs text-zinc-500">
+										template for auto-generated collection names. use {'{model}'}
+										as a placeholder.
+									</p>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_prefetch_limit">prefetch limit</Label>
+									<Input
+										id="assets_prefetch_limit"
+										type="number"
+										bind:value={assetsVectorPrefetchLimit}
+										placeholder="256"
+										class="rounded-xl"
+									/>
+								</div>
+							</div>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div
+									class="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 p-3"
+								>
+									<Label for="assets_sparse_enabled">sparse vectors (BM25)</Label>
+									<Switch
+										id="assets_sparse_enabled"
+										checked={assetsVectorSparseEnabled}
+										onCheckedChange={(v) => {
+											assetsVectorSparseEnabled = v
+										}}
+									/>
+								</div>
+								<div
+									class="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 p-3"
+								>
+									<Label for="assets_normalize_scores">normalize scores</Label>
+									<Switch
+										id="assets_normalize_scores"
+										checked={assetsVectorNormalizeScores}
+										onCheckedChange={(v) => {
+											assetsVectorNormalizeScores = v
+										}}
+									/>
+								</div>
+							</div>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="assets_fusion_algorithm">fusion algorithm</Label>
+									<Select
+										type="single"
+										value={assetsVectorFusionAlgorithm}
+										onValueChange={(v: string) => {
+											assetsVectorFusionAlgorithm = v ?? 'rrf'
+										}}
+									>
+										<SelectTrigger class="rounded-xl">
+											{assetsVectorFusionAlgorithm === 'rrf'
+												? 'reciprocal rank fusion (RRF)'
+												: 'distribution-based score fusion (DBSF)'}
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="rrf"
+												>reciprocal rank fusion (RRF)</SelectItem
+											>
+											<SelectItem value="dbsf"
+												>distribution-based score fusion (DBSF)</SelectItem
+											>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+
+							<h4 class="pt-2 text-sm font-medium text-zinc-400">embeddings</h4>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="assets_vector_size">vector size (dimensions)</Label>
+									<Input
+										id="assets_vector_size"
+										type="number"
+										bind:value={assetsEmbeddingsVectorSize}
+										placeholder="1536"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_batch_size">batch size</Label>
+									<Input
+										id="assets_batch_size"
+										type="number"
+										bind:value={assetsEmbeddingsBatchSize}
+										placeholder="64"
+										class="rounded-xl"
+									/>
+								</div>
+							</div>
+
+							<h4 class="pt-2 text-sm font-medium text-zinc-400">reranking</h4>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="assets_rerank_strategy">default strategy</Label>
+									<Select
+										type="single"
+										value={assetsRerankDefaultStrategy}
+										onValueChange={(v: string) => {
+											assetsRerankDefaultStrategy = v ?? 'native'
+										}}
+									>
+										<SelectTrigger class="rounded-xl">
+											{assetsRerankDefaultStrategy}
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="none">none</SelectItem>
+											<SelectItem value="native">native</SelectItem>
+											<SelectItem value="external">external</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+								<div class="space-y-2">
+									<Label for="assets_rerank_top_k">rerank top-k</Label>
+									<Input
+										id="assets_rerank_top_k"
+										type="number"
+										bind:value={assetsRerankTopK}
+										placeholder="10"
+										class="rounded-xl"
+									/>
+								</div>
 							</div>
 						</CardContent>
 					</Card>

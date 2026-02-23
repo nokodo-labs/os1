@@ -346,6 +346,7 @@ async def _hybrid_search_memories(
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
 	query_emb = await embed_text(text=q, session=db) if need_dense else None
 	text_query = q if need_sparse else None
+	# memories are user-private (no sharing) - owner_id filter is efficient.
 	query_filter = vectorstore_service.resource_filter(
 		"memory",
 		owner_id=(str(principal.user.id) if not principal.is_admin else None),
@@ -362,6 +363,8 @@ async def _hybrid_search_memories(
 		return []
 	resource_ids = [r.metadata["resource_id"] for r in results]
 	stmt = select(Memory).where(Memory.id.in_(resource_ids))
+	if not principal.is_admin:
+		stmt = stmt.where(Memory.user_id == principal.user.id)
 	db_result = await db.execute(stmt)
 	by_id = {str(m.id): m for m in db_result.scalars().all()}
 	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
