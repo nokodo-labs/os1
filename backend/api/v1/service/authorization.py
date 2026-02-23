@@ -232,12 +232,6 @@ def resource_access_predicate(
 		)
 	)
 
-	# check if the principal's role_resource_defaults grant sufficient access
-	default_level = principal.role_resource_defaults.get(resource_type)
-	has_default_access = default_level is not None and _level_satisfies(
-		default_level, required_level
-	)
-
 	if owner_fk is not None:
 		base_access = or_(
 			owner_fk == user_id, user_rule, group_rule, role_rule, public_rule
@@ -245,7 +239,8 @@ def resource_access_predicate(
 	else:
 		base_access = or_(user_rule, group_rule, role_rule, public_rule)
 
-	if has_default_access:
+	# role + global defaults grant access - shortcut to true()
+	if principal.has_default_access(resource_type, required_level):
 		base_access = or_(base_access, true())
 
 	return and_(base_access, visibility)
@@ -396,7 +391,7 @@ async def get_effective_access_level(
 	1. superuser → admin
 	2. owner → admin
 	3. explicit resource rules (last match by order_index wins)
-	4. role_resource_defaults fallback (highest across all roles)
+	4. merged defaults fallback (role + global defaults, highest-wins)
 	"""
 	if principal.is_admin:
 		return AccessLevel.ADMIN
@@ -433,11 +428,9 @@ async def get_effective_access_level(
 		if applies:
 			effective_level = rule.level
 
-	# if no explicit rule matched, fall back to role_resource_defaults
+	# if no explicit rule matched, fall back to merged defaults
 	if effective_level is None:
-		effective_level = principal.role_resource_defaults.get(
-			resource_type,
-		)
+		effective_level = principal.role_resource_defaults.get(resource_type)
 
 	return effective_level
 

@@ -38,14 +38,27 @@ class FieldMatch(Base):
 	"""exact value to match against."""
 
 
-class ChunkFilter(Base):
-	"""adapter-agnostic filter for chunk search queries.
+class FieldMatchAny(Base):
+	"""match a payload field against any value in a list (array intersection)."""
 
-	all conditions in `must` are ANDed together.
+	key: str
+	"""payload field name to match."""
+	values: list[str]
+	"""at least one of these values must appear in the field."""
+
+
+class ChunkFilter(Base):
+	"""adapter-agnostic filter for chunk queries.
+
+	- all_of: every condition must match (AND).
+	- any_of: at least one condition must match (OR). when both all_of and
+		any_of are non-empty, both constraints apply simultaneously.
 	"""
 
-	must: list[FieldMatch] = Field(default_factory=list)
+	all_of: list[FieldMatch | FieldMatchAny] = Field(default_factory=list)
 	"""conditions that must all match (AND logic)."""
+	any_of: list[FieldMatch | FieldMatchAny] = Field(default_factory=list)
+	"""conditions where at least one must match (OR logic)."""
 
 
 Index = dict[str, IndexFieldType]
@@ -184,6 +197,42 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		args:
 			collection: target collection/namespace
 			target: identifiers of chunks to remove, or a filter to match
+		"""
+		...
+
+	@overload
+	async def update(
+		self,
+		collection: str,
+		target: list[str],
+		*,
+		payload: dict[str, object] | None = None,
+	) -> None: ...
+
+	@overload
+	async def update(
+		self,
+		collection: str,
+		target: ChunkFilter,
+		*,
+		payload: dict[str, object] | None = None,
+	) -> None: ...
+
+	@abstractmethod
+	async def update(
+		self,
+		collection: str,
+		target: list[str] | ChunkFilter,
+		*,
+		payload: dict[str, object] | None = None,
+	) -> None:
+		"""update matching chunks in place.
+
+		only the fields supplied are touched; others are preserved.
+
+		target may be:
+		- list[str]: raises ValueError if any id does not exist.
+		- ChunkFilter: silently skips when no chunks match.
 		"""
 		...
 

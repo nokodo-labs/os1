@@ -56,6 +56,8 @@ from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,
+	fetch_acl_metadata,
+	fetch_bulk_acl_metadata,
 	remove_vectorized_resource,
 	vectorize_resource,
 )
@@ -207,7 +209,14 @@ async def generate_thread_metadata(
 
 		# index thread with new metadata (title/tags + full message text for BM25)
 		await session.refresh(thread, attribute_names=["messages"])
-		await vectorize_resource(spec=THREAD_SPEC, resource=thread, session=session)
+		await vectorize_resource(
+			spec=THREAD_SPEC,
+			resource=thread,
+			session=session,
+			extra_metadata=await fetch_acl_metadata(
+				str(thread.id), ResourceType.THREAD, session
+			),
+		)
 
 		return result
 
@@ -483,7 +492,14 @@ async def update_thread(
 	# re-index if searchable fields changed
 	if await THREAD_SPEC.should_revectorize(thread, thread_in, session):
 		await session.refresh(thread, attribute_names=["messages"])
-		await vectorize_resource(spec=THREAD_SPEC, resource=thread, session=session)
+		await vectorize_resource(
+			spec=THREAD_SPEC,
+			resource=thread,
+			session=session,
+			extra_metadata=await fetch_acl_metadata(
+				str(thread.id), ResourceType.THREAD, session
+			),
+		)
 
 	if (
 		owner_changed
@@ -1047,6 +1063,10 @@ def _thread_metadata(thread: Thread) -> JSONObject:
 		"title": thread.title or "",
 		"tags": list(thread.tags or []),
 		"is_archived": thread.is_archived,
+		# acl fields - populated at vectorize time from access_rules table
+		"allowed_user_ids": [],
+		"allowed_group_ids": [],
+		"allowed_role_ids": [],
 	}
 
 
@@ -1091,12 +1111,15 @@ async def vectorize_all_threads(session: AsyncSession) -> int:
 	if not valid:
 		return 0
 	embeddings = await embed_texts([text for _, text in valid], session)
+	thread_ids = [str(t.id) for t, _ in valid]
+	acl_by_id = await fetch_bulk_acl_metadata(thread_ids, ResourceType.THREAD, session)
 	chunks = []
 	for (thread, _), emb in zip(valid, embeddings):
 		await remove_vectorized_resource(
 			spec=THREAD_SPEC, resource_id=str(thread.id), session=session
 		)
-		chunks.append(build_chunk(THREAD_SPEC, thread, emb))
+		acl = acl_by_id.get(str(thread.id))
+		chunks.append(build_chunk(THREAD_SPEC, thread, emb, extra_metadata=acl))
 	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
 	return len(valid)
 
@@ -1153,15 +1176,22 @@ async def _hybrid_search_threads(
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
 	query_emb = await embed_text(text=q, session=db) if need_dense else None
 	text_query = q if need_sparse else None
-	query_filter = vectorstore_service.resource_filter(
+	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
+	# principals with default access bypass should-conditions (role or global defaults)
+	query_filter = vectorstore_service.acl_filter(
 		"thread",
-		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+		is_admin=(
+			principal.is_admin or principal.has_default_access(ResourceType.THREAD)
+		),
+		user_id=str(principal.user.id),
+		group_ids=principal.group_ids,
+		role_ids=principal.role_ids,
 	)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
-		limit=limit,
+		limit=settings.assets.vector.prefetch_limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
 	)

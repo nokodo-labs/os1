@@ -14,9 +14,10 @@ from sqlalchemy.orm import selectinload
 
 from api.constants import API_V1_MOUNT_PATH
 from api.database import AsyncSessionLocal, get_db
+from api.models.access_rule import AccessLevel
 from api.models.group import GroupMembership
 from api.models.user import User
-from api.permissions import DefaultResourceAccess
+from api.permissions import DefaultResourceAccess, ResourceType
 from api.settings import settings
 from api.v1.schemas.auth import Token, TokenPayload
 from nokodo_ai.utils.security import (
@@ -129,6 +130,18 @@ class Principal:
 	@property
 	def user_id(self) -> str:
 		return str(self.user.id)
+
+	def has_default_access(
+		self,
+		resource_type: ResourceType,
+		required_level: AccessLevel = AccessLevel.READER,
+	) -> bool:
+		"""check if merged defaults (role + global) grant access to a resource type."""
+		level = self.role_resource_defaults.get(resource_type)
+		if level is None:
+			return False
+		_order = {AccessLevel.READER: 0, AccessLevel.EDITOR: 1, AccessLevel.ADMIN: 2}
+		return _order[level] >= _order[required_level]
 
 	@property
 	def is_admin(self) -> bool:

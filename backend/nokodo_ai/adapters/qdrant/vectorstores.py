@@ -15,6 +15,7 @@ from qdrant_client.models import (
 	FilterSelector,
 	Fusion,
 	FusionQuery,
+	MatchAny,
 	MatchValue,
 	Modifier,
 	PayloadSchemaType,
@@ -32,6 +33,8 @@ from ..base.vectorstores import (
 	Chunk,
 	ChunkFilter,
 	ChunkSearchResult,
+	FieldMatch,
+	FieldMatchAny,
 	Index,
 )
 from .base import BaseQdrantAdapter
@@ -78,29 +81,33 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 
 		indexes maps field names to scalar field types (e.g.
 		{"resource_type": "keyword", "owner_id": "keyword"}).
-		indexes are only created once alongside the collection.
+		indexes are applied every time (idempotent) so fields added later
+		are automatically indexed on existing collections.
 		"""
 		exists = await self._client.collection_exists(collection_name=collection)
-		if exists:
-			return
-		if sparse:
-			await self._client.create_collection(
-				collection_name=collection,
-				vectors_config={
-					"dense": VectorParams(
+		if not exists:
+			if sparse:
+				await self._client.create_collection(
+					collection_name=collection,
+					vectors_config={
+						"dense": VectorParams(
+							size=vector_size,
+							distance=Distance.COSINE,
+						),
+					},
+					sparse_vectors_config={
+						"bm25": SparseVectorParams(modifier=Modifier.IDF),
+					},
+				)
+			else:
+				await self._client.create_collection(
+					collection_name=collection,
+					vectors_config=VectorParams(
 						size=vector_size,
 						distance=Distance.COSINE,
 					),
-				},
-				sparse_vectors_config={
-					"bm25": SparseVectorParams(modifier=Modifier.IDF),
-				},
-			)
-		else:
-			await self._client.create_collection(
-				collection_name=collection,
-				vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-			)
+				)
+		# always apply indexes (idempotent - no-op if field already indexed)
 		if indexes:
 			for field_name, field_type in indexes.items():
 				await self._client.create_payload_index(
@@ -338,17 +345,76 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		return payload
 
 	@staticmethod
-	def _to_qdrant_filter(cf: ChunkFilter) -> Filter:
+	def _build_field_condition(match: FieldMatch | FieldMatchAny) -> FieldCondition:
+		"""convert a FieldMatch or FieldMatchAny to a Qdrant FieldCondition."""
+		if isinstance(match, FieldMatchAny):
+			return FieldCondition(key=match.key, match=MatchAny(any=match.values))
+		# FieldMatch
+		val: str | int | bool
+		if isinstance(match.value, float):
+			val = (
+				int(match.value)
+				if match.value == int(match.value)
+				else str(match.value)
+			)
+		else:
+			val = match.value
+		return FieldCondition(key=match.key, match=MatchValue(value=val))
+
+	@classmethod
+	def _to_qdrant_filter(cls, cf: ChunkFilter) -> Filter:
 		"""convert a library ChunkFilter to a Qdrant Filter."""
-		conditions: list[Condition] = []
-		for m in cf.must:
-			val: str | int | bool
-			if isinstance(m.value, float):
-				val = int(m.value) if m.value == int(m.value) else str(m.value)
-			else:
-				val = m.value
-			conditions.append(FieldCondition(key=m.key, match=MatchValue(value=val)))
-		return Filter(must=conditions)
+		all_conds: list[Condition] = [cls._build_field_condition(m) for m in cf.all_of]
+		any_conds: list[Condition] = [cls._build_field_condition(s) for s in cf.any_of]
+		return Filter(
+			must=all_conds or None,
+			should=any_conds or None,
+		)
+
+	async def update(
+		self,
+		collection: str,
+		target: list[str] | ChunkFilter,
+		*,
+		payload: dict[str, object] | None = None,
+	) -> None:
+		"""update matching chunks in place."""
+		if payload is None:
+			return
+		exists = await self._client.collection_exists(collection_name=collection)
+		if not exists:
+			if isinstance(target, list) and target:
+				raise ValueError(
+					f"chunks not found: {target} (collection does not exist)"
+				)
+			return
+		if isinstance(target, list):
+			if not target:
+				return
+			point_ids = [self._to_point_id(id_) for id_ in target]
+			found = await self._client.retrieve(
+				collection_name=collection,
+				ids=point_ids,
+				with_payload=False,
+				with_vectors=False,
+			)
+			if len(found) != len(target):
+				found_ids = {str(p.id) for p in found}
+				missing = [
+					i for i in target if str(self._to_point_id(i)) not in found_ids
+				]
+				raise ValueError(f"chunks not found: {missing}")
+			await self._client.set_payload(
+				collection_name=collection,
+				payload=payload,
+				points=PointIdsList(points=point_ids),  # type: ignore[arg-type]
+			)
+		else:
+			await self._client.set_payload(
+				collection_name=collection,
+				payload=payload,
+				points=FilterSelector(filter=self._to_qdrant_filter(target)),
+			)
 
 	def _build_result(
 		self,

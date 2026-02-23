@@ -24,6 +24,7 @@ from nokodo_ai.adapters.base.vectorstores import (
 	ChunkFilter,
 	ChunkSearchResult,
 	FieldMatch,
+	FieldMatchAny,
 	Index,
 )
 from nokodo_ai.adapters.vectorstores import VectorstoreAdapter
@@ -39,6 +40,10 @@ DEFAULT_INDEXES: Index = {
 	"resource_type": "keyword",
 	"resource_id": "keyword",
 	"owner_id": "keyword",
+	# acl fields - indexed for fast principal-scoped search
+	"allowed_user_ids": "keyword",
+	"allowed_group_ids": "keyword",
+	"allowed_role_ids": "keyword",
 }
 """scalar field indexes for the default collection.
 
@@ -129,14 +134,47 @@ def resource_filter(
 	identification (used for upsert/delete). adds owner_id for user-scoped
 	access-controlled search.
 	"""
-	must: list[FieldMatch] = [
+	all_of: list[FieldMatch | FieldMatchAny] = [
 		FieldMatch(key="resource_type", value=resource_type),
 	]
 	if resource_id is not None:
-		must.append(FieldMatch(key="resource_id", value=resource_id))
+		all_of.append(FieldMatch(key="resource_id", value=resource_id))
 	if owner_id is not None:
-		must.append(FieldMatch(key="owner_id", value=owner_id))
-	return ChunkFilter(must=must)
+		all_of.append(FieldMatch(key="owner_id", value=owner_id))
+	return ChunkFilter(all_of=all_of)
+
+
+def acl_filter(
+	resource_type: str,
+	*,
+	is_admin: bool,
+	user_id: str,
+	group_ids: tuple[str, ...] | list[str] = (),
+	role_ids: tuple[str, ...] | list[str] = (),
+) -> ChunkFilter:
+	"""build a principal-scoped filter for qdrant that enforces ACL at the vector layer.
+
+	for admins: returns a resource-type-only filter (sees everything).
+	for regular principals: adds should-conditions for owner + explicit grants:
+	- owner_id == me
+	- me in allowed_user_ids (direct user grant)
+	- any(group_ids) in allowed_group_ids
+	- any(role_ids) in allowed_role_ids
+	"""
+	all_of: list[FieldMatch | FieldMatchAny] = [
+		FieldMatch(key="resource_type", value=resource_type),
+	]
+	if is_admin:
+		return ChunkFilter(all_of=all_of)
+	any_of: list[FieldMatch | FieldMatchAny] = [
+		FieldMatch(key="owner_id", value=user_id),
+		FieldMatch(key="allowed_user_ids", value=user_id),
+	]
+	if group_ids:
+		any_of.append(FieldMatchAny(key="allowed_group_ids", values=list(group_ids)))
+	if role_ids:
+		any_of.append(FieldMatchAny(key="allowed_role_ids", values=list(role_ids)))
+	return ChunkFilter(all_of=all_of, any_of=any_of)
 
 
 # collection resolution and provisioning

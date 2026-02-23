@@ -15,6 +15,7 @@ from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.note import Note
+from api.permissions import ResourceType
 from api.schemas.note import Note as NoteOut
 from api.schemas.note import NoteCreate, NoteUpdate
 from api.schemas.search import (
@@ -28,12 +29,18 @@ from api.settings.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission, require_project_access
+from api.v1.service.authorization import (
+	require_permission,
+	require_project_access,
+	resource_access_predicate,
+)
 from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,
+	fetch_acl_metadata,
+	fetch_bulk_acl_metadata,
 	remove_vectorized_resource,
 	vectorize_resource,
 )
@@ -100,7 +107,15 @@ async def create_note(
 		origin_session_id=origin_session_id,
 	)
 
-	await vectorize_resource(spec=NOTE_SPEC, resource=note, session=session)
+	# freshly created note has no acl rules yet, but include the placeholder fields
+	await vectorize_resource(
+		spec=NOTE_SPEC,
+		resource=note,
+		session=session,
+		extra_metadata=await fetch_acl_metadata(
+			str(note.id), ResourceType.NOTE, session
+		),
+	)
 
 	return await _get_note(note_id, session, principal)
 
@@ -196,7 +211,14 @@ async def update_note(
 	)
 
 	if await NOTE_SPEC.should_revectorize(note, note_in, session):
-		await vectorize_resource(spec=NOTE_SPEC, resource=note, session=session)
+		await vectorize_resource(
+			spec=NOTE_SPEC,
+			resource=note,
+			session=session,
+			extra_metadata=await fetch_acl_metadata(
+				str(note.id), ResourceType.NOTE, session
+			),
+		)
 
 	return await _get_note(note_id, session, principal)
 
@@ -246,6 +268,10 @@ def _note_metadata(note: Note) -> JSONObject:
 		"title": note.title or "",
 		"labels": list(note.labels or []),
 		"project_id": (str(note.project_id) if note.project_id else None),
+		# acl fields - populated at vectorize time from access_rules table
+		"allowed_user_ids": [],
+		"allowed_group_ids": [],
+		"allowed_role_ids": [],
 	}
 
 
@@ -281,13 +307,17 @@ async def vectorize_all_notes(session: AsyncSession) -> int:
 			valid.append((n, text))
 	if not valid:
 		return 0
+	# fetch all acl metadata in one query
+	note_ids = [str(n.id) for n, _ in valid]
+	acl_by_id = await fetch_bulk_acl_metadata(note_ids, ResourceType.NOTE, session)
 	embeddings = await embed_texts([text for _, text in valid], session)
 	chunks = []
 	for (note, _), emb in zip(valid, embeddings):
 		await remove_vectorized_resource(
 			spec=NOTE_SPEC, resource_id=str(note.id), session=session
 		)
-		chunks.append(build_chunk(NOTE_SPEC, note, emb))
+		acl = acl_by_id.get(str(note.id))
+		chunks.append(build_chunk(NOTE_SPEC, note, emb, extra_metadata=acl))
 	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
 	return len(valid)
 
@@ -343,22 +373,32 @@ async def _hybrid_search_notes(
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
 	query_emb = await embed_text(text=q, session=db) if need_dense else None
 	text_query = q if need_sparse else None
-	query_filter = vectorstore_service.resource_filter(
+	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
+	# principals with default access (role or global) bypass should-conditions:
+	# they pass postgres but have no entries in allowed_* fields
+	query_filter = vectorstore_service.acl_filter(
 		"note",
-		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+		is_admin=principal.is_admin or principal.has_default_access(ResourceType.NOTE),
+		user_id=str(principal.user.id),
+		group_ids=principal.group_ids,
+		role_ids=principal.role_ids,
 	)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
-		limit=limit,
+		limit=settings.assets.vector.prefetch_limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
 	)
 	if not results:
 		return []
 	resource_ids = [r.metadata["resource_id"] for r in results]
-	stmt = select(Note).where(Note.id.in_(resource_ids), Note.deleted_at.is_(None))
+	stmt = select(Note).where(
+		Note.id.in_(resource_ids),
+		Note.deleted_at.is_(None),
+		resource_access_predicate(principal, ResourceType.NOTE),
+	)
 	db_result = await db.execute(stmt)
 	by_id = {str(n.id): n for n in db_result.scalars().all()}
 	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}

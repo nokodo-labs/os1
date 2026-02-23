@@ -15,6 +15,7 @@ from api.v1.service.authorization import (
 	RESOURCE_CONFIG,
 	require_resource_access,
 )
+from api.v1.service.vectorize import sync_resource_vector_acl
 
 
 def _rule_key(rule: AccessRuleCreate) -> str:
@@ -208,5 +209,8 @@ async def _set_rules_impl(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail="invalid subject reference - user, group, or role not found",
 		)
+
+	# sync acl metadata to qdrant (no-op if resource has no chunks)
+	await sync_resource_vector_acl(resource_id, resource_type, session)
 
 	return await _list_rules_for_resource(resource_type, resource_id, session)

@@ -8,7 +8,7 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +39,7 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
+from api.settings.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
@@ -754,7 +755,13 @@ async def _autocomplete_reminders(
 		.limit(limit)
 	)
 	if not principal.is_admin:
-		stmt = stmt.where(Reminder.owner_id == principal.user.id)
+		list_access = resource_access_predicate(principal, ResourceType.REMINDER_LIST)
+		stmt = stmt.where(
+			or_(
+				Reminder.owner_id == principal.user.id,
+				and_(Reminder.list_id.is_not(None), list_access),
+			)
+		)
 	result = await db.execute(stmt)
 	return [
 		SearchResultItem(
@@ -783,22 +790,33 @@ async def _hybrid_search_reminders(
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
 	query_emb = await embed_text(text=q, session=db) if need_dense else None
 	text_query = q if need_sparse else None
-	query_filter = vectorstore_service.resource_filter(
-		"reminder",
-		owner_id=(str(principal.user.id) if not principal.is_admin else None),
-	)
+	# reminders inherit ACL from their parent list; fetch broad candidates and
+	# let postgres enforce owner-or-list-access.
+	query_filter = vectorstore_service.resource_filter("reminder")
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
-		limit=limit,
+		limit=settings.assets.vector.prefetch_limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
 	)
 	if not results:
 		return []
-	resource_ids = [r.metadata["resource_id"] for r in results]
-	stmt = select(Reminder).where(Reminder.id.in_(resource_ids))
+	resource_ids = [str(r.metadata["resource_id"]) for r in results]
+	stmt = (
+		select(Reminder)
+		.outerjoin(ReminderList, Reminder.list_id == ReminderList.id)
+		.where(Reminder.id.in_(resource_ids))
+	)
+	if not principal.is_admin:
+		list_access = resource_access_predicate(principal, ResourceType.REMINDER_LIST)
+		stmt = stmt.where(
+			or_(
+				Reminder.owner_id == principal.user.id,
+				and_(Reminder.list_id.is_not(None), list_access),
+			)
+		)
 	db_result = await db.execute(stmt)
 	by_id = {str(r.id): r for r in db_result.scalars().all()}
 	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}

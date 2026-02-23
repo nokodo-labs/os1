@@ -108,6 +108,25 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		"""remove chunks by their string ids or by filter."""
 		await self.adapter.delete(self.collection, target)
 
+	@overload
+	async def update(
+		self, target: list[str], *, payload: dict[str, object] | None = None
+	) -> None: ...
+
+	@overload
+	async def update(
+		self, target: ChunkFilter, *, payload: dict[str, object] | None = None
+	) -> None: ...
+
+	async def update(
+		self,
+		target: list[str] | ChunkFilter,
+		*,
+		payload: dict[str, object] | None = None,
+	) -> None:
+		"""update matching chunks in place. see adapter.update for semantics."""
+		await self.adapter.update(self.collection, target, payload=payload)
+
 	async def ensure_collection(
 		self,
 		*,
