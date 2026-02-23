@@ -2,7 +2,10 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { api, unwrap, type Group } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Group = Schemas['Group']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'

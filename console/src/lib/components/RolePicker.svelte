@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { api, unwrap, type Role } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Role = Schemas['Role']
+
 	import { Input } from '$lib/components/ui/input'
 	import { Shield, X } from '@lucide/svelte'
 

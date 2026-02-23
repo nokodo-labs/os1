@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import {
-		api,
-		unwrap,
-		type DefaultPermissions_Input,
-		type DefaultPermissions_Output,
-		type Role,
-		type RoleUpdate,
-		type User,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
+	type DefaultPermissions_Output = Schemas['DefaultPermissions-Output']
+	type Role = Schemas['Role']
+	type RoleUpdate = Schemas['RoleUpdate']
+	type User = Schemas['User']
+
 	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'

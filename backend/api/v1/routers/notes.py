@@ -66,6 +66,37 @@ async def list_notes(
 	)
 
 
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_notes(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search notes with cursor-based pagination."""
+	return await note_service.search_notes(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_notes(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all notes into qdrant. admin only."""
+	require_admin(principal)
+	count = await note_service.vectorize_all_notes(db)
+	return {"vectorized": count}
+
+
 @router.get("/{note_id}", response_model=NoteSchema)
 async def get_note(
 	note_id: TypeID,
@@ -108,34 +139,3 @@ async def delete_note(
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
-
-
-@router.get("/search", response_model=CursorPage[SearchResultItem])
-async def search_notes(
-	q: str = Query(min_length=1, max_length=500),
-	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
-	mode: SearchMode = Query(default=SearchMode.FULL),
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search notes with cursor-based pagination."""
-	return await note_service.search_notes(
-		q,
-		db,
-		principal=principal,
-		limit=limit,
-		cursor=cursor,
-		search_params=SearchParams(mode=mode),
-	)
-
-
-@router.post("/revectorize")
-async def revectorize_notes(
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> dict[str, int]:
-	"""vectorize all notes into qdrant. admin only."""
-	require_admin(principal)
-	count = await note_service.vectorize_all_notes(db)
-	return {"vectorized": count}

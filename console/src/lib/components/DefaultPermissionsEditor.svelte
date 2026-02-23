@@ -1,9 +1,10 @@
 <script lang="ts">
-	import {
-		type AccessLevel,
-		type ActionPermission,
-		type DefaultPermissions_Input,
-	} from '$lib/api'
+	import type { Schemas } from '$lib/api'
+
+	type AccessLevel = Schemas['AccessLevel']
+	type ActionPermission = Schemas['ActionPermission']
+	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
+
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'

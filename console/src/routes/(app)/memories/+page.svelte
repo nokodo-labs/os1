@@ -2,7 +2,11 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { api, unwrap, type Memory } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Memory = Schemas['Memory']
+	type SearchResultItem = Schemas['SearchResultItem']
+
 	import MemoryDetailsModal from '$lib/components/MemoryDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
@@ -14,6 +18,7 @@
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
+	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
 		ArrowDown,
@@ -59,6 +64,38 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+
+	let searchQuery = $state('')
+	let searchResults = $state<SearchResultItem[]>([])
+	let isSearching = $state(false)
+	let searchError = $state<string | null>(null)
+	let _searchTimer: ReturnType<typeof setTimeout> | undefined
+
+	$effect(() => {
+		const q = searchQuery.trim()
+		clearTimeout(_searchTimer)
+		if (!q) {
+			searchResults = []
+			searchError = null
+			return
+		}
+		isSearching = true
+		_searchTimer = setTimeout(() => {
+			api.GET('/v1/memories/search', { params: { query: { q } } })
+				.then((r) => unwrap(r))
+				.then((page) => {
+					searchResults = page.items
+				})
+				.catch((e: unknown) => {
+					searchError = e instanceof Error ? e.message : 'search failed'
+					searchResults = []
+				})
+				.finally(() => {
+					isSearching = false
+				})
+		}, 300)
+		return () => clearTimeout(_searchTimer)
+	})
 
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
@@ -188,6 +225,12 @@
 			<p class="text-zinc-400">user-scoped memories (use filters; start from a user).</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
+			<Input
+				type="search"
+				placeholder="search memories..."
+				bind:value={searchQuery}
+				class="h-9 w-50 lg:w-75"
+			/>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">
@@ -248,7 +291,9 @@
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
-					{#if userIdFilter}
+					{#if searchQuery.trim()}
+						showing {searchResults.length} results
+					{:else if userIdFilter}
 						page {pageIndex + 1} · showing {memories.length}{hasNext ? '+' : ''}
 					{:else}
 						open a user and click “memories” to filter.
@@ -281,7 +326,60 @@
 			{/if}
 		</CardHeader>
 		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
-			{#if !userIdFilter}
+			{#if searchQuery.trim()}
+				<!-- search results mode -->
+				{#if isSearching}
+					<div
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					>
+						<NokodoLoader />
+					</div>
+				{:else if searchError}
+					<div
+						class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+					>
+						{searchError}
+					</div>
+				{:else if searchResults.length === 0}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no results found
+					</div>
+				{:else}
+					{#each searchResults as r (r.id)}
+						<div
+							class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+						>
+							<div
+								class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+							>
+								<div class="min-w-0 flex-1 space-y-1">
+									<span class="truncate font-mono text-sm font-medium"
+										>{r.title}</span
+									>
+									{#if r.subtitle}
+										<div class="line-clamp-1 text-sm text-zinc-400">
+											{r.subtitle}
+										</div>
+									{/if}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{r.id}
+									</span>
+								</div>
+								{#if r.score != null}
+									<span class="shrink-0 text-xs text-zinc-500"
+										>{(r.score * 100).toFixed(1)}%</span
+									>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				{/if}
+			{:else if !userIdFilter}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>

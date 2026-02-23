@@ -27,12 +27,7 @@
 		metadata: Record<string, unknown>
 	}
 
-	interface ReindexResult {
-		notes: number
-		threads: number
-		reminders: number
-		memories: number
-	}
+	type RevectorizeResult = Record<string, number>
 
 	// -- state --
 
@@ -52,7 +47,34 @@
 
 	// reindex state
 	let isReindexing = $state(false)
-	let reindexResult = $state<ReindexResult | null>(null)
+	let revectorizeResult = $state<RevectorizeResult | null>(null)
+
+	// per-resource revectorize state
+	type ResourceKey = 'notes' | 'threads' | 'reminders' | 'memories'
+	const RESOURCE_ENDPOINTS: Record<ResourceKey, string> = {
+		notes: '/v1/notes/revectorize',
+		threads: '/v1/threads/revectorize',
+		reminders: '/v1/reminders/revectorize',
+		memories: '/v1/memories/revectorize',
+	}
+	let isRevectorizingResource = $state<Record<ResourceKey, boolean>>({
+		notes: false,
+		threads: false,
+		reminders: false,
+		memories: false,
+	})
+	let revectorizeResourceResult = $state<Record<ResourceKey, RevectorizeResult | null>>({
+		notes: null,
+		threads: null,
+		reminders: null,
+		memories: null,
+	})
+	let revectorizeResourceError = $state<Record<ResourceKey, string | null>>({
+		notes: null,
+		threads: null,
+		reminders: null,
+		memories: null,
+	})
 
 	// delete state
 	let showDeleteConfirm = $state(false)
@@ -138,20 +160,41 @@
 
 	// -- reindex --
 
-	async function reindexAll() {
+	async function revectorizeAll() {
 		isReindexing = true
-		reindexResult = null
+		revectorizeResult = null
 		try {
 			const data = unwrap(
-				await api.POST('/v1/vectorstores/reindex' as '/v1/vectorstores/reindex', {})
+				await api.POST('/v1/vectorstores/revectorize' as '/v1/vectorstores/revectorize', {})
 			)
-			reindexResult = data as unknown as ReindexResult
+			revectorizeResult = data as unknown as RevectorizeResult
 			await fetchCollections()
 		} catch (e) {
-			console.error('reindex failed', e)
-			error = e instanceof Error ? e.message : 'reindex failed'
+			console.error('revectorize failed', e)
+			error = e instanceof Error ? e.message : 'revectorize failed'
 		} finally {
 			isReindexing = false
+		}
+	}
+
+	async function revectorizeResource(resource: ResourceKey) {
+		isRevectorizingResource[resource] = true
+		revectorizeResourceResult[resource] = null
+		revectorizeResourceError[resource] = null
+		try {
+			const endpoint = RESOURCE_ENDPOINTS[resource]
+			const data = unwrap(
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				await api.POST(endpoint as any, {})
+			)
+			revectorizeResourceResult[resource] = data as unknown as RevectorizeResult
+			await fetchCollections()
+		} catch (e) {
+			console.error(`revectorize ${resource} failed`, e)
+			revectorizeResourceError[resource] =
+				e instanceof Error ? e.message : `revectorize ${resource} failed`
+		} finally {
+			isRevectorizingResource[resource] = false
 		}
 	}
 
@@ -216,9 +259,9 @@
 				<Search class="mr-2 h-4 w-4" />
 				search
 			</Button>
-			<Button variant="outline" size="sm" onclick={reindexAll} disabled={isReindexing}>
+			<Button variant="outline" size="sm" onclick={revectorizeAll} disabled={isReindexing}>
 				<RefreshCw class="mr-2 h-4 w-4 {isReindexing ? 'animate-spin' : ''}" />
-				{isReindexing ? 'reindexing...' : 'reindex all'}
+				{isReindexing ? 'revectorizing...' : 'revectorize all'}
 			</Button>
 			<Button
 				variant="destructive"
@@ -233,12 +276,14 @@
 	</div>
 
 	<!-- reindex result -->
-	{#if reindexResult}
+	{#if revectorizeResult}
 		<Card class="border-green-800 bg-green-950/30">
 			<CardContent class="py-3">
 				<p class="text-sm text-green-400">
-					reindex complete - notes: {reindexResult.notes}, threads: {reindexResult.threads},
-					reminders: {reindexResult.reminders}, memories: {reindexResult.memories}
+					revectorize complete —
+					{Object.entries(revectorizeResult)
+						.map(([k, v]) => `${k}: ${v}`)
+						.join(', ')}
 				</p>
 			</CardContent>
 		</Card>
@@ -252,6 +297,42 @@
 			</CardContent>
 		</Card>
 	{/if}
+
+	<!-- per-resource revectorize -->
+	<Card>
+		<CardContent class="py-4">
+			<p class="mb-3 text-sm font-medium text-zinc-300">revectorize by resource</p>
+			<div class="flex flex-wrap gap-3">
+				{#each ['notes', 'threads', 'reminders', 'memories'] as ResourceKey[] as resource (resource)}
+					<div class="flex flex-col gap-1">
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => revectorizeResource(resource)}
+							disabled={isRevectorizingResource[resource]}
+						>
+							<RefreshCw
+								class="mr-2 h-4 w-4 {isRevectorizingResource[resource]
+									? 'animate-spin'
+									: ''}"
+							/>
+							{isRevectorizingResource[resource] ? 'revectorizing...' : resource}
+						</Button>
+						{#if revectorizeResourceResult[resource]}
+							<p class="text-xs text-green-400">
+								{Object.entries(revectorizeResourceResult[resource]!)
+									.map(([k, v]) => `${k}: ${v}`)
+									.join(', ')}
+							</p>
+						{/if}
+						{#if revectorizeResourceError[resource]}
+							<p class="text-xs text-red-400">{revectorizeResourceError[resource]}</p>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</CardContent>
+	</Card>
 
 	<!-- stats overview -->
 	{#if !isFetching && collections.length > 0}

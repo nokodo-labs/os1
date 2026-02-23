@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { api, unwrap, type Group, type Role, type User } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Group = Schemas['Group']
+	type Role = Schemas['Role']
+	type User = Schemas['User']
+
 	import { Input } from '$lib/components/ui/input'
 	import { Shield, Users, UsersRound } from '@lucide/svelte'
 

@@ -2,7 +2,11 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { api, unwrap, type Note } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Note = Schemas['Note']
+	type SearchResultItem = Schemas['SearchResultItem']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import NoteDetailsModal from '$lib/components/NoteDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
@@ -51,23 +55,42 @@
 	let hasNext = $state(false)
 	let error = $state<string | null>(null)
 
+	let searchResults = $state<SearchResultItem[]>([])
+	let isSearching = $state(false)
+	let searchError = $state<string | null>(null)
+	let _searchTimer: ReturnType<typeof setTimeout> | undefined
+
+	$effect(() => {
+		const q = searchQuery.trim()
+		clearTimeout(_searchTimer)
+		if (!q) {
+			searchResults = []
+			searchError = null
+			return
+		}
+		isSearching = true
+		_searchTimer = setTimeout(() => {
+			api.GET('/v1/notes/search', { params: { query: { q } } })
+				.then((r) => unwrap(r))
+				.then((page) => {
+					searchResults = page.items
+				})
+				.catch((e: unknown) => {
+					searchError = e instanceof Error ? e.message : 'search failed'
+					searchResults = []
+				})
+				.finally(() => {
+					isSearching = false
+				})
+		}, 300)
+		return () => clearTimeout(_searchTimer)
+	})
+
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
 
 	let isNoteDetailsOpen = $state(false)
 	let selectedNote = $state<Note | null>(null)
-
-	const filteredNotes = $derived(
-		notes.filter((n) => {
-			const q = searchQuery.toLowerCase()
-			return (
-				n.title.toLowerCase().includes(q) ||
-				n.content.toLowerCase().includes(q) ||
-				n.id.toLowerCase().includes(q) ||
-				(n.labels ?? []).some((l) => l.toLowerCase().includes(q))
-			)
-		})
-	)
 
 	function openUser(userId: string) {
 		selectedUserId = userId
@@ -255,7 +278,9 @@
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
-					page {pageIndex + 1} · showing {filteredNotes.length}{hasNext ? '+' : ''}
+					page {pageIndex + 1} · showing {searchQuery.trim()
+						? searchResults.length
+						: notes.length}{!searchQuery.trim() && hasNext ? '+' : ''}
 				</CardDescription>
 			</div>
 			<div class="flex items-center gap-2">
@@ -282,91 +307,154 @@
 			</div>
 		</CardHeader>
 		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
-			{#if isLoading && notes.length === 0}
-				<div
-					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
-				>
-					<NokodoLoader />
-				</div>
-			{/if}
-
-			{#if filteredNotes.length === 0 && !isLoading}
-				<div
-					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
-				>
-					no notes found
-				</div>
-			{/if}
-
-			{#each filteredNotes as n (n.id)}
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
-					onclick={() => openNote(n)}
-				>
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0 flex-1 space-y-2">
-							<div class="flex items-center gap-2">
-								<FileText class="h-4 w-4 text-zinc-500" />
-								<span class="truncate font-medium">{n.title}</span>
-								{#if n.deleted_at}
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
-									>
-										deleted
-									</span>
-								{/if}
-							</div>
-							{#if n.content}
-								<div class="line-clamp-2 text-sm text-zinc-400">
-									{n.content}
-								</div>
-							{/if}
-							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Hash class="h-3.5 w-3.5" />
-									{n.id}
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<User class="h-3.5 w-3.5" />
-									<button
-										type="button"
-										class="underline underline-offset-4 hover:text-zinc-200"
-										onclick={() => openUser(n.user_id)}
-									>
-										{n.user_id}
-									</button>
-								</span>
-								{#if (n.labels ?? []).length > 0}
-									{#each n.labels ?? [] as label (label)}
+			{#if searchQuery.trim()}
+				<!-- search results mode -->
+				{#if isSearching}
+					<div
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					>
+						<NokodoLoader />
+					</div>
+				{:else if searchError}
+					<div
+						class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+					>
+						{searchError}
+					</div>
+				{:else if searchResults.length === 0}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no results found
+					</div>
+				{:else}
+					{#each searchResults as r (r.id)}
+						<div
+							class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+						>
+							<div
+								class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+							>
+								<div class="min-w-0 flex-1 space-y-1">
+									<div class="flex items-center gap-2">
+										<FileText class="h-4 w-4 text-zinc-500" />
+										<span class="truncate font-medium">{r.title}</span>
+									</div>
+									{#if r.subtitle}
+										<div class="line-clamp-1 text-sm text-zinc-400">
+											{r.subtitle}
+										</div>
+									{/if}
+									<div class="flex items-center gap-2 text-xs text-zinc-400">
 										<span
 											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
 										>
-											<Tag class="h-3.5 w-3.5" />
-											{label}
+											<Hash class="h-3.5 w-3.5" />
+											{r.id}
 										</span>
-									{/each}
+									</div>
+								</div>
+								{#if r.score != null}
+									<span class="shrink-0 text-xs text-zinc-500"
+										>{(r.score * 100).toFixed(1)}%</span
+									>
 								{/if}
 							</div>
 						</div>
-						<div class="shrink-0 text-xs text-zinc-500">
-							<div class="flex items-center gap-1">
-								<Clock class="h-3.5 w-3.5" />
-								updated {new Date(n.updated_at).toLocaleString()}
+					{/each}
+				{/if}
+			{:else}
+				<!-- normal paginated list mode -->
+				{#if isLoading && notes.length === 0}
+					<div
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					>
+						<NokodoLoader />
+					</div>
+				{/if}
+
+				{#if notes.length === 0 && !isLoading}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no notes found
+					</div>
+				{/if}
+
+				{#each notes as n (n.id)}
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+						onclick={() => openNote(n)}
+					>
+						<div
+							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+						>
+							<div class="min-w-0 flex-1 space-y-2">
+								<div class="flex items-center gap-2">
+									<FileText class="h-4 w-4 text-zinc-500" />
+									<span class="truncate font-medium">{n.title}</span>
+									{#if n.deleted_at}
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+										>
+											deleted
+										</span>
+									{/if}
+								</div>
+								{#if n.content}
+									<div class="line-clamp-2 text-sm text-zinc-400">
+										{n.content}
+									</div>
+								{/if}
+								<div
+									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
+								>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{n.id}
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<User class="h-3.5 w-3.5" />
+										<button
+											type="button"
+											class="underline underline-offset-4 hover:text-zinc-200"
+											onclick={() => openUser(n.user_id)}
+										>
+											{n.user_id}
+										</button>
+									</span>
+									{#if (n.labels ?? []).length > 0}
+										{#each n.labels ?? [] as label (label)}
+											<span
+												class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+											>
+												<Tag class="h-3.5 w-3.5" />
+												{label}
+											</span>
+										{/each}
+									{/if}
+								</div>
 							</div>
-							<div class="mt-1 flex items-center gap-1">
-								<Clock class="h-3.5 w-3.5" />
-								created {new Date(n.created_at).toLocaleString()}
+							<div class="shrink-0 text-xs text-zinc-500">
+								<div class="flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									updated {new Date(n.updated_at).toLocaleString()}
+								</div>
+								<div class="mt-1 flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									created {new Date(n.created_at).toLocaleString()}
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
-			{/each}
+				{/each}
+			{/if}
 		</CardContent>
 	</Card>
 </div>

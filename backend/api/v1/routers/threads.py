@@ -132,6 +132,37 @@ async def list_threads(
 	)
 
 
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_threads(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search threads with cursor-based pagination."""
+	return await thread_service.search_threads(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_threads(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all threads into qdrant. admin only."""
+	require_admin(principal)
+	count = await thread_service.vectorize_all_threads(db)
+	return {"vectorized": count}
+
+
 @router.get("/{thread_id}", response_model=ThreadSchema)
 async def get_thread(
 	thread_id: TypeID,
@@ -370,34 +401,3 @@ async def set_thread_access_rules(
 	return await access_rules_service.set_access_rules(
 		ResourceType.THREAD, str(thread_id), rules, db, principal=principal
 	)
-
-
-@router.get("/search", response_model=CursorPage[SearchResultItem])
-async def search_threads(
-	q: str = Query(min_length=1, max_length=500),
-	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
-	mode: SearchMode = Query(default=SearchMode.FULL),
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search threads with cursor-based pagination."""
-	return await thread_service.search_threads(
-		q,
-		db,
-		principal=principal,
-		limit=limit,
-		cursor=cursor,
-		search_params=SearchParams(mode=mode),
-	)
-
-
-@router.post("/revectorize")
-async def revectorize_threads(
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> dict[str, int]:
-	"""vectorize all threads into qdrant. admin only."""
-	require_admin(principal)
-	count = await thread_service.vectorize_all_threads(db)
-	return {"vectorized": count}

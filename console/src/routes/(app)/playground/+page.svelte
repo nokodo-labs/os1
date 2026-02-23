@@ -1,14 +1,13 @@
 <script lang="ts">
-	import {
-		api,
-		unwrap,
-		type Agent,
-		type Message,
-		type MessageCreate,
-		type Model,
-		type Thread,
-		type ThreadCreate,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Agent = Schemas['Agent']
+	type Message = Schemas['Message']
+	type MessageCreate = Schemas['MessageCreate']
+	type Model = Schemas['Model']
+	type Thread = Schemas['Thread']
+	type ThreadCreate = Schemas['ThreadCreate']
+
 	import { auth } from '$lib/auth.svelte'
 	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'

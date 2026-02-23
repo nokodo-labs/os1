@@ -89,7 +89,7 @@
 					.catch(() => []),
 				api
 					.GET('/v1/reminders/lists', {
-						params: { query: { limit: 10000, include_counts: false } },
+						params: { query: { limit: 10000, include_counts: true } },
 					})
 					.then((r) => unwrap(r))
 					.catch(() => []),
@@ -151,8 +151,8 @@
 					color: 'text-pink-400',
 				},
 				{
-					label: 'reminder lists',
-					value: lists.length,
+					label: 'reminders',
+					value: lists.reduce((sum, l) => sum + (l.total_count ?? 0), 0),
 					icon: ListChecks,
 					color: 'text-lime-400',
 				},

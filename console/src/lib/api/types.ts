@@ -443,7 +443,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/reindex": {
+    "/threads/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -453,10 +453,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reindex Threads
-         * @description reindex all threads into qdrant. admin only.
+         * Revectorize Threads
+         * @description vectorize all threads into qdrant. admin only.
          */
-        post: operations["reindex_threads_threads_reindex_post"];
+        post: operations["revectorize_threads_threads_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -785,7 +785,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/memories/reindex": {
+    "/memories/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -795,10 +795,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reindex Memories
-         * @description reindex all memories. admin only.
+         * Revectorize Memories
+         * @description vectorize all memories. admin only.
          */
-        post: operations["reindex_memories_memories_reindex_post"];
+        post: operations["revectorize_memories_memories_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -877,7 +877,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/notes/reindex": {
+    "/notes/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -887,10 +887,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reindex Notes
-         * @description reindex all notes into qdrant. admin only.
+         * Revectorize Notes
+         * @description vectorize all notes into qdrant. admin only.
          */
-        post: operations["reindex_notes_notes_reindex_post"];
+        post: operations["revectorize_notes_notes_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1351,7 +1351,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/reminders/reindex": {
+    "/reminders/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -1361,10 +1361,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reindex Reminders
-         * @description reindex all reminders into qdrant. admin only.
+         * Revectorize Reminders
+         * @description vectorize all reminders into qdrant. admin only.
          */
-        post: operations["reindex_reminders_reminders_reindex_post"];
+        post: operations["revectorize_reminders_reminders_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1414,7 +1414,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/search/reindex": {
+    "/search/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -1424,10 +1424,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reindex All
-         * @description reindex all searchable resources into qdrant. admin only.
+         * Revectorize All
+         * @description vectorize all searchable resources into qdrant. admin only.
          */
-        post: operations["reindex_all_search_reindex_post"];
+        post: operations["revectorize_all_search_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1949,7 +1949,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/vectorstores/reindex": {
+    "/vectorstores/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -1959,10 +1959,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reindex All
-         * @description reindex all searchable resources. admin only.
+         * Revectorize All
+         * @description vectorize all searchable resources. admin only.
          */
-        post: operations["reindex_all_vectorstores_reindex_post"];
+        post: operations["revectorize_all_vectorstores_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2248,11 +2248,6 @@ export interface components {
              * @description whether haptic feedback is enabled on compatible devices
              */
             hapticFeedback?: boolean | null;
-            /**
-             * Svgliquidglass
-             * @description whether to enable svg-based liquid glass when supported by the browser
-             */
-            svgLiquidGlass?: boolean | null;
         };
         /**
          * AccountPreferences
@@ -2312,6 +2307,22 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * AdvancedPreferences
+         * @description user advanced preferences.
+         */
+        AdvancedPreferences: {
+            /**
+             * Svgliquidglass
+             * @description whether to enable svg-based liquid glass when supported by the browser
+             */
+            svgLiquidGlass?: boolean | null;
+            /**
+             * Svgliquidglassisland
+             * @description whether to enable svg-based liquid glass specifically for the Island component
+             */
+            svgLiquidGlassIsland?: boolean | null;
         };
         /**
          * Agent
@@ -2780,7 +2791,7 @@ export interface components {
             vector_size: number;
             /**
              * Batch Size
-             * @description batch size for embedding generation during reindexing
+             * @description batch size for embedding generation during vectorization
              * @default 64
              */
             batch_size: number;
@@ -4863,6 +4874,8 @@ export interface components {
             title: string;
             /** Subtitle */
             subtitle?: string | null;
+            /** Score */
+            score?: number | null;
             /**
              * Created At
              * Format: date-time
@@ -5620,6 +5633,8 @@ export interface components {
             privacy?: components["schemas"]["PrivacyPreferences"] | null;
             /** @description accessibility preferences */
             accessibility?: components["schemas"]["AccessibilityPreferences"] | null;
+            /** @description advanced preferences */
+            advanced?: components["schemas"]["AdvancedPreferences"] | null;
             /** @description debug preferences (admin-only) */
             debug?: components["schemas"]["DebugPreferences"] | null;
             /** @description homepage suggestion preferences */
@@ -8513,7 +8528,7 @@ export interface operations {
             };
         };
     };
-    reindex_threads_threads_reindex_post: {
+    revectorize_threads_threads_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -10618,7 +10633,7 @@ export interface operations {
             };
         };
     };
-    reindex_memories_memories_reindex_post: {
+    revectorize_memories_memories_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -11294,7 +11309,7 @@ export interface operations {
             };
         };
     };
-    reindex_notes_notes_reindex_post: {
+    revectorize_notes_notes_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -14970,7 +14985,7 @@ export interface operations {
             };
         };
     };
-    reindex_reminders_reminders_reindex_post: {
+    revectorize_reminders_reminders_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -15258,7 +15273,7 @@ export interface operations {
             };
         };
     };
-    reindex_all_search_reindex_post: {
+    revectorize_all_search_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -19451,7 +19466,7 @@ export interface operations {
             };
         };
     };
-    reindex_all_vectorstores_reindex_post: {
+    revectorize_all_vectorstores_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;

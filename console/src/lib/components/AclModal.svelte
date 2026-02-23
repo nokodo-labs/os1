@@ -1,14 +1,14 @@
 <script lang="ts">
-	import {
-		api,
-		unwrap,
-		type AccessLevel,
-		type AccessRuleCreate,
-		type AccessRuleResponse,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type AccessLevel = Schemas['AccessLevel']
+	type AccessRuleCreate = Schemas['AccessRuleCreate']
+	type AccessRuleResponse = Schemas['AccessRuleResponse']
+
 	import PrincipalPicker from '$lib/components/PrincipalPicker.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Label } from '$lib/components/ui/label'
+	import { generateUUID } from '$lib/utils/crypto'
 	import { Globe, Shield, Users, UsersRound } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
@@ -114,7 +114,7 @@
 		error = null
 
 		const next: AccessRuleResponse = {
-			id: `draft:${crypto.randomUUID()}`,
+			id: `draft:${generateUUID()}`,
 			thread_id: resourceType === 'thread' ? resourceId : null,
 			project_id: resourceType === 'project' ? resourceId : null,
 			agent_id: resourceType === 'agent' ? resourceId : null,

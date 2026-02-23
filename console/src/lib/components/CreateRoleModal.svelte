@@ -1,12 +1,11 @@
 <script lang="ts">
-	import {
-		api,
-		unwrap,
-		type DefaultPermissions_Input,
-		type DefaultPermissions_Output,
-		type Role,
-		type RoleCreate,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
+	type DefaultPermissions_Output = Schemas['DefaultPermissions-Output']
+	type Role = Schemas['Role']
+	type RoleCreate = Schemas['RoleCreate']
+
 	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'

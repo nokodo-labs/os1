@@ -1,14 +1,13 @@
 <script lang="ts">
-	import {
-		api,
-		unwrap,
-		type Agent,
-		type AgentCreate,
-		type AgentUpdate,
-		type Model,
-		type PluginInfo,
-		type Prompt,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Agent = Schemas['Agent']
+	type AgentCreate = Schemas['AgentCreate']
+	type AgentUpdate = Schemas['AgentUpdate']
+	type Model = Schemas['Model']
+	type PluginInfo = Schemas['PluginInfo']
+	type Prompt = Schemas['Prompt']
+
 	import AclModal from '$lib/components/AclModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'

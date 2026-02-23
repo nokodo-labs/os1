@@ -1,15 +1,13 @@
 <script lang="ts">
-	import {
-		api,
-		unwrap,
-		type Agent,
-		type BackgroundType,
-		type DefaultPermissionsSettings,
-		type DefaultPermissionsSettingsPatch,
-		type Model,
-		type SettingsResponse,
-		type SettingsUpdateRequest,
-	} from '$lib/api'
+	import { api, unwrap, type BackgroundType, type Schemas } from '$lib/api'
+
+	type Agent = Schemas['Agent']
+	type DefaultPermissionsSettings = Schemas['DefaultPermissionsSettings']
+	type DefaultPermissionsSettingsPatch = Schemas['DefaultPermissionsSettingsPatch']
+	type Model = Schemas['Model']
+	type SettingsResponse = Schemas['SettingsResponse']
+	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
+
 	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import RolePicker from '$lib/components/RolePicker.svelte'

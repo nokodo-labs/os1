@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { api, unwrap, type Reminder, type ReminderListWithCounts } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Reminder = Schemas['Reminder']
+	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
+	type SearchResultItem = Schemas['SearchResultItem']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -59,16 +64,36 @@
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
 
-	const filteredLists = $derived(
-		lists.filter((l) => {
-			const q = searchQuery.toLowerCase()
-			return (
-				l.name.toLowerCase().includes(q) ||
-				l.id.toLowerCase().includes(q) ||
-				(l.description ?? '').toLowerCase().includes(q)
-			)
-		})
-	)
+	let searchResults = $state<SearchResultItem[]>([])
+	let isSearching = $state(false)
+	let searchError = $state<string | null>(null)
+	let _searchTimer: ReturnType<typeof setTimeout> | undefined
+
+	$effect(() => {
+		const q = searchQuery.trim()
+		clearTimeout(_searchTimer)
+		if (!q) {
+			searchResults = []
+			searchError = null
+			return
+		}
+		isSearching = true
+		_searchTimer = setTimeout(() => {
+			api.GET('/v1/reminders/search', { params: { query: { q } } })
+				.then((r) => unwrap(r))
+				.then((page) => {
+					searchResults = page.items
+				})
+				.catch((e: unknown) => {
+					searchError = e instanceof Error ? e.message : 'search failed'
+					searchResults = []
+				})
+				.finally(() => {
+					isSearching = false
+				})
+		}, 300)
+		return () => clearTimeout(_searchTimer)
+	})
 
 	function openUser(userId: string) {
 		selectedUserId = userId
@@ -214,202 +239,265 @@
 		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
 	>
 		<CardHeader class="shrink-0">
-			<CardTitle>reminder lists</CardTitle>
+			<CardTitle>{searchQuery.trim() ? 'reminders' : 'reminder lists'}</CardTitle>
 			<CardDescription>
-				{filteredLists.length} list{filteredLists.length === 1 ? '' : 's'}
+				{searchQuery.trim()
+					? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
+					: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
 			</CardDescription>
 		</CardHeader>
 		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
-			{#if isLoading && lists.length === 0}
-				<div
-					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
-				>
-					<NokodoLoader />
-				</div>
-			{/if}
-
-			{#if filteredLists.length === 0 && !isLoading}
-				<div
-					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
-				>
-					no reminder lists found
-				</div>
-			{/if}
-
-			{#each filteredLists as list (list.id)}
-				<div
-					class="rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-zinc-700"
-				>
+			{#if searchQuery.trim()}
+				<!-- search results mode: individual reminders -->
+				{#if isSearching}
 					<div
-						role="button"
-						tabindex="0"
-						class="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
-						onclick={() => toggleExpand(list.id)}
-						onkeydown={(e: KeyboardEvent) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								e.preventDefault()
-								toggleExpand(list.id)
-							}
-						}}
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 					>
-						<div class="mt-0.5 shrink-0 text-zinc-500">
-							{#if expandedListId === list.id}
-								<ChevronDown class="h-4 w-4" />
-							{:else}
-								<ChevronRight class="h-4 w-4" />
-							{/if}
-						</div>
-						<div class="min-w-0 flex-1 space-y-2">
-							<div class="flex items-center gap-2">
-								{#if list.color}
-									<span
-										class="inline-block h-3 w-3 rounded-full"
-										style="background-color: {list.color}"
-									></span>
-								{/if}
-								<span class="truncate font-medium">{list.name}</span>
-							</div>
-							{#if list.description}
-								<div class="line-clamp-1 text-sm text-zinc-400">
-									{list.description}
-								</div>
-							{/if}
-							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Hash class="h-3.5 w-3.5" />
-									{list.id}
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<User class="h-3.5 w-3.5" />
-									<button
-										type="button"
-										class="underline underline-offset-4 hover:text-zinc-200"
-										onclick={(e: MouseEvent) => {
-											e.stopPropagation()
-											openUser(list.owner_id)
-										}}
-									>
-										{list.owner_id}
-									</button>
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<ListChecks class="h-3.5 w-3.5" />
-									total {list.total_count}
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Circle class="h-3.5 w-3.5" />
-									pending {list.pending_count}
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<CircleCheck class="h-3.5 w-3.5" />
-									completed {list.completed_count}
-								</span>
-							</div>
-						</div>
-						<div class="shrink-0 text-xs text-zinc-500">
-							<div class="flex items-center gap-1">
-								<Clock class="h-3.5 w-3.5" />
-								updated {new Date(list.updated_at).toLocaleString()}
-							</div>
-						</div>
+						<NokodoLoader />
 					</div>
-					{#if expandedListId === list.id}
-						<div class="border-t border-zinc-800 px-4 py-3">
-							{#if isRemindersLoading}
-								<div class="flex items-center justify-center p-6">
-									<NokodoLoader />
-								</div>
-							{:else if remindersError}
-								<div
-									class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
-								>
-									{remindersError}
-								</div>
-							{:else if listReminders.length === 0}
-								<div class="py-4 text-center text-sm text-zinc-500">
-									no reminders in this list
-								</div>
-							{:else}
-								<div class="space-y-1">
-									{#each listReminders as reminder (reminder.id)}
-										<div
-											class="flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
-										>
-											<div class="mt-0.5 shrink-0">
-												{#if reminder.status === 'completed'}
-													<CircleCheck class="h-4 w-4 text-emerald-400" />
-												{:else}
-													<Circle class="h-4 w-4 text-zinc-500" />
-												{/if}
-											</div>
-											<div class="min-w-0 flex-1">
-												<div
-													class="text-sm font-medium {reminder.status ===
-													'completed'
-														? 'text-zinc-500 line-through'
-														: ''}"
-												>
-													{reminder.title}
-												</div>
-												{#if reminder.description}
-													<div
-														class="mt-0.5 line-clamp-1 text-xs text-zinc-400"
-													>
-														{reminder.description}
-													</div>
-												{/if}
-												<div
-													class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500"
-												>
-													<div>id: {reminder.id}</div>
-													{#if reminder.due_at}
-														<div>
-															due: {new Date(
-																reminder.due_at
-															).toLocaleString()}
-														</div>
-													{/if}
-													{#if reminder.completed_at}
-														<div>
-															completed: {new Date(
-																reminder.completed_at
-															).toLocaleString()}
-														</div>
-													{/if}
-													<div>
-														owner:
-														<button
-															type="button"
-															class="ml-1 underline underline-offset-4 hover:text-zinc-200"
-															onclick={() =>
-																openUser(reminder.owner_id)}
-														>
-															{reminder.owner_id}
-														</button>
-													</div>
-												</div>
-											</div>
-											<div class="shrink-0 text-xs text-zinc-500">
-												{new Date(reminder.updated_at).toLocaleString()}
-											</div>
+				{:else if searchError}
+					<div
+						class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+					>
+						{searchError}
+					</div>
+				{:else if searchResults.length === 0}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no results found
+					</div>
+				{:else}
+					{#each searchResults as r (r.id)}
+						<div
+							class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+						>
+							<div
+								class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+							>
+								<div class="min-w-0 flex-1 space-y-1">
+									<div class="flex items-center gap-2">
+										<Circle class="h-4 w-4 text-zinc-500" />
+										<span class="truncate font-medium">{r.title}</span>
+									</div>
+									{#if r.subtitle}
+										<div class="line-clamp-1 text-sm text-zinc-400">
+											{r.subtitle}
 										</div>
-									{/each}
+									{/if}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{r.id}
+									</span>
 								</div>
-							{/if}
+								{#if r.score != null}
+									<span class="shrink-0 text-xs text-zinc-500"
+										>{(r.score * 100).toFixed(1)}%</span
+									>
+								{/if}
+							</div>
 						</div>
-					{/if}
-				</div>
-			{/each}
+					{/each}
+				{/if}
+			{:else}
+				<!-- normal list view -->
+				{#if isLoading && lists.length === 0}
+					<div
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					>
+						<NokodoLoader />
+					</div>
+				{/if}
+
+				{#if lists.length === 0 && !isLoading}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no reminder lists found
+					</div>
+				{/if}
+
+				{#each lists as list (list.id)}
+					<div
+						class="rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-zinc-700"
+					>
+						<div
+							role="button"
+							tabindex="0"
+							class="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
+							onclick={() => toggleExpand(list.id)}
+							onkeydown={(e: KeyboardEvent) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault()
+									toggleExpand(list.id)
+								}
+							}}
+						>
+							<div class="mt-0.5 shrink-0 text-zinc-500">
+								{#if expandedListId === list.id}
+									<ChevronDown class="h-4 w-4" />
+								{:else}
+									<ChevronRight class="h-4 w-4" />
+								{/if}
+							</div>
+							<div class="min-w-0 flex-1 space-y-2">
+								<div class="flex items-center gap-2">
+									{#if list.color}
+										<span
+											class="inline-block h-3 w-3 rounded-full"
+											style="background-color: {list.color}"
+										></span>
+									{/if}
+									<span class="truncate font-medium">{list.name}</span>
+								</div>
+								{#if list.description}
+									<div class="line-clamp-1 text-sm text-zinc-400">
+										{list.description}
+									</div>
+								{/if}
+								<div
+									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
+								>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{list.id}
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<User class="h-3.5 w-3.5" />
+										<button
+											type="button"
+											class="underline underline-offset-4 hover:text-zinc-200"
+											onclick={(e: MouseEvent) => {
+												e.stopPropagation()
+												openUser(list.owner_id)
+											}}
+										>
+											{list.owner_id}
+										</button>
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<ListChecks class="h-3.5 w-3.5" />
+										total {list.total_count}
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<Circle class="h-3.5 w-3.5" />
+										pending {list.pending_count}
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<CircleCheck class="h-3.5 w-3.5" />
+										completed {list.completed_count}
+									</span>
+								</div>
+							</div>
+							<div class="shrink-0 text-xs text-zinc-500">
+								<div class="flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									updated {new Date(list.updated_at).toLocaleString()}
+								</div>
+							</div>
+						</div>
+						{#if expandedListId === list.id}
+							<div class="border-t border-zinc-800 px-4 py-3">
+								{#if isRemindersLoading}
+									<div class="flex items-center justify-center p-6">
+										<NokodoLoader />
+									</div>
+								{:else if remindersError}
+									<div
+										class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
+									>
+										{remindersError}
+									</div>
+								{:else if listReminders.length === 0}
+									<div class="py-4 text-center text-sm text-zinc-500">
+										no reminders in this list
+									</div>
+								{:else}
+									<div class="space-y-1">
+										{#each listReminders as reminder (reminder.id)}
+											<div
+												class="flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
+											>
+												<div class="mt-0.5 shrink-0">
+													{#if reminder.status === 'completed'}
+														<CircleCheck
+															class="h-4 w-4 text-emerald-400"
+														/>
+													{:else}
+														<Circle class="h-4 w-4 text-zinc-500" />
+													{/if}
+												</div>
+												<div class="min-w-0 flex-1">
+													<div
+														class="text-sm font-medium {reminder.status ===
+														'completed'
+															? 'text-zinc-500 line-through'
+															: ''}"
+													>
+														{reminder.title}
+													</div>
+													{#if reminder.description}
+														<div
+															class="mt-0.5 line-clamp-1 text-xs text-zinc-400"
+														>
+															{reminder.description}
+														</div>
+													{/if}
+													<div
+														class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500"
+													>
+														<div>id: {reminder.id}</div>
+														{#if reminder.due_at}
+															<div>
+																due: {new Date(
+																	reminder.due_at
+																).toLocaleString()}
+															</div>
+														{/if}
+														{#if reminder.completed_at}
+															<div>
+																completed: {new Date(
+																	reminder.completed_at
+																).toLocaleString()}
+															</div>
+														{/if}
+														<div>
+															owner:
+															<button
+																type="button"
+																class="ml-1 underline underline-offset-4 hover:text-zinc-200"
+																onclick={() =>
+																	openUser(reminder.owner_id)}
+															>
+																{reminder.owner_id}
+															</button>
+														</div>
+													</div>
+												</div>
+												<div class="shrink-0 text-xs text-zinc-500">
+													{new Date(reminder.updated_at).toLocaleString()}
+												</div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				{/each}
+			{/if}
 		</CardContent>
 	</Card>
 </div>

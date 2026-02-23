@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
-	import {
-		api,
-		unwrap,
-		type Model,
-		type ModelCreate,
-		type ModelUpdate,
-		type Provider,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Model = Schemas['Model']
+	type ModelCreate = Schemas['ModelCreate']
+	type ModelUpdate = Schemas['ModelUpdate']
+	type Provider = Schemas['Provider']
+
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'

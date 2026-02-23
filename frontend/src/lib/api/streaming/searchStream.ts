@@ -10,7 +10,7 @@ import { getApiBaseUrl, refreshAccessToken } from '../client'
 import { getSessionId } from '../sessionId'
 
 export interface SearchResult {
-	type: 'thread' | 'reminder' | 'note'
+	type: 'thread' | 'reminder' | 'note' | 'memory'
 	id: string
 	title: string
 	subtitle?: string | null
@@ -22,6 +22,7 @@ export interface SearchStreamOptions {
 	query: string
 	types?: string[]
 	limit?: number
+	mode?: 'hybrid' | 'dense' | 'sparse' | 'autocomplete' | 'full'
 	signal?: AbortSignal
 }
 
@@ -37,6 +38,7 @@ export async function* searchStream(
 		for (const t of opts.types) params.append('types', t)
 	}
 	if (opts.limit) params.set('limit', String(opts.limit))
+	if (opts.mode) params.set('mode', opts.mode)
 
 	const url = `${getApiBaseUrl()}/v1/search/stream?${params}`
 

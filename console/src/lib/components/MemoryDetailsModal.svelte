@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { api, unwrap, type Memory } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Memory = Schemas['Memory']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'

@@ -2,7 +2,10 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { api, unwrap, type User } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type User = Schemas['User']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {

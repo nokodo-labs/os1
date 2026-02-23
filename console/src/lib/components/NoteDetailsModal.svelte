@@ -1,5 +1,8 @@
 <script lang="ts">
-	import type { Note } from '$lib/api'
+	import type { Schemas } from '$lib/api'
+
+	type Note = Schemas['Note']
+
 	import { Button } from '$lib/components/ui/button'
 	import { Calendar, Clock, FileText, Hash, Pencil, Tag, Trash2, User, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'

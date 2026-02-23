@@ -2,7 +2,11 @@
 	import { browser } from '$app/environment'
 	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
-	import { api, unwrap, type Thread } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type SearchResultItem = Schemas['SearchResultItem']
+	type Thread = Schemas['Thread']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadDetailsModal from '$lib/components/ThreadDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
@@ -14,6 +18,7 @@
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
+	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
 		Activity,
@@ -22,6 +27,7 @@
 		ArrowUp,
 		Clock,
 		Hash,
+		MessageSquare,
 		Timer,
 		Trash2,
 		User,
@@ -73,6 +79,38 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+
+	let searchQuery = $state('')
+	let searchResults = $state<SearchResultItem[]>([])
+	let isSearching = $state(false)
+	let searchError = $state<string | null>(null)
+	let _searchTimer: ReturnType<typeof setTimeout> | undefined
+
+	$effect(() => {
+		const q = searchQuery.trim()
+		clearTimeout(_searchTimer)
+		if (!q) {
+			searchResults = []
+			searchError = null
+			return
+		}
+		isSearching = true
+		_searchTimer = setTimeout(() => {
+			api.GET('/v1/threads/search', { params: { query: { q } } })
+				.then((r) => unwrap(r))
+				.then((page) => {
+					searchResults = page.items
+				})
+				.catch((e: unknown) => {
+					searchError = e instanceof Error ? e.message : 'search failed'
+					searchResults = []
+				})
+				.finally(() => {
+					isSearching = false
+				})
+		}, 300)
+		return () => clearTimeout(_searchTimer)
+	})
 
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
@@ -201,6 +239,12 @@
 			<p class="text-zinc-400">all threads in the system (including hidden).</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
+			<Input
+				type="search"
+				placeholder="search threads..."
+				bind:value={searchQuery}
+				class="h-9 w-50 lg:w-75"
+			/>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">{sortLabel(sortKey)}</span>
@@ -263,7 +307,9 @@
 			<div>
 				<CardTitle>list</CardTitle>
 				<CardDescription>
-					page {pageIndex + 1} · showing {threads.length}{hasNext ? '+' : ''}
+					page {pageIndex + 1} · showing {searchQuery.trim()
+						? searchResults.length
+						: threads.length}{!searchQuery.trim() && hasNext ? '+' : ''}
 				</CardDescription>
 			</div>
 			<div class="flex items-center gap-2">
@@ -290,105 +336,170 @@
 			</div>
 		</CardHeader>
 		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
-			{#if isLoading && threads.length === 0}
-				<div
-					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
-				>
-					<NokodoLoader />
-				</div>
-			{/if}
-
-			{#if threads.length === 0 && !isLoading}
-				<div
-					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
-				>
-					no threads found
-				</div>
-			{/if}
-
-			{#each threads as t (t.id)}
-				<div
-					role="button"
-					tabindex="0"
-					class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
-					onclick={() => openThread(t.id)}
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault()
-							openThread(t.id)
-						}
-					}}
-				>
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0 flex-1 space-y-2">
-							<div class="flex flex-wrap items-center gap-2">
-								<span class="truncate font-medium">{t.title ?? '(untitled)'}</span>
-								{#if t.is_archived}
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300"
-									>
-										<Archive class="h-3.5 w-3.5" />
-										archived
-									</span>
-								{/if}
-								{#if deletedAt(t)}
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
-									>
-										<Trash2 class="h-3.5 w-3.5" />
-										deleted
-									</span>
-								{/if}
-								{#if t.is_temporary}
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300"
-									>
-										<Timer class="h-3.5 w-3.5" />
-										temporary
-									</span>
-								{/if}
-							</div>
-							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Hash class="h-3.5 w-3.5" />
-									{t.id}
-								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<User class="h-3.5 w-3.5" />
-									{#if t.owner_id}
-										<button
-											type="button"
-											class="underline underline-offset-4 hover:text-zinc-200"
-											onclick={(e) => {
-												e.stopPropagation()
-												openUser(t.owner_id)
-											}}
-										>
-											{t.owner_id}
-										</button>
-									{:else}
-										<span>-</span>
+			{#if searchQuery.trim()}
+				<!-- search results mode -->
+				{#if isSearching}
+					<div
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					>
+						<NokodoLoader />
+					</div>
+				{:else if searchError}
+					<div
+						class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+					>
+						{searchError}
+					</div>
+				{:else if searchResults.length === 0}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no results found
+					</div>
+				{:else}
+					{#each searchResults as r (r.id)}
+						<div
+							class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+						>
+							<div
+								class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+							>
+								<div class="min-w-0 flex-1 space-y-1">
+									<div class="flex items-center gap-2">
+										<MessageSquare class="h-4 w-4 text-zinc-500" />
+										<span class="truncate font-medium">{r.title}</span>
+									</div>
+									{#if r.subtitle}
+										<div class="line-clamp-1 text-sm text-zinc-400">
+											{r.subtitle}
+										</div>
 									{/if}
-								</span>
+									<div class="flex items-center gap-2 text-xs text-zinc-400">
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+										>
+											<Hash class="h-3.5 w-3.5" />
+											{r.id}
+										</span>
+									</div>
+								</div>
+								{#if r.score != null}
+									<span class="shrink-0 text-xs text-zinc-500"
+										>{(r.score * 100).toFixed(1)}%</span
+									>
+								{/if}
 							</div>
 						</div>
-						<div class="shrink-0 text-xs text-zinc-500">
-							<div class="flex items-center gap-1">
-								<Clock class="h-3.5 w-3.5" />
-								updated {new Date(t.updated_at).toLocaleString()}
+					{/each}
+				{/if}
+			{:else}
+				<!-- normal paginated list mode -->
+				{#if isLoading && threads.length === 0}
+					<div
+						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					>
+						<NokodoLoader />
+					</div>
+				{/if}
+
+				{#if threads.length === 0 && !isLoading}
+					<div
+						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no threads found
+					</div>
+				{/if}
+
+				{#each threads as t (t.id)}
+					<div
+						role="button"
+						tabindex="0"
+						class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+						onclick={() => openThread(t.id)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault()
+								openThread(t.id)
+							}
+						}}
+					>
+						<div
+							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+						>
+							<div class="min-w-0 flex-1 space-y-2">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="truncate font-medium"
+										>{t.title ?? '(untitled)'}</span
+									>
+									{#if t.is_archived}
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300"
+										>
+											<Archive class="h-3.5 w-3.5" />
+											archived
+										</span>
+									{/if}
+									{#if deletedAt(t)}
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+										>
+											<Trash2 class="h-3.5 w-3.5" />
+											deleted
+										</span>
+									{/if}
+									{#if t.is_temporary}
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300"
+										>
+											<Timer class="h-3.5 w-3.5" />
+											temporary
+										</span>
+									{/if}
+								</div>
+								<div
+									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
+								>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<Hash class="h-3.5 w-3.5" />
+										{t.id}
+									</span>
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										<User class="h-3.5 w-3.5" />
+										{#if t.owner_id}
+											<button
+												type="button"
+												class="underline underline-offset-4 hover:text-zinc-200"
+												onclick={(e) => {
+													e.stopPropagation()
+													openUser(t.owner_id)
+												}}
+											>
+												{t.owner_id}
+											</button>
+										{:else}
+											<span>-</span>
+										{/if}
+									</span>
+								</div>
 							</div>
-							<div class="mt-1 flex items-center gap-1">
-								<Activity class="h-3.5 w-3.5" />
-								activity {new Date(t.last_activity_at).toLocaleString()}
+							<div class="shrink-0 text-xs text-zinc-500">
+								<div class="flex items-center gap-1">
+									<Clock class="h-3.5 w-3.5" />
+									updated {new Date(t.updated_at).toLocaleString()}
+								</div>
+								<div class="mt-1 flex items-center gap-1">
+									<Activity class="h-3.5 w-3.5" />
+									activity {new Date(t.last_activity_at).toLocaleString()}
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
-			{/each}
+				{/each}
+			{/if}
 		</CardContent>
 	</Card>
 </div>

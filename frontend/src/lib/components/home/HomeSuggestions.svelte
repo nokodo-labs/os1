@@ -56,7 +56,7 @@
 
 	const chrome = useSystemChrome()
 
-	// --- search state ---
+	// search state
 	let isSearching = $state(false)
 	let isSearchError = $state(false)
 	let searchResults = $state<SearchResult[]>([])
@@ -66,10 +66,16 @@
 	let searchDebounceTimer: number | null = null
 	let searchAbort: AbortController | null = null
 
+	// full (hybrid) search state
+	let isFullSearching = $state(false)
+	let isFullSearchError = $state(false)
+	let hasDoneFullSearch = $state(false)
+	let fullSearchAbort: AbortController | null = null
+
 	const normalizedQuery = $derived(query.trim().toLowerCase())
 	const open = $derived(normalizedQuery.length > 0 && !forceClosed)
 
-	// --- suggestion data ---
+	// suggestion data
 	const allAppSuggestions: HomeSuggestion[] = [
 		{ id: 'chats', title: 'chats', subtitle: 'recent conversations', icon: ChatBubbles },
 		{
@@ -145,12 +151,17 @@
 		return [...localScored, ...apiResults].slice(0, 10)
 	})
 
-	// --- search logic ---
-	async function runSearch(q: string, signal: AbortSignal): Promise<void> {
+	// search logic
+	async function runAutocomplete(q: string, signal: AbortSignal): Promise<void> {
 		const results: SearchResult[] = []
 		isSearchError = false
 		try {
-			for await (const result of searchStream({ query: q, limit: 10, signal })) {
+			for await (const result of searchStream({
+				query: q,
+				limit: 10,
+				mode: 'autocomplete',
+				signal,
+			})) {
 				if (signal.aborted) break
 				results.push(result)
 				searchResults = [...results]
@@ -163,6 +174,40 @@
 				isSearching = false
 			}
 		}
+	}
+
+	function triggerFullSearch() {
+		fullSearchAbort?.abort()
+		fullSearchAbort = null
+		const q = query.trim()
+		if (!q) return
+		isFullSearching = true
+		isFullSearchError = false
+		const controller = new AbortController()
+		fullSearchAbort = controller
+		void (async () => {
+			const results: SearchResult[] = []
+			try {
+				for await (const result of searchStream({
+					query: q,
+					limit: 20,
+					mode: 'full',
+					signal: controller.signal,
+				})) {
+					if (controller.signal.aborted) break
+					results.push(result)
+				}
+				if (!controller.signal.aborted) {
+					searchResults = results
+					hasDoneFullSearch = true
+				}
+			} catch {
+				if (!controller.signal.aborted) isFullSearchError = true
+			} finally {
+				if (!controller.signal.aborted) isFullSearching = false
+			}
+			fullSearchAbort = null
+		})()
 	}
 
 	// debounced search effect - only tracks query prop
@@ -186,6 +231,11 @@
 			cancelPending()
 			isSearching = false
 			isSearchError = false
+			isFullSearching = false
+			isFullSearchError = false
+			hasDoneFullSearch = false
+			fullSearchAbort?.abort()
+			fullSearchAbort = null
 			highlightedIndex = -1
 			isSuggestionNavigationActive = false
 			searchResults = []
@@ -194,6 +244,10 @@
 
 		cancelPending()
 		isSearching = true
+		isFullSearching = false
+		hasDoneFullSearch = false
+		fullSearchAbort?.abort()
+		fullSearchAbort = null
 		isSuggestionNavigationActive = false
 		highlightedIndex = -1
 
@@ -201,11 +255,11 @@
 			searchDebounceTimer = null
 			const controller = new AbortController()
 			searchAbort = controller
-			void runSearch(q, controller.signal)
-		}, 300) as unknown as number
+			void runAutocomplete(q, controller.signal)
+		}, 150) as unknown as number
 	})
 
-	// --- actions ---
+	// actions
 	function selectSuggestion(suggestion: HomeSuggestion) {
 		forceClosed = true
 		highlightedIndex = -1
@@ -292,7 +346,7 @@
 		<div class="relative z-10">
 			<div class="p-2" role="listbox" aria-label="suggestions">
 				{#if isSearching}
-					<!-- shimmer searching state -->
+					<!-- shimmer autocomplete state -->
 					<div class="flex items-center gap-3 px-3 py-2.5">
 						<div
 							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/85"
@@ -313,7 +367,7 @@
 						</div>
 						<div class="text-sm text-white/40">search failed - try again</div>
 					</div>
-				{:else if suggestions.length === 0}
+				{:else if suggestions.length === 0 && !isFullSearching}
 					<!-- no results -->
 					<div class="flex items-center gap-3 px-3 py-2.5">
 						<div
@@ -324,6 +378,19 @@
 						<div class="text-sm text-white/40">no results found</div>
 					</div>
 				{:else}
+					{#if isFullSearching}
+						<!-- shimmer row while full search runs -->
+						<div class="flex items-center gap-3 px-3 py-2">
+							<div
+								class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-white/6 text-white/50"
+							>
+								<Search class="h-4 w-4" strokeWidth="2" />
+							</div>
+							<ShimmerText className="text-xs font-medium text-white/50">
+								searching deeper
+							</ShimmerText>
+						</div>
+					{/if}
 					{#each suggestions as suggestion, index (suggestion.id)}
 						{@const Icon = suggestion.icon}
 						<button
@@ -357,6 +424,26 @@
 							</div>
 						</button>
 					{/each}
+					{#if !hasDoneFullSearch && !isFullSearching && suggestions.length > 0}
+						<!-- full search trigger -->
+						<div class="mt-1 border-t border-white/8 pt-1">
+							<button
+								type="button"
+								class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors hover:bg-white/7"
+								onclick={triggerFullSearch}
+							>
+								<div
+									class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-white/6 text-white/50"
+								>
+									<Search class="h-4 w-4" strokeWidth="2" />
+								</div>
+								<div class="text-xs text-white/50">search more in-depth</div>
+							</button>
+						</div>
+					{/if}
+					{#if isFullSearchError}
+						<div class="px-3 py-1.5 text-xs text-red-400/70">full search failed</div>
+					{/if}
 				{/if}
 			</div>
 		</div>

@@ -1,3 +1,4 @@
+import { browser } from '$app/environment'
 import { authReady, clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth.svelte'
 import createClient from 'openapi-fetch'
 import type { paths } from './types'
@@ -8,7 +9,15 @@ type PrefixedPaths<P, Prefix extends string> = {
 
 export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
 
-const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1383'
+function getApiBase(): string {
+	if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+	if (!browser) return 'http://localhost:1383'
+	const portFromEnv = Number.parseInt(import.meta.env.VITE_API_PORT || '', 10)
+	const apiPort = Number.isFinite(portFromEnv) ? portFromEnv : 1383
+	return `${window.location.protocol}//${window.location.hostname}:${apiPort}`
+}
+
+const DEFAULT_API_BASE = getApiBase()
 
 // ── deduped refresh ──────────────────────────────────────────────────
 let refreshInFlight: Promise<string | null> | null = null

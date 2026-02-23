@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { api, unwrap, type Message, type Thread } from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Message = Schemas['Message']
+	type Thread = Schemas['Thread']
+
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { X } from '@lucide/svelte'

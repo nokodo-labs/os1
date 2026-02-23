@@ -175,6 +175,37 @@ async def list_reminders(
 	)
 
 
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_reminders(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search reminders with cursor-based pagination."""
+	return await reminder_service.search_reminders(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_reminders(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all reminders into qdrant. admin only."""
+	require_admin(principal)
+	count = await reminder_service.vectorize_all_reminders(db)
+	return {"vectorized": count}
+
+
 @router.get("/{reminder_id}", response_model=ReminderWithSubtasks)
 async def get_reminder(
 	reminder_id: TypeID,
@@ -250,34 +281,3 @@ async def move_reminder(
 		position=position,
 		origin_session_id=x_session_id,
 	)
-
-
-@router.get("/search", response_model=CursorPage[SearchResultItem])
-async def search_reminders(
-	q: str = Query(min_length=1, max_length=500),
-	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
-	mode: SearchMode = Query(default=SearchMode.FULL),
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search reminders with cursor-based pagination."""
-	return await reminder_service.search_reminders(
-		q,
-		db,
-		principal=principal,
-		limit=limit,
-		cursor=cursor,
-		search_params=SearchParams(mode=mode),
-	)
-
-
-@router.post("/revectorize")
-async def revectorize_reminders(
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> dict[str, int]:
-	"""vectorize all reminders into qdrant. admin only."""
-	require_admin(principal)
-	count = await reminder_service.vectorize_all_reminders(db)
-	return {"vectorized": count}

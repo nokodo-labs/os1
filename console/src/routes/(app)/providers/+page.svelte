@@ -1,12 +1,11 @@
 <script lang="ts">
-	import {
-		api,
-		unwrap,
-		type Provider,
-		type ProviderCreate,
-		type ProviderType,
-		type ProviderUpdate,
-	} from '$lib/api'
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Provider = Schemas['Provider']
+	type ProviderCreate = Schemas['ProviderCreate']
+	type ProviderType = Schemas['ProviderType']
+	type ProviderUpdate = Schemas['ProviderUpdate']
+
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
