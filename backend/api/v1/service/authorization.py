@@ -545,3 +545,12 @@ def require_permission(principal: Principal, permission: str) -> None:
 	"""check that principal has a global permission string."""
 	if not principal.has_permission(permission):
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
+def require_admin(principal: Principal) -> None:
+	"""raise 403 if the principal is not an admin."""
+	if not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="admin access required",
+		)

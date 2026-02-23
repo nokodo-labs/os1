@@ -34,12 +34,12 @@ from api.settings import settings
 
 @pytest.fixture(scope="session", autouse=True)
 def _api_test_env_defaults() -> Generator[None]:
-	"""Make api tests self-contained (no external OpenAI/Qdrant required)."""
+	"""Make api tests self-contained (no external OpenAI/vector DB required)."""
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
-	if not os.getenv("NOKODO__ASSETS__QDRANT_URL"):
-		monkeypatch.setenv("NOKODO__ASSETS__QDRANT_URL", ":memory:")
+	if not os.getenv("NOKODO__ASSETS__VECTOR_DATABASE__URL"):
+		monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__URL", ":memory:")
 	monkeypatch.setenv("NOKODO__SECURITY__AUTO_SIGNUP_ROLE_IDS", "[]")
 
 	settings.reload()
@@ -67,7 +67,7 @@ def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 	from api.v1.service import vectorstores as vectorstores_service
 	from nokodo_ai.embeddings import EmbeddingModel
 
-	vectorstores_service._qdrant_adapter.cache_clear()
+	vectorstores_service._vectorstore_adapter.cache_clear()
 
 	async def _fake_embed(self: EmbeddingModel, texts: list[str]) -> list[list[float]]:
 		_ = self
@@ -806,7 +806,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 	previous_testing = boot_settings.TESTING
 	boot_settings.TESTING = True
 
-	from api.core.database import get_db
+	from api.database import get_db
 	from api.main import app
 	from api.v1.app import v1_app
 

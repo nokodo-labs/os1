@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.plugin import Plugin
 from api.schemas.plugin import Plugin as PluginSchema
 from api.schemas.plugin import PluginCreate, PluginInfo, PluginUpdate

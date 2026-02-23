@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
-from api.core.database import get_db
+from api.database import get_db
 from api.schemas.runs import ActiveRunOut, RunRequest
 from api.v1.service import runs as runs_service
 from api.v1.service.auth import Principal, get_current_principal

@@ -147,6 +147,17 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="message",
 	)
 
+	@property
+	def text_content(self) -> str:
+		"""extract concatenated text from all text content parts."""
+		parts: list[str] = []
+		for part in self.content or []:
+			if isinstance(part, dict) and part.get("type") == "text":
+				text = str(part.get("text", "")).strip()
+				if text:
+					parts.append(text)
+		return " ".join(parts)
+
 	def _sdk_content(self) -> list[SDKContentPart]:
 		"""validate content parts into sdk models."""
 		return [

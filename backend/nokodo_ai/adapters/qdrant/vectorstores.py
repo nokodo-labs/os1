@@ -3,27 +3,45 @@
 from __future__ import annotations
 
 import uuid
-from typing import Literal
+from typing import Literal, overload
 
 from qdrant_client.models import (
+	Condition,
 	Distance,
+	Document,
 	ExtendedPointId,
+	FieldCondition,
+	Filter,
+	FilterSelector,
+	Fusion,
+	FusionQuery,
+	MatchValue,
+	Modifier,
+	PayloadSchemaType,
 	PointIdsList,
 	PointStruct,
+	Prefetch,
 	ScoredPoint,
+	SparseVectorParams,
 	VectorParams,
 )
 
-from ...types.json import JSONObject
-from ...utils.vectors import normalize_cosine_score
-from ..base.vectorstores import BaseVectorstoreAdapter, Chunk, ChunkSearchResult
+from ...utils.vectors import normalize_cosine_score, normalize_scores
+from ..base.vectorstores import (
+	BaseVectorstoreAdapter,
+	Chunk,
+	ChunkFilter,
+	ChunkSearchResult,
+	Index,
+)
 from .base import BaseQdrantAdapter
 
 
 class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	"""adapter for Qdrant vector database.
 
-	supports both Qdrant Cloud and self-hosted instances.
+	supports dense, sparse (BM25), and hybrid (dense + BM25 with RRF fusion)
+	operations through unified add() and search() methods.
 
 	usage:
 		# local instance
@@ -48,101 +66,345 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		except ValueError:
 			return uuid.uuid5(uuid.NAMESPACE_URL, f"nokodo:{id_}")
 
-	async def _ensure_collection(self, collection: str, vector_size: int) -> None:
+	async def ensure_collection(
+		self,
+		collection: str,
+		*,
+		vector_size: int,
+		sparse: bool = False,
+		indexes: Index | None = None,
+	) -> None:
+		"""ensure a collection exists with the desired vector configuration.
+
+		indexes maps field names to scalar field types (e.g.
+		{"resource_type": "keyword", "owner_id": "keyword"}).
+		indexes are only created once alongside the collection.
+		"""
 		exists = await self._client.collection_exists(collection_name=collection)
 		if exists:
 			return
-		await self._client.create_collection(
-			collection_name=collection,
-			vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-		)
+		if sparse:
+			await self._client.create_collection(
+				collection_name=collection,
+				vectors_config={
+					"dense": VectorParams(
+						size=vector_size,
+						distance=Distance.COSINE,
+					),
+				},
+				sparse_vectors_config={
+					"bm25": SparseVectorParams(modifier=Modifier.IDF),
+				},
+			)
+		else:
+			await self._client.create_collection(
+				collection_name=collection,
+				vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+			)
+		if indexes:
+			for field_name, field_type in indexes.items():
+				await self._client.create_payload_index(
+					collection_name=collection,
+					field_name=field_name,
+					field_schema=PayloadSchemaType(field_type),
+				)
 
 	async def add(
 		self,
 		collection: str,
 		chunks: list[Chunk],
+		*,
+		sparse: bool = False,
 	) -> None:
-		"""add documents with their embeddings to the specified collection."""
-		if chunks:
-			await self._ensure_collection(
-				collection, vector_size=len(chunks[0].embedding)
-			)
-		points = []
+		"""store chunks with dense and optionally sparse (BM25) vectors."""
+		if not chunks:
+			return
+		points: list[PointStruct] = []
 		for chunk in chunks:
-			payload: JSONObject = {"id": chunk.id, "content": chunk.content}
-			if chunk.metadata:
-				payload["metadata"] = chunk.metadata
-			points.append(
-				PointStruct(
-					id=self._to_point_id(chunk.id),
-					vector=chunk.embedding,
-					payload=payload,
+			payload = self._build_payload(chunk)
+			if sparse:
+				points.append(
+					PointStruct(
+						id=self._to_point_id(chunk.id),
+						payload=payload,
+						vector={
+							"dense": chunk.embedding,
+							"bm25": Document(text=chunk.content, model="Qdrant/bm25"),
+						},
+					)
 				)
-			)
-
-		await self._client.upsert(
-			collection_name=collection,
-			points=points,
-		)
+			else:
+				points.append(
+					PointStruct(
+						id=self._to_point_id(chunk.id),
+						payload=payload,
+						vector=chunk.embedding,
+					)
+				)
+		await self._client.upsert(collection_name=collection, points=points)
 
 	async def search(
 		self,
 		collection: str,
-		query: list[float],
 		*,
+		query: list[float] | None = None,
+		text_query: str | None = None,
 		limit: int = 10,
+		offset: int | None = None,
+		query_filter: ChunkFilter | None = None,
+		prefetch_limit: int | None = None,
+		fusion: str = "rrf",
+		normalize: bool = True,
 	) -> list[ChunkSearchResult]:
-		"""search for similar documents by embedding in the specified collection."""
+		"""search with mode determined by argument combinations."""
+		qf = self._to_qdrant_filter(query_filter) if query_filter else None
+		exists = await self._client.collection_exists(collection_name=collection)
+		if not exists:
+			return []
+		if query is not None and text_query is not None:
+			return await self._search_hybrid(
+				collection,
+				query=query,
+				text_query=text_query,
+				limit=limit,
+				offset=offset,
+				query_filter=qf,
+				prefetch_limit=prefetch_limit or 50,
+				fusion=fusion,
+				normalize=normalize,
+			)
+		if query is not None:
+			return await self._search_dense(
+				collection,
+				query=query,
+				limit=limit,
+				offset=offset,
+				query_filter=qf,
+				normalize=normalize,
+			)
+		if text_query is not None:
+			return await self._search_sparse(
+				collection,
+				text_query=text_query,
+				limit=limit,
+				offset=offset,
+				query_filter=qf,
+				normalize=normalize,
+			)
+		raise ValueError("at least one of query or text_query must be provided")
+
+	@overload
+	async def delete(
+		self,
+		collection: str,
+		target: list[str],
+	) -> None: ...
+
+	@overload
+	async def delete(
+		self,
+		collection: str,
+		target: ChunkFilter,
+	) -> None: ...
+
+	async def delete(
+		self,
+		collection: str,
+		target: list[str] | ChunkFilter,
+	) -> None:
+		"""remove chunks by their string ids or by filter."""
+		exists = await self._client.collection_exists(collection_name=collection)
+		if not exists:
+			return
+		if isinstance(target, list):
+			if not target:
+				return
+			point_ids: list[ExtendedPointId] = [
+				self._to_point_id(id_) for id_ in target
+			]
+			await self._client.delete(
+				collection_name=collection,
+				points_selector=PointIdsList(points=point_ids),
+			)
+		else:
+			await self._client.delete(
+				collection_name=collection,
+				points_selector=FilterSelector(filter=self._to_qdrant_filter(target)),
+			)
+
+	async def _search_dense(
+		self,
+		collection: str,
+		*,
+		query: list[float],
+		limit: int,
+		offset: int | None,
+		query_filter: Filter | None,
+		normalize: bool,
+	) -> list[ChunkSearchResult]:
+		"""dense cosine similarity search."""
 		response = await self._client.query_points(
 			collection_name=collection,
 			query=query,
 			limit=limit,
+			offset=offset,
 			with_payload=True,
 			with_vectors=True,
+			query_filter=query_filter,
 		)
-		return [self._convert_result(r) for r in response.points]
-
-	async def delete(self, collection: str, chunks: list[Chunk]) -> None:
-		"""remove documents by their ids from the specified collection."""
-		point_ids: list[ExtendedPointId] = [
-			self._to_point_id(chunk.id) for chunk in chunks
+		if normalize:
+			return [
+				self._build_result(p, score=normalize_cosine_score(p.score))
+				for p in response.points
+			]
+		return [
+			self._build_result(p, score=p.score if p.score is not None else 0.0)
+			for p in response.points
 		]
-		await self._client.delete(
+
+	async def _search_sparse(
+		self,
+		collection: str,
+		*,
+		text_query: str,
+		limit: int,
+		offset: int | None,
+		query_filter: Filter | None,
+		normalize: bool,
+	) -> list[ChunkSearchResult]:
+		"""BM25 sparse text search."""
+		response = await self._client.query_points(
 			collection_name=collection,
-			points_selector=PointIdsList(points=point_ids),
+			query=Document(text=text_query, model="Qdrant/bm25"),
+			using="bm25",
+			limit=limit,
+			offset=offset,
+			with_payload=True,
+			query_filter=query_filter,
 		)
+		if normalize:
+			return self._normalize_batch(response.points)
+		return self._raw_batch(response.points)
 
-	def _convert_result(self, result: ScoredPoint) -> ChunkSearchResult:
-		"""convert a Qdrant ScoredPoint to ChunkSearchResult."""
-		payload = result.payload or {}
-		id_value = payload.get("id")
-		metadata = payload.get("metadata")
+	async def _search_hybrid(
+		self,
+		collection: str,
+		*,
+		query: list[float],
+		text_query: str,
+		limit: int,
+		offset: int | None,
+		query_filter: Filter | None,
+		prefetch_limit: int,
+		fusion: str,
+		normalize: bool,
+	) -> list[ChunkSearchResult]:
+		"""hybrid fusion of dense + BM25 search."""
+		fusion_mode = Fusion.DBSF if fusion == "dbsf" else Fusion.RRF
+		response = await self._client.query_points(
+			collection_name=collection,
+			prefetch=[
+				Prefetch(
+					query=query,
+					using="dense",
+					limit=prefetch_limit,
+					filter=query_filter,
+				),
+				Prefetch(
+					query=Document(text=text_query, model="Qdrant/bm25"),
+					using="bm25",
+					limit=prefetch_limit,
+					filter=query_filter,
+				),
+			],
+			query=FusionQuery(fusion=fusion_mode),
+			limit=limit,
+			offset=offset,
+			with_payload=True,
+		)
+		if normalize:
+			return self._normalize_batch(response.points)
+		return self._raw_batch(response.points)
 
+	@staticmethod
+	def _build_payload(chunk: Chunk) -> dict[str, object]:
+		"""build the Qdrant payload dict from a chunk."""
+		payload: dict[str, object] = {
+			"id": chunk.id,
+			"content": chunk.content,
+		}
+		if chunk.metadata:
+			payload.update(chunk.metadata)
+		return payload
+
+	@staticmethod
+	def _to_qdrant_filter(cf: ChunkFilter) -> Filter:
+		"""convert a library ChunkFilter to a Qdrant Filter."""
+		conditions: list[Condition] = []
+		for m in cf.must:
+			val: str | int | bool
+			if isinstance(m.value, float):
+				val = int(m.value) if m.value == int(m.value) else str(m.value)
+			else:
+				val = m.value
+			conditions.append(FieldCondition(key=m.key, match=MatchValue(value=val)))
+		return Filter(must=conditions)
+
+	def _build_result(
+		self,
+		point: ScoredPoint,
+		*,
+		score: float,
+	) -> ChunkSearchResult:
+		"""convert a Qdrant ScoredPoint to a ChunkSearchResult."""
+		payload = dict(point.payload or {})
+		point_id = str(payload.pop("id", point.id))
+		content = str(payload.pop("content", ""))
+		# backward compat: handle nested metadata from older collections
+		nested = payload.pop("metadata", None)
+		if isinstance(nested, dict):
+			payload.update(nested)
 		return ChunkSearchResult(
-			id=id_value if isinstance(id_value, str) else str(result.id),
-			content=str(payload.get("content", "")),
-			score=normalize_cosine_score(result.score),
-			metadata=metadata if isinstance(metadata, dict) else {},
-			embedding=self._extract_embedding(result) or [],
+			id=point_id,
+			content=content,
+			score=score,
+			metadata=payload,
+			embedding=self._extract_dense_vector(point),
 		)
 
-	def _extract_embedding(self, result: ScoredPoint) -> list[float] | None:
-		vector = result.vector
+	def _normalize_batch(
+		self,
+		points: list[ScoredPoint],
+	) -> list[ChunkSearchResult]:
+		"""convert points and normalize scores to 0-1 as a batch."""
+		if not points:
+			return []
+		raw_scores = [p.score if p.score is not None else 0.0 for p in points]
+		normed = normalize_scores(raw_scores)
+		return [
+			self._build_result(p, score=s) for p, s in zip(points, normed, strict=True)
+		]
+
+	def _raw_batch(
+		self,
+		points: list[ScoredPoint],
+	) -> list[ChunkSearchResult]:
+		"""convert points keeping raw scores without normalization."""
+		return [
+			self._build_result(p, score=p.score if p.score is not None else 0.0)
+			for p in points
+		]
+
+	@staticmethod
+	def _extract_dense_vector(point: ScoredPoint) -> list[float]:
+		"""extract the dense embedding from a scored point."""
+		vector = point.vector
 		if vector is None:
-			return None
+			return []
 		if isinstance(vector, list):
-			if not vector:
-				return []
-			first = vector[0]
-			if isinstance(first, (float, int)):
-				return [float(x) for x in vector if isinstance(x, (float, int))]
-			return None
+			return [float(x) for x in vector if isinstance(x, (float, int))]
 		if isinstance(vector, dict):
-			for value in vector.values():
-				if (
-					isinstance(value, list)
-					and value
-					and isinstance(value[0], (float, int))
-				):
-					return [float(x) for x in value if isinstance(x, (float, int))]
-		return None
+			dense = vector.get("dense")
+			if isinstance(dense, list):
+				return [float(x) for x in dense if isinstance(x, (float, int))]
+		return []

@@ -25,6 +25,7 @@ from api.v1.routers import (
 	tasks,
 	threads,
 	users,
+	vectorstores,
 )
 
 
@@ -52,3 +53,4 @@ api_router.include_router(prompts.router)
 api_router.include_router(openai.router)
 api_router.include_router(plugins.router)
 api_router.include_router(settings.router)
+api_router.include_router(vectorstores.router)

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+from collections.abc import Coroutine
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.database import build_cursor_page, decode_cursor
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -28,7 +32,15 @@ from api.schemas.reminder import (
 from api.schemas.reminder import (
 	ReminderList as ReminderListOut,
 )
+from api.schemas.search import (
+	CursorPage,
+	SearchMode,
+	SearchParams,
+	SearchResultItem,
+	SearchResultType,
+)
 from api.v1.service import events as event_service
+from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
@@ -36,8 +48,19 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.vectorize import (
+	VectorSpec,
+	build_chunk,
+	remove_vectorized_resource,
+	vectorize_resource,
+)
+from nokodo_ai.types import JSONObject
 from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
 
 
 # sort column mappings
@@ -270,6 +293,11 @@ async def update_reminder_list(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
+	# re-index child reminders when list name/description changes
+	_list_search_fields = {"name", "description"}
+	if _list_search_fields & update_data.keys():
+		await vectorize_reminders_for_list(list_id, session)
+
 	return reminder_list
 
 
@@ -338,6 +366,9 @@ async def create_reminder(
 	await event_service.publish_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
+
+	# index for search
+	await vectorize_resource(spec=REMINDER_SPEC, resource=reminder, session=session)
 
 	return reminder
 
@@ -481,6 +512,10 @@ async def update_reminder(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
+	# re-index if searchable fields changed
+	if await REMINDER_SPEC.should_revectorize(reminder, data, session):
+		await vectorize_resource(spec=REMINDER_SPEC, resource=reminder, session=session)
+
 	return reminder
 
 
@@ -561,6 +596,11 @@ async def delete_reminder(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
+	# remove from search index
+	await remove_vectorized_resource(
+		REMINDER_SPEC, resource_id=reminder_id_str, session=session
+	)
+
 
 async def move_reminder(
 	reminder_id: TypeID,
@@ -606,3 +646,220 @@ async def move_reminder(
 	)
 
 	return reminder
+
+
+def _reminder_dense_text(reminder: Reminder) -> str:
+	parts = [reminder.title or ""]
+	if reminder.description:
+		parts.append(reminder.description)
+	return " ".join(p for p in parts if p).strip()
+
+
+def _reminder_metadata(reminder: Reminder) -> JSONObject:
+	return {
+		"resource_type": "reminder",
+		"owner_id": str(reminder.owner_id),
+		"title": reminder.title or "",
+		"status": (reminder.status.value if reminder.status else ""),
+		"list_id": (str(reminder.list_id) if reminder.list_id else None),
+	}
+
+
+async def _reminder_should_revectorize(
+	reminder: Reminder,
+	data: ReminderUpdate,
+	session: AsyncSession,
+) -> bool:
+	_fields = {"title", "description", "list_id"}
+	update_data = data.model_dump(exclude_unset=True, mode="python")
+	return bool(_fields & update_data.keys())
+
+
+REMINDER_SPEC: VectorSpec[Reminder] = VectorSpec(
+	resource_type="reminder",
+	resource_id=lambda r: str(r.id),
+	dense_text=_reminder_dense_text,
+	bm25_text=_reminder_dense_text,
+	metadata=_reminder_metadata,
+	should_revectorize=_reminder_should_revectorize,
+	sort_key="updated_at",
+)
+
+
+async def vectorize_reminders_for_list(
+	list_id: str | TypeID, session: AsyncSession
+) -> None:
+	"""re-vectorize all reminders in a list (e.g. when list is renamed)."""
+	stmt = select(Reminder).where(Reminder.list_id == str(list_id))
+	result = await session.execute(stmt)
+	valid: list[tuple[Reminder, str]] = []
+	for r in result.scalars().all():
+		text = _reminder_dense_text(r)
+		if text.strip():
+			valid.append((r, text))
+	if not valid:
+		return
+	embeddings = await embed_texts([text for _, text in valid], session)
+	chunks = []
+	for (reminder, _), emb in zip(valid, embeddings):
+		await remove_vectorized_resource(
+			spec=REMINDER_SPEC, resource_id=str(reminder.id), session=session
+		)
+		chunks.append(build_chunk(REMINDER_SPEC, reminder, emb))
+	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+
+
+async def vectorize_all_reminders(session: AsyncSession) -> int:
+	"""vectorize all reminders in bulk. returns count."""
+	stmt = select(Reminder)
+	result = await session.execute(stmt)
+	valid: list[tuple[Reminder, str]] = []
+	for r in result.scalars().all():
+		text = _reminder_dense_text(r)
+		if text.strip():
+			valid.append((r, text))
+	if not valid:
+		return 0
+	embeddings = await embed_texts([text for _, text in valid], session)
+	chunks = []
+	for (reminder, _), emb in zip(valid, embeddings):
+		await remove_vectorized_resource(
+			spec=REMINDER_SPEC, resource_id=str(reminder.id), session=session
+		)
+		chunks.append(build_chunk(REMINDER_SPEC, reminder, emb))
+	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	return len(valid)
+
+
+async def _autocomplete_reminders(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 5,
+) -> list[SearchResultItem]:
+	"""pg_trgm autocomplete for reminders on title/description/list."""
+	stmt = (
+		select(Reminder)
+		.outerjoin(ReminderList, Reminder.list_id == ReminderList.id)
+		.where(
+			or_(
+				func.similarity(Reminder.title, q) > 0.1,
+				Reminder.title.ilike(f"%{q}%"),
+				Reminder.description.ilike(f"%{q}%"),
+				ReminderList.name.ilike(f"%{q}%"),
+			),
+		)
+		.order_by(func.similarity(Reminder.title, q).desc())
+		.limit(limit)
+	)
+	if not principal.is_admin:
+		stmt = stmt.where(Reminder.owner_id == principal.user.id)
+	result = await db.execute(stmt)
+	return [
+		SearchResultItem(
+			type=SearchResultType.REMINDER,
+			id=TypeID(rem.id),
+			title=rem.title or "",
+			subtitle=(rem.description[:100] if rem.description else None),
+			created_at=rem.created_at,
+			updated_at=rem.updated_at,
+		)
+		for rem in result.scalars().all()
+	]
+
+
+async def _hybrid_search_reminders(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	search_params: SearchParams | None = None,
+) -> list[SearchResultItem]:
+	"""qdrant hybrid search for reminders (dense + BM25)."""
+	params = search_params or SearchParams()
+	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
+	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
+	query_emb = await embed_text(text=q, session=db) if need_dense else None
+	text_query = q if need_sparse else None
+	query_filter = vectorstore_service.resource_filter(
+		"reminder",
+		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+	)
+	results = await vectorstore_service.search(
+		session=db,
+		query=query_emb,
+		text_query=text_query,
+		limit=limit,
+		query_filter=query_filter,
+		normalize=params.normalize,
+	)
+	if not results:
+		return []
+	resource_ids = [r.metadata["resource_id"] for r in results]
+	stmt = select(Reminder).where(Reminder.id.in_(resource_ids))
+	db_result = await db.execute(stmt)
+	by_id = {str(r.id): r for r in db_result.scalars().all()}
+	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
+	items: list[SearchResultItem] = []
+	for r in results:
+		rid = str(r.metadata["resource_id"])
+		rem = by_id.get(rid)
+		if not rem:
+			continue
+		items.append(
+			SearchResultItem(
+				type=SearchResultType.REMINDER,
+				id=TypeID(rem.id),
+				title=rem.title or "",
+				subtitle=(rem.description[:100] if rem.description else None),
+				score=score_by_rid.get(rid),
+				created_at=rem.created_at,
+				updated_at=rem.updated_at,
+			)
+		)
+	return items
+
+
+async def search_reminders(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+) -> CursorPage[SearchResultItem]:
+	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	params = search_params or SearchParams()
+	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	run_autocomplete = params.mode in (SearchMode.AUTOCOMPLETE, SearchMode.FULL)
+	run_hybrid = params.mode in (
+		SearchMode.HYBRID,
+		SearchMode.DENSE,
+		SearchMode.SPARSE,
+		SearchMode.FULL,
+	)
+	# hybrid first - wins on deduplication (higher quality than autocomplete)
+	if run_hybrid:
+		coros.append(
+			_hybrid_search_reminders(
+				q, db, principal=principal, limit=limit + 1, search_params=params
+			)
+		)
+	if run_autocomplete:
+		coros.append(
+			_autocomplete_reminders(q, db, principal=principal, limit=limit + 1)
+		)
+	results = await asyncio.gather(*coros, return_exceptions=True)
+	items = vectorstore_service.merge_deduplicate(
+		results, limit + 1, resource_name="reminders"
+	)
+	if cursor:
+		ts, cid = decode_cursor(cursor)
+		_sk = REMINDER_SPEC.sort_key
+		items = [i for i in items if (getattr(i, _sk), str(i.id)) < (ts, cid)]
+	_sk = REMINDER_SPEC.sort_key
+	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
+	return build_cursor_page(items, limit, sort_key=REMINDER_SPEC.sort_key)

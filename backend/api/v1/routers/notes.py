@@ -7,13 +7,15 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.note import Note
 from api.schemas.note import Note as NoteSchema
 from api.schemas.note import NoteCreate, NoteUpdate
+from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.v1.service import notes as note_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
@@ -106,3 +108,34 @@ async def delete_note(
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+
+
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_notes(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search notes with cursor-based pagination."""
+	return await note_service.search_notes(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_notes(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all notes into qdrant. admin only."""
+	require_admin(principal)
+	count = await note_service.vectorize_all_notes(db)
+	return {"vectorized": count}

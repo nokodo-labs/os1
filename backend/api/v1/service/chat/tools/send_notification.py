@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from api.core.database import AsyncSessionLocal
+from api.database import AsyncSessionLocal
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType

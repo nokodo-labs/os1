@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.provider import Provider
 from api.schemas.provider import Provider as ProviderSchema
 from api.schemas.provider import ProviderCreate, ProviderUpdate

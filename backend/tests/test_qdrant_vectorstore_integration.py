@@ -95,7 +95,7 @@ async def test_qdrant_create_upsert_search_and_cleanup() -> None:
 		assert exists
 
 		query = _toy_embed("cats like naps")
-		results = await store.search(query, limit=3)
+		results = await store.search(query=query, limit=3)
 		assert results
 		assert results[0].id == "doc-cats"
 		assert results[0].metadata.get("topic") == "cats"

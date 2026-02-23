@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.access_rule import AccessRule
 from api.models.event import Event
 from api.models.message import Message
@@ -23,6 +23,7 @@ from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate
 from api.schemas.runs import ThreadCreateAndRunRequest
+from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.thread import (
 	Thread as ThreadSchema,
@@ -38,6 +39,7 @@ from api.v1.service import access_rules as access_rules_service
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
@@ -368,3 +370,34 @@ async def set_thread_access_rules(
 	return await access_rules_service.set_access_rules(
 		ResourceType.THREAD, str(thread_id), rules, db, principal=principal
 	)
+
+
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_threads(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search threads with cursor-based pagination."""
+	return await thread_service.search_threads(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_threads(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all threads into qdrant. admin only."""
+	require_admin(principal)
+	count = await thread_service.vectorize_all_threads(db)
+	return {"vectorized": count}

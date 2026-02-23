@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.memory import Memory
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import MemoryCreate, MemoryUpdate
+from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
@@ -27,6 +29,30 @@ MemorySortBy = Literal[
 	"last_accessed_at",
 	"confidence",
 ]
+
+
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_memories(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""hybrid search across memories with cursor pagination.
+
+	memories are only searchable via this dedicated endpoint and are NOT
+	included in the global /search results.
+	"""
+	return await memory_service.search_memories(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
 
 
 @router.post("", response_model=MemorySchema, status_code=status.HTTP_201_CREATED)
@@ -126,3 +152,14 @@ async def delete_all_memories(
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+
+
+@router.post("/revectorize")
+async def revectorize_memories(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all memories. admin only."""
+	require_admin(principal)
+	count = await memory_service.vectorize_all_memories(db)
+	return {"vectorized": count}

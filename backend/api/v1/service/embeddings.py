@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import overload
 
 from fastapi import HTTPException, status
@@ -14,6 +15,37 @@ from api.models.provider import Provider
 from api.settings import settings
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.utils.typeid import TypeID
+
+
+async def embed_text(text: str, session: AsyncSession) -> list[float]:
+	"""embed a single text string."""
+	model = build_embedding_model(await resolve_embedding_model(session))
+	return (await model.embed([text]))[0]
+
+
+async def embed_texts(
+	texts: list[str],
+	session: AsyncSession,
+	*,
+	batch_size: int = 64,
+	parallel: bool = True,
+) -> list[list[float]]:
+	"""embed a list of texts in batches. preserves input order.
+
+	parallel=True (default): all batches are gathered concurrently.
+	parallel=False: sequential - useful for rate-limited or ordered paths.
+	"""
+	if not texts:
+		return []
+	model = build_embedding_model(await resolve_embedding_model(session))
+	batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+	if parallel:
+		nested = await asyncio.gather(*(model.embed(b) for b in batches))
+		return [vec for batch in nested for vec in batch]
+	results: list[list[float]] = []
+	for batch in batches:
+		results.extend(await model.embed(batch))
+	return results
 
 
 def build_sdk_adapter_config(

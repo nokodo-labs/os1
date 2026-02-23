@@ -9,13 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.boot_settings import boot_settings
 from api.constants import API_V1_MOUNT_PATH
-from api.core.database import init_db
 from api.core.exceptions import (
 	unhandled_exception_handler,
 	validation_exception_handler,
 )
 from api.core.logging import configure_logging, get_logger
 from api.core.runtime import configure_psycopg_asyncio_event_loop_policy
+from api.database import init_db
 from api.middleware import (
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,

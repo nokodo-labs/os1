@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from enum import StrEnum
 from functools import cache
 from typing import Any, Final, Literal, Self
 
@@ -262,14 +263,150 @@ class MediaSettings(BaseModel):
 	)
 
 
+class VectorSettings(BaseModel):
+	"""vector database collection and search tuning."""
+
+	collection_template: str = Field(
+		default="{model}_bm25",
+		description="collection name template. '{model}' is replaced with "
+		"the slugified embedding model name at runtime",
+	)
+	sparse_vectors_enabled: bool = Field(
+		default=True,
+		description="enable BM25 sparse vectors for hybrid search",
+	)
+	prefetch_limit: int = Field(
+		default=100,
+		ge=1,
+		le=10000,
+		description="how many candidates to prefetch before fusion/reranking",
+	)
+	fusion_algorithm: Literal["rrf", "dbsf"] = Field(
+		default="rrf",
+		description="score fusion algorithm: rrf (reciprocal rank fusion) or "
+		"dbsf (distribution-based score fusion)",
+	)
+	normalize_scores: bool = Field(
+		default=True,
+		description="normalize fused scores to 0-1 range",
+	)
+
+
+class EmbeddingsSettings(BaseModel):
+	"""embedding model configuration."""
+
+	vector_size: int = Field(
+		default=1536,
+		ge=1,
+		description="default vector dimension for the embedding model",
+	)
+	batch_size: int = Field(
+		default=64,
+		ge=1,
+		le=4096,
+		description="batch size for embedding generation during vectorization",
+	)
+
+
+class RerankSettings(BaseModel):
+	"""default reranking behavior."""
+
+	default_strategy: str = Field(
+		default="native",
+		description="default reranking strategy: none, native, or external",
+	)
+	top_k: int = Field(
+		default=10,
+		ge=1,
+		le=100,
+		description="number of results to keep after reranking",
+	)
+
+
+class VectorDatabaseProvider(StrEnum):
+	"""supported vector database providers."""
+
+	QDRANT = "qdrant"
+	PINECONE = "pinecone"
+	WEAVIATE = "weaviate"
+	MILVUS = "milvus"
+	PGVECTOR = "pgvector"
+	REDIS = "redis"
+	OPENSEARCH = "opensearch"
+
+
+class VectorDatabaseApiKeys(BaseModel):
+	"""provider-specific credentials for vector databases."""
+
+	qdrant_api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for qdrant",
+	)
+	pinecone_api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for pinecone",
+	)
+	weaviate_api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for weaviate",
+	)
+	milvus_token: str | None = settings_field(
+		default=None,
+		private=True,
+		description="token for milvus",
+	)
+	redis_password: str | None = settings_field(
+		default=None,
+		private=True,
+		description="password for redis",
+	)
+	opensearch_api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for opensearch",
+	)
+
+
+class VectorDatabaseSettings(BaseModel):
+	"""vector database connection settings."""
+
+	provider: VectorDatabaseProvider = Field(
+		default=VectorDatabaseProvider.QDRANT,
+		description="vector database provider",
+	)
+	url: str = Field(
+		default="http://localhost:6333",
+		description="vector database endpoint url or local mode location",
+	)
+	api_keys: VectorDatabaseApiKeys = Field(
+		default_factory=VectorDatabaseApiKeys,
+		description="provider-specific api key and token settings",
+	)
+
+
 class AssetsSettings(BaseModel):
 	default_embedding_model_id: str | None = Field(
 		default=None,
 		description="default embedding model id (Model.id)",
 	)
-	qdrant_url: str = Field(
-		default="http://localhost:6333",
-		description="qdrant url or ':memory:' for in-process testing",
+	vector_database: VectorDatabaseSettings = Field(
+		default_factory=VectorDatabaseSettings,
+		description="vector database provider and connection settings",
+	)
+	vector: VectorSettings = Field(
+		default_factory=VectorSettings,
+		description="vector database collection and search tuning",
+	)
+	embeddings: EmbeddingsSettings = Field(
+		default_factory=EmbeddingsSettings,
+		description="embedding model configuration",
+	)
+	rerank: RerankSettings = Field(
+		default_factory=RerankSettings,
+		description="default reranking behavior",
 	)
 
 

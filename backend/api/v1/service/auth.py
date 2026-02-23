@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.constants import API_V1_MOUNT_PATH
-from api.core.database import AsyncSessionLocal, get_db
+from api.database import AsyncSessionLocal, get_db
 from api.models.group import GroupMembership
 from api.models.user import User
 from api.permissions import DefaultResourceAccess

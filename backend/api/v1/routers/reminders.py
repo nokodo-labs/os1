@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.reminder import Reminder, ReminderList, ReminderStatus
 from api.schemas.reminder import (
 	Reminder as ReminderSchema,
@@ -23,8 +23,10 @@ from api.schemas.reminder import (
 from api.schemas.reminder import (
 	ReminderList as ReminderListSchema,
 )
+from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.v1.service import reminders as reminder_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from api.v1.service.sorting import SortDir
 from nokodo_ai.utils.typeid import TypeID
@@ -209,7 +211,10 @@ async def complete_reminder(
 ) -> Reminder:
 	"""mark a reminder as completed, optionally cascading to subtasks."""
 	return await reminder_service.complete_reminder(
-		reminder_id, db, principal=principal, cascade=cascade,
+		reminder_id,
+		db,
+		principal=principal,
+		cascade=cascade,
 		origin_session_id=x_session_id,
 	)
 
@@ -238,6 +243,41 @@ async def move_reminder(
 ) -> Reminder:
 	"""move a reminder to a different list (or default list if null)."""
 	return await reminder_service.move_reminder(
-		reminder_id, target_list_id, db, principal=principal, position=position,
+		reminder_id,
+		target_list_id,
+		db,
+		principal=principal,
+		position=position,
 		origin_session_id=x_session_id,
 	)
+
+
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_reminders(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search reminders with cursor-based pagination."""
+	return await reminder_service.search_reminders(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_reminders(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all reminders into qdrant. admin only."""
+	require_admin(principal)
+	count = await reminder_service.vectorize_all_reminders(db)
+	return {"vectorized": count}

@@ -11,8 +11,8 @@ import base64
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from api.core.database import AsyncSessionLocal
 from api.core.logging import get_logger
+from api.database import AsyncSessionLocal
 from api.permissions import ResourceType
 from api.v1.service import events as event_service
 from api.v1.service.authorization import list_accessible_user_ids
@@ -104,9 +104,7 @@ async def handle_join(
 	participants = await document_session_store.get_participants(document_id)
 
 	# notify other participants
-	other_ids = list(
-		{p.user_id for p in participants if p.session_id != ws_session_id}
-	)
+	other_ids = list({p.user_id for p in participants if p.session_id != ws_session_id})
 	if other_ids:
 		await event_service.event_connections.send_to_users(
 			other_ids,
@@ -184,9 +182,7 @@ async def handle_awareness(
 		awareness_data,
 	)
 	participants = await document_session_store.get_participants(document_id)
-	peer_ids = list(
-		{p.user_id for p in participants if p.session_id != ws_session_id}
-	)
+	peer_ids = list({p.user_id for p in participants if p.session_id != ws_session_id})
 	if peer_ids:
 		await event_service.event_connections.send_to_users(
 			peer_ids,

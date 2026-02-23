@@ -16,9 +16,9 @@ async def test_async_agentic_flow(
 	"""Exercise the primary architecture entities in a single flow."""
 	from api.v1.service import vectorstores as vectorstores_service
 
-	monkeypatch.setenv("QDRANT_URL", ":memory:")
+	monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__URL", ":memory:")
 	monkeypatch.setenv("OPENAI_API_KEY", "test")
-	vectorstores_service._qdrant_adapter.cache_clear()
+	vectorstores_service._vectorstore_adapter.cache_clear()
 
 	async def _fake_embed(
 		self: EmbeddingModel,

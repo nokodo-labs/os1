@@ -7,7 +7,7 @@ import logging
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.core.database import AsyncSessionLocal
+from api.database import AsyncSessionLocal
 from api.models.memory import Memory
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -79,11 +79,6 @@ class NoteCreateTool(Tool[AppContext]):
 		default_factory=lambda: NoteCreateInput.model_json_schema()
 	)
 
-
-
-
-
-
 	async def call(
 		self,
 		__agent_context__: AgentContext,
@@ -100,6 +95,7 @@ class NoteCreateTool(Tool[AppContext]):
 		returns:
 			ToolMessage with recalled memories
 		"""
+		raise NotImplementedError("note creation tool is WIP")
 		# query param is available for semantic search (future use)
 		_ = str(kwargs.get("query", ""))
 		limit_val = kwargs.get("limit", 5)
@@ -165,20 +161,6 @@ class MemoryCreateTool(Tool[AppContext]):
 		__app_context__: AppContext,
 		**kwargs: object,
 	) -> ToolMessage:
-		try:
-			input_memory = MemoryCreateInput.model_validate(kwargs)
-
-			new_memory = Memory(
-				user_id=__app_context__.user_id,
-				content=input_memory.content,
-				category=input_memory.category,
-			)
-			async with AsyncSessionLocal() as tool_session:
-				tool_session.add(new_memory)
-				await tool_session.commit()
-
-		except Exception as e:
-			logger.error(f"failed to create memory: {str(e)}", exc_info=True)
-			return self.error("failed to create memory", __agent_context__)
+		raise NotImplementedError("memory creation tool is WIP")
 
 		return self.success("memory created successfully", __agent_context__)

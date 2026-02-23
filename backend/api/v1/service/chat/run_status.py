@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from api.core.database import AsyncSessionLocal
+from api.database import AsyncSessionLocal
 from api.permissions import ResourceType
 from api.v1.service.authorization import list_accessible_user_ids
 from nokodo_ai.utils.sse import sse_encode

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 from sqlalchemy import select
 
-from api.core.database import AsyncSessionLocal
+from api.database import AsyncSessionLocal
 from api.models.memory import Memory
 from api.v1.service.chat.filters.base import Filter
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage

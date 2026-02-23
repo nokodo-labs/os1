@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from pydantic_settings import PydanticBaseSettingsSource
 from sqlalchemy import select
 
-from api.core.database import AsyncSessionLocal
+from api.database import AsyncSessionLocal
 from api.models.setting import SettingsDocument
 
 

@@ -7,7 +7,7 @@ import logging
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.core.database import AsyncSessionLocal
+from api.database import AsyncSessionLocal
 from api.models.memory import Memory
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -85,6 +85,7 @@ class MemoryRecallTool(Tool[AppContext]):
 		returns:
 			ToolMessage with recalled memories
 		"""
+		raise NotImplementedError("memory recall is WIP")
 		# query param is available for semantic search (future use)
 		_ = str(kwargs.get("query", ""))
 		limit_val = kwargs.get("limit", 5)
@@ -150,6 +151,7 @@ class MemoryCreateTool(Tool[AppContext]):
 		__app_context__: AppContext,
 		**kwargs: object,
 	) -> ToolMessage:
+		raise NotImplementedError("memory creation is WIP")
 		try:
 			input_memory = MemoryCreateInput.model_validate(kwargs)
 

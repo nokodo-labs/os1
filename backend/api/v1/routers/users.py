@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.user import User
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.user import User as UserSchema

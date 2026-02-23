@@ -2,22 +2,46 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+from collections.abc import Coroutine
+
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.database import build_cursor_page, decode_cursor
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.note import Note
 from api.schemas.note import Note as NoteOut
 from api.schemas.note import NoteCreate, NoteUpdate
+from api.schemas.search import (
+	CursorPage,
+	SearchMode,
+	SearchParams,
+	SearchResultItem,
+	SearchResultType,
+)
 from api.settings.settings import settings
 from api.v1.service import events as event_service
+from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission, require_project_access
+from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.vectorize import (
+	VectorSpec,
+	build_chunk,
+	remove_vectorized_resource,
+	vectorize_resource,
+)
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
 
 
 async def _get_note(
@@ -75,6 +99,9 @@ async def create_note(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+
+	await vectorize_resource(spec=NOTE_SPEC, resource=note, session=session)
+
 	return await _get_note(note_id, session, principal)
 
 
@@ -167,6 +194,10 @@ async def update_note(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+
+	if await NOTE_SPEC.should_revectorize(note, note_in, session):
+		await vectorize_resource(spec=NOTE_SPEC, resource=note, session=session)
+
 	return await _get_note(note_id, session, principal)
 
 
@@ -194,3 +225,199 @@ async def delete_note(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+
+	await remove_vectorized_resource(
+		NOTE_SPEC, resource_id=str(note_id), session=session
+	)
+
+
+def _note_searchable_text(note: Note) -> str:
+	"""build combined searchable text for a note (title + content)."""
+	parts = [note.title or ""]
+	if note.content:
+		parts.append(note.content)
+	return " ".join(p for p in parts if p).strip()
+
+
+def _note_metadata(note: Note) -> JSONObject:
+	return {
+		"resource_type": "note",
+		"owner_id": str(note.user_id),
+		"title": note.title or "",
+		"labels": list(note.labels or []),
+		"project_id": (str(note.project_id) if note.project_id else None),
+	}
+
+
+async def _note_should_revectorize(
+	note: Note,
+	note_in: NoteUpdate,
+	session: AsyncSession,
+) -> bool:
+	_fields = {"title", "content", "labels", "project_id"}
+	update_data = note_in.model_dump(exclude_unset=True, mode="python")
+	return bool(_fields & update_data.keys())
+
+
+NOTE_SPEC: VectorSpec[Note] = VectorSpec(
+	resource_type="note",
+	resource_id=lambda n: str(n.id),
+	dense_text=_note_searchable_text,
+	bm25_text=_note_searchable_text,
+	metadata=_note_metadata,
+	should_revectorize=_note_should_revectorize,
+	sort_key="updated_at",
+)
+
+
+async def vectorize_all_notes(session: AsyncSession) -> int:
+	"""vectorize all non-deleted notes in bulk. returns count."""
+	stmt = select(Note).where(Note.deleted_at.is_(None))
+	result = await session.execute(stmt)
+	valid: list[tuple[Note, str]] = []
+	for n in result.scalars().all():
+		text = _note_searchable_text(n)
+		if text.strip():
+			valid.append((n, text))
+	if not valid:
+		return 0
+	embeddings = await embed_texts([text for _, text in valid], session)
+	chunks = []
+	for (note, _), emb in zip(valid, embeddings):
+		await remove_vectorized_resource(
+			spec=NOTE_SPEC, resource_id=str(note.id), session=session
+		)
+		chunks.append(build_chunk(NOTE_SPEC, note, emb))
+	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	return len(valid)
+
+
+async def _autocomplete_notes(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 5,
+) -> list[SearchResultItem]:
+	"""pg_trgm autocomplete for notes on title and content."""
+	stmt = (
+		select(Note)
+		.where(
+			Note.deleted_at.is_(None),
+			or_(
+				func.similarity(Note.title, q) > 0.1,
+				Note.title.ilike(f"%{q}%"),
+				Note.content.ilike(f"%{q}%"),
+			),
+		)
+		.order_by(func.similarity(Note.title, q).desc())
+		.limit(limit)
+	)
+	if not principal.is_admin:
+		stmt = stmt.where(Note.user_id == principal.user.id)
+	result = await db.execute(stmt)
+	return [
+		SearchResultItem(
+			type=SearchResultType.NOTE,
+			id=TypeID(note.id),
+			title=note.title or "",
+			subtitle=(note.content[:100] if note.content else None),
+			created_at=note.created_at,
+			updated_at=note.updated_at,
+		)
+		for note in result.scalars().all()
+	]
+
+
+async def _hybrid_search_notes(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	search_params: SearchParams | None = None,
+) -> list[SearchResultItem]:
+	"""qdrant hybrid search for notes (dense + BM25, RRF fusion)."""
+	params = search_params or SearchParams()
+	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
+	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
+	query_emb = await embed_text(text=q, session=db) if need_dense else None
+	text_query = q if need_sparse else None
+	query_filter = vectorstore_service.resource_filter(
+		"note",
+		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+	)
+	results = await vectorstore_service.search(
+		session=db,
+		query=query_emb,
+		text_query=text_query,
+		limit=limit,
+		query_filter=query_filter,
+		normalize=params.normalize,
+	)
+	if not results:
+		return []
+	resource_ids = [r.metadata["resource_id"] for r in results]
+	stmt = select(Note).where(Note.id.in_(resource_ids), Note.deleted_at.is_(None))
+	db_result = await db.execute(stmt)
+	by_id = {str(n.id): n for n in db_result.scalars().all()}
+	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
+	items: list[SearchResultItem] = []
+	for r in results:
+		rid = str(r.metadata["resource_id"])
+		note = by_id.get(rid)
+		if not note:
+			continue
+		items.append(
+			SearchResultItem(
+				type=SearchResultType.NOTE,
+				id=TypeID(note.id),
+				title=note.title or "",
+				subtitle=(note.content[:100] if note.content else None),
+				score=score_by_rid.get(rid),
+				created_at=note.created_at,
+				updated_at=note.updated_at,
+			)
+		)
+	return items
+
+
+async def search_notes(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+) -> CursorPage[SearchResultItem]:
+	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	params = search_params or SearchParams()
+	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	run_autocomplete = params.mode in (SearchMode.AUTOCOMPLETE, SearchMode.FULL)
+	run_hybrid = params.mode in (
+		SearchMode.HYBRID,
+		SearchMode.DENSE,
+		SearchMode.SPARSE,
+		SearchMode.FULL,
+	)
+	# hybrid first - wins on deduplication (higher quality than autocomplete)
+	if run_hybrid:
+		coros.append(
+			_hybrid_search_notes(
+				q, db, principal=principal, limit=limit + 1, search_params=params
+			)
+		)
+	if run_autocomplete:
+		coros.append(_autocomplete_notes(q, db, principal=principal, limit=limit + 1))
+	results = await asyncio.gather(*coros, return_exceptions=True)
+	items = vectorstore_service.merge_deduplicate(
+		results, limit + 1, resource_name="notes"
+	)
+	if cursor:
+		ts, cid = decode_cursor(cursor)
+		_sk = NOTE_SPEC.sort_key
+		items = [i for i in items if (getattr(i, _sk), str(i.id)) < (ts, cid)]
+	_sk = NOTE_SPEC.sort_key
+	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
+	return build_cursor_page(items, limit, sort_key=NOTE_SPEC.sort_key)

@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import AsyncSessionLocal, get_db
 from api.core.logging import get_logger
+from api.database import AsyncSessionLocal, get_db
 from api.models.event import Event, EventScope
 from api.models.user import User
 from api.schemas.event import Event as EventSchema

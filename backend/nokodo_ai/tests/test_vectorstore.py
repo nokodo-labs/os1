@@ -19,9 +19,10 @@ async def test_vectorstore_forwards_adapter_calls() -> None:
 		Chunk(id=ids[1], content="world", embedding=[0.3, 0.4], metadata=metadata[1]),
 	]
 
+	await store.ensure_collection(vector_size=2)
 	await store.add(chunks)
-	results = await store.search([0.5, 0.6], limit=5)
-	await store.delete(chunks)
+	results = await store.search(query=[0.5, 0.6], limit=5)
+	await store.delete([c.id for c in chunks])
 	assert results
 	assert all(r.id in {"a1", "a2"} for r in results)
 	assert any(r.metadata in metadata for r in results)
@@ -37,6 +38,7 @@ async def test_vectorstore_collection_field() -> None:
 	)
 
 	assert store.collection == "my-namespace"
+	await store.ensure_collection(vector_size=1)
 	await store.add(
 		[
 			Chunk(
@@ -59,6 +61,7 @@ async def test_vectorstore_create_supports_adapter_dict_shorthand() -> None:
 	assert store.collection == "my-namespace"
 	assert store.adapter.type == "qdrant.vectorstore"
 
+	await store.ensure_collection(vector_size=1)
 	await store.add(
 		[
 			Chunk(

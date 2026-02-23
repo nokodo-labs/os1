@@ -8,6 +8,8 @@ fields are included.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.permissions import (
@@ -70,6 +72,106 @@ class MediaSettingsPatch(BaseModel):
 	)
 
 
+class VectorDatabaseApiKeysPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	qdrant_api_key: str | None = Field(default=None, description="api key for qdrant")
+	pinecone_api_key: str | None = Field(
+		default=None,
+		description="api key for pinecone",
+	)
+	weaviate_api_key: str | None = Field(
+		default=None,
+		description="api key for weaviate",
+	)
+	milvus_token: str | None = Field(default=None, description="token for milvus")
+	redis_password: str | None = Field(default=None, description="password for redis")
+	opensearch_api_key: str | None = Field(
+		default=None,
+		description="api key for opensearch",
+	)
+
+
+class VectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	provider: (
+		Literal[
+			"qdrant",
+			"pinecone",
+			"weaviate",
+			"milvus",
+			"pgvector",
+			"redis",
+			"opensearch",
+		]
+		| None
+	) = Field(
+		default=None,
+		description="vector database provider",
+	)
+	url: str | None = Field(default=None, description="vector database endpoint url")
+	api_keys: VectorDatabaseApiKeysPatch | None = None
+
+
+class VectorSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	collection_template: str | None = Field(
+		default=None,
+		description="collection name template with '{model}' placeholder",
+	)
+	sparse_vectors_enabled: bool | None = Field(
+		default=None,
+		description="enable sparse vectors",
+	)
+	prefetch_limit: int | None = Field(
+		default=None,
+		ge=1,
+		le=10000,
+		description="prefetch candidate limit",
+	)
+	fusion_algorithm: Literal["rrf", "dbsf"] | None = Field(
+		default=None,
+		description="fusion algorithm",
+	)
+	normalize_scores: bool | None = Field(
+		default=None,
+		description="normalize fused scores",
+	)
+
+
+class EmbeddingsSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	vector_size: int | None = Field(
+		default=None,
+		ge=1,
+		description="default embedding vector size",
+	)
+	batch_size: int | None = Field(
+		default=None,
+		ge=1,
+		le=4096,
+		description="embedding batch size",
+	)
+
+
+class RerankSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	default_strategy: Literal["none", "native", "external"] | None = Field(
+		default=None,
+		description="default reranking strategy",
+	)
+	top_k: int | None = Field(
+		default=None,
+		ge=1,
+		le=100,
+		description="rerank top-k",
+	)
+
+
 class AssetsSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -77,10 +179,10 @@ class AssetsSettingsPatch(BaseModel):
 		default=None,
 		description="default embedding model id (Model.id)",
 	)
-	qdrant_url: str | None = Field(
-		default=None,
-		description="qdrant url or ':memory:' for in-process testing",
-	)
+	vector_database: VectorDatabaseSettingsPatch | None = None
+	vector: VectorSettingsPatch | None = None
+	embeddings: EmbeddingsSettingsPatch | None = None
+	rerank: RerankSettingsPatch | None = None
 
 
 class BrandingSettingsPatch(BaseModel):

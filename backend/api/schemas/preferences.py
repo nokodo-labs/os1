@@ -181,18 +181,34 @@ class PrivacyPreferences(BaseModel):
 class AccessibilityPreferences(BaseModel):
 	"""user accessibility preferences."""
 
-	model_config = ConfigDict(extra="forbid")
+	model_config = ConfigDict(extra="ignore")
 
 	haptic_feedback: bool | None = Field(
 		default=None,
 		alias="hapticFeedback",
 		description="whether haptic feedback is enabled on compatible devices",
 	)
+
+
+# advanced preferences
+class AdvancedPreferences(BaseModel):
+	"""user advanced preferences."""
+
+	model_config = ConfigDict(extra="forbid")
+
 	svg_liquid_glass: bool | None = Field(
 		default=None,
 		alias="svgLiquidGlass",
 		description=(
 			"whether to enable svg-based liquid glass when supported by the browser"
+		),
+	)
+	svg_liquid_glass_island: bool | None = Field(
+		default=None,
+		alias="svgLiquidGlassIsland",
+		description=(
+			"whether to enable svg-based liquid glass "
+			"specifically for the Island component"
 		),
 	)
 
@@ -280,6 +296,10 @@ class UserPreferences(BaseModel):
 	accessibility: AccessibilityPreferences | None = Field(
 		default=None,
 		description="accessibility preferences",
+	)
+	advanced: AdvancedPreferences | None = Field(
+		default=None,
+		description="advanced preferences",
 	)
 	debug: DebugPreferences | None = Field(
 		default=None,

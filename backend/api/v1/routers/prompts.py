@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.database import get_db
 from api.models.prompt import Prompt
 from api.schemas.prompt import Prompt as PromptSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
