@@ -18,6 +18,9 @@ BackgroundType = Literal[
 	"lightbends",
 	"lightrays",
 	"silk",
+	"fog",
+	"clouds",
+	"clouds2",
 	"static",
 	"none",
 ]
@@ -173,6 +176,13 @@ class PrivacyPreferences(BaseModel):
 		description=(
 			"whether to send device information (timezone, OS, browser)"
 			" to personalise AI responses"
+		),
+	)
+	use_battery_status: bool | None = Field(
+		default=None,
+		alias="useBatteryStatus",
+		description=(
+			"whether to send battery status details to personalise AI responses"
 		),
 	)
 

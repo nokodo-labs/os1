@@ -40,7 +40,7 @@
 		onClose?.()
 		void logout()
 		session.clear()
-		void goto(resolve('/login'))
+		window.location.href = '/login'
 	}
 
 	function handleLogin() {

@@ -6,16 +6,16 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import { MenuItem } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { notes, type NotesSortMode } from '$lib/stores/notes.svelte'
 	import { session } from '$lib/stores/session.svelte'
-	import { scale } from 'svelte/transition'
 
 	interface Props {
 		selectedNoteId: string | null
@@ -25,8 +25,7 @@
 	let { selectedNoteId, isMobile = false }: Props = $props()
 
 	let openMenuId: string | null = $state(null)
-	let menuFixedTop = $state(0)
-	let menuFixedRight = $state(0)
+	let menuAnchorEl = $state<HTMLElement | null>(null)
 
 	// delete confirmation modal state (managed here so it survives menu unmount)
 	let deleteTargetId: string | null = $state(null)
@@ -35,7 +34,6 @@
 
 	// sort menu state
 	let isSortMenuOpen = $state(false)
-	let sortMenuEl: HTMLDivElement | null = $state(null)
 	let sortButtonEl: HTMLButtonElement | null = $state(null)
 
 	const sortOptions: { value: NotesSortMode; label: string }[] = [
@@ -47,7 +45,6 @@
 
 	function closeSortMenu() {
 		isSortMenuOpen = false
-		sortMenuEl = null
 	}
 
 	function toggleSortMenu() {
@@ -56,36 +53,6 @@
 
 	$effect(() => {
 		void notes.load()
-	})
-
-	// close menu on outside click/escape
-	$effect(() => {
-		if (!openMenuId && !isSortMenuOpen) return
-
-		const onPointerDown = (event: PointerEvent) => {
-			const target = event.target as HTMLElement
-			if (openMenuId && target.closest('[data-note-menu]')) return
-			if (isSortMenuOpen && sortMenuEl && event.composedPath().includes(sortMenuEl)) return
-			if (isSortMenuOpen && sortButtonEl && event.composedPath().includes(sortButtonEl))
-				return
-			openMenuId = null
-			closeSortMenu()
-		}
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') {
-				event.preventDefault()
-				openMenuId = null
-				closeSortMenu()
-			}
-		}
-
-		window.addEventListener('pointerdown', onPointerDown)
-		window.addEventListener('keydown', onKeyDown)
-		return () => {
-			window.removeEventListener('pointerdown', onPointerDown)
-			window.removeEventListener('keydown', onKeyDown)
-		}
 	})
 
 	const noteList = $derived(notes.all)
@@ -121,6 +88,12 @@
 		openMenuId = null
 		// TODO: implement share modal for notes
 		console.log('share note:', noteId)
+	}
+
+	function handleProperties(noteId: string): void {
+		openMenuId = null
+		// TODO: implement properties modal for notes
+		console.log('show properties for note:', noteId)
 	}
 
 	function requestDelete(noteId: string): void {
@@ -178,42 +151,32 @@
 		</div>
 		{#if !isMobile}
 			<div class="flex items-center gap-1">
-				<div class="relative">
-					<button
-						type="button"
-						bind:this={sortButtonEl}
-						class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-						onclick={toggleSortMenu}
-						aria-label="sort notes"
-						aria-haspopup="menu"
-						aria-expanded={isSortMenuOpen}
-					>
-						<ArrowsUpDown variant="solid" class="h-5 w-5" />
-					</button>
-
-					{#if isSortMenuOpen}
-						<div
-							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-							bind:this={sortMenuEl}
-							role="menu"
-							class="animate-popup-right rounded-container absolute top-full right-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+				<button
+					type="button"
+					bind:this={sortButtonEl}
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					onclick={toggleSortMenu}
+					aria-label="sort notes"
+					aria-haspopup="menu"
+					aria-expanded={isSortMenuOpen}
+				>
+					<ArrowsUpDown variant="solid" class="h-5 w-5" />
+				</button>
+				<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
+					{#each sortOptions as option (option.value)}
+						<button
+							type="button"
+							role="menuitem"
+							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+							onclick={() => {
+								notes.sortMode = option.value
+								closeSortMenu()
+							}}
 						>
-							{#each sortOptions as option (option.value)}
-								<button
-									type="button"
-									role="menuitem"
-									class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-									onclick={() => {
-										notes.sortMode = option.value
-										closeSortMenu()
-									}}
-								>
-									{option.label}{notes.sortMode === option.value ? ' ✓' : ''}
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
+							{option.label}{notes.sortMode === option.value ? ' ✓' : ''}
+						</button>
+					{/each}
+				</PopupMenu>
 				<button
 					type="button"
 					onclick={createNote}
@@ -262,13 +225,8 @@
 								class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white"
 								onclick={(e) => {
 									e.stopPropagation()
-									if (openMenuId !== note.id) {
-										const rect = (
-											e.currentTarget as HTMLElement
-										).getBoundingClientRect()
-										menuFixedTop = rect.bottom + 4
-										menuFixedRight = window.innerWidth - rect.right
-									}
+									if (openMenuId !== note.id)
+										menuAnchorEl = e.currentTarget as HTMLElement
 									openMenuId = openMenuId === note.id ? null : note.id
 								}}
 								aria-label="note options"
@@ -278,29 +236,34 @@
 						{/snippet}
 					</SidebarListItem>
 
-					{#if openMenuId === note.id}
-						<div
-							data-note-menu
-							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-							class="liquid-metal rounded-container animate-popup-right fixed z-50 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
-							style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
+					<PopupMenu
+						open={openMenuId === note.id}
+						anchorEl={menuAnchorEl}
+						onClose={() => {
+							openMenuId = null
+						}}
+						data-note-menu
+					>
+						<MenuItem onclick={() => handleShare(note.id)}>
+							{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
+							share
+						</MenuItem>
+						<MenuItem onclick={() => handleProperties(note.id)}>
+							{#snippet icon()}<InfoCircle class="h-4 w-4" />{/snippet}
+							properties
+						</MenuItem>
+						<div class="my-1 h-px w-full bg-white/10"></div>
+						<button
+							type="button"
+							class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+							onclick={() => requestDelete(note.id)}
 						>
-							<MenuItem onclick={() => handleShare(note.id)}>
-								{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-								share
-							</MenuItem>
-							<button
-								type="button"
-								class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
-								onclick={() => requestDelete(note.id)}
-							>
-								<Trash
-									class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300"
-								/>
-								<span class="ml-2">delete</span>
-							</button>
-						</div>
-					{/if}
+							<Trash
+								class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300"
+							/>
+							<span class="ml-2">delete</span>
+						</button>
+					</PopupMenu>
 				</div>
 			{/snippet}
 

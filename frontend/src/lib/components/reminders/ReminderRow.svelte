@@ -6,11 +6,11 @@
 	import Circle from '$lib/components/icons/Circle.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import { PopupMenu } from '$lib/components/primitives'
 	import { device } from '$lib/stores/device.svelte'
 	import type { ReminderListWithCounts, ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import { SvelteDate } from 'svelte/reactivity'
-	import { scale } from 'svelte/transition'
 
 	type Motion = 'in' | 'out-complete' | 'out-uncomplete' | null
 
@@ -46,13 +46,10 @@
 	let props: Props = $props()
 
 	let rootEl: HTMLDivElement | null = $state(null)
-	let menuEl: HTMLDivElement | null = $state(null)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
 	let titleInputEl: HTMLInputElement | null = $state(null)
 
 	let isMenuOpen = $state(false)
-	let menuFixedTop = $state(0)
-	let menuFixedRight = $state(0)
 
 	let editedTitle = $state('')
 	let editedDescription = $state('')
@@ -233,31 +230,6 @@
 		if (!props.expanded) return
 		void focusTitle()
 	})
-
-	$effect(() => {
-		if (props.kind !== 'edit') return
-		if (!isMenuOpen) return
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== 'Escape') return
-			event.preventDefault()
-			isMenuOpen = false
-		}
-
-		const onPointerDown = (event: PointerEvent) => {
-			const path = event.composedPath()
-			if (menuEl && path.includes(menuEl)) return
-			if (menuButtonEl && path.includes(menuButtonEl)) return
-			isMenuOpen = false
-		}
-
-		window.addEventListener('keydown', onKeyDown)
-		window.addEventListener('pointerdown', onPointerDown)
-		return () => {
-			window.removeEventListener('keydown', onKeyDown)
-			window.removeEventListener('pointerdown', onPointerDown)
-		}
-	})
 </script>
 
 <div
@@ -354,11 +326,6 @@
 						: 'opacity-0 group-hover:opacity-100'}"
 					onclick={(event) => {
 						event.stopPropagation()
-						if (!isMenuOpen && menuButtonEl) {
-							const rect = menuButtonEl.getBoundingClientRect()
-							menuFixedTop = rect.bottom + 4
-							menuFixedRight = window.innerWidth - rect.right
-						}
 						isMenuOpen = !isMenuOpen
 					}}
 					aria-label="reminder actions"
@@ -430,13 +397,8 @@
 		</div>
 	{/if}
 
-	{#if props.kind === 'edit' && isMenuOpen}
-		<div
-			transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-			bind:this={menuEl}
-			class="animate-popup-right liquid-metal rounded-container fixed z-50 w-56 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
-			style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
-		>
+	{#if props.kind === 'edit'}
+		<PopupMenu open={isMenuOpen} anchorEl={menuButtonEl} onClose={() => (isMenuOpen = false)}>
 			<div class="px-3 pt-2 pb-1 text-xs font-medium text-white/55">move</div>
 			<div class="max-h-44 overflow-auto">
 				<button
@@ -466,6 +428,7 @@
 				{/each}
 			</div>
 
+			<div class="my-1 h-px w-full bg-white/10"></div>
 			<div class="mt-1">
 				<DeleteButton
 					confirm={true}
@@ -480,7 +443,7 @@
 					}}
 				/>
 			</div>
-		</div>
+		</PopupMenu>
 	{/if}
 </div>
 

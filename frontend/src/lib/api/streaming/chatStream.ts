@@ -287,6 +287,13 @@ export async function* runChatStream(
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
 	const url = `${getApiBaseUrl()}/v1/runs`
 	const clientContext = preferences.data.privacy.useDeviceContext ? getClientContext() : null
+	if (clientContext && !preferences.data.privacy.useBatteryStatus) {
+		clientContext.batterySupported = false
+		clientContext.batteryCharging = null
+		clientContext.batteryLevel = null
+		clientContext.batteryChargingTimeSeconds = null
+		clientContext.batteryDischargingTimeSeconds = null
+	}
 
 	const body: Record<string, unknown> = {
 		agent_id: opts.agentId,
@@ -339,6 +346,13 @@ export async function* runCreateAndRunStream(
 ): AsyncGenerator<CreateAndRunStreamDelta, void, unknown> {
 	const url = `${getApiBaseUrl()}/v1/threads/create_and_run`
 	const clientContext = preferences.data.privacy.useDeviceContext ? getClientContext() : null
+	if (clientContext && !preferences.data.privacy.useBatteryStatus) {
+		clientContext.batterySupported = false
+		clientContext.batteryCharging = null
+		clientContext.batteryLevel = null
+		clientContext.batteryChargingTimeSeconds = null
+		clientContext.batteryDischargingTimeSeconds = null
+	}
 
 	const body: Record<string, unknown> = {
 		agent_id: opts.agentId,

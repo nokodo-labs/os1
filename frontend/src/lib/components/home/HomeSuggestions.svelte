@@ -341,10 +341,10 @@
 {#if open}
 	<LiquidGlass
 		tag="div"
-		class="rounded-container mt-3 overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+		class="rounded-container mt-3 flex min-h-0 flex-col overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
-		<div class="relative z-10">
-			<div class="p-2" role="listbox" aria-label="suggestions">
+		<div class="relative z-10 flex min-h-0 flex-col">
+			<div class="min-h-0 overflow-y-auto p-2" role="listbox" aria-label="suggestions">
 				{#if isSearching}
 					<!-- shimmer autocomplete state -->
 					<div class="flex items-center gap-3 px-3 py-2.5">

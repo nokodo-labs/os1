@@ -86,7 +86,12 @@
 	}
 
 	function openActions() {
-		if (isLastMessage) return
+		if (isLastMessage) {
+			showActions = false
+			isHovered = true
+			window.dispatchEvent(new CustomEvent(ACTIONS_EVENT, { detail: { id: instanceId } }))
+			return
+		}
 		showActions = true
 		isHovered = true
 		justRevealed = true
@@ -99,7 +104,7 @@
 
 	function handleTouchStart(e: TouchEvent) {
 		lastTouchTime = Date.now()
-		if (showActions || isLastMessage) return
+		if (showActions) return
 		if (e.touches.length !== 1) return
 		touchActive = true
 		touchMoved = false
@@ -144,7 +149,7 @@
 
 	// dismiss touch-revealed actions when tapping outside this message
 	$effect(() => {
-		if (!showActions || isLastMessage) return
+		if (!showActions && !isHovered) return
 		const dismiss = (e: TouchEvent) => {
 			lastTouchTime = Date.now()
 			if (messageRef?.contains(e.target as Node)) return

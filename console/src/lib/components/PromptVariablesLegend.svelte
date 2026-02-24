@@ -159,8 +159,63 @@
 				},
 				{ name: 'client_os', description: 'operating system (e.g. Windows)' },
 				{ name: 'client_browser', description: 'browser name (e.g. Chrome)' },
+				{ name: 'client_user_agent', description: 'raw browser user-agent string' },
 				{ name: 'client_is_mobile', description: 'true/false or N/A' },
 				{ name: 'client_pwa_installed', description: 'true/false or N/A' },
+				{ name: 'client_offline', description: 'whether the client is offline or N/A' },
+				{
+					name: 'client_display_mode',
+					description: 'display mode (browser, standalone, fullscreen, etc)',
+				},
+				{
+					name: 'client_preferred_color_scheme',
+					description: 'dark/light/no-preference or N/A',
+				},
+				{
+					name: 'client_prefers_reduced_motion',
+					description: 'true/false or N/A',
+				},
+				{ name: 'client_prefers_contrast', description: 'more/less/no-preference or N/A' },
+				{ name: 'client_idle_state', description: 'active/idle or N/A' },
+				{
+					name: 'client_gamepad_count',
+					description: 'number of connected gamepads or N/A',
+				},
+				{ name: 'client_gamepads', description: 'connected gamepad ids, comma-separated' },
+				{ name: 'client_connection_type', description: 'network connection type or N/A' },
+				{
+					name: 'client_connection_effective_type',
+					description: 'effective network type (e.g. 4g) or N/A',
+				},
+				{
+					name: 'client_connection_downlink_mbps',
+					description: 'estimated downlink speed in Mbps or N/A',
+				},
+				{
+					name: 'client_connection_rtt_ms',
+					description: 'estimated round-trip time in milliseconds or N/A',
+				},
+				{
+					name: 'client_connection_save_data',
+					description: 'data saver enabled true/false or N/A',
+				},
+				{
+					name: 'client_battery_supported',
+					description: 'battery API support true/false or N/A',
+				},
+				{
+					name: 'client_battery_charging',
+					description: 'charging state true/false or N/A',
+				},
+				{ name: 'client_battery_level', description: 'battery level percentage or N/A' },
+				{
+					name: 'client_battery_charging_time_seconds',
+					description: 'seconds until full charge or N/A',
+				},
+				{
+					name: 'client_battery_discharging_time_seconds',
+					description: 'seconds until empty or N/A',
+				},
 			],
 		},
 		{

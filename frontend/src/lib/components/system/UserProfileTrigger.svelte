@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { eventStreamClient } from '$lib/api/streaming'
+	import { PopupMenu } from '$lib/components/primitives'
 	import '$lib/styles/liquid-glass.css'
 	import { getUserInitials } from '$lib/utils'
-	import { onMount } from 'svelte'
-	import { scale } from 'svelte/transition'
 	import ConnectionIndicator from './ConnectionIndicator.svelte'
 	import UserProfilePanel from './UserProfilePanel.svelte'
 
@@ -21,7 +20,6 @@
 
 	let isOpen = $state(false)
 	let buttonElement: HTMLButtonElement | undefined = $state()
-	let panelElement: HTMLDivElement | undefined = $state()
 
 	function togglePanel() {
 		isOpen = !isOpen
@@ -31,24 +29,6 @@
 		isOpen = false
 	}
 
-	function handleClickOutside(event: MouseEvent) {
-		if (
-			isOpen &&
-			panelElement &&
-			buttonElement &&
-			!panelElement.contains(event.target as Node) &&
-			!buttonElement.contains(event.target as Node)
-		) {
-			closePanel()
-		}
-	}
-
-	onMount(() => {
-		document.addEventListener('click', handleClickOutside)
-		return () => {
-			document.removeEventListener('click', handleClickOutside)
-		}
-	})
 	const isHeaderPlacement = $derived(placement === 'header')
 	const safeUser = $derived(user ?? { name: 'not signed in', email: '', avatar: null })
 	const wsStatus = $derived(eventStreamClient.state.status)
@@ -112,41 +92,13 @@
 		{/if}
 	</button>
 
-	{#if isOpen}
-		<div
-			bind:this={panelElement}
-			transition:scale={{ duration: 180, start: 0.96, opacity: 0 }}
-			class="profile-panel-wrapper liquid-metal {isHeaderPlacement
-				? 'header animate-popup-right'
-				: 'animate-popup-up'}"
-		>
-			<UserProfilePanel {user} onClose={closePanel} />
-		</div>
-	{/if}
+	<PopupMenu open={isOpen} anchorEl={buttonElement ?? null} onClose={closePanel}>
+		<UserProfilePanel {user} onClose={closePanel} />
+	</PopupMenu>
 </div>
 
 <style>
 	.user-profile-trigger-container {
 		position: relative;
-	}
-
-	.profile-panel-wrapper {
-		position: absolute;
-		bottom: 0;
-		left: calc(100% + 0.5rem);
-		z-index: 1000;
-		border-radius: var(--radius-container-base);
-		will-change: transform, opacity;
-	}
-
-	.profile-panel-wrapper.header {
-		top: calc(100% + 0.5rem);
-		right: 0;
-		bottom: auto;
-		left: auto;
-	}
-
-	:global(.dark) .profile-panel-wrapper {
-		border-color: rgba(255, 255, 255, 0.1);
 	}
 </style>

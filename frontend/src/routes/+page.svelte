@@ -443,27 +443,31 @@
 			class="mx-auto flex w-full flex-1 flex-col pb-2 {device.isMobile ? '' : 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 		>
-			<!-- top spacer: pushes content toward vertical center (hidden when keyboard open) -->
+			<!-- top spacer: pushes content toward vertical center (or bottom when keyboard open) -->
 			{#if !(device.virtualKeyboardOpen && device.isMobile)}
 				<div class="flex-[0.6]"></div>
+			{:else}
+				<div class="flex-1"></div>
 			{/if}
 
-			<!-- greeting: takes remaining space when keyboard open to center between Island and input -->
-			<div
-				style="view-transition-name: landing-greeting;"
-				class="{device.virtualKeyboardOpen && device.isMobile
-					? 'flex-1 justify-end'
-					: ''} mb-12 flex flex-col items-center justify-center gap-2 text-center"
-			>
-				<h1 class="text-4xl font-medium text-white">
-					hi <span
-						class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
-						style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
-						>{session.userDisplay.name}</span
-					>
-				</h1>
-				<p class="text-xl text-white/60">good afternoon</p>
-			</div>
+			<!-- greeting: hidden when virtual keyboard is open on mobile -->
+			{#if !(device.virtualKeyboardOpen && device.isMobile)}
+				<div
+					out:fade={{ duration: 200 }}
+					in:fade={{ duration: 300, delay: 150 }}
+					style="view-transition-name: landing-greeting;"
+					class="mb-12 flex flex-col items-center justify-center gap-2 text-center"
+				>
+					<h1 class="text-4xl font-medium text-white">
+						hi <span
+							class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
+							style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
+							>{session.userDisplay.name}</span
+						>
+					</h1>
+					<p class="text-xl text-white/60">good afternoon</p>
+				</div>
+			{/if}
 
 			<!-- input -->
 			<div style="view-transition-name: chat-input;">

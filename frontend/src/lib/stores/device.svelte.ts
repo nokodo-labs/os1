@@ -70,8 +70,27 @@ export const device = $state({
 	language: '',
 	os: '',
 	browserName: '',
+	userAgent: '',
 	isChromium: false,
 	pwaInstalled: false,
+	online: true,
+	displayMode: 'browser',
+	preferredColorScheme: 'no-preference',
+	prefersReducedMotion: false,
+	prefersContrast: 'no-preference',
+	idleState: 'active' as 'active' | 'idle',
+	gamepadCount: 0,
+	gamepads: [] as string[],
+	connectionType: null as string | null,
+	connectionEffectiveType: null as string | null,
+	connectionDownlinkMbps: null as number | null,
+	connectionRttMs: null as number | null,
+	connectionSaveData: null as boolean | null,
+	batterySupported: false,
+	batteryCharging: null as boolean | null,
+	batteryLevel: null as number | null,
+	batteryChargingTimeSeconds: null as number | null,
+	batteryDischargingTimeSeconds: null as number | null,
 
 	// geolocation (populated when useLocation is enabled)
 	latitude: null as number | null,
@@ -85,11 +104,42 @@ export const device = $state({
 
 type Cleanup = () => void
 
+type BatteryManagerLike = EventTarget & {
+	charging: boolean
+	level: number
+	chargingTime: number
+	dischargingTime: number
+}
+
+type NavigatorWithClientSignals = Navigator & {
+	connection?: {
+		type?: string
+		effectiveType?: string
+		downlink?: number
+		rtt?: number
+		saveData?: boolean
+		addEventListener?: (type: string, listener: EventListenerOrEventListenerObject) => void
+		removeEventListener?: (type: string, listener: EventListenerOrEventListenerObject) => void
+	}
+	userAgentData?: {
+		platform?: string
+		mobile?: boolean
+		brands?: Array<{ brand: string; version: string }>
+	}
+	getBattery?: () => Promise<BatteryManagerLike>
+	getGamepads?: () => ArrayLike<Gamepad | null>
+}
+
 let didInit = false
 let cleanup: Cleanup | null = null
 let rafId: number | null = null
 let dprMql: MediaQueryList | null = null
 let dprCleanup: Cleanup | null = null
+let batteryCleanup: Cleanup | null = null
+let idleTimer: number | null = null
+let lastActivityAt = 0
+
+const IDLE_TIMEOUT_MS = 60_000
 
 // virtual keyboard detection state
 let keyboardBaselineHeight = 0
@@ -158,8 +208,27 @@ function resetDeviceState() {
 	device.language = ''
 	device.os = ''
 	device.browserName = ''
+	device.userAgent = ''
 	device.isChromium = false
 	device.pwaInstalled = false
+	device.online = true
+	device.displayMode = 'browser'
+	device.preferredColorScheme = 'no-preference'
+	device.prefersReducedMotion = false
+	device.prefersContrast = 'no-preference'
+	device.idleState = 'active'
+	device.gamepadCount = 0
+	device.gamepads = []
+	device.connectionType = null
+	device.connectionEffectiveType = null
+	device.connectionDownlinkMbps = null
+	device.connectionRttMs = null
+	device.connectionSaveData = null
+	device.batterySupported = false
+	device.batteryCharging = null
+	device.batteryLevel = null
+	device.batteryChargingTimeSeconds = null
+	device.batteryDischargingTimeSeconds = null
 	device.virtualKeyboardOpen = false
 	device.virtualKeyboardHeight = 0
 }
@@ -252,6 +321,149 @@ function detectPwaInstalled(): boolean {
 	} catch {
 		return false
 	}
+}
+
+function detectDisplayMode(): string {
+	try {
+		if (window.matchMedia('(display-mode: standalone)').matches) return 'standalone'
+		if (window.matchMedia('(display-mode: fullscreen)').matches) return 'fullscreen'
+		if (window.matchMedia('(display-mode: minimal-ui)').matches) return 'minimal-ui'
+		return 'browser'
+	} catch {
+		return 'browser'
+	}
+}
+
+function detectPreferredColorScheme(): 'dark' | 'light' | 'no-preference' {
+	try {
+		if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark'
+		if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light'
+		return 'no-preference'
+	} catch {
+		return 'no-preference'
+	}
+}
+
+function detectReducedMotion(): boolean {
+	try {
+		return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+	} catch {
+		return false
+	}
+}
+
+function detectContrastPreference(): 'more' | 'less' | 'no-preference' {
+	try {
+		if (window.matchMedia('(prefers-contrast: more)').matches) return 'more'
+		if (window.matchMedia('(prefers-contrast: less)').matches) return 'less'
+		return 'no-preference'
+	} catch {
+		return 'no-preference'
+	}
+}
+
+function updateConnectionInfo(): void {
+	const nav = navigator as NavigatorWithClientSignals
+	const connection = nav.connection
+	if (!connection) {
+		device.connectionType = null
+		device.connectionEffectiveType = null
+		device.connectionDownlinkMbps = null
+		device.connectionRttMs = null
+		device.connectionSaveData = null
+		return
+	}
+
+	device.connectionType = connection.type ?? null
+	device.connectionEffectiveType = connection.effectiveType ?? null
+	device.connectionDownlinkMbps =
+		typeof connection.downlink === 'number' ? connection.downlink : null
+	device.connectionRttMs = typeof connection.rtt === 'number' ? connection.rtt : null
+	device.connectionSaveData =
+		typeof connection.saveData === 'boolean' ? connection.saveData : null
+}
+
+function updateGamepads(): void {
+	const nav = navigator as NavigatorWithClientSignals
+	if (typeof nav.getGamepads !== 'function') {
+		device.gamepadCount = 0
+		device.gamepads = []
+		return
+	}
+
+	const pads = Array.from(nav.getGamepads() ?? []).filter((pad): pad is Gamepad => pad !== null)
+	device.gamepadCount = pads.length
+	device.gamepads = pads.map((pad) => pad.id)
+}
+
+function updateIdleState(forceIdle = false): void {
+	if (forceIdle) {
+		device.idleState = 'idle'
+		return
+	}
+	const idleFor = Date.now() - lastActivityAt
+	device.idleState = idleFor >= IDLE_TIMEOUT_MS ? 'idle' : 'active'
+}
+
+function scheduleIdleCheck(): void {
+	if (idleTimer !== null) window.clearTimeout(idleTimer)
+	const remaining = Math.max(0, IDLE_TIMEOUT_MS - (Date.now() - lastActivityAt))
+	idleTimer = window.setTimeout(() => {
+		updateIdleState()
+		scheduleIdleCheck()
+	}, remaining)
+}
+
+function setupBatteryDetection(): void {
+	batteryCleanup?.()
+	batteryCleanup = null
+
+	const nav = navigator as NavigatorWithClientSignals
+	if (typeof nav.getBattery !== 'function') {
+		device.batterySupported = false
+		device.batteryCharging = null
+		device.batteryLevel = null
+		device.batteryChargingTimeSeconds = null
+		device.batteryDischargingTimeSeconds = null
+		return
+	}
+
+	nav.getBattery()
+		.then((battery) => {
+			const syncBattery = () => {
+				device.batterySupported = true
+				device.batteryCharging = battery.charging
+				device.batteryLevel = Math.round(battery.level * 100)
+				device.batteryChargingTimeSeconds = Number.isFinite(battery.chargingTime)
+					? battery.chargingTime
+					: null
+				device.batteryDischargingTimeSeconds = Number.isFinite(battery.dischargingTime)
+					? battery.dischargingTime
+					: null
+			}
+
+			syncBattery()
+
+			const onChange = () => syncBattery()
+			battery.addEventListener('chargingchange', onChange)
+			battery.addEventListener('levelchange', onChange)
+			battery.addEventListener('chargingtimechange', onChange)
+			battery.addEventListener('dischargingtimechange', onChange)
+
+			batteryCleanup = () => {
+				battery.removeEventListener('chargingchange', onChange)
+				battery.removeEventListener('levelchange', onChange)
+				battery.removeEventListener('chargingtimechange', onChange)
+				battery.removeEventListener('dischargingtimechange', onChange)
+			}
+		})
+		.catch(() => {
+			device.batterySupported = false
+			device.batteryCharging = null
+			device.batteryLevel = null
+			device.batteryChargingTimeSeconds = null
+			device.batteryDischargingTimeSeconds = null
+		})
 }
 
 function readDeviceMemory(): number | null {
@@ -444,6 +656,14 @@ function syncFromWindow(
 	const maxTouchPoints = navigator.maxTouchPoints || 0
 	device.isTouch = device.isCoarsePointer || (maxTouchPoints > 0 && !device.hasHover)
 	device.ready = true
+	device.online = navigator.onLine
+	device.displayMode = detectDisplayMode()
+	device.preferredColorScheme = detectPreferredColorScheme()
+	device.prefersReducedMotion = detectReducedMotion()
+	device.prefersContrast = detectContrastPreference()
+	updateConnectionInfo()
+	updateGamepads()
+	updateIdleState(document.hidden)
 
 	// virtual keyboard detection
 	const vvHeight = window.visualViewport?.height ?? window.innerHeight
@@ -530,13 +750,50 @@ export function initDevice(): void {
 	device.language = detectLanguage()
 	device.os = detectOS()
 	device.browserName = detectBrowser()
+	device.userAgent = navigator.userAgent || ''
 	device.isChromium = detectChromium()
 	device.pwaInstalled = detectPwaInstalled()
+	setupBatteryDetection()
+	lastActivityAt = Date.now()
+	updateIdleState()
+	scheduleIdleCheck()
 
 	const offMobile = addMqListener(mqMobile, onEvent)
 	const offCoarsePointer = addMqListener(mqCoarsePointer, onEvent)
 	const offHover = addMqListener(mqHover, onEvent)
 	setupDprListener(onEvent)
+
+	const navWithSignals = navigator as NavigatorWithClientSignals
+	const onConnectionChange = () => updateConnectionInfo()
+	const onOnline = () => {
+		device.online = true
+		updateConnectionInfo()
+	}
+	const onOffline = () => {
+		device.online = false
+		updateConnectionInfo()
+	}
+	const onGamepad = () => updateGamepads()
+	const onActivity = () => {
+		lastActivityAt = Date.now()
+		updateIdleState()
+		scheduleIdleCheck()
+	}
+	const onVisibilityChange = () => {
+		updateIdleState(document.hidden)
+	}
+
+	navWithSignals.connection?.addEventListener?.('change', onConnectionChange)
+	window.addEventListener('online', onOnline)
+	window.addEventListener('offline', onOffline)
+	window.addEventListener('gamepadconnected', onGamepad)
+	window.addEventListener('gamepaddisconnected', onGamepad)
+	window.addEventListener('pointerdown', onActivity, { passive: true })
+	window.addEventListener('keydown', onActivity)
+	window.addEventListener('touchstart', onActivity, { passive: true })
+	window.addEventListener('mousemove', onActivity, { passive: true })
+	window.addEventListener('focus', onActivity)
+	document.addEventListener('visibilitychange', onVisibilityChange)
 
 	window.addEventListener('resize', onEvent, { passive: true })
 	window.addEventListener('orientationchange', onEvent, { passive: true })
@@ -555,6 +812,26 @@ export function initDevice(): void {
 			rafId = null
 		}
 
+		if (idleTimer !== null) {
+			window.clearTimeout(idleTimer)
+			idleTimer = null
+		}
+
+		batteryCleanup?.()
+		batteryCleanup = null
+
+		navWithSignals.connection?.removeEventListener?.('change', onConnectionChange)
+		window.removeEventListener('online', onOnline)
+		window.removeEventListener('offline', onOffline)
+		window.removeEventListener('gamepadconnected', onGamepad)
+		window.removeEventListener('gamepaddisconnected', onGamepad)
+		window.removeEventListener('pointerdown', onActivity)
+		window.removeEventListener('keydown', onActivity)
+		window.removeEventListener('touchstart', onActivity)
+		window.removeEventListener('mousemove', onActivity)
+		window.removeEventListener('focus', onActivity)
+		document.removeEventListener('visibilitychange', onVisibilityChange)
+
 		window.removeEventListener('resize', onEvent)
 		window.removeEventListener('orientationchange', onEvent)
 		window.visualViewport?.removeEventListener('resize', onEvent)
@@ -572,6 +849,13 @@ export function destroyDevice(): void {
 	cleanup?.()
 	cleanup = null
 	didInit = false
+	if (idleTimer !== null) {
+		window.clearTimeout(idleTimer)
+		idleTimer = null
+	}
+	batteryCleanup?.()
+	batteryCleanup = null
+	lastActivityAt = 0
 	keyboardBaselineHeight = 0
 	keyboardBaselineWidth = 0
 	document.documentElement.style.removeProperty('--app-height')
@@ -585,10 +869,29 @@ export function getClientContext(): {
 	language: string
 	os: string
 	browser: string
+	userAgent: string
 	pwaInstalled: boolean
 	screenWidth: number
 	screenHeight: number
 	isMobile: boolean
+	offline: boolean
+	displayMode: string
+	preferredColorScheme: string
+	prefersReducedMotion: boolean
+	prefersContrast: string
+	idleState: 'active' | 'idle'
+	gamepadCount: number
+	gamepads: string[]
+	connectionType: string | null
+	connectionEffectiveType: string | null
+	connectionDownlinkMbps: number | null
+	connectionRttMs: number | null
+	connectionSaveData: boolean | null
+	batterySupported: boolean
+	batteryCharging: boolean | null
+	batteryLevel: number | null
+	batteryChargingTimeSeconds: number | null
+	batteryDischargingTimeSeconds: number | null
 	latitude: number | null
 	longitude: number | null
 	locationLabel: string | null
@@ -598,10 +901,29 @@ export function getClientContext(): {
 		language: device.language,
 		os: device.os,
 		browser: device.browserName,
+		userAgent: device.userAgent,
 		pwaInstalled: device.pwaInstalled,
 		screenWidth: device.width,
 		screenHeight: device.height,
 		isMobile: device.isMobile,
+		offline: !device.online,
+		displayMode: device.displayMode,
+		preferredColorScheme: device.preferredColorScheme,
+		prefersReducedMotion: device.prefersReducedMotion,
+		prefersContrast: device.prefersContrast,
+		idleState: device.idleState,
+		gamepadCount: device.gamepadCount,
+		gamepads: [...device.gamepads],
+		connectionType: device.connectionType,
+		connectionEffectiveType: device.connectionEffectiveType,
+		connectionDownlinkMbps: device.connectionDownlinkMbps,
+		connectionRttMs: device.connectionRttMs,
+		connectionSaveData: device.connectionSaveData,
+		batterySupported: device.batterySupported,
+		batteryCharging: device.batteryCharging,
+		batteryLevel: device.batteryLevel,
+		batteryChargingTimeSeconds: device.batteryChargingTimeSeconds,
+		batteryDischargingTimeSeconds: device.batteryDischargingTimeSeconds,
 		latitude: device.latitude,
 		longitude: device.longitude,
 		locationLabel: device.locationLabel,

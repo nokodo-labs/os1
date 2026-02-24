@@ -34,6 +34,11 @@ class ClientContext(BaseModel):
 		default=None,
 		description="browser name, e.g. 'Chrome', 'Firefox', 'Safari'",
 	)
+	user_agent: str | None = Field(
+		default=None,
+		alias="userAgent",
+		description="raw browser user-agent string",
+	)
 	pwa_installed: bool | None = Field(
 		default=None,
 		alias="pwaInstalled",
@@ -53,6 +58,94 @@ class ClientContext(BaseModel):
 		default=None,
 		alias="isMobile",
 		description="whether the client is on a mobile device",
+	)
+	offline: bool | None = Field(
+		default=None,
+		description="whether the device is currently offline",
+	)
+	display_mode: str | None = Field(
+		default=None,
+		alias="displayMode",
+		description="browser display mode (browser, standalone, fullscreen, etc)",
+	)
+	preferred_color_scheme: str | None = Field(
+		default=None,
+		alias="preferredColorScheme",
+		description="preferred color scheme (dark, light, or no-preference)",
+	)
+	prefers_reduced_motion: bool | None = Field(
+		default=None,
+		alias="prefersReducedMotion",
+		description="whether the user prefers reduced motion",
+	)
+	prefers_contrast: str | None = Field(
+		default=None,
+		alias="prefersContrast",
+		description="contrast preference (more, less, or no-preference)",
+	)
+	idle_state: str | None = Field(
+		default=None,
+		alias="idleState",
+		description="activity state detected by the client (active or idle)",
+	)
+	gamepad_count: int | None = Field(
+		default=None,
+		alias="gamepadCount",
+		description="number of currently connected gamepads",
+	)
+	gamepads: list[str] | None = Field(
+		default=None,
+		description="connected gamepad identifiers",
+	)
+	connection_type: str | None = Field(
+		default=None,
+		alias="connectionType",
+		description="network connection type",
+	)
+	connection_effective_type: str | None = Field(
+		default=None,
+		alias="connectionEffectiveType",
+		description="effective network type hint (e.g. 4g, 3g)",
+	)
+	connection_downlink_mbps: float | None = Field(
+		default=None,
+		alias="connectionDownlinkMbps",
+		description="estimated downlink speed in Mbps",
+	)
+	connection_rtt_ms: float | None = Field(
+		default=None,
+		alias="connectionRttMs",
+		description="estimated round-trip time in milliseconds",
+	)
+	connection_save_data: bool | None = Field(
+		default=None,
+		alias="connectionSaveData",
+		description="whether data saver mode is enabled",
+	)
+	battery_supported: bool | None = Field(
+		default=None,
+		alias="batterySupported",
+		description="whether battery status API is supported",
+	)
+	battery_charging: bool | None = Field(
+		default=None,
+		alias="batteryCharging",
+		description="whether the device is currently charging",
+	)
+	battery_level: int | None = Field(
+		default=None,
+		alias="batteryLevel",
+		description="battery percentage from 0 to 100",
+	)
+	battery_charging_time_seconds: float | None = Field(
+		default=None,
+		alias="batteryChargingTimeSeconds",
+		description="seconds until full charge when available",
+	)
+	battery_discharging_time_seconds: float | None = Field(
+		default=None,
+		alias="batteryDischargingTimeSeconds",
+		description="seconds until empty when available",
 	)
 	latitude: float | None = Field(
 		default=None,

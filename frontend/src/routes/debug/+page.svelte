@@ -33,5 +33,11 @@
 		>
 			runs & caches
 		</a>
+		<a
+			href={resolve('/debug/backgrounds')}
+			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+		>
+			backgrounds debug
+		</a>
 	</div>
 </div>

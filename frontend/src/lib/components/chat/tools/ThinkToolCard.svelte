@@ -117,9 +117,6 @@
 				<span class="text-white/50">thought for {displayElapsed}s</span>
 			{:else if isError}
 				<span class="text-red-400">thinking failed</span>
-				{#if execution.error}
-					<span class="text-xs text-red-400/60">&mdash; {execution.error}</span>
-				{/if}
 			{/if}
 		</div>
 	</div>

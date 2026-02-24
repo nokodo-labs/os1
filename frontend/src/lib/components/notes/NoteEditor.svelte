@@ -14,6 +14,7 @@
 	import H1 from '$lib/components/icons/H1.svelte'
 	import H2 from '$lib/components/icons/H2.svelte'
 	import H3 from '$lib/components/icons/H3.svelte'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Italic from '$lib/components/icons/Italic.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import NumberedList from '$lib/components/icons/NumberedList.svelte'
@@ -21,7 +22,7 @@
 	import Share from '$lib/components/icons/Share.svelte'
 	import Strikethrough from '$lib/components/icons/Strikethrough.svelte'
 	import Underline from '$lib/components/icons/Underline.svelte'
-	import { MenuItem, Switch } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu, Switch } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -30,8 +31,6 @@
 	import { getUserInitials } from '$lib/utils'
 	import { marked } from 'marked'
 	import { onDestroy } from 'svelte'
-	import { scale } from 'svelte/transition'
-
 	// storage format: markdown (in notes store)
 	// normal mode: shared collaborative tiptap editor (Yjs CRDT)
 	// markdown mode: textarea showing raw markdown source (manual save / Ctrl+S)
@@ -56,7 +55,6 @@
 	let isRawMode = $state(false)
 	let menuOpen = $state(false)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
-	let menuEl: HTMLDivElement | null = $state(null)
 	let saveTimeout: number | null = null
 	let textareaEl: HTMLTextAreaElement | null = $state(null)
 	let sharedEditor: SharedEditor | null = $state(null)
@@ -140,32 +138,6 @@
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
 		return () => chrome.setContextActions(null)
-	})
-
-	// close menu on outside click/escape
-	$effect(() => {
-		if (!menuOpen) return
-
-		const onPointerDown = (event: PointerEvent) => {
-			const path = event.composedPath()
-			if (menuEl && path.includes(menuEl)) return
-			if (menuButtonEl && path.includes(menuButtonEl)) return
-			menuOpen = false
-		}
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') {
-				event.preventDefault()
-				menuOpen = false
-			}
-		}
-
-		window.addEventListener('pointerdown', onPointerDown)
-		window.addEventListener('keydown', onKeyDown)
-		return () => {
-			window.removeEventListener('pointerdown', onPointerDown)
-			window.removeEventListener('keydown', onKeyDown)
-		}
 	})
 
 	function scheduleSave(): void {
@@ -316,53 +288,43 @@
 	</button>
 
 	<!-- 3-dot menu -->
-	<div class="relative">
+	<button
+		type="button"
+		bind:this={menuButtonEl}
+		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		onclick={() => (menuOpen = !menuOpen)}
+		aria-label="note options"
+		aria-haspopup="menu"
+		aria-expanded={menuOpen}
+	>
+		<EllipsisHorizontal />
+	</button>
+	<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={() => (menuOpen = false)}>
 		<button
 			type="button"
-			bind:this={menuButtonEl}
-			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
-			onclick={() => (menuOpen = !menuOpen)}
-			aria-label="note options"
-			aria-haspopup="menu"
-			aria-expanded={menuOpen}
+			role="menuitemcheckbox"
+			aria-checked={isRawMode}
+			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-white/85 transition-all duration-150 hover:bg-white/10 hover:text-white"
+			onclick={() => setRawMode(!isRawMode)}
 		>
-			<EllipsisHorizontal />
+			<span class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full">
+				<Code class="h-4 w-4" />
+			</span>
+			<span class="flex-1 truncate">markdown mode</span>
+			<Switch size="sm" checked={isRawMode} />
 		</button>
-
-		{#if menuOpen}
-			<div
-				transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-				bind:this={menuEl}
-				role="menu"
-				class="liquid-metal rounded-container animate-popup-right absolute top-full left-0 z-50 mt-2 min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
-			>
-				<button
-					type="button"
-					role="menuitemcheckbox"
-					aria-checked={isRawMode}
-					class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-white/85 transition-all duration-150 hover:bg-white/10 hover:text-white"
-					onclick={() => setRawMode(!isRawMode)}
-				>
-					<span
-						class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
-					>
-						<Code class="h-4 w-4" />
-					</span>
-					<span class="flex-1 truncate">markdown mode</span>
-					<Switch size="sm" checked={isRawMode} />
-				</button>
-				<div class="my-1 h-px w-full bg-white/10"></div>
-				<MenuItem onclick={handleShare}>
-					{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-					share
-				</MenuItem>
-				<MenuItem onclick={handleProperties}>
-					{#snippet icon()}<CodeBracket class="h-4 w-4" />{/snippet}
-					properties
-				</MenuItem>
-			</div>
+		{#if device.isMobile}
+			<div class="my-1 h-px w-full bg-white/10"></div>
+			<MenuItem onclick={handleShare}>
+				{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
+				share
+			</MenuItem>
+			<MenuItem onclick={handleProperties}>
+				{#snippet icon()}<InfoCircle class="h-4 w-4" />{/snippet}
+				properties
+			</MenuItem>
 		{/if}
-	</div>
+	</PopupMenu>
 {/snippet}
 
 {#if !note}
@@ -570,13 +532,15 @@
 
 			<!-- content area -->
 			<div
-				class="relative w-full flex-1 overflow-auto px-3.5 pt-4 pb-20"
+				class="relative w-full flex-1 overflow-auto px-3.5 pt-4"
 				id="note-content-container"
+				style:padding-bottom="{Math.max(80, device.virtualKeyboardHeight + 24)}px"
 			>
 				{#if isRawMode}
 					<textarea
 						bind:this={textareaEl}
-						class="h-full min-h-[60vh] w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
+						class="min-h-24 w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
+						style:field-sizing="content"
 						placeholder="write something... (Ctrl+S to save)"
 						bind:value={content}
 						oninput={handleRawInput}

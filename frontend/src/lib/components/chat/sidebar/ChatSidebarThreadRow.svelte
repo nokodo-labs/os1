@@ -7,12 +7,12 @@
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
-	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import { PopupMenu } from '$lib/components/primitives'
 	import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
-	import { scale } from 'svelte/transition'
 
 	type Props = {
 		thread: Thread
@@ -42,6 +42,8 @@
 	const isGeneratingTitle = $derived(hasRun && !thread.title)
 	const displayTitle = $derived(thread.title || 'new chat')
 	const hasTags = $derived(thread.tags && thread.tags.length > 0)
+
+	let menuButtonEl = $state<HTMLElement | null>(null)
 </script>
 
 <div class="group/chat relative min-w-0" role="listitem">
@@ -107,8 +109,12 @@
 			<button
 				type="button"
 				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/55 transition-all duration-200 hover:bg-white/10 hover:text-white"
+				onpointerdown={(e) => e.stopPropagation()}
 				onclick={(e) => {
 					e.stopPropagation()
+					if (openThreadMenuId !== thread.id) {
+						menuButtonEl = e.currentTarget as HTMLElement
+					}
 					onToggleMenu(thread.id)
 				}}
 				aria-label={hasRun ? 'active run' : 'thread actions'}
@@ -129,64 +135,63 @@
 		{/snippet}
 	</SidebarListItem>
 
-	{#if openThreadMenuId === thread.id}
-		<div
-			transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-			data-thread-menu
-			class="animate-popup-right liquid-metal rounded-container absolute top-full right-2 z-50 mt-2 w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
+	<PopupMenu
+		open={openThreadMenuId === thread.id}
+		anchorEl={menuButtonEl}
+		onClose={onCloseMenu}
+		data-thread-menu
+	>
+		<button
+			type="button"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+			onclick={(e) => {
+				e.stopPropagation()
+				onCloseMenu()
+				modals.open('share-resource', {
+					resource: 'thread',
+					id: thread.id,
+					title: thread.title ?? null,
+				})
+			}}
 		>
-			<button
-				type="button"
-				class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-				onclick={(e) => {
-					e.stopPropagation()
-					onCloseMenu()
-					modals.open('share-resource', {
-						resource: 'thread',
-						id: thread.id,
-						title: thread.title ?? null,
-					})
+			<Share class="h-4 w-4" />
+			share
+		</button>
+		<button
+			type="button"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+			onclick={(e) => {
+				e.stopPropagation()
+				onCloseMenu()
+				onRequestEdit(thread)
+			}}
+		>
+			<InfoCircle class="h-4 w-4" />
+			properties
+		</button>
+		<button
+			type="button"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+			onclick={(e) => {
+				e.stopPropagation()
+				onCloseMenu()
+				console.log('thread action', 'archive', thread.id)
+			}}
+		>
+			<ArchiveBox class="h-4 w-4" />
+			archive
+		</button>
+		<div class="my-1 h-px w-full bg-white/15"></div>
+		<div class="mt-1">
+			<DeleteButton
+				confirm={true}
+				stopPropagation={true}
+				modalText={{
+					title: 'delete chat?',
+					description: thread.title || 'new chat',
 				}}
-			>
-				<Share class="h-4 w-4" />
-				share
-			</button>
-			<button
-				type="button"
-				class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-				onclick={(e) => {
-					e.stopPropagation()
-					onCloseMenu()
-					onRequestEdit(thread)
-				}}
-			>
-				<Pencil variant="solid" class="h-4 w-4" />
-				edit
-			</button>
-			<button
-				type="button"
-				class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-				onclick={(e) => {
-					e.stopPropagation()
-					onCloseMenu()
-					console.log('thread action', 'archive', thread.id)
-				}}
-			>
-				<ArchiveBox class="h-4 w-4" />
-				archive
-			</button>
-			<div class="my-1 h-px w-full bg-white/15"></div>
-			<div class="mt-1">
-				<DeleteButton
-					confirm={true}
-					stopPropagation={true}
-					modalText={{
-						title: 'delete chat?',
-						description: thread.title || 'new chat',
-					}}
-					onDelete={() => onDeleteThread(thread)}
-				/>
-			</div>
+				onDelete={() => onDeleteThread(thread)}
+			/>
 		</div>
-	{/if}
+	</PopupMenu>
 </div>

@@ -16,7 +16,10 @@
  * avoid race conditions with the BackgroundManager transition guard.
  */
 
-import type { BackgroundType } from '$lib/components/backgrounds/BackgroundManager.svelte'
+import type {
+	BackgroundConfig,
+	BackgroundType,
+} from '$lib/components/backgrounds/BackgroundManager.svelte'
 import { device } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
 import { settingsState } from '$lib/stores/settings.svelte'
@@ -37,6 +40,7 @@ const TIER_BACKGROUNDS: Record<string, BackgroundType> = {
 // ── internal reactive state ────────────────────────────────
 
 let pageOverride = $state<BackgroundType | null>(null)
+let pageConfigOverride = $state<BackgroundConfig | null>(null)
 
 // ── private derived ────────────────────────────────────────
 
@@ -80,6 +84,11 @@ export const background = {
 	/** auth background from admin settings - use with `setPage` in auth pages */
 	get auth() {
 		return _auth
+	},
+
+	/** optional page-level config override for BackgroundManager */
+	get pageConfig() {
+		return pageConfigOverride
 	},
 
 	// ── preference reads (for settings UI) ──
@@ -129,5 +138,15 @@ export const background = {
 	/** clear the per-page override */
 	clearPage() {
 		pageOverride = null
+	},
+
+	/** set a per-page background config override */
+	setPageConfig(config: BackgroundConfig) {
+		pageConfigOverride = { ...config }
+	},
+
+	/** clear the per-page background config override */
+	clearPageConfig() {
+		pageConfigOverride = null
 	},
 }

@@ -382,6 +382,10 @@ def build_prompt_variables(
 	now = _resolve_now(client_context)
 	variables: dict[str, object] = _build_date_variables(client_context)
 
+	gamepads: object = _NA
+	if client_context and client_context.gamepads:
+		gamepads = ", ".join(client_context.gamepads)
+
 	# client context variables
 	variables.update(
 		{
@@ -411,6 +415,100 @@ def build_prompt_variables(
 			"client_pwa_installed": (
 				client_context.pwa_installed
 				if client_context and client_context.pwa_installed is not None
+				else _NA
+			),
+			"client_user_agent": (
+				client_context.user_agent
+				if client_context and client_context.user_agent
+				else _NA
+			),
+			"client_offline": (
+				client_context.offline
+				if client_context and client_context.offline is not None
+				else _NA
+			),
+			"client_display_mode": (
+				client_context.display_mode
+				if client_context and client_context.display_mode
+				else _NA
+			),
+			"client_preferred_color_scheme": (
+				client_context.preferred_color_scheme
+				if client_context and client_context.preferred_color_scheme
+				else _NA
+			),
+			"client_prefers_reduced_motion": (
+				client_context.prefers_reduced_motion
+				if client_context and client_context.prefers_reduced_motion is not None
+				else _NA
+			),
+			"client_prefers_contrast": (
+				client_context.prefers_contrast
+				if client_context and client_context.prefers_contrast
+				else _NA
+			),
+			"client_idle_state": (
+				client_context.idle_state
+				if client_context and client_context.idle_state
+				else _NA
+			),
+			"client_gamepad_count": (
+				client_context.gamepad_count
+				if client_context and client_context.gamepad_count is not None
+				else _NA
+			),
+			"client_gamepads": gamepads,
+			"client_connection_type": (
+				client_context.connection_type
+				if client_context and client_context.connection_type
+				else _NA
+			),
+			"client_connection_effective_type": (
+				client_context.connection_effective_type
+				if client_context and client_context.connection_effective_type
+				else _NA
+			),
+			"client_connection_downlink_mbps": (
+				client_context.connection_downlink_mbps
+				if client_context
+				and client_context.connection_downlink_mbps is not None
+				else _NA
+			),
+			"client_connection_rtt_ms": (
+				client_context.connection_rtt_ms
+				if client_context and client_context.connection_rtt_ms is not None
+				else _NA
+			),
+			"client_connection_save_data": (
+				client_context.connection_save_data
+				if client_context and client_context.connection_save_data is not None
+				else _NA
+			),
+			"client_battery_supported": (
+				client_context.battery_supported
+				if client_context and client_context.battery_supported is not None
+				else _NA
+			),
+			"client_battery_charging": (
+				client_context.battery_charging
+				if client_context and client_context.battery_charging is not None
+				else _NA
+			),
+			"client_battery_level": (
+				client_context.battery_level
+				if client_context and client_context.battery_level is not None
+				else _NA
+			),
+			"client_battery_charging_time_seconds": (
+				client_context.battery_charging_time_seconds
+				if client_context
+				and client_context.battery_charging_time_seconds is not None
+				else _NA
+			),
+			"client_battery_discharging_time_seconds": (
+				client_context.battery_discharging_time_seconds
+				if client_context
+				and client_context.battery_discharging_time_seconds is not None
 				else _NA
 			),
 		}

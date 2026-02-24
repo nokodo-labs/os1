@@ -25,6 +25,9 @@
 		{ value: 'lightbends', label: 'light bends' },
 		{ value: 'lightrays', label: 'light rays' },
 		{ value: 'silk', label: 'silk' },
+		{ value: 'fog', label: 'fog' },
+		{ value: 'clouds', label: 'clouds' },
+		{ value: 'clouds2', label: 'clouds 2' },
 		{ value: 'static', label: 'static color' },
 	]
 

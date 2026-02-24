@@ -7,6 +7,7 @@
 
 	const useLocation = $derived(preferences.data.privacy.useLocation ?? false)
 	const useDeviceContext = $derived(preferences.data.privacy.useDeviceContext ?? true)
+	const useBatteryStatus = $derived(preferences.data.privacy.useBatteryStatus ?? false)
 
 	function setUseLocation(enabled: boolean): void {
 		void preferences.update('privacy', { useLocation: enabled })
@@ -19,6 +20,10 @@
 
 	function setUseDeviceContext(enabled: boolean): void {
 		void preferences.update('privacy', { useDeviceContext: enabled })
+	}
+
+	function setUseBatteryStatus(enabled: boolean): void {
+		void preferences.update('privacy', { useBatteryStatus: enabled })
 	}
 </script>
 
@@ -53,6 +58,15 @@
 						</div>
 					</div>
 					<Switch size="md" checked={useLocation} onchange={setUseLocation} />
+				</div>
+				<div class="flex items-center justify-between gap-3">
+					<div>
+						<div class="text-sm text-white/70">battery status</div>
+						<div class="text-xs text-white/50">
+							share charging state and battery level for context-aware responses
+						</div>
+					</div>
+					<Switch size="md" checked={useBatteryStatus} onchange={setUseBatteryStatus} />
 				</div>
 			</div>
 		</div>

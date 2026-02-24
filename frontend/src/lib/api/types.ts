@@ -2438,7 +2438,7 @@ export interface components {
              * Background
              * @description background wallpaper preference used when auto_background is disabled
              */
-            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
             /**
              * Autobackground
              * @description when enabled, background changes automatically based on context
@@ -4119,6 +4119,11 @@ export interface components {
              * @description whether to send device information (timezone, OS, browser) to personalise AI responses
              */
             useDeviceContext?: boolean | null;
+            /**
+             * Usebatterystatus
+             * @description whether to send battery status details to personalise AI responses
+             */
+            useBatteryStatus?: boolean | null;
         };
         /**
          * ProblemDetails
@@ -5486,14 +5491,14 @@ export interface components {
              * @default darkveil
              * @enum {string}
              */
-            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none";
+            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none";
             /**
              * Auth Pages Background
              * @description background for auth pages (login, signup)
              * @default lightrays
              * @enum {string}
              */
-            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none";
+            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none";
             /**
              * Sidebar Collapsed
              * @description collapse sidebar
@@ -5512,12 +5517,12 @@ export interface components {
              * Default Background
              * @description default background for the app
              */
-            default_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            default_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
             /**
              * Auth Pages Background
              * @description background for auth pages (login, signup)
              */
-            auth_pages_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            auth_pages_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
             /**
              * Sidebar Collapsed
              * @description collapse sidebar

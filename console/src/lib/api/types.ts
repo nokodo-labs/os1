@@ -4119,6 +4119,11 @@ export interface components {
              * @description whether to send device information (timezone, OS, browser) to personalise AI responses
              */
             useDeviceContext?: boolean | null;
+            /**
+             * Usebatterystatus
+             * @description whether to send battery status details to personalise AI responses
+             */
+            useBatteryStatus?: boolean | null;
         };
         /**
          * ProblemDetails

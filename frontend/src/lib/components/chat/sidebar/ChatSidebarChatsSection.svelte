@@ -55,18 +55,20 @@
 						</div>
 					</div>
 				{:else}
-					{#each threads as thread (thread.id)}
-						<ChatSidebarThreadRow
-							{thread}
-							selected={selectedChatId === thread.id}
-							onPrefetch={onPrefetchThread}
-							{onOpenThread}
-							{openThreadMenuId}
-							{onToggleMenu}
-							{onCloseMenu}
-							{onRequestEdit}
-							{onDeleteThread}
-						/>
+					{#each threads as thread, index (thread.id)}
+						<div class={index === threads.length - 1 ? 'pb-5' : ''}>
+							<ChatSidebarThreadRow
+								{thread}
+								selected={selectedChatId === thread.id}
+								onPrefetch={onPrefetchThread}
+								{onOpenThread}
+								{openThreadMenuId}
+								{onToggleMenu}
+								{onCloseMenu}
+								{onRequestEdit}
+								{onDeleteThread}
+							/>
+						</div>
 					{/each}
 				{/if}
 			</div>

@@ -8,11 +8,11 @@
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { PopupMenu } from '$lib/components/primitives'
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
 	import { reminders, type ReminderListsSortMode } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
-	import { scale } from 'svelte/transition'
-	import Pencil from '../icons/Pencil.svelte'
+	import InfoCircle from '../icons/InfoCircle.svelte'
 	import EditReminderListModal from './EditReminderListModal.svelte'
 
 	interface Props {
@@ -33,7 +33,6 @@
 
 	// sort menu state
 	let isSortMenuOpen = $state(false)
-	let sortMenuEl: HTMLDivElement | null = $state(null)
 	let sortButtonEl: HTMLButtonElement | null = $state(null)
 
 	const sortOptions: { value: ReminderListsSortMode; label: string }[] = [
@@ -46,7 +45,6 @@
 
 	function closeSortMenu() {
 		isSortMenuOpen = false
-		sortMenuEl = null
 	}
 
 	function toggleSortMenu() {
@@ -55,10 +53,7 @@
 	}
 
 	let openListMenuId = $state<string | null>(null)
-	let listMenuEl: HTMLDivElement | null = $state(null)
 	let listMenuButtonEl: HTMLButtonElement | null = $state(null)
-	let menuFixedTop = $state(0)
-	let menuFixedRight = $state(0)
 
 	let editListId = $state<string | null>(null)
 	const editList = $derived(editListId ? reminders.getListById(editListId) : null)
@@ -106,16 +101,10 @@
 		const opening = openListMenuId !== listId
 		openListMenuId = opening ? listId : null
 		if (buttonEl) listMenuButtonEl = buttonEl
-		if (opening && buttonEl) {
-			const rect = buttonEl.getBoundingClientRect()
-			menuFixedTop = rect.bottom + 4
-			menuFixedRight = window.innerWidth - rect.right
-		}
 	}
 
 	function closeListMenu() {
 		openListMenuId = null
-		listMenuEl = null
 		listMenuButtonEl = null
 	}
 
@@ -125,38 +114,6 @@
 		})
 		return response.status
 	}
-
-	$effect(() => {
-		if (!openListMenuId && !isSortMenuOpen) return
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== 'Escape') return
-			event.preventDefault()
-			closeListMenu()
-			closeSortMenu()
-		}
-
-		const onPointerDown = (event: PointerEvent) => {
-			const path = event.composedPath()
-			if (openListMenuId) {
-				if (listMenuEl && path.includes(listMenuEl)) return
-				if (listMenuButtonEl && path.includes(listMenuButtonEl)) return
-			}
-			if (isSortMenuOpen) {
-				if (sortMenuEl && path.includes(sortMenuEl)) return
-				if (sortButtonEl && path.includes(sortButtonEl)) return
-			}
-			closeListMenu()
-			closeSortMenu()
-		}
-
-		window.addEventListener('keydown', onKeyDown)
-		window.addEventListener('pointerdown', onPointerDown)
-		return () => {
-			window.removeEventListener('keydown', onKeyDown)
-			window.removeEventListener('pointerdown', onPointerDown)
-		}
-	})
 
 	$effect(() => {
 		if (!browser) return
@@ -182,44 +139,32 @@
 		</div>
 		{#if !isMobile}
 			<div class="flex items-center gap-1">
-				<div class="relative">
-					<button
-						type="button"
-						bind:this={sortButtonEl}
-						class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
-						onclick={toggleSortMenu}
-						aria-label="sort lists"
-						aria-haspopup="menu"
-						aria-expanded={isSortMenuOpen}
-					>
-						<ArrowsUpDown variant="solid" class="h-5 w-5" />
-					</button>
-
-					{#if isSortMenuOpen}
-						<div
-							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-							bind:this={sortMenuEl}
-							role="menu"
-							class="animate-popup-right rounded-container absolute top-full right-0 z-50 mt-2 w-44 border border-white/10 bg-black/70 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] backdrop-blur"
+				<button
+					type="button"
+					bind:this={sortButtonEl}
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					onclick={toggleSortMenu}
+					aria-label="sort lists"
+					aria-haspopup="menu"
+					aria-expanded={isSortMenuOpen}
+				>
+					<ArrowsUpDown variant="solid" class="h-5 w-5" />
+				</button>
+				<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
+					{#each sortOptions as option (option.value)}
+						<button
+							type="button"
+							role="menuitem"
+							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+							onclick={() => {
+								reminders.setListsSortMode(option.value)
+								closeSortMenu()
+							}}
 						>
-							{#each sortOptions as option (option.value)}
-								<button
-									type="button"
-									role="menuitem"
-									class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-									onclick={() => {
-										reminders.setListsSortMode(option.value)
-										closeSortMenu()
-									}}
-								>
-									{option.label}{reminders.listsSortMode === option.value
-										? ' ✓'
-										: ''}
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
+							{option.label}{reminders.listsSortMode === option.value ? ' ✓' : ''}
+						</button>
+					{/each}
+				</PopupMenu>
 				<button
 					type="button"
 					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
@@ -264,48 +209,46 @@
 							}}
 						/>
 
-						{#if openListMenuId === list.id}
-							<div
-								transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-								bind:this={listMenuEl}
-								data-reminders-list-menu
-								class="animate-popup-right liquid-metal rounded-container fixed z-50 min-w-52 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)]"
-								style="top: {menuFixedTop}px; right: {menuFixedRight}px;"
+						<PopupMenu
+							open={openListMenuId === list.id}
+							anchorEl={listMenuButtonEl}
+							onClose={closeListMenu}
+							data-reminders-list-menu
+						>
+							<button
+								type="button"
+								class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+								onclick={(event) => {
+									event.stopPropagation()
+									closeListMenu()
+									editListId = list.id
+								}}
 							>
-								<button
-									type="button"
-									class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
-									onclick={(event) => {
-										event.stopPropagation()
-										closeListMenu()
-										editListId = list.id
+								<InfoCircle class="h-4 w-4" />
+								properties
+							</button>
+							<div class="my-1 h-px w-full bg-white/10"></div>
+							<div class="mt-1">
+								<DeleteButton
+									confirm={true}
+									stopPropagation={true}
+									modalText={{
+										title: 'delete list?',
+										description: list.name,
 									}}
-								>
-									<Pencil variant="solid" class="h-4 w-4" />
-									&nbsp; edit
-								</button>
-								<div class="mt-1">
-									<DeleteButton
-										confirm={true}
-										stopPropagation={true}
-										modalText={{
-											title: 'delete list?',
-											description: list.name,
-										}}
-										onDelete={async () => {
-											const status = await deleteList(list.id)
-											if (status !== 204) return false
+									onDelete={async () => {
+										const status = await deleteList(list.id)
+										if (status !== 204) return false
 
-											await reminders.loadLists({ force: true })
-											if (selectedListId === list.id) {
-												selectList(null)
-											}
-											return true
-										}}
-									/>
-								</div>
+										await reminders.loadLists({ force: true })
+										if (selectedListId === list.id) {
+											selectList(null)
+										}
+										return true
+									}}
+								/>
 							</div>
-						{/if}
+						</PopupMenu>
 					</div>
 				{/each}
 
