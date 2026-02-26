@@ -8,10 +8,9 @@
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
-	import LockClosed from '$lib/components/icons/LockClosed.svelte'
+	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
 	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import UserCircle from '$lib/components/icons/UserCircle.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import type { Component } from 'svelte'
@@ -32,7 +31,6 @@
 	}
 
 	type SettingsSectionId =
-		| 'account'
 		| 'appearance'
 		| 'notifications'
 		| 'privacy'
@@ -44,7 +42,6 @@
 		| 'debug'
 
 	type SettingsRouteId =
-		| '/settings/account'
 		| '/settings/appearance'
 		| '/settings/notifications'
 		| '/settings/privacy'
@@ -56,7 +53,6 @@
 		| '/settings/debug'
 
 	const settingsRouteBySection = {
-		account: '/settings/account',
 		appearance: '/settings/appearance',
 		notifications: '/settings/notifications',
 		privacy: '/settings/privacy',
@@ -69,12 +65,6 @@
 	} as const satisfies Record<SettingsSectionId, SettingsRouteId>
 
 	const sections: SettingsSection[] = [
-		{
-			id: 'account',
-			label: 'account',
-			icon: UserCircle,
-			description: 'profile, email, and personal info',
-		},
 		{
 			id: 'appearance',
 			label: 'appearance',
@@ -108,8 +98,8 @@
 		{
 			id: 'security',
 			label: 'security',
-			icon: LockClosed,
-			description: 'passwords, sessions, and authentication',
+			icon: ShieldCheck,
+			description: 'passwords, email, and authentication',
 		},
 		{
 			id: 'advanced',

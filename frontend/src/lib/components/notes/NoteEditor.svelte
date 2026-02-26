@@ -334,234 +334,227 @@
 		</div>
 	</div>
 {:else}
-	<div class="w-full" id="note-editor">
-		<div class="flex w-full flex-col">
-			<!-- header section -->
-			<div class="rounded-container bg-white/5 px-5 py-5 pb-6">
-				<!-- title row -->
-				<div class="mb-2 flex w-full items-center gap-2">
-					<input
-						class="min-w-0 flex-1 bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/42"
-						placeholder="title"
-						bind:value={title}
-						oninput={handleTitleInput}
-					/>
-				</div>
+	<div class="flex w-full flex-1 flex-col" id="note-editor">
+		<!-- header section -->
+		<div class="rounded-container bg-white/5 px-5 py-5 pb-6">
+			<!-- title row -->
+			<div class="mb-2 flex w-full items-center gap-2">
+				<input
+					class="min-w-0 flex-1 bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/42"
+					placeholder="title"
+					bind:value={title}
+					oninput={handleTitleInput}
+				/>
+			</div>
 
-				<!-- meta row -->
-				<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
-					<div class="flex w-fit items-center gap-1 text-xs font-medium text-white/55">
-						<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
-							<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
-							<Timestamp
-								timestamp={{ getTime: () => note.updatedAt }}
-								mode="calendar"
-							/>
-						</div>
+			<!-- meta row -->
+			<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
+				<div class="flex w-fit items-center gap-1 text-xs font-medium text-white/55">
+					<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
+						<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
+						<Timestamp timestamp={{ getTime: () => note.updatedAt }} mode="calendar" />
+					</div>
+					<span class="text-white/25">·</span>
+					<div class="flex min-w-fit items-center gap-1 px-0.5 py-1">
+						<Bars3BottomLeft class="h-3 w-3" strokeWidth="2" />
+						<span>{wordCount} words</span>
 						<span class="text-white/25">·</span>
+						<span>{charCount} chars</span>
+					</div>
+					<span class="text-white/25">·</span>
+					{#if isRawMode && rawDirty}
+						<div
+							class="flex min-w-fit items-center gap-1 px-0.5 py-1 text-amber-400/80"
+						>
+							<PencilSquare class="h-3 w-3" />
+							<span>unsaved</span>
+						</div>
+					{:else}
 						<div class="flex min-w-fit items-center gap-1 px-0.5 py-1">
-							<Bars3BottomLeft class="h-3 w-3" strokeWidth="2" />
-							<span>{wordCount} words</span>
-							<span class="text-white/25">·</span>
-							<span>{charCount} chars</span>
+							<Cloud class="h-3 w-3" />
+							<span>autosaved</span>
 						</div>
-						<span class="text-white/25">·</span>
-						{#if isRawMode && rawDirty}
-							<div
-								class="flex min-w-fit items-center gap-1 px-0.5 py-1 text-amber-400/80"
-							>
-								<PencilSquare class="h-3 w-3" />
-								<span>unsaved</span>
-							</div>
-						{:else}
-							<div class="flex min-w-fit items-center gap-1 px-0.5 py-1">
-								<Cloud class="h-3 w-3" />
-								<span>autosaved</span>
-							</div>
-						{/if}
-					</div>
-				</div>
-
-				<!-- viewers row (sessions editing this document) -->
-				{#if peers.length > 0}
-					<div
-						class="scrollbar-none mt-3 flex items-center gap-3 overflow-x-auto pt-2"
-						use:wheelToHScroll
-					>
-						{#each peers as peer, idx (peer.sessionId + ':' + idx)}
-							{@const name = peer.userName || 'user'}
-							{@const initials = getUserInitials(name)}
-							{@const color = peer.color || '#85C1E9'}
-							<!-- TODO: clicking on a viewer should open the User Profile modal once implemented -->
-							<div class="flex shrink-0 items-center gap-2">
-								<div
-									class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm"
-									style:background-color={color}
-								>
-									{#if peer.avatarUrl}
-										<img
-											src={peer.avatarUrl}
-											alt={name}
-											class="h-full w-full rounded-full object-cover"
-										/>
-									{:else}
-										{initials}
-									{/if}
-								</div>
-								<span class="text-sm font-bold whitespace-nowrap text-white/70"
-									>{name}</span
-								>
-							</div>
-						{/each}
-					</div>
-				{/if}
-
-				<!-- formatting toolbar row - hidden in raw mode -->
-				<div
-					class="formatting-toolbar overflow-hidden transition-all duration-200 ease-out {isRawMode
-						? 'max-h-0 opacity-0'
-						: 'max-h-20 opacity-100'}"
-				>
-					<div
-						class="scrollbar-none mt-3 flex items-center justify-between overflow-x-auto border-t border-white/10 pt-3"
-						use:wheelToHScroll
-					>
-						<div class="flex min-w-fit items-center gap-0.5">
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleHeading(1)}
-								title="heading 1"
-							>
-								<H1 class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleHeading(2)}
-								title="heading 2"
-							>
-								<H2 class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleHeading(3)}
-								title="heading 3"
-							>
-								<H3 class="h-4 w-4" />
-							</button>
-
-							<div class="mx-1 h-4 w-px bg-white/15"></div>
-
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleBold()}
-								title="bold (ctrl+b)"
-							>
-								<Bold class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleItalic()}
-								title="italic (ctrl+i)"
-							>
-								<Italic class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleUnderline()}
-								title="underline (ctrl+u)"
-							>
-								<Underline class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleStrike()}
-								title="strikethrough"
-							>
-								<Strikethrough class="h-4 w-4" />
-							</button>
-
-							<div class="mx-1 h-4 w-px bg-white/15"></div>
-
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleBulletList()}
-								title="bullet list"
-							>
-								<ListBullet class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleOrderedList()}
-								title="numbered list"
-							>
-								<NumberedList class="h-4 w-4" />
-							</button>
-
-							<div class="mx-1 h-4 w-px bg-white/15"></div>
-
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleCode()}
-								title="inline code"
-							>
-								<CodeBracket class="h-4 w-4" />
-							</button>
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
-								onclick={() => sharedEditor?.toggleCodeBlock()}
-								title="code block"
-							>
-								<Code class="h-4 w-4" />
-							</button>
-						</div>
-						<div></div>
-					</div>
+					{/if}
 				</div>
 			</div>
 
-			<!-- content area -->
-			<div
-				class="relative w-full flex-1 overflow-auto px-3.5 pt-4"
-				id="note-content-container"
-				style:padding-bottom="{Math.max(80, device.virtualKeyboardHeight + 24)}px"
-			>
-				{#if isRawMode}
-					<textarea
-						bind:this={textareaEl}
-						class="min-h-24 w-full resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
-						style:field-sizing="content"
-						placeholder="write something... (Ctrl+S to save)"
-						bind:value={content}
-						oninput={handleRawInput}
-						onkeydown={handleRawKeyDown}
-					></textarea>
-				{/if}
-
-				<!-- SharedEditor stays mounted (hidden in raw mode) so Yjs stays connected -->
-				<div class={isRawMode ? 'hidden' : ''}>
-					<SharedEditor
-						bind:this={sharedEditor}
-						{documentId}
-						initialContent={content}
-						user={userInfo}
-						placeholder="write something..."
-						onchange={handleContentChange}
-						onparticipantschange={(p) => (collabParticipants = p)}
-						onsynced={handleSynced}
-						class="min-h-24 text-[0.95rem] leading-relaxed"
-					/>
+			<!-- viewers row (sessions editing this document) -->
+			{#if peers.length > 0}
+				<div
+					class="scrollbar-none mt-3 flex items-center gap-3 overflow-x-auto pt-2"
+					use:wheelToHScroll
+				>
+					{#each peers as peer, idx (peer.sessionId + ':' + idx)}
+						{@const name = peer.userName || 'user'}
+						{@const initials = getUserInitials(name)}
+						{@const color = peer.color || '#85C1E9'}
+						<!-- TODO: clicking on a viewer should open the User Profile modal once implemented -->
+						<div class="flex shrink-0 items-center gap-2">
+							<div
+								class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm"
+								style:background-color={color}
+							>
+								{#if peer.avatarUrl}
+									<img
+										src={peer.avatarUrl}
+										alt={name}
+										class="h-full w-full rounded-full object-cover"
+									/>
+								{:else}
+									{initials}
+								{/if}
+							</div>
+							<span class="text-sm font-bold whitespace-nowrap text-white/70"
+								>{name}</span
+							>
+						</div>
+					{/each}
 				</div>
+			{/if}
+
+			<!-- formatting toolbar row - hidden in raw mode -->
+			<div
+				class="formatting-toolbar overflow-hidden transition-all duration-200 ease-out {isRawMode
+					? 'max-h-0 opacity-0'
+					: 'max-h-20 opacity-100'}"
+			>
+				<div
+					class="scrollbar-none mt-3 flex items-center justify-between overflow-x-auto border-t border-white/10 pt-3"
+					use:wheelToHScroll
+				>
+					<div class="flex min-w-fit items-center gap-0.5">
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleHeading(1)}
+							title="heading 1"
+						>
+							<H1 class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleHeading(2)}
+							title="heading 2"
+						>
+							<H2 class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleHeading(3)}
+							title="heading 3"
+						>
+							<H3 class="h-4 w-4" />
+						</button>
+
+						<div class="mx-1 h-4 w-px bg-white/15"></div>
+
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleBold()}
+							title="bold (ctrl+b)"
+						>
+							<Bold class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleItalic()}
+							title="italic (ctrl+i)"
+						>
+							<Italic class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleUnderline()}
+							title="underline (ctrl+u)"
+						>
+							<Underline class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleStrike()}
+							title="strikethrough"
+						>
+							<Strikethrough class="h-4 w-4" />
+						</button>
+
+						<div class="mx-1 h-4 w-px bg-white/15"></div>
+
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleBulletList()}
+							title="bullet list"
+						>
+							<ListBullet class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleOrderedList()}
+							title="numbered list"
+						>
+							<NumberedList class="h-4 w-4" />
+						</button>
+
+						<div class="mx-1 h-4 w-px bg-white/15"></div>
+
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleCode()}
+							title="inline code"
+						>
+							<CodeBracket class="h-4 w-4" />
+						</button>
+						<button
+							type="button"
+							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							onclick={() => sharedEditor?.toggleCodeBlock()}
+							title="code block"
+						>
+							<Code class="h-4 w-4" />
+						</button>
+					</div>
+					<div></div>
+				</div>
+			</div>
+		</div>
+
+		<!-- content area -->
+		<div
+			class="relative flex w-full flex-1 flex-col px-3.5 pt-4 pb-6"
+			id="note-content-container"
+		>
+			{#if isRawMode}
+				<textarea
+					bind:this={textareaEl}
+					class="min-h-24 w-full flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
+					placeholder="write something... (Ctrl+S to save)"
+					bind:value={content}
+					oninput={handleRawInput}
+					onkeydown={handleRawKeyDown}
+				></textarea>
+			{/if}
+
+			<!-- SharedEditor stays mounted (hidden in raw mode) so Yjs stays connected -->
+			<div class={isRawMode ? 'hidden' : 'flex flex-1 flex-col'}>
+				<SharedEditor
+					bind:this={sharedEditor}
+					{documentId}
+					initialContent={content}
+					user={userInfo}
+					placeholder="write something..."
+					onchange={handleContentChange}
+					onparticipantschange={(p) => (collabParticipants = p)}
+					onsynced={handleSynced}
+					class="min-h-24 flex-1 text-[0.95rem] leading-relaxed"
+				/>
 			</div>
 		</div>
 	</div>

@@ -52,8 +52,9 @@ export {
 // user actions
 export {
 	deleteUserMessage,
-	handleEditMessage,
 	handleRegenerateMessage,
+	handleSaveAsCopyMessage,
+	handleSaveEditMessage,
 	handleSendMessage,
 	handleStopGeneration,
 	requestDeleteUserMessage,

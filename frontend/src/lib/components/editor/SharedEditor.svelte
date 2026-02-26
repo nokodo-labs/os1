@@ -285,18 +285,21 @@
 
 <div
 	bind:this={editorElement}
-	class="shared-editor prose prose-invert max-w-none {className}"
+	class="shared-editor h-full prose prose-invert max-w-none {className}"
 ></div>
 
 <style>
 	/* --- editor chrome --- */
 	.shared-editor {
 		outline: none;
+		display: flex;
+		flex-direction: column;
+		height: 100%;
 	}
 
 	.shared-editor :global(.tiptap) {
 		outline: none;
-		min-height: 100%;
+		flex: 1 1 0%;
 	}
 
 	.shared-editor :global(.tiptap:focus) {

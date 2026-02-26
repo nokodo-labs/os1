@@ -188,6 +188,10 @@ export class ToolExecutionTracker {
 		const exec = this.executions.get(result.toolCallId)
 		if (!exec) return
 
+		// skip redundant re-registration to avoid spurious reactive updates
+		// that can restart timers in tool cards (e.g. ThinkToolCard)
+		if ((exec.status === 'completed' || exec.status === 'error') && exec.result) return
+
 		exec.result = result
 		exec.completedAt = new SvelteDate()
 

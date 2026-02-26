@@ -124,6 +124,7 @@ function createPreferencesStore() {
 		advanced: {
 			svgLiquidGlass: false,
 			svgLiquidGlassIsland: true,
+			svgLiquidMetal: false,
 		},
 		debug: {
 			enableDebugApps: false,
@@ -145,6 +146,9 @@ function createPreferencesStore() {
 	)
 	const useSvgLiquidGlassIsland = $derived.by(
 		() => device.isChromium && (data.advanced.svgLiquidGlassIsland ?? true)
+	)
+	const useSvgLiquidMetal = $derived.by(
+		() => device.isChromium && (data.advanced.svgLiquidMetal ?? false)
 	)
 
 	// event stream integration
@@ -300,6 +304,9 @@ function createPreferencesStore() {
 		},
 		get useSvgLiquidGlassIsland() {
 			return useSvgLiquidGlassIsland
+		},
+		get useSvgLiquidMetal() {
+			return useSvgLiquidMetal
 		},
 		get loading() {
 			return loading

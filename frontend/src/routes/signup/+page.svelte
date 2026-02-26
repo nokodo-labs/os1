@@ -10,6 +10,7 @@
 	import { onMount } from 'svelte'
 
 	let email = $state('')
+	let username = $state('')
 	let displayName = $state('')
 	let password = $state('')
 	let passwordConfirm = $state('')
@@ -42,7 +43,8 @@
 	})
 
 	const canSubmit = $derived(
-		email.trim().length > 0 &&
+		username.trim().length > 0 &&
+			email.trim().length > 0 &&
 			password.length >= 1 &&
 			passwordConfirm.length >= 1 &&
 			password === passwordConfirm &&
@@ -69,6 +71,7 @@
 				body: {
 					email: email.trim(),
 					password,
+					username: username.trim(),
 					display_name: displayName.trim() ? displayName.trim() : null,
 				},
 			})
@@ -158,6 +161,21 @@
 									autocomplete="name"
 									bind:value={displayName}
 									placeholder="optional"
+									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
+								/>
+							</div>
+
+							<div class="space-y-2">
+								<label class="text-sm font-medium text-white/75" for="username"
+									>username</label
+								>
+								<input
+									id="username"
+									type="text"
+									autocomplete="username"
+									required
+									bind:value={username}
+									placeholder="3 to 30 characters"
 									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>

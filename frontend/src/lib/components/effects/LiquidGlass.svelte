@@ -9,6 +9,8 @@
 		tag?: string
 		class?: string
 		style?: string
+		/** apply the frosted modifier (liquid-glass--frosted) */
+		frosted?: boolean
 		/** explicit corner radius for the SVG filter (defaults to pill shape) */
 		cornerRadius?: number
 		/** pass-through glass filter props */
@@ -33,6 +35,7 @@
 		tag = 'div',
 		class: className = '',
 		style: userStyle = '',
+		frosted = false,
 		cornerRadius,
 		surfaceFn,
 		blurRadius,
@@ -117,7 +120,7 @@
 <svelte:element
 	this={tag}
 	bind:this={el}
-	class="liquid-glass {className}"
+	class="liquid-glass {frosted ? 'liquid-glass--frosted' : ''} {className}"
 	style={combinedStyle}
 	{...rest}
 >

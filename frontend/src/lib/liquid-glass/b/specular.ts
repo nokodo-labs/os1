@@ -1,3 +1,5 @@
+import { getCachedSpecularMap, setCachedSpecularMap } from './cache'
+
 /**
  * generate rim-light specular highlight for glass edges.
  * matches the reference implementation: a thin highlight
@@ -15,51 +17,15 @@ export interface SpecularConfig {
 	falloff?: number
 }
 
-/**
- * rounded rectangle SDF - returns signed distance and outward normal.
- */
-function roundedRectSDF(
-	px: number,
-	py: number,
-	w: number,
-	h: number,
-	r: number
-): { dist: number; nx: number; ny: number } {
-	const ax = Math.abs(px - w / 2)
-	const ay = Math.abs(py - h / 2)
-	const bx = w / 2 - r
-	const by = h / 2 - r
-	const dx = Math.max(ax - bx, 0)
-	const dy = Math.max(ay - by, 0)
-
-	let dist: number
-	let nx: number
-	let ny: number
-
-	if (dx > 0 && dy > 0) {
-		const len = Math.sqrt(dx * dx + dy * dy)
-		dist = len - r
-		nx = dx / len
-		ny = dy / len
-	} else if (ax - bx > ay - by) {
-		dist = ax - bx - r
-		nx = 1
-		ny = 0
-	} else {
-		dist = ay - by - r
-		nx = 0
-		ny = 1
-	}
-
-	if (px < w / 2) nx = -nx
-	if (py < h / 2) ny = -ny
-
-	return { dist, nx, ny }
-}
-
 export function generateSpecularHighlight(config: SpecularConfig): string {
 	const { width, height, bezelWidth, intensity = 1, lightAngle = 135, falloff = 1 } = config
 	const cornerRadius = config.cornerRadius ?? Math.min(width, height) / 2
+
+	const cacheKey = `${width}-${height}-${bezelWidth}-${cornerRadius}-${intensity}-${lightAngle}-${falloff}`
+	const cached = getCachedSpecularMap(cacheKey)
+	if (cached) {
+		return cached.imageDataUrl
+	}
 
 	const canvas = document.createElement('canvas')
 	canvas.width = width
@@ -70,12 +36,47 @@ export function generateSpecularHighlight(config: SpecularConfig): string {
 	const lightRad = (lightAngle * Math.PI) / 180
 	const lightDir = { x: Math.cos(lightRad), y: Math.sin(lightRad) }
 
-	for (let y = 0; y < height; y++) {
-		for (let x = 0; x < width; x++) {
-			const { dist, nx, ny } = roundedRectSDF(x + 0.5, y + 0.5, width, height, cornerRadius)
-			const distFromEdge = -dist // positive inside
+	const halfW = width / 2
+	const halfH = height / 2
+	const bx = halfW - cornerRadius
+	const by = halfH - cornerRadius
 
-			const idx = (y * width + x) * 4
+	let idx = 0
+	for (let y = 0; y < height; y++) {
+		const py = y + 0.5
+		const ay = Math.abs(py - halfH)
+		const dy = Math.max(ay - by, 0)
+		const isTop = py < halfH
+
+		for (let x = 0; x < width; x++) {
+			const px = x + 0.5
+			const ax = Math.abs(px - halfW)
+			const dx = Math.max(ax - bx, 0)
+			const isLeft = px < halfW
+
+			let dist: number
+			let nx: number
+			let ny: number
+
+			if (dx > 0 && dy > 0) {
+				const len = Math.sqrt(dx * dx + dy * dy)
+				dist = len - cornerRadius
+				nx = dx / len
+				ny = dy / len
+			} else if (ax - bx > ay - by) {
+				dist = ax - bx - cornerRadius
+				nx = 1
+				ny = 0
+			} else {
+				dist = ay - by - cornerRadius
+				nx = 0
+				ny = 1
+			}
+
+			if (isLeft) nx = -nx
+			if (isTop) ny = -ny
+
+			const distFromEdge = -dist // positive inside
 
 			// specular only within bezel region
 			if (distFromEdge > 0 && distFromEdge < bezelWidth) {
@@ -87,10 +88,10 @@ export function generateSpecularHighlight(config: SpecularConfig): string {
 				// beyond 2px: inner term goes negative → skip
 				const inner = 1 - (1 - distFromEdge) * (1 - distFromEdge)
 				if (inner <= 0) {
-					imageData.data[idx] = 0
-					imageData.data[idx + 1] = 0
-					imageData.data[idx + 2] = 0
-					imageData.data[idx + 3] = 0
+					imageData.data[idx++] = 0
+					imageData.data[idx++] = 0
+					imageData.data[idx++] = 0
+					imageData.data[idx++] = 0
 					continue
 				}
 
@@ -98,19 +99,21 @@ export function generateSpecularHighlight(config: SpecularConfig): string {
 				const color = 255 * coefficient * intensity
 				const finalOpacity = color * Math.pow(coefficient, falloff)
 
-				imageData.data[idx] = color
-				imageData.data[idx + 1] = color
-				imageData.data[idx + 2] = color
-				imageData.data[idx + 3] = finalOpacity
+				imageData.data[idx++] = color
+				imageData.data[idx++] = color
+				imageData.data[idx++] = color
+				imageData.data[idx++] = finalOpacity
 			} else {
-				imageData.data[idx] = 0
-				imageData.data[idx + 1] = 0
-				imageData.data[idx + 2] = 0
-				imageData.data[idx + 3] = 0
+				imageData.data[idx++] = 0
+				imageData.data[idx++] = 0
+				imageData.data[idx++] = 0
+				imageData.data[idx++] = 0
 			}
 		}
 	}
 
 	ctx.putImageData(imageData, 0, 0)
-	return canvas.toDataURL('image/png')
+	const result = canvas.toDataURL('image/png')
+	setCachedSpecularMap(cacheKey, { imageDataUrl: result })
+	return result
 }

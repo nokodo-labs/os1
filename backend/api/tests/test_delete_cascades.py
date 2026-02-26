@@ -4,6 +4,7 @@ Ensures backend delete operations clean up dependent rows:
 - soft-deleting a thread does not delete messages
 - deleting a message clears its attached events
 - deleting a notification clears its attached event (when unshared)
+- deleting a user message deletes entire descendant subtree
 """
 
 from __future__ import annotations
@@ -173,3 +174,244 @@ async def test_delete_notification_also_deletes_attached_event(
 
 	assert await db_session.get(Notification, notification.id) is None
 	assert await db_session.get(Event, event.id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_user_message_deletes_entire_subtree(
+	db_session: AsyncSession,
+) -> None:
+	"""deleting a user message must remove all descendants recursively.
+
+	tree structure:
+		root_user
+		├── assistant_1 (run 1)
+		│   └── followup_user
+		│       └── followup_assistant
+		└── assistant_2 (run 2, regeneration)
+
+	deleting root_user should remove all 5 messages (4 children + itself).
+	"""
+	user = await user_service.create_user(
+		UserCreate(
+			email="subtree_delete@example.com",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=TypeID(user.id), title="t"),
+		db_session,
+		principal=principal,
+	)
+	tid = TypeID(thread.id)
+
+	root_user = await thread_service.create_message(
+		tid,
+		MessageCreate(content="hello", type=MessageType.USER),
+		session=db_session,
+		principal=principal,
+	)
+
+	assistant_1 = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="reply 1",
+			type=MessageType.ASSISTANT,
+			parent_id=root_user.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	followup_user = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="follow up",
+			type=MessageType.USER,
+			parent_id=assistant_1.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	followup_assistant = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="follow up reply",
+			type=MessageType.ASSISTANT,
+			parent_id=followup_user.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	# alternate regeneration branch from root_user
+	assistant_2 = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="reply 2",
+			type=MessageType.ASSISTANT,
+			parent_id=root_user.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	count_before = await db_session.scalar(
+		select(func.count()).select_from(Message).where(Message.thread_id == thread.id)
+	)
+	assert int(count_before or 0) == 5
+
+	await thread_service.delete_user_message_turn(
+		tid,
+		TypeID(root_user.id),
+		db_session,
+		principal=principal,
+	)
+
+	count_after = await db_session.scalar(
+		select(func.count()).select_from(Message).where(Message.thread_id == thread.id)
+	)
+	assert int(count_after or 0) == 0
+
+	# thread leaf should be cleared since all messages are gone
+	await db_session.refresh(thread)
+	assert thread.current_message_id is None
+
+
+@pytest.mark.asyncio
+async def test_delete_user_message_preserves_siblings(
+	db_session: AsyncSession,
+) -> None:
+	"""deleting one version of a user message must not affect its sibling edits.
+
+	tree structure:
+		precursor_user (root)
+		└── precursor_assistant
+		    ├── user_v1 (original)  ← delete this
+		    │   └── assistant_1
+		    └── user_v2 (edit, same parent)
+		        └── assistant_2
+
+	deleting user_v1 should remove user_v1 + assistant_1 but
+	keep precursor_*, user_v2, and assistant_2.
+	"""
+	user = await user_service.create_user(
+		UserCreate(
+			email="sibling_delete@example.com",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=TypeID(user.id), title="t"),
+		db_session,
+		principal=principal,
+	)
+	tid = TypeID(thread.id)
+
+	# precursor pair (root of the tree)
+	precursor_user = await thread_service.create_message(
+		tid,
+		MessageCreate(content="precursor", type=MessageType.USER),
+		session=db_session,
+		principal=principal,
+	)
+
+	precursor_assistant = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="precursor reply",
+			type=MessageType.ASSISTANT,
+			parent_id=precursor_user.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	# first version of the follow-up user message
+	user_v1 = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="version 1",
+			type=MessageType.USER,
+			parent_id=precursor_assistant.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	assistant_1 = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="reply to v1",
+			type=MessageType.ASSISTANT,
+			parent_id=user_v1.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	# sibling user message (same parent as user_v1 = edit/version)
+	user_v2 = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="version 2",
+			type=MessageType.USER,
+			parent_id=precursor_assistant.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	assistant_2 = await thread_service.create_message(
+		tid,
+		MessageCreate(
+			content="reply to v2",
+			type=MessageType.ASSISTANT,
+			parent_id=user_v2.id,
+		),
+		session=db_session,
+		principal=principal,
+	)
+
+	count_before = await db_session.scalar(
+		select(func.count()).select_from(Message).where(Message.thread_id == thread.id)
+	)
+	assert int(count_before or 0) == 6
+
+	await thread_service.delete_user_message_turn(
+		tid,
+		TypeID(user_v1.id),
+		db_session,
+		principal=principal,
+	)
+
+	remaining = list(
+		(
+			await db_session.scalars(
+				select(Message).where(Message.thread_id == thread.id)
+			)
+		).all()
+	)
+	remaining_ids = {m.id for m in remaining}
+
+	# siblings and their descendants must survive
+	assert precursor_user.id in remaining_ids
+	assert precursor_assistant.id in remaining_ids
+	assert user_v2.id in remaining_ids
+	assert assistant_2.id in remaining_ids
+
+	# deleted subtree must be gone
+	assert user_v1.id not in remaining_ids
+	assert assistant_1.id not in remaining_ids
+
+	# thread leaf should point to the deepest remaining leaf
+	await db_session.refresh(thread)
+	assert thread.current_message_id == assistant_2.id

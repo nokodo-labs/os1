@@ -1,9 +1,9 @@
 <script lang="ts">
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+	import PopupMenu from '$lib/components/primitives/PopupMenu.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
 	import { selectedAgent as selectedAgentStore } from '$lib/stores/selectedAgent.svelte'
-	import { scale } from 'svelte/transition'
 
 	interface Props {
 		selectedAgent: string
@@ -15,11 +15,12 @@
 	let isOpen = $state(false)
 	let didLoadAgents = $state(false)
 	let didAutoSelect = $state(false)
+	let anchorEl = $state<HTMLElement | null>(null)
 
 	const currentAgent = $derived(
 		agents.list.length === 0
 			? null
-			: agents.list.find((a) => a.id === selectedAgent) || agents.list[0]
+			: agents.list.find((agent) => agent.id === selectedAgent) || agents.list[0]
 	)
 
 	$effect(() => {
@@ -31,19 +32,12 @@
 	$effect(() => {
 		if (didAutoSelect) return
 		if (agents.list.length === 0) return
-		const hasSelected = selectedAgent && agents.list.some((a) => a.id === selectedAgent)
+		const hasSelected = selectedAgent && agents.list.some((agent) => agent.id === selectedAgent)
 		if (!hasSelected) {
 			didAutoSelect = true
 			onAgentChange(selectedAgentStore.resolveDefault(agents.list))
 		}
 	})
-
-	function handleClickOutside(event: MouseEvent) {
-		const target = event.target as HTMLElement
-		if (!target.closest('.agent-selector')) {
-			isOpen = false
-		}
-	}
 
 	function toggle() {
 		if (agents.list.length === 0) return
@@ -55,16 +49,14 @@
 		onAgentChange(agentId)
 	}
 
-	$effect(() => {
-		if (isOpen) {
-			document.addEventListener('click', handleClickOutside)
-			return () => document.removeEventListener('click', handleClickOutside)
-		}
-	})
+	function closeMenu() {
+		isOpen = false
+	}
 </script>
 
 <div class="agent-selector relative flex items-center pl-1">
 	<button
+		bind:this={anchorEl}
 		class="flex cursor-pointer items-center gap-1 border-none bg-transparent transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={toggle}
 		aria-expanded={isOpen}
@@ -84,50 +76,49 @@
 		</span>
 	</button>
 
-	{#if isOpen}
-		<div
-			transition:scale={{ duration: 180, start: 0.96, opacity: 0 }}
-			class="animate-popup liquid-metal rounded-container z-1000 min-w-72 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.5)]"
-			style="position: absolute; top: calc(100% + 0.5rem); left: 0;"
-		>
-			<ul class="m-0 list-none p-0" role="listbox">
-				{#each agents.list as agent (agent.id)}
-					{@const isSelected = agent.id === selectedAgent}
-					<li role="option" aria-selected={isSelected}>
-						<button
-							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-all duration-150 hover:bg-white/8 {isSelected
-								? 'ring-1 ring-white/20'
-								: ''}"
-							style={isSelected ? 'background-color: var(--accent-bg);' : ''}
-							onclick={() => select(agent.id)}
-						>
-							<!-- agent icon -->
-							{#if agent.profile_image_url}
-								<img
-									src={agent.profile_image_url}
-									alt={agent.name}
-									class="h-8 w-8 shrink-0 rounded-full object-cover"
-								/>
-							{:else}
-								<div
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/80 uppercase"
-								>
-									{agent.name.charAt(0)}
-								</div>
-							{/if}
-
-							<div class="flex min-w-0 flex-1 flex-col items-start gap-1">
-								<span class="text-[0.9375rem] font-semibold text-white/95">
-									{agent.name}
-								</span>
+	<PopupMenu
+		open={isOpen}
+		{anchorEl}
+		onClose={closeMenu}
+		class="rounded-container min-w-72"
+		estimatedHeight={320}
+	>
+		<ul class="m-0 list-none p-0" role="listbox">
+			{#each agents.list as agent (agent.id)}
+				{@const isSelected = agent.id === selectedAgent}
+				<li role="option" aria-selected={isSelected}>
+					<button
+						class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-all duration-150 hover:bg-white/8 {isSelected
+							? 'ring-1 ring-white/20'
+							: ''}"
+						style={isSelected ? 'background-color: var(--accent-bg);' : ''}
+						onclick={() => select(agent.id)}
+					>
+						{#if agent.profile_image_url}
+							<img
+								src={agent.profile_image_url}
+								alt={agent.name}
+								class="h-8 w-8 shrink-0 rounded-full object-cover"
+							/>
+						{:else}
+							<div
+								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/80 uppercase"
+							>
+								{agent.name.charAt(0)}
 							</div>
-							{#if isSelected}
-								<Check class="h-4 w-4 shrink-0 text-white/80" strokeWidth="2.5" />
-							{/if}
-						</button>
-					</li>
-				{/each}
-			</ul>
-		</div>
-	{/if}
+						{/if}
+
+						<div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+							<span class="text-[0.9375rem] font-semibold text-white/95"
+								>{agent.name}</span
+							>
+						</div>
+						{#if isSelected}
+							<Check class="h-4 w-4 shrink-0 text-white/80" strokeWidth="2.5" />
+						{/if}
+					</button>
+				</li>
+			{/each}
+		</ul>
+	</PopupMenu>
 </div>

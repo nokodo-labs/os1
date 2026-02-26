@@ -23,52 +23,6 @@ export interface DisplacementResult {
 }
 
 /**
- * signed distance from a point to the nearest edge of a rounded rectangle.
- * returns negative inside the shape, positive outside,
- * plus the outward normal direction (nx, ny) at that point.
- */
-function roundedRectSDF(
-	px: number,
-	py: number,
-	w: number,
-	h: number,
-	r: number
-): { dist: number; nx: number; ny: number } {
-	const ax = Math.abs(px - w / 2)
-	const ay = Math.abs(py - h / 2)
-
-	const bx = w / 2 - r
-	const by = h / 2 - r
-
-	const dx = Math.max(ax - bx, 0)
-	const dy = Math.max(ay - by, 0)
-
-	let dist: number
-	let nx: number
-	let ny: number
-
-	if (dx > 0 && dy > 0) {
-		const len = Math.sqrt(dx * dx + dy * dy)
-		dist = len - r
-		nx = dx / len
-		ny = dy / len
-	} else if (ax - bx > ay - by) {
-		dist = ax - bx - r
-		nx = 1
-		ny = 0
-	} else {
-		dist = ay - by - r
-		nx = 0
-		ny = 1
-	}
-
-	if (px < w / 2) nx = -nx
-	if (py < h / 2) ny = -ny
-
-	return { dist, nx, ny }
-}
-
-/**
  * generate SVG displacement map from refraction calculations.
  * uses RED channel for X-axis, GREEN channel for Y-axis.
  * 128 = neutral (no displacement). values are normalized then
@@ -178,21 +132,54 @@ function generateDisplacementMapInternal(
 	const ctx = canvas.getContext('2d')!
 	const imageData = ctx.createImageData(width, height)
 
+	const halfW = width / 2
+	const halfH = height / 2
+	const bx = halfW - cornerRadius
+	const by = halfH - cornerRadius
+
+	let idx = 0
 	for (let y = 0; y < height; y++) {
+		const py = y + 0.5
+		const ay = Math.abs(py - halfH)
+		const dy = Math.max(ay - by, 0)
+		const isTop = py < halfH
+
 		for (let x = 0; x < width; x++) {
 			const px = x + 0.5
-			const py = y + 0.5
-			const { dist, nx, ny } = roundedRectSDF(px, py, width, height, cornerRadius)
-			const distFromEdge = -dist // positive inside the shape
+			const ax = Math.abs(px - halfW)
+			const dx = Math.max(ax - bx, 0)
+			const isLeft = px < halfW
 
-			const idx = (y * width + x) * 4
+			let dist: number
+			let nx: number
+			let ny: number
+
+			if (dx > 0 && dy > 0) {
+				const len = Math.sqrt(dx * dx + dy * dy)
+				dist = len - cornerRadius
+				nx = dx / len
+				ny = dy / len
+			} else if (ax - bx > ay - by) {
+				dist = ax - bx - cornerRadius
+				nx = 1
+				ny = 0
+			} else {
+				dist = ay - by - cornerRadius
+				nx = 0
+				ny = 1
+			}
+
+			if (isLeft) nx = -nx
+			if (isTop) ny = -ny
+
+			const distFromEdge = -dist // positive inside the shape
 
 			if (distFromEdge <= 0) {
 				// outside shape: neutral
-				imageData.data[idx] = 128
-				imageData.data[idx + 1] = 128
-				imageData.data[idx + 2] = 128
-				imageData.data[idx + 3] = 255
+				imageData.data[idx++] = 128
+				imageData.data[idx++] = 128
+				imageData.data[idx++] = 128
+				imageData.data[idx++] = 255
 				continue
 			}
 
@@ -209,10 +196,10 @@ function generateDisplacementMapInternal(
 				magnitude = normInterior[si]
 			} else {
 				// interior with no lens effect: neutral
-				imageData.data[idx] = 128
-				imageData.data[idx + 1] = 128
-				imageData.data[idx + 2] = 128
-				imageData.data[idx + 3] = 255
+				imageData.data[idx++] = 128
+				imageData.data[idx++] = 128
+				imageData.data[idx++] = 128
+				imageData.data[idx++] = 255
 				continue
 			}
 
@@ -223,10 +210,10 @@ function generateDisplacementMapInternal(
 			const displaceX = -magnitude * nx
 			const displaceY = -magnitude * ny
 
-			imageData.data[idx] = Math.round(Math.max(0, Math.min(255, 128 + displaceX * 127)))
-			imageData.data[idx + 1] = Math.round(Math.max(0, Math.min(255, 128 + displaceY * 127)))
-			imageData.data[idx + 2] = 128
-			imageData.data[idx + 3] = 255
+			imageData.data[idx++] = Math.round(Math.max(0, Math.min(255, 128 + displaceX * 127)))
+			imageData.data[idx++] = Math.round(Math.max(0, Math.min(255, 128 + displaceY * 127)))
+			imageData.data[idx++] = 128
+			imageData.data[idx++] = 255
 		}
 	}
 

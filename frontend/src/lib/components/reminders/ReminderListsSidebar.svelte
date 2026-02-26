@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { apiClient } from '$lib/api/client'
+	import PageTitle from '$lib/components/common/PageTitle.svelte'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
@@ -131,12 +132,7 @@
 			? 'mt-0'
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
-		<div class="flex min-w-0 items-center gap-3">
-			<ListBullet class="h-6 w-6 text-white/70" />
-			<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-white/90">
-				lists
-			</h2>
-		</div>
+		<PageTitle icon={ListBullet} label="lists" iconColor="text-white/70" tag="h2" />
 		{#if !isMobile}
 			<div class="flex items-center gap-1">
 				<button

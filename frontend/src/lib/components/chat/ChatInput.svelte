@@ -52,6 +52,12 @@
 		})
 	})
 
+	// trigger resize when value is changed externally (e.g. quote insertion)
+	$effect(() => {
+		void value
+		tick().then(resize)
+	})
+
 	function closeAddMenu() {
 		isAddMenuOpen = false
 	}
@@ -96,13 +102,16 @@
 		closeAddMenu()
 	}
 
-	function handleInput() {
+	function resize() {
 		if (!textarea) return
 		textarea.style.height = 'auto'
 		const newHeight = Math.min(textarea.scrollHeight, 200)
 		textarea.style.height = `${newHeight}px`
-		// Check if content spans multiple lines (scrollHeight > single line height ~24px)
 		isMultiLine = textarea.scrollHeight > 32
+	}
+
+	function handleInput() {
+		resize()
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -249,7 +258,7 @@
 							class="rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
 							onclick={onStop}
 						>
-							<Stop class="h-3.5 w-3.5" />
+							<Stop class="h-5 w-5" />
 						</button>
 					{:else}
 						<button

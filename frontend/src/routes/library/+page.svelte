@@ -1,6 +1,8 @@
 <script lang="ts">
+	import PageTitle from '$lib/components/common/PageTitle.svelte'
 	import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
+	import BookOpen from '$lib/components/icons/BookOpen.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
@@ -107,7 +109,7 @@
 {/snippet}
 
 <div class="mx-auto mt-10 max-w-3xl">
-	<h1 class="text-2xl font-semibold text-white/90">library</h1>
+	<PageTitle icon={BookOpen} label="library" />
 	<p class="mt-2 text-sm text-white/60">
 		all sent and received media, artifacts, and files will live here.
 	</p>

@@ -3,9 +3,13 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { markAuthReady } from '$lib/auth/session.svelte'
-	import BackgroundManager from '$lib/components/backgrounds/BackgroundManager.svelte'
+	import BackgroundManager, {
+		type BackgroundConfig,
+	} from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
+	import AddFriendsModal from '$lib/components/modals/AddFriendsModal.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
+	import CreateGroupModal from '$lib/components/modals/CreateGroupModal.svelte'
 	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
@@ -32,6 +36,10 @@
 	import '../app.css'
 
 	const PUBLIC_PATHS = new Set(['/login', '/signup'])
+
+	const DEFAULT_BACKGROUND_CONFIG: BackgroundConfig = {
+		clouds2TexturePath: '/backgrounds/noise.png',
+	}
 
 	type ViewTransitionCapableDocument = Document & {
 		startViewTransition?: (
@@ -111,7 +119,7 @@
 			const islandRect = islandEl.getBoundingClientRect()
 			const offset = Math.max(0, Math.round(islandRect.bottom - mainRect.top))
 			mainEl.style.setProperty('--chrome-island-offset', `${offset}px`)
-			// set the island's left position to align with main content
+			// align the island shell left edge with the main content area
 			islandEl.style.setProperty('--island-left', `${mainRect.left}px`)
 		}
 		update()
@@ -327,7 +335,11 @@
 <!-- BackgroundManager handles all backgrounds with smooth transitions -->
 <BackgroundManager
 	type={background.resolved}
-	config={{ color: background.resolvedStaticColor }}
+	config={{
+		...DEFAULT_BACKGROUND_CONFIG,
+		...(background.pageConfig || {}),
+		color: background.resolvedStaticColor,
+	}}
 	onReady={handleBackgroundReady}
 >
 	{#if pendingApproval}
@@ -361,7 +373,7 @@
 
 			<!-- main content -->
 			<div
-				class="main-content-shell relative flex min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
+				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
 				role="main"
 				style="touch-action: pan-y; overscroll-behavior-y: contain;"
 				bind:this={mainContentShell}
@@ -415,7 +427,9 @@
 				</div>
 			</div>
 
+			<AddFriendsModal open={modals.isOpen('add-friends')} onClose={modals.close} />
 			<ArchivedChatsModal open={modals.isOpen('archived-chats')} onClose={modals.close} />
+			<CreateGroupModal open={modals.isOpen('create-group')} onClose={modals.close} />
 			<MemoriesModal open={modals.isOpen('memories')} onClose={modals.close} />
 			<ShareResourceModal
 				open={modals.isOpen('share-resource')}

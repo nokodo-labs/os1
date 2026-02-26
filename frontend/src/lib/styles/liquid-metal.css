@@ -1,83 +1,54 @@
-/**
- * liquid-metal.css
- * Chrome/liquid metal surface effect for Tailwind v4
- *
- * USAGE:
- *   @import "tailwindcss";
- *   @import "./liquid-metal.css";
- *
- *   <button class="liquid-metal rounded-full px-6 py-3">chrome</button>
- *   <div class="liquid-metal rounded-xl p-8">card</div>
- *
- * CUSTOMIZATION (optional):
- *   --lm-peak: 46%;         brightness of horizon band (40-55% range)
- *   --lm-reflection: 0.25;  reflection intensity (0-1)
- */
-
 @layer components {
 	.liquid-metal {
-		--lm-peak: 46%;
-		--lm-reflection: 0.25;
+		--lm-peak: 33%;
 
 		position: relative;
 		isolation: isolate;
 
 		background: linear-gradient(
 			180deg,
-			hsl(0 0% 8%) 0%,
-			hsl(0 0% 11%) 8%,
-			hsl(0 0% 16%) 18%,
-			hsl(0 0% 24%) 28%,
-			hsl(0 0% 34%) 38%,
+			hsl(0 0% 9%) 0%,
+			hsl(0 0% 12%) 10%,
+			hsl(0 0% 18%) 22%,
+			hsl(0 0% 30%) 36%,
 			hsl(0 0% var(--lm-peak)) 50%,
-			hsl(0 0% 34%) 62%,
-			hsl(0 0% 24%) 72%,
-			hsl(0 0% 16%) 82%,
-			hsl(0 0% 10%) 92%,
-			hsl(0 0% 8%) 100%
+			hsl(0 0% 30%) 64%,
+			hsl(0 0% 18%) 78%,
+			hsl(0 0% 12%) 90%,
+			hsl(0 0% 9%) 100%
 		);
 
 		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.1),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.2),
-			inset 0 0 0 1px rgba(0, 0, 0, 0.12),
-			0 6px 20px -6px rgba(0, 0, 0, 0.5);
+			inset 0 1px 0 rgba(255, 255, 255, 0.12),
+			inset 0 -1px 0 rgba(0, 0, 0, 0.34),
+			inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+			0 8px 24px -10px rgba(0, 0, 0, 0.62);
 	}
 
-	/* reflections */
 	.liquid-metal::before {
 		content: '';
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
 		pointer-events: none;
-		z-index: 1;
 
-		background:
-			radial-gradient(
-				ellipse 60% 40% at 28% 0%,
-				rgba(255, 255, 255, var(--lm-reflection)) 0%,
-				rgba(255, 255, 255, calc(var(--lm-reflection) * 0.3)) 40%,
-				transparent 70%
-			),
-			radial-gradient(
-				ellipse 30% 25% at 75% 8%,
-				rgba(255, 255, 255, calc(var(--lm-reflection) * 0.5)) 0%,
-				transparent 60%
-			);
+		background: radial-gradient(
+			ellipse 70% 22% at 50% 8%,
+			rgba(255, 255, 255, 0.16) 0%,
+			rgba(255, 255, 255, 0.08) 46%,
+			transparent 78%
+		);
 	}
 
-	/* edge definition */
 	.liquid-metal::after {
 		content: '';
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
 		pointer-events: none;
-		z-index: 2;
 
 		box-shadow:
-			inset 0 1px 1px rgba(255, 255, 255, 0.06),
-			inset 0 -1px 1px rgba(0, 0, 0, 0.1);
+			inset 0 1px 1px rgba(255, 255, 255, 0.12),
+			inset 0 -1px 1px rgba(0, 0, 0, 0.25);
 	}
 }

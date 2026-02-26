@@ -110,9 +110,10 @@ export interface ChatState extends ChatContext {
 	// delegated actions
 	loadTree(threadId: string): Promise<boolean>
 	handleSendMessage(content: string): Promise<void>
-	handleRegenerateMessage(parentId?: string | null): Promise<void>
+	handleRegenerateMessage(parentId?: string | null, prompt?: string | null): Promise<void>
 	handleStopGeneration(): void
-	handleEditMessage(messageId: string): Promise<void>
+	handleSaveEditMessage(messageId: string, newContent: string): Promise<void>
+	handleSaveAsCopyMessage(messageId: string, newContent: string): Promise<void>
 	resumeCreateAndRun(
 		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
 		threadId: string

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import PageTitle from '$lib/components/common/PageTitle.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
@@ -143,12 +144,7 @@
 			? 'mt-0'
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
-		<div class="flex min-w-0 items-center gap-3" style="color: var(--accent-primary);">
-			<Document variant="solid" class="h-6 w-6" />
-			<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-white/90">
-				notes
-			</h2>
-		</div>
+		<PageTitle icon={Document} label="notes" iconColor="text-(--accent-primary)" tag="h2" />
 		{#if !isMobile}
 			<div class="flex items-center gap-1">
 				<button

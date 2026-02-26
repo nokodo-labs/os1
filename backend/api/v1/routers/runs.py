@@ -12,6 +12,7 @@ from api.database import get_db
 from api.schemas.runs import ActiveRunOut, RunRequest
 from api.v1.service import runs as runs_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.chat import run_agent as chat_run_agent
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_response
@@ -30,7 +31,7 @@ async def create_run(
 	"""start an agent run.
 
 	when ``thread_id`` is present the run continues that thread (streaming).
-	when omitted the run is **ephemeral** (not yet implemented).
+	when omitted the run is **ephemeral** - inference only, nothing persisted.
 
 	when ``stream`` is false a JSON response is returned instead of SSE
 	(not yet implemented).
@@ -51,21 +52,25 @@ async def create_run(
 			parent_id=req.parent_id,
 			client_context=req.client_context,
 			origin_session_id=x_session_id,
+			persist=req.persist,
 		)
 		return sse_response(stream)
 
-	# ephemeral run - no thread_id
+	# ephemeral run - no thread, no persistence
 	if not req.input:
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail="input is required for ephemeral runs",
 		)
 
-	stream = await runs_service.start_ephemeral_run(
-		agent_id=req.agent_id,
-		principal=principal,
+	stream = chat_run_agent(
+		None,
+		req.agent_id,
+		principal,
 		input=req.input,
 		client_context=req.client_context,
+		origin_session_id=x_session_id,
+		persist=False,
 	)
 	return sse_response(stream)
 

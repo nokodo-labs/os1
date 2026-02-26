@@ -171,11 +171,6 @@ def resource_access_predicate(
 	else:
 		visibility = true()
 
-	# temporary threads
-	if config.is_temporary_col is not None:
-		if not (include_deleted and principal.is_admin):
-			visibility = and_(visibility, config.is_temporary_col.is_(False))
-
 	# superuser bypass
 	if principal.is_admin:
 		return visibility

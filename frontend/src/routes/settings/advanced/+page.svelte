@@ -124,6 +124,7 @@
 	const svgLiquidGlassIslandEnabled = $derived(
 		preferences.data.advanced.svgLiquidGlassIsland ?? true
 	)
+	const svgLiquidMetalEnabled = $derived(preferences.data.advanced.svgLiquidMetal ?? false)
 
 	function setSvgLiquidGlass(enabled: boolean): void {
 		void preferences.update('advanced', { svgLiquidGlass: enabled })
@@ -131,6 +132,10 @@
 
 	function setSvgLiquidGlassIsland(enabled: boolean): void {
 		void preferences.update('advanced', { svgLiquidGlassIsland: enabled })
+	}
+
+	function setSvgLiquidMetal(enabled: boolean): void {
+		void preferences.update('advanced', { svgLiquidMetal: enabled })
 	}
 </script>
 
@@ -179,6 +184,23 @@
 					checked={svgLiquidGlassIslandEnabled}
 					onchange={setSvgLiquidGlassIsland}
 					ariaLabelledbyId="svg-liquid-glass-island-label"
+				/>
+			</div>
+
+			<div class="mt-6 flex items-center justify-between">
+				<div>
+					<span id="svg-liquid-metal-label" class="text-sm text-white/70"
+						>enable svg liquid metal</span
+					>
+					<div class="mt-1 text-xs text-white/40">
+						use svg-based liquid metal edge refractions when supported by your browser.
+					</div>
+				</div>
+				<Switch
+					size="md"
+					checked={svgLiquidMetalEnabled}
+					onchange={setSvgLiquidMetal}
+					ariaLabelledbyId="svg-liquid-metal-label"
 				/>
 			</div>
 		</div>

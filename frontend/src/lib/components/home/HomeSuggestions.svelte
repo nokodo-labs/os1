@@ -15,7 +15,7 @@
 		icon: IconComponent
 	}
 
-	type SuggestionRoute = `/c/${string}` | NotesRouteId | RemindersRouteId | SettingsRouteId
+	type SuggestionRoute = '/' | `/c/${string}` | '/library' | NotesRouteId | RemindersRouteId | SettingsRouteId
 
 	export type SuggestionAction =
 		| { type: 'navigate'; path: SuggestionRoute }
@@ -297,6 +297,22 @@
 			onAction({ type: 'toggle-dock' })
 			return
 		}
+		if (suggestion.id === 'chats') {
+			onAction({ type: 'navigate', path: '/' })
+			return
+		}
+		if (suggestion.id === 'notes') {
+			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('notes') })
+			return
+		}
+		if (suggestion.id === 'reminders') {
+			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('reminders') })
+			return
+		}
+		if (suggestion.id === 'library') {
+			onAction({ type: 'navigate', path: '/library' })
+			return
+		}
 		onAction({ type: 'pulse', message: `${suggestion.title}: coming soon` })
 	}
 
@@ -341,10 +357,14 @@
 {#if open}
 	<LiquidGlass
 		tag="div"
-		class="rounded-container mt-3 flex min-h-0 flex-col overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+		class="rounded-container flex min-h-0 flex-col overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	>
 		<div class="relative z-10 flex min-h-0 flex-col">
-			<div class="min-h-0 overflow-y-auto p-2" role="listbox" aria-label="suggestions">
+			<div
+				class="no-scrollbar min-h-0 overflow-y-auto p-2"
+				role="listbox"
+				aria-label="suggestions"
+			>
 				{#if isSearching}
 					<!-- shimmer autocomplete state -->
 					<div class="flex items-center gap-3 px-3 py-2.5">

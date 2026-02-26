@@ -9,7 +9,7 @@
 	import { session } from '$lib/stores/session.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 
-	let email = $state('')
+	let identifier = $state('')
 	let password = $state('')
 	let isSubmitting = $state(false)
 	let errorMessage = $state<string | null>(null)
@@ -31,9 +31,9 @@
 	$effect(() => {
 		if (!browser) return
 		const fromState = page.state.email
-		if (fromState && !email) email = fromState
+		if (fromState && !identifier) identifier = fromState
 		const fromQuery = page.url.searchParams.get('email')
-		if (fromQuery && !email) email = fromQuery
+		if (fromQuery && !identifier) identifier = fromQuery
 	})
 
 	function nextTargetFromNextValue(
@@ -62,7 +62,7 @@
 						'Content-Type': 'application/x-www-form-urlencoded',
 					},
 					body: {
-						username: email.trim(),
+						username: identifier.trim(),
 						password,
 						scope: '',
 					},
@@ -116,16 +116,16 @@
 
 						<form class="space-y-4" onsubmit={onSubmit}>
 							<div class="space-y-2">
-								<label class="text-sm font-medium text-white/75" for="email"
-									>email</label
+								<label class="text-sm font-medium text-white/75" for="identifier"
+									>email or username</label
 								>
 								<input
-									id="email"
-									type="email"
-									autocomplete="email"
+									id="identifier"
+									type="text"
+									autocomplete="username"
 									required
-									bind:value={email}
-									placeholder="you@nokodo.net"
+									bind:value={identifier}
+									placeholder="email or username"
 									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
 								/>
 							</div>

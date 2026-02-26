@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { apiClient } from '$lib/api/client'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Lock from '$lib/components/icons/Lock.svelte'
 	import LockClosed from '$lib/components/icons/LockClosed.svelte'
+	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	let currentPassword = $state('')
 	let newPassword = $state('')
@@ -11,7 +12,16 @@
 	let error = $state<string | null>(null)
 	let success = $state(false)
 
+	// change email state
+	let newEmail = $state('')
+	let emailSaving = $state(false)
+	let emailError = $state<string | null>(null)
+	let emailSuccess = $state(false)
+
+	const currentEmail = $derived(session.currentUser?.email ?? '')
+
 	const canSubmit = $derived(currentPassword.length > 0 && newPassword.length >= 8)
+	const canSubmitEmail = $derived(newEmail.trim().length > 0 && newEmail.trim() !== currentEmail)
 
 	async function handleSubmit(e: Event): Promise<void> {
 		e.preventDefault()
@@ -38,10 +48,42 @@
 			saving = false
 		}
 	}
+
+	async function handleEmailSubmit(e: Event): Promise<void> {
+		e.preventDefault()
+		if (!canSubmitEmail || emailSaving) return
+		const uid = session.currentUser?.id
+		if (!uid) return
+		emailSaving = true
+		emailError = null
+		emailSuccess = false
+		try {
+			const {
+				data,
+				error: apiError,
+				response,
+			} = await apiClient().PATCH('/v1/users/{user_id}', {
+				params: { path: { user_id: uid } },
+				body: { email: newEmail.trim() },
+			})
+			if (!response.ok) {
+				const detail = (apiError as Record<string, unknown>)?.detail
+				emailError = typeof detail === 'string' ? detail : 'failed to update email'
+				return
+			}
+			if (data) session.currentUser = { ...data }
+			emailSuccess = true
+			newEmail = ''
+		} catch {
+			emailError = 'network error'
+		} finally {
+			emailSaving = false
+		}
+	}
 </script>
 
 <SettingsSectionLayout
-	icon={Lock}
+	icon={ShieldCheck}
 	label="security"
 	description="authentication, passwords, and access control"
 >
@@ -141,6 +183,54 @@
 				</button>
 				<p class="mt-2 text-xs text-white/45">coming soon</p>
 			</div>
+		</div>
+
+		<!-- change email -->
+		<div class="rounded-container bg-white/5 p-5">
+			<div class="text-sm font-semibold text-white">email address</div>
+			<div class="mt-1 text-sm text-white/50">
+				your email address for notifications and account recovery.
+			</div>
+			<div
+				class="rounded-pill mt-3 flex w-full items-center border border-white/14 bg-white/3 px-4 py-2.5 text-sm text-white/60"
+			>
+				{currentEmail}
+			</div>
+			<form class="mt-3 space-y-3" onsubmit={handleEmailSubmit} autocomplete="off">
+				<div>
+					<label class="mb-1.5 block text-xs font-medium text-white/50" for="new-email"
+						>new email</label
+					>
+					<input
+						id="new-email"
+						type="email"
+						autocomplete="email"
+						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						placeholder="new email address"
+						bind:value={newEmail}
+						disabled={emailSaving}
+					/>
+				</div>
+
+				{#if emailError}
+					<p class="text-xs text-red-400">{emailError}</p>
+				{/if}
+				{#if emailSuccess}
+					<p class="text-xs text-green-400">email updated successfully</p>
+				{/if}
+
+				<button
+					type="submit"
+					disabled={!canSubmitEmail || emailSaving}
+					class="rounded-pill border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/15 disabled:text-white/40 disabled:hover:bg-white/10"
+				>
+					{#if emailSaving}
+						<ShimmerText className="inline-block">updating</ShimmerText>
+					{:else}
+						update email
+					{/if}
+				</button>
+			</form>
 		</div>
 	</div>
 </SettingsSectionLayout>

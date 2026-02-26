@@ -15,17 +15,17 @@
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
 	import CopyButton from '$lib/components/chat/CopyButton.svelte'
+	import FloatingButtons from '$lib/components/chat/FloatingButtons.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
+	import RegenerateMenu from '$lib/components/chat/RegenerateMenu.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
 	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
-	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -412,19 +412,19 @@
 										onNext={() => chat.switchBranch(item.message.id, 'next')}
 										tailStyle={bubbleTailStyle}
 										{showTail}
+										onEditSave={item.align === 'right'
+											? (c) => chat.handleSaveEditMessage(item.message.id, c)
+											: undefined}
+										onEditSaveAsCopy={item.align === 'right'
+											? (c) =>
+													chat.handleSaveAsCopyMessage(item.message.id, c)
+											: undefined}
 									>
 										{#snippet actions()}
 											<CopyButton
 												content={contentPartsToText(item.message.content)}
 											/>
 											{#if item.align === 'right'}
-												<MessageActionButton
-													onclick={() =>
-														chat.handleEditMessage(item.message.id)}
-													ariaLabel="edit message"
-												>
-													<Pencil variant="solid" class="h-4 w-4" />
-												</MessageActionButton>
 												<MessageActionButton
 													onclick={() =>
 														chat.requestDeleteUserMessage(
@@ -510,55 +510,57 @@
 										: null}
 								>
 									{#snippet lead()}
-										{#each responseItems as item, idx (idx)}
-											{#if item.kind === 'assistant'}
-												<div
-													class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-												>
-													<MarkdownRenderer
-														content={contentPartsToText(
-															item.message.content
-														)}
-														isStreaming={false}
-													/>
-												</div>
-											{:else if item.kind === 'tool'}
-												{@const exec = chat.getToolExecution(
-													item.toolCallId
-												)}
-												{#if exec}
-													<ToolExecutionCard execution={exec} />
-												{/if}
-											{:else if item.kind === 'streaming_tool'}
-												{@const exec = chat.getToolExecution(
-													item.toolCallId
-												)}
-												{#if exec}
-													<ToolExecutionCard execution={exec} />
-												{/if}
-											{:else if item.kind === 'streaming_assistant' && chat.streamingAssistant}
-												{#if chat.streamingAssistant.content.trim()}
+										<div class="relative">
+											{#each responseItems as item, idx (idx)}
+												{#if item.kind === 'assistant'}
 													<div
 														class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
 													>
 														<MarkdownRenderer
-															content={chat.streamingAssistant
-																.content}
-															isStreaming={!chat.streamingAssistant
-																.isError}
+															content={contentPartsToText(
+																item.message.content
+															)}
+															isStreaming={false}
 														/>
 													</div>
-												{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
-													<div
-														class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
-													>
-														<div class="my-3">
-															<ChatGptLoadingIndicator />
+												{:else if item.kind === 'tool'}
+													{@const exec = chat.getToolExecution(
+														item.toolCallId
+													)}
+													{#if exec}
+														<ToolExecutionCard execution={exec} />
+													{/if}
+												{:else if item.kind === 'streaming_tool'}
+													{@const exec = chat.getToolExecution(
+														item.toolCallId
+													)}
+													{#if exec}
+														<ToolExecutionCard execution={exec} />
+													{/if}
+												{:else if item.kind === 'streaming_assistant' && chat.streamingAssistant}
+													{#if chat.streamingAssistant.content.trim()}
+														<div
+															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+														>
+															<MarkdownRenderer
+																content={chat.streamingAssistant
+																	.content}
+																isStreaming={!chat
+																	.streamingAssistant.isError}
+															/>
 														</div>
-													</div>
+													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
+														<div
+															class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
+														>
+															<div class="my-3">
+																<ChatGptLoadingIndicator />
+															</div>
+														</div>
+													{/if}
 												{/if}
-											{/if}
-										{/each}
+											{/each}
+										</div>
 									{/snippet}
 
 									{#snippet actions()}
@@ -587,17 +589,16 @@
 											}}
 										/>
 										{#if !isStreamingBlock}
-											<MessageActionButton
-												onclick={() => {
-													// pass the user message ID so new responses branch from there
+											<RegenerateMenu
+												onRegenerate={(prompt) => {
 													const userMessageId =
 														chat.findRunUserMessage(block)
-													chat.handleRegenerateMessage(userMessageId)
+													chat.handleRegenerateMessage(
+														userMessageId,
+														prompt
+													)
 												}}
-												ariaLabel="retry"
-											>
-												<ArrowPath class="h-4 w-4" strokeWidth="2" />
-											</MessageActionButton>
+											/>
 										{:else if chat.streamingAssistant?.isError}
 											<button
 												type="button"
@@ -616,6 +617,12 @@
 					<!-- streaming assistant is rendered within its run block -->
 
 					<TypingIndicator typingUserIds={chat.typingUsers} />
+					<FloatingButtons
+						{threadId}
+						onQuote={(content) => {
+							chat.inputValue = content
+						}}
+					/>
 				</div>
 			{:else}
 				<!-- while data is loading, keep layout stable; loader is rendered as an overlay -->
@@ -690,6 +697,9 @@
 			<div class="relative z-10">
 				<div class="text-lg font-semibold text-white/90">delete message?</div>
 				<div class="mt-2 text-sm text-white/60">{chat.confirmDeleteMessage.preview}</div>
+				<div class="mt-2 text-xs text-white/40">
+					this will also delete all replies and branches below this message.
+				</div>
 
 				{#if chat.deleteMessageError}
 					<div
@@ -702,7 +712,7 @@
 				<div class="mt-5 flex items-center justify-end gap-2">
 					<button
 						type="button"
-						class="rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+						class="cursor-pointer rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5 disabled:cursor-default"
 						disabled={chat.isDeletingMessage}
 						onclick={() => {
 							chat.confirmDeleteMessage = null
@@ -713,7 +723,7 @@
 					</button>
 					<button
 						type="button"
-						class="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:opacity-60"
+						class="cursor-pointer rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:cursor-default disabled:opacity-60"
 						disabled={chat.isDeletingMessage}
 						onclick={() => {
 							void (async () => {

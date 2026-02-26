@@ -53,6 +53,7 @@ async def list_user_notifications(
 		select(Notification)
 		.options(selectinload(Notification.event))
 		.where(Notification.user_id == user_id)
+		.where(Notification.dismissed.is_(False))
 		.order_by(Notification.created_at.desc())
 	)
 

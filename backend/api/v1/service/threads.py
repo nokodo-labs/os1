@@ -12,6 +12,7 @@ from typing import overload
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -362,6 +363,10 @@ async def list_threads(
 
 	if owner_id is not None:
 		stmt = stmt.where(Thread.owner_id == owner_id)
+
+	# always exclude temporary threads from listings
+	if not include_hidden:
+		stmt = stmt.where(Thread.is_temporary.is_(False))
 
 	if is_archived is not None:
 		stmt = stmt.where(Thread.is_archived == is_archived)
@@ -890,6 +895,46 @@ async def create_message(
 	return message
 
 
+async def _find_deepest_leaf(
+	session: AsyncSession,
+	thread_id: TypeID,
+	start_id: str | None,
+	*,
+	exclude: set[str],
+) -> str | None:
+	"""walk from start_id down to the deepest remaining leaf, excluding IDs."""
+	if start_id is None:
+		result = await session.execute(
+			select(Message.id)
+			.where(
+				Message.thread_id == str(thread_id),
+				Message.parent_id.is_(None),
+				Message.id.notin_(list(exclude)),
+			)
+			.order_by(Message.created_at)
+		)
+		roots = [str(row[0]) for row in result]
+		if not roots:
+			return None
+		start_id = roots[-1]
+
+	leaf_id = start_id
+	while True:
+		result = await session.execute(
+			select(Message.id)
+			.where(
+				Message.parent_id == leaf_id,
+				Message.id.notin_(list(exclude)),
+			)
+			.order_by(Message.created_at)
+		)
+		children = [str(row[0]) for row in result]
+		if not children:
+			break
+		leaf_id = children[-1]
+	return leaf_id
+
+
 async def delete_user_message_turn(
 	thread_id: TypeID,
 	message_id: TypeID,
@@ -898,13 +943,10 @@ async def delete_user_message_turn(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
-	"""delete a user message and its generated response(s) on the active branch.
+	"""delete a user message and its entire descendant subtree.
 
-	deletes the user message and all subsequent messages until (but not including)
-	the next user message, if any.
-
-	if a next user message exists, it will be re-parented to the deleted user's
-	parent so the remaining branch stays connected.
+	all children (assistant responses, follow-up messages, tool messages,
+	alternate regeneration branches) are recursively deleted.
 	"""
 	thread = await _load_thread(
 		thread_id,
@@ -913,66 +955,44 @@ async def delete_user_message_turn(
 		required_level=AccessLevel.EDITOR,
 	)
 
-	branch = await get_current_branch(
-		thread_id,
-		session,
-		principal=principal,
-		include_hidden=False,
-	)
-	if not branch:
+	target = await session.get(Message, str(message_id))
+	if not target or TypeID(target.thread_id) != thread_id:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="Message not found",
 		)
-
-	start_idx: int | None = None
-	for i, msg in enumerate(branch):
-		if TypeID(msg.id) == message_id:
-			start_idx = i
-			break
-	if start_idx is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Message not found",
-		)
-
-	start_msg = branch[start_idx]
-	if start_msg.type != MessageType.USER:
+	if target.type != MessageType.USER:
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail="only user messages can be deleted",
 		)
 
-	end_idx = len(branch)
-	for j in range(start_idx + 1, len(branch)):
-		if branch[j].type == MessageType.USER:
-			end_idx = j
-			break
+	parent_id = target.parent_id
 
-	parent_id = start_msg.parent_id
+	# collect the entire subtree via BFS (level-by-level for efficiency)
+	deleted_ids: list[str] = [str(message_id)]
+	frontier: list[str] = [str(message_id)]
+	while frontier:
+		result = await session.execute(
+			select(Message.id).where(Message.parent_id.in_(frontier))
+		)
+		children = [str(row[0]) for row in result]
+		deleted_ids.extend(children)
+		frontier = children
 
-	# re-parent the next user message (if any) before deleting its ancestors
-	if end_idx < len(branch):
-		next_user = branch[end_idx]
-		next_user.parent_id = parent_id
-		await session.flush()
+	deleted_set = set(deleted_ids)
 
-	# delete the message segment
-	deleted_ids = {TypeID(m.id) for m in branch[start_idx:end_idx]}
-	for msg in branch[start_idx:end_idx]:
-		await session.delete(msg)
-
-	# update thread leaf if needed
-	if thread.current_message_id and TypeID(thread.current_message_id) in deleted_ids:
-		if end_idx < len(branch):
-			# leaf remains valid; keep current_message_id
-			pass
-			# note: we intentionally do not recompute leaf here; the remaining branch
-			# still terminates at the existing leaf id.
-		else:
-			thread.current_message_id = parent_id
+	# compute new current_message_id before deleting
+	if thread.current_message_id and str(thread.current_message_id) in deleted_set:
+		leaf = await _find_deepest_leaf(
+			session, thread_id, parent_id, exclude=deleted_set
+		)
+		thread.current_message_id = TypeID(leaf) if leaf else None
 
 	thread.last_activity_at = datetime.now(tz=UTC)
+
+	# bulk-delete subtree; DB CASCADE on event FKs handles cleanup
+	await session.execute(sa_delete(Message).where(Message.id.in_(deleted_ids)))
 
 	# emit message.deleted event
 	event = Event(
@@ -982,7 +1002,8 @@ async def delete_user_message_turn(
 		data={
 			"thread_id": str(thread_id),
 			"message_id": str(message_id),
-			"deleted_ids": [str(d) for d in deleted_ids],
+			"parent_id": parent_id,
+			"deleted_ids": deleted_ids,
 		},
 		user_id=principal.user_id,
 		thread_id=str(thread_id),

@@ -29,8 +29,9 @@ import { findRunUserMessage, switchBranch } from './treeNavigation'
 import type { ChatState } from './types'
 import {
 	deleteUserMessage,
-	handleEditMessage,
 	handleRegenerateMessage,
+	handleSaveAsCopyMessage,
+	handleSaveEditMessage,
 	handleSendMessage,
 	handleStopGeneration,
 	requestDeleteUserMessage,
@@ -465,9 +466,13 @@ export function createChatState(): ChatState {
 		// ── delegated to $lib/chat modules ───────────────────────────────
 		loadTree: (threadId) => loadTree(threadId, state),
 		handleSendMessage: (content) => handleSendMessage(content, state),
-		handleRegenerateMessage: (parentId) => handleRegenerateMessage(parentId ?? null, state),
+		handleRegenerateMessage: (parentId, prompt) =>
+			handleRegenerateMessage(parentId ?? null, state, prompt),
 		handleStopGeneration: () => handleStopGeneration(state),
-		handleEditMessage: (messageId) => handleEditMessage(messageId, state),
+		handleSaveEditMessage: (messageId, newContent) =>
+			handleSaveEditMessage(messageId, newContent, state),
+		handleSaveAsCopyMessage: (messageId, newContent) =>
+			handleSaveAsCopyMessage(messageId, newContent, state),
 		resumeCreateAndRun: (stream, threadId) => resumeCreateAndRun(stream, threadId, state),
 		requestDeleteUserMessage: (messageId) => requestDeleteUserMessage(messageId, state),
 		deleteUserMessage: (messageId) => deleteUserMessage(messageId, state),

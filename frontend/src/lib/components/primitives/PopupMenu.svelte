@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { portal } from '$lib/actions/portal'
+	import LiquidMetal from '$lib/components/effects/LiquidMetal.svelte'
 	import type { Snippet } from 'svelte'
 	import { tick } from 'svelte'
 	import { scale } from 'svelte/transition'
@@ -73,10 +74,15 @@
 		bind:this={menuEl}
 		role="menu"
 		transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-		class="liquid-metal fixed z-9999 min-w-44 rounded-3xl p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] {className}"
+		class="fixed z-9999"
 		style="top: {posTop}px; {usesLeft ? `left: ${posLeft}px` : `right: ${posLeft}px`};"
 		{...rest}
 	>
-		{@render children()}
+		<LiquidMetal
+			tag="div"
+			class="rounded-popup min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] {className}"
+		>
+			{@render children()}
+		</LiquidMetal>
 	</div>
 {/if}

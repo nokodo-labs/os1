@@ -24,7 +24,7 @@
 	const selectedNoteId = $derived(page.params.id ?? null)
 </script>
 
-<MasterDetailScaffold masterWidthClass="w-[clamp(280px,30vw,520px)]" ariaLabel="notes">
+<MasterDetailScaffold masterWidthClass="w-[clamp(280px,30vw,520px)] h-full" ariaLabel="notes">
 	{#snippet master({ isMobile })}
 		<NotesSidebar {selectedNoteId} {isMobile} />
 	{/snippet}

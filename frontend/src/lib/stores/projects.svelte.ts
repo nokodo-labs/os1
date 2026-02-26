@@ -93,7 +93,7 @@ class ProjectsCache {
 		if (this.#inFlight) return this.#inFlight
 
 		this.#inFlight = (async () => {
-			const { data, error } = await apiClient().GET('/projects', {
+			const { data, error } = await apiClient().GET('/v1/projects', {
 				params: { query: { sort_by: 'updated_at', sort_dir: 'desc' } },
 			})
 			if (error || !data) return this.list
@@ -111,13 +111,13 @@ class ProjectsCache {
 	// mutations - return optimistic data for caller; WS delivers truth
 
 	async create(params: ProjectCreate): Promise<Project | null> {
-		const { data, error } = await apiClient().POST('/projects', { body: params })
+		const { data, error } = await apiClient().POST('/v1/projects', { body: params })
 		if (error || !data) return null
 		return data
 	}
 
 	async update(id: string, params: ProjectUpdate): Promise<Project | null> {
-		const { data, error } = await apiClient().PATCH('/projects/{project_id}', {
+		const { data, error } = await apiClient().PATCH('/v1/projects/{project_id}', {
 			params: { path: { project_id: id } },
 			body: params,
 		})
@@ -126,7 +126,7 @@ class ProjectsCache {
 	}
 
 	async remove(id: string): Promise<boolean> {
-		const { error } = await apiClient().DELETE('/projects/{project_id}', {
+		const { error } = await apiClient().DELETE('/v1/projects/{project_id}', {
 			params: { path: { project_id: id } },
 		})
 		return !error

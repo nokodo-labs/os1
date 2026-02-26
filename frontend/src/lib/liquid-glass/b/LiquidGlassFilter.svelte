@@ -60,6 +60,8 @@
 	let maxDisplacement = $state(1)
 	let resolvedCornerRadius = $derived(cornerRadius ?? Math.min(width, height) / 2)
 
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
 	function regenerateMaps() {
 		if (width <= 0 || height <= 0) return
 
@@ -100,7 +102,22 @@
 			specularAngle,
 			specularFalloff,
 		]
-		regenerateMaps()
+
+		if (debounceTimer) clearTimeout(debounceTimer)
+
+		// if we don't have a map yet, generate immediately
+		if (!displacementUrl) {
+			regenerateMaps()
+		} else {
+			// debounce during animations (e.g. island expanding)
+			debounceTimer = setTimeout(() => {
+				regenerateMaps()
+			}, 150)
+		}
+
+		return () => {
+			if (debounceTimer) clearTimeout(debounceTimer)
+		}
 	})
 
 	// scale = maxDisplacement * refractionStrength (matches reference: maximumDisplacement * scaleRatio)

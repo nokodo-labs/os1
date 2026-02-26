@@ -12,8 +12,9 @@ import {
 } from '$lib/api/streaming'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap } from 'svelte/reactivity'
-import { getMessageCreatedAt, type ApiMessage } from './helpers'
+import { buildMessageChildren, type ApiMessage } from './helpers'
 import { consumeStream } from './streamProcessor'
+import { getLatestLeaf } from './treeNavigation'
 import type { ChatContext } from './types'
 
 /** lightweight pointer for a run signal received over WS */
@@ -37,7 +38,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 	ctx.typingUsers.clear()
 	ctx.activeAgentRuns.clear()
 
-	// ── tool events ──────────────────────────────────────────────────────
+	// tool events
 
 	function handleToolEvent(ev: StreamEvent): void {
 		if (ev.thread_id !== threadId) return
@@ -52,7 +53,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		ctx.toolTracker.processEvent(toolEv)
 	}
 
-	// ── message events (cross-device sync) ───────────────────────────────
+	// message events (cross-device sync)
 
 	function handleMessageEvent(ev: StreamEvent): void {
 		if (ev.thread_id !== threadId) return
@@ -84,34 +85,34 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			}
 		} else if (ev.type === 'message.deleted') {
 			const deletedIds = data.deleted_ids as string[] | undefined
+			const parentId = (data.parent_id as string | null | undefined) ?? null
 			const msgId = (data.message_id as string) ?? ev.message_id
 			if (deletedIds) {
 				for (const id of deletedIds) ctx.messageTree.delete(id)
 			} else if (msgId) {
 				ctx.messageTree.delete(msgId)
 			}
-			// if the current leaf was deleted, walk up to find a valid one
+			// if the current leaf was deleted, find a new valid leaf
 			if (ctx.currentLeafId && !ctx.messageTree.has(ctx.currentLeafId)) {
-				let validLeaf: string | null = null
-				for (const m of ctx.messageTree.values()) {
-					if (!validLeaf) {
-						validLeaf = m.id
-						continue
-					}
-					if (
-						getMessageCreatedAt(m).getTime() >=
-						getMessageCreatedAt(ctx.messageTree.get(validLeaf)!).getTime()
-					) {
-						validLeaf = m.id
+				if (parentId && ctx.messageTree.has(parentId)) {
+					// walk from the deleted message's parent to the deepest remaining leaf
+					ctx.currentLeafId = getLatestLeaf(parentId, ctx)
+				} else {
+					// fallback: find any tree root and walk to its deepest leaf
+					const children = buildMessageChildren(ctx.messageTree.values())
+					const roots = children.get(null)
+					if (roots && roots.length > 0) {
+						ctx.currentLeafId = getLatestLeaf(roots[roots.length - 1], ctx)
+					} else {
+						ctx.currentLeafId = null
 					}
 				}
-				ctx.currentLeafId = validLeaf
 			}
 			ctx.rebuildRunBlocks()
 		}
 	}
 
-	// ── typing events ────────────────────────────────────────────────────
+	// typing events
 
 	function handleTypingEvent(ev: StreamEvent): void {
 		const data = (ev.data ?? {}) as Record<string, unknown>
@@ -141,7 +142,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	// ── run events (run started/completed + active runs catchup) ─────────
+	// run events (run started/completed + active runs catchup)
 
 	/** attempt to resume a run's SSE stream and feed it into consumeStream */
 	function tryResumeRun(runId: string, agentId: string): void {
@@ -234,7 +235,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	// ── single unified listener ──────────────────────────────────────────
+	// single unified listener
 
 	const unsub = eventStreamClient.subscribe((msg) => {
 		if (!msg || typeof msg !== 'object') return

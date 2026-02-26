@@ -440,14 +440,14 @@
 	<!-- stay in normal flow so the column matches the island + sidebar spacing -->
 	<div class="flex min-h-0 flex-1 flex-col">
 		<div
-			class="mx-auto flex w-full flex-1 flex-col pb-2 {device.isMobile ? '' : 'max-w-7xl'}"
+			class="mx-auto flex min-h-0 w-full flex-1 flex-col pb-2 {device.isMobile
+				? ''
+				: 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 		>
-			<!-- top spacer: pushes content toward vertical center (or bottom when keyboard open) -->
+			<!-- top spacer: pushes content toward vertical center (normal mode only) -->
 			{#if !(device.virtualKeyboardOpen && device.isMobile)}
 				<div class="flex-[0.6]"></div>
-			{:else}
-				<div class="flex-1"></div>
 			{/if}
 
 			<!-- greeting: hidden when virtual keyboard is open on mobile -->
@@ -470,7 +470,10 @@
 			{/if}
 
 			<!-- input -->
-			<div style="view-transition-name: chat-input;">
+			<div
+				style="view-transition-name: chat-input;"
+				class={device.virtualKeyboardOpen && device.isMobile ? 'order-last mt-3' : ''}
+			>
 				<ChatInput
 					bind:value={inputValue}
 					onSubmit={handleSendMessage}
@@ -484,15 +487,16 @@
 
 			<!-- apps grid + suggestions -->
 			<div
-				class="relative {device.virtualKeyboardOpen && device.isMobile
-					? ''
-					: 'flex min-h-0 flex-1 flex-col'}"
+				class="relative flex min-h-0 flex-1 flex-col {device.virtualKeyboardOpen &&
+				device.isMobile
+					? 'order-first'
+					: ''}"
 			>
 				<!-- suggestions: absolute on desktop, in-flow on mobile+keyboard -->
 				<div
-					class={device.virtualKeyboardOpen && device.isMobile
-						? ''
-						: 'absolute top-0 right-0 left-0 z-20'}
+					class="flex min-h-0 flex-col {device.virtualKeyboardOpen && device.isMobile
+						? 'flex-1 justify-end'
+					: 'absolute top-0 right-0 left-0 z-20 max-h-full pt-3'}"
 				>
 					<HomeSuggestions
 						query={inputValue}

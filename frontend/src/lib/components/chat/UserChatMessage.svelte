@@ -1,10 +1,12 @@
 <script lang="ts">
+	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
+	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { BubbleTailStyle } from '$lib/stores/preferences.svelte'
 	import type { Snippet } from 'svelte'
-	import { onMount } from 'svelte'
+	import { onMount, tick } from 'svelte'
 	import type { Action } from 'svelte/action'
 
 	interface Props {
@@ -18,6 +20,8 @@
 		onNext?: () => void
 		tailStyle?: BubbleTailStyle
 		showTail?: boolean
+		onEditSave?: (newContent: string) => Promise<void>
+		onEditSaveAsCopy?: (newContent: string) => Promise<void>
 	}
 
 	let {
@@ -31,10 +35,18 @@
 		onNext,
 		tailStyle = 'none',
 		showTail = false,
+		onEditSave,
+		onEditSaveAsCopy,
 	}: Props = $props()
 
 	let showActions = $state(false)
 	let isHovered = $state(false)
+
+	// edit state
+	let isEditing = $state(false)
+	let editContent = $state('')
+	let editTextarea: HTMLTextAreaElement | undefined = $state()
+	let isSaving = $state(false)
 
 	// intentionally non-reactive - synchronous flag between touch + click handlers.
 	// first tap reveals actions, the captured click is swallowed so buttons aren't triggered.
@@ -147,16 +159,66 @@
 			},
 		}
 	}
+
+	function startEditing() {
+		isEditing = true
+		editContent = content
+	}
+
+	function cancelEditing() {
+		isEditing = false
+		editContent = ''
+	}
+
+	async function saveEdit() {
+		if (!onEditSave || isSaving || !editContent.trim()) return
+		isSaving = true
+		try {
+			await onEditSave(editContent.trim())
+			isEditing = false
+			editContent = ''
+		} finally {
+			isSaving = false
+		}
+	}
+
+	async function saveAsCopy() {
+		if (!onEditSaveAsCopy || isSaving || !editContent.trim()) return
+		isSaving = true
+		try {
+			await onEditSaveAsCopy(editContent.trim())
+			isEditing = false
+			editContent = ''
+		} finally {
+			isSaving = false
+		}
+	}
+
+	// focus & size the textarea when entering edit mode
+	$effect(() => {
+		if (!isEditing || !editTextarea) return
+		const el = editTextarea
+		void tick().then(() => {
+			el.style.height = ''
+			el.style.height = `${el.scrollHeight}px`
+			el.focus()
+			el.setSelectionRange(el.value.length, el.value.length)
+		})
+	})
+
+	const canEdit = $derived(!!(onEditSave || onEditSaveAsCopy))
 </script>
 
 <div
 	bind:this={messageRef}
-	class="flex max-w-[80%] animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2"
+	class="flex animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2"
+	class:max-w-\[80\%\]={!isEditing}
 	class:ml-auto={align === 'right'}
 	class:items-end={align === 'right'}
 	class:self-end={align === 'right'}
 	class:items-start={align === 'left'}
 	class:self-start={align === 'left'}
+	class:w-full={isEditing}
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
 	ontouchstart={handleTouchStart}
@@ -165,7 +227,7 @@
 	ontouchcancel={handleTouchCancel}
 	role="article"
 >
-	{#if timestamp}
+	{#if timestamp && !isEditing}
 		<Timestamp
 			{timestamp}
 			className="text-xs text-black/50 transition-opacity duration-200 dark:text-white/50 {isHovered
@@ -176,57 +238,129 @@
 
 	<div
 		class="bubble-wrapper"
-		class:imessage-right={showTail && tailStyle === 'imessage' && align === 'right'}
-		class:imessage-left={showTail && tailStyle === 'imessage' && align === 'left'}
-		class:whatsapp-right={showTail && tailStyle === 'whatsapp' && align === 'right'}
-		class:whatsapp-left={showTail && tailStyle === 'whatsapp' && align === 'left'}
+		class:imessage-right={!isEditing &&
+			showTail &&
+			tailStyle === 'imessage' &&
+			align === 'right'}
+		class:imessage-left={!isEditing && showTail && tailStyle === 'imessage' && align === 'left'}
+		class:whatsapp-right={!isEditing &&
+			showTail &&
+			tailStyle === 'whatsapp' &&
+			align === 'right'}
+		class:whatsapp-left={!isEditing && showTail && tailStyle === 'whatsapp' && align === 'left'}
 	>
 		<div
 			class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
-			style="
-                background-color: var(--accent-primary);
-                box-shadow: 0 4px 16px var(--accent-border);
-            "
+			class:px-5={isEditing}
+			class:py-3={isEditing}
+			style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
 		>
-			<div class="leading-relaxed wrap-break-word whitespace-pre-wrap text-white">
-				{content}
-			</div>
+			{#if isEditing}
+				<div class="max-h-96 overflow-auto">
+					<textarea
+						bind:this={editTextarea}
+						bind:value={editContent}
+						class="w-full resize-none bg-transparent leading-relaxed wrap-break-word text-white outline-none placeholder:text-white/40 disabled:opacity-60"
+						placeholder="edit your message..."
+						disabled={isSaving}
+						rows={1}
+						oninput={(e) => {
+							const t = e.currentTarget
+							t.style.height = ''
+							t.style.height = `${t.scrollHeight}px`
+						}}
+						onkeydown={(e) => {
+							if (e.key === 'Escape') cancelEditing()
+							if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && onEditSaveAsCopy)
+								saveAsCopy()
+							if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+								e.preventDefault()
+								if (onEditSave) saveEdit()
+							}
+						}}
+					></textarea>
+				</div>
+				<!-- button row: save (left), cancel + send (right) -->
+				<div class="mt-2 mb-1 flex justify-between text-sm font-medium">
+					<div>
+						{#if onEditSave}
+							<button
+								onclick={saveEdit}
+								disabled={isSaving || !editContent.trim()}
+								class="cursor-pointer rounded-3xl border border-white/20 bg-white/10 px-3.5 py-1.5 text-white/90 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+							>
+								save
+							</button>
+						{/if}
+					</div>
+					<div class="flex space-x-1.5">
+						<button
+							onclick={cancelEditing}
+							disabled={isSaving}
+							class="cursor-pointer rounded-3xl px-3.5 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							cancel
+						</button>
+						{#if onEditSaveAsCopy}
+							<button
+								onclick={saveAsCopy}
+								disabled={isSaving || !editContent.trim()}
+								class="cursor-pointer rounded-3xl bg-white px-3.5 py-1.5 font-semibold text-black/80 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+							>
+								{isSaving ? 'saving…' : 'send'}
+							</button>
+						{/if}
+					</div>
+				</div>
+			{:else}
+				<div class="leading-relaxed wrap-break-word whitespace-pre-wrap text-white">
+					{content}
+				</div>
+			{/if}
 		</div>
 	</div>
 
-	{#if actions || siblingCount > 1}
-		<div class="flex items-center gap-1 px-1" role="none">
+	{#if !isEditing && (actions || siblingCount > 1 || canEdit)}
+		<div class="flex items-center gap-2 px-1" role="none">
+			<div
+				class="flex items-center gap-1 transition-opacity duration-200 {showActions
+					? 'opacity-100'
+					: 'pointer-events-none opacity-0'}"
+				use:captureClick
+			>
+				{#if canEdit}
+					<MessageActionButton onclick={startEditing} ariaLabel="edit message">
+						<Pencil variant="solid" class="h-4 w-4" />
+					</MessageActionButton>
+				{/if}
+				{#if actions}
+					{@render actions()}
+				{/if}
+			</div>
 			{#if siblingCount > 1}
 				<div
-					class="mr-2 flex items-center text-xs font-medium text-black/50 select-none dark:text-white/50"
+					class="flex items-center text-xs font-medium text-black/50 select-none dark:text-white/50"
+					role="none"
 				>
 					<button
 						onclick={onPrevious}
 						disabled={currentSiblingIndex === 0}
-						class="flex h-5 w-5 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.1] hover:text-black active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/50 dark:hover:text-white"
+						class="flex h-6 w-6 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.05] hover:text-black active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/80 dark:hover:text-white"
+						title="previous version"
 					>
-						<ChevronLeft class="h-3 w-3" strokeWidth="2.5" />
+						<ChevronLeft class="size-4" strokeWidth="2" />
 					</button>
-					<span class="mx-0.5 tabular-nums">
+					<span class="mx-0.5 font-mono tabular-nums">
 						{currentSiblingIndex + 1}/{siblingCount}
 					</span>
 					<button
 						onclick={onNext}
 						disabled={currentSiblingIndex === siblingCount - 1}
-						class="flex h-5 w-5 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.1] hover:text-black active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/50 dark:hover:text-white"
+						class="flex h-6 w-6 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.05] hover:text-black active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/80 dark:hover:text-white"
+						title="next version"
 					>
-						<ChevronRight class="h-3 w-3" strokeWidth="2.5" />
+						<ChevronRight class="size-4" strokeWidth="2" />
 					</button>
-				</div>
-			{/if}
-			{#if actions}
-				<div
-					class="flex items-center gap-1 transition-opacity duration-200 {showActions
-						? 'opacity-100'
-						: 'pointer-events-none opacity-0'}"
-					use:captureClick
-				>
-					{@render actions()}
 				</div>
 			{/if}
 		</div>

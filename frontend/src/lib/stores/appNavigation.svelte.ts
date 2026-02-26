@@ -1,7 +1,6 @@
 import { browser } from '$app/environment'
 
 export type SettingsRouteId =
-	| '/settings/account'
 	| '/settings/appearance'
 	| '/settings/notifications'
 	| '/settings/privacy'
@@ -15,16 +14,18 @@ export type SettingsRouteId =
 export type NotesRouteId = '/notes' | `/notes/${string}`
 export type RemindersRouteId = '/reminders' | `/reminders/lists/${string}`
 
-export type AppId = 'settings' | 'notes' | 'reminders'
+export type SocialRouteId = '/social/friends' | '/social/groups'
 
-export const DEFAULT_SETTINGS_ROUTE: SettingsRouteId = '/settings/account'
+export type AppId = 'settings' | 'notes' | 'reminders' | 'social'
+
+export const DEFAULT_SETTINGS_ROUTE: SettingsRouteId = '/settings/appearance'
 export const DEFAULT_NOTES_ROUTE: NotesRouteId = '/notes'
 export const DEFAULT_REMINDERS_ROUTE: RemindersRouteId = '/reminders'
+export const DEFAULT_SOCIAL_ROUTE: SocialRouteId = '/social/friends'
 
 const STORAGE_PREFIX = 'last-visited-route:'
 
 const SETTINGS_ROUTES: SettingsRouteId[] = [
-	'/settings/account',
 	'/settings/appearance',
 	'/settings/notifications',
 	'/settings/privacy',
@@ -53,6 +54,10 @@ function isNotesRoute(pathname: string): pathname is NotesRouteId {
 function isRemindersRoute(pathname: string): pathname is RemindersRouteId {
 	if (pathname === '/reminders') return true
 	return /^\/reminders\/lists\/[^/]+$/.test(pathname)
+}
+
+function isSocialRoute(pathname: string): pathname is SocialRouteId {
+	return pathname === '/social/friends' || pathname === '/social/groups'
 }
 
 function readStoredSettings(): SettingsRouteId | '' {
@@ -88,15 +93,28 @@ function readStoredReminders(): RemindersRouteId | '' {
 	}
 }
 
+function readStoredSocial(): SocialRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}social`) ?? ''
+		const normalized = normalizePath(raw)
+		return isSocialRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
 class AppNavigationStore {
 	lastSettingsRoute = $state<SettingsRouteId | ''>(readStoredSettings())
 	lastNotesRoute = $state<NotesRouteId | ''>(readStoredNotes())
 	lastRemindersRoute = $state<RemindersRouteId | ''>(readStoredReminders())
+	lastSocialRoute = $state<SocialRouteId | ''>(readStoredSocial())
 
 	getEntryRoute(appId: 'settings'): SettingsRouteId
 	getEntryRoute(appId: 'notes'): NotesRouteId
 	getEntryRoute(appId: 'reminders'): RemindersRouteId
-	getEntryRoute(appId: AppId): SettingsRouteId | NotesRouteId | RemindersRouteId {
+	getEntryRoute(appId: 'social'): SocialRouteId
+	getEntryRoute(appId: AppId): SettingsRouteId | NotesRouteId | RemindersRouteId | SocialRouteId {
 		switch (appId) {
 			case 'settings':
 				return this.lastSettingsRoute || DEFAULT_SETTINGS_ROUTE
@@ -104,12 +122,15 @@ class AppNavigationStore {
 				return this.lastNotesRoute || DEFAULT_NOTES_ROUTE
 			case 'reminders':
 				return this.lastRemindersRoute || DEFAULT_REMINDERS_ROUTE
+			case 'social':
+				return this.lastSocialRoute || DEFAULT_SOCIAL_ROUTE
 		}
 	}
 
 	setLastVisited(appId: 'settings', pathname: string): void
 	setLastVisited(appId: 'notes', pathname: string): void
 	setLastVisited(appId: 'reminders', pathname: string): void
+	setLastVisited(appId: 'social', pathname: string): void
 	setLastVisited(appId: AppId, pathname: string): void {
 		const normalized = normalizePath(pathname)
 
@@ -132,10 +153,19 @@ class AppNavigationStore {
 				this.persist('reminders', normalized)
 				return
 			}
+			case 'social': {
+				if (!isSocialRoute(normalized)) return
+				this.lastSocialRoute = normalized
+				this.persist('social', normalized)
+				return
+			}
 		}
 	}
 
-	private persist(appId: AppId, pathname: SettingsRouteId | NotesRouteId | RemindersRouteId) {
+	private persist(
+		appId: AppId,
+		pathname: SettingsRouteId | NotesRouteId | RemindersRouteId | SocialRouteId
+	) {
 		if (!browser) return
 		try {
 			window.localStorage.setItem(`${STORAGE_PREFIX}${appId}`, pathname)

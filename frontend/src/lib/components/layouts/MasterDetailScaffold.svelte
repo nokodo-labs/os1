@@ -61,7 +61,7 @@
 		style="view-transition-name: master-sidebar;"
 	>
 		<div
-			class="relative h-full pb-10"
+			class="relative h-full"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: clamp(12px, 1vw, 32px);"
 		>
 			{@render master({ isMobile: false })}
@@ -80,7 +80,7 @@
 	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content));"
 >
 	<div
-		class="pb-10"
+		class="flex min-h-full flex-col pb-10"
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
 		{@render children()}

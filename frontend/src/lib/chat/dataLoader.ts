@@ -175,7 +175,6 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	ctx.thread = threadData
 	chatStore.activeThread = threadData
 
-	ctx.toolTracker.clear()
 	ctx.messageTree.clear()
 	ctx.messageSkip = messagesPage.length
 	// more messages exist if we got a full page (limit is 120)

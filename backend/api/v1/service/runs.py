@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel
@@ -29,6 +28,7 @@ async def start_thread_run(
 	parent_id: TypeID | None = None,
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
+	persist: bool = True,
 ) -> AsyncIterator[bytes]:
 	"""validate access and return a streaming agent run on an existing thread.
 
@@ -49,6 +49,7 @@ async def start_thread_run(
 		parent_id=parent_id,
 		client_context=client_context,
 		origin_session_id=origin_session_id,
+		persist=persist,
 	)
 
 
@@ -101,20 +102,3 @@ async def create_thread_and_run_stream(
 			yield chunk
 
 	return _stream()
-
-
-async def start_ephemeral_run(
-	*,
-	agent_id: TypeID,
-	principal: Principal,
-	input: str,
-	client_context: ClientContext | None = None,
-) -> AsyncIterator[bytes]:
-	"""run a one-turn ephemeral inference (no persisted thread).
-
-	NOT IMPLEMENTED - placeholder for future work.
-	"""
-	raise HTTPException(
-		status_code=status.HTTP_501_NOT_IMPLEMENTED,
-		detail="ephemeral runs are not yet implemented",
-	)

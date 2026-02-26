@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { logout } from '$lib/api/client'
-	import { Cog6, InfoCircle, SignOut, Sparkles } from '$lib/components/icons'
+	import { ChevronRight, Cog6, InfoCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { getUserInitials } from '$lib/utils'
@@ -17,6 +17,12 @@
 	}
 
 	let { user, onClose }: UserProfilePanelProps = $props()
+
+	function handleUserProfileClick() {
+		onClose?.()
+		const userId = session.currentUser?.id
+		if (userId) void goto(resolve(`/social/users/${userId}`))
+	}
 
 	function handleSettingsClick() {
 		onClose?.()
@@ -82,9 +88,13 @@
 	]
 </script>
 
-<div class="w-80 p-4">
-	<!-- User Info Section -->
-	<div class="flex items-center gap-3 p-3">
+<div class="w-60 p-3">
+	<!-- User Info Section (clickable to profile) -->
+	<button
+		class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-all hover:bg-white/5 active:scale-[0.98]"
+		onclick={handleUserProfileClick}
+		disabled={!session.isLoggedIn}
+	>
 		{#if session.isLoggedIn && user}
 			{#if user.avatar}
 				<img
@@ -112,6 +122,7 @@
 					{user.email}
 				</p>
 			</div>
+			<ChevronRight class="h-4 w-4 shrink-0 text-white/30" />
 		{:else}
 			<div
 				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white uppercase"
@@ -132,7 +143,7 @@
 				</p>
 			</div>
 		{/if}
-	</div>
+	</button>
 
 	<hr class="my-2 border-white/10" />
 
@@ -142,7 +153,7 @@
 			{#each menuItems as item (item.id)}
 				{@const Icon = item.icon}
 				<button
-					class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
+					class="rounded-pill flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
 					onclick={item.action}
 				>
 					<Icon class="h-4.5 w-4.5 shrink-0" variant={item.variant} />
@@ -166,7 +177,7 @@
 	{#if session.isLoggedIn}
 		<!-- logout Button -->
 		<button
-			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-4 py-3 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
 			onclick={handleLogout}
 		>
 			<SignOut class="h-4.5 w-4.5 shrink-0" />

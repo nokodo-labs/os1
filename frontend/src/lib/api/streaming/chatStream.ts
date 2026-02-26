@@ -270,10 +270,11 @@ async function* readSseFrames(
 // run chat stream
 
 export interface ChatStreamOptions {
-	threadId: string
+	threadId?: string | null
 	agentId: string
 	input: string | null
 	parentId?: string | null
+	persist?: boolean
 	signal?: AbortSignal
 }
 
@@ -297,11 +298,12 @@ export async function* runChatStream(
 
 	const body: Record<string, unknown> = {
 		agent_id: opts.agentId,
-		thread_id: opts.threadId,
 		input: opts.input,
 		parent_id: opts.parentId,
 		stream: true,
 	}
+	if (opts.threadId) body.thread_id = opts.threadId
+	if (opts.persist === false) body.persist = false
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })

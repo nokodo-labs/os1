@@ -6,7 +6,7 @@ import { apiClient } from '$lib/api/client'
 import type { components } from '$lib/api/types'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { SvelteDate } from 'svelte/reactivity'
-import { loadTree, syncCacheAfterRun } from './dataLoader'
+import { syncCacheAfterRun } from './dataLoader'
 import { computeIsAtBottom, contentPartsToText } from './helpers'
 import { runThreadStream } from './streamProcessor'
 import type { ChatContext } from './types'
@@ -90,10 +90,12 @@ export async function handleSendMessage(content: string, ctx: ChatContext): Prom
 	}
 }
 
-/** regenerate the agent response from a given parent message */
+/** regenerate the agent response from a given parent message.
+ * if prompt is provided, it is sent as an additional instruction. */
 export async function handleRegenerateMessage(
 	parentId: string | null,
-	ctx: ChatContext
+	ctx: ChatContext,
+	prompt?: string | null
 ): Promise<void> {
 	if (!ctx.thread) return
 	if (!selectedAgent.id) return
@@ -125,7 +127,7 @@ export async function handleRegenerateMessage(
 			{
 				threadId: ctx.thread.id,
 				agentId: selectedAgent.id,
-				input: ctx.optimisticUserMessage ? ctx.lastRunInput : null,
+				input: prompt ?? (ctx.optimisticUserMessage ? ctx.lastRunInput : null),
 				runId,
 				parentId: resolvedParent,
 			},
@@ -188,17 +190,42 @@ export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	}
 }
 
-/** edit a message and regenerate the response */
-export async function handleEditMessage(messageId: string, ctx: ChatContext): Promise<void> {
+/** update a user message's content in place (no regeneration) */
+export async function handleSaveEditMessage(
+	messageId: string,
+	newContent: string,
+	ctx: ChatContext
+): Promise<void> {
 	if (!ctx.thread) return
 	const msg = ctx.messages.find((m) => m.id === messageId)
 	if (!msg) return
 
-	const currentContent = contentPartsToText(msg.content)
-	const newContent = window.prompt('edit message', currentContent)
+	const { data: updated, error } = await apiClient().PATCH(
+		'/v1/threads/{thread_id}/messages/{message_id}',
+		{
+			params: { path: { thread_id: ctx.thread.id, message_id: messageId } },
+			body: { content: newContent },
+		}
+	)
 
-	if (newContent === null || newContent.trim() === currentContent.trim()) return
-	if (!newContent.trim()) return
+	if (error || !updated) {
+		console.error('failed to update message', error)
+		return
+	}
+
+	ctx.messageTree.set(updated.id, updated)
+	ctx.rebuildRunBlocks()
+}
+
+/** create a new branch with edited content and regenerate the response */
+export async function handleSaveAsCopyMessage(
+	messageId: string,
+	newContent: string,
+	ctx: ChatContext
+): Promise<void> {
+	if (!ctx.thread) return
+	const msg = ctx.messages.find((m) => m.id === messageId)
+	if (!msg) return
 
 	const body = {
 		content: newContent,
@@ -212,7 +239,7 @@ export async function handleEditMessage(messageId: string, ctx: ChatContext): Pr
 	})
 
 	if (error || !newMessage) {
-		console.error('failed to create edited message', error)
+		console.error('failed to create edited message branch', error)
 		return
 	}
 
@@ -257,6 +284,33 @@ export async function deleteUserMessage(messageId: string, ctx: ChatContext): Pr
 		return true
 	}
 
+	// collect all IDs to delete (message + every descendant)
+	const start = ctx.messageTree.get(messageId)
+	if (!start || start.type !== 'user') return false
+
+	const idsToDelete: string[] = []
+	const stack: string[] = [messageId]
+	while (stack.length > 0) {
+		const id = stack.pop()
+		if (!id) continue
+		idsToDelete.push(id)
+		const kids = ctx.messageChildren.get(id) ?? []
+		for (const childId of kids) stack.push(childId)
+	}
+
+	// snapshot for rollback
+	const snapshotEntries = idsToDelete
+		.map((id) => [id, ctx.messageTree.get(id)] as const)
+		.filter(([, v]) => v !== undefined)
+	const snapshotLeafId = ctx.currentLeafId
+
+	// optimistic removal
+	for (const id of idsToDelete) ctx.messageTree.delete(id)
+	ctx.currentLeafId = start.parent_id ?? null
+	ctx.optimisticUserMessage = null
+	ctx.streamingAssistant = null
+	ctx.rebuildRunBlocks()
+
 	const { response, error } = await apiClient().DELETE(
 		'/v1/threads/{thread_id}/messages/{message_id}',
 		{
@@ -270,11 +324,12 @@ export async function deleteUserMessage(messageId: string, ctx: ChatContext): Pr
 	)
 	if (!response.ok || error) {
 		console.error('failed to delete user message', error)
+		// rollback
+		for (const [id, msg] of snapshotEntries) ctx.messageTree.set(id, msg!)
+		ctx.currentLeafId = snapshotLeafId
+		ctx.rebuildRunBlocks()
 		return false
 	}
 
-	ctx.optimisticUserMessage = null
-	ctx.streamingAssistant = null
-	await loadTree(ctx.thread.id, ctx)
 	return true
 }

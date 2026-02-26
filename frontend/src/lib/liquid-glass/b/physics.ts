@@ -111,7 +111,7 @@ export function calculateDisplacement(
 	// normalized derivative for slope calculation (reference uses normalized coords)
 	const epsilon = 0.0001
 	const y2 = surfaceFn(Math.min(1, t + epsilon), 1)
-	const derivative = (y2 - y) / epsilon
+	const derivative = ((y2 - y) * thickness) / (epsilon * bezelWidth)
 
 	// normal pointing INTO the glass (reference convention: negative y)
 	const magnitude = Math.sqrt(derivative * derivative + 1)

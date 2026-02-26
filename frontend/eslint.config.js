@@ -33,7 +33,7 @@ export default [
 			'.svelte-kit/',
 			'dist/',
 			'node_modules/',
-			'src/lib/api/generated/',
+			'static/',
 			'src/lib/api/types.ts',
 		],
 	},

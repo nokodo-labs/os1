@@ -189,15 +189,18 @@ class RunRequest(_RunBase):
 	"""POST /runs - run on an existing thread, or ephemeral (no thread).
 
 	when ``thread_id`` is present the run continues that thread.
-	when omitted the run is **ephemeral** - no thread is created or
-	persisted (not yet implemented).
+	when omitted the run is **ephemeral** - no thread is created or persisted.
 
 	``input`` is required for ephemeral runs and optional when continuing
 	an existing thread (omit for regeneration / retry).
+
+	``persist`` controls whether messages and metadata are saved to the
+	database. defaults to True; set to False for ephemeral inference.
 	"""
 
 	thread_id: TypeID | None = None
 	parent_id: TypeID | None = None
+	persist: bool = True
 
 
 class ThreadCreateAndRunRequest(_RunBase):

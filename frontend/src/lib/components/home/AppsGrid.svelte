@@ -77,6 +77,15 @@
 			},
 		},
 		{
+			id: 'social',
+			title: 'social',
+			icon: Users,
+			accent: 'orange',
+			action: async () => {
+				await goto(resolve(appNavigation.getEntryRoute('social')))
+			},
+		},
+		{
 			id: 'settings',
 			title: 'settings',
 			icon: Cog6,

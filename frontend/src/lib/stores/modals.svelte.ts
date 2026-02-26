@@ -1,4 +1,9 @@
-export type ModalId = 'archived-chats' | 'memories' | 'share-resource'
+export type ModalId =
+	| 'add-friends'
+	| 'archived-chats'
+	| 'create-group'
+	| 'memories'
+	| 'share-resource'
 
 export type ShareResourcePayload = {
 	resource: 'thread'
@@ -10,7 +15,9 @@ class ModalStore {
 	active = $state<ModalId | null>(null)
 	shareResourcePayload = $state<ShareResourcePayload | null>(null)
 	isOpen = (id: ModalId) => this.active === id
+	open(id: 'add-friends'): void
 	open(id: 'archived-chats'): void
+	open(id: 'create-group'): void
 	open(id: 'memories'): void
 	open(id: 'share-resource', payload: ShareResourcePayload): void
 	open(id: ModalId, payload?: ShareResourcePayload): void {
