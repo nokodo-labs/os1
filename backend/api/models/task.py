@@ -6,7 +6,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -65,7 +66,7 @@ class Task(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	progress: Mapped[int | None] = mapped_column(Integer())
 	stage: Mapped[str | None] = mapped_column(String(100))
-	result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+	result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	spawned_thread_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="SET NULL"),

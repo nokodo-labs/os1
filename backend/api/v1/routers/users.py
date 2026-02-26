@@ -9,9 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.user import User
+from api.schemas.friendship import UserSearchResult
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.user import User as UserSchema
 from api.schemas.user import UserCreate, UserPermissions, UserUpdate
+from api.v1.routers import friends as friends_router
+from api.v1.service import friends as friends_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import (
 	Principal,
@@ -24,6 +27,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/users", tags=["users"])
+router.include_router(friends_router.router)
 
 
 UserSortBy = Literal[
@@ -71,6 +75,19 @@ async def read_active_user_ids(
 	if not principal.is_admin:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 	return await user_activity_store.get_active_user_ids()
+
+
+@router.get("/search", response_model=list[UserSearchResult])
+async def search_users(
+	q: str,
+	limit: int = 20,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[User]:
+	"""search users by name, username, or email."""
+	return await friends_service.search_users(
+		q, db, principal=principal, limit=min(limit, 50)
+	)
 
 
 @router.get("/{user_id}", response_model=UserSchema)

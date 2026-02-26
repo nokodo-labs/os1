@@ -56,12 +56,12 @@ async def login_access_token(
 			detail="oidc login required",
 		)
 	user = await auth_service.authenticate_user(
-		session=session, email=form_data.username, password=form_data.password
+		session=session, identifier=form_data.username, password=form_data.password
 	)
 	if not user:
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="incorrect email or password",
+			detail="incorrect email, username, or password",
 		)
 
 	token_pair = await auth_service.create_token_pair(user)

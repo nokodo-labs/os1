@@ -182,6 +182,15 @@
 								</span>
 							</div>
 							<div class="flex items-center gap-3 text-sm">
+								<UserIcon class="h-4 w-4 shrink-0 text-zinc-500" />
+								<span class="text-zinc-400">username</span>
+								<span class="ml-auto truncate font-medium">
+									{(user as Record<string, unknown>).username
+										? `@${(user as Record<string, unknown>).username}`
+										: '-'}
+								</span>
+							</div>
+							<div class="flex items-center gap-3 text-sm">
 								<Mail class="h-4 w-4 shrink-0 text-zinc-500" />
 								<span class="text-zinc-400">email</span>
 								<span class="ml-auto truncate font-medium">{user.email}</span>

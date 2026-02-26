@@ -221,6 +221,14 @@ class AdvancedPreferences(BaseModel):
 			"specifically for the Island component"
 		),
 	)
+	svg_liquid_metal: bool | None = Field(
+		default=None,
+		alias="svgLiquidMetal",
+		description=(
+			"whether to enable svg-based liquid metal effects "
+			"when supported by the browser"
+		),
+	)
 
 
 # debug preferences

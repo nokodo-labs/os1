@@ -154,6 +154,29 @@ class MessageCreate(MetadataModel):
 				raise ValueError(f"unknown sdk message role: {sdk_msg.role}")
 
 
+class MessageUpdate(MetadataModel):
+	"""Payload for updating a user message's content in place."""
+
+	content: str | list[dict[str, Any] | ContentPart]
+
+	@field_validator("content", mode="before")
+	@classmethod
+	def normalize_content(
+		cls,
+		v: str | list[dict[str, Any] | ContentPart],
+	) -> list[dict[str, Any]]:
+		"""Normalize content to list of content part dicts."""
+		if isinstance(v, str):
+			return [{"type": "text", "text": v}] if v else []
+		result = []
+		for item in v:
+			if isinstance(item, dict):
+				result.append(item)
+			else:
+				result.append(item.model_dump())
+		return result
+
+
 class Message(MessageBase, TimestampedModel):
 	"""Response schema."""
 

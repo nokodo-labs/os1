@@ -24,6 +24,7 @@
 	let email = $state('')
 	let password = $state('')
 	let displayName = $state('')
+	let username = $state('')
 	let isActive = $state(true)
 	let isSuperuser = $state(false)
 
@@ -31,6 +32,7 @@
 		email = ''
 		password = ''
 		displayName = ''
+		username = ''
 		isActive = true
 		isSuperuser = false
 		error = null
@@ -43,8 +45,13 @@
 
 	async function submit() {
 		const trimmedEmail = email.trim()
+		const trimmedUsername = username.trim()
 		if (!trimmedEmail) {
 			error = 'email is required'
+			return
+		}
+		if (!trimmedUsername) {
+			error = 'username is required'
 			return
 		}
 		if (!password) {
@@ -60,6 +67,7 @@
 					body: {
 						email: trimmedEmail,
 						password,
+						username: trimmedUsername,
 						display_name: displayName.trim() ? displayName.trim() : null,
 						is_active: isActive,
 						is_superuser: isSuperuser,
@@ -120,6 +128,15 @@
 						<Input
 							id="create_display_name"
 							bind:value={displayName}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="create_username">username</Label>
+						<Input
+							id="create_username"
+							bind:value={username}
+							placeholder="required"
 							class="rounded-xl"
 						/>
 					</div>

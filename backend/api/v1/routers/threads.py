@@ -21,7 +21,7 @@ from api.schemas.access_rule import (
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
-from api.schemas.message import MessageCreate
+from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.runs import ThreadCreateAndRunRequest
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
@@ -327,6 +327,29 @@ async def create_message(
 	"""Append a message to a thread."""
 	return await thread_service.create_message(
 		thread_id,
+		message_in,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
+
+
+@router.patch(
+	"/{thread_id}/messages/{message_id}",
+	response_model=MessageSchema,
+)
+async def update_user_message(
+	thread_id: TypeID,
+	message_id: TypeID,
+	message_in: MessageUpdate,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> Message:
+	"""update a user message's content in place."""
+	return await thread_service.update_user_message(
+		thread_id,
+		message_id,
 		message_in,
 		db,
 		principal=principal,

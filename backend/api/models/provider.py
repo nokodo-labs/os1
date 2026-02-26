@@ -6,7 +6,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, String
+from sqlalchemy import DateTime, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import Base, StringEnum
@@ -51,7 +52,7 @@ class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	base_url: Mapped[str | None] = mapped_column(String(255))
 	encrypted_api_key: Mapped[str | None] = mapped_column(String(1024))
 	model_prefix: Mapped[str | None] = mapped_column(String(50))
-	additional_headers: Mapped[dict | None] = mapped_column(JSON)
+	additional_headers: Mapped[dict | None] = mapped_column(JSONB)
 	status: Mapped[ProviderStatus] = mapped_column(
 		StringEnum(ProviderStatus),
 		default=ProviderStatus.ENABLED,

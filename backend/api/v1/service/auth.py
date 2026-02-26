@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from authlib.jose import JoseError
 from fastapi import Depends, Header, HTTPException, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -164,9 +164,13 @@ class Principal:
 
 
 async def authenticate_user(
-	session: AsyncSession, email: str, password: str
+	session: AsyncSession, identifier: str, password: str
 ) -> User | None:
-	result = await session.execute(select(User).where(User.email == email))
+	"""authenticate by email or username."""
+	stmt = select(User).where(
+		or_(User.email == identifier, User.username == identifier)
+	)
+	result = await session.execute(stmt)
 	user = result.scalar_one_or_none()
 	if not user:
 		return None

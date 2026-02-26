@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
@@ -32,8 +33,8 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	description: Mapped[str | None] = mapped_column(Text())
 	system_prompt: Mapped[str | None] = mapped_column(Text())
-	plugin_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
-	config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	plugin_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+	config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	model_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("models.id", ondelete="SET NULL"),

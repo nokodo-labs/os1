@@ -2,8 +2,10 @@
 
 from api.models.access_rule import AccessRule
 from api.models.agent import Agent
+from api.models.block import Block
 from api.models.event import Event
 from api.models.file import File
+from api.models.friendship import Friendship, FriendshipEvent
 from api.models.group import Group
 from api.models.memory import Memory
 from api.models.message import Message
@@ -28,8 +30,11 @@ __all__ = [
 	"AccessLevel",
 	"AccessRule",
 	"Agent",
+	"Block",
 	"Event",
 	"File",
+	"Friendship",
+	"FriendshipEvent",
 	"Group",
 	"Memory",
 	"Message",

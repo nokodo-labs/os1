@@ -6,7 +6,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import JSON, Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -89,14 +90,14 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	# Ordered list of content parts (TextContent, ImageContent, etc.)
 	# Each part is a dict with "type" discriminator matching api.schemas.content
-	content: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+	content: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 	# Tool-specific fields. Nullable for non-tool messages.
 	tool_call_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH), index=True)
 	is_error: Mapped[bool | None] = mapped_column(Boolean)
-	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 	# Token usage from LLM response (matches SDK Usage model)
-	usage: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-	read_by: Mapped[list[str]] = mapped_column(JSON, default=list)
+	usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+	read_by: Mapped[list[str]] = mapped_column(JSONB, default=list)
 
 	__mapper_args__ = {
 		"polymorphic_on": type,

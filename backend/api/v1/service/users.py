@@ -156,6 +156,7 @@ async def create_user(
 	user = User(
 		email=user_in.email,
 		hashed_password=hash_password(user_in.password),
+		username=user_in.username,
 		display_name=user_in.display_name,
 		is_active=is_active,
 		is_superuser=is_superuser,
@@ -180,6 +181,11 @@ async def create_user(
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="email already registered",
+			) from None
+		elif "username" in msg and "unique" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail="username already taken",
 			) from None
 		elif "foreign key" in msg and "user_roles" in msg:
 			raise HTTPException(
@@ -216,14 +222,19 @@ async def update_user(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="unsupported fields",
 			)
-		if (
-			user_in.preferences is None
-			and user_in.display_name is None
-			and user_in.avatar_url is None
-		):
+		has_self_field = (
+			user_in.preferences is not None
+			or user_in.display_name is not None
+			or user_in.avatar_url is not None
+			or user_in.username is not None
+			or user_in.bio is not None
+			or user_in.find_by_email is not None
+			or user_in.privacy is not None
+		)
+		if not has_self_field:
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="preferences, display_name, or avatar_url is required",
+				detail="no updatable fields provided",
 			)
 
 	user = await get_user(user_id, session, principal=principal)
@@ -240,6 +251,14 @@ async def update_user(
 		user.display_name = user_in.display_name
 	if user_in.avatar_url is not None:
 		user.avatar_url = user_in.avatar_url
+	if user_in.username is not None:
+		user.username = user_in.username
+	if user_in.bio is not None:
+		user.bio = user_in.bio
+	if user_in.find_by_email is not None:
+		user.find_by_email = user_in.find_by_email
+	if user_in.privacy is not None:
+		user.privacy = user_in.privacy.model_dump(mode="json")
 
 	if principal.is_admin:
 		if user_in.email is not None:
@@ -274,6 +293,17 @@ async def update_user(
 		await session.commit()
 	except IntegrityError as exc:
 		await session.rollback()
+		msg = str(exc.orig).lower()
+		if "username" in msg and "unique" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail="username already taken",
+			) from None
+		if "email" in msg and "unique" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail="email already registered",
+			) from None
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=f"invalid reference: {exc.orig}",

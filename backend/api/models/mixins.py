@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import ClassVar
 
-from sqlalchemy import JSON, DateTime, String, func
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from api.models.base import TYPEID_LENGTH
@@ -46,7 +47,7 @@ class MetadataJSONMixin:
 
 	metadata_: Mapped[JSONObject] = mapped_column(
 		"metadata",  # SQLAlchemy reserves "metadata" name on DeclarativeBase
-		JSON,
+		JSONB,
 		default=dict,
 	)
 

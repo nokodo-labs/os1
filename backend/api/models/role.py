@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Integer, String, Text
+from sqlalchemy import Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import Base
@@ -25,11 +26,11 @@ class Role(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	name: Mapped[str] = mapped_column(String(50), unique=True, index=True)
 	description: Mapped[str | None] = mapped_column(Text)
-	quotas: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	quotas: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	priority: Mapped[int] = mapped_column(Integer, default=0)
 
 	# typed default permissions - resource access levels + action permissions
-	default_permissions: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	default_permissions: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
 	users: Mapped[list[User]] = relationship(
 		"User",

@@ -80,6 +80,10 @@
 			return (
 				u.email.toLowerCase().includes(q) ||
 				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
+				((u as Record<string, unknown>).username &&
+					String((u as Record<string, unknown>).username)
+						.toLowerCase()
+						.includes(q)) ||
 				u.id.toLowerCase().includes(q)
 			)
 		})
@@ -356,6 +360,13 @@
 									>
 										<UserIcon class="h-3.5 w-3.5" />
 										{u.display_name}
+									</span>
+								{/if}
+								{#if (u as Record<string, unknown>).username}
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
+									>
+										@{(u as Record<string, unknown>).username}
 									</span>
 								{/if}
 							</div>

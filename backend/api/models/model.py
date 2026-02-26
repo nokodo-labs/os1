@@ -5,7 +5,8 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -50,7 +51,7 @@ class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	endpoint: Mapped[str | None] = mapped_column(String(255))
 	adapter: Mapped[str | None] = mapped_column(String(100))
-	capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+	capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)
 	context_window: Mapped[int | None] = mapped_column(Integer())
 	input_cost: Mapped[float | None] = mapped_column(Float())
 	output_cost: Mapped[float | None] = mapped_column(Float())

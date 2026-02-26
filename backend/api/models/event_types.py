@@ -88,6 +88,12 @@ class EventType(StrEnum):
 	GROUP_MEMBER_ADDED = "group.member_added"
 	GROUP_MEMBER_REMOVED = "group.member_removed"
 
+	# --- friendship events ---
+	FRIEND_REQUEST_SENT = "friend.request_sent"
+	FRIEND_REQUEST_ACCEPTED = "friend.request_accepted"
+	FRIEND_REQUEST_DECLINED = "friend.request_declined"
+	FRIEND_REMOVED = "friend.removed"
+
 	# --- settings events ---
 	SETTINGS_UPDATED = "settings.updated"
 
@@ -180,6 +186,13 @@ GROUP_EVENTS = {
 	EventType.GROUP_DELETED,
 	EventType.GROUP_MEMBER_ADDED,
 	EventType.GROUP_MEMBER_REMOVED,
+}
+
+FRIEND_EVENTS = {
+	EventType.FRIEND_REQUEST_SENT,
+	EventType.FRIEND_REQUEST_ACCEPTED,
+	EventType.FRIEND_REQUEST_DECLINED,
+	EventType.FRIEND_REMOVED,
 }
 
 REMINDER_EVENTS = {

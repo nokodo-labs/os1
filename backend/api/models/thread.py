@@ -6,12 +6,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-	JSON,
 	DateTime,
 	ForeignKey,
 	String,
 	func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
@@ -50,7 +50,7 @@ class Thread(
 	__typeid_prefix__ = "thread"
 
 	title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-	tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+	tags: Mapped[list[str]] = mapped_column(JSONB, default=list)
 	is_archived: Mapped[bool] = mapped_column(default=False)
 	is_temporary: Mapped[bool] = mapped_column(default=False)
 	last_activity_at: Mapped[datetime] = mapped_column(

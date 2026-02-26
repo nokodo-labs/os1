@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, String, func
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import Base
@@ -16,6 +17,7 @@ from api.models.mixins import TypeIDPrimaryKeyMixin
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
 	from api.models.file import File
+	from api.models.friendship import Friendship
 	from api.models.group import Group, GroupMembership
 	from api.models.memory import Memory
 	from api.models.note import Note
@@ -35,14 +37,18 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	__typeid_prefix__ = "user"
 
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+	username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
 	display_name: Mapped[str | None] = mapped_column(String(150))
+	bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
 	avatar_url: Mapped[str | None] = mapped_column(String(512))
 	hashed_password: Mapped[str] = mapped_column(String(255))
 	is_active: Mapped[bool] = mapped_column(default=True)
 	is_superuser: Mapped[bool] = mapped_column(default=False)
-	preferences: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-	integration_tokens: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-	usage_quotas: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	find_by_email: Mapped[bool] = mapped_column(default=True, index=True)
+	privacy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+	preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+	integration_tokens: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+	usage_quotas: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now()
 	)
@@ -112,5 +118,17 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	thread_participants: Mapped[list[ThreadParticipant]] = relationship(
 		"ThreadParticipant",
 		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	sent_friend_requests: Mapped[list[Friendship]] = relationship(
+		"Friendship",
+		foreign_keys="Friendship.requester_id",
+		back_populates="requester",
+		cascade="all, delete-orphan",
+	)
+	received_friend_requests: Mapped[list[Friendship]] = relationship(
+		"Friendship",
+		foreign_keys="Friendship.addressee_id",
+		back_populates="addressee",
 		cascade="all, delete-orphan",
 	)

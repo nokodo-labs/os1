@@ -6,7 +6,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -50,7 +51,7 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	scope_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH))
 	type: Mapped[str] = mapped_column(String(100))
-	data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+	data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	version: Mapped[int] = mapped_column(Integer(), default=1)
 	user_id: Mapped[str | None] = mapped_column(

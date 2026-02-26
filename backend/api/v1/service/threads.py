@@ -26,7 +26,7 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import ResourceType
 from api.schemas.message import Message as MessageOut
-from api.schemas.message import MessageCreate
+from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.search import (
 	CursorPage,
 	SearchMode,
@@ -892,6 +892,62 @@ async def create_message(
 		origin_session_id=origin_session_id,
 	)
 
+	return message
+
+
+async def update_user_message(
+	thread_id: TypeID,
+	message_id: TypeID,
+	message_in: MessageUpdate,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	origin_session_id: str | None = None,
+) -> Message:
+	await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_level=AccessLevel.EDITOR,
+	)
+	message = await session.get(Message, message_id)
+	if not message or message.thread_id != thread_id:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="message not found",
+		)
+	if message.type != MessageType.USER:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="only user messages can be edited",
+		)
+	if not principal.is_admin and str(message.sender_user_id) != str(principal.user.id):
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	update_data = message_in.model_dump(exclude_unset=True, by_alias=True)
+	for field, value in update_data.items():
+		setattr(message, field, value)
+	await session.flush()
+	await session.commit()
+	await session.refresh(message)
+
+	message_data = MessageOut.model_validate(message).model_dump(mode="json")
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MESSAGE_UPDATED,
+		data=message_data,
+		user_id=principal.user_id,
+		thread_id=str(thread_id),
+		message_id=str(message.id),
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
 	return message
 
 
