@@ -54,7 +54,7 @@
 
 <div class="mx-auto w-full max-w-4xl px-6 pt-10 pb-24">
 	<div class="mb-6 flex items-center gap-3">
-		<a href={resolve('/debug')} class="text-sm text-white/50 transition hover:text-white/75">
+		<a href={resolve('/debug')} class="text-sm text-foreground/50 transition hover:text-foreground/75">
 			← debug
 		</a>
 	</div>
@@ -66,14 +66,14 @@
 
 	<div class="mt-8 space-y-4">
 		<!-- offline banner trigger -->
-		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+		<div class="rounded-xl border border-foreground/10 bg-foreground/5 p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="flex items-center gap-2 text-sm font-semibold text-white/85">
+					<div class="flex items-center gap-2 text-sm font-semibold text-foreground/85">
 						<WifiSlash />
 						offline banner
 					</div>
-					<div class="mt-1 text-sm text-white/55">
+					<div class="mt-1 text-sm text-foreground/55">
 						toggles <code class="text-xs">network.online</code> to show/hide the banner.
 					</div>
 				</div>
@@ -81,24 +81,24 @@
 					type="button"
 					class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {offlineOverride
 						? 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
-						: 'border-white/10 bg-white/5 text-white/75 hover:bg-white/10'}"
+						: 'border-foreground/10 bg-foreground/5 text-foreground/75 hover:bg-foreground/10'}"
 					onclick={toggleOffline}
 				>
 					{offlineOverride ? 'restore' : 'simulate offline'}
 				</button>
 			</div>
-			<div class="mt-3 text-xs text-white/40">
-				actual: <span class="text-white/60">{navigator.onLine ? 'online' : 'offline'}</span>
-				· store: <span class="text-white/60">{network.online ? 'online' : 'offline'}</span>
+			<div class="mt-3 text-xs text-foreground/40">
+				actual: <span class="text-foreground/60">{navigator.onLine ? 'online' : 'offline'}</span>
+				· store: <span class="text-foreground/60">{network.online ? 'online' : 'offline'}</span>
 			</div>
 		</div>
 
 		<!-- update toast trigger -->
-		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+		<div class="rounded-xl border border-foreground/10 bg-foreground/5 p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-white/85">update toast</div>
-					<div class="mt-1 text-sm text-white/55">
+					<div class="text-sm font-semibold text-foreground/85">update toast</div>
+					<div class="mt-1 text-sm text-foreground/55">
 						toggles <code class="text-xs">swUpdate.updateAvailable</code> to show/hide the
 						toast.
 					</div>
@@ -107,25 +107,25 @@
 					type="button"
 					class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {updateOverride
 						? 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-						: 'border-white/10 bg-white/5 text-white/75 hover:bg-white/10'}"
+						: 'border-foreground/10 bg-foreground/5 text-foreground/75 hover:bg-foreground/10'}"
 					onclick={toggleUpdate}
 				>
 					{updateOverride ? 'restore' : 'simulate update'}
 				</button>
 			</div>
-			<div class="mt-3 text-xs text-white/40">
-				store: <span class="text-white/60"
+			<div class="mt-3 text-xs text-foreground/40">
+				store: <span class="text-foreground/60"
 					>{swUpdate.updateAvailable ? 'update available' : 'up to date'}</span
 				>
 			</div>
 		</div>
 
 		<!-- install prompt trigger -->
-		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+		<div class="rounded-xl border border-foreground/10 bg-foreground/5 p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-white/85">install prompt</div>
-					<div class="mt-1 text-sm text-white/55">
+					<div class="text-sm font-semibold text-foreground/85">install prompt</div>
+					<div class="mt-1 text-sm text-foreground/55">
 						toggles <code class="text-xs">installPrompt.canInstall</code> to show/hide the
 						dialog.
 					</div>
@@ -134,25 +134,25 @@
 					type="button"
 					class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {installOverride
 						? 'border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20'
-						: 'border-white/10 bg-white/5 text-white/75 hover:bg-white/10'}"
+						: 'border-foreground/10 bg-foreground/5 text-foreground/75 hover:bg-foreground/10'}"
 					onclick={toggleInstall}
 				>
 					{installOverride ? 'restore' : 'simulate prompt'}
 				</button>
 			</div>
-			<div class="mt-3 text-xs text-white/40">
-				canInstall: <span class="text-white/60">{installPrompt.canInstall}</span>
-				· isInstalled: <span class="text-white/60">{installPrompt.isInstalled}</span>
-				· dismissed: <span class="text-white/60">{installPrompt.dismissed}</span>
+			<div class="mt-3 text-xs text-foreground/40">
+				canInstall: <span class="text-foreground/60">{installPrompt.canInstall}</span>
+				· isInstalled: <span class="text-foreground/60">{installPrompt.isInstalled}</span>
+				· dismissed: <span class="text-foreground/60">{installPrompt.dismissed}</span>
 			</div>
 		</div>
 
 		<!-- offline page link -->
-		<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+		<div class="rounded-xl border border-foreground/10 bg-foreground/5 p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-white/85">offline page</div>
-					<div class="mt-1 text-sm text-white/55">
+					<div class="text-sm font-semibold text-foreground/85">offline page</div>
+					<div class="mt-1 text-sm text-foreground/55">
 						preview the static offline fallback served by the service worker.
 					</div>
 				</div>
@@ -160,7 +160,7 @@
 					href="/offline.html"
 					target="_blank"
 					rel="external noopener"
-					class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/75 transition hover:bg-white/10"
+					class="rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs font-medium text-foreground/75 transition hover:bg-foreground/10"
 				>
 					open offline page
 				</a>

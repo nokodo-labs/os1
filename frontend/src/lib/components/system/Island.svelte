@@ -120,7 +120,7 @@
 					<span class="text-xs font-medium">offline</span>
 				</div>
 			{:else if chrome.island.pulse}
-				<div class="max-w-160 truncate text-sm text-white/70">
+				<div class="max-w-160 truncate text-sm text-foreground/70">
 					{chrome.island.pulse}
 				</div>
 			{/if}
@@ -149,7 +149,7 @@
 			<!-- PWA: install button -->
 			{#if showInstall}
 				<button
-					class="island-pwa-btn flex cursor-pointer items-center justify-center gap-1.5 text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="island-pwa-btn flex cursor-pointer items-center justify-center gap-1.5 text-foreground/80 transition-transform duration-300 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 					onclick={promptInstall}
 					aria-label="install app"
 				>
@@ -166,7 +166,7 @@
 
 			{#if !isHomeLayout}
 				<button
-					class="flex cursor-pointer items-center justify-center text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex cursor-pointer items-center justify-center text-foreground/80 transition-transform duration-300 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 					onclick={handleHome}
 					aria-label="home"
 				>
@@ -175,7 +175,7 @@
 			{/if}
 
 			<button
-				class="flex cursor-pointer items-center justify-center text-white/80 transition-transform duration-300 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+				class="flex cursor-pointer items-center justify-center text-foreground/80 transition-transform duration-300 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 				onclick={() => chrome.toggleDock()}
 				aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 				aria-expanded={chrome.isDockOpen}

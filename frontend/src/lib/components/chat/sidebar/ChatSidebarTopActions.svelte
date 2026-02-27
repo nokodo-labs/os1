@@ -21,7 +21,7 @@
 
 <!-- Search -->
 <button
-	class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+	class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-foreground transition-all duration-200 hover:border-foreground/10 hover:bg-foreground/5"
 	onclick={(e) => {
 		stop(e)
 		onSearchClick()
@@ -45,7 +45,7 @@
 {#each items as item (item.id)}
 	{@const Icon = item.icon}
 	<button
-		class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-white transition-all duration-200 hover:border-white/10 hover:bg-white/5"
+		class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-foreground transition-all duration-200 hover:border-foreground/10 hover:bg-foreground/5"
 		onclick={(e) => {
 			stop(e)
 			void item.action()

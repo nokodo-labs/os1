@@ -11,37 +11,37 @@
 	<div class="mt-6 grid gap-3 sm:grid-cols-2">
 		<a
 			href={resolve('/debug/shimmer')}
-			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
 		>
 			shimmer playground
 		</a>
 		<a
 			href={resolve('/debug/liquid-glass')}
-			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
 		>
 			liquid glass lab
 		</a>
 		<a
 			href={resolve('/debug/liquid-metal')}
-			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
 		>
 			liquid metal svg lab
 		</a>
 		<a
 			href={resolve('/debug/pwa')}
-			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
 		>
 			pwa debug
 		</a>
 		<a
 			href={resolve('/debug/runs')}
-			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
 		>
 			runs & caches
 		</a>
 		<a
 			href={resolve('/debug/backgrounds')}
-			class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:border-white/20 hover:bg-white/8"
+			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
 		>
 			backgrounds debug
 		</a>

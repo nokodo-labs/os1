@@ -29,15 +29,15 @@
 
 	const variantClasses: Record<Variant, string> = {
 		primary:
-			'bg-[var(--accent-primary)] text-white hover:brightness-110 border border-transparent',
+			'bg-[var(--accent-primary)] text-foreground hover:brightness-110 border border-transparent',
 		secondary:
-			'bg-white/10 text-white/90 hover:bg-white/15 hover:text-white border border-white/10 hover:border-white/15',
-		ghost: 'bg-transparent text-white/80 hover:bg-white/8 hover:text-white border border-transparent',
-		danger: 'bg-red-500/80 text-white hover:bg-red-500 border border-transparent',
+			'bg-foreground/10 text-foreground/90 hover:bg-foreground/15 hover:text-foreground border border-foreground/10 hover:border-foreground/15',
+		ghost: 'bg-transparent text-foreground/80 hover:bg-foreground/8 hover:text-foreground border border-transparent',
+		danger: 'bg-red-500/80 text-foreground hover:bg-red-500 border border-transparent',
 	}
 
 	const baseClasses =
-		'inline-flex cursor-pointer items-center justify-center gap-2 font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40'
+		'inline-flex cursor-pointer items-center justify-center gap-2 font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40'
 </script>
 
 <button

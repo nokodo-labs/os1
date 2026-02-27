@@ -259,7 +259,7 @@
 	{#if onBack && device.isMobile}
 		<button
 			type="button"
-			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 			onclick={() => onBack?.()}
 			aria-label="back to notes"
 		>
@@ -304,7 +304,7 @@
 			type="button"
 			role="menuitemcheckbox"
 			aria-checked={isRawMode}
-			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-white/85 transition-all duration-150 hover:bg-white/10 hover:text-white"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/85 transition-all duration-150 hover:bg-foreground/10 hover:text-foreground"
 			onclick={() => setRawMode(!isRawMode)}
 		>
 			<span class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full">
@@ -314,7 +314,7 @@
 			<Switch size="sm" checked={isRawMode} />
 		</button>
 		{#if device.isMobile}
-			<div class="my-1 h-px w-full bg-white/10"></div>
+			<div class="my-1 h-px w-full bg-foreground/10"></div>
 			<MenuItem onclick={handleShare}>
 				{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
 				share
@@ -330,7 +330,7 @@
 {#if !note}
 	<div class="mx-auto mt-10 max-w-3xl">
 		<div
-			class="rounded-container liquid-glass liquid-glass--frosted border border-white/10 p-5 text-sm text-white/70"
+			class="rounded-container liquid-glass liquid-glass--frosted border border-foreground/10 p-5 text-sm text-foreground/70"
 		>
 			note not found.
 		</div>
@@ -342,7 +342,7 @@
 			<!-- title row -->
 			<div class="mb-2 flex w-full items-center gap-2">
 				<input
-					class="min-w-0 flex-1 bg-transparent text-2xl font-medium text-white/95 outline-none placeholder:text-white/42"
+					class="min-w-0 flex-1 bg-transparent text-2xl font-medium text-foreground/95 outline-none placeholder:text-foreground/42"
 					placeholder="title"
 					bind:value={title}
 					oninput={handleTitleInput}
@@ -351,19 +351,19 @@
 
 			<!-- meta row -->
 			<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
-				<div class="flex w-fit items-center gap-1 text-xs font-medium text-white/55">
+				<div class="flex w-fit items-center gap-1 text-xs font-medium text-foreground/55">
 					<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 						<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
 						<Timestamp timestamp={{ getTime: () => note.updatedAt }} mode="calendar" />
 					</div>
-					<span class="text-white/25">·</span>
+					<span class="text-foreground/25">·</span>
 					<div class="flex min-w-fit items-center gap-1 px-0.5 py-1">
 						<Bars3BottomLeft class="h-3 w-3" strokeWidth="2" />
 						<span>{wordCount} words</span>
-						<span class="text-white/25">·</span>
+						<span class="text-foreground/25">·</span>
 						<span>{charCount} chars</span>
 					</div>
-					<span class="text-white/25">·</span>
+					<span class="text-foreground/25">·</span>
 					{#if isRawMode && rawDirty}
 						<div
 							class="flex min-w-fit items-center gap-1 px-0.5 py-1 text-amber-400/80"
@@ -393,7 +393,7 @@
 						<!-- TODO: clicking on a viewer should open the User Profile modal once implemented -->
 						<div class="flex shrink-0 items-center gap-2">
 							<div
-								class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm"
+								class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-foreground shadow-sm"
 								style:background-color={color}
 							>
 								{#if peer.avatarUrl}
@@ -406,7 +406,7 @@
 									{initials}
 								{/if}
 							</div>
-							<span class="text-sm font-bold whitespace-nowrap text-white/70"
+							<span class="text-sm font-bold whitespace-nowrap text-foreground/70"
 								>{name}</span
 							>
 						</div>
@@ -421,13 +421,13 @@
 					: 'max-h-20 opacity-100'}"
 			>
 				<div
-					class="scrollbar-none mt-3 flex items-center justify-between overflow-x-auto border-t border-white/10 pt-3"
+					class="scrollbar-none mt-3 flex items-center justify-between overflow-x-auto border-t border-foreground/10 pt-3"
 					use:wheelToHScroll
 				>
 					<div class="flex min-w-fit items-center gap-0.5">
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleHeading(1)}
 							title="heading 1"
 						>
@@ -435,7 +435,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleHeading(2)}
 							title="heading 2"
 						>
@@ -443,18 +443,18 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleHeading(3)}
 							title="heading 3"
 						>
 							<H3 class="h-4 w-4" />
 						</button>
 
-						<div class="mx-1 h-4 w-px bg-white/15"></div>
+						<div class="mx-1 h-4 w-px bg-foreground/15"></div>
 
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleBold()}
 							title="bold (ctrl+b)"
 						>
@@ -462,7 +462,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleItalic()}
 							title="italic (ctrl+i)"
 						>
@@ -470,7 +470,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleUnderline()}
 							title="underline (ctrl+u)"
 						>
@@ -478,18 +478,18 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleStrike()}
 							title="strikethrough"
 						>
 							<Strikethrough class="h-4 w-4" />
 						</button>
 
-						<div class="mx-1 h-4 w-px bg-white/15"></div>
+						<div class="mx-1 h-4 w-px bg-foreground/15"></div>
 
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleBulletList()}
 							title="bullet list"
 						>
@@ -497,18 +497,18 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleOrderedList()}
 							title="numbered list"
 						>
 							<NumberedList class="h-4 w-4" />
 						</button>
 
-						<div class="mx-1 h-4 w-px bg-white/15"></div>
+						<div class="mx-1 h-4 w-px bg-foreground/15"></div>
 
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleCode()}
 							title="inline code"
 						>
@@ -516,7 +516,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-white transition hover:bg-white/8"
+							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
 							onclick={() => sharedEditor?.toggleCodeBlock()}
 							title="code block"
 						>
@@ -536,7 +536,7 @@
 			{#if isRawMode}
 				<textarea
 					bind:this={textareaEl}
-					class="min-h-24 w-full flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/42"
+					class="min-h-24 w-full flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed text-foreground/90 outline-none placeholder:text-foreground/42"
 					placeholder="write something... (Ctrl+S to save)"
 					bind:value={content}
 					oninput={handleRawInput}

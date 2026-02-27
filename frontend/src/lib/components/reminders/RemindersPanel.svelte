@@ -221,19 +221,19 @@
 			<div class="flex min-w-0 items-center gap-3">
 				{#if activeList}
 					<span
-						class="rounded-pill flex h-8 w-8 items-center justify-center text-white"
+						class="rounded-pill flex h-8 w-8 items-center justify-center text-foreground"
 						style:background-color={activeList.color ?? 'rgba(255,255,255,0.08)'}
 					>
 						<span class="text-sm">{activeList.icon ?? '📋'}</span>
 					</span>
 				{:else}
 					<span
-						class="rounded-pill flex h-8 w-8 items-center justify-center bg-white/8 text-white/80"
+						class="rounded-pill flex h-8 w-8 items-center justify-center bg-foreground/8 text-foreground/80"
 					>
 						<CheckBox variant="solid" class="h-5 w-5" />
 					</span>
 				{/if}
-				<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-white/90">
+				<h2 class="min-w-0 truncate text-xl font-semibold tracking-wide text-foreground/90">
 					{activeList?.name ?? 'reminders'}
 				</h2>
 			</div>
@@ -287,10 +287,10 @@
 				{:else}
 					<button
 						type="button"
-						class="rounded-pill flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-[0.95rem] leading-6 text-white/70 transition-colors duration-150 hover:bg-white/6 hover:text-white/85"
+						class="rounded-pill flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-[0.95rem] leading-6 text-foreground/70 transition-colors duration-150 hover:bg-foreground/6 hover:text-foreground/85"
 						onclick={() => void startInlineAdd()}
 					>
-						<span class="flex h-6 w-6 items-center justify-center text-white/55">
+						<span class="flex h-6 w-6 items-center justify-center text-foreground/55">
 							<Plus class="h-6 w-6" strokeWidth="2" />
 						</span>
 						<span>new reminder</span>
@@ -302,12 +302,12 @@
 				<div class="mt-3 px-2">
 					<button
 						type="button"
-						class="rounded-pill liquid-glass liquid-glass--frosted flex w-full cursor-pointer items-center justify-between border border-white/14 px-4 py-2 text-left text-[0.95rem] font-semibold text-white transition-colors duration-150 hover:brightness-110"
+						class="rounded-pill liquid-glass liquid-glass--frosted flex w-full cursor-pointer items-center justify-between border border-foreground/14 px-4 py-2 text-left text-[0.95rem] font-semibold text-foreground transition-colors duration-150 hover:brightness-110"
 						onclick={() => (showCompleted = !showCompleted)}
 					>
 						<span>completed ({completedCount})</span>
 						<span
-							class="text-white/70 transition-transform {showCompleted
+							class="text-foreground/70 transition-transform {showCompleted
 								? 'rotate-180'
 								: ''}"
 						>

@@ -52,7 +52,7 @@
 	<button
 		bind:this={anchorEl}
 		type="button"
-		class="flex h-6 w-6 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+		class="text-foreground/80 hover:text-foreground flex h-6 w-6 cursor-pointer items-center justify-center transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={toggle}
 		aria-label="regenerate options"
 		aria-haspopup="menu"
@@ -68,7 +68,7 @@
 				<input
 					bind:this={inputEl}
 					type="text"
-					class="w-full min-w-0 flex-1 bg-transparent text-sm text-white/90 placeholder-white/45 outline-none"
+					class="text-foreground/90 placeholder:text-foreground/45 w-full min-w-0 flex-1 bg-transparent text-sm outline-none"
 					placeholder="suggest a change"
 					bind:value={inputValue}
 					onkeydown={(e) => {
@@ -78,8 +78,8 @@
 				<button
 					type="button"
 					class="ml-2 flex shrink-0 items-center justify-center rounded-full p-1 transition {inputValue.trim()
-						? 'bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90'
-						: 'bg-white/10 text-white/45 dark:bg-white/10 dark:text-white/35'}"
+						? 'bg-foreground text-background hover:bg-foreground/90'
+						: 'bg-foreground/10 text-foreground/35'}"
 					onclick={submitCustom}
 					disabled={!inputValue.trim()}
 					aria-label="submit"
@@ -88,7 +88,7 @@
 				</button>
 			</div>
 
-			<div class="mx-2 border-t border-white/8"></div>
+			<div class="border-foreground/8 mx-2 border-t"></div>
 
 			<!-- preset options -->
 			<MenuItem onclick={() => selectOption()}>

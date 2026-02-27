@@ -51,7 +51,7 @@
 		{selected}
 		radiusClass="rounded-container"
 		paddingClass="px-5 py-2.5"
-		className="gap-2 text-white"
+		className="gap-2 text-foreground"
 		onPrefetch={() => onPrefetch(thread.id)}
 		onSelect={async () => {
 			await onOpenThread(thread.id)
@@ -70,8 +70,8 @@
 				{:else}
 					<span
 						class="min-w-0 flex-1 overflow-hidden text-sm leading-normal font-medium text-ellipsis whitespace-nowrap {thread.title
-							? 'text-white'
-							: 'text-white/40 italic'}"
+							? 'text-foreground'
+							: 'text-foreground/40 italic'}"
 					>
 						{displayTitle}
 					</span>
@@ -81,7 +81,7 @@
 					timestamp={new Date(thread.last_activity_at ?? '')}
 					mode="relative"
 					minUnit="hour"
-					className="ml-auto shrink-0 text-[11px] text-white/35"
+					className="ml-auto shrink-0 text-[11px] text-foreground/35"
 				/>
 			</div>
 
@@ -90,14 +90,14 @@
 				<div class="mt-1 flex items-center gap-1 overflow-hidden">
 					{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
 						<span
-							class="inline-flex max-w-20 shrink-0 items-center truncate rounded-full bg-white/8 px-1.5 py-px text-[10px] leading-tight text-white/50"
+							class="inline-flex max-w-20 shrink-0 items-center truncate rounded-full bg-foreground/8 px-1.5 py-px text-[10px] leading-tight text-foreground/50"
 							title={tag}
 						>
 							{tag}
 						</span>
 					{/each}
 					{#if (thread.tags ?? []).length > 3}
-						<span class="shrink-0 text-[10px] text-white/30">
+						<span class="shrink-0 text-[10px] text-foreground/30">
 							+{(thread.tags ?? []).length - 3}
 						</span>
 					{/if}
@@ -108,7 +108,7 @@
 		{#snippet actions()}
 			<button
 				type="button"
-				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-white/55 transition-all duration-200 hover:bg-white/10 hover:text-white"
+				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-foreground/55 transition-all duration-200 hover:bg-foreground/10 hover:text-foreground"
 				onpointerdown={(e) => e.stopPropagation()}
 				onclick={(e) => {
 					e.stopPropagation()
@@ -143,7 +143,7 @@
 	>
 		<button
 			type="button"
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
@@ -159,7 +159,7 @@
 		</button>
 		<button
 			type="button"
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
@@ -171,7 +171,7 @@
 		</button>
 		<button
 			type="button"
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
@@ -181,7 +181,7 @@
 			<ArchiveBox class="h-4 w-4" />
 			archive
 		</button>
-		<div class="my-1 h-px w-full bg-white/15"></div>
+		<div class="my-1 h-px w-full bg-foreground/15"></div>
 		<div class="mt-1">
 			<DeleteButton
 				confirm={true}

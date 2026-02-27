@@ -154,7 +154,7 @@
 {#snippet islandBackAction()}
 	<button
 		type="button"
-		class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+		class="rounded-pill hover:text-foreground flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={handleBack}
 		aria-label="back to friends"
 	>
@@ -186,7 +186,7 @@
 						/>
 					{:else}
 						<div
-							class="flex h-full w-full items-center justify-center text-2xl font-bold text-white uppercase"
+							class="text-foreground flex h-full w-full items-center justify-center text-2xl font-bold uppercase"
 							style="background: linear-gradient(to bottom right, var(--accent-primary), color-mix(in srgb, var(--accent-primary) 60%, black));"
 						>
 							{getUserInitials(editDisplayName || 'U')}
@@ -195,7 +195,7 @@
 					<div
 						class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
 					>
-						<Camera class="h-5 w-5 text-white" />
+						<Camera class="text-foreground h-5 w-5" />
 					</div>
 				</button>
 
@@ -208,62 +208,64 @@
 			</div>
 
 			<div class="mx-auto max-w-md space-y-4">
-				<div class="rounded-container bg-white/5 p-5">
-					<label class="mb-1.5 block text-xs font-medium text-white/50" for="edit-name"
-						>display name</label
+				<div class="rounded-container bg-foreground/5 p-5">
+					<label
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
+						for="edit-name">display name</label
 					>
 					<input
 						id="edit-name"
 						type="text"
-						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 						placeholder="your name"
 						bind:value={editDisplayName}
 						oninput={() => saveDisplayName(editDisplayName)}
 					/>
 				</div>
 
-				<div class="rounded-container bg-white/5 p-5">
+				<div class="rounded-container bg-foreground/5 p-5">
 					<label
-						class="mb-1.5 block text-xs font-medium text-white/50"
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
 						for="edit-username">username</label
 					>
 					<input
 						id="edit-username"
 						type="text"
-						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 						placeholder="3-30 characters, letters, numbers, . and _"
 						bind:value={editUsername}
 						oninput={() => saveUsername(editUsername)}
 					/>
 				</div>
 
-				<div class="rounded-container bg-white/5 p-5">
-					<label class="mb-1.5 block text-xs font-medium text-white/50" for="edit-bio"
-						>bio</label
+				<div class="rounded-container bg-foreground/5 p-5">
+					<label
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
+						for="edit-bio">bio</label
 					>
 					<textarea
 						id="edit-bio"
-						class="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
 						rows="3"
 						maxlength={500}
 						placeholder="tell others a bit about yourself..."
 						bind:value={editBio}
 						oninput={() => saveBio(editBio)}
 					></textarea>
-					<div class="mt-1 text-right text-xs text-white/30">
+					<div class="text-foreground/30 mt-1 text-right text-xs">
 						{editBio.length}/500
 					</div>
 				</div>
 
-				<div class="rounded-container bg-white/5 p-5">
+				<div class="rounded-container bg-foreground/5 p-5">
 					<label
-						class="mb-1.5 block text-xs font-medium text-white/50"
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
 						for="edit-birthdate">birth date</label
 					>
 					<input
 						id="edit-birthdate"
 						type="date"
-						class="rounded-pill w-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 scheme-dark transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm scheme-dark transition-colors outline-none"
 						value={editBirthDate}
 						onchange={(e) => {
 							editBirthDate = e.currentTarget.value
@@ -272,13 +274,14 @@
 					/>
 				</div>
 
-				<div class="rounded-container bg-white/5 p-5">
-					<label class="mb-1.5 block text-xs font-medium text-white/50" for="edit-gender"
-						>gender</label
+				<div class="rounded-container bg-foreground/5 p-5">
+					<label
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
+						for="edit-gender">gender</label
 					>
 					<select
 						id="edit-gender"
-						class="rounded-pill w-full cursor-pointer appearance-none border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/90 scheme-dark transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 focus:border-foreground/20 focus:bg-foreground/8 w-full cursor-pointer appearance-none border px-4 py-2.5 text-sm scheme-dark transition-colors outline-none"
 						value={editGender}
 						onchange={(e) => {
 							editGender = e.currentTarget.value
@@ -298,11 +301,11 @@
 					<img
 						src={displayAvatar}
 						alt={displayName}
-						class="h-24 w-24 rounded-full object-cover ring-2 ring-white/10"
+						class="ring-foreground/10 h-24 w-24 rounded-full object-cover ring-2"
 					/>
 				{:else}
 					<div
-						class="flex h-24 w-24 items-center justify-center rounded-full text-2xl font-bold text-white uppercase"
+						class="text-foreground flex h-24 w-24 items-center justify-center rounded-full text-2xl font-bold uppercase"
 						style="background: linear-gradient(to bottom right, var(--accent-primary), color-mix(in srgb, var(--accent-primary) 60%, black));"
 					>
 						{getUserInitials(displayName || userId)}
@@ -310,11 +313,11 @@
 				{/if}
 
 				<div class="flex flex-col items-center gap-1 text-center">
-					<h1 class="text-xl font-bold text-white">
+					<h1 class="text-foreground text-xl font-bold">
 						{displayName || userId}
 					</h1>
 					{#if displayUsername}
-						<p class="text-sm text-white/50">@{displayUsername}</p>
+						<p class="text-foreground/50 text-sm">@{displayUsername}</p>
 					{/if}
 				</div>
 
@@ -330,20 +333,20 @@
 									noScroll: true,
 								})}
 						>
-							<span class="text-lg font-bold text-white">{friendsCount}</span>
-							<span class="text-xs text-white/50">friends</span>
+							<span class="text-foreground text-lg font-bold">{friendsCount}</span>
+							<span class="text-foreground/50 text-xs">friends</span>
 						</button>
 					</div>
 				{/if}
 
 				<!-- bio -->
 				{#if displayBio}
-					<p class="max-w-sm text-center text-sm text-white/70">{displayBio}</p>
+					<p class="text-foreground/70 max-w-sm text-center text-sm">{displayBio}</p>
 				{/if}
 
 				<!-- meta tags -->
 				{#if displayGender || displayAge}
-					<div class="flex items-center gap-3 text-xs text-white/40">
+					<div class="text-foreground/40 flex items-center gap-3 text-xs">
 						{#if displayGender}
 							<span>{displayGender}</span>
 						{/if}
@@ -358,7 +361,7 @@
 
 				{#if isOwnProfile}
 					<button
-						class="interactive flex items-center gap-2 rounded-full bg-white/8 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/12"
+						class="interactive bg-foreground/8 text-foreground hover:bg-foreground/12 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium"
 						onclick={startEditing}
 					>
 						<PencilSquare class="h-4 w-4" />
@@ -370,11 +373,11 @@
 			<div class="mt-4 flex flex-col gap-6">
 				<section class="flex flex-col gap-3">
 					<div class="flex items-center gap-2">
-						<User class="h-4 w-4 text-white/50" />
-						<h2 class="text-sm font-semibold text-white/60">shared with you</h2>
+						<User class="text-foreground/50 h-4 w-4" />
+						<h2 class="text-foreground/60 text-sm font-semibold">shared with you</h2>
 					</div>
-					<div class="rounded-2xl bg-white/5 py-8 text-center">
-						<p class="text-sm text-white/40">
+					<div class="bg-foreground/5 rounded-2xl py-8 text-center">
+						<p class="text-foreground/40 text-sm">
 							shared notes, threads, and reminders will appear here
 						</p>
 					</div>
@@ -382,11 +385,11 @@
 
 				<section class="flex flex-col gap-3">
 					<div class="flex items-center gap-2">
-						<UserGroup class="h-4 w-4 text-white/50" />
-						<h2 class="text-sm font-semibold text-white/60">mutual groups</h2>
+						<UserGroup class="text-foreground/50 h-4 w-4" />
+						<h2 class="text-foreground/60 text-sm font-semibold">mutual groups</h2>
 					</div>
-					<div class="rounded-2xl bg-white/5 py-8 text-center">
-						<p class="text-sm text-white/40">
+					<div class="bg-foreground/5 rounded-2xl py-8 text-center">
+						<p class="text-foreground/40 text-sm">
 							groups you both belong to will appear here
 						</p>
 					</div>

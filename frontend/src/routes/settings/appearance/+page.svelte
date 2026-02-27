@@ -87,8 +87,8 @@
 >
 	<div class="space-y-4">
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white">theme</div>
-			<div class="mt-1 text-sm text-white/50">
+			<div class="text-foreground text-sm font-semibold">theme</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				choose between light, dark, or automatic theme based on system settings
 			</div>
 			<RadioGroup
@@ -102,8 +102,8 @@
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-white">auto accent colors</div>
-					<div class="mt-1 text-sm text-white/50">
+					<div class="text-foreground text-sm font-semibold">auto accent colors</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						accent colors change automatically based on context
 					</div>
 				</div>
@@ -112,11 +112,11 @@
 
 			{#if !autoAccentColors}
 				<div
-					class="mt-5 border-t border-white/15 pt-5"
+					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-sm font-semibold text-white">accent color</div>
-					<div class="mt-1 text-sm text-white/50">
+					<div class="text-foreground text-sm font-semibold">accent color</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						customize the accent color used for highlights and selection states
 					</div>
 					<div class="mt-4 flex flex-wrap gap-3">
@@ -127,13 +127,13 @@
 								onclick={() => setAccent(colorKey)}
 								class="group rounded-pill flex cursor-pointer items-center gap-2.5 border px-3 py-2 transition-all duration-200
 									{isSelected
-									? 'border-white/30 bg-white/15'
-									: 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'}"
+									? 'border-foreground/30 bg-foreground/15'
+									: 'border-foreground/10 bg-foreground/5 hover:border-foreground/20 hover:bg-foreground/10'}"
 							>
 								<!-- radio dot indicator -->
 								<span
 									class="flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all
-										{isSelected ? 'border-white' : 'border-white/40'}"
+										{isSelected ? 'border-foreground' : 'border-foreground/40'}"
 								>
 									{#if isSelected}
 										<span
@@ -145,8 +145,9 @@
 								</span>
 								<span
 									class="text-sm font-medium {isSelected
-										? 'text-white'
-										: 'text-white/60 group-hover:text-white'}">{colorKey}</span
+										? 'text-foreground'
+										: 'text-foreground/60 group-hover:text-foreground'}"
+									>{colorKey}</span
 								>
 							</button>
 						{/each}
@@ -158,8 +159,8 @@
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-white">auto wallpaper</div>
-					<div class="mt-1 text-sm text-white/50">
+					<div class="text-foreground text-sm font-semibold">auto wallpaper</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						wallpaper changes automatically based on context
 					</div>
 				</div>
@@ -168,11 +169,11 @@
 
 			{#if !autoBackground}
 				<div
-					class="mt-5 border-t border-white/15 pt-5"
+					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-sm font-semibold text-white">wallpaper</div>
-					<div class="mt-1 text-sm text-white/50">
+					<div class="text-foreground text-sm font-semibold">wallpaper</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						select a dynamic background for the app
 					</div>
 					<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -183,22 +184,23 @@
 								onclick={() => setBackground(bg.value)}
 								class="rounded-pill group flex cursor-pointer items-center gap-2.5 border px-3 py-2.5 text-left text-sm transition-all duration-200
 									{isSelected
-									? 'border-white/30 bg-white/15'
-									: 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'}"
+									? 'border-foreground/30 bg-foreground/15'
+									: 'border-foreground/10 bg-foreground/5 hover:border-foreground/20 hover:bg-foreground/10'}"
 							>
 								<!-- radio dot indicator -->
 								<span
 									class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all
-										{isSelected ? 'border-white' : 'border-white/40'}"
+										{isSelected ? 'border-foreground' : 'border-foreground/40'}"
 								>
 									{#if isSelected}
-										<span class="h-2 w-2 rounded-full bg-white"></span>
+										<span class="bg-background h-2 w-2 rounded-full"></span>
 									{/if}
 								</span>
 								<span
 									class="font-medium {isSelected
-										? 'text-white'
-										: 'text-white/60 group-hover:text-white'}">{bg.label}</span
+										? 'text-foreground'
+										: 'text-foreground/60 group-hover:text-foreground'}"
+									>{bg.label}</span
 								>
 							</button>
 						{/each}
@@ -206,10 +208,10 @@
 
 					{#if selectedBackground === 'static'}
 						<div
-							class="mt-4 flex items-center gap-3 border-t border-white/15 pt-4"
+							class="border-foreground/15 mt-4 flex items-center gap-3 border-t pt-4"
 							transition:slide={{ duration: 200 }}
 						>
-							<label class="text-sm font-medium text-white/60" for="static-color"
+							<label class="text-foreground/60 text-sm font-medium" for="static-color"
 								>static color</label
 							>
 							<input
@@ -217,9 +219,9 @@
 								type="color"
 								value={staticColor}
 								oninput={(e) => setStaticColor(e.currentTarget.value)}
-								class="h-8 w-10 cursor-pointer rounded border border-white/20 bg-transparent"
+								class="border-foreground/20 h-8 w-10 cursor-pointer rounded border bg-transparent"
 							/>
-							<span class="font-mono text-xs text-white/40">{staticColor}</span>
+							<span class="text-foreground/40 font-mono text-xs">{staticColor}</span>
 						</div>
 					{/if}
 				</div>
@@ -227,8 +229,8 @@
 		</div>
 
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white">chat bubble tails</div>
-			<div class="mt-1 text-sm text-white/50">
+			<div class="text-foreground text-sm font-semibold">chat bubble tails</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				add decorative tails to chat message bubbles, similar to popular messaging apps
 			</div>
 			<RadioGroup

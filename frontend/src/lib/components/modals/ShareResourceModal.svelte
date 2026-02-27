@@ -65,9 +65,9 @@
 >
 	<div class="space-y-4">
 		<div class="space-y-1">
-			<div class="text-xs font-semibold text-white/60 uppercase">link</div>
-			<div class="rounded-pill border border-white/10 bg-white/5 px-3 py-2">
-				<div class="truncate text-sm text-white/80" title={shareUrl}>{shareUrl}</div>
+			<div class="text-xs font-semibold text-foreground/60 uppercase">link</div>
+			<div class="rounded-pill border border-foreground/10 bg-foreground/5 px-3 py-2">
+				<div class="truncate text-sm text-foreground/80" title={shareUrl}>{shareUrl}</div>
 			</div>
 		</div>
 
@@ -75,7 +75,7 @@
 			{#if canNativeShare}
 				<button
 					type="button"
-					class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+					class="rounded-pill border border-foreground/10 bg-transparent px-4 py-2 text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/5"
 					onclick={() => void shareNative()}
 					disabled={!shareUrl}
 				>
@@ -84,7 +84,7 @@
 			{/if}
 			<button
 				type="button"
-				class="rounded-pill border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:opacity-60"
+				class="rounded-pill border border-foreground/10 bg-foreground/10 px-4 py-2 text-sm text-foreground/90 transition-colors duration-150 hover:bg-foreground/15 disabled:opacity-60"
 				onclick={() => void copyLink()}
 				disabled={!shareUrl}
 			>

@@ -35,7 +35,7 @@
 {#snippet islandBackAction()}
 	<button
 		type="button"
-		class="rounded-pill flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+		class="rounded-pill hover:text-foreground flex h-12 w-12 cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={handleBack}
 		aria-label="back to groups"
 	>
@@ -53,12 +53,12 @@
 	>
 		{#if isLoading}
 			<div class="flex flex-col gap-4 py-6">
-				<div class="h-8 w-48 animate-pulse rounded-full bg-white/5"></div>
-				<div class="h-4 w-72 animate-pulse rounded-full bg-white/5"></div>
+				<div class="bg-foreground/5 h-8 w-48 animate-pulse rounded-full"></div>
+				<div class="bg-foreground/5 h-4 w-72 animate-pulse rounded-full"></div>
 			</div>
 		{:else if !group}
-			<div class="rounded-2xl bg-white/5 p-6 text-center">
-				<p class="text-sm text-white/50">group not found</p>
+			<div class="bg-foreground/5 rounded-2xl p-6 text-center">
+				<p class="text-foreground/50 text-sm">group not found</p>
 			</div>
 		{:else}
 			<div class="mb-8 flex items-start gap-4 py-2">
@@ -68,13 +68,13 @@
 					<UserGroup class="h-7 w-7 text-(--accent-primary)" variant="solid" />
 				</div>
 				<div class="flex flex-col gap-1">
-					<h1 class="text-xl font-bold text-white">{group.name}</h1>
+					<h1 class="text-foreground text-xl font-bold">{group.name}</h1>
 					{#if group.description}
-						<p class="text-sm text-white/60">{group.description}</p>
+						<p class="text-foreground/60 text-sm">{group.description}</p>
 					{/if}
-					<div class="mt-1 flex items-center gap-2 text-xs text-white/45">
+					<div class="text-foreground/45 mt-1 flex items-center gap-2 text-xs">
 						<span>{group.memberships?.length ?? 0} members</span>
-						<span class="text-white/20">-</span>
+						<span class="text-foreground/20">-</span>
 						<span>
 							created <Timestamp
 								timestamp={new Date(group.created_at)}
@@ -86,32 +86,32 @@
 			</div>
 
 			<section class="flex flex-col gap-3">
-				<h2 class="text-sm font-semibold text-white/60">members</h2>
+				<h2 class="text-foreground/60 text-sm font-semibold">members</h2>
 
 				{#if group.memberships && group.memberships.length > 0}
 					<div class="flex flex-col gap-1">
 						{#each group.memberships as member (member.id)}
 							<button
-								class="interactive-subtle flex w-full items-center gap-3 rounded-full p-3 text-left hover:bg-white/5"
+								class="interactive-subtle hover:bg-foreground/5 flex w-full items-center gap-3 rounded-full p-3 text-left"
 								onclick={() => goto(resolve(`/social/users/${member.user_id}`))}
 							>
 								<div
-									class="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white/80"
+									class="bg-foreground/10 text-foreground/80 flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
 								>
 									{member.user_id.slice(0, 2).toUpperCase()}
 								</div>
 								<div class="flex min-w-0 flex-col">
-									<span class="truncate text-sm text-white">
+									<span class="text-foreground truncate text-sm">
 										{member.user_id}
 									</span>
-									<span class="text-xs text-white/45">{member.role}</span>
+									<span class="text-foreground/45 text-xs">{member.role}</span>
 								</div>
 							</button>
 						{/each}
 					</div>
 				{:else}
-					<div class="rounded-2xl bg-white/5 py-8 text-center">
-						<p class="text-sm text-white/50">no members yet</p>
+					<div class="bg-foreground/5 rounded-2xl py-8 text-center">
+						<p class="text-foreground/50 text-sm">no members yet</p>
 					</div>
 				{/if}
 			</section>

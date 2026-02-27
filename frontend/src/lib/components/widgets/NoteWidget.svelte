@@ -40,29 +40,29 @@
 				<Document variant="solid" class="size-5" />
 			</div>
 			<div class="flex flex-col">
-				<span class="text-[13px] font-medium text-white/60">note</span>
+				<span class="text-[13px] font-medium text-foreground/60">note</span>
 				{#if wordCount > 0}
-					<span class="text-[11px] text-white/40">{wordCount} words</span>
+					<span class="text-[11px] text-foreground/40">{wordCount} words</span>
 				{/if}
 			</div>
 		</div>
-		<h3 class="mb-1.5 truncate text-xl font-semibold text-white">
+		<h3 class="mb-1.5 truncate text-xl font-semibold text-foreground">
 			{resource.title || 'untitled note'}
 		</h3>
 		{#if resource.preview}
-			<p class="mb-3 line-clamp-3 text-sm leading-relaxed text-white/70">
+			<p class="mb-3 line-clamp-3 text-sm leading-relaxed text-foreground/70">
 				{stripMarkdown(resource.preview)}
 			</p>
 		{:else}
-			<p class="mb-3 text-sm text-white/40 italic">empty note</p>
+			<p class="mb-3 text-sm text-foreground/40 italic">empty note</p>
 		{/if}
 		<div class="mt-auto flex items-center gap-2">
 			{#if labels.length > 0}
 				<div class="flex items-center gap-1 overflow-hidden">
-					<Label class="size-3.5 shrink-0 text-white/45" />
+					<Label class="size-3.5 shrink-0 text-foreground/45" />
 					{#each labels.slice(0, 3) as label (label)}
 						<span
-							class="truncate rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-white/50"
+							class="truncate rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-medium text-foreground/50"
 						>
 							{label}
 						</span>
@@ -72,7 +72,7 @@
 			<Timestamp
 				timestamp={new Date(resource.updatedAt)}
 				mode="relative"
-				className="ml-auto shrink-0 text-xs text-white/45"
+				className="ml-auto shrink-0 text-xs text-foreground/45"
 			/>
 		</div>
 	{:else}
@@ -82,19 +82,19 @@
 			<Document variant="solid" class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-semibold text-white">
+			<h3 class="truncate text-base font-semibold text-foreground">
 				{resource.title || 'untitled note'}
 			</h3>
 			{#if resource.preview}
-				<p class="truncate text-sm text-white/65">{stripMarkdown(resource.preview)}</p>
+				<p class="truncate text-sm text-foreground/65">{stripMarkdown(resource.preview)}</p>
 			{:else}
-				<p class="truncate text-sm text-white/45 italic">empty note</p>
+				<p class="truncate text-sm text-foreground/45 italic">empty note</p>
 			{/if}
 		</div>
 		{#if labels.length > 0}
 			<div class="flex shrink-0 gap-1">
 				{#each labels.slice(0, 2) as label (label)}
-					<span class="rounded-full bg-white/8 px-2 py-0.5 text-[11px] text-white/50">
+					<span class="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] text-foreground/50">
 						{label}
 					</span>
 				{/each}
@@ -103,7 +103,7 @@
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="shrink-0 text-xs text-white/45"
+			className="shrink-0 text-xs text-foreground/45"
 		/>
 	{/if}
 </a>

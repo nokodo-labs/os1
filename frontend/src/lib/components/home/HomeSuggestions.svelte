@@ -369,11 +369,11 @@
 					<!-- shimmer autocomplete state -->
 					<div class="flex items-center gap-3 px-3 py-2.5">
 						<div
-							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/85"
+							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-foreground/8 text-foreground/85"
 						>
 							<Search class="h-5 w-5" strokeWidth="2" />
 						</div>
-						<ShimmerText className="text-sm font-semibold text-white/60">
+						<ShimmerText className="text-sm font-semibold text-foreground/60">
 							searching
 						</ShimmerText>
 					</div>
@@ -385,28 +385,28 @@
 						>
 							<XMark class="h-5 w-5" />
 						</div>
-						<div class="text-sm text-white/40">search failed - try again</div>
+						<div class="text-sm text-foreground/40">search failed - try again</div>
 					</div>
 				{:else if suggestions.length === 0 && !isFullSearching}
 					<!-- no results -->
 					<div class="flex items-center gap-3 px-3 py-2.5">
 						<div
-							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/40"
+							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-foreground/8 text-foreground/40"
 						>
 							<Search class="h-5 w-5" strokeWidth="2" />
 						</div>
-						<div class="text-sm text-white/40">no results found</div>
+						<div class="text-sm text-foreground/40">no results found</div>
 					</div>
 				{:else}
 					{#if isFullSearching}
 						<!-- shimmer row while full search runs -->
 						<div class="flex items-center gap-3 px-3 py-2">
 							<div
-								class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-white/6 text-white/50"
+								class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-foreground/6 text-foreground/50"
 							>
 								<Search class="h-4 w-4" strokeWidth="2" />
 							</div>
-							<ShimmerText className="text-xs font-medium text-white/50">
+							<ShimmerText className="text-xs font-medium text-foreground/50">
 								searching deeper
 							</ShimmerText>
 						</div>
@@ -419,8 +419,8 @@
 							aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
 							class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors {index ===
 								highlightedIndex && highlightedIndex >= 0
-								? 'bg-white/10'
-								: 'bg-transparent hover:bg-white/7'}"
+								? 'bg-foreground/10'
+								: 'bg-transparent hover:bg-foreground/7'}"
 							onmouseenter={() => {
 								highlightedIndex = index
 								isSuggestionNavigationActive = true
@@ -428,16 +428,16 @@
 							onclick={() => selectSuggestion(suggestion)}
 						>
 							<div
-								class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-white/8 text-white/85"
+								class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-foreground/8 text-foreground/85"
 							>
 								<Icon class="h-5 w-5" strokeWidth="2" />
 							</div>
 							<div class="min-w-0">
-								<div class="truncate text-sm font-semibold text-white/90">
+								<div class="truncate text-sm font-semibold text-foreground/90">
 									{suggestion.title}
 								</div>
 								{#if suggestion.subtitle}
-									<div class="truncate text-sm text-white/55">
+									<div class="truncate text-sm text-foreground/55">
 										{suggestion.subtitle}
 									</div>
 								{/if}
@@ -446,18 +446,18 @@
 					{/each}
 					{#if !hasDoneFullSearch && !isFullSearching && suggestions.length > 0}
 						<!-- full search trigger -->
-						<div class="mt-1 border-t border-white/8 pt-1">
+						<div class="mt-1 border-t border-foreground/8 pt-1">
 							<button
 								type="button"
-								class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors hover:bg-white/7"
+								class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors hover:bg-foreground/7"
 								onclick={triggerFullSearch}
 							>
 								<div
-									class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-white/6 text-white/50"
+									class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-foreground/6 text-foreground/50"
 								>
 									<Search class="h-4 w-4" strokeWidth="2" />
 								</div>
-								<div class="text-xs text-white/50">search more in-depth</div>
+								<div class="text-xs text-foreground/50">search more in-depth</div>
 							</button>
 						</div>
 					{/if}

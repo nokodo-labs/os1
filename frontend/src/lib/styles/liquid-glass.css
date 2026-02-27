@@ -105,13 +105,12 @@
 	--lg-blur: var(--lg-frost-blur);
 	--lg-bg: var(--lg-frost-bg-light);
 	--lg-border: var(--lg-frost-border-light);
-	color: #1a1a1a;
+	color: var(--foreground);
 }
 
 :is(.dark) .liquid-glass--frosted {
 	--lg-bg: var(--lg-frost-bg-dark);
 	--lg-border: var(--lg-frost-border-dark);
-	color: #fff;
 }
 
 /* frosted variant needs a solid border, not gradient */

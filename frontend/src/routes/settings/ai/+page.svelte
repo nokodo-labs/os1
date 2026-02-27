@@ -65,8 +65,8 @@
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-white">use account bio</div>
-					<div class="mt-1 text-sm text-white/50">
+					<div class="text-sm font-semibold text-foreground">use account bio</div>
+					<div class="mt-1 text-sm text-foreground/50">
 						use your account bio as context for AI conversations instead of a separate
 						AI bio.
 					</div>
@@ -76,16 +76,16 @@
 
 			{#if !useAccountBio}
 				<div
-					class="mt-5 border-t border-white/15 pt-5"
+					class="mt-5 border-t border-foreground/15 pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-sm font-semibold text-white">AI bio</div>
-					<div class="mt-1 text-sm text-white/50">
+					<div class="text-sm font-semibold text-foreground">AI bio</div>
+					<div class="mt-1 text-sm text-foreground/50">
 						tell the AI about yourself - your interests, work, and preferences. this
 						helps personalize responses.
 					</div>
 					<textarea
-						class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+						class="mt-3 w-full resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
 						rows="4"
 						placeholder="e.g., i'm a software engineer interested in AI and design..."
 						value={aiBio}
@@ -98,40 +98,40 @@
 		<!-- memories -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center gap-3 pb-1">
-				<Brain class="h-5 w-5 text-white/60" />
-				<div class="text-sm font-semibold text-white">memories</div>
+				<Brain class="h-5 w-5 text-foreground/60" />
+				<div class="text-sm font-semibold text-foreground">memories</div>
 			</div>
-			<div class="mt-1 text-sm text-white/50">
+			<div class="mt-1 text-sm text-foreground/50">
 				the AI remembers things you tell it across conversations to provide more relevant
 				responses.
 			</div>
 
 			<div class="mt-4 space-y-3">
 				<div class="flex items-center justify-between">
-					<span class="text-sm text-white/70">enable memories</span>
+					<span class="text-sm text-foreground/70">enable memories</span>
 					<Switch size="md" checked={memoriesEnabled} onchange={setMemoriesEnabled} />
 				</div>
 
 				{#if memoriesEnabled}
 					<div transition:slide={{ duration: 200 }}>
 						<div class="flex items-center justify-between">
-							<span class="text-sm text-white/70">chat recall</span>
+							<span class="text-sm text-foreground/70">chat recall</span>
 							<Switch size="md" checked={chatRecall} onchange={setChatRecall} />
 						</div>
-						<div class="mt-1 pl-0 text-xs text-white/40">
+						<div class="mt-1 pl-0 text-xs text-foreground/40">
 							allow the AI to reference previous conversations for context.
 						</div>
 					</div>
 
 					<div
-						class="mt-3 border-t border-white/15 pt-3"
+						class="mt-3 border-t border-foreground/15 pt-3"
 						transition:slide={{ duration: 200 }}
 					>
 						<div class="flex items-center justify-between">
-							<div class="text-sm font-medium text-white/70">manage memories</div>
+							<div class="text-sm font-medium text-foreground/70">manage memories</div>
 							<button
 								type="button"
-								class="rounded-pill flex items-center gap-1.5 border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white/80"
+								class="rounded-pill flex items-center gap-1.5 border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/60 transition-all hover:border-foreground/20 hover:bg-foreground/10 hover:text-foreground/80"
 								onclick={() => modals.open('memories')}
 							>
 								<Brain class="h-3.5 w-3.5" />
@@ -145,13 +145,13 @@
 
 		<!-- custom instructions -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white">custom instructions</div>
-			<div class="mt-1 text-sm text-white/50">
+			<div class="text-sm font-semibold text-foreground">custom instructions</div>
+			<div class="mt-1 text-sm text-foreground/50">
 				provide specific instructions the AI should always follow. these apply to every
 				conversation.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+				class="mt-3 w-full resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
 				rows="4"
 				placeholder="e.g., always respond in a casual tone, prefer code examples in TypeScript..."
 				value={customInstructions}
@@ -161,12 +161,12 @@
 
 		<!-- AI personality -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white">personality</div>
-			<div class="mt-1 text-sm text-white/50">
+			<div class="text-sm font-semibold text-foreground">personality</div>
+			<div class="mt-1 text-sm text-foreground/50">
 				describe how you'd like the AI to communicate - its tone, style, and character.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+				class="mt-3 w-full resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
 				rows="3"
 				placeholder="e.g., friendly and concise, like talking to a knowledgeable colleague..."
 				value={personality}

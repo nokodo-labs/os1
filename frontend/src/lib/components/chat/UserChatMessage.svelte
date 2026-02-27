@@ -230,7 +230,7 @@
 	{#if timestamp && !isEditing}
 		<Timestamp
 			{timestamp}
-			className="text-xs text-black/50 transition-opacity duration-200 dark:text-white/50 {isHovered
+			className="text-xs text-foreground/50 transition-opacity duration-200 {isHovered
 				? 'opacity-100'
 				: 'opacity-0'}"
 		/>
@@ -260,7 +260,7 @@
 					<textarea
 						bind:this={editTextarea}
 						bind:value={editContent}
-						class="w-full resize-none bg-transparent leading-relaxed wrap-break-word text-white outline-none placeholder:text-white/40 disabled:opacity-60"
+						class="text-foreground placeholder:text-foreground/40 w-full resize-none bg-transparent leading-relaxed wrap-break-word outline-none disabled:opacity-60"
 						placeholder="edit your message..."
 						disabled={isSaving}
 						rows={1}
@@ -287,7 +287,7 @@
 							<button
 								onclick={saveEdit}
 								disabled={isSaving || !editContent.trim()}
-								class="cursor-pointer rounded-3xl border border-white/20 bg-white/10 px-3.5 py-1.5 text-white/90 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+								class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 cursor-pointer rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
 							>
 								save
 							</button>
@@ -297,7 +297,7 @@
 						<button
 							onclick={cancelEditing}
 							disabled={isSaving}
-							class="cursor-pointer rounded-3xl px-3.5 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+							class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground cursor-pointer rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							cancel
 						</button>
@@ -305,7 +305,7 @@
 							<button
 								onclick={saveAsCopy}
 								disabled={isSaving || !editContent.trim()}
-								class="cursor-pointer rounded-3xl bg-white px-3.5 py-1.5 font-semibold text-black/80 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+								class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
 							>
 								{isSaving ? 'saving…' : 'send'}
 							</button>
@@ -313,7 +313,7 @@
 					</div>
 				</div>
 			{:else}
-				<div class="leading-relaxed wrap-break-word whitespace-pre-wrap text-white">
+				<div class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap">
 					{content}
 				</div>
 			{/if}
@@ -339,13 +339,13 @@
 			</div>
 			{#if siblingCount > 1}
 				<div
-					class="flex items-center text-xs font-medium text-black/50 select-none dark:text-white/50"
+					class="text-foreground/50 flex items-center text-xs font-medium select-none"
 					role="none"
 				>
 					<button
 						onclick={onPrevious}
 						disabled={currentSiblingIndex === 0}
-						class="flex h-6 w-6 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.05] hover:text-black active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/80 dark:hover:text-white"
+						class="text-foreground/50 hover:text-foreground flex h-6 w-6 cursor-pointer items-center justify-center transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
 						title="previous version"
 					>
 						<ChevronLeft class="size-4" strokeWidth="2" />
@@ -356,7 +356,7 @@
 					<button
 						onclick={onNext}
 						disabled={currentSiblingIndex === siblingCount - 1}
-						class="flex h-6 w-6 cursor-pointer items-center justify-center text-black/50 transition-transform duration-150 hover:scale-[1.05] hover:text-black active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 dark:text-white/80 dark:hover:text-white"
+						class="text-foreground/50 hover:text-foreground flex h-6 w-6 cursor-pointer items-center justify-center transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
 						title="next version"
 					>
 						<ChevronRight class="size-4" strokeWidth="2" />

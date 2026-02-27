@@ -21,15 +21,15 @@
 	}: MenuItemProps = $props()
 
 	const baseClasses =
-		'flex w-full cursor-pointer items-center gap-3 rounded-pill border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40'
+		'flex w-full cursor-pointer items-center gap-3 rounded-pill border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40'
 
 	const textClasses = $derived(
 		destructive
 			? 'text-red-400 hover:bg-red-500/15 hover:text-red-300'
-			: 'text-white/85 hover:bg-white/10 hover:text-white'
+			: 'text-foreground/85 hover:bg-foreground/10 hover:text-foreground'
 	)
 
-	const selectedClasses = $derived(selected ? 'bg-white/10 text-white' : '')
+	const selectedClasses = $derived(selected ? 'bg-foreground/10 text-foreground' : '')
 </script>
 
 <button

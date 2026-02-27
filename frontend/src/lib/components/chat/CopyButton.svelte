@@ -48,7 +48,7 @@
 	type="button"
 	class="flex h-6 w-6 cursor-pointer items-center justify-center transition-all duration-150 hover:scale-[1.05] active:scale-[0.97] {copied
 		? 'text-green-400'
-		: 'text-white/80 hover:text-white'} {className}"
+		: 'text-foreground/80 hover:text-foreground'} {className}"
 	onclick={handleCopy}
 	aria-label={copied ? 'copied' : 'copy message'}
 >

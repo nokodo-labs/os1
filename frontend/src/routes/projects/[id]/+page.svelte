@@ -304,10 +304,10 @@
 >
 	{#if !project && !loading}
 		<div class="flex flex-1 flex-col items-center justify-center py-20 text-center">
-			<p class="text-sm text-white/50">project not found</p>
+			<p class="text-sm text-foreground/50">project not found</p>
 			<button
 				type="button"
-				class="rounded-pill mt-4 cursor-pointer border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70 transition-colors hover:bg-white/10"
+				class="rounded-pill mt-4 cursor-pointer border border-foreground/10 bg-foreground/5 px-4 py-2 text-sm text-foreground/70 transition-colors hover:bg-foreground/10"
 				onclick={() => goto(resolve('/projects'))}
 			>
 				back to projects
@@ -318,14 +318,14 @@
 			<div class="flex-1">
 				<PageTitle icon={FinderFolder} label={project?.name ?? 'loading...'} />
 				{#if project?.description}
-					<p class="mt-2 text-sm text-white/60">{project.description}</p>
+					<p class="mt-2 text-sm text-foreground/60">{project.description}</p>
 				{/if}
 			</div>
 			<div class="relative flex shrink-0 gap-1 pt-1">
 				<button
 					type="button"
 					bind:this={moreButtonEl}
-					class="flex size-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-white/60 transition-colors hover:text-white/90"
+					class="flex size-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-foreground/60 transition-colors hover:text-foreground/90"
 					onclick={() => (moreMenuOpen = !moreMenuOpen)}
 					aria-label="project options"
 					aria-haspopup="menu"
@@ -358,7 +358,7 @@
 					</MenuItem>
 					<button
 						type="button"
-						class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+						class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 						onclick={() => {
 							moreMenuOpen = false
 							showDeleteConfirm = true

@@ -198,7 +198,7 @@
 	/* interactive element base: use on any clickable element for consistent UX */
 	.interactive {
 		@apply cursor-pointer transition-all duration-150;
-		@apply focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none;
+		@apply focus-visible:ring-foreground/40 focus-visible:ring-2 focus-visible:outline-none;
 		@apply active:scale-[0.97];
 		-webkit-tap-highlight-color: transparent;
 		user-select: none;
@@ -213,7 +213,7 @@
 	/* subtle variant: lighter active state for small elements */
 	.interactive-subtle {
 		@apply cursor-pointer transition-all duration-150;
-		@apply focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none;
+		@apply focus-visible:ring-foreground/40 focus-visible:ring-2 focus-visible:outline-none;
 		@apply active:scale-[0.98];
 		-webkit-tap-highlight-color: transparent;
 		user-select: none;
@@ -231,12 +231,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-	background: rgba(255, 255, 255, 0.1);
+	background: color-mix(in oklch, var(--foreground) 10%, transparent);
 	border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-	background: rgba(255, 255, 255, 0.2);
+	background: color-mix(in oklch, var(--foreground) 20%, transparent);
 }
 
 /* hide scrollbar for specific scroll areas (e.g., home apps grid). */

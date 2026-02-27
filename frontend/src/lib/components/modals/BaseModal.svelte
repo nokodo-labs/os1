@@ -60,7 +60,7 @@
 
 		<!-- dialog panel -->
 		<div
-			class="relative w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden border border-black/10 bg-white/88 text-black shadow-[0_24px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-white/10 dark:bg-black/75 dark:text-white dark:shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
+			class="relative w-full {widthClassName} rounded-container border-border/60 bg-card/88 text-card-foreground max-h-[calc(100vh-2rem)] overflow-hidden border shadow-[0_24px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
@@ -69,18 +69,18 @@
 			<div class="relative z-10 flex max-h-[calc(100vh-2rem)] flex-col p-6">
 				<header class="mb-5 flex items-start justify-between gap-3">
 					<div class="min-w-0">
-						<div class="text-lg font-semibold text-black/90 dark:text-white/95">
+						<div class="text-card-foreground text-lg font-semibold">
 							{title}
 						</div>
 						{#if description}
-							<div class="mt-1 text-sm text-black/60 dark:text-white/60">
+							<div class="text-muted-foreground mt-1 text-sm">
 								{description}
 							</div>
 						{/if}
 					</div>
 					<button
 						type="button"
-						class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent text-black/60 transition-all duration-150 hover:scale-[1.05] hover:text-black active:scale-[0.97] dark:text-white/70 dark:hover:text-white"
+						class="text-muted-foreground hover:text-foreground flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 						onclick={onClose}
 						aria-label="close"
 					>

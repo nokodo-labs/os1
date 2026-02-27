@@ -26,7 +26,7 @@
 <BaseToolCard {execution} {compact}>
 	{#snippet icon()}
 		<AppNotification
-			className={`h-4 w-4 text-white/80 ${execution.status === 'running' ? 'animate-pulse' : ''}`}
+			className={`h-4 w-4 text-foreground/80 ${execution.status === 'running' ? 'animate-pulse' : ''}`}
 		/>
 	{/snippet}
 
@@ -49,17 +49,17 @@
 				isUnread={true}
 			/>
 		{:else if execution.status === 'running' || execution.status === 'pending'}
-			<div class="animate-pulse space-y-2 bg-white/5 p-3">
-				<div class="h-3 w-32 bg-white/10"></div>
-				<div class="h-3 w-48 bg-white/10"></div>
+			<div class="animate-pulse space-y-2 bg-foreground/5 p-3">
+				<div class="h-3 w-32 bg-foreground/10"></div>
+				<div class="h-3 w-48 bg-foreground/10"></div>
 			</div>
 		{/if}
 
 		{#if execution.events.length > 0}
 			<div class="mt-3 space-y-1">
 				{#each execution.events as event (event.id)}
-					<div class="flex items-start gap-2 text-xs text-white/60">
-						<span class="text-white/45">{event.timestamp.toLocaleTimeString()}</span>
+					<div class="flex items-start gap-2 text-xs text-foreground/60">
+						<span class="text-foreground/45">{event.timestamp.toLocaleTimeString()}</span>
 						<span>{formatToolEventLine(event)}</span>
 					</div>
 				{/each}

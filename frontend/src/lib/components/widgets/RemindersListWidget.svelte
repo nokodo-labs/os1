@@ -40,40 +40,40 @@
 				{/if}
 			</div>
 			<div class="flex flex-col">
-				<span class="text-[13px] font-medium text-white/60">reminders</span>
+				<span class="text-[13px] font-medium text-foreground/60">reminders</span>
 				{#if totalCount > 0}
-					<span class="text-[11px] text-white/40">{completedCount}/{totalCount} done</span
+					<span class="text-[11px] text-foreground/40">{completedCount}/{totalCount} done</span
 					>
 				{/if}
 			</div>
 		</div>
-		<h3 class="mb-1.5 truncate text-xl font-semibold text-white">
+		<h3 class="mb-1.5 truncate text-xl font-semibold text-foreground">
 			{resource.title || 'untitled list'}
 		</h3>
 		{#if resource.subtitle}
-			<p class="mb-2 text-sm text-white/70">{resource.subtitle}</p>
+			<p class="mb-2 text-sm text-foreground/70">{resource.subtitle}</p>
 		{/if}
 		{#if totalCount > 0}
 			<div class="mb-2 space-y-1.5">
-				<div class="h-2 w-full overflow-hidden rounded-full bg-white/8">
+				<div class="h-2 w-full overflow-hidden rounded-full bg-foreground/8">
 					<div
 						class="h-full rounded-full transition-all duration-300"
 						style:width="{progress}%"
 						style:background-color={color ?? 'rgb(14 165 233)'}
 					></div>
 				</div>
-				<div class="flex justify-between text-xs text-white/50">
+				<div class="flex justify-between text-xs text-foreground/50">
 					<span>{pendingCount} pending</span>
 					<span>{Math.round(progress)}%</span>
 				</div>
 			</div>
 		{:else}
-			<p class="mb-2 text-sm text-white/40 italic">no reminders yet</p>
+			<p class="mb-2 text-sm text-foreground/40 italic">no reminders yet</p>
 		{/if}
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="mt-auto text-xs text-white/45"
+			className="mt-auto text-xs text-foreground/45"
 		/>
 	{:else}
 		<div
@@ -88,10 +88,10 @@
 			{/if}
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-semibold text-white">
+			<h3 class="truncate text-base font-semibold text-foreground">
 				{resource.title || 'untitled list'}
 			</h3>
-			<p class="text-sm text-white/65">
+			<p class="text-sm text-foreground/65">
 				{#if totalCount > 0}
 					{pendingCount} pending - {completedCount}/{totalCount} done
 				{:else}
@@ -101,7 +101,7 @@
 		</div>
 		{#if totalCount > 0}
 			<div class="flex w-20 shrink-0 items-center">
-				<div class="h-2 w-full overflow-hidden rounded-full bg-white/8">
+				<div class="h-2 w-full overflow-hidden rounded-full bg-foreground/8">
 					<div
 						class="h-full rounded-full"
 						style:width="{progress}%"
@@ -113,7 +113,7 @@
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="shrink-0 text-xs text-white/45"
+			className="shrink-0 text-xs text-foreground/45"
 		/>
 	{/if}
 </a>

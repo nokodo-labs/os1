@@ -42,7 +42,7 @@
 <div
 	role="button"
 	tabindex="0"
-	class={`group/sidebar-item ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} text-left transition-all duration-200 hover:border-white/15 hover:bg-white/8 ${selected ? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]' : ''} ${className}`}
+	class={`group/sidebar-item ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-foreground/8 text-left transition-all duration-200 ${className}`}
 	style={selected
 		? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
 		: ''}
@@ -68,7 +68,7 @@
 
 	{#if showChevron}
 		<ChevronRight
-			class="h-5 w-5 shrink-0 text-white/50 transition-colors group-hover/sidebar-item:text-white/70"
+			class="text-foreground/50 group-hover/sidebar-item:text-foreground/70 h-5 w-5 shrink-0 transition-colors"
 		/>
 	{/if}
 </div>

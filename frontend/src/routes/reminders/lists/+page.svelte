@@ -74,7 +74,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 				onclick={() => {
 					reminders.setListsSortMode(option.value)
 					closeSortMenu()

@@ -193,7 +193,7 @@
 	<!-- avatar - hidden on mobile to reclaim full width -->
 	{#if !device.isMobile}
 		<div
-			class="assistant-avatar mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/5"
+			class="assistant-avatar mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border border-foreground/10 bg-foreground/5"
 		>
 			{#if avatarUrl && !avatarError}
 				<img
@@ -207,7 +207,7 @@
 					class="flex h-full w-full items-center justify-center"
 					style="background-color: var(--accent-primary);"
 				>
-					<Sparkles variant="solid" class="h-5 w-5 text-white/90" />
+					<Sparkles variant="solid" class="h-5 w-5 text-foreground/90" />
 				</div>
 			{/if}
 		</div>
@@ -216,11 +216,11 @@
 	<!-- content container -->
 	<div class="relative flex min-w-0 flex-1 flex-col gap-2">
 		<div class="flex items-center gap-2">
-			<span class="text-base font-bold text-white/90">{modelName}</span>
+			<span class="text-base font-bold text-foreground/90">{modelName}</span>
 			{#if timestamp}
 				<Timestamp
 					{timestamp}
-					className="text-xs text-white/50 transition-opacity duration-200 {isHovered
+					className="text-xs text-foreground/50 transition-opacity duration-200 {isHovered
 						? 'opacity-100'
 						: 'opacity-0'}"
 				/>
@@ -240,7 +240,7 @@
 				/>
 			</div>
 		{:else if isStreaming && !hasContent && showStreamingPlaceholder}
-			<div class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60">
+			<div class="assistant-markdown text-[0.95rem] leading-relaxed text-foreground/60">
 				<div class="my-3">
 					<ChatGptLoadingIndicator />
 				</div>
@@ -261,13 +261,13 @@
 		<div class="flex items-center gap-2">
 			{#if siblingCount > 1}
 				<div
-					class="mr-1 flex h-6 items-center text-xs font-medium text-white/50 transition-opacity duration-200 select-none
+					class="mr-1 flex h-6 items-center text-xs font-medium text-foreground/50 transition-opacity duration-200 select-none
                         {branchNavVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}"
 					role="none"
 					use:captureClick
 				>
 					<button
-						class="flex h-6 w-6 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+						class="flex h-6 w-6 cursor-pointer items-center justify-center text-foreground/80 transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
 						disabled={currentSiblingIndex === 0}
 						onclick={onPrevious}
 						title="previous version"
@@ -278,7 +278,7 @@
 						{currentSiblingIndex + 1}/{siblingCount}
 					</span>
 					<button
-						class="flex h-6 w-6 cursor-pointer items-center justify-center text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+						class="flex h-6 w-6 cursor-pointer items-center justify-center text-foreground/80 transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
 						disabled={currentSiblingIndex === siblingCount - 1}
 						onclick={onNext}
 						title="next version"

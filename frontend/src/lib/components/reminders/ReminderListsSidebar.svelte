@@ -132,13 +132,13 @@
 			? 'mt-0'
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
-		<PageTitle icon={ListBullet} label="lists" iconColor="text-white/70" tag="h2" />
+		<PageTitle icon={ListBullet} label="lists" iconColor="text-foreground/70" tag="h2" />
 		{#if !isMobile}
 			<div class="flex items-center gap-1">
 				<button
 					type="button"
 					bind:this={sortButtonEl}
-					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-foreground/80 transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 					onclick={toggleSortMenu}
 					aria-label="sort lists"
 					aria-haspopup="menu"
@@ -151,7 +151,7 @@
 						<button
 							type="button"
 							role="menuitem"
-							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 							onclick={() => {
 								reminders.setListsSortMode(option.value)
 								closeSortMenu()
@@ -163,7 +163,7 @@
 				</PopupMenu>
 				<button
 					type="button"
-					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-foreground/80 transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 					onclick={handleCreateList}
 					aria-label="create list"
 				>
@@ -213,7 +213,7 @@
 						>
 							<button
 								type="button"
-								class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+								class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 								onclick={(event) => {
 									event.stopPropagation()
 									closeListMenu()
@@ -223,7 +223,7 @@
 								<InfoCircle class="h-4 w-4" />
 								properties
 							</button>
-							<div class="my-1 h-px w-full bg-white/10"></div>
+							<div class="my-1 h-px w-full bg-foreground/10"></div>
 							<div class="mt-1">
 								<DeleteButton
 									confirm={true}
@@ -250,11 +250,11 @@
 				{/each}
 
 				{#if isAddingList}
-					<div class="rounded-pill border border-white/14 bg-white/6 px-3 py-2.5">
+					<div class="rounded-pill border border-foreground/14 bg-foreground/6 px-3 py-2.5">
 						<input
 							bind:this={addListInputEl}
 							type="text"
-							class="w-full bg-transparent text-[0.95rem] font-medium text-white/90 outline-none placeholder:text-white/40"
+							class="w-full bg-transparent text-[0.95rem] font-medium text-foreground/90 outline-none placeholder:text-foreground/40"
 							placeholder="new list"
 							autocomplete="off"
 							bind:value={newListName}

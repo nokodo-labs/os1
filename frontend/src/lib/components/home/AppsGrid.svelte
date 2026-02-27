@@ -373,7 +373,7 @@
 						>
 							<LiquidGlass
 								tag="div"
-								class="flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[box-shadow,ring-color,transform] duration-300 ease-in-out group-hover:scale-[1.03] group-hover:ring-white/20 group-active:translate-y-px group-active:scale-[0.92] group-active:shadow-[0_16px_36px_rgba(12,10,30,0.6)] {iconShape ===
+								class="group-hover:ring-foreground/20 flex items-center justify-center shadow-[0_24px_48px_rgba(12,10,30,0.35)] ring-1 ring-transparent transition-[box-shadow,ring-color,transform] duration-300 ease-in-out group-hover:scale-[1.03] group-active:translate-y-px group-active:scale-[0.92] group-active:shadow-[0_16px_36px_rgba(12,10,30,0.6)] {iconShape ===
 								'circle'
 									? 'rounded-full'
 									: 'rounded-container'}"
@@ -387,14 +387,14 @@
 										const color = iconColorForApp(app)
 										return color
 											? `color: ${color};`
-											: 'color: rgba(255,255,255,0.9);'
+											: 'color: var(--foreground);'
 									})()}
 								>
 									<Icon variant="solid" class="h-(--icon-px) w-(--icon-px)" />
 								</div>
 							</LiquidGlass>
 							<div
-								class="text-center text-xs font-medium text-white/70 transition-colors duration-150 group-hover:text-white/85"
+								class="text-foreground/70 group-hover:text-foreground/85 text-center text-xs font-medium transition-colors duration-150"
 								style="margin-top: {tileToLabelGapPx}px; line-height: {labelPx}px; height: {labelPx}px;"
 							>
 								{app.title}
@@ -414,8 +414,8 @@
 			<button
 				type="button"
 				class="cursor-pointer transition-all duration-200 {index === currentPage
-					? 'h-2 w-6 rounded-full bg-white/80'
-					: 'h-2 w-2 rounded-full bg-white/40 hover:bg-white/45'}"
+					? 'bg-foreground/80 h-2 w-6 rounded-full'
+					: 'bg-foreground/40 hover:bg-foreground/45 h-2 w-2 rounded-full'}"
 				aria-label={`page ${index + 1} (${_page.length})`}
 				aria-current={index === currentPage ? 'page' : undefined}
 				onclick={() => {

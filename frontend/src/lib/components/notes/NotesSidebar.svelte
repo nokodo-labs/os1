@@ -150,7 +150,7 @@
 				<button
 					type="button"
 					bind:this={sortButtonEl}
-					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-foreground/80 transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 					onclick={toggleSortMenu}
 					aria-label="sort notes"
 					aria-haspopup="menu"
@@ -163,7 +163,7 @@
 						<button
 							type="button"
 							role="menuitem"
-							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+							class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 							onclick={() => {
 								notes.sortMode = option.value
 								closeSortMenu()
@@ -176,7 +176,7 @@
 				<button
 					type="button"
 					onclick={createNote}
-					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-white/80 transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					class="flex h-12 w-12 cursor-pointer items-center justify-center bg-transparent text-foreground/80 transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 					aria-label="create note"
 				>
 					<Plus class="h-6 w-6" />
@@ -189,7 +189,7 @@
 		{#if noteList.length === 0}
 			<div class="py-4">
 				<div
-					class="rounded-container w-full overflow-hidden border border-white/14 bg-white/5 p-3 text-center text-sm whitespace-nowrap text-white/55"
+					class="rounded-container w-full overflow-hidden border border-foreground/14 bg-foreground/5 p-3 text-center text-sm whitespace-nowrap text-foreground/55"
 				>
 					no notes yet
 				</div>
@@ -204,10 +204,10 @@
 						showChevron={true}
 					>
 						<span class="flex min-w-0 flex-col">
-							<span class="min-w-0 truncate text-[0.95rem] font-medium text-white/90">
+							<span class="min-w-0 truncate text-[0.95rem] font-medium text-foreground/90">
 								{labelForNote(note.title)}
 							</span>
-							<span class="min-w-0 truncate text-xs text-white/55">
+							<span class="min-w-0 truncate text-xs text-foreground/55">
 								{note.content.trim().length > 0
 									? note.content.trim().slice(0, 60)
 									: 'empty note'}
@@ -218,7 +218,7 @@
 							<button
 								type="button"
 								data-note-menu
-								class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white"
+								class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-foreground/70 transition-all duration-150 hover:bg-foreground/10 hover:text-foreground"
 								onclick={(e) => {
 									e.stopPropagation()
 									if (openMenuId !== note.id)
@@ -248,10 +248,10 @@
 							{#snippet icon()}<InfoCircle class="h-4 w-4" />{/snippet}
 							properties
 						</MenuItem>
-						<div class="my-1 h-px w-full bg-white/10"></div>
+						<div class="my-1 h-px w-full bg-foreground/10"></div>
 						<button
 							type="button"
-							class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+							class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 							onclick={() => requestDelete(note.id)}
 						>
 							<Trash
@@ -269,7 +269,7 @@
 					<div>
 						<button
 							type="button"
-							class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide text-white/70 uppercase transition-colors duration-150 hover:text-white/90"
+							class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide text-foreground/70 uppercase transition-colors duration-150 hover:text-foreground/90"
 							onclick={() => (myNotesOpen = !myNotesOpen)}
 							aria-expanded={myNotesOpen}
 						>
@@ -279,7 +279,7 @@
 									: '-rotate-90'}"
 							/>
 							your notes
-							<span class="font-normal text-white/50">({myNotes.length})</span>
+							<span class="font-normal text-foreground/50">({myNotes.length})</span>
 						</button>
 						{#if myNotesOpen}
 							<div class="space-y-1">
@@ -294,7 +294,7 @@
 				<div class="mt-3">
 					<button
 						type="button"
-						class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide text-white/70 uppercase transition-colors duration-150 hover:text-white/90"
+						class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide text-foreground/70 uppercase transition-colors duration-150 hover:text-foreground/90"
 						onclick={() => (sharedNotesOpen = !sharedNotesOpen)}
 						aria-expanded={sharedNotesOpen}
 					>
@@ -304,7 +304,7 @@
 								: '-rotate-90'}"
 						/>
 						shared with you
-						<span class="font-normal text-white/50">({sharedNotes.length})</span>
+						<span class="font-normal text-foreground/50">({sharedNotes.length})</span>
 					</button>
 					{#if sharedNotesOpen}
 						<div class="space-y-1">
@@ -340,7 +340,7 @@
 	<div class="space-y-4">
 		{#if deleteError}
 			<div
-				class="rounded-container border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+				class="rounded-container border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/70"
 			>
 				{deleteError}
 			</div>
@@ -349,7 +349,7 @@
 		<div class="flex items-center justify-end gap-2">
 			<button
 				type="button"
-				class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+				class="rounded-pill border border-foreground/10 bg-transparent px-4 py-2 text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/5"
 				disabled={isDeleting}
 				onclick={() => {
 					deleteTargetId = null

@@ -144,7 +144,7 @@
 >
 	<!-- icon -->
 	<div
-		class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/8 text-white/85"
+		class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/8 text-foreground/85"
 	>
 		{#if iconUrl}
 			<img src={iconUrl} alt="" class="h-5 w-5 rounded-full object-cover" />
@@ -161,26 +161,26 @@
 				{timestamp}
 				mode="relative"
 				minUnit="minute"
-				className="block text-[0.6875rem] text-white/50 mb-0.5 transition-all duration-300"
+				className="block text-[0.6875rem] text-foreground/50 mb-0.5 transition-all duration-300"
 			/>
 		{/if}
 
 		<div
 			class="flex min-w-0 items-center gap-1.5 text-[0.8125rem] leading-4.5 font-semibold {isUnread
-				? 'text-white/90'
-				: 'text-white/70'}"
+				? 'text-foreground/90'
+				: 'text-foreground/70'}"
 		>
 			<span bind:this={titleRef} class="min-w-0 truncate">{title}</span>
 			{#if isUnread}
 				<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400"></span>
 			{/if}
 			{#if !expanded}
-				<span class="shrink-0 text-white/30">·</span>
+				<span class="shrink-0 text-foreground/30">·</span>
 				<Timestamp
 					{timestamp}
 					mode="relative"
 					minUnit="minute"
-					className="shrink-0 text-[0.6875rem] font-normal text-white/50"
+					className="shrink-0 text-[0.6875rem] font-normal text-foreground/50"
 				/>
 			{/if}
 		</div>
@@ -189,8 +189,8 @@
 		<div class="relative">
 			<div
 				class="text-[0.8125rem] {isUnread
-					? 'text-white/60'
-					: 'text-white/55'} overflow-hidden leading-4.5 transition-[max-height] duration-300 ease-out {!expanded &&
+					? 'text-foreground/60'
+					: 'text-foreground/55'} overflow-hidden leading-4.5 transition-[max-height] duration-300 ease-out {!expanded &&
 				isBodyOverflowing
 					? 'line-clamp-1'
 					: ''}"
@@ -217,14 +217,14 @@
 	<div class="flex shrink-0 flex-col items-center gap-1.5">
 		{#if !device.isTouch && onDismiss}
 			<XMark
-				class="size-6 cursor-pointer text-white/50 transition-all duration-150 hover:scale-[1.05] hover:text-white/80 active:scale-[0.97]"
+				class="size-6 cursor-pointer text-foreground/50 transition-all duration-150 hover:scale-[1.05] hover:text-foreground/80 active:scale-[0.97]"
 				onclick={() => onDismiss?.(notification.id)}
 			/>
 		{/if}
 		{#if canExpand}
 			<button
 				type="button"
-				class="cursor-pointer text-white/80 transition-all duration-150 hover:text-white"
+				class="cursor-pointer text-foreground/80 transition-all duration-150 hover:text-foreground"
 				onclick={toggleExpand}
 			>
 				<ChevronDown

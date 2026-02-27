@@ -88,8 +88,8 @@
 				{@const isSelected = agent.id === selectedAgent}
 				<li role="option" aria-selected={isSelected}>
 					<button
-						class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-all duration-150 hover:bg-white/8 {isSelected
-							? 'ring-1 ring-white/20'
+						class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-all duration-150 hover:bg-foreground/8 {isSelected
+							? 'ring-1 ring-foreground/20'
 							: ''}"
 						style={isSelected ? 'background-color: var(--accent-bg);' : ''}
 						onclick={() => select(agent.id)}
@@ -102,19 +102,19 @@
 							/>
 						{:else}
 							<div
-								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/80 uppercase"
+								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-sm font-semibold text-foreground/80 uppercase"
 							>
 								{agent.name.charAt(0)}
 							</div>
 						{/if}
 
 						<div class="flex min-w-0 flex-1 flex-col items-start gap-1">
-							<span class="text-[0.9375rem] font-semibold text-white/95"
+							<span class="text-[0.9375rem] font-semibold text-foreground/95"
 								>{agent.name}</span
 							>
 						</div>
 						{#if isSelected}
-							<Check class="h-4 w-4 shrink-0 text-white/80" strokeWidth="2.5" />
+							<Check class="h-4 w-4 shrink-0 text-foreground/80" strokeWidth="2.5" />
 						{/if}
 					</button>
 				</li>

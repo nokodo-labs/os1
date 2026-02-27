@@ -43,7 +43,7 @@
 
 <section class="relative min-h-dvh w-full overflow-hidden">
 	<div class="absolute top-3 left-4 z-30">
-		<div class="rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white/80">
+		<div class="rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-foreground/80">
 			css action demo
 		</div>
 	</div>
@@ -59,7 +59,7 @@
 		<div class="pointer-events-auto grid gap-3">
 			<div
 				use:liquidGlass={'nav'}
-				class="w-full max-w-md rounded-full px-5 py-3 text-sm text-white/90"
+				class="w-full max-w-md rounded-full px-5 py-3 text-sm text-foreground/90"
 			>
 				navigation pill
 			</div>
@@ -67,26 +67,26 @@
 				<button
 					type="button"
 					use:liquidGlass={'subtle'}
-					class="rounded-2xl px-4 py-2.5 text-xs text-white/85"
+					class="rounded-2xl px-4 py-2.5 text-xs text-foreground/85"
 				>
 					subtle button
 				</button>
 				<button
 					type="button"
 					use:liquidGlass={'heavy'}
-					class="rounded-2xl px-4 py-2.5 text-xs text-white/85"
+					class="rounded-2xl px-4 py-2.5 text-xs text-foreground/85"
 				>
 					heavy button
 				</button>
 			</div>
 			<div
 				use:liquidGlass={'panel'}
-				class="max-w-sm rounded-3xl px-5 py-4 text-xs text-white/80"
+				class="max-w-sm rounded-3xl px-5 py-4 text-xs text-foreground/80"
 			>
-				<div class="font-medium text-white/90">glass panel</div>
-				<div class="mt-1.5 text-white/60">focus the input to see state change</div>
+				<div class="font-medium text-foreground/90">glass panel</div>
+				<div class="mt-1.5 text-foreground/60">focus the input to see state change</div>
 				<input
-					class="mt-2.5 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 outline-none"
+					class="mt-2.5 w-full rounded-2xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/80 outline-none"
 					placeholder="type here"
 				/>
 			</div>
@@ -109,7 +109,7 @@
 	>
 		<div
 			use:liquidGlass={'heavy'}
-			class="grid h-full w-full place-items-center rounded-3xl text-xs text-white/70"
+			class="grid h-full w-full place-items-center rounded-3xl text-xs text-foreground/70"
 		>
 			drag me
 		</div>

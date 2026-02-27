@@ -18,12 +18,12 @@
 >
 	<div class="space-y-4">
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white/85">haptic feedback</div>
-			<div class="mt-1 text-sm text-white/55">
+			<div class="text-sm font-semibold text-foreground/85">haptic feedback</div>
+			<div class="mt-1 text-sm text-foreground/55">
 				enable haptic feedback on supported devices
 			</div>
 			<div class="mt-4 flex items-center justify-between">
-				<span id="haptic-label" class="text-sm text-white/70">haptic feedback</span>
+				<span id="haptic-label" class="text-sm text-foreground/70">haptic feedback</span>
 				<Switch
 					size="md"
 					checked={hapticEnabled}

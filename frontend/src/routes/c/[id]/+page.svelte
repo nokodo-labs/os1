@@ -318,7 +318,7 @@
 			<LiquidGlass
 				tag="button"
 				type="button"
-				class="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+				class="border-foreground/10 text-foreground/85 hover:bg-foreground/10 hover:text-foreground pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
 				cornerRadius={18}
 				aria-label="scroll to bottom"
 				onpointerdown={(e: PointerEvent) => e.preventDefault()}
@@ -346,12 +346,14 @@
 				<div class="flex flex-1 items-center justify-center py-16">
 					<div class="max-w-md text-center">
 						<div
-							class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
+							class="bg-foreground/5 text-foreground/85 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
 						>
 							<EyeSlash class="h-7 w-7" />
 						</div>
-						<h2 class="text-2xl font-semibold text-white/90">temporary chat enabled</h2>
-						<p class="mt-2 text-sm text-white/60">
+						<h2 class="text-foreground/90 text-2xl font-semibold">
+							temporary chat enabled
+						</h2>
+						<p class="text-foreground/60 mt-2 text-sm">
 							send a message to start. messages here won't be saved.
 						</p>
 					</div>
@@ -360,12 +362,12 @@
 				<div class="flex flex-1 items-center justify-center py-16">
 					<div class="max-w-md text-center">
 						<div
-							class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
+							class="bg-foreground/5 text-foreground/85 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
 						>
 							<EyeSlash class="h-7 w-7" />
 						</div>
-						<h2 class="text-2xl font-semibold text-white/90">no messages yet</h2>
-						<p class="mt-2 text-sm text-white/60">
+						<h2 class="text-foreground/90 text-2xl font-semibold">no messages yet</h2>
+						<p class="text-foreground/60 mt-2 text-sm">
 							send a message to begin this thread.
 						</p>
 					</div>
@@ -551,7 +553,7 @@
 														</div>
 													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
 														<div
-															class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
+															class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
 														>
 															<div class="my-3">
 																<ChatGptLoadingIndicator />
@@ -602,7 +604,7 @@
 										{:else if chat.streamingAssistant?.isError}
 											<button
 												type="button"
-												class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-white/70 transition-colors hover:text-white/95"
+												class="text-foreground/70 hover:text-foreground/95 rounded-xl bg-transparent px-3 py-1.5 text-sm transition-colors"
 												onclick={() => chat.handleRegenerateMessage()}
 											>
 												retry
@@ -695,15 +697,17 @@
 			onkeydown={(e) => e.stopPropagation()}
 		>
 			<div class="relative z-10">
-				<div class="text-lg font-semibold text-white/90">delete message?</div>
-				<div class="mt-2 text-sm text-white/60">{chat.confirmDeleteMessage.preview}</div>
-				<div class="mt-2 text-xs text-white/40">
+				<div class="text-foreground/90 text-lg font-semibold">delete message?</div>
+				<div class="text-foreground/60 mt-2 text-sm">
+					{chat.confirmDeleteMessage.preview}
+				</div>
+				<div class="text-foreground/40 mt-2 text-xs">
 					this will also delete all replies and branches below this message.
 				</div>
 
 				{#if chat.deleteMessageError}
 					<div
-						class="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+						class="border-foreground/10 bg-foreground/5 text-foreground/70 mt-3 rounded-2xl border px-3 py-2 text-sm"
 					>
 						{chat.deleteMessageError}
 					</div>
@@ -712,7 +716,7 @@
 				<div class="mt-5 flex items-center justify-end gap-2">
 					<button
 						type="button"
-						class="cursor-pointer rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5 disabled:cursor-default"
+						class="border-foreground/10 text-foreground/80 hover:bg-foreground/5 cursor-pointer rounded-2xl border bg-transparent px-4 py-2 text-sm transition-colors duration-150 disabled:cursor-default"
 						disabled={chat.isDeletingMessage}
 						onclick={() => {
 							chat.confirmDeleteMessage = null
@@ -723,7 +727,7 @@
 					</button>
 					<button
 						type="button"
-						class="cursor-pointer rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:cursor-default disabled:opacity-60"
+						class="border-foreground/10 bg-foreground/10 text-foreground/90 hover:bg-foreground/15 cursor-pointer rounded-2xl border px-4 py-2 text-sm transition-colors duration-150 disabled:cursor-default disabled:opacity-60"
 						disabled={chat.isDeletingMessage}
 						onclick={() => {
 							void (async () => {

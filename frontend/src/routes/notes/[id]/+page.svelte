@@ -17,7 +17,7 @@
 	{/key}
 {:else}
 	<div class="mx-auto mt-10 max-w-3xl">
-		<div class="rounded-container border border-white/10 bg-white/5 p-5 text-sm text-white/70">
+		<div class="rounded-container border border-foreground/10 bg-foreground/5 p-5 text-sm text-foreground/70">
 			missing note id
 		</div>
 	</div>

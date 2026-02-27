@@ -37,11 +37,11 @@
 <div class="user-profile-trigger-container {isHeaderPlacement ? '' : 'mt-auto'}">
 	<button
 		bind:this={buttonElement}
-		class="relative flex cursor-pointer items-center border border-transparent bg-transparent text-white transition-all duration-200 {isHeaderPlacement
+		class="relative flex cursor-pointer items-center border border-transparent bg-transparent text-foreground transition-all duration-200 {isHeaderPlacement
 			? 'h-full w-12 justify-center px-0 hover:scale-[1.05] active:scale-[0.97]'
 			: isExpanded
-				? 'rounded-pill w-full justify-start gap-3 p-3 hover:border-white/10 hover:bg-white/5'
-				: 'rounded-pill h-14 w-14 justify-center p-3 hover:border-white/10 hover:bg-white/5'}"
+				? 'rounded-pill w-full justify-start gap-3 p-3 hover:border-foreground/10 hover:bg-foreground/5'
+				: 'rounded-pill h-14 w-14 justify-center p-3 hover:border-foreground/10 hover:bg-foreground/5'}"
 		onclick={togglePanel}
 		aria-label="User Profile"
 		aria-expanded={isOpen}
@@ -64,7 +64,7 @@
 						? 'h-10 w-10 text-[0.875rem]'
 						: isExpanded
 							? 'h-10 w-10 text-[0.875rem]'
-							: 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-white uppercase transition-all duration-200"
+							: 'h-9 w-9 text-[0.75rem]'} flex shrink-0 items-center justify-center rounded-full font-semibold text-foreground uppercase transition-all duration-200"
 					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 				>
 					{getUserInitials(safeUser.name)}
@@ -81,11 +81,11 @@
 					: ''}"
 			>
 				<p
-					class="overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap text-white"
+					class="overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap text-foreground"
 				>
 					{safeUser.name}
 				</p>
-				<p class="overflow-hidden text-xs text-ellipsis whitespace-nowrap text-white/60">
+				<p class="overflow-hidden text-xs text-ellipsis whitespace-nowrap text-foreground/60">
 					{safeUser.email}
 				</p>
 			</div>

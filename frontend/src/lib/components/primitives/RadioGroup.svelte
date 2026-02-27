@@ -22,16 +22,16 @@
 			onclick={() => onchange(option.value)}
 			class="rounded-pill flex flex-1 cursor-pointer items-center justify-center gap-2.5 border px-4 py-2.5 text-sm font-medium transition-all duration-200
 				{isSelected
-				? 'border-white/20 bg-white/12 text-white'
-				: 'border-white/10 bg-white/5 text-white/60 hover:border-white/15 hover:bg-white/8 hover:text-white'}"
+				? 'border-foreground/20 bg-foreground/12 text-foreground'
+				: 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:border-foreground/15 hover:bg-foreground/8 hover:text-foreground'}"
 		>
 			<!-- radio dot indicator -->
 			<span
 				class="flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all
-					{isSelected ? 'border-white' : 'border-white/40'}"
+					{isSelected ? 'border-foreground' : 'border-foreground/40'}"
 			>
 				{#if isSelected}
-					<span class="h-2 w-2 rounded-full bg-white"></span>
+					<span class="bg-background h-2 w-2 rounded-full"></span>
 				{/if}
 			</span>
 			<span>{option.label}</span>

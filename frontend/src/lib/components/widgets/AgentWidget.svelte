@@ -29,27 +29,27 @@
 			>
 				<Brain class="size-5" />
 			</div>
-			<span class="text-xs text-white/50">agent</span>
+			<span class="text-xs text-foreground/50">agent</span>
 		</div>
-		<h3 class="mb-1 truncate text-base font-medium text-white/90">
+		<h3 class="mb-1 truncate text-base font-medium text-foreground/90">
 			{resource.title || 'untitled agent'}
 		</h3>
 		{#if resource.subtitle}
-			<p class="mb-3 line-clamp-2 text-sm leading-relaxed text-white/60">
+			<p class="mb-3 line-clamp-2 text-sm leading-relaxed text-foreground/60">
 				{resource.subtitle}
 			</p>
 		{/if}
 		<div class="mt-auto flex items-center gap-2">
 			{#if toolCount > 0}
-				<span class="text-xs text-white/40">{toolCount} tools</span>
+				<span class="text-xs text-foreground/40">{toolCount} tools</span>
 			{/if}
 			{#if author}
-				<span class="text-xs text-white/40">by {author}</span>
+				<span class="text-xs text-foreground/40">by {author}</span>
 			{/if}
 			<Timestamp
 				timestamp={new Date(resource.updatedAt)}
 				mode="relative"
-				className="ml-auto shrink-0 text-xs text-white/40"
+				className="ml-auto shrink-0 text-xs text-foreground/40"
 			/>
 		</div>
 	{:else}
@@ -59,20 +59,20 @@
 			<Brain class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-medium text-white/90">
+			<h3 class="truncate text-base font-medium text-foreground/90">
 				{resource.title || 'untitled agent'}
 			</h3>
 			{#if resource.subtitle}
-				<p class="truncate text-sm text-white/60">{resource.subtitle}</p>
+				<p class="truncate text-sm text-foreground/60">{resource.subtitle}</p>
 			{/if}
 		</div>
 		{#if toolCount > 0}
-			<span class="shrink-0 text-xs text-white/40">{toolCount} tools</span>
+			<span class="shrink-0 text-xs text-foreground/40">{toolCount} tools</span>
 		{/if}
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="shrink-0 text-xs text-white/40"
+			className="shrink-0 text-xs text-foreground/40"
 		/>
 	{/if}
 </a>

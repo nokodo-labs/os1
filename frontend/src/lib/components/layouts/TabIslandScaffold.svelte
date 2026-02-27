@@ -96,7 +96,7 @@
 					bind:this={tabEls[section.id]}
 					href={section.href}
 					class="relative z-1 flex flex-col items-center gap-0.5 rounded-full px-5 py-1.5 transition-colors duration-200
-						{active ? 'text-(--accent-primary)' : 'text-white/50 hover:text-white/75'}"
+						{active ? 'text-(--accent-primary)' : 'text-foreground/50 hover:text-foreground/75'}"
 					aria-current={active ? 'page' : undefined}
 				>
 					<Icon class="h-5 w-5" variant={active ? 'solid' : 'outline'} />

@@ -353,7 +353,7 @@
 								{#snippet lead()}
 									{#if !chatStartError}
 										<div
-											class="assistant-markdown text-[0.95rem] leading-relaxed text-white/60"
+											class="assistant-markdown text-[0.95rem] leading-relaxed text-foreground/60"
 										>
 											<div class="my-3">
 												<ChatGptLoadingIndicator />
@@ -365,7 +365,7 @@
 									{#if chatStartError}
 										<button
 											type="button"
-											class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-white/70 transition-colors hover:text-white/95"
+											class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:text-foreground/95"
 											onclick={() => {
 												chatStartError = null
 												optimisticContent = null
@@ -386,7 +386,7 @@
 					>
 						<div class="max-w-md text-center">
 							<div
-								class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/5 text-white/85"
+								class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-foreground/5 text-foreground/85"
 							>
 								{#if isTemporaryChatMode}
 									<EyeSlash class="h-7 w-7" />
@@ -395,12 +395,12 @@
 								{/if}
 							</div>
 							{#if isTemporaryChatMode}
-								<h2 class="text-2xl font-semibold text-white/90">temporary chat</h2>
-								<p class="mt-2 text-sm text-white/60">
+								<h2 class="text-2xl font-semibold text-foreground/90">temporary chat</h2>
+								<p class="mt-2 text-sm text-foreground/60">
 									messages here won't be saved
 								</p>
 							{:else}
-								<h2 class="text-2xl font-semibold text-white/90">new chat</h2>
+								<h2 class="text-2xl font-semibold text-foreground/90">new chat</h2>
 							{/if}
 						</div>
 					</div>
@@ -458,14 +458,14 @@
 					style="view-transition-name: landing-greeting;"
 					class="mb-12 flex flex-col items-center justify-center gap-2 text-center"
 				>
-					<h1 class="text-4xl font-medium text-white">
+					<h1 class="text-4xl font-medium text-foreground">
 						hi <span
 							class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 							style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 							>{session.userDisplay.name}</span
 						>
 					</h1>
-					<p class="text-xl text-white/60">good afternoon</p>
+					<p class="text-xl text-foreground/60">good afternoon</p>
 				</div>
 			{/if}
 

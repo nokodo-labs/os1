@@ -44,7 +44,7 @@
 <!-- logo / brand with close button -->
 <div class="relative grid w-full grid-cols-[auto_1fr_auto] items-center">
 	<button
-		class="group relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white/80 transition-all duration-200 hover:text-white"
+		class="group relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-foreground/80 transition-all duration-200 hover:text-foreground"
 		onclick={onHomeClick}
 		aria-label="home"
 	>
@@ -56,7 +56,7 @@
 		>
 			{#if !isChatSidebarOpen}
 				<div
-					class="absolute flex scale-75 items-center justify-center text-white opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100"
+					class="absolute flex scale-75 items-center justify-center text-foreground opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100"
 				>
 					<Sidebar class="h-4 w-4" />
 				</div>
@@ -79,7 +79,7 @@
 
 	<!-- close button -->
 	<button
-		class="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-white transition-all {!isCompactLayout
+		class="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent text-foreground transition-all {!isCompactLayout
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'}"
 		onclick={(e) => {

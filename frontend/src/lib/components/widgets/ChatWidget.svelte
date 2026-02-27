@@ -31,24 +31,24 @@
 				<ChatBubbles variant="solid" class="size-5" />
 			</div>
 			<div class="flex flex-col">
-				<span class="text-[13px] font-medium text-white/60">chat</span>
+				<span class="text-[13px] font-medium text-foreground/60">chat</span>
 				{#if messageCount > 0}
-					<span class="text-[11px] text-white/40">{messageCount} messages</span>
+					<span class="text-[11px] text-foreground/40">{messageCount} messages</span>
 				{/if}
 			</div>
 			{#if isArchived}
 				<span
-					class="ml-auto rounded-full bg-white/8 px-2.5 py-0.5 text-[11px] font-medium text-white/50"
+					class="ml-auto rounded-full bg-foreground/8 px-2.5 py-0.5 text-[11px] font-medium text-foreground/50"
 				>
 					archived
 				</span>
 			{/if}
 		</div>
-		<h3 class="mb-1.5 truncate text-xl font-semibold text-white">
+		<h3 class="mb-1.5 truncate text-xl font-semibold text-foreground">
 			{resource.title || 'untitled chat'}
 		</h3>
 		{#if resource.preview}
-			<p class="mb-3 line-clamp-2 text-sm leading-relaxed text-white/70">
+			<p class="mb-3 line-clamp-2 text-sm leading-relaxed text-foreground/70">
 				{resource.preview}
 			</p>
 		{/if}
@@ -57,7 +57,7 @@
 				<div class="flex gap-1 overflow-hidden">
 					{#each tags.slice(0, 3) as tag (tag)}
 						<span
-							class="truncate rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-white/50"
+							class="truncate rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-medium text-foreground/50"
 						>
 							{tag}
 						</span>
@@ -67,7 +67,7 @@
 			<Timestamp
 				timestamp={new Date(resource.updatedAt)}
 				mode="relative"
-				className="ml-auto shrink-0 text-xs text-white/45"
+				className="ml-auto shrink-0 text-xs text-foreground/45"
 			/>
 		</div>
 	{:else}
@@ -77,20 +77,20 @@
 			<ChatBubbles variant="solid" class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-semibold text-white">
+			<h3 class="truncate text-base font-semibold text-foreground">
 				{resource.title || 'untitled chat'}
 			</h3>
 			{#if resource.preview}
-				<p class="truncate text-sm text-white/65">{resource.preview}</p>
+				<p class="truncate text-sm text-foreground/65">{resource.preview}</p>
 			{/if}
 		</div>
 		{#if messageCount > 0}
-			<span class="shrink-0 text-xs text-white/45">{messageCount} msgs</span>
+			<span class="shrink-0 text-xs text-foreground/45">{messageCount} msgs</span>
 		{/if}
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="shrink-0 text-xs text-white/45"
+			className="shrink-0 text-xs text-foreground/45"
 		/>
 	{/if}
 </a>

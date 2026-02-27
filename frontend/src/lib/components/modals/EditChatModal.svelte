@@ -38,18 +38,18 @@
 	<div class="space-y-4">
 		<div class="space-y-3">
 			<label class="block">
-				<div class="text-xs font-semibold text-white/60 uppercase">title</div>
+				<div class="text-xs font-semibold text-foreground/60 uppercase">title</div>
 				<input
-					class="rounded-pill mt-1 w-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-hidden placeholder:text-white/40"
+					class="rounded-pill mt-1 w-full border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/90 outline-hidden placeholder:text-foreground/40"
 					bind:value={title}
 					placeholder={thread?.title ? thread.title : 'untitled chat'}
 					disabled={isSaving}
 				/>
 			</label>
 			<label class="block">
-				<div class="text-xs font-semibold text-white/60 uppercase">tags</div>
+				<div class="text-xs font-semibold text-foreground/60 uppercase">tags</div>
 				<input
-					class="rounded-pill mt-1 w-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-hidden placeholder:text-white/40"
+					class="rounded-pill mt-1 w-full border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/90 outline-hidden placeholder:text-foreground/40"
 					bind:value={tagsCsv}
 					placeholder="comma, separated, tags"
 					disabled={isSaving}
@@ -59,7 +59,7 @@
 
 		{#if error}
 			<div
-				class="rounded-pill border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+				class="rounded-pill border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/70"
 			>
 				{error}
 			</div>
@@ -68,7 +68,7 @@
 		<div class="flex items-center justify-end gap-2">
 			<button
 				type="button"
-				class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+				class="rounded-pill border border-foreground/10 bg-transparent px-4 py-2 text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/5"
 				disabled={isSaving}
 				onclick={onCancel}
 			>
@@ -76,7 +76,7 @@
 			</button>
 			<button
 				type="button"
-				class="rounded-pill border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/90 transition-colors duration-150 hover:bg-white/15 disabled:opacity-60"
+				class="rounded-pill border border-foreground/10 bg-foreground/10 px-4 py-2 text-sm text-foreground/90 transition-colors duration-150 hover:bg-foreground/15 disabled:opacity-60"
 				disabled={isSaving}
 				onclick={onSave}
 			>

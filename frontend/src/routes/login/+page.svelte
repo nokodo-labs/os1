@@ -110,14 +110,15 @@
 				>
 					<div class="p-8">
 						<div class="mb-8 space-y-2">
-							<h1 class="text-2xl font-medium text-white">welcome back</h1>
-							<p class="text-sm text-white/55">sign in to continue</p>
+							<h1 class="text-foreground text-2xl font-medium">welcome back</h1>
+							<p class="text-foreground/55 text-sm">sign in to continue</p>
 						</div>
 
 						<form class="space-y-4" onsubmit={onSubmit}>
 							<div class="space-y-2">
-								<label class="text-sm font-medium text-white/75" for="identifier"
-									>email or username</label
+								<label
+									class="text-foreground/75 text-sm font-medium"
+									for="identifier">email or username</label
 								>
 								<input
 									id="identifier"
@@ -126,12 +127,12 @@
 									required
 									bind:value={identifier}
 									placeholder="email or username"
-									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
+									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
 								/>
 							</div>
 
 							<div class="space-y-2">
-								<label class="text-sm font-medium text-white/75" for="password"
+								<label class="text-foreground/75 text-sm font-medium" for="password"
 									>password</label
 								>
 								<input
@@ -141,7 +142,7 @@
 									required
 									bind:value={password}
 									placeholder="••••••••"
-									class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/90 transition-colors outline-none placeholder:text-white/35 focus:border-white/20"
+									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
 								/>
 							</div>
 
@@ -164,13 +165,13 @@
 							<button
 								type="submit"
 								disabled={isSubmitting || oidcOnly}
-								class="interactive inline-flex h-11 w-full items-center justify-center rounded-full bg-white font-medium text-black transition-all hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-black/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+								class="interactive bg-foreground text-background hover:bg-foreground/90 focus-visible:ring-foreground/20 inline-flex h-11 w-full items-center justify-center rounded-full font-medium transition-all focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
 							>
 								{#if isSubmitting}
 									<ShimmerText
 										className="inline-block"
-										textColor="rgb(0 0 0 / 1)"
-										waveColor="rgb(0 0 0 / 0.35)"
+										textColor="var(--background)"
+										waveColor="color-mix(in oklch, var(--background) 35%, transparent)"
 									>
 										signing in
 									</ShimmerText>
@@ -181,11 +182,11 @@
 						</form>
 
 						{#if allowSignups}
-							<div class="mt-6 text-center text-sm text-white/55">
+							<div class="text-foreground/55 mt-6 text-center text-sm">
 								don't have an account?
 								<a
 									href={resolve('/signup')}
-									class="ml-1 font-medium text-white/80 hover:text-white"
+									class="text-foreground/80 hover:text-foreground ml-1 font-medium"
 								>
 									sign up
 								</a>

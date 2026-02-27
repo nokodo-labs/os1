@@ -207,7 +207,7 @@
 					}}
 				>
 					<div
-						class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10"
+						class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/10"
 					>
 						{#if toast.iconUrl}
 							<img
@@ -216,15 +216,15 @@
 								class="h-5 w-5 rounded-full object-cover"
 							/>
 						{:else}
-							<AppNotification class="h-4 w-4 text-white/80" />
+							<AppNotification class="h-4 w-4 text-foreground/80" />
 						{/if}
 					</div>
 					<div class="min-w-0 flex-1">
-						<div class="truncate text-sm font-semibold text-white/90">
+						<div class="truncate text-sm font-semibold text-foreground/90">
 							{toast.title}
 						</div>
 						{#if toast.body}
-							<div class="line-clamp-2 text-sm text-white/60">{toast.body}</div>
+							<div class="line-clamp-2 text-sm text-foreground/60">{toast.body}</div>
 						{/if}
 						{#if toast.imageUrl}
 							<img
@@ -235,7 +235,7 @@
 						{/if}
 					</div>
 					<XMark
-						class="mt-0.5 size-5 shrink-0 cursor-pointer text-white/45 transition-all duration-150 hover:scale-[1.05] hover:text-white/80 active:scale-[0.97]"
+						class="mt-0.5 size-5 shrink-0 cursor-pointer text-foreground/45 transition-all duration-150 hover:scale-[1.05] hover:text-foreground/80 active:scale-[0.97]"
 						onpointerdown={(e) => e.stopPropagation()}
 						onclick={() => handleButtonDismiss(toast.id)}
 					/>
@@ -264,7 +264,7 @@
 						}}
 					>
 						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10"
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/10"
 						>
 							{#if toast.iconUrl}
 								<img
@@ -273,15 +273,15 @@
 									class="h-5 w-5 rounded-full object-cover"
 								/>
 							{:else}
-								<AppNotification class="h-4 w-4 text-white/80" />
+								<AppNotification class="h-4 w-4 text-foreground/80" />
 							{/if}
 						</div>
 						<div class="min-w-0 flex-1">
-							<div class="truncate text-sm font-semibold text-white/90">
+							<div class="truncate text-sm font-semibold text-foreground/90">
 								{toast.title}
 							</div>
 							{#if toast.body}
-								<div class="line-clamp-2 text-sm text-white/60">{toast.body}</div>
+								<div class="line-clamp-2 text-sm text-foreground/60">{toast.body}</div>
 							{/if}
 							{#if toast.imageUrl}
 								<img
@@ -292,7 +292,7 @@
 							{/if}
 						</div>
 						<XMark
-							class="mt-0.5 size-5 shrink-0 cursor-pointer text-white/45 transition-all duration-150 hover:scale-[1.05] hover:text-white/80 active:scale-[0.97]"
+							class="mt-0.5 size-5 shrink-0 cursor-pointer text-foreground/45 transition-all duration-150 hover:scale-[1.05] hover:text-foreground/80 active:scale-[0.97]"
 							onpointerdown={(e) => e.stopPropagation()}
 							onclick={() => handleButtonDismiss(toast.id)}
 						/>

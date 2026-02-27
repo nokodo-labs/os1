@@ -33,7 +33,7 @@
 {#snippet mobileBackAction()}
 	<button
 		type="button"
-		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
 		onclick={handleBack}
 		aria-label="back to settings"
 	>
@@ -47,12 +47,12 @@
 			class="flex items-center gap-4"
 			style="margin-bottom: var(--spacing-header-content);"
 		>
-			<div class="rounded-container flex h-12 w-12 items-center justify-center bg-white/10">
-				<Icon variant="solid" class="h-6 w-6 text-white/80" />
+			<div class="rounded-container flex h-12 w-12 items-center justify-center bg-foreground/10">
+				<Icon variant="solid" class="h-6 w-6 text-foreground/80" />
 			</div>
 			<div class="min-w-0">
-				<div class="text-2xl font-semibold text-white/90">{label}</div>
-				<div class="mt-1 text-sm text-white/60">{description}</div>
+				<div class="text-2xl font-semibold text-foreground/90">{label}</div>
+				<div class="mt-1 text-sm text-foreground/60">{description}</div>
 			</div>
 		</header>
 

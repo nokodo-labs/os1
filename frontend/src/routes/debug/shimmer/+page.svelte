@@ -89,12 +89,12 @@
 	</div>
 
 	<div class="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<section class="rounded-2xl border border-white/10 bg-black/20 p-5">
+		<section class="rounded-2xl border border-foreground/10 bg-black/20 p-5">
 			<div class="flex items-center justify-between gap-3">
 				<h2 class="text-base font-semibold">splash preview</h2>
 				<div class="flex items-center gap-2">
 					<button
-						class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm hover:bg-black/40"
+						class="rounded-xl border border-foreground/10 bg-black/30 px-3 py-2 text-sm hover:bg-black/40"
 						onclick={reloadSplashPreview}
 						type="button"
 					>
@@ -103,7 +103,7 @@
 				</div>
 			</div>
 
-			<div class="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+			<div class="mt-4 overflow-hidden rounded-2xl border border-foreground/10 bg-black/30">
 				<iframe
 					src={splashPreviewSrc}
 					class="h-[780px] w-full"
@@ -113,7 +113,7 @@
 			</div>
 		</section>
 
-		<section class="rounded-2xl border border-white/10 bg-black/20 p-5">
+		<section class="rounded-2xl border border-foreground/10 bg-black/20 p-5">
 			<div class="flex items-center justify-between gap-3">
 				<h2 class="text-base font-semibold">nokodo loader</h2>
 				<div class="flex items-center gap-3">
@@ -151,7 +151,7 @@
 				<label class="flex items-center justify-between gap-3 text-sm">
 					<span class="text-muted-foreground">background</span>
 					<select
-						class="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm"
+						class="rounded-xl border border-foreground/10 bg-black/30 px-3 py-2 text-sm"
 						bind:value={background}
 					>
 						<option value="glass">glass</option>
@@ -161,7 +161,7 @@
 				</label>
 			</div>
 
-			<div class="mt-5 overflow-hidden rounded-2xl border border-white/10">
+			<div class="mt-5 overflow-hidden rounded-2xl border border-foreground/10">
 				<div class="grid min-h-[780px] place-items-center p-10 {backgroundClass}">
 					<div style={loaderVars}>
 						<NokodoLoader {shimmer} {expanded} className="opacity-100" />

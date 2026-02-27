@@ -36,7 +36,7 @@
 			></span>
 		{/if}
 		<span
-			class="ws-indicator-dot relative inline-flex rounded-full border-2 border-white/20 {colors.bg}"
+			class="ws-indicator-dot relative inline-flex rounded-full border-2 border-foreground/20 {colors.bg}"
 		></span>
 	</span>
 </div>

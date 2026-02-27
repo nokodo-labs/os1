@@ -91,7 +91,7 @@
 <div class="w-60 p-3">
 	<!-- User Info Section (clickable to profile) -->
 	<button
-		class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-all hover:bg-white/5 active:scale-[0.98]"
+		class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-all hover:bg-foreground/5 active:scale-[0.98]"
 		onclick={handleUserProfileClick}
 		disabled={!session.isLoggedIn}
 	>
@@ -104,7 +104,7 @@
 				/>
 			{:else}
 				<div
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white uppercase"
+					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-foreground uppercase"
 					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 				>
 					{getUserInitials(user.name)}
@@ -112,32 +112,32 @@
 			{/if}
 			<div class="flex min-w-0 flex-1 flex-col">
 				<p
-					class="overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap text-white"
+					class="overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap text-foreground"
 				>
 					{user.name}
 				</p>
 				<p
-					class="overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap text-white/60"
+					class="overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap text-foreground/60"
 				>
 					{user.email}
 				</p>
 			</div>
-			<ChevronRight class="h-4 w-4 shrink-0 text-white/30" />
+			<ChevronRight class="h-4 w-4 shrink-0 text-foreground/30" />
 		{:else}
 			<div
-				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white uppercase"
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-foreground uppercase"
 				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 			>
 				??
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col">
 				<p
-					class="overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap text-white"
+					class="overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap text-foreground"
 				>
 					not signed in
 				</p>
 				<p
-					class="overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap text-white/60"
+					class="overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap text-foreground/60"
 				>
 					log in to access your account
 				</p>
@@ -145,7 +145,7 @@
 		{/if}
 	</button>
 
-	<hr class="my-2 border-white/10" />
+	<hr class="my-2 border-foreground/10" />
 
 	{#if session.isLoggedIn}
 		<!-- menu Items -->
@@ -153,7 +153,7 @@
 			{#each menuItems as item (item.id)}
 				{@const Icon = item.icon}
 				<button
-					class="rounded-pill flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-white transition-all duration-150 hover:border-white/20 hover:bg-white/10 active:scale-[0.98]"
+					class="rounded-pill flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-foreground transition-all duration-150 hover:border-foreground/20 hover:bg-foreground/10 active:scale-[0.98]"
 					onclick={item.action}
 				>
 					<Icon class="h-4.5 w-4.5 shrink-0" variant={item.variant} />
@@ -164,7 +164,7 @@
 	{:else}
 		<div class="flex flex-col gap-1">
 			<button
-				class="rounded-pill flex w-full cursor-pointer items-center justify-center border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
+				class="rounded-pill flex w-full cursor-pointer items-center justify-center border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm font-semibold text-foreground transition-all duration-150 hover:bg-foreground/10 active:scale-[0.98]"
 				onclick={handleLogin}
 			>
 				log in
@@ -172,7 +172,7 @@
 		</div>
 	{/if}
 
-	<hr class="my-2 border-white/10" />
+	<hr class="my-2 border-foreground/10" />
 
 	{#if session.isLoggedIn}
 		<!-- logout Button -->

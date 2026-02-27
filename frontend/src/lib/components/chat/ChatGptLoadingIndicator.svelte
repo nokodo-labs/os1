@@ -16,8 +16,8 @@
 	class={`relative inline-flex align-middle ${sizeClass} ${className}`.trim()}
 	aria-hidden="true"
 >
-	<span class="absolute inline-flex h-full w-full animate-pulse rounded-full bg-white/20"></span>
-	<span class={`relative inline-flex rounded-full bg-white/70 ${dotClass} chatgpt-dot`}></span>
+	<span class="absolute inline-flex h-full w-full animate-pulse rounded-full bg-foreground/20"></span>
+	<span class={`relative inline-flex rounded-full bg-foreground/70 ${dotClass} chatgpt-dot`}></span>
 </span>
 
 <style>

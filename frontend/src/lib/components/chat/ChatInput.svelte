@@ -183,7 +183,7 @@
 						aria-label="Add attachment"
 						aria-haspopup="menu"
 						aria-expanded={isAddMenuOpen}
-						class="flex cursor-pointer items-center justify-center bg-transparent p-0 text-black/65 transition-colors duration-200 hover:text-black/95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:text-white dark:hover:text-white"
+						class="text-foreground/65 hover:text-foreground flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
 						{disabled}
 						onclick={toggleAddMenu}
 					>
@@ -207,12 +207,12 @@
 					{#if isAddMenuOpen}
 						<div
 							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-							class="animate-popup-up rounded-container absolute bottom-full left-0 mb-3 w-56 overflow-hidden border border-white/10 bg-black/85 p-1 text-white/85 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
+							class="animate-popup-up rounded-container border-foreground/10 bg-popover/95 text-popover-foreground absolute bottom-full left-0 mb-3 w-56 overflow-hidden border p-1 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
 							role="menu"
 						>
 							<button
 								type="button"
-								class="rounded-pill flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+								class="rounded-pill hover:bg-foreground/10 flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors"
 								role="menuitem"
 								onclick={() => fileInput?.click()}
 							>
@@ -220,7 +220,7 @@
 							</button>
 							<button
 								type="button"
-								class="rounded-pill flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors hover:bg-white/10"
+								class="rounded-pill hover:bg-foreground/10 flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors"
 								role="menuitem"
 								onclick={() => imageInput?.click()}
 							>
@@ -241,7 +241,7 @@
 						oncompositionstart={handleCompositionStart}
 						oncompositionend={handleCompositionEnd}
 						rows="1"
-						class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/20 hover:scrollbar-thumb-black/30 dark:scrollbar-thumb-white/20 dark:hover:scrollbar-thumb-white/30 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 text-black/96 outline-none placeholder:text-black/40 dark:text-white/96 dark:placeholder:text-white/40"
+						class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-foreground/20 hover:scrollbar-thumb-foreground/30 text-foreground/96 placeholder:text-foreground/40 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 outline-none"
 					></textarea>
 				</div>
 
@@ -255,7 +255,7 @@
 						<button
 							type="button"
 							aria-label="stop generating"
-							class="rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center bg-black text-white transition-all duration-200 hover:bg-gray-800 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-gray-100"
+							class="rounded-circle bg-foreground text-background hover:bg-foreground/90 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95"
 							onclick={onStop}
 						>
 							<Stop class="h-5 w-5" />
@@ -268,7 +268,7 @@
 								value.trim() === '' || disabled
 							)
 								? 'hover:brightness-110'
-								: 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}"
+								: 'bg-foreground/10 text-foreground/35'}"
 							disabled={value.trim() === '' || disabled}
 						>
 							<ArrowUp class="h-5 w-5" strokeWidth="2" />
@@ -283,55 +283,40 @@
 <style>
 	.chat-input {
 		--lg-blur: 8px;
-		--lg-bg: rgba(255, 255, 255, 0.12);
+		--lg-bg: color-mix(in oklch, var(--background) 12%, transparent);
 	}
 
 	:global(.dark) .chat-input {
-		--lg-bg: rgba(0, 0, 0, 0.35);
+		--lg-bg: color-mix(in oklch, var(--background) 35%, transparent);
 	}
 
 	.chat-input:hover {
-		--lg-bg: rgba(255, 255, 255, 0.16);
+		--lg-bg: color-mix(in oklch, var(--background) 16%, transparent);
 		--lg-highlight-center: rgba(255, 255, 255, 0.24);
 		--lg-border-start: rgba(80, 80, 80, 0.28);
 		--lg-border-end: rgba(170, 170, 170, 0.42);
 	}
 
 	:global(.dark) .chat-input:hover {
-		--lg-bg: rgba(0, 0, 0, 0.4);
+		--lg-bg: color-mix(in oklch, var(--background) 40%, transparent);
 	}
 
 	.chat-input:has(textarea:focus) {
-		--lg-bg: rgba(255, 255, 255, 0.25);
+		--lg-bg: color-mix(in oklch, var(--background) 25%, transparent);
 		--lg-highlight-center: rgba(255, 255, 255, 0.42);
 		--lg-border-start: rgba(120, 120, 120, 0.35);
 		--lg-border-end: rgba(200, 200, 200, 0.5);
 	}
 
 	:global(.dark) .chat-input:has(textarea:focus) {
-		--lg-bg: rgba(0, 0, 0, 0.45);
+		--lg-bg: color-mix(in oklch, var(--background) 45%, transparent);
 		--lg-highlight-center: rgba(255, 255, 255, 0.42);
 		--lg-border-start: rgba(120, 120, 120, 0.35);
 		--lg-border-end: rgba(200, 200, 200, 0.5);
 	}
 
 	.send-btn {
-		background-color: var(--accent-primary);
-		color: white;
-	}
-
-	:global(.dark) .send-btn {
-		background-color: rgb(255 255 255);
-		color: rgb(0 0 0);
-	}
-
-	.send-btn:disabled {
-		background-color: rgb(229 231 235);
-		color: rgb(107 114 128);
-	}
-
-	:global(.dark) .send-btn:disabled {
-		background-color: rgb(55 65 81);
-		color: rgb(156 163 175);
+		background-color: var(--foreground);
+		color: var(--background);
 	}
 </style>

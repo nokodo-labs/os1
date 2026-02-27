@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { runChatStream } from '$lib/api/streaming'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
@@ -255,23 +255,23 @@
 		{#if mode === 'menu'}
 			<LiquidGlass frosted class="rounded-popup flex items-center gap-1 p-1">
 				<button
-					class="interactive rounded-pill flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium hover:bg-black/10 dark:hover:bg-white/15"
+					class="interactive rounded-pill hover:bg-foreground/10 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium"
 					onclick={handleQuote}
 				>
 					<BlockQuote class="size-3.5" />
 					quote
 				</button>
-				<div class="h-4 w-px bg-black/15 dark:bg-white/20"></div>
+				<div class="bg-foreground/15 h-4 w-px"></div>
 				<button
-					class="interactive rounded-pill flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium hover:bg-black/10 dark:hover:bg-white/15"
+					class="interactive rounded-pill hover:bg-foreground/10 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium"
 					onclick={handleAsk}
 				>
 					<ChatBubble class="size-3.5" />
 					ask
 				</button>
-				<div class="h-4 w-px bg-black/15 dark:bg-white/20"></div>
+				<div class="bg-foreground/15 h-4 w-px"></div>
 				<button
-					class="interactive rounded-pill flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium hover:bg-black/10 dark:hover:bg-white/15"
+					class="interactive rounded-pill hover:bg-foreground/10 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium"
 					onclick={handleExplain}
 				>
 					<LightBulb class="size-3.5" />
@@ -322,7 +322,7 @@
 					{#if chatPhase === 'idle'}
 						<div class="px-2 pt-1 pb-2">
 							<div
-								class="flex items-center gap-1.5 rounded-full border border-black/10 bg-black/5 px-2 py-1 dark:border-white/10 dark:bg-white/5"
+								class="border-foreground/10 bg-foreground/5 flex items-center gap-1.5 rounded-full border px-2 py-1"
 							>
 								<input
 									bind:this={chatInputEl}
@@ -339,7 +339,7 @@
 									}}
 								/>
 								<button
-									class="interactive flex size-6 shrink-0 items-center justify-center rounded-full text-white hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
+									class="interactive text-foreground flex size-6 shrink-0 items-center justify-center rounded-full hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
 									style="background-color: var(--accent-primary);"
 									onclick={handleSubmitChat}
 									disabled={!chatQuery.trim() || chatInputDisabled}

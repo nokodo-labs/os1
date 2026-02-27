@@ -104,8 +104,8 @@
 				type="button"
 				class="flex size-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors duration-150 {layout ===
 				'grid'
-					? 'text-white/80'
-					: 'text-white/30 hover:text-white/50'}"
+					? 'text-foreground/80'
+					: 'text-foreground/30 hover:text-foreground/50'}"
 				onclick={() => (layout = 'grid')}
 				aria-label="grid view"
 				aria-pressed={layout === 'grid'}
@@ -116,8 +116,8 @@
 				type="button"
 				class="flex size-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors duration-150 {layout ===
 				'list'
-					? 'text-white/80'
-					: 'text-white/30 hover:text-white/50'}"
+					? 'text-foreground/80'
+					: 'text-foreground/30 hover:text-foreground/50'}"
 				onclick={() => (layout = 'list')}
 				aria-label="list view"
 				aria-pressed={layout === 'list'}
@@ -146,7 +146,7 @@
 		<div
 			class="liquid-glass liquid-glass--frosted flex flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl py-16 text-center"
 		>
-			<p class="text-sm text-white/50">{emptyMessage}</p>
+			<p class="text-sm text-foreground/50">{emptyMessage}</p>
 		</div>
 	{:else}
 		<div
@@ -179,18 +179,18 @@
 		<div class="flex items-center justify-center gap-3 pt-2">
 			<button
 				type="button"
-				class="rounded-pill cursor-pointer border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60 transition-colors duration-150 hover:bg-white/10 disabled:cursor-default disabled:opacity-30"
+				class="rounded-pill cursor-pointer border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/60 transition-colors duration-150 hover:bg-foreground/10 disabled:cursor-default disabled:opacity-30"
 				onclick={prevPage}
 				disabled={currentPage === 0}
 			>
 				previous
 			</button>
-			<span class="text-xs text-white/40">
+			<span class="text-xs text-foreground/40">
 				{currentPage + 1} / {totalPages}
 			</span>
 			<button
 				type="button"
-				class="rounded-pill cursor-pointer border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60 transition-colors duration-150 hover:bg-white/10 disabled:cursor-default disabled:opacity-30"
+				class="rounded-pill cursor-pointer border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/60 transition-colors duration-150 hover:bg-foreground/10 disabled:cursor-default disabled:opacity-30"
 				onclick={nextPage}
 				disabled={currentPage >= totalPages - 1}
 			>

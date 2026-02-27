@@ -116,19 +116,19 @@
 	<div class="space-y-4">
 		<!-- profile privacy controls -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white/85">profile visibility</div>
-			<div class="mt-1 text-sm text-white/55">
+			<div class="text-sm font-semibold text-foreground/85">profile visibility</div>
+			<div class="mt-1 text-sm text-foreground/55">
 				choose who can see each part of your profile.
 			</div>
 			<div class="mt-4 space-y-4">
 				{#each privacyFields as field (field.key)}
 					<div class="flex items-center justify-between gap-3">
 						<div class="min-w-0 flex-1">
-							<div class="text-sm text-white/70">{field.label}</div>
-							<div class="text-xs text-white/50">{field.description}</div>
+							<div class="text-sm text-foreground/70">{field.label}</div>
+							<div class="text-xs text-foreground/50">{field.description}</div>
 						</div>
 						<select
-							class="rounded-pill w-32 shrink-0 cursor-pointer appearance-none border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/80 scheme-dark transition-colors outline-none focus:border-white/20"
+							class="rounded-pill w-32 shrink-0 cursor-pointer appearance-none border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/80 scheme-dark transition-colors outline-none focus:border-foreground/20"
 							value={getVisibility(field.key)}
 							onchange={(e) =>
 								void setVisibility(field.key, e.currentTarget.value as Visibility)}
@@ -145,15 +145,15 @@
 
 		<!-- AI personalization -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white/85">AI personalization</div>
-			<div class="mt-1 text-sm text-white/55">
+			<div class="text-sm font-semibold text-foreground/85">AI personalization</div>
+			<div class="mt-1 text-sm text-foreground/55">
 				control what information is shared with the AI to personalise your experience.
 			</div>
 			<div class="mt-4 space-y-4">
 				<div class="flex items-center justify-between gap-3">
 					<div>
-						<div class="text-sm text-white/70">device information</div>
-						<div class="text-xs text-white/50">
+						<div class="text-sm text-foreground/70">device information</div>
+						<div class="text-xs text-foreground/50">
 							share timezone, device type, and browser to help the AI personalise
 							responses
 						</div>
@@ -162,8 +162,8 @@
 				</div>
 				<div class="flex items-center justify-between gap-3">
 					<div>
-						<div class="text-sm text-white/70">precise location</div>
-						<div class="text-xs text-white/50">
+						<div class="text-sm text-foreground/70">precise location</div>
+						<div class="text-xs text-foreground/50">
 							share your location with the AI for location-aware responses
 						</div>
 					</div>
@@ -171,8 +171,8 @@
 				</div>
 				<div class="flex items-center justify-between gap-3">
 					<div>
-						<div class="text-sm text-white/70">battery status</div>
-						<div class="text-xs text-white/50">
+						<div class="text-sm text-foreground/70">battery status</div>
+						<div class="text-xs text-foreground/50">
 							share charging state and battery level for context-aware responses
 						</div>
 					</div>
@@ -183,18 +183,18 @@
 
 		<!-- data collection -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-white/85">data collection</div>
-			<div class="mt-1 text-sm text-white/55">
+			<div class="text-sm font-semibold text-foreground/85">data collection</div>
+			<div class="mt-1 text-sm text-foreground/55">
 				control what data is collected and how it's used.
 			</div>
 			<div class="mt-4 space-y-3">
 				<div class="flex items-center justify-between">
-					<span class="text-sm text-white/70">analytics</span>
-					<div class="h-6 w-12 rounded-full bg-white/20"></div>
+					<span class="text-sm text-foreground/70">analytics</span>
+					<div class="h-6 w-12 rounded-full bg-foreground/20"></div>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-sm text-white/70">crash reports</span>
-					<div class="h-6 w-12 rounded-full bg-white/20"></div>
+					<span class="text-sm text-foreground/70">crash reports</span>
+					<div class="h-6 w-12 rounded-full bg-foreground/20"></div>
 				</div>
 			</div>
 		</div>

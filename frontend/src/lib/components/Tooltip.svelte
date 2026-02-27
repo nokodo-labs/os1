@@ -48,7 +48,8 @@
 
 <style>
 	:global(.tippy-box) {
-		background-color: #000;
+		background-color: var(--popover);
+		color: var(--popover-foreground);
 		border-radius: 999px;
 		padding: 6px 12px;
 		font-size: 0.75rem;

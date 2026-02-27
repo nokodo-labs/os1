@@ -14,7 +14,7 @@
 		<PageTitle icon={Users} label="friends" />
 		<LiquidGlass class="rounded-full" style="view-transition-name: social-action-btn;">
 			<button
-				class="interactive flex items-center gap-1.5 rounded-full border-none bg-transparent px-4 py-2 text-sm font-medium text-white/80 hover:text-white"
+				class="interactive flex items-center gap-1.5 rounded-full border-none bg-transparent px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground"
 				onclick={() => modals.open('add-friends')}
 			>
 				<UserPlus class="h-4 w-4" />
@@ -33,8 +33,8 @@
 			<Users class="h-10 w-10 text-(--accent-primary)" />
 		</div>
 		<div class="flex flex-col items-center gap-2 text-center">
-			<p class="text-base font-medium text-white/80">no friends yet</p>
-			<p class="max-w-xs text-sm text-white/50">
+			<p class="text-base font-medium text-foreground/80">no friends yet</p>
+			<p class="max-w-xs text-sm text-foreground/50">
 				add friends to share notes, start conversations, and collaborate together.
 			</p>
 		</div>

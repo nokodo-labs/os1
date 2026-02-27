@@ -64,7 +64,7 @@
 {#if showTrigger}
 	<button
 		type="button"
-		class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+		class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 		onclick={handleTriggerClick}
 	>
 		<Trash
@@ -88,7 +88,7 @@
 	<div class="space-y-4">
 		{#if error}
 			<div
-				class="rounded-container border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70"
+				class="rounded-container border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/70"
 			>
 				{error}
 			</div>
@@ -97,7 +97,7 @@
 		<div class="flex items-center justify-end gap-2">
 			<button
 				type="button"
-				class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
+				class="rounded-pill border border-foreground/10 bg-transparent px-4 py-2 text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/5"
 				disabled={isDeleting}
 				onclick={() => {
 					open = false

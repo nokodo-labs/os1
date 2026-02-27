@@ -58,9 +58,9 @@
 				<FinderFolder class="size-5" />
 			</div>
 			<div class="flex flex-col">
-				<span class="text-[13px] font-medium text-white/60">project</span>
+				<span class="text-[13px] font-medium text-foreground/60">project</span>
 				{#if memberCount > 0}
-					<span class="text-[11px] text-white/40"
+					<span class="text-[11px] text-foreground/40"
 						>{memberCount} member{memberCount !== 1 ? 's' : ''}</span
 					>
 				{/if}
@@ -69,7 +69,7 @@
 				<button
 					type="button"
 					bind:this={menuButtonEl}
-					class="ml-auto flex size-7 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-white/40 opacity-0 transition-all duration-150 group-hover:opacity-100 hover:text-white/80"
+					class="ml-auto flex size-7 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-foreground/40 opacity-0 transition-all duration-150 group-hover:opacity-100 hover:text-foreground/80"
 					onclick={handleMenuClick}
 					aria-label="project options"
 					aria-haspopup="menu"
@@ -96,7 +96,7 @@
 					{#if onDelete}
 						<button
 							type="button"
-							class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+							class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 							onclick={(e: MouseEvent) => {
 								e.preventDefault()
 								e.stopPropagation()
@@ -113,19 +113,19 @@
 				</PopupMenu>
 			{/if}
 		</div>
-		<h3 class="mb-1.5 truncate text-xl font-semibold text-white">
+		<h3 class="mb-1.5 truncate text-xl font-semibold text-foreground">
 			{resource.title || 'untitled project'}
 		</h3>
 		{#if resource.subtitle}
-			<p class="mb-2 line-clamp-2 text-sm leading-relaxed text-white/70">
+			<p class="mb-2 line-clamp-2 text-sm leading-relaxed text-foreground/70">
 				{resource.subtitle}
 			</p>
 		{/if}
-		<p class="mb-1 text-sm text-white/55">{stats}</p>
+		<p class="mb-1 text-sm text-foreground/55">{stats}</p>
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="mt-auto text-xs text-white/45"
+			className="mt-auto text-xs text-foreground/45"
 		/>
 	{:else}
 		<div
@@ -134,19 +134,19 @@
 			<FinderFolder class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-semibold text-white">
+			<h3 class="truncate text-base font-semibold text-foreground">
 				{resource.title || 'untitled project'}
 			</h3>
-			<p class="truncate text-sm text-white/65">{stats}</p>
+			<p class="truncate text-sm text-foreground/65">{stats}</p>
 		</div>
 		{#if memberCount > 0}
-			<span class="shrink-0 text-xs text-white/45">{memberCount} members</span>
+			<span class="shrink-0 text-xs text-foreground/45">{memberCount} members</span>
 		{/if}
 		{#if hasActions}
 			<button
 				type="button"
 				bind:this={menuButtonEl}
-				class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-white/40 opacity-0 transition-all duration-150 group-hover:opacity-100 hover:text-white/80"
+				class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-foreground/40 opacity-0 transition-all duration-150 group-hover:opacity-100 hover:text-foreground/80"
 				onclick={handleMenuClick}
 				aria-label="project options"
 				aria-haspopup="menu"
@@ -169,7 +169,7 @@
 				{#if onDelete}
 					<button
 						type="button"
-						class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+						class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 						onclick={(e: MouseEvent) => {
 							e.preventDefault()
 							e.stopPropagation()
@@ -188,7 +188,7 @@
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="shrink-0 text-xs text-white/45"
+			className="shrink-0 text-xs text-foreground/45"
 		/>
 	{/if}
 </a>

@@ -147,8 +147,8 @@
 			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
 	>
 		<div class="flex min-w-0 items-center gap-2">
-			<Cog6 variant="solid" class="h-5 w-5 text-white/60" />
-			<h2 class="min-w-0 truncate text-lg font-semibold tracking-wide text-white/85">
+			<Cog6 variant="solid" class="text-foreground/60 h-5 w-5" />
+			<h2 class="text-foreground/85 min-w-0 truncate text-lg font-semibold tracking-wide">
 				settings
 			</h2>
 		</div>
@@ -160,10 +160,7 @@
 				<div
 					role="button"
 					tabindex="0"
-					class="group rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-3 py-2.5 text-left transition-all duration-200 hover:border-white/12 hover:bg-white/8 hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] {selectedSection ===
-					section.id
-						? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
-						: ''}"
+					class="group rounded-pill hover:border-foreground/12 hover:bg-foreground/8 flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-3 py-2.5 text-left transition-all duration-200"
 					style={selectedSection === section.id
 						? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
 						: ''}
@@ -176,21 +173,21 @@
 					}}
 				>
 					<span
-						class="rounded-pill flex h-8 w-8 items-center justify-center text-white/80 {rowIconBackground
-							? 'bg-white/8'
+						class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
+							? 'bg-foreground/8'
 							: ''}"
 					>
 						<section.icon variant="solid" class="h-5 w-5" />
 					</span>
 
 					<span class="flex min-w-0 flex-1 items-center gap-2">
-						<span class="min-w-0 truncate text-[0.95rem] font-medium text-white/90"
+						<span class="text-foreground/90 min-w-0 truncate text-[0.95rem] font-medium"
 							>{section.label}</span
 						>
 					</span>
 
 					<ChevronRight
-						class="h-4 w-4 text-white/50 transition-colors group-hover:text-white/55"
+						class="text-foreground/50 group-hover:text-foreground/55 h-4 w-4 transition-colors"
 					/>
 				</div>
 			{/each}

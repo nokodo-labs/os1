@@ -29,15 +29,15 @@
 				transition-[transform,box-shadow,ring-color,background-color,color] duration-300
 				ease-in-out hover:scale-[1.06] active:scale-[1.1]
 				{isSelected
-				? 'border-white/25 bg-white/14 text-white shadow-[0_14px_30px_rgba(12,10,30,0.25)]'
-				: 'border-white/10 bg-white/6 text-white/60 hover:border-white/18 hover:bg-white/10 hover:text-white'}"
+				? 'border-foreground/25 bg-foreground/14 text-foreground shadow-[0_14px_30px_rgba(12,10,30,0.25)]'
+				: 'border-foreground/10 bg-foreground/6 text-foreground/60 hover:border-foreground/18 hover:bg-foreground/10 hover:text-foreground'}"
 		>
 			<span
 				class="flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all
-					{isSelected ? 'border-white' : 'border-white/40'}"
+					{isSelected ? 'border-foreground' : 'border-foreground/40'}"
 			>
 				{#if isSelected}
-					<span class="h-2 w-2 rounded-full bg-white"></span>
+					<span class="bg-background h-2 w-2 rounded-full"></span>
 				{/if}
 			</span>
 			<span>{option.label}</span>

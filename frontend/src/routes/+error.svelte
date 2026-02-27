@@ -38,23 +38,25 @@
 	>
 		<div class="relative z-10 px-7 py-7">
 			<div class="text-center">
-				<div class="text-[4.75rem] leading-none font-semibold tracking-tight text-white/90">
+				<div
+					class="text-foreground/90 text-[4.75rem] leading-none font-semibold tracking-tight"
+				>
 					{status}
 				</div>
-				<div class="mt-3 text-xl font-semibold text-white/85">{errorTitle}</div>
-				<div class="mt-2 text-sm text-white/60">{message}</div>
+				<div class="text-foreground/85 mt-3 text-xl font-semibold">{errorTitle}</div>
+				<div class="text-foreground/60 mt-2 text-sm">{message}</div>
 			</div>
 
 			<div class="mt-6 flex justify-center">
 				<button
 					type="button"
-					class="group inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium text-white/85 transition-colors duration-150 hover:bg-white/12 hover:text-white active:scale-[0.99]"
+					class="group border-foreground/10 bg-foreground/8 text-foreground/85 hover:bg-foreground/12 hover:text-foreground inline-flex cursor-pointer items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors duration-150 active:scale-[0.99]"
 					onclick={() => void goto(resolve('/'), { keepFocus: true, noScroll: true })}
 					aria-label="go home"
 				>
 					<Home
 						variant="solid"
-						class="size-4 text-white/70 transition-colors duration-150 group-hover:text-white/85"
+						class="text-foreground/70 group-hover:text-foreground/85 size-4 transition-colors duration-150"
 					/>
 					go home
 				</button>

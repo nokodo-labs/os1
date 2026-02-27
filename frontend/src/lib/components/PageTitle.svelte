@@ -12,7 +12,7 @@
 	let {
 		icon: Icon,
 		label,
-		iconColor = 'text-white',
+		iconColor = 'text-foreground',
 		tag = 'h1',
 		class: className = '',
 	}: PageTitleProps = $props()
@@ -20,7 +20,7 @@
 
 <div class="flex items-center gap-3 {className}">
 	<Icon class="h-7 w-7 shrink-0 {iconColor}" variant="solid" />
-	<svelte:element this={tag} class="min-w-0 truncate text-2xl font-bold text-white">
+	<svelte:element this={tag} class="min-w-0 truncate text-2xl font-bold text-foreground">
 		{label}
 	</svelte:element>
 </div>

@@ -342,7 +342,7 @@
 {/if}
 
 <aside
-	class="chat-sidebar fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-white/14 backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
+	class="chat-sidebar border-foreground/14 fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
 		? ''
 		: 'group'} {device.isMobile
 		? 'w-full'
@@ -361,10 +361,10 @@
 >
 	<!-- gradient overlay (replaces ::before pseudo-element) -->
 	<div
-		class="pointer-events-none absolute inset-0 bg-linear-to-br from-white/12 via-white/7 to-transparent opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+		class="from-foreground/12 via-foreground/7 pointer-events-none absolute inset-0 bg-linear-to-br to-transparent opacity-70 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 	<div
-		class="pointer-events-none absolute inset-0 bg-white/5 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+		class="bg-foreground/5 pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	></div>
 
 	<div class="relative z-20 flex h-full min-h-0 w-full flex-col items-center gap-3 pt-4 pb-0">
@@ -385,7 +385,7 @@
 
 		<div class="w-full px-3" aria-hidden="true">
 			<div
-				class="h-px w-full bg-linear-to-r from-transparent via-white/18 to-transparent"
+				class="via-foreground/18 h-px w-full bg-linear-to-r from-transparent to-transparent"
 			></div>
 		</div>
 

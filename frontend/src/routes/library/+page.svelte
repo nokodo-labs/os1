@@ -85,7 +85,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-white/10"
+				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
 				onclick={() => {
 					sort = option.value
 					closeSortMenu()
@@ -103,7 +103,7 @@
 >
 	<div>
 		<PageTitle icon={Clip} label="files" />
-		<p class="mt-2 text-sm text-white/60">
+		<p class="mt-2 text-sm text-foreground/60">
 			all your uploaded, created and shared files in one place
 		</p>
 	</div>

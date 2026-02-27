@@ -38,23 +38,23 @@
 				<Clip class="size-5" />
 			</div>
 			<div class="flex flex-col">
-				<span class="text-[13px] font-medium text-white/60">{fileType}</span>
+				<span class="text-[13px] font-medium text-foreground/60">{fileType}</span>
 				{#if fileSize}
-					<span class="text-[11px] text-white/40">{formatFileSize(fileSize)}</span>
+					<span class="text-[11px] text-foreground/40">{formatFileSize(fileSize)}</span>
 				{/if}
 			</div>
 		</div>
-		<h3 class="mb-1.5 truncate text-xl font-semibold text-white">
+		<h3 class="mb-1.5 truncate text-xl font-semibold text-foreground">
 			{resource.title || 'untitled file'}
 		</h3>
 		<div class="mt-auto flex items-center gap-2">
 			{#if uploadedBy}
-				<span class="text-xs text-white/50">by {uploadedBy}</span>
+				<span class="text-xs text-foreground/50">by {uploadedBy}</span>
 			{/if}
 			<Timestamp
 				timestamp={new Date(resource.updatedAt)}
 				mode="relative"
-				className="ml-auto shrink-0 text-xs text-white/45"
+				className="ml-auto shrink-0 text-xs text-foreground/45"
 			/>
 		</div>
 	{:else}
@@ -64,22 +64,22 @@
 			<Clip class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-semibold text-white">
+			<h3 class="truncate text-base font-semibold text-foreground">
 				{resource.title || 'untitled file'}
 			</h3>
 			<div class="flex items-center gap-2">
 				{#if fileSize}
-					<span class="text-sm text-white/60">{formatFileSize(fileSize)}</span>
+					<span class="text-sm text-foreground/60">{formatFileSize(fileSize)}</span>
 				{/if}
 				{#if uploadedBy}
-					<span class="text-xs text-white/45">by {uploadedBy}</span>
+					<span class="text-xs text-foreground/45">by {uploadedBy}</span>
 				{/if}
 			</div>
 		</div>
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
 			mode="relative"
-			className="shrink-0 text-xs text-white/45"
+			className="shrink-0 text-xs text-foreground/45"
 		/>
 	{/if}
 </a>

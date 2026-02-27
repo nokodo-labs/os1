@@ -36,13 +36,13 @@
 	}
 
 	const variantClasses: Record<Variant, string> = {
-		ghost: 'bg-transparent text-white/70 hover:text-white hover:bg-white/8',
-		subtle: 'bg-white/5 text-white/80 hover:bg-white/12 hover:text-white',
-		solid: 'bg-white/15 text-white hover:bg-white/22',
+		ghost: 'bg-transparent text-foreground/70 hover:text-foreground hover:bg-foreground/8',
+		subtle: 'bg-foreground/5 text-foreground/80 hover:bg-foreground/12 hover:text-foreground',
+		solid: 'bg-foreground/15 text-foreground hover:bg-foreground/22',
 	}
 
 	const baseClasses =
-		'inline-flex cursor-pointer items-center justify-center rounded-pill border-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-40'
+		'inline-flex cursor-pointer items-center justify-center rounded-pill border-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-40'
 </script>
 
 <button

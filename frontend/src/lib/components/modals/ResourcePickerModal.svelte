@@ -257,7 +257,7 @@
 			reminder_list: { icon: CheckBox, color: 'text-sky-400 bg-sky-500/15' },
 			file: { icon: Clip, color: 'text-rose-400 bg-rose-500/15' },
 		}
-		return map[type] ?? { icon: Clip, color: 'text-white/50 bg-white/10' }
+		return map[type] ?? { icon: Clip, color: 'text-foreground/50 bg-foreground/10' }
 	}
 </script>
 
@@ -274,11 +274,11 @@
 		<!-- search bar -->
 		<div class="relative">
 			<Search
-				class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40"
+				class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40"
 			/>
 			<input
 				type="text"
-				class="rounded-pill w-full border border-white/10 bg-white/5 py-2.5 pr-3 pl-9 text-sm text-white/90 placeholder-white/40 transition-colors outline-none focus:border-white/20 focus:bg-white/8"
+				class="rounded-pill w-full border border-foreground/10 bg-foreground/5 py-2.5 pr-3 pl-9 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
 				placeholder="search resources..."
 				value={searchQuery}
 				oninput={(e) => handleSearchInput(e.currentTarget.value)}
@@ -293,8 +293,8 @@
 						type="button"
 						class="rounded-pill shrink-0 cursor-pointer border px-3 py-1.5 text-xs transition-colors duration-150 {activeFilter ===
 						opt.value
-							? 'border-white/20 bg-white/12 text-white/90'
-							: 'border-white/8 bg-transparent text-white/50 hover:bg-white/5 hover:text-white/70'}"
+							? 'border-foreground/20 bg-foreground/12 text-foreground/90'
+							: 'border-foreground/8 bg-transparent text-foreground/50 hover:bg-foreground/5 hover:text-foreground/70'}"
 						onclick={() => {
 							activeFilter = opt.value
 							if (searchQuery.trim()) void runSearch(searchQuery)
@@ -309,8 +309,8 @@
 					type="button"
 					class="flex size-7 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors {layout ===
 					'grid'
-						? 'text-white/80'
-						: 'text-white/30 hover:text-white/50'}"
+						? 'text-foreground/80'
+						: 'text-foreground/30 hover:text-foreground/50'}"
 					onclick={() => (layout = 'grid')}
 					aria-label="grid view"
 				>
@@ -320,8 +320,8 @@
 					type="button"
 					class="flex size-7 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors {layout ===
 					'list'
-						? 'text-white/80'
-						: 'text-white/30 hover:text-white/50'}"
+						? 'text-foreground/80'
+						: 'text-foreground/30 hover:text-foreground/50'}"
 					onclick={() => (layout = 'list')}
 					aria-label="list view"
 				>
@@ -335,12 +335,12 @@
 			{#if loading}
 				<div class="flex items-center justify-center py-12">
 					<div
-						class="size-5 animate-spin rounded-full border-2 border-white/20 border-t-white/60"
+						class="size-5 animate-spin rounded-full border-2 border-foreground/20 border-t-white/60"
 					></div>
 				</div>
 			{:else if displayResults.length === 0}
 				<div class="flex flex-col items-center justify-center py-12 text-center">
-					<p class="text-sm text-white/40">
+					<p class="text-sm text-foreground/40">
 						{searchQuery.trim()
 							? 'no matching resources found'
 							: 'no resources available'}
@@ -352,7 +352,7 @@
 						{@const typeInfo = getTypeIcon(resource.type)}
 						<button
 							type="button"
-							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-colors duration-150 hover:bg-white/8 active:scale-[0.99]"
+							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-colors duration-150 hover:bg-foreground/8 active:scale-[0.99]"
 							onclick={() => handleSelect(resource)}
 						>
 							<div
@@ -361,11 +361,11 @@
 								<typeInfo.icon class="size-4" />
 							</div>
 							<div class="min-w-0 flex-1">
-								<div class="truncate text-sm font-medium text-white/90">
+								<div class="truncate text-sm font-medium text-foreground/90">
 									{resource.title}
 								</div>
 								{#if resource.subtitle || resource.preview}
-									<div class="truncate text-xs text-white/50">
+									<div class="truncate text-xs text-foreground/50">
 										{resource.subtitle ?? resource.preview}
 									</div>
 								{/if}
@@ -373,7 +373,7 @@
 							<Timestamp
 								timestamp={new Date(resource.updatedAt)}
 								mode="relative"
-								className="shrink-0 text-xs text-white/35"
+								className="shrink-0 text-xs text-foreground/35"
 							/>
 						</button>
 					{/each}
@@ -384,7 +384,7 @@
 						{@const typeInfo = getTypeIcon(resource.type)}
 						<button
 							type="button"
-							class="flex cursor-pointer flex-col gap-2 rounded-2xl border border-white/8 bg-white/4 p-4 text-left transition-all duration-150 hover:bg-white/8 active:scale-[0.98]"
+							class="flex cursor-pointer flex-col gap-2 rounded-2xl border border-foreground/8 bg-foreground/4 p-4 text-left transition-all duration-150 hover:bg-foreground/8 active:scale-[0.98]"
 							onclick={() => handleSelect(resource)}
 						>
 							<div class="flex items-center gap-2">
@@ -393,22 +393,22 @@
 								>
 									<typeInfo.icon class="size-4" />
 								</div>
-								<span class="text-[11px] text-white/40"
+								<span class="text-[11px] text-foreground/40"
 									>{resource.type.replace('_', ' ')}</span
 								>
 							</div>
-							<div class="truncate text-sm font-medium text-white/90">
+							<div class="truncate text-sm font-medium text-foreground/90">
 								{resource.title}
 							</div>
 							{#if resource.subtitle || resource.preview}
-								<div class="line-clamp-2 text-xs text-white/50">
+								<div class="line-clamp-2 text-xs text-foreground/50">
 									{resource.subtitle ?? resource.preview}
 								</div>
 							{/if}
 							<Timestamp
 								timestamp={new Date(resource.updatedAt)}
 								mode="relative"
-								className="mt-auto text-[11px] text-white/35"
+								className="mt-auto text-[11px] text-foreground/35"
 							/>
 						</button>
 					{/each}
