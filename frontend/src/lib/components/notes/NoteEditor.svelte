@@ -329,14 +329,16 @@
 
 {#if !note}
 	<div class="mx-auto mt-10 max-w-3xl">
-		<div class="rounded-container border border-white/10 bg-white/5 p-5 text-sm text-white/70">
+		<div
+			class="rounded-container liquid-glass liquid-glass--frosted border border-white/10 p-5 text-sm text-white/70"
+		>
 			note not found.
 		</div>
 	</div>
 {:else}
 	<div class="flex w-full flex-1 flex-col" id="note-editor">
 		<!-- header section -->
-		<div class="rounded-container bg-white/5 px-5 py-5 pb-6">
+		<div class="rounded-container liquid-glass liquid-glass--frosted px-5 py-5 pb-6">
 			<!-- title row -->
 			<div class="mb-2 flex w-full items-center gap-2">
 				<input

@@ -35,9 +35,6 @@
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
 	"githubIssues.issueBranchTitle": "issues/${issueNumber}-${user}",
-
-	// Python
-	"python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv",
 	"[python]": {
 		"editor.defaultFormatter": "charliermarsh.ruff",
 		"editor.formatOnSave": true,

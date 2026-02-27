@@ -333,7 +333,7 @@ async def _autocomplete_memories(
 
 
 async def _hybrid_search_memories(
-	q: str,
+	query: str | list[float],
 	db: AsyncSession,
 	*,
 	principal: Principal,
@@ -344,8 +344,13 @@ async def _hybrid_search_memories(
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_emb = await embed_text(text=q, session=db) if need_dense else None
-	text_query = q if need_sparse else None
+	query_text = query if isinstance(query, str) else None
+	query_emb = (
+		query
+		if isinstance(query, list)
+		else (await embed_text(text=query, session=db) if need_dense else None)
+	)
+	text_query = query_text if need_sparse else None
 	# memories are user-private (no sharing) - owner_id filter is efficient.
 	query_filter = vectorstore_service.resource_filter(
 		"memory",
@@ -389,7 +394,7 @@ async def _hybrid_search_memories(
 
 
 async def search_memories(
-	q: str,
+	query: str | list[float],
 	db: AsyncSession,
 	*,
 	principal: Principal,
@@ -399,8 +404,12 @@ async def search_memories(
 ) -> CursorPage[SearchResultItem]:
 	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
 	params = search_params or SearchParams()
+	query_text = query if isinstance(query, str) else None
 	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
-	run_autocomplete = params.mode in (SearchMode.AUTOCOMPLETE, SearchMode.FULL)
+	run_autocomplete = query_text is not None and params.mode in (
+		SearchMode.AUTOCOMPLETE,
+		SearchMode.FULL,
+	)
 	run_hybrid = params.mode in (
 		SearchMode.HYBRID,
 		SearchMode.DENSE,
@@ -411,12 +420,16 @@ async def search_memories(
 	if run_hybrid:
 		coros.append(
 			_hybrid_search_memories(
-				q, db, principal=principal, limit=limit + 1, search_params=params
+				query,
+				db,
+				principal=principal,
+				limit=limit + 1,
+				search_params=params,
 			)
 		)
-	if run_autocomplete:
+	if run_autocomplete and query_text is not None:
 		coros.append(
-			_autocomplete_memories(q, db, principal=principal, limit=limit + 1)
+			_autocomplete_memories(query_text, db, principal=principal, limit=limit + 1)
 		)
 	results = await asyncio.gather(*coros, return_exceptions=True)
 	items = vectorstore_service.merge_deduplicate(

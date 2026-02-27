@@ -62,7 +62,7 @@
 >
 	<div class="space-y-4">
 		<!-- AI bio -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
 					<div class="text-sm font-semibold text-white">use account bio</div>
@@ -96,7 +96,7 @@
 		</div>
 
 		<!-- memories -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center gap-3 pb-1">
 				<Brain class="h-5 w-5 text-white/60" />
 				<div class="text-sm font-semibold text-white">memories</div>
@@ -144,7 +144,7 @@
 		</div>
 
 		<!-- custom instructions -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">custom instructions</div>
 			<div class="mt-1 text-sm text-white/50">
 				provide specific instructions the AI should always follow. these apply to every
@@ -160,7 +160,7 @@
 		</div>
 
 		<!-- AI personality -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">personality</div>
 			<div class="mt-1 text-sm text-white/50">
 				describe how you'd like the AI to communicate - its tone, style, and character.

@@ -86,10 +86,10 @@
 	description="customize theme, colors, and visual preferences"
 >
 	<div class="space-y-4">
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">theme</div>
 			<div class="mt-1 text-sm text-white/50">
-				choose between light, dark, or automatic theme based on system settings.
+				choose between light, dark, or automatic theme based on system settings
 			</div>
 			<RadioGroup
 				options={themeModeOptions}
@@ -99,12 +99,12 @@
 			/>
 		</div>
 
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
 					<div class="text-sm font-semibold text-white">auto accent colors</div>
 					<div class="mt-1 text-sm text-white/50">
-						accent colors change automatically based on the current page.
+						accent colors change automatically based on context
 					</div>
 				</div>
 				<Switch size="md" checked={autoAccentColors} onchange={setAutoAccentColors} />
@@ -117,7 +117,7 @@
 				>
 					<div class="text-sm font-semibold text-white">accent color</div>
 					<div class="mt-1 text-sm text-white/50">
-						customize the accent color used for highlights and selection states.
+						customize the accent color used for highlights and selection states
 					</div>
 					<div class="mt-4 flex flex-wrap gap-3">
 						{#each selectableAccentColors as colorKey (colorKey)}
@@ -155,12 +155,12 @@
 			{/if}
 		</div>
 
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
 					<div class="text-sm font-semibold text-white">auto wallpaper</div>
 					<div class="mt-1 text-sm text-white/50">
-						wallpaper changes automatically based on the current page.
+						wallpaper changes automatically based on context
 					</div>
 				</div>
 				<Switch size="md" checked={autoBackground} onchange={setAutoBackground} />
@@ -173,7 +173,7 @@
 				>
 					<div class="text-sm font-semibold text-white">wallpaper</div>
 					<div class="mt-1 text-sm text-white/50">
-						select a dynamic background for the app.
+						select a dynamic background for the app
 					</div>
 					<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
 						{#each backgrounds as bg (bg.value)}
@@ -226,10 +226,10 @@
 			{/if}
 		</div>
 
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">chat bubble tails</div>
 			<div class="mt-1 text-sm text-white/50">
-				add decorative tails to chat message bubbles, similar to popular messaging apps.
+				add decorative tails to chat message bubbles, similar to popular messaging apps
 			</div>
 			<RadioGroup
 				options={bubbleTailOptions}

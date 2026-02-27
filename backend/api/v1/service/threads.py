@@ -1240,7 +1240,7 @@ async def _autocomplete_threads(
 
 
 async def _hybrid_search_threads(
-	q: str,
+	query: str | list[float],
 	db: AsyncSession,
 	*,
 	principal: Principal,
@@ -1251,8 +1251,13 @@ async def _hybrid_search_threads(
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_emb = await embed_text(text=q, session=db) if need_dense else None
-	text_query = q if need_sparse else None
+	query_text = query if isinstance(query, str) else None
+	query_emb = (
+		query
+		if isinstance(query, list)
+		else (await embed_text(text=query, session=db) if need_dense else None)
+	)
+	text_query = query_text if need_sparse else None
 	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
 	# principals with default access bypass should-conditions (role or global defaults)
 	query_filter = vectorstore_service.acl_filter(
@@ -1309,8 +1314,32 @@ async def _hybrid_search_threads(
 	return items
 
 
+@overload
 async def search_threads(
-	q: str,
+	query: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+) -> CursorPage[SearchResultItem]: ...
+
+
+@overload
+async def search_threads(
+	query: list[float],
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+) -> CursorPage[SearchResultItem]: ...
+
+
+async def search_threads(
+	query: str | list[float],
 	db: AsyncSession,
 	*,
 	principal: Principal,
@@ -1320,8 +1349,12 @@ async def search_threads(
 ) -> CursorPage[SearchResultItem]:
 	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
 	params = search_params or SearchParams()
+	query_text = query if isinstance(query, str) else None
 	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
-	run_autocomplete = params.mode in (SearchMode.AUTOCOMPLETE, SearchMode.FULL)
+	run_autocomplete = query_text is not None and params.mode in (
+		SearchMode.AUTOCOMPLETE,
+		SearchMode.FULL,
+	)
 	run_hybrid = params.mode in (
 		SearchMode.HYBRID,
 		SearchMode.DENSE,
@@ -1332,11 +1365,17 @@ async def search_threads(
 	if run_hybrid:
 		coros.append(
 			_hybrid_search_threads(
-				q, db, principal=principal, limit=limit + 1, search_params=params
+				query,
+				db,
+				principal=principal,
+				limit=limit + 1,
+				search_params=params,
 			)
 		)
-	if run_autocomplete:
-		coros.append(_autocomplete_threads(q, db, principal=principal, limit=limit + 1))
+	if run_autocomplete and query_text is not None:
+		coros.append(
+			_autocomplete_threads(query_text, db, principal=principal, limit=limit + 1)
+		)
 	results = await asyncio.gather(*coros, return_exceptions=True)
 	items = vectorstore_service.merge_deduplicate(
 		results, limit + 1, resource_name="threads"

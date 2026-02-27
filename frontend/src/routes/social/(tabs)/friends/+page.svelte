@@ -1,5 +1,5 @@
 <script lang="ts">
-	import PageTitle from '$lib/components/common/PageTitle.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import Users from '$lib/components/icons/Users.svelte'

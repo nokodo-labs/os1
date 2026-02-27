@@ -24,6 +24,7 @@ export interface Note {
 	title: string
 	content: string
 	labels: string[]
+	projectId: string | null
 	createdAt: number
 	updatedAt: number
 }
@@ -57,6 +58,7 @@ function toNote(apiNote: ApiNote): Note {
 		title: apiNote.title,
 		content: apiNote.content,
 		labels: apiNote.labels ?? [],
+		projectId: apiNote.project_id ?? null,
 		createdAt: new Date(apiNote.created_at).getTime(),
 		updatedAt: new Date(apiNote.updated_at).getTime(),
 	}

@@ -160,7 +160,7 @@
 				<div
 					role="button"
 					tabindex="0"
-					class="group rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-3 py-2.5 text-left transition-all duration-200 hover:border-white/10 hover:bg-white/5 {selectedSection ===
+					class="group rounded-pill flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-3 py-2.5 text-left transition-all duration-200 hover:border-white/12 hover:bg-white/8 hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] {selectedSection ===
 					section.id
 						? 'shadow-[inset_0_2px_8px_rgba(255,255,255,0.1)]'
 						: ''}"

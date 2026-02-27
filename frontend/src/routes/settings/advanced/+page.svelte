@@ -146,7 +146,7 @@
 >
 	<div class="space-y-4">
 		<!-- experimental features -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white/85">experimental features</div>
 			<div class="mt-1 text-sm text-white/55">
 				these features are experimental and may cause performance issues or bugs.
@@ -206,7 +206,7 @@
 		</div>
 
 		<!-- homepage suggestions -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">homepage suggestions</div>
 			<div class="mt-1 text-sm text-white/50">
 				choose which apps appear when you search on the home screen.
@@ -248,7 +248,7 @@
 		</div>
 
 		<!-- data export -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">data export</div>
 			<div class="mt-1 text-sm text-white/50">download your data in portable formats.</div>
 			<div class="mt-4 space-y-2">
@@ -274,7 +274,7 @@
 		</div>
 
 		<!-- chat management -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">chat management</div>
 			<div class="mt-1 text-sm text-white/50">organize or clean up your conversations.</div>
 			<div class="mt-4 space-y-2">
@@ -313,7 +313,7 @@
 		</div>
 
 		<!-- open webui import -->
-		<div class="rounded-container bg-white/5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted">
 			<button
 				type="button"
 				class="flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-5 text-left"

@@ -61,31 +61,62 @@
 
 ```
 frontend/
-├── src/                    # SvelteKit source
-│   ├── app.html            # SvelteKit template shell
-│   ├── app.d.ts            # SvelteKit types
-│   ├── app.css             # global styles (TailwindCSS)
-│   ├── routes/             # SvelteKit routes
-│   │   ├── +layout.svelte  # global layout
-│   │   ├── +layout.ts      # SPA mode (ssr=false)
-│   │   ├── +page.svelte    # home/landing experience
-│   │   ├── c/              # chat threads
-│   │   │   └── [id]/
-│   │   │       └── +page.svelte
-│   │   ├── login/
-│   │   │   └── +page.svelte
-│   │   └── signup/
-│   │       └── +page.svelte
-│   ├── lib/                # shared app code
-│   │   ├── actions/         # app actions/commands
-│   │   ├── api/            # generated OpenAPI types/client output
-│   │   ├── auth/           # auth helpers + session utilities
-│   │   ├── components/     # Svelte components (major areas)
+├── src/
+│   ├── app.html
+│   ├── app.d.ts
+│   ├── app.css
+│   ├── service-worker.ts
+│   ├── routes/
+│   │   ├── +error.svelte
+│   │   ├── +layout.svelte
+│   │   ├── +layout.ts
+│   │   ├── +page.svelte
+│   │   ├── c/[id]/
+│   │   ├── debug/
+│   │   │   ├── +page.svelte
 │   │   │   ├── backgrounds/
-│   │   │   ├── chat/
+│   │   │   ├── liquid-glass/
+│   │   │   ├── liquid-metal/
+│   │   │   ├── pwa/
+│   │   │   ├── runs/
+│   │   │   └── shimmer/
+│   │   ├── library/
+│   │   ├── login/
+│   │   ├── notes/
+│   │   │   └── [id]/
+│   │   ├── projects/
+│   │   │   └── [id]/
+│   │   ├── reminders/
+│   │   │   └── lists/[listId]/
+│   │   ├── settings/
+│   │   │   ├── about/
+│   │   │   ├── accessibility/
+│   │   │   ├── advanced/
+│   │   │   ├── ai/
+│   │   │   ├── appearance/
+│   │   │   ├── debug/
+│   │   │   ├── notifications/
+│   │   │   ├── privacy/
+│   │   │   └── security/
+│   │   ├── signup/
+│   │   └── social/
+│   │       ├── (tabs)/
+│   │       │   ├── friends/
+│   │       │   └── groups/
+│   │       ├── groups/[id]/
+│   │       └── users/[id]/
+│   ├── lib/
+│   │   ├── actions/
+│   │   ├── api/
+│   │   │   └── streaming/
+│   │   ├── auth/
+│   │   ├── chat/
+│   │   ├── collaboration/
+│   │   ├── components/
+│   │   │   ├── backgrounds/ (webgl/)
+│   │   │   ├── chat/ (sidebar/, tools/, webgl/)
 │   │   │   ├── common/
 │   │   │   ├── editor/
-│   │   │   ├── debug/
 │   │   │   ├── effects/
 │   │   │   ├── home/
 │   │   │   ├── icons/
@@ -93,27 +124,54 @@ frontend/
 │   │   │   ├── markdown/
 │   │   │   ├── modals/
 │   │   │   ├── notes/
-│   │   │   ├── primitives/
+│   │   │   ├── primitives/ (liquid-glass/)
 │   │   │   ├── reminders/
 │   │   │   ├── settings/
-│   │   │   ├── sidebar/
-│   │   │   ├── streamdown/
+│   │   │   ├── streamdown/ (utils/)
 │   │   │   ├── system/
-│   │   │   └── ui/
-│   │   ├── config/         # app/runtime config helpers
-│   │   ├── contexts/       # Svelte contexts
-│   │   ├── init.ts          # frontend init/bootstrap
-│   │   ├── stores/         # client state management
-│   │   ├── styles/         # shared styling utilities
-│   │   ├── tools/          # app tooling helpers
-│   │   ├── api.ts          # API wrappers/entrypoints
-│   │   ├── utils.ts        # general utilities
-│   │   └── index.ts        # lib barrel exports
-│   └── test/               # test helpers/utilities
-└── static/                 # static assets served at /
+│   │   │   └── widgets/
+│   │   ├── config/
+│   │   ├── contexts/
+│   │   ├── liquid-glass/ (a/, b/)
+│   │   ├── liquid-mercury/ (b/)
+│   │   ├── liquid-metal/ (svg/)
+│   │   ├── stores/
+│   │   ├── styles/
+│   │   ├── tools/
+│   │   ├── utils/
+│   │   ├── init.ts
+│   │   ├── index.ts
+│   │   └── utils.ts
+│   └── test/
+│       ├── README.md
+│       ├── setup.ts
+│       └── api/v1/
+└── static/
+    ├── backgrounds/
+    ├── config.json
+    ├── offline.html
     ├── robots.txt
-    └── config.json
+    ├── shimmer.css
+    ├── splash-preview.html
+    └── splash.css
 ```
+
+## core, frequently used components (/src/lib/components)
+
+- shell and system chrome
+    - `system/Island.svelte`
+    - `system/Dock.svelte`
+- page scaffolds
+    - `layouts/MasterDetailScaffold.svelte`
+    - `layouts/TabIslandScaffold.svelte`
+- common
+    - `/Timestamp.svelte`
+    - `/NokodoLoader.svelte`
+    - `/PageTitle.svelte`
+    - `/DeleteButton.svelte`
+    - `/SidebarListItem.svelte`
+    - `/Tooltip.svelte`
+- primitives at `/primitives/`
 
 ## testing instructions
 

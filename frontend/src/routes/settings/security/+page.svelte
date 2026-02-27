@@ -89,7 +89,7 @@
 >
 	<div class="space-y-4">
 		<!-- JWT / session info -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center gap-2">
 				<LockClosed class="h-4.5 w-4.5 text-white/60" />
 				<div class="text-sm font-semibold text-white">session</div>
@@ -109,7 +109,7 @@
 		</div>
 
 		<!-- change password -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">change password</div>
 			<div class="mt-1 text-sm text-white/50">
 				update your account password. you'll need to enter your current password.
@@ -167,7 +167,7 @@
 		</div>
 
 		<!-- OIDC -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">external authentication</div>
 			<div class="mt-1 text-sm text-white/50">
 				connect your account to an external identity provider via OpenID Connect (OIDC) for
@@ -186,7 +186,7 @@
 		</div>
 
 		<!-- change email -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">email address</div>
 			<div class="mt-1 text-sm text-white/50">
 				your email address for notifications and account recovery.

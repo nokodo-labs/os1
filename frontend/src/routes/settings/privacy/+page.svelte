@@ -115,7 +115,7 @@
 >
 	<div class="space-y-4">
 		<!-- profile privacy controls -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white/85">profile visibility</div>
 			<div class="mt-1 text-sm text-white/55">
 				choose who can see each part of your profile.
@@ -144,7 +144,7 @@
 		</div>
 
 		<!-- AI personalization -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white/85">AI personalization</div>
 			<div class="mt-1 text-sm text-white/55">
 				control what information is shared with the AI to personalise your experience.
@@ -182,7 +182,7 @@
 		</div>
 
 		<!-- data collection -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white/85">data collection</div>
 			<div class="mt-1 text-sm text-white/55">
 				control what data is collected and how it's used.

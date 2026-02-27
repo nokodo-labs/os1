@@ -15,6 +15,8 @@
 		label?: string
 		onTrigger?: () => void
 		stopPropagation?: boolean
+		showTrigger?: boolean
+		open?: boolean
 	}
 
 	let {
@@ -24,9 +26,10 @@
 		label = 'delete',
 		onTrigger,
 		stopPropagation = false,
+		showTrigger = true,
+		open = $bindable(false),
 	}: Props = $props()
 
-	let modalOpen = $state(false)
 	let isDeleting = $state(false)
 	let error = $state<string | null>(null)
 
@@ -39,7 +42,7 @@
 				error = 'could not delete'
 				return
 			}
-			modalOpen = false
+			open = false
 		} catch {
 			error = 'could not delete'
 		} finally {
@@ -51,29 +54,33 @@
 		if (stopPropagation) event.stopPropagation()
 		onTrigger?.()
 		if (confirm) {
-			modalOpen = true
+			open = true
 			return
 		}
 		void runDelete()
 	}
 </script>
 
-<button
-	type="button"
-	class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
-	onclick={handleTriggerClick}
->
-	<Trash class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300" />
-	<span class="ml-2">{label}</span>
-</button>
+{#if showTrigger}
+	<button
+		type="button"
+		class="group rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-white/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+		onclick={handleTriggerClick}
+	>
+		<Trash
+			class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300"
+		/>
+		<span class="ml-2">{label}</span>
+	</button>
+{/if}
 
 <BaseModal
-	open={modalOpen}
+	{open}
 	title={modalText.title}
 	description={modalText.description}
 	onClose={() => {
 		if (isDeleting) return
-		modalOpen = false
+		open = false
 		error = null
 	}}
 	widthClassName="max-w-sm"
@@ -93,7 +100,7 @@
 				class="rounded-pill border border-white/10 bg-transparent px-4 py-2 text-sm text-white/80 transition-colors duration-150 hover:bg-white/5"
 				disabled={isDeleting}
 				onclick={() => {
-					modalOpen = false
+					open = false
 					error = null
 				}}
 			>

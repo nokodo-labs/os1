@@ -10,7 +10,7 @@
 	/* frosted variant */
 	--lg-frost-blur: 24px;
 	--lg-frost-saturate: 1.15;
-	--lg-frost-bg-light: rgba(255, 255, 255, 0.55);
+	--lg-frost-bg-light: rgba(255, 255, 255, 0.36);
 	--lg-frost-bg-dark: rgba(18, 18, 18, 0.62);
 	--lg-frost-border-light: rgba(255, 255, 255, 0.22);
 	--lg-frost-border-dark: rgba(255, 255, 255, 0.08);
@@ -108,17 +108,9 @@
 	color: #1a1a1a;
 }
 
-@media (prefers-color-scheme: dark) {
-	.liquid-glass--frosted {
-		--lg-bg: var(--lg-frost-bg-dark);
-		--lg-border: var(--lg-frost-border-dark);
-		color: #fff;
-	}
-}
-
 :is(.dark) .liquid-glass--frosted {
 	--lg-bg: var(--lg-frost-bg-dark);
-	--lg-border: var(--lg-frost-border-light);
+	--lg-border: var(--lg-frost-border-dark);
 	color: #fff;
 }
 
@@ -142,12 +134,10 @@
 	.liquid-glass--frosted {
 		background: rgba(245, 245, 245, 0.96);
 	}
-	@media (prefers-color-scheme: dark) {
-		.liquid-glass {
-			background: rgba(24, 24, 24, 0.94);
-		}
-		.liquid-glass--frosted {
-			background: rgba(20, 20, 20, 0.96);
-		}
+	:is(.dark) .liquid-glass {
+		background: rgba(24, 24, 24, 0.94);
+	}
+	:is(.dark) .liquid-glass--frosted {
+		background: rgba(20, 20, 20, 0.96);
 	}
 }

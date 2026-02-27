@@ -28,7 +28,7 @@
 		</div>
 	{:else}
 		<div class="space-y-4">
-			<div class="rounded-container bg-white/5 p-5">
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 				<div class="text-sm font-semibold text-white/85">debug apps</div>
 				<div class="mt-1 text-sm text-white/55">
 					show placeholder apps on the home screen for testing.
@@ -48,7 +48,7 @@
 				</label>
 			</div>
 
-			<div class="rounded-container bg-white/5 p-5">
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 				<div class="text-sm font-semibold text-white/85">appearance</div>
 				<div class="mt-1 text-sm text-white/55">admin-only debug overrides.</div>
 				<label class="mt-4 flex items-center justify-between gap-4">
@@ -66,7 +66,7 @@
 				</label>
 			</div>
 
-			<div class="rounded-container bg-white/5 p-5">
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 				<div class="text-sm font-semibold text-white/85">debug pages</div>
 				<div class="mt-1 text-sm text-white/55">visual test pages and playgrounds.</div>
 				<div class="mt-4 flex flex-wrap gap-2">
@@ -79,7 +79,7 @@
 				</div>
 			</div>
 
-			<div class="rounded-container bg-white/5 p-5">
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 				<div class="text-sm font-semibold text-white/85">device insights</div>
 				<div class="mt-1 text-sm text-white/55">
 					computed device metrics and gpu tier signal breakdown.
@@ -170,7 +170,7 @@
 				{/if}
 			</div>
 
-			<div class="rounded-container bg-white/5 p-5">
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 				<div class="text-sm font-semibold text-white/85">apps grid</div>
 				<div class="mt-1 text-sm text-white/55">visual tweaks for the home apps grid.</div>
 				<button
@@ -184,7 +184,7 @@
 				</button>
 			</div>
 
-			<div class="rounded-container bg-white/5 p-5">
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 				<div class="text-sm font-semibold text-white/85">markdown streaming</div>
 				<div class="mt-1 text-sm text-white/55">
 					tune the streamdown animation used while tokens arrive.

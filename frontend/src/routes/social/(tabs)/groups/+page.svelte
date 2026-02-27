@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import PageTitle from '$lib/components/common/PageTitle.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'

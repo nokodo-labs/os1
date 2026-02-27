@@ -3,12 +3,12 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { apiClient } from '$lib/api/client'
-	import PageTitle from '$lib/components/common/PageTitle.svelte'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
 	import { reminders, type ReminderListsSortMode } from '$lib/stores/reminders.svelte'
@@ -228,6 +228,7 @@
 								<DeleteButton
 									confirm={true}
 									stopPropagation={true}
+									onTrigger={closeListMenu}
 									modalText={{
 										title: 'delete list?',
 										description: list.name,

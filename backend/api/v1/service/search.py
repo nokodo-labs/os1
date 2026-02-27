@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas.search import (
 	CursorPage,
+	SearchMode,
 	SearchParams,
 	SearchResultItem,
 	SearchResultType,
@@ -26,6 +27,7 @@ from api.v1.service import notes as notes_service
 from api.v1.service import reminders as reminders_service
 from api.v1.service import threads as threads_service
 from api.v1.service.auth import Principal
+from api.v1.service.embeddings import embed_text
 
 
 logger = logging.getLogger(__name__)
@@ -51,12 +53,20 @@ async def search_stream(
 			SearchResultType.REMINDER,
 		]
 
+	# embed query once instead of per-resource-type to avoid redundant API calls
+	params = search_params or SearchParams()
+	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
+	query_embedding = await embed_text(text=q, session=db) if need_dense else None
+	search_query: str | list[float] = (
+		query_embedding if query_embedding is not None else q
+	)
+
 	per_type = max(3, limit // len(types)) if types else limit
 	coros: list[Coroutine[None, None, CursorPage[SearchResultItem]]] = []
 	if SearchResultType.NOTE in types:
 		coros.append(
 			notes_service.search_notes(
-				q,
+				search_query,
 				db,
 				principal=principal,
 				limit=per_type,
@@ -66,7 +76,7 @@ async def search_stream(
 	if SearchResultType.THREAD in types:
 		coros.append(
 			threads_service.search_threads(
-				q,
+				search_query,
 				db,
 				principal=principal,
 				limit=per_type,
@@ -76,7 +86,7 @@ async def search_stream(
 	if SearchResultType.REMINDER in types:
 		coros.append(
 			reminders_service.search_reminders(
-				q,
+				search_query,
 				db,
 				principal=principal,
 				limit=per_type,

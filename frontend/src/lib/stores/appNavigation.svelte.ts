@@ -16,12 +16,15 @@ export type RemindersRouteId = '/reminders' | `/reminders/lists/${string}`
 
 export type SocialRouteId = '/social/friends' | '/social/groups'
 
-export type AppId = 'settings' | 'notes' | 'reminders' | 'social'
+export type ProjectsRouteId = '/projects' | `/projects/${string}`
+
+export type AppId = 'settings' | 'notes' | 'reminders' | 'social' | 'projects'
 
 export const DEFAULT_SETTINGS_ROUTE: SettingsRouteId = '/settings/appearance'
 export const DEFAULT_NOTES_ROUTE: NotesRouteId = '/notes'
 export const DEFAULT_REMINDERS_ROUTE: RemindersRouteId = '/reminders'
 export const DEFAULT_SOCIAL_ROUTE: SocialRouteId = '/social/friends'
+export const DEFAULT_PROJECTS_ROUTE: ProjectsRouteId = '/projects'
 
 const STORAGE_PREFIX = 'last-visited-route:'
 
@@ -58,6 +61,11 @@ function isRemindersRoute(pathname: string): pathname is RemindersRouteId {
 
 function isSocialRoute(pathname: string): pathname is SocialRouteId {
 	return pathname === '/social/friends' || pathname === '/social/groups'
+}
+
+function isProjectsRoute(pathname: string): pathname is ProjectsRouteId {
+	if (pathname === '/projects') return true
+	return /^\/projects\/[^/]+$/.test(pathname)
 }
 
 function readStoredSettings(): SettingsRouteId | '' {
@@ -104,17 +112,32 @@ function readStoredSocial(): SocialRouteId | '' {
 	}
 }
 
+function readStoredProjects(): ProjectsRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}projects`) ?? ''
+		const normalized = normalizePath(raw)
+		return isProjectsRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
 class AppNavigationStore {
 	lastSettingsRoute = $state<SettingsRouteId | ''>(readStoredSettings())
 	lastNotesRoute = $state<NotesRouteId | ''>(readStoredNotes())
 	lastRemindersRoute = $state<RemindersRouteId | ''>(readStoredReminders())
 	lastSocialRoute = $state<SocialRouteId | ''>(readStoredSocial())
+	lastProjectsRoute = $state<ProjectsRouteId | ''>(readStoredProjects())
 
 	getEntryRoute(appId: 'settings'): SettingsRouteId
 	getEntryRoute(appId: 'notes'): NotesRouteId
 	getEntryRoute(appId: 'reminders'): RemindersRouteId
 	getEntryRoute(appId: 'social'): SocialRouteId
-	getEntryRoute(appId: AppId): SettingsRouteId | NotesRouteId | RemindersRouteId | SocialRouteId {
+	getEntryRoute(appId: 'projects'): ProjectsRouteId
+	getEntryRoute(
+		appId: AppId
+	): SettingsRouteId | NotesRouteId | RemindersRouteId | SocialRouteId | ProjectsRouteId {
 		switch (appId) {
 			case 'settings':
 				return this.lastSettingsRoute || DEFAULT_SETTINGS_ROUTE
@@ -124,6 +147,8 @@ class AppNavigationStore {
 				return this.lastRemindersRoute || DEFAULT_REMINDERS_ROUTE
 			case 'social':
 				return this.lastSocialRoute || DEFAULT_SOCIAL_ROUTE
+			case 'projects':
+				return this.lastProjectsRoute || DEFAULT_PROJECTS_ROUTE
 		}
 	}
 
@@ -131,6 +156,7 @@ class AppNavigationStore {
 	setLastVisited(appId: 'notes', pathname: string): void
 	setLastVisited(appId: 'reminders', pathname: string): void
 	setLastVisited(appId: 'social', pathname: string): void
+	setLastVisited(appId: 'projects', pathname: string): void
 	setLastVisited(appId: AppId, pathname: string): void {
 		const normalized = normalizePath(pathname)
 
@@ -159,12 +185,23 @@ class AppNavigationStore {
 				this.persist('social', normalized)
 				return
 			}
+			case 'projects': {
+				if (!isProjectsRoute(normalized)) return
+				this.lastProjectsRoute = normalized
+				this.persist('projects', normalized)
+				return
+			}
 		}
 	}
 
 	private persist(
 		appId: AppId,
-		pathname: SettingsRouteId | NotesRouteId | RemindersRouteId | SocialRouteId
+		pathname:
+			| SettingsRouteId
+			| NotesRouteId
+			| RemindersRouteId
+			| SocialRouteId
+			| ProjectsRouteId
 	) {
 		if (!browser) return
 		try {

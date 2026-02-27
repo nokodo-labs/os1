@@ -433,6 +433,7 @@
 				<DeleteButton
 					confirm={true}
 					stopPropagation={true}
+					onTrigger={() => (isMenuOpen = false)}
 					modalText={{
 						title: 'delete reminder?',
 						description: props.kind === 'edit' ? props.reminder.title : '',

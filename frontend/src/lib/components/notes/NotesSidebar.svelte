@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import PageTitle from '$lib/components/common/PageTitle.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'

@@ -51,7 +51,7 @@
 		<!-- backdrop (fades independently, click closes modal) -->
 		<button
 			type="button"
-			class="absolute inset-0 bg-black/30 backdrop-blur-sm"
+			class="absolute inset-0 bg-black/18 backdrop-blur-sm dark:bg-black/30"
 			transition:fade={{ duration: 180 }}
 			onmousedown={onClose}
 			aria-label="close modal"
@@ -60,23 +60,27 @@
 
 		<!-- dialog panel -->
 		<div
-			class="relative w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden border border-white/10 bg-black/75 shadow-[0_32px_64px_rgba(12,10,30,0.55)] backdrop-blur-xl"
+			class="relative w-full {widthClassName} rounded-container max-h-[calc(100vh-2rem)] overflow-hidden border border-black/10 bg-white/88 text-black shadow-[0_24px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-white/10 dark:bg-black/75 dark:text-white dark:shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
-			transition:scale={{ duration: 200, start: 0.97, opacity: 0 }}
+			transition:scale={{ duration: 240, start: 0.94, opacity: 0 }}
 		>
 			<div class="relative z-10 flex max-h-[calc(100vh-2rem)] flex-col p-6">
 				<header class="mb-5 flex items-start justify-between gap-3">
 					<div class="min-w-0">
-						<div class="text-lg font-semibold text-white/95">{title}</div>
+						<div class="text-lg font-semibold text-black/90 dark:text-white/95">
+							{title}
+						</div>
 						{#if description}
-							<div class="mt-1 text-sm text-white/60">{description}</div>
+							<div class="mt-1 text-sm text-black/60 dark:text-white/60">
+								{description}
+							</div>
 						{/if}
 					</div>
 					<button
 						type="button"
-						class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent text-white/70 transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent text-black/60 transition-all duration-150 hover:scale-[1.05] hover:text-black active:scale-[0.97] dark:text-white/70 dark:hover:text-white"
 						onclick={onClose}
 						aria-label="close"
 					>

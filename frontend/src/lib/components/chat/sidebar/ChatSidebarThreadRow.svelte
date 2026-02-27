@@ -186,6 +186,7 @@
 			<DeleteButton
 				confirm={true}
 				stopPropagation={true}
+				onTrigger={onCloseMenu}
 				modalText={{
 					title: 'delete chat?',
 					description: thread.title || 'new chat',

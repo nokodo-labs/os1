@@ -61,7 +61,7 @@
 		</div>
 
 		<!-- links -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">links</div>
 			<div class="mt-3 space-y-1">
 				{#each links as link (link.href)}
@@ -83,7 +83,7 @@
 		</div>
 
 		<!-- shields -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">community</div>
 			<div class="mt-3 flex flex-wrap gap-2">
 				{#each shields as badge (badge.label)}
@@ -95,7 +95,7 @@
 		</div>
 
 		<!-- legal -->
-		<div class="rounded-container bg-white/5 p-5">
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-sm font-semibold text-white">legal</div>
 			<div class="mt-2 space-y-2 text-xs text-white/50">
 				<p>&copy; {new Date().getFullYear()} nokodo. all rights reserved.</p>

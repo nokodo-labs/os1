@@ -8,6 +8,7 @@
 	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
+	import Clip from '$lib/components/icons/Clip.svelte'
 	import Cloud from '$lib/components/icons/Cloud.svelte'
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
@@ -68,10 +69,19 @@
 		{ id: 'calendar', title: 'calendar', icon: Calendar },
 		{ id: 'messages', title: 'messages', icon: ChatBubbles, accent: 'green' },
 		{
-			id: 'library',
-			title: 'library',
+			id: 'projects',
+			title: 'projects',
 			icon: FinderFolder,
 			accent: 'yellow',
+			action: async () => {
+				await goto(resolve(appNavigation.getEntryRoute('projects')))
+			},
+		},
+		{
+			id: 'library',
+			title: 'files',
+			icon: Clip,
+			accent: 'blue',
 			action: async () => {
 				await goto(resolve('/library'))
 			},

@@ -302,7 +302,7 @@
 				<div class="mt-3 px-2">
 					<button
 						type="button"
-						class="rounded-pill flex w-full cursor-pointer items-center justify-between border border-white/14 bg-white/6 px-4 py-2 text-left text-[0.95rem] font-semibold text-white transition-colors duration-150 hover:bg-white/8"
+						class="rounded-pill liquid-glass liquid-glass--frosted flex w-full cursor-pointer items-center justify-between border border-white/14 px-4 py-2 text-left text-[0.95rem] font-semibold text-white transition-colors duration-150 hover:brightness-110"
 						onclick={() => (showCompleted = !showCompleted)}
 					>
 						<span>completed ({completedCount})</span>
