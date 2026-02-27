@@ -486,6 +486,7 @@ async def test_service_create_thread(db_session: AsyncSession) -> None:
 
 	user = User(
 		email="service@example.com",
+		username="service_threads",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -542,6 +543,7 @@ async def test_update_thread_owner(
 		headers=admin_headers,
 		json={
 			"email": "u2@example.com",
+			"username": "u2_test",
 			"password": "password",
 		},
 	)
@@ -616,6 +618,7 @@ async def test_create_message_types(
 async def test_service_create_thread_missing_owner(db_session: AsyncSession) -> None:
 	admin = User(
 		email="thread-admin@example.com",
+		username="thread_admin",
 		hashed_password="pw",
 		is_active=True,
 		is_superuser=True,
@@ -634,8 +637,18 @@ async def test_service_create_thread_missing_owner(db_session: AsyncSession) -> 
 
 @pytest.mark.asyncio
 async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
-	owner = User(email="owner@example.com", hashed_password="pw", is_active=True)
-	editor = User(email="editor@example.com", hashed_password="pw", is_active=True)
+	owner = User(
+		email="owner@example.com",
+		username="owner_threads",
+		hashed_password="pw",
+		is_active=True,
+	)
+	editor = User(
+		email="editor@example.com",
+		username="editor_threads",
+		hashed_password="pw",
+		is_active=True,
+	)
 	db_session.add_all([owner, editor])
 	await db_session.commit()
 
@@ -670,6 +683,7 @@ async def test_update_thread_owner_guard(db_session: AsyncSession) -> None:
 async def test_update_thread_new_owner_missing(db_session: AsyncSession) -> None:
 	admin = User(
 		email="owner-missing@example.com",
+		username="owner_missing",
 		hashed_password="pw",
 		is_active=True,
 		is_superuser=True,
@@ -697,10 +711,16 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 	db_session: AsyncSession,
 ) -> None:
 	owner = User(
-		email="handoff-owner@example.com", hashed_password="pw", is_active=True
+		email="handoff-owner@example.com",
+		username="handoff_owner",
+		hashed_password="pw",
+		is_active=True,
 	)
 	new_owner = User(
-		email="handoff-new@example.com", hashed_password="pw", is_active=True
+		email="handoff-new@example.com",
+		username="handoff_new",
+		hashed_password="pw",
+		is_active=True,
 	)
 	db_session.add_all([owner, new_owner])
 	await db_session.commit()
@@ -763,8 +783,18 @@ async def test_load_thread_unrestricted_missing(db_session: AsyncSession) -> Non
 
 @pytest.mark.asyncio
 async def test_create_message_sender_guard(db_session: AsyncSession) -> None:
-	owner = User(email="sender-owner@example.com", hashed_password="pw", is_active=True)
-	other = User(email="sender-other@example.com", hashed_password="pw", is_active=True)
+	owner = User(
+		email="sender-owner@example.com",
+		username="sender_owner",
+		hashed_password="pw",
+		is_active=True,
+	)
+	other = User(
+		email="sender-other@example.com",
+		username="sender_other",
+		hashed_password="pw",
+		is_active=True,
+	)
 	db_session.add_all([owner, other])
 	await db_session.commit()
 
@@ -794,6 +824,7 @@ async def test_get_thread_not_found_service(db_session: AsyncSession) -> None:
 
 	user = User(
 		email="svc_not_found@example.com",
+		username="svc_not_found",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=True,
@@ -817,6 +848,7 @@ async def test_create_thread_invalid_user_service(db_session: AsyncSession) -> N
 
 	admin = User(
 		email="svc_invalid_owner@example.com",
+		username="svc_invalid_owner",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=True,
@@ -847,6 +879,7 @@ async def test_create_thread_invalid_project_service(
 
 	user = User(
 		email="svc_invalid_project@example.com",
+		username="svc_invalid_project",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -877,6 +910,7 @@ async def test_list_threads_filter_owner(
 
 	user = User(
 		email="svc_list_owner@example.com",
+		username="svc_list_owner",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -916,6 +950,7 @@ async def test_update_thread_owner_service(
 
 	u1 = User(
 		email="svc_u1@example.com",
+		username="svc_u1_test",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -925,6 +960,7 @@ async def test_update_thread_owner_service(
 	)
 	u2 = User(
 		email="svc_u2@example.com",
+		username="svc_u2_test",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -961,6 +997,7 @@ async def test_update_thread_fields_service(
 
 	owner = User(
 		email="svc_update_fields@example.com",
+		username="svc_update_fields",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -999,6 +1036,7 @@ async def test_admin_update_owner_and_create_message(
 
 	owner = User(
 		email="admin-thread-owner@example.com",
+		username="admin_thread_owner",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -1008,6 +1046,7 @@ async def test_admin_update_owner_and_create_message(
 	)
 	new_owner = User(
 		email="admin-thread-new@example.com",
+		username="admin_thread_new",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -1017,6 +1056,7 @@ async def test_admin_update_owner_and_create_message(
 	)
 	admin = User(
 		email="admin-thread-admin@example.com",
+		username="admin_thread_admin",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=True,
@@ -1063,6 +1103,7 @@ async def test_create_message_types_service(
 
 	user = User(
 		email="svc_msgs@example.com",
+		username="svc_msgs_test",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -1123,6 +1164,7 @@ async def test_create_message_unknown_type_service(
 
 	user = User(
 		email="svc_unknown_type@example.com",
+		username="svc_unknown_type",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -1161,6 +1203,7 @@ async def test_list_messages_service(
 
 	user = User(
 		email="svc_list_msgs@example.com",
+		username="svc_list_msgs",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -1239,6 +1282,7 @@ async def test_update_thread_projects(
 
 	user = User(
 		email="svc_update_projects@example.com",
+		username="svc_update_projects",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,

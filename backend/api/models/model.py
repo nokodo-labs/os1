@@ -22,10 +22,19 @@ if TYPE_CHECKING:
 	from api.models.provider import Provider
 
 
+class InputModality(StrEnum):
+	"""Supported input modalities for models."""
+
+	TEXT = "text"
+	IMAGES = "images"
+	AUDIO = "audio"
+	VIDEO = "video"
+
+
 class ModelType(StrEnum):
 	"""Supported model categories."""
 
-	LLM = "llm"
+	CHAT_MODEL = "chat_model"
 	EMBEDDING = "embedding"
 	IMAGE = "image_generation"
 	AUDIO = "audio"
@@ -47,8 +56,9 @@ class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	display_name: Mapped[str | None] = mapped_column(String(150))
 	model_type: Mapped[ModelType] = mapped_column(
 		StringEnum(ModelType),
-		default=ModelType.LLM,
+		default=ModelType.CHAT_MODEL,
 	)
+	input_modalities: Mapped[list[str]] = mapped_column(JSONB)
 	endpoint: Mapped[str | None] = mapped_column(String(255))
 	adapter: Mapped[str | None] = mapped_column(String(100))
 	capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)

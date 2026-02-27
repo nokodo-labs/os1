@@ -24,6 +24,7 @@ async def notification_fixture(db_session: AsyncSession):
 	# Create user
 	user_in = UserCreate(
 		email="notif_test@example.com",
+		username="notif_test",
 		password="password123",
 		is_superuser=True,
 	)
@@ -145,7 +146,10 @@ async def test_get_notification_not_found(db_session: AsyncSession) -> None:
 	"""Test getting a non-existent notification."""
 	user = await user_service.create_user(
 		UserCreate(
-			email="notif_nf@example.com", password="password123", is_superuser=True
+			email="notif_nf@example.com",
+			username="notif_nf_test",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
@@ -164,17 +168,28 @@ async def test_notification_access_guard(db_session: AsyncSession) -> None:
 	"""Ensure users cannot mark others' notifications."""
 	admin = await user_service.create_user(
 		UserCreate(
-			email="notif_guard_admin@example.com", password="pw", is_superuser=True
+			email="notif_guard_admin@example.com",
+			username="notif_guard_admin",
+			password="pw",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	user_a = await user_service.create_user(
-		UserCreate(email="notif_guard_a@example.com", password="pw"),
+		UserCreate(
+			email="notif_guard_a@example.com",
+			username="notif_guard_a",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	user_b = await user_service.create_user(
-		UserCreate(email="notif_guard_b@example.com", password="pw"),
+		UserCreate(
+			email="notif_guard_b@example.com",
+			username="notif_guard_b",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
@@ -226,17 +241,28 @@ async def test_list_notifications_forbidden_other_user(
 ) -> None:
 	admin = await user_service.create_user(
 		UserCreate(
-			email="notif_list_admin@example.com", password="pw", is_superuser=True
+			email="notif_list_admin@example.com",
+			username="notif_list_admin",
+			password="pw",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	user_a = await user_service.create_user(
-		UserCreate(email="notif_list_a@example.com", password="pw"),
+		UserCreate(
+			email="notif_list_a@example.com",
+			username="notif_list_a",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	user_b = await user_service.create_user(
-		UserCreate(email="notif_list_b@example.com", password="pw"),
+		UserCreate(
+			email="notif_list_b@example.com",
+			username="notif_list_b",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
@@ -262,7 +288,10 @@ async def test_send_agent_notification_thread_includes_owner_when_no_participant
 ) -> None:
 	owner = await user_service.create_user(
 		UserCreate(
-			email="thread_owner_notif@example.com", password="pw", is_superuser=True
+			email="thread_owner_notif@example.com",
+			username="thread_owner_notif",
+			password="pw",
+			is_superuser=True,
 		),
 		db_session,
 	)

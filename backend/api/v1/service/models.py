@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.model import Model
+from api.models.model import InputModality, Model
 from api.models.provider import Provider, ProviderStatus
 from api.schemas.model import ModelCreate, ModelUpdate
 from api.v1.service.auth import Principal
@@ -19,6 +19,23 @@ from api.v1.service.authorization import require_permission
 
 
 logger = logging.getLogger(__name__)
+
+
+def _default_input_modalities(model_type: str) -> list[str]:
+	"""return the default input modalities for a model type."""
+	match model_type:
+		case "chat_model":
+			return [InputModality.TEXT, InputModality.IMAGES]
+		case "embedding":
+			return [InputModality.TEXT]
+		case "image_generation":
+			return [InputModality.TEXT, InputModality.IMAGES]
+		case "audio":
+			return [InputModality.TEXT, InputModality.AUDIO]
+		case "video":
+			return [InputModality.TEXT, InputModality.IMAGES, InputModality.VIDEO]
+		case _:
+			return [InputModality.TEXT]
 
 
 _DEFAULT_BASE_URLS: dict[str, str] = {
@@ -34,7 +51,7 @@ def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
 	if provider_key == "":
 		return None
 
-	if model_type == "llm":
+	if model_type == "chat_model":
 		match provider_key:
 			case "openai":
 				return "chat_completions"
@@ -271,7 +288,7 @@ async def _sync_autofetched_models(
 							display_name=display_name,
 							adapter=_default_model_adapter(
 								provider.adapter_type,
-								"llm",
+								"chat_model",
 							),
 							capabilities=[],
 							enabled=True,
@@ -286,7 +303,7 @@ async def _sync_autofetched_models(
 				if existing.adapter is None:
 					existing.adapter = _default_model_adapter(
 						provider.adapter_type,
-						"llm",
+						"chat_model",
 					)
 
 			for model in existing_models:
@@ -346,7 +363,7 @@ def _check_valid_adapter(
 		)
 
 	valid = False
-	if model_type == "llm":
+	if model_type == "chat_model":
 		if provider_type == "openai":
 			valid = adapter in ("chat_completions", "responses")
 		elif provider_type == "anthropic":
@@ -360,7 +377,7 @@ def _check_valid_adapter(
 			valid = adapter == "embedding"
 
 	if not valid:
-		display_model_type = "chat model" if model_type == "llm" else model_type
+		display_model_type = "chat model" if model_type == "chat_model" else model_type
 		msg = (
 			f"Invalid adapter '{adapter}' for provider type '{provider_type}' "
 			f"and model type '{display_model_type}'."
@@ -387,10 +404,13 @@ async def create_model(
 		)
 
 	data = model_in.model_dump(by_alias=True)
-	model_type = str(data.get("model_type") or "llm")
+	model_type = str(data.get("model_type") or "chat_model")
 
 	if data.get("adapter") is None:
 		data["adapter"] = _default_model_adapter(provider.adapter_type, model_type)
+
+	if not data.get("input_modalities"):
+		data["input_modalities"] = _default_input_modalities(model_type)
 
 	_check_valid_adapter(provider.adapter_type, model_type, data.get("adapter"))
 

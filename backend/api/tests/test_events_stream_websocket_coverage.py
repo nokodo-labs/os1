@@ -328,6 +328,7 @@ async def test_authenticate_websocket_cookie_inactive_user_returns_none(
 
 	inactive = User(
 		email="inactive@example.com",
+		username="inactive_ws",
 		hashed_password=hash_password("password"),
 		is_active=False,
 		is_superuser=False,

@@ -460,7 +460,7 @@ export interface paths {
         put?: never;
         /**
          * Generate Thread Metadata
-         * @description generate thread title/tags using an LLM.
+         * @description generate thread title/tags using a chat model.
          *
          *     uses the task model configured in settings (ai.tasks).
          *     when replace is false, only fills in missing metadata.
@@ -1268,9 +1268,29 @@ export interface paths {
         put?: never;
         /**
          * Create File
-         * @description register a new file record.
+         * @description register a new file record (metadata only).
          */
         post: operations["create_file_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload File
+         * @description upload a file (multipart) and create the record.
+         */
+        post: operations["upload_file_files_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1303,6 +1323,46 @@ export interface paths {
          * @description update file metadata.
          */
         patch: operations["update_file_files__file_id__patch"];
+        trace?: never;
+    };
+    "/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get File Content
+         * @description download file content.
+         */
+        get: operations["get_file_content_files__file_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/{file_id}/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get File Url
+         * @description get a direct or presigned URL for the file.
+         */
+        get: operations["get_file_url_files__file_id__url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/files/{file_id}/access-rules": {
@@ -2639,6 +2699,8 @@ export interface components {
             embeddings?: components["schemas"]["EmbeddingsSettings"];
             /** @description default reranking behavior */
             rerank?: components["schemas"]["RerankSettings"];
+            /** @description file storage backend configuration */
+            storage?: components["schemas"]["StorageSettings"];
         };
         /** AssetsSettingsPatch */
         AssetsSettingsPatch: {
@@ -2675,6 +2737,18 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
+        };
+        /** Body_upload_file_files_upload_post */
+        Body_upload_file_files_upload_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** @default upload */
+            source: components["schemas"]["FileSource"];
         };
         /** BrandingSettings */
         BrandingSettings: {
@@ -3569,6 +3643,12 @@ export interface components {
             /** Media Type */
             media_type?: string | null;
         };
+        /**
+         * InputModality
+         * @description Supported input modalities for models.
+         * @enum {string}
+         */
+        InputModality: "text" | "images" | "audio" | "video";
         "JSONObject-Input": {
             [key: string]: components["schemas"]["JSONValue-Input"];
         };
@@ -3649,6 +3729,18 @@ export interface components {
              * @description rate limit/min
              */
             rate_limit_requests_per_minute?: number | null;
+        };
+        /**
+         * LocalStorageConfig
+         * @description local filesystem storage configuration.
+         */
+        LocalStorageConfig: {
+            /**
+             * Root Path
+             * @description root directory for local file storage
+             * @default data/uploads
+             */
+            root_path: string;
         };
         /**
          * MediaSettings
@@ -3905,7 +3997,7 @@ export interface components {
         };
         /**
          * Model
-         * @description Response schema.
+         * @description response schema.
          */
         Model: {
             /**
@@ -3923,7 +4015,7 @@ export interface components {
             name: string;
             /** Display Name */
             display_name?: string | null;
-            /** @default llm */
+            /** @default chat_model */
             model_type: components["schemas"]["ModelType"];
             /** Endpoint */
             endpoint?: string | null;
@@ -3947,6 +4039,8 @@ export interface components {
              * @default false
              */
             is_autofetched: boolean;
+            /** Input Modalities */
+            input_modalities: components["schemas"]["InputModality"][];
             /** Id */
             id: string;
             /** Provider Id */
@@ -3954,7 +4048,7 @@ export interface components {
         };
         /**
          * ModelCreate
-         * @description Payload to register a model.
+         * @description payload to register a model.
          */
         ModelCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -3962,7 +4056,7 @@ export interface components {
             name: string;
             /** Display Name */
             display_name?: string | null;
-            /** @default llm */
+            /** @default chat_model */
             model_type: components["schemas"]["ModelType"];
             /** Endpoint */
             endpoint?: string | null;
@@ -3986,6 +4080,8 @@ export interface components {
              * @default false
              */
             is_autofetched: boolean;
+            /** Input Modalities */
+            input_modalities?: components["schemas"]["InputModality"][] | null;
             /** Provider Id */
             provider_id: string;
         };
@@ -3994,10 +4090,10 @@ export interface components {
          * @description Supported model categories.
          * @enum {string}
          */
-        ModelType: "llm" | "embedding" | "image_generation" | "audio" | "video";
+        ModelType: "chat_model" | "embedding" | "image_generation" | "audio" | "video";
         /**
          * ModelUpdate
-         * @description Payload to update a model.
+         * @description payload to update a model.
          */
         ModelUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -4006,6 +4102,8 @@ export interface components {
             /** Display Name */
             display_name?: string | null;
             model_type?: components["schemas"]["ModelType"] | null;
+            /** Input Modalities */
+            input_modalities?: components["schemas"]["InputModality"][] | null;
             /** Endpoint */
             endpoint?: string | null;
             /** Adapter */
@@ -5242,6 +5340,75 @@ export interface components {
             persist: boolean;
         };
         /**
+         * S3StorageConfig
+         * @description S3-compatible storage configuration.
+         */
+        S3StorageConfig: {
+            /**
+             * Endpoint Url
+             * @description S3-compatible endpoint (MinIO, R2, etc.)
+             */
+            endpoint_url?: string | null;
+            /**
+             * Bucket
+             * @description S3 bucket name. must be globally unique per deployment.
+             * @default nokodo-ai
+             */
+            bucket: string;
+            /**
+             * Region
+             * @description AWS region
+             * @default us-east-1
+             */
+            region: string;
+            /**
+             * Access Key Id
+             * @description S3 access key id
+             */
+            access_key_id?: string | null;
+            /**
+             * Secret Access Key
+             * @description S3 secret access key
+             */
+            secret_access_key?: string | null;
+            /**
+             * Prefix
+             * @description key prefix within the bucket
+             * @default
+             */
+            prefix: string;
+            /**
+             * Presigned Url Ttl
+             * @description presigned URL expiration in seconds
+             * @default 3600
+             */
+            presigned_url_ttl: number;
+            /**
+             * Multipart Threshold
+             * @description bytes above which multipart upload kicks in
+             * @default 104857600
+             */
+            multipart_threshold: number;
+            /**
+             * Multipart Chunk Size
+             * @description multipart upload chunk size in bytes
+             * @default 10485760
+             */
+            multipart_chunk_size: number;
+            /**
+             * Max Retries
+             * @description max retry attempts
+             * @default 3
+             */
+            max_retries: number;
+            /**
+             * Retry Mode
+             * @description botocore retry mode
+             * @default adaptive
+             */
+            retry_mode: string;
+        };
+        /**
          * SearchMode
          * @description determines which search tiers to run.
          *
@@ -5564,6 +5731,24 @@ export interface components {
         };
         /** @enum {string} */
         SortDir: "asc" | "desc";
+        /**
+         * StorageSettings
+         * @description file storage backend configuration.
+         *
+         *     set `backend` to choose which storage system is active.
+         *     only the selected backend is instantiated at startup.
+         */
+        StorageSettings: {
+            /**
+             * Backend
+             * @description active storage backend: 'local' or 's3'
+             * @default local
+             * @enum {string}
+             */
+            backend: "local" | "s3";
+            local?: components["schemas"]["LocalStorageConfig"];
+            s3?: components["schemas"]["S3StorageConfig"];
+        };
         /**
          * Task
          * @description Response model.
@@ -14481,6 +14666,104 @@ export interface operations {
             };
         };
     };
+    upload_file_files_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_files_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_file_files__file_id__get: {
         parameters: {
             query?: never;
@@ -14693,6 +14976,198 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_file_content_files__file_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_file_url_files__file_id__url_get: {
+        parameters: {
+            query?: {
+                expires_in?: number | null;
+            };
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string | null;
+                    };
                 };
             };
             /** @description bad request */

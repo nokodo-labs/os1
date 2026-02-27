@@ -26,8 +26,10 @@ async def _principal(
 	*,
 	is_admin: bool,
 ) -> Principal:
+	uid = new_typeid("user")
 	user = User(
-		email=f"{new_typeid('user')}@example.com",
+		email=f"{uid}@example.com",
+		username=f"a{uid.replace('_', '')[:20]}",
 		hashed_password="x",
 		is_superuser=is_admin,
 	)
@@ -243,7 +245,7 @@ async def test_create_agent_with_model(db_session: AsyncSession) -> None:
 		ModelCreate(
 			name="gpt-4-agent-test",
 			provider_id=provider.id,
-			model_type=ModelType.LLM,
+			model_type=ModelType.CHAT_MODEL,
 		),
 		db_session,
 		principal=principal,

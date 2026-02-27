@@ -87,7 +87,7 @@ async def chat_completions(
 			detail="OPENAI_API_KEY is required for openai-compatible chat completions",
 		)
 
-	llm = ChatModel.create(
+	chat_model = ChatModel.create(
 		req.model,
 		adapter={"type": "openai.chat_completions", "api_key": api_key},
 	)
@@ -98,7 +98,7 @@ async def chat_completions(
 	if req.max_tokens is not None:
 		params["max_tokens"] = req.max_tokens
 	params_value = params if params else None
-	assistant = await llm.generate(
+	assistant = await chat_model.generate(
 		sdk_messages,
 		stream=False,
 		params=params_value,

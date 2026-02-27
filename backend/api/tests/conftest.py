@@ -33,6 +33,24 @@ from api.settings import settings
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _register_test_storage_backends(
+	tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[None]:
+	"""register the local storage backend for the test session.
+
+	uses a dedicated temp dir so test uploads do not pollute the project
+	tree and are cleaned up automatically when the session ends.
+	"""
+	from api.storage import _BACKENDS, register
+	from api.storage.local import LocalStorageBackend
+
+	root = tmp_path_factory.mktemp("storage", numbered=True)
+	register("local", LocalStorageBackend(root_path=str(root)))
+	yield
+	_BACKENDS.clear()
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _api_test_env_defaults() -> Generator[None]:
 	"""Make api tests self-contained (no external OpenAI/vector DB required)."""
 	monkeypatch = pytest.MonkeyPatch()
@@ -91,7 +109,12 @@ async def _api_test_seed_default_embedding_model(
 	from api.v1.service.auth import Principal
 
 	principal = Principal(
-		user=User(email="seed@example.com", hashed_password="x", is_superuser=True),
+		user=User(
+			email="seed@example.com",
+			username="seed_test",
+			hashed_password="x",
+			is_superuser=True,
+		),
 		group_ids=(),
 		permissions=frozenset({"providers:manage", "models:manage"}),
 	)
@@ -829,11 +852,18 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 @pytest_asyncio.fixture(scope="function")
 async def admin_auth(client: AsyncClient) -> dict[str, object]:
-	email = f"admin-{uuid4().hex}@example.com"
+	uniq = uuid4().hex[:10]
+	email = f"admin{uniq}@example.com"
+	username = f"admin{uniq}"
 	password = "password"
 	user_resp = await client.post(
 		"/v1/users",
-		json={"email": email, "password": password, "is_superuser": True},
+		json={
+			"email": email,
+			"username": username,
+			"password": password,
+			"is_superuser": True,
+		},
 	)
 	assert user_resp.status_code == 201
 	user = user_resp.json()
@@ -859,14 +889,21 @@ async def user_auth(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> dict[str, object]:
-	email = f"user-{uuid4().hex}@example.com"
+	uniq = uuid4().hex[:10]
+	email = f"user{uniq}@example.com"
+	username = f"user{uniq}"
 	password = "password"
 	headers = admin_auth["headers"]
 	assert isinstance(headers, dict)
 	user_resp = await client.post(
 		"/v1/users",
 		headers=headers,
-		json={"email": email, "password": password, "is_superuser": False},
+		json={
+			"email": email,
+			"username": username,
+			"password": password,
+			"is_superuser": False,
+		},
 	)
 	assert user_resp.status_code == 201
 	user = user_resp.json()
@@ -894,6 +931,7 @@ async def test_user(db_session: AsyncSession) -> dict[str, object]:
 
 	user = User(
 		email="test@example.com",
+		username="test_user",
 		hashed_password=hash_password("password"),
 		is_active=True,
 		is_superuser=False,

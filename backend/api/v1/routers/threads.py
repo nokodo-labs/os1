@@ -205,7 +205,7 @@ async def generate_thread_metadata(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Thread:
-	"""generate thread title/tags using an LLM.
+	"""generate thread title/tags using a chat model.
 
 	uses the task model configured in settings (ai.tasks).
 	when replace is false, only fills in missing metadata.

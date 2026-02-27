@@ -210,6 +210,7 @@ async def test_service_create_task(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="task_service@example.com",
+		username="task_service",
 		password="password123",
 		is_superuser=True,
 	)
@@ -233,6 +234,7 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="task_list@example.com",
+		username="task_list_test",
 		password="password123",
 		is_superuser=True,
 	)
@@ -272,6 +274,7 @@ async def test_task_update_no_changes_does_not_touch_last_event(
 	"""No-op update should not set last_event_at and respects user scoping."""
 	user_in = UserCreate(
 		email="task_no_change@example.com",
+		username="task_no_change",
 		password="password123",
 		is_superuser=True,
 	)
@@ -308,6 +311,7 @@ async def test_service_update_task(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="task_update@example.com",
+		username="task_update",
 		password="password123",
 		is_superuser=True,
 	)
@@ -337,7 +341,10 @@ async def test_service_get_task_not_found(db_session: AsyncSession) -> None:
 	"""Test getting a non-existent task."""
 	user = await user_service.create_user(
 		UserCreate(
-			email="task_nf@example.com", password="password123", is_superuser=True
+			email="task_nf@example.com",
+			username="task_nf_test",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
@@ -358,6 +365,7 @@ async def test_service_update_task_no_changes(db_session: AsyncSession) -> None:
 	# Create user and task
 	user_in = UserCreate(
 		email="task_no_change@example.com",
+		username="task_no_change",
 		password="password123",
 		is_superuser=True,
 	)

@@ -17,7 +17,12 @@ from nokodo_ai.utils.typeid import new_typeid
 
 @pytest.mark.asyncio
 async def test_require_thread_and_project_access(db_session: AsyncSession) -> None:
-	user = User(email="authz@example.com", hashed_password="pw", is_active=True)
+	user = User(
+		email="authz@example.com",
+		username="authz_test",
+		hashed_password="pw",
+		is_active=True,
+	)
 	db_session.add(user)
 	await db_session.commit()
 	principal = Principal(
@@ -40,7 +45,12 @@ async def test_require_thread_and_project_access(db_session: AsyncSession) -> No
 
 
 def test_require_permission_denied() -> None:
-	user = User(email="authz-deny@example.com", hashed_password="pw", is_active=True)
+	user = User(
+		email="authz-deny@example.com",
+		username="authz_deny",
+		hashed_password="pw",
+		is_active=True,
+	)
 	principal = Principal(
 		user=user,
 		group_ids=(),
@@ -53,7 +63,12 @@ def test_require_permission_denied() -> None:
 
 
 def test_require_permission_allows() -> None:
-	user = User(email="authz-allow@example.com", hashed_password="pw", is_active=True)
+	user = User(
+		email="authz-allow@example.com",
+		username="authz_allow",
+		hashed_password="pw",
+		is_active=True,
+	)
 	principal = Principal(
 		user=user,
 		group_ids=(),
@@ -67,7 +82,12 @@ def test_require_permission_allows() -> None:
 
 @pytest.mark.asyncio
 async def test_require_thread_access_hidden_forbidden(db_session: AsyncSession) -> None:
-	user = User(email="authz-hidden@example.com", hashed_password="pw", is_active=True)
+	user = User(
+		email="authz-hidden@example.com",
+		username="authz_hidden",
+		hashed_password="pw",
+		is_active=True,
+	)
 	db_session.add(user)
 	await db_session.commit()
 	principal = Principal(
@@ -100,6 +120,7 @@ def test_allowed_levels_reader_case() -> None:
 async def test_authorization_admin_predicates(db_session: AsyncSession) -> None:
 	admin = User(
 		email="authz-admin@example.com",
+		username="authz_admin",
 		hashed_password="pw",
 		is_active=True,
 		is_superuser=True,

@@ -35,6 +35,7 @@ async def test_soft_delete_thread_does_not_delete_messages(
 		UserCreate(
 			email="cascade_thread@example.com",
 			password="password123",
+			username="cascade_thread",
 			is_superuser=True,
 		),
 		db_session,
@@ -92,6 +93,7 @@ async def test_delete_message_also_deletes_attached_events(
 		UserCreate(
 			email="cascade_message@example.com",
 			password="password123",
+			username="cascade_message",
 			is_superuser=True,
 		),
 		db_session,
@@ -145,6 +147,7 @@ async def test_delete_notification_also_deletes_attached_event(
 		UserCreate(
 			email="cascade_notif@example.com",
 			password="password123",
+			username="cascade_notif",
 			is_superuser=True,
 		),
 		db_session,
@@ -195,6 +198,7 @@ async def test_delete_user_message_deletes_entire_subtree(
 		UserCreate(
 			email="subtree_delete@example.com",
 			password="password123",
+			username="subtree_delete",
 			is_superuser=True,
 		),
 		db_session,
@@ -303,6 +307,7 @@ async def test_delete_user_message_preserves_siblings(
 		UserCreate(
 			email="sibling_delete@example.com",
 			password="password123",
+			username="sibling_delete",
 			is_superuser=True,
 		),
 		db_session,

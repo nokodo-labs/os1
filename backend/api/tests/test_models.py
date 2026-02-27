@@ -20,7 +20,12 @@ from api.v1.service.auth import Principal
 
 
 def _admin_principal() -> Principal:
-	user = User(email="admin@example.com", hashed_password="x", is_superuser=True)
+	user = User(
+		email="admin@example.com",
+		username="admin_models",
+		hashed_password="x",
+		is_superuser=True,
+	)
 	return Principal(user=user, group_ids=(), permissions=frozenset())
 
 
@@ -37,7 +42,7 @@ async def test_create_model(db_session: AsyncSession) -> None:
 	model_in = ModelCreate(
 		provider_id=provider.id,
 		name="gpt-4",
-		model_type=ModelType.LLM,
+		model_type=ModelType.CHAT_MODEL,
 		capabilities=["chat"],
 		enabled=True,
 	)
@@ -52,7 +57,7 @@ async def test_create_model_invalid_provider(db_session: AsyncSession) -> None:
 	model_in = ModelCreate(
 		provider_id="nonexistent",
 		name="gpt-4",
-		model_type=ModelType.LLM,
+		model_type=ModelType.CHAT_MODEL,
 		capabilities=[],
 		enabled=True,
 	)
@@ -72,7 +77,7 @@ async def test_list_models(db_session: AsyncSession) -> None:
 	model_in = ModelCreate(
 		provider_id=provider.id,
 		name="m1",
-		model_type=ModelType.LLM,
+		model_type=ModelType.CHAT_MODEL,
 		capabilities=[],
 		enabled=True,
 	)
@@ -103,7 +108,7 @@ async def test_get_model(db_session: AsyncSession) -> None:
 	model_in = ModelCreate(
 		provider_id=provider.id,
 		name="m2",
-		model_type=ModelType.LLM,
+		model_type=ModelType.CHAT_MODEL,
 		capabilities=[],
 		enabled=True,
 	)
@@ -141,7 +146,7 @@ async def test_models_router_endpoints(
 		json={
 			"provider_id": provider_id,
 			"name": "models-router",
-			"model_type": "llm",
+			"model_type": "chat_model",
 			"capabilities": ["chat"],
 		},
 		headers=headers,
@@ -191,7 +196,7 @@ async def test_update_model_service(db_session: AsyncSession) -> None:
 		ModelCreate(
 			provider_id=provider.id,
 			name="m_update",
-			model_type=ModelType.LLM,
+			model_type=ModelType.CHAT_MODEL,
 			capabilities=[],
 			enabled=True,
 		),
@@ -222,7 +227,7 @@ async def test_delete_model_service(db_session: AsyncSession) -> None:
 		ModelCreate(
 			provider_id=provider.id,
 			name="m_delete",
-			model_type=ModelType.LLM,
+			model_type=ModelType.CHAT_MODEL,
 			capabilities=[],
 			enabled=True,
 		),

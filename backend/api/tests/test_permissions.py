@@ -311,8 +311,10 @@ class TestPrincipalPermissions:
 		global_action_permissions: frozenset[str] = frozenset(),
 		is_superuser: bool = False,
 	) -> Principal:
+		tid = new_typeid("user")
 		user = User(
-			email=f"test-{new_typeid('user')}@example.com",
+			email=f"test-{tid}@example.com",
+			username=f"test_{tid}",
 			hashed_password="x",
 			is_superuser=is_superuser,
 		)
@@ -375,7 +377,12 @@ class TestGetCurrentPrincipal:
 
 	@pytest.mark.asyncio
 	async def test_no_roles_no_defaults(self, db_session: AsyncSession) -> None:
-		user = User(email="no-roles@example.com", hashed_password="pw", is_active=True)
+		user = User(
+			email="no-roles@example.com",
+			username="no_roles",
+			hashed_password="pw",
+			is_active=True,
+		)
 		db_session.add(user)
 		await db_session.commit()
 		await db_session.refresh(user, attribute_names=["roles"])
@@ -398,7 +405,12 @@ class TestGetCurrentPrincipal:
 			name="viewer",
 			default_permissions=dp.model_dump(mode="json"),
 		)
-		user = User(email="viewer@example.com", hashed_password="pw", is_active=True)
+		user = User(
+			email="viewer@example.com",
+			username="viewer_perm",
+			hashed_password="pw",
+			is_active=True,
+		)
 		db_session.add_all([role, user])
 		await db_session.flush()
 		await db_session.execute(
@@ -426,7 +438,12 @@ class TestGetCurrentPrincipal:
 			name="editor-role",
 			default_permissions=dp.model_dump(mode="json"),
 		)
-		user = User(email="editor@example.com", hashed_password="pw", is_active=True)
+		user = User(
+			email="editor@example.com",
+			username="editor_perm",
+			hashed_password="pw",
+			is_active=True,
+		)
 		db_session.add_all([role, user])
 		await db_session.flush()
 		await db_session.execute(
@@ -461,7 +478,12 @@ class TestGetCurrentPrincipal:
 		role2 = Role(
 			name="power", default_permissions=dp2.model_dump(mode="json"), priority=10
 		)
-		user = User(email="multirole@example.com", hashed_password="pw", is_active=True)
+		user = User(
+			email="multirole@example.com",
+			username="multirole_perm",
+			hashed_password="pw",
+			is_active=True,
+		)
 		db_session.add_all([role1, role2, user])
 		await db_session.flush()
 		await db_session.execute(
@@ -509,8 +531,16 @@ class TestResourceAccessPredicateWithDefaults:
 	@pytest.mark.asyncio
 	async def test_default_grants_access(self, db_session: AsyncSession) -> None:
 		"""role default_permissions resource_access should grant access."""
-		owner = User(email="other-owner@example.com", hashed_password="pw")
-		user = User(email="default-user@example.com", hashed_password="pw")
+		owner = User(
+			email="other-owner@example.com",
+			username="other_owner",
+			hashed_password="pw",
+		)
+		user = User(
+			email="default-user@example.com",
+			username="default_user",
+			hashed_password="pw",
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 
@@ -550,8 +580,14 @@ class TestResourceAccessPredicateWithDefaults:
 	@pytest.mark.asyncio
 	async def test_default_insufficient_level(self, db_session: AsyncSession) -> None:
 		"""reader default should not satisfy editor requirement."""
-		owner = User(email="owner-insuf@example.com", hashed_password="pw")
-		user = User(email="insuf-user@example.com", hashed_password="pw")
+		owner = User(
+			email="owner-insuf@example.com",
+			username="owner_insuf",
+			hashed_password="pw",
+		)
+		user = User(
+			email="insuf-user@example.com", username="insuf_user", hashed_password="pw"
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 
@@ -588,8 +624,16 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_no_access(self, db_session: AsyncSession) -> None:
-		owner = User(email="no-access-owner@example.com", hashed_password="pw")
-		user = User(email="no-access@example.com", hashed_password="pw")
+		owner = User(
+			email="no-access-owner@example.com",
+			username="no_access_owner",
+			hashed_password="pw",
+		)
+		user = User(
+			email="no-access@example.com",
+			username="no_access_test",
+			hashed_password="pw",
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 		thread = Thread(
@@ -614,7 +658,11 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_owner_gets_admin(self, db_session: AsyncSession) -> None:
-		user = User(email="owner-admin@example.com", hashed_password="pw")
+		user = User(
+			email="owner-admin@example.com",
+			username="owner_admin",
+			hashed_password="pw",
+		)
 		db_session.add(user)
 		await db_session.flush()
 		thread = Thread(
@@ -643,8 +691,12 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_explicit_rule_wins(self, db_session: AsyncSession) -> None:
-		owner = User(email="rule-owner@example.com", hashed_password="pw")
-		user = User(email="rule-user@example.com", hashed_password="pw")
+		owner = User(
+			email="rule-owner@example.com", username="rule_owner", hashed_password="pw"
+		)
+		user = User(
+			email="rule-user@example.com", username="rule_user", hashed_password="pw"
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 		thread = Thread(
@@ -682,8 +734,16 @@ class TestGetEffectiveAccessLevel:
 	@pytest.mark.asyncio
 	async def test_role_default_fallback(self, db_session: AsyncSession) -> None:
 		"""when no explicit rule, role defaults should be used."""
-		owner = User(email="default-owner@example.com", hashed_password="pw")
-		user = User(email="default-fb@example.com", hashed_password="pw")
+		owner = User(
+			email="default-owner@example.com",
+			username="default_owner",
+			hashed_password="pw",
+		)
+		user = User(
+			email="default-fb@example.com",
+			username="default_fb_test",
+			hashed_password="pw",
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 		thread = Thread(
@@ -711,9 +771,12 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_superuser_always_admin(self, db_session: AsyncSession) -> None:
-		owner = User(email="su-owner@example.com", hashed_password="pw")
+		owner = User(
+			email="su-owner@example.com", username="su_owner_test", hashed_password="pw"
+		)
 		admin = User(
 			email="su@example.com",
+			username="su_admin_test",
 			hashed_password="pw",
 			is_superuser=True,
 		)
@@ -741,8 +804,12 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_public_rule_grants_access(self, db_session: AsyncSession) -> None:
-		owner = User(email="pub-owner@example.com", hashed_password="pw")
-		user = User(email="pub-user@example.com", hashed_password="pw")
+		owner = User(
+			email="pub-owner@example.com", username="pub_owner", hashed_password="pw"
+		)
+		user = User(
+			email="pub-user@example.com", username="pub_user_test", hashed_password="pw"
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 		thread = Thread(
@@ -777,8 +844,12 @@ class TestGetEffectiveAccessLevel:
 	async def test_group_rule_grants_access(self, db_session: AsyncSession) -> None:
 		from api.models.group import Group
 
-		owner = User(email="grp-owner@example.com", hashed_password="pw")
-		user = User(email="grp-user@example.com", hashed_password="pw")
+		owner = User(
+			email="grp-owner@example.com", username="grp_owner", hashed_password="pw"
+		)
+		user = User(
+			email="grp-user@example.com", username="grp_user_test", hashed_password="pw"
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 
@@ -822,7 +893,9 @@ class TestRequirePermission:
 	"""tests for require_permission with typed ActionPermission."""
 
 	def test_denies_without_permission(self) -> None:
-		user = User(email="deny@example.com", hashed_password="pw")
+		user = User(
+			email="deny@example.com", username="deny_perm", hashed_password="pw"
+		)
 		principal = Principal(
 			user=user,
 			group_ids=(),
@@ -835,7 +908,9 @@ class TestRequirePermission:
 		assert exc.value.status_code == 403
 
 	def test_allows_with_exact_permission(self) -> None:
-		user = User(email="allow@example.com", hashed_password="pw")
+		user = User(
+			email="allow@example.com", username="allow_perm", hashed_password="pw"
+		)
 		principal = Principal(
 			user=user,
 			group_ids=(),
@@ -847,7 +922,11 @@ class TestRequirePermission:
 
 	def test_allows_with_global_defaults(self) -> None:
 		"""global default action perms should satisfy require_permission."""
-		user = User(email="global-allow@example.com", hashed_password="pw")
+		user = User(
+			email="global-allow@example.com",
+			username="global_allow",
+			hashed_password="pw",
+		)
 		principal = Principal(
 			user=user,
 			group_ids=(),
@@ -860,6 +939,7 @@ class TestRequirePermission:
 	def test_superuser_bypass(self) -> None:
 		user = User(
 			email="su-perm@example.com",
+			username="su_perm_test",
 			hashed_password="pw",
 			is_superuser=True,
 		)
@@ -881,7 +961,9 @@ class TestRequireResourceAccess:
 
 	@pytest.mark.asyncio
 	async def test_not_found(self, db_session: AsyncSession) -> None:
-		user = User(email="notfound@example.com", hashed_password="pw")
+		user = User(
+			email="notfound@example.com", username="notfound_perm", hashed_password="pw"
+		)
 		db_session.add(user)
 		await db_session.commit()
 
@@ -906,8 +988,12 @@ class TestRequireResourceAccess:
 		self, db_session: AsyncSession
 	) -> None:
 		"""insufficient access should return 404 to avoid leaking existence."""
-		owner = User(email="rra-owner@example.com", hashed_password="pw")
-		user = User(email="rra-user@example.com", hashed_password="pw")
+		owner = User(
+			email="rra-owner@example.com", username="rra_owner", hashed_password="pw"
+		)
+		user = User(
+			email="rra-user@example.com", username="rra_user_test", hashed_password="pw"
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 		thread = Thread(
@@ -946,7 +1032,9 @@ class TestRequireResourceAccess:
 
 	@pytest.mark.asyncio
 	async def test_owner_passes(self, db_session: AsyncSession) -> None:
-		user = User(email="rra-pass@example.com", hashed_password="pw")
+		user = User(
+			email="rra-pass@example.com", username="rra_pass_test", hashed_password="pw"
+		)
 		db_session.add(user)
 		await db_session.flush()
 		thread = Thread(
@@ -987,6 +1075,7 @@ class TestRolesService:
 
 		admin_user = User(
 			email="role-admin@example.com",
+			username="role_admin",
 			hashed_password="pw",
 			is_superuser=True,
 		)
@@ -1027,6 +1116,7 @@ class TestRolesService:
 
 		admin = User(
 			email="update-admin@example.com",
+			username="update_admin",
 			hashed_password="pw",
 			is_superuser=True,
 		)
@@ -1072,6 +1162,7 @@ class TestRolesService:
 
 		admin = User(
 			email="list-admin@example.com",
+			username="list_admin",
 			hashed_password="pw",
 			is_superuser=True,
 		)
@@ -1103,7 +1194,12 @@ class TestRolesService:
 		self, db_session: AsyncSession
 	) -> None:
 		"""non-admin without roles:read should be denied."""
-		user = User(email="no-perm@example.com", hashed_password="pw", is_active=True)
+		user = User(
+			email="no-perm@example.com",
+			username="no_perm_test",
+			hashed_password="pw",
+			is_active=True,
+		)
 		db_session.add(user)
 		await db_session.commit()
 
@@ -1122,6 +1218,7 @@ class TestRolesService:
 	async def test_get_nonexistent_role(self, db_session: AsyncSession) -> None:
 		admin = User(
 			email="get-ne-admin@example.com",
+			username="get_ne_admin",
 			hashed_password="pw",
 			is_superuser=True,
 		)
@@ -1152,8 +1249,16 @@ class TestAccessRuleWithRole:
 	async def test_role_scoped_rule_grants_access(
 		self, db_session: AsyncSession
 	) -> None:
-		owner = User(email="role-scope-owner@example.com", hashed_password="pw")
-		user = User(email="role-scope-user@example.com", hashed_password="pw")
+		owner = User(
+			email="role-scope-owner@example.com",
+			username="role_scope_owner",
+			hashed_password="pw",
+		)
+		user = User(
+			email="role-scope-user@example.com",
+			username="role_scope_user",
+			hashed_password="pw",
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 
@@ -1239,7 +1344,9 @@ class TestEdgeCases:
 		self, db_session: AsyncSession
 	) -> None:
 		"""user model should not have the old role_id column."""
-		user = User(email="no-role-id@example.com", hashed_password="pw")
+		user = User(
+			email="no-role-id@example.com", username="no_role_id", hashed_password="pw"
+		)
 		db_session.add(user)
 		await db_session.commit()
 		# role_id attribute should not exist on User
@@ -1259,8 +1366,14 @@ class TestEdgeCases:
 	@pytest.mark.asyncio
 	async def test_last_rule_wins_ordering(self, db_session: AsyncSession) -> None:
 		"""explicit rules: last matching rule by order_index wins."""
-		owner = User(email="order-owner@example.com", hashed_password="pw")
-		user = User(email="order-user@example.com", hashed_password="pw")
+		owner = User(
+			email="order-owner@example.com",
+			username="order_owner",
+			hashed_password="pw",
+		)
+		user = User(
+			email="order-user@example.com", username="order_user", hashed_password="pw"
+		)
 		db_session.add_all([owner, user])
 		await db_session.flush()
 
@@ -1306,7 +1419,9 @@ class TestEdgeCases:
 		self, db_session: AsyncSession
 	) -> None:
 		"""resource defaults for different types should be independent."""
-		user = User(email="multi-rt@example.com", hashed_password="pw")
+		user = User(
+			email="multi-rt@example.com", username="multi_rt_test", hashed_password="pw"
+		)
 		db_session.add(user)
 		await db_session.commit()
 

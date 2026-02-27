@@ -387,6 +387,64 @@ class VectorDatabaseSettings(BaseModel):
 	)
 
 
+class LocalStorageConfig(BaseModel):
+	"""local filesystem storage configuration."""
+
+	root_path: str = Field(
+		default="data/uploads",
+		description="root directory for local file storage",
+	)
+
+
+class S3StorageConfig(BaseModel):
+	"""S3-compatible storage configuration."""
+
+	endpoint_url: str | None = Field(
+		default=None,
+		description="S3-compatible endpoint (MinIO, R2, etc.)",
+	)
+	bucket: str = Field(
+		default="nokodo-ai",
+		description=("S3 bucket name. must be globally unique per deployment."),
+	)
+	region: str = Field(default="us-east-1", description="AWS region")
+	access_key_id: str | None = settings_field(
+		default=None, private=True, description="S3 access key id"
+	)
+	secret_access_key: str | None = settings_field(
+		default=None, private=True, description="S3 secret access key"
+	)
+	prefix: str = Field(default="", description="key prefix within the bucket")
+	presigned_url_ttl: int = Field(
+		default=3600, description="presigned URL expiration in seconds"
+	)
+	multipart_threshold: int = Field(
+		default=100 * 1024 * 1024,
+		description="bytes above which multipart upload kicks in",
+	)
+	multipart_chunk_size: int = Field(
+		default=10 * 1024 * 1024,
+		description="multipart upload chunk size in bytes",
+	)
+	max_retries: int = Field(default=3, description="max retry attempts")
+	retry_mode: str = Field(default="adaptive", description="botocore retry mode")
+
+
+class StorageSettings(BaseModel):
+	"""file storage backend configuration.
+
+	set `backend` to choose which storage system is active.
+	only the selected backend is instantiated at startup.
+	"""
+
+	backend: Literal["local", "s3"] = Field(
+		default="local",
+		description="active storage backend: 'local' or 's3'",
+	)
+	local: LocalStorageConfig = Field(default_factory=LocalStorageConfig)
+	s3: S3StorageConfig = Field(default_factory=S3StorageConfig)
+
+
 class AssetsSettings(BaseModel):
 	default_embedding_model_id: str | None = Field(
 		default=None,
@@ -407,6 +465,10 @@ class AssetsSettings(BaseModel):
 	rerank: RerankSettings = Field(
 		default_factory=RerankSettings,
 		description="default reranking behavior",
+	)
+	storage: StorageSettings = Field(
+		default_factory=StorageSettings,
+		description="file storage backend configuration",
 	)
 
 

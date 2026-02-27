@@ -27,6 +27,7 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 	"""User can obtain a token and fetch their user resource via /users/{id}."""
 	bootstrap_payload = {
 		"email": "bootstrap-admin-auth-flow@example.com",
+		"username": "bootstrap_admin_auth_flow",
 		"password": "passw0rd!",
 		"is_superuser": True,
 	}
@@ -35,6 +36,7 @@ async def test_login_and_fetch_user(client: AsyncClient) -> None:
 
 	user_payload = {
 		"email": "auth-flow@example.com",
+		"username": "auth_flow",
 		"password": "passw0rd!",
 	}
 	create_resp = await client.post("/v1/users", json=user_payload)
@@ -80,6 +82,7 @@ async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 	"""Incorrect password should produce HTTP 400."""
 	bootstrap_payload = {
 		"email": "bootstrap-admin-auth-fail@example.com",
+		"username": "bootstrap_admin_auth_fail",
 		"password": "correct-password",
 		"is_superuser": True,
 	}
@@ -88,6 +91,7 @@ async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 
 	user_payload = {
 		"email": "auth-fail@example.com",
+		"username": "auth_fail",
 		"password": "correct-password",
 	}
 	create_resp = await client.post("/v1/users", json=user_payload)
@@ -106,6 +110,7 @@ async def test_login_inactive_user_rejected(client: AsyncClient) -> None:
 	"""Inactive users should not receive tokens."""
 	admin_payload = {
 		"email": "admin-inactive@example.com",
+		"username": "admin_inactive",
 		"password": "password",
 		"is_superuser": True,
 	}
@@ -124,6 +129,7 @@ async def test_login_inactive_user_rejected(client: AsyncClient) -> None:
 
 	user_payload = {
 		"email": "inactive@example.com",
+		"username": "inactive",
 		"password": "correct-password",
 		"is_active": False,
 	}
@@ -158,6 +164,7 @@ async def test_service_authenticate_user(db_session: AsyncSession) -> None:
 	# Create user
 	user_in = UserCreate(
 		email="auth_service@example.com",
+		username="auth_service",
 		password="password123",
 		is_superuser=True,
 	)
@@ -246,7 +253,10 @@ async def test_principal_permission_checks_and_active_guard(
 	"""Ensure Principal permission wildcards and active guard behave."""
 	admin_seed = await user_service.create_user(
 		UserCreate(
-			email="principal-admin@example.com", password="pw", is_superuser=True
+			email="principal-admin@example.com",
+			username="principal_admin",
+			password="pw",
+			is_superuser=True,
 		),
 		db_session,
 	)
@@ -256,7 +266,7 @@ async def test_principal_permission_checks_and_active_guard(
 		permissions=frozenset(),
 	)
 	user = await user_service.create_user(
-		UserCreate(email="principal@example.com", password="pw"),
+		UserCreate(email="principal@example.com", username="principal", password="pw"),
 		db_session,
 		principal=admin_principal,
 	)
@@ -272,6 +282,7 @@ async def test_principal_permission_checks_and_active_guard(
 	admin = Principal(
 		user=User(
 			email="admin-perm@example.com",
+			username="admin_perm",
 			hashed_password="x",
 			is_superuser=True,
 			is_active=True,
@@ -283,6 +294,7 @@ async def test_principal_permission_checks_and_active_guard(
 
 	inactive = User(
 		email="inactive@example.com",
+		username="inactive",
 		hashed_password="x",
 		is_active=False,
 		is_superuser=False,
@@ -292,16 +304,31 @@ async def test_principal_permission_checks_and_active_guard(
 
 
 def test_principal_permission_star() -> None:
-	user = User(email="star@example.com", hashed_password="x", is_superuser=False)
+	user = User(
+		email="star@example.com",
+		username="star_test",
+		hashed_password="x",
+		is_superuser=False,
+	)
 	principal = Principal(user=user, group_ids=(), permissions=frozenset({"*"}))
 	assert principal.has_permission("any:permission")
-	admin = User(email="star-admin@example.com", hashed_password="x", is_superuser=True)
+	admin = User(
+		email="star-admin@example.com",
+		username="star_admin",
+		hashed_password="x",
+		is_superuser=True,
+	)
 	assert Principal(user=admin, group_ids=(), permissions=frozenset()).is_admin
 
 
 @pytest.mark.asyncio
 async def test_optional_user_and_require_admin(db_session: AsyncSession) -> None:
-	user = User(email="optional@example.com", hashed_password="x", is_active=True)
+	user = User(
+		email="optional@example.com",
+		username="optional_test",
+		hashed_password="x",
+		is_active=True,
+	)
 	db_session.add(user)
 	await db_session.commit()
 
@@ -316,7 +343,12 @@ async def test_optional_user_and_require_admin(db_session: AsyncSession) -> None
 async def test_get_current_active_user_allows_active_user(
 	db_session: AsyncSession,
 ) -> None:
-	user = User(email="active@example.com", hashed_password="pw", is_active=True)
+	user = User(
+		email="active@example.com",
+		username="active",
+		hashed_password="pw",
+		is_active=True,
+	)
 	assert await get_current_active_user(user) is user
 
 
@@ -330,7 +362,10 @@ async def test_get_current_principal_with_role(db_session: AsyncSession) -> None
 		},
 	)
 	user = User(
-		email="principal-role@example.com", hashed_password="pw", is_active=True
+		email="principal-role@example.com",
+		username="principal_role",
+		hashed_password="pw",
+		is_active=True,
 	)
 	db_session.add_all([role, user])
 	await db_session.flush()

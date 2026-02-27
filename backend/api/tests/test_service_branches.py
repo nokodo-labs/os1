@@ -33,8 +33,10 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _user(is_admin: bool = False, *, active: bool = True) -> User:
+	uid = new_typeid("user")
 	return User(
-		email=f"u-{new_typeid('user')}@example.com",
+		email=f"u-{uid}@example.com",
+		username=f"u{uid[:8].replace('-', '')}",
 		hashed_password=hash_password("password"),
 		is_active=active,
 		is_superuser=is_admin,
@@ -227,7 +229,12 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 		await users.get_user(new_typeid("user"), db_session, principal=principal)
 
 	created = await users.create_user(
-		user_in=UserCreate(email="x@example.com", password="pw", is_superuser=True),
+		user_in=UserCreate(
+			email="x@example.com",
+			username="x_test_sb",
+			password="pw",
+			is_superuser=True,
+		),
 		session=db_session,
 		principal=None,
 	)
@@ -236,7 +243,9 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 
 	with pytest.raises(HTTPException):
 		await users.create_user(
-			user_in=UserCreate(email="y@example.com", password="pw"),
+			user_in=UserCreate(
+				email="y@example.com", username="y_test_sb", password="pw"
+			),
 			session=db_session,
 			principal=Principal(user=user, group_ids=(), permissions=frozenset()),
 		)
@@ -244,7 +253,12 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 	user.is_active = False
 	with pytest.raises(HTTPException):
 		await users.create_user(
-			user_in=UserCreate(email="z@example.com", password="pw", is_active=True),
+			user_in=UserCreate(
+				email="z@example.com",
+				username="z_test_sb",
+				password="pw",
+				is_active=True,
+			),
 			session=db_session,
 			principal=Principal(user=user, group_ids=(), permissions=frozenset()),
 		)

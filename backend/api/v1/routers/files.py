@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Form, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
 from api.database import get_db
 from api.models.access_rule import AccessRule
-from api.models.file import File
+from api.models.file import File, FileSource
 from api.permissions import ResourceType
 from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
 from api.schemas.file import File as FileSchema
@@ -30,11 +33,35 @@ async def create_file(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> File:
-	"""register a new file record."""
+	"""register a new file record (metadata only)."""
 	return await file_service.create_file(
 		file_in,
 		db,
 		principal=principal,
+		origin_session_id=x_session_id,
+	)
+
+
+@router.post(
+	"/upload",
+	response_model=FileSchema,
+	status_code=status.HTTP_201_CREATED,
+)
+async def upload_file(
+	file: UploadFile,
+	project_id: TypeID | None = Form(default=None),
+	source: FileSource = Form(default=FileSource.UPLOAD),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> File:
+	"""upload a file (multipart) and create the record."""
+	return await file_service.upload_file(
+		file,
+		db,
+		principal=principal,
+		project_id=project_id,
+		source=source,
 		origin_session_id=x_session_id,
 	)
 
@@ -69,6 +96,45 @@ async def get_file(
 ) -> File:
 	"""fetch a file by id."""
 	return await file_service.get_file(file_id, db, principal=principal)
+
+
+@router.get("/{file_id}/content")
+async def get_file_content(
+	file_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+	"""download file content."""
+	stream, content_type, filename, size_bytes = await file_service.get_file_content(
+		file_id, db, principal=principal
+	)
+	headers: dict[str, str] = {}
+	if filename:
+		encoded = quote(filename, safe="")
+		headers["Content-Disposition"] = (
+			f"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}"
+		)
+	if size_bytes is not None:
+		headers["Content-Length"] = str(size_bytes)
+	return StreamingResponse(
+		stream,
+		media_type=content_type or "application/octet-stream",
+		headers=headers,
+	)
+
+
+@router.get("/{file_id}/url")
+async def get_file_url(
+	file_id: TypeID,
+	expires_in: int | None = None,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, str | None]:
+	"""get a direct or presigned URL for the file."""
+	url = await file_service.get_file_url(
+		file_id, db, principal=principal, expires_in=expires_in
+	)
+	return {"url": url}
 
 
 @router.patch("/{file_id}", response_model=FileSchema)

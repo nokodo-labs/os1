@@ -58,7 +58,7 @@ skipping any of these steps will lead to increased costs and suboptimal results.
 
 to validate your work, use the following methods, in order of importance:
 
-1. **problems tool**: always check for code problems regularly, as this will quickly highlight issues.
+1. **problems tool**: ALWAYS check for code errors regularly using your file problems tool, as this will quickly highlight issues.
 2. **dedicated check Tasks**: use these after you have completed a task or set of changes.
 3. **unit tests**: run unit tests after an entire, complete change has passed all previous checks.
 

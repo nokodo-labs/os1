@@ -19,13 +19,13 @@ from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter
 from nokodo_ai.context import AgentContext
 
 
-def test_llm_requires_model() -> None:
+def test_chat_model_requires_model() -> None:
 	with pytest.raises(ValidationError):
 		ChatModel.model_validate({})
 
 
-def test_llm_resolves_openai_model() -> None:
-	llm = ChatModel.model_validate(
+def test_chat_model_resolves_openai_model() -> None:
+	chat_model = ChatModel.model_validate(
 		{
 			"model_name": "gpt-4o",
 			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
@@ -33,23 +33,23 @@ def test_llm_resolves_openai_model() -> None:
 	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
+	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 
 
-def test_llm_adapter_shorthand_resolves_to_full_type() -> None:
+def test_chat_model_adapter_shorthand_resolves_to_full_type() -> None:
 	"""shorthand provider name in adapter type resolves to default adapter."""
-	llm = ChatModel.create(
+	chat_model = ChatModel.create(
 		"gpt-4o",
 		adapter={"type": "openai", "api_key": "test"},
 	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
-	assert llm.adapter.type.startswith("openai.")
+	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
+	assert chat_model.adapter.type.startswith("openai.")
 
 
-def test_llm_resolves_openai_explicit() -> None:
-	llm = ChatModel.model_validate(
+def test_chat_model_resolves_openai_explicit() -> None:
+	chat_model = ChatModel.model_validate(
 		{
 			"model_name": "gpt-4o-mini",
 			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
@@ -57,11 +57,11 @@ def test_llm_resolves_openai_explicit() -> None:
 	)
 	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
-	assert isinstance(llm.adapter, OpenAIChatCompletionsAdapter)
+	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 
 
-def test_llm_resolves_openai_responses_api() -> None:
-	llm = ChatModel.model_validate(
+def test_chat_model_resolves_openai_responses_api() -> None:
+	chat_model = ChatModel.model_validate(
 		{
 			"model_name": "gpt-4o",
 			"adapter": {"type": "openai.responses", "api_key": "test"},
@@ -69,11 +69,11 @@ def test_llm_resolves_openai_responses_api() -> None:
 	)
 	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
-	assert isinstance(llm.adapter, OpenAIResponsesAdapter)
+	assert isinstance(chat_model.adapter, OpenAIResponsesAdapter)
 
 
-def test_llm_resolves_anthropic() -> None:
-	llm = ChatModel.model_validate(
+def test_chat_model_resolves_anthropic() -> None:
+	chat_model = ChatModel.model_validate(
 		{
 			"model_name": "claude-sonnet-4-20250514",
 			"adapter": {"type": "anthropic.messages", "api_key": "test"},
@@ -81,20 +81,20 @@ def test_llm_resolves_anthropic() -> None:
 	)
 	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
-	assert isinstance(llm.adapter, AnthropicMessagesAdapter)
+	assert isinstance(chat_model.adapter, AnthropicMessagesAdapter)
 
 
-def test_llm_resolves_ollama() -> None:
-	llm = ChatModel.model_validate(
+def test_chat_model_resolves_ollama() -> None:
+	chat_model = ChatModel.model_validate(
 		{"model_name": "llama3.2", "adapter": {"type": "ollama.chat"}}
 	)
 	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
-	assert isinstance(llm.adapter, OllamaChatAdapter)
+	assert isinstance(chat_model.adapter, OllamaChatAdapter)
 
 
-def test_llm_resolves_google() -> None:
-	llm = ChatModel.model_validate(
+def test_chat_model_resolves_google() -> None:
+	chat_model = ChatModel.model_validate(
 		{
 			"model_name": "gemini-2.0-flash-001",
 			"adapter": {"type": "google.generate_content", "api_key": "test"},
@@ -102,10 +102,10 @@ def test_llm_resolves_google() -> None:
 	)
 	from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
 
-	assert isinstance(llm.adapter, GoogleGenerateContentAdapter)
+	assert isinstance(chat_model.adapter, GoogleGenerateContentAdapter)
 
 
-def test_llm_unknown_provider_raises() -> None:
+def test_chat_model_unknown_provider_raises() -> None:
 	with pytest.raises(ValidationError):
 		ChatModel.model_validate(
 			{
@@ -216,14 +216,14 @@ class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 @pytest.mark.asyncio
 async def test_chat_model_generate_with_thread(monkeypatch: pytest.MonkeyPatch) -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
-	llm = ChatModel.model_construct(
+	chat_model = ChatModel.model_construct(
 		model_name="stub",
 		adapter=adapter,
 	)
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
-	result = await llm.generate(thread)
+	result = await chat_model.generate(thread)
 
 	assert result.text == "ok"
 	call = adapter.calls[-1]
@@ -244,7 +244,7 @@ async def test_chat_model_streaming_with_tools() -> None:
 			AssistantMessage.from_text("c2"),
 		],
 	)
-	llm = ChatModel.model_construct(
+	chat_model = ChatModel.model_construct(
 		model_name="stub",
 		adapter=adapter,
 	)
@@ -261,7 +261,7 @@ async def test_chat_model_streaming_with_tools() -> None:
 
 	chunks = [
 		delta
-		async for delta in llm.generate(
+		async for delta in chat_model.generate(
 			[UserMessage.from_text("hi")],
 			stream=True,
 			tools=[noop],
@@ -282,12 +282,12 @@ async def test_chat_model_streaming_with_tools() -> None:
 @pytest.mark.asyncio
 async def test_chat_model_parses_params_dict() -> None:
 	adapter = _StubChatAdapter(AssistantMessage.from_text("ok"))
-	llm = ChatModel.model_construct(
+	chat_model = ChatModel.model_construct(
 		model_name="stub",
 		adapter=adapter,
 	)
 
-	result = await llm.generate(
+	result = await chat_model.generate(
 		[UserMessage.from_text("hi")],
 		params={"temperature": 0.123, "max_tokens": 7},
 	)

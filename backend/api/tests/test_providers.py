@@ -18,7 +18,12 @@ from nokodo_ai.utils.security import decrypt_string
 
 
 def _admin_principal() -> Principal:
-	user = User(email="admin@example.com", hashed_password="x", is_superuser=True)
+	user = User(
+		email="admin@example.com",
+		username="admin_providers",
+		hashed_password="x",
+		is_superuser=True,
+	)
 	return Principal(user=user, group_ids=(), permissions=frozenset())
 
 
@@ -221,7 +226,7 @@ async def test_provider_model_properties(db_session):
 	model1 = Model(
 		provider_id=provider.id,
 		name="model-manual",
-		model_type="llm",
+		model_type="chat_model",
 		capabilities={},
 		enabled=True,
 		is_autofetched=False,
@@ -229,7 +234,7 @@ async def test_provider_model_properties(db_session):
 	model2 = Model(
 		provider_id=provider.id,
 		name="model-auto",
-		model_type="llm",
+		model_type="chat_model",
 		capabilities={},
 		enabled=True,
 		is_autofetched=True,

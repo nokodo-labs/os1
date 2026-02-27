@@ -20,6 +20,7 @@ async def memory_user(db_session: AsyncSession):
 	"""Create a user for memory tests."""
 	user_in = UserCreate(
 		email="memory_test@example.com",
+		username="memory_test",
 		password="password123",
 		is_superuser=True,
 	)
@@ -91,7 +92,10 @@ async def test_get_memory_not_found(db_session: AsyncSession) -> None:
 	"""Test getting a non-existent memory."""
 	user = await user_service.create_user(
 		UserCreate(
-			email="memory_nf@example.com", password="password123", is_superuser=True
+			email="memory_nf@example.com",
+			username="memory_nf_test",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
@@ -173,11 +177,20 @@ async def test_list_memories_sorting(
 async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> None:
 	"""Admin principals can list memories for another user."""
 	admin = await user_service.create_user(
-		UserCreate(email="mem_admin@example.com", password="pw", is_superuser=True),
+		UserCreate(
+			email="mem_admin@example.com",
+			username="mem_admin",
+			password="pw",
+			is_superuser=True,
+		),
 		db_session,
 	)
 	other = await user_service.create_user(
-		UserCreate(email="mem_other@example.com", password="pw"),
+		UserCreate(
+			email="mem_other@example.com",
+			username="mem_other",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
@@ -200,17 +213,28 @@ async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> 
 	"""Non-admin list_memories should ignore requested user_id."""
 	admin = await user_service.create_user(
 		UserCreate(
-			email="mem_guard_admin@example.com", password="pw", is_superuser=True
+			email="mem_guard_admin@example.com",
+			username="mem_guard_admin",
+			password="pw",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	owner = await user_service.create_user(
-		UserCreate(email="mem_guard_owner@example.com", password="pw"),
+		UserCreate(
+			email="mem_guard_owner@example.com",
+			username="mem_guard_owner",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	other = await user_service.create_user(
-		UserCreate(email="mem_guard_other@example.com", password="pw"),
+		UserCreate(
+			email="mem_guard_other@example.com",
+			username="mem_guard_other",
+			password="pw",
+		),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)

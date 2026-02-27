@@ -5,7 +5,7 @@ and are designed to be compatible with SDK content parts via Pydantic validation
 
 The key design principle:
 - File references are stored in `metadata["file_id"]` for ORM persistence
-- `url`/`base64` are used for SDK execution (actual data for LLM calls)
+- `url`/`base64` are used for SDK execution (actual data for chat model calls)
 - The API layer resolves file_id → url when sending to SDK
 - The API layer persists url/base64 → File record when receiving from SDK
 """

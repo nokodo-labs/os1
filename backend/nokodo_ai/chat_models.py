@@ -1,4 +1,4 @@
-"""llm high-level interface - unified access to chat models."""
+"""chat model high-level interface - unified access to chat models."""
 
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ from .tool import ToolDefinition
 
 
 class ChatModel(ChatGenerationParams, AdapterEnabledBase[ChatAdapter]):
-	"""high-level unified interface for LLM chat models.
+	"""high-level unified interface for chat models.
 
 	usage:
-		llm = ChatModel.create(
+		chat_model = ChatModel.create(
 			"gpt-4o",
 			adapter={"type": "openai", "api_key": "..."},
 		)
-		response = await llm.generate(messages)
+		response = await chat_model.generate(messages)
 	"""
 
 	model_name: str = Field(..., description="model identifier")

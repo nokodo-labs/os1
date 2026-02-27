@@ -1,4 +1,4 @@
-"""run (llm execution) schemas."""
+"""run (chat model execution) schemas."""
 
 from __future__ import annotations
 

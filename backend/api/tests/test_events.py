@@ -23,6 +23,7 @@ from api.v1.service.auth import Principal
 def _admin_principal() -> Principal:
 	user = User(
 		email="admin@example.com",
+		username="admin_events",
 		hashed_password="x",
 		is_active=True,
 		is_superuser=True,
@@ -48,6 +49,7 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 	# Create user
 	user = User(
 		email="event@example.com",
+		username="event_test",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -86,6 +88,7 @@ async def test_emit_event_non_admin_cannot_notify_other_user(
 	"""Non-admins may only create notifications for themselves."""
 	actor = User(
 		email="actor@example.com",
+		username="actor_test",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -95,6 +98,7 @@ async def test_emit_event_non_admin_cannot_notify_other_user(
 	)
 	target = User(
 		email="target@example.com",
+		username="target_test",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,
@@ -134,6 +138,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Create user
 	user = User(
 		email="list_event@example.com",
+		username="list_event",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,

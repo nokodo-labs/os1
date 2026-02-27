@@ -42,8 +42,8 @@ backend/
 │   └── tests/              # API & ORM tests
 ├── nokodo_ai/              # SDK - publishable, standalone execution library
 │   ├── adapters/           # provider adapters (openai/anthropic/ollama) + capability ABCs
-│   ├── agent.py            # Agent orchestrator (LLM + Tools)
-│   ├── llm.py              # LLM high-level interface
+│   ├── agent.py            # Agent orchestrator (ChatModel + Tools)
+│   ├── llm.py              # ChatModel high-level interface
 │   ├── embedding.py        # EmbeddingModel high-level interface
 │   ├── vectorstore.py      # Vectorstore high-level interface
 │   ├── tool.py             # Tool decorator / Tool class

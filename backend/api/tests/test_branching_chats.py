@@ -215,6 +215,7 @@ async def test_get_current_branch_handles_missing_current_message_gracefully(
 ) -> None:
 	user = User(
 		email="branch-miss@example.com",
+		username="branch_miss",
 		hashed_password="password",
 		is_active=True,
 		is_superuser=False,

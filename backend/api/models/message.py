@@ -95,7 +95,7 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	tool_call_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH), index=True)
 	is_error: Mapped[bool | None] = mapped_column(Boolean)
 	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-	# Token usage from LLM response (matches SDK Usage model)
+	# Token usage from chat model response (matches SDK Usage model)
 	usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	read_by: Mapped[list[str]] = mapped_column(JSONB, default=list)
 

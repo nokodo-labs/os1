@@ -85,7 +85,7 @@ ContentPartAdapter = TypeAdapter(ContentPart)
 
 
 class Usage(Base):
-	"""token usage information from an LLM response."""
+	"""token usage information from a chat model response."""
 
 	input_tokens: int = 0
 	output_tokens: int = 0
@@ -317,7 +317,7 @@ class ToolMessage(BaseMessage):
 	"""a message containing tool execution results.
 
 	tools can return both text output and optional attachments (images, files).
-	attachments are passed to the LLM in subsequent turns and rendered in the UI.
+	attachments are passed to the chat model in subsequent turns and rendered in the UI.
 	"""
 
 	role: Literal["tool"] = "tool"

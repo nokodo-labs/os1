@@ -32,7 +32,7 @@ async def test_async_agentic_flow(
 	# Create a baseline user
 	user_payload = {
 		"email": "poc@example.com",
-		"username": "poc-user",
+		"username": "poc_user",
 		"password": "supersecret",
 		"display_name": "POC User",
 		"is_superuser": True,

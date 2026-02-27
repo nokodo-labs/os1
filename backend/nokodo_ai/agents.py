@@ -1,4 +1,4 @@
-"""agent class - orchestrates llm with tools."""
+"""agent class - orchestrates chat model with tools."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ AgentProducedMessages = list[AssistantMessage | ToolMessage]
 
 
 class Agent[AppContextT = None](Base):
-	"""an agent that orchestrates an llm with tools.
+	"""an agent that orchestrates a chat model with tools.
 
 	agents are generic over AppContextT to allow application-specific
 	context to be passed through the entire execution pipeline.
@@ -40,13 +40,13 @@ class Agent[AppContextT = None](Base):
 	agents can execute multi-step reasoning by:
 	1. receiving a thread with messages (including system prompt if needed)
 	2. running pre-filters to augment/modify input
-	3. calling the llm to decide on actions
+	3. calling the chat model to decide on actions
 	4. running post-filters on responses
 	5. executing tools when requested
-	6. feeding tool results back to the llm
+	6. feeding tool results back to the chat model
 	7. repeating until a final response is ready
 
-	llm configuration (temperature, max_tokens, etc.) belongs in the ChatModel.
+	chat model configuration (temperature, max_tokens, etc.) belongs in the ChatModel.
 	system prompts belong in the Thread as a SystemMessage.
 
 	usage:
@@ -61,8 +61,8 @@ class Agent[AppContextT = None](Base):
 			async def call(self, agent_ctx, app_ctx, *, city: str) -> ToolMessage:
 				return self.success(f"sunny in {city}", agent_ctx)
 
-		llm = ChatModel("gpt-4o", temperature=0.7)
-		agent = Agent(llm=llm, tools=[WeatherTool()])
+		chat_model = ChatModel("gpt-4o", temperature=0.7)
+		agent = Agent(chat_model=chat_model, tools=[WeatherTool()])
 
 		thread = Thread()
 		thread.add(SystemMessage.from_text("you are a helpful assistant"))
@@ -99,7 +99,7 @@ class Agent[AppContextT = None](Base):
 
 	@cached_property
 	def tool_definitions(self) -> list[ToolDefinition]:
-		"""get tool definitions for llm.generate() calls."""
+		"""get tool definitions for chat_model.generate() calls."""
 		return [t.definition for t in self.tools]
 
 	@overload
@@ -130,7 +130,7 @@ class Agent[AppContextT = None](Base):
 		"""run the agent against a thread.
 
 		the thread should already contain any system prompt and user messages.
-		llm configuration (temperature, max_tokens) is taken from the ChatModel.
+		chat model configuration (temperature, max_tokens) is taken from the ChatModel.
 
 		args:
 			thread: the conversation thread to continue
@@ -197,7 +197,7 @@ class Agent[AppContextT = None](Base):
 				thread.add(tool_message)
 				produced.append(tool_message)
 
-		# max iterations reached - call llm one more time without tools
+		# max iterations reached - call chat model one more time without tools
 		final_response = await self.chat_model.generate(
 			thread,
 			tools=self.tool_definitions,
@@ -225,7 +225,7 @@ class Agent[AppContextT = None](Base):
 
 			current_tool_choice = tool_choice if self.tools else None
 
-			# stream from llm and accumulate full message
+			# stream from chat model and accumulate full message
 			assistant_message = AssistantMessage()
 			async for chat_delta in self.chat_model.generate(
 				filtered_thread,

@@ -78,7 +78,7 @@ class ThinkingTool(Tool[AppContext]):
 
 		the elapsed time is measured from when the ToolCall object was
 		first created (i.e. when the first streaming delta for this
-		tool call arrived), capturing the LLM's generation time.
+		tool call arrived), capturing the chat model's generation time.
 		"""
 		elapsed_time = time() - __agent_context__.tool_call_start_time
 		try:

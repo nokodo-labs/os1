@@ -1,26 +1,26 @@
 """
 nokodo_ai SDK - AI execution abstractions.
 
-a publishable, standalone library providing unified interfaces for LLMs, embeddings,
+a publishable, standalone library providing unified interfaces for chat models, embeddings,
 vector stores, tools, and agents - with pluggable adapters for different providers.
 
 core principle: magic by default, explicitly customizable if needed.
 
 usage (simple):
-	from nokodo_ai import LLM, EmbeddingModel
+	from nokodo_ai import ChatModel, EmbeddingModel
 
-	llm = LLM("gpt-4o")
-	response = await llm.generate(messages)
+	chat_model = ChatModel("gpt-4o")
+	response = await chat_model.generate(messages)
 
 	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
 	vectors = await embedder.embed(["hello", "world"])
 
 usage (explicit adapter):
-	from nokodo_ai import LLM
+	from nokodo_ai import ChatModel
 	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
 	adapter = OpenAIResponsesAdapter(api_key="...", base_url="https://custom-proxy.com")
-	llm = LLM(adapter=adapter)
+	chat_model = ChatModel(adapter=adapter)
 """
 
 from __future__ import annotations

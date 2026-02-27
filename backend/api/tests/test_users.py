@@ -16,6 +16,7 @@ async def test_create_user(client: AsyncClient) -> None:
 	"""Test creating a new user."""
 	bootstrap_admin = {
 		"email": "admin@example.com",
+		"username": "admin_test",
 		"password": "testpassword123",
 		"is_superuser": True,
 	}
@@ -24,6 +25,7 @@ async def test_create_user(client: AsyncClient) -> None:
 
 	user_data = {
 		"email": "test@example.com",
+		"username": "test_user",
 		"password": "testpassword123",
 	}
 	response = await client.post("/v1/users", json=user_data)
@@ -70,7 +72,7 @@ async def test_get_users_sorting(
 	]:
 		resp = await client.post(
 			"/v1/users",
-			json={"email": email, "password": "pw"},
+			json={"email": email, "username": email.split("@")[0], "password": "pw"},
 			headers=headers,
 		)
 		assert resp.status_code == 201
@@ -129,6 +131,7 @@ async def test_create_duplicate_user(
 	"""Test creating a user with an existing email."""
 	user_data = {
 		"email": "duplicate@example.com",
+		"username": "duplicate_test",
 		"password": "password",
 	}
 	headers = admin_auth["headers"]
@@ -147,12 +150,16 @@ async def test_service_create_user(db_session: AsyncSession) -> None:
 	"""Test creating a user directly via service."""
 	await user_service.create_user(
 		UserCreate(
-			email="bootstrap@example.com", password="password123", is_superuser=True
+			email="bootstrap@example.com",
+			username="bootstrap_test",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	user_in = UserCreate(
 		email="service_test@example.com",
+		username="service_test",
 		password="password123",
 	)
 	user = await user_service.create_user(user_in, db_session)
@@ -166,13 +173,18 @@ async def test_service_get_user(db_session: AsyncSession) -> None:
 	# Create user first
 	admin = await user_service.create_user(
 		UserCreate(
-			email="admin_get@example.com", password="password123", is_superuser=True
+			email="admin_get@example.com",
+			username="admin_get",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
 
-	user_in = UserCreate(email="service_get@example.com", password="password123")
+	user_in = UserCreate(
+		email="service_get@example.com", username="service_get", password="password123"
+	)
 	created_user = await user_service.create_user(
 		user_in,
 		db_session,
@@ -194,14 +206,21 @@ async def test_service_list_users(db_session: AsyncSession) -> None:
 	"""Test listing users directly via service."""
 	admin = await user_service.create_user(
 		UserCreate(
-			email="admin_list@example.com", password="password123", is_superuser=True
+			email="admin_list@example.com",
+			username="admin_list",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
 
 	for i in range(2):
-		user_in = UserCreate(email=f"list_{i}@example.com", password="password123")
+		user_in = UserCreate(
+			email=f"list_{i}@example.com",
+			username=f"list_{i}_test",
+			password="password123",
+		)
 		await user_service.create_user(
 			user_in,
 			db_session,
@@ -217,7 +236,10 @@ async def test_service_get_user_not_found(db_session: AsyncSession) -> None:
 	"""Test getting a non-existent user directly via service."""
 	admin = await user_service.create_user(
 		UserCreate(
-			email="admin_nf@example.com", password="password123", is_superuser=True
+			email="admin_nf@example.com",
+			username="admin_nf_test",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
@@ -236,12 +258,16 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 	"""Test creating a duplicate user directly via service."""
 	admin = await user_service.create_user(
 		UserCreate(
-			email="admin_dup@example.com", password="password123", is_superuser=True
+			email="admin_dup@example.com",
+			username="admin_dup",
+			password="password123",
+			is_superuser=True,
 		),
 		db_session,
 	)
 	user_in = UserCreate(
 		email="duplicate_service@example.com",
+		username="duplicate_svc",
 		password="password123",
 	)
 	await user_service.create_user(
@@ -263,11 +289,16 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 async def test_user_service_guards(db_session: AsyncSession) -> None:
 	"""Non-admin principals should hit guardrails for list/get."""
 	admin = await user_service.create_user(
-		UserCreate(email="guard-admin@example.com", password="pw", is_superuser=True),
+		UserCreate(
+			email="guard-admin@example.com",
+			username="guard_admin",
+			password="pw",
+			is_superuser=True,
+		),
 		db_session,
 	)
 	normal_user = await user_service.create_user(
-		UserCreate(email="guard@example.com", password="pw"),
+		UserCreate(email="guard@example.com", username="guard_test", password="pw"),
 		db_session,
 		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 	)
@@ -286,7 +317,11 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 	# first user must request superuser explicitly
 	with pytest.raises(HTTPException) as exc:
 		await user_service.create_user(
-			UserCreate(email="bootstrap-denied@example.com", password="pw"),
+			UserCreate(
+				email="bootstrap-denied@example.com",
+				username="bootstrap_denied",
+				password="pw",
+			),
 			db_session,
 		)
 	assert exc.value.status_code == 400
@@ -295,7 +330,12 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 	assert "console_origin" in exc.value.detail
 
 	bootstrap = await user_service.create_user(
-		UserCreate(email="bootstrap@example.com", password="pw", is_superuser=True),
+		UserCreate(
+			email="bootstrap@example.com",
+			username="bootstrap_test",
+			password="pw",
+			is_superuser=True,
+		),
 		db_session,
 	)
 	assert bootstrap.is_superuser is True
@@ -304,7 +344,12 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 	# unauthenticated create: even if is_superuser=True is passed,
 	# result is a regular user
 	sneaky = await user_service.create_user(
-		UserCreate(email="sneaky@example.com", password="pw", is_superuser=True),
+		UserCreate(
+			email="sneaky@example.com",
+			username="sneaky_test",
+			password="pw",
+			is_superuser=True,
+		),
 		db_session,
 		principal=None,
 	)
@@ -313,7 +358,12 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 
 	# superuser can create another superuser
 	new_admin = await user_service.create_user(
-		UserCreate(email="new-admin@example.com", password="pw", is_superuser=True),
+		UserCreate(
+			email="new-admin@example.com",
+			username="new_admin",
+			password="pw",
+			is_superuser=True,
+		),
 		db_session,
 		principal=Principal(user=bootstrap, group_ids=(), permissions=frozenset()),
 	)

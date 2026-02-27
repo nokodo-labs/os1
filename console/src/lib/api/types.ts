@@ -85,6 +85,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{user_id}/friends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Friends
+         * @description list all accepted friends.
+         */
+        get: operations["list_friends_users__user_id__friends_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/friends/requests/incoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Incoming Requests
+         * @description list pending friend requests received by the current user.
+         */
+        get: operations["list_incoming_requests_users__user_id__friends_requests_incoming_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/friends/requests/outgoing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Outgoing Requests
+         * @description list pending friend requests sent by the current user.
+         */
+        get: operations["list_outgoing_requests_users__user_id__friends_requests_outgoing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/friends/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Friend Request
+         * @description send a friend request to another user.
+         */
+        post: operations["send_friend_request_users__user_id__friends_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/friends/requests/{friendship_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Friend Request
+         * @description accept an incoming friend request.
+         */
+        post: operations["accept_friend_request_users__user_id__friends_requests__friendship_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/friends/requests/{friendship_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Friend Request
+         * @description decline an incoming friend request.
+         */
+        post: operations["decline_friend_request_users__user_id__friends_requests__friendship_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/friends/{friend_user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Friend
+         * @description remove an existing friend.
+         */
+        delete: operations["remove_friend_users__user_id__friends__friend_user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -121,6 +261,26 @@ export interface paths {
          * @description return IDs of users currently connected to the event stream.
          */
         get: operations["read_active_user_ids_users_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Users
+         * @description search users by name, username, or email.
+         */
+        get: operations["search_users_users_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -221,6 +381,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Threads
+         * @description search threads with cursor-based pagination.
+         */
+        get: operations["search_threads_threads_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/revectorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revectorize Threads
+         * @description vectorize all threads into qdrant. admin only.
+         */
+        post: operations["revectorize_threads_threads_revectorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}": {
         parameters: {
             query?: never;
@@ -260,7 +460,7 @@ export interface paths {
         put?: never;
         /**
          * Generate Thread Metadata
-         * @description generate thread title/tags using an LLM.
+         * @description generate thread title/tags using a chat model.
          *
          *     uses the task model configured in settings (ai.tasks).
          *     when replace is false, only fills in missing metadata.
@@ -376,7 +576,11 @@ export interface paths {
         delete: operations["delete_user_message_turn_threads__thread_id__messages__message_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update User Message
+         * @description update a user message's content in place.
+         */
+        patch: operations["update_user_message_threads__thread_id__messages__message_id__patch"];
         trace?: never;
     };
     "/threads/{thread_id}/switch": {
@@ -423,46 +627,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search Threads
-         * @description search threads with cursor-based pagination.
-         */
-        get: operations["search_threads_threads_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/threads/revectorize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revectorize Threads
-         * @description vectorize all threads into qdrant. admin only.
-         */
-        post: operations["revectorize_threads_threads_revectorize_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/runs": {
         parameters: {
             query?: never;
@@ -481,7 +645,7 @@ export interface paths {
          * @description start an agent run.
          *
          *     when ``thread_id`` is present the run continues that thread (streaming).
-         *     when omitted the run is **ephemeral** (not yet implemented).
+         *     when omitted the run is **ephemeral** - inference only, nothing persisted.
          *
          *     when ``stream`` is false a JSON response is returned instead of SSE
          *     (not yet implemented).
@@ -829,34 +993,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/notes/{note_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Note
-         * @description fetch a single note.
-         */
-        get: operations["get_note_notes__note_id__get"];
-        /**
-         * Update Note
-         * @description update a note.
-         */
-        put: operations["update_note_notes__note_id__put"];
-        post?: never;
-        /**
-         * Delete Note
-         * @description delete a note.
-         */
-        delete: operations["delete_note_notes__note_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/notes/search": {
         parameters: {
             query?: never;
@@ -892,6 +1028,34 @@ export interface paths {
          */
         post: operations["revectorize_notes_notes_revectorize_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Note
+         * @description fetch a single note.
+         */
+        get: operations["get_note_notes__note_id__get"];
+        /**
+         * Update Note
+         * @description update a note.
+         */
+        put: operations["update_note_notes__note_id__put"];
+        post?: never;
+        /**
+         * Delete Note
+         * @description delete a note.
+         */
+        delete: operations["delete_note_notes__note_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1104,9 +1268,29 @@ export interface paths {
         put?: never;
         /**
          * Create File
-         * @description register a new file record.
+         * @description register a new file record (metadata only).
          */
         post: operations["create_file_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload File
+         * @description upload a file (multipart) and create the record.
+         */
+        post: operations["upload_file_files_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1139,6 +1323,46 @@ export interface paths {
          * @description update file metadata.
          */
         patch: operations["update_file_files__file_id__patch"];
+        trace?: never;
+    };
+    "/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get File Content
+         * @description download file content.
+         */
+        get: operations["get_file_content_files__file_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/files/{file_id}/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get File Url
+         * @description get a direct or presigned URL for the file.
+         */
+        get: operations["get_file_url_files__file_id__url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/files/{file_id}/access-rules": {
@@ -1263,6 +1487,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reminders/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Reminders
+         * @description search reminders with cursor-based pagination.
+         */
+        get: operations["search_reminders_reminders_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reminders/revectorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revectorize Reminders
+         * @description vectorize all reminders into qdrant. admin only.
+         */
+        post: operations["revectorize_reminders_reminders_revectorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reminders/{reminder_id}": {
         parameters: {
             query?: never;
@@ -1325,46 +1589,6 @@ export interface paths {
          * @description move a reminder to a different list (or default list if null).
          */
         post: operations["move_reminder_reminders__reminder_id__move_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reminders/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search Reminders
-         * @description search reminders with cursor-based pagination.
-         */
-        get: operations["search_reminders_reminders_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/reminders/revectorize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revectorize Reminders
-         * @description vectorize all reminders into qdrant. admin only.
-         */
-        post: operations["revectorize_reminders_reminders_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2323,6 +2547,11 @@ export interface components {
              * @description whether to enable svg-based liquid glass specifically for the Island component
              */
             svgLiquidGlassIsland?: boolean | null;
+            /**
+             * Svgliquidmetal
+             * @description whether to enable svg-based liquid metal effects when supported by the browser
+             */
+            svgLiquidMetal?: boolean | null;
         };
         /**
          * Agent
@@ -2438,7 +2667,7 @@ export interface components {
              * Background
              * @description background wallpaper preference used when auto_background is disabled
              */
-            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
             /**
              * Autobackground
              * @description when enabled, background changes automatically based on context
@@ -2470,6 +2699,8 @@ export interface components {
             embeddings?: components["schemas"]["EmbeddingsSettings"];
             /** @description default reranking behavior */
             rerank?: components["schemas"]["RerankSettings"];
+            /** @description file storage backend configuration */
+            storage?: components["schemas"]["StorageSettings"];
         };
         /** AssetsSettingsPatch */
         AssetsSettingsPatch: {
@@ -2506,6 +2737,18 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
+        };
+        /** Body_upload_file_files_upload_post */
+        Body_upload_file_files_upload_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** @default upload */
+            source: components["schemas"]["FileSource"];
         };
         /** BrandingSettings */
         BrandingSettings: {
@@ -2646,6 +2889,11 @@ export interface components {
              */
             browser?: string | null;
             /**
+             * Useragent
+             * @description raw browser user-agent string
+             */
+            userAgent?: string | null;
+            /**
              * Pwainstalled
              * @description whether the app is running as an installed PWA
              */
@@ -2665,6 +2913,96 @@ export interface components {
              * @description whether the client is on a mobile device
              */
             isMobile?: boolean | null;
+            /**
+             * Offline
+             * @description whether the device is currently offline
+             */
+            offline?: boolean | null;
+            /**
+             * Displaymode
+             * @description browser display mode (browser, standalone, fullscreen, etc)
+             */
+            displayMode?: string | null;
+            /**
+             * Preferredcolorscheme
+             * @description preferred color scheme (dark, light, or no-preference)
+             */
+            preferredColorScheme?: string | null;
+            /**
+             * Prefersreducedmotion
+             * @description whether the user prefers reduced motion
+             */
+            prefersReducedMotion?: boolean | null;
+            /**
+             * Preferscontrast
+             * @description contrast preference (more, less, or no-preference)
+             */
+            prefersContrast?: string | null;
+            /**
+             * Idlestate
+             * @description activity state detected by the client (active or idle)
+             */
+            idleState?: string | null;
+            /**
+             * Gamepadcount
+             * @description number of currently connected gamepads
+             */
+            gamepadCount?: number | null;
+            /**
+             * Gamepads
+             * @description connected gamepad identifiers
+             */
+            gamepads?: string[] | null;
+            /**
+             * Connectiontype
+             * @description network connection type
+             */
+            connectionType?: string | null;
+            /**
+             * Connectioneffectivetype
+             * @description effective network type hint (e.g. 4g, 3g)
+             */
+            connectionEffectiveType?: string | null;
+            /**
+             * Connectiondownlinkmbps
+             * @description estimated downlink speed in Mbps
+             */
+            connectionDownlinkMbps?: number | null;
+            /**
+             * Connectionrttms
+             * @description estimated round-trip time in milliseconds
+             */
+            connectionRttMs?: number | null;
+            /**
+             * Connectionsavedata
+             * @description whether data saver mode is enabled
+             */
+            connectionSaveData?: boolean | null;
+            /**
+             * Batterysupported
+             * @description whether battery status API is supported
+             */
+            batterySupported?: boolean | null;
+            /**
+             * Batterycharging
+             * @description whether the device is currently charging
+             */
+            batteryCharging?: boolean | null;
+            /**
+             * Batterylevel
+             * @description battery percentage from 0 to 100
+             */
+            batteryLevel?: number | null;
+            /**
+             * Batterychargingtimeseconds
+             * @description seconds until full charge when available
+             */
+            batteryChargingTimeSeconds?: number | null;
+            /**
+             * Batterydischargingtimeseconds
+             * @description seconds until empty when available
+             */
+            batteryDischargingTimeSeconds?: number | null;
             /**
              * Latitude
              * @description device latitude from browser geolocation API
@@ -3042,6 +3380,113 @@ export interface components {
             status?: components["schemas"]["FileStatus"] | null;
         };
         /**
+         * FriendRequestCreate
+         * @description send a friend request to another user.
+         */
+        FriendRequestCreate: {
+            /**
+             * Addressee Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            addressee_id: string;
+        };
+        /**
+         * FriendResponse
+         * @description a confirmed friend - simplified view for the friends list.
+         */
+        FriendResponse: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Friendship Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            friendship_id: string;
+            /** Username */
+            username?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email: string;
+            /** Avatar Url */
+            avatar_url?: string | null;
+        };
+        /**
+         * FriendshipDetail
+         * @description friendship with expanded user info for list endpoints.
+         */
+        FriendshipDetail: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Requester Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            requester_id: string;
+            /**
+             * Addressee Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            addressee_id: string;
+            status: components["schemas"]["FriendshipStatus"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Accepted At */
+            accepted_at?: string | null;
+            requester?: components["schemas"]["User"] | null;
+            addressee?: components["schemas"]["User"] | null;
+        };
+        /** FriendshipResponse */
+        FriendshipResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Requester Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            requester_id: string;
+            /**
+             * Addressee Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            addressee_id: string;
+            status: components["schemas"]["FriendshipStatus"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Accepted At */
+            accepted_at?: string | null;
+        };
+        /**
+         * FriendshipStatus
+         * @enum {string}
+         */
+        FriendshipStatus: "pending" | "accepted" | "declined" | "removed";
+        /**
          * Group
          * @description Group schema.
          */
@@ -3198,6 +3643,12 @@ export interface components {
             /** Media Type */
             media_type?: string | null;
         };
+        /**
+         * InputModality
+         * @description Supported input modalities for models.
+         * @enum {string}
+         */
+        InputModality: "text" | "images" | "audio" | "video";
         "JSONObject-Input": {
             [key: string]: components["schemas"]["JSONValue-Input"];
         };
@@ -3278,6 +3729,18 @@ export interface components {
              * @description rate limit/min
              */
             rate_limit_requests_per_minute?: number | null;
+        };
+        /**
+         * LocalStorageConfig
+         * @description local filesystem storage configuration.
+         */
+        LocalStorageConfig: {
+            /**
+             * Root Path
+             * @description root directory for local file storage
+             * @default data/uploads
+             */
+            root_path: string;
         };
         /**
          * MediaSettings
@@ -3522,8 +3985,19 @@ export interface components {
          */
         MessageType: "user" | "assistant" | "tool" | "system";
         /**
+         * MessageUpdate
+         * @description Payload for updating a user message's content in place.
+         */
+        MessageUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Content */
+            content: string | ({
+                [key: string]: unknown;
+            } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
+        };
+        /**
          * Model
-         * @description Response schema.
+         * @description response schema.
          */
         Model: {
             /**
@@ -3541,7 +4015,7 @@ export interface components {
             name: string;
             /** Display Name */
             display_name?: string | null;
-            /** @default llm */
+            /** @default chat_model */
             model_type: components["schemas"]["ModelType"];
             /** Endpoint */
             endpoint?: string | null;
@@ -3565,6 +4039,8 @@ export interface components {
              * @default false
              */
             is_autofetched: boolean;
+            /** Input Modalities */
+            input_modalities: components["schemas"]["InputModality"][];
             /** Id */
             id: string;
             /** Provider Id */
@@ -3572,7 +4048,7 @@ export interface components {
         };
         /**
          * ModelCreate
-         * @description Payload to register a model.
+         * @description payload to register a model.
          */
         ModelCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -3580,7 +4056,7 @@ export interface components {
             name: string;
             /** Display Name */
             display_name?: string | null;
-            /** @default llm */
+            /** @default chat_model */
             model_type: components["schemas"]["ModelType"];
             /** Endpoint */
             endpoint?: string | null;
@@ -3604,6 +4080,8 @@ export interface components {
              * @default false
              */
             is_autofetched: boolean;
+            /** Input Modalities */
+            input_modalities?: components["schemas"]["InputModality"][] | null;
             /** Provider Id */
             provider_id: string;
         };
@@ -3612,10 +4090,10 @@ export interface components {
          * @description Supported model categories.
          * @enum {string}
          */
-        ModelType: "llm" | "embedding" | "image_generation" | "audio" | "video";
+        ModelType: "chat_model" | "embedding" | "image_generation" | "audio" | "video";
         /**
          * ModelUpdate
-         * @description Payload to update a model.
+         * @description payload to update a model.
          */
         ModelUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -3624,6 +4102,8 @@ export interface components {
             /** Display Name */
             display_name?: string | null;
             model_type?: components["schemas"]["ModelType"] | null;
+            /** Input Modalities */
+            input_modalities?: components["schemas"]["InputModality"][] | null;
             /** Endpoint */
             endpoint?: string | null;
             /** Adapter */
@@ -4825,11 +5305,13 @@ export interface components {
          * @description POST /runs - run on an existing thread, or ephemeral (no thread).
          *
          *     when ``thread_id`` is present the run continues that thread.
-         *     when omitted the run is **ephemeral** - no thread is created or
-         *     persisted (not yet implemented).
+         *     when omitted the run is **ephemeral** - no thread is created or persisted.
          *
          *     ``input`` is required for ephemeral runs and optional when continuing
          *     an existing thread (omit for regeneration / retry).
+         *
+         *     ``persist`` controls whether messages and metadata are saved to the
+         *     database. defaults to True; set to False for ephemeral inference.
          */
         RunRequest: {
             /**
@@ -4851,6 +5333,80 @@ export interface components {
             thread_id?: string | null;
             /** Parent Id */
             parent_id?: string | null;
+            /**
+             * Persist
+             * @default true
+             */
+            persist: boolean;
+        };
+        /**
+         * S3StorageConfig
+         * @description S3-compatible storage configuration.
+         */
+        S3StorageConfig: {
+            /**
+             * Endpoint Url
+             * @description S3-compatible endpoint (MinIO, R2, etc.)
+             */
+            endpoint_url?: string | null;
+            /**
+             * Bucket
+             * @description S3 bucket name. must be globally unique per deployment.
+             * @default nokodo-ai
+             */
+            bucket: string;
+            /**
+             * Region
+             * @description AWS region
+             * @default us-east-1
+             */
+            region: string;
+            /**
+             * Access Key Id
+             * @description S3 access key id
+             */
+            access_key_id?: string | null;
+            /**
+             * Secret Access Key
+             * @description S3 secret access key
+             */
+            secret_access_key?: string | null;
+            /**
+             * Prefix
+             * @description key prefix within the bucket
+             * @default
+             */
+            prefix: string;
+            /**
+             * Presigned Url Ttl
+             * @description presigned URL expiration in seconds
+             * @default 3600
+             */
+            presigned_url_ttl: number;
+            /**
+             * Multipart Threshold
+             * @description bytes above which multipart upload kicks in
+             * @default 104857600
+             */
+            multipart_threshold: number;
+            /**
+             * Multipart Chunk Size
+             * @description multipart upload chunk size in bytes
+             * @default 10485760
+             */
+            multipart_chunk_size: number;
+            /**
+             * Max Retries
+             * @description max retry attempts
+             * @default 3
+             */
+            max_retries: number;
+            /**
+             * Retry Mode
+             * @description botocore retry mode
+             * @default adaptive
+             */
+            retry_mode: string;
         };
         /**
          * SearchMode
@@ -5176,6 +5732,24 @@ export interface components {
         /** @enum {string} */
         SortDir: "asc" | "desc";
         /**
+         * StorageSettings
+         * @description file storage backend configuration.
+         *
+         *     set `backend` to choose which storage system is active.
+         *     only the selected backend is instantiated at startup.
+         */
+        StorageSettings: {
+            /**
+             * Backend
+             * @description active storage backend: 'local' or 's3'
+             * @default local
+             * @enum {string}
+             */
+            backend: "local" | "s3";
+            local?: components["schemas"]["LocalStorageConfig"];
+            s3?: components["schemas"]["S3StorageConfig"];
+        };
+        /**
          * Task
          * @description Response model.
          */
@@ -5491,14 +6065,14 @@ export interface components {
              * @default darkveil
              * @enum {string}
              */
-            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none";
+            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none";
             /**
              * Auth Pages Background
              * @description background for auth pages (login, signup)
              * @default lightrays
              * @enum {string}
              */
-            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none";
+            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none";
             /**
              * Sidebar Collapsed
              * @description collapse sidebar
@@ -5517,12 +6091,12 @@ export interface components {
              * Default Background
              * @description default background for the app
              */
-            default_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            default_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
             /**
              * Auth Pages Background
              * @description background for auth pages (login, signup)
              */
-            auth_pages_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "static" | "none") | null;
+            auth_pages_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
             /**
              * Sidebar Collapsed
              * @description collapse sidebar
@@ -5549,8 +6123,15 @@ export interface components {
              * Format: email
              */
             email: string;
+            /**
+             * Username
+             * @example johndoe
+             */
+            username: string;
             /** Display Name */
             display_name?: string | null;
+            /** Bio */
+            bio?: string | null;
             /** Avatar Url */
             avatar_url?: string | null;
             /**
@@ -5563,6 +6144,12 @@ export interface components {
              * @default false
              */
             is_superuser: boolean;
+            /**
+             * Find By Email
+             * @default true
+             */
+            find_by_email: boolean;
+            privacy?: components["schemas"]["UserPrivacy"];
             preferences?: components["schemas"]["UserPreferences"];
             /** Integration Tokens */
             integration_tokens?: {
@@ -5603,6 +6190,11 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+            /**
+             * Username
+             * @example johndoe
+             */
+            username: string;
             /** Display Name */
             display_name?: string | null;
             /** Is Active */
@@ -5648,6 +6240,50 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * UserPrivacy
+         * @description privacy settings stored in the user.privacy JSONB column.
+         *
+         *     validated at the service layer - the column stores jsonb and
+         *     the service ensures conformance via this schema.
+         */
+        UserPrivacy: {
+            /** @default friends */
+            online_status: components["schemas"]["Visibility"];
+            /** @default everyone */
+            profile_picture: components["schemas"]["Visibility"];
+            /** @default everyone */
+            real_name: components["schemas"]["Visibility"];
+            /** @default everyone */
+            bio: components["schemas"]["Visibility"];
+            /** @default friends */
+            gender: components["schemas"]["Visibility"];
+            /** @default friends */
+            birth_date: components["schemas"]["Visibility"];
+            /** @default friends */
+            allow_dms: components["schemas"]["Visibility"];
+            /** @default everyone */
+            allow_friend_requests: components["schemas"]["Visibility"];
+        };
+        /**
+         * UserSearchResult
+         * @description user search result for the add-friends flow.
+         */
+        UserSearchResult: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Username */
+            username?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email: string;
+            /** Avatar Url */
+            avatar_url?: string | null;
+        };
+        /**
          * UserUpdate
          * @description schema for updating a user.
          */
@@ -5656,12 +6292,19 @@ export interface components {
             email?: string | null;
             /** Password */
             password?: string | null;
+            /** Username */
+            username?: string | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Display Name */
             display_name?: string | null;
+            /** Bio */
+            bio?: string | null;
             /** Avatar Url */
             avatar_url?: string | null;
+            /** Find By Email */
+            find_by_email?: boolean | null;
+            privacy?: components["schemas"]["UserPrivacy"] | null;
             preferences?: components["schemas"]["UserPreferences"] | null;
             /** Integration Tokens */
             integration_tokens?: {
@@ -5910,6 +6553,12 @@ export interface components {
              */
             normalize_scores?: boolean | null;
         };
+        /**
+         * Visibility
+         * @description who can see a given piece of user data.
+         * @enum {string}
+         */
+        Visibility: "everyone" | "friends" | "private";
     };
     responses: never;
     parameters: never;
@@ -6297,6 +6946,677 @@ export interface operations {
             };
         };
     };
+    list_friends_users__user_id__friends_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_incoming_requests_users__user_id__friends_requests_incoming_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendshipDetail"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_outgoing_requests_users__user_id__friends_requests_outgoing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendshipDetail"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    send_friend_request_users__user_id__friends_requests_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FriendRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendshipResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    accept_friend_request_users__user_id__friends_requests__friendship_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                friendship_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendshipResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    decline_friend_request_users__user_id__friends_requests__friendship_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                friendship_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FriendshipResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_friend_users__user_id__friends__friend_user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                friend_user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     read_users_users_get: {
         parameters: {
             query?: {
@@ -6506,6 +7826,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    search_users_users_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSearchResult"][];
                 };
             };
             /** @description bad request */
@@ -7090,6 +8505,197 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    search_threads_threads_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+                mode?: components["schemas"]["SearchMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revectorize_threads_threads_revectorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
             /** @description bad request */
@@ -8144,6 +9750,107 @@ export interface operations {
             };
         };
     };
+    update_user_message_threads__thread_id__messages__message_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                thread_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     switch_branch_threads__thread_id__switch_post: {
         parameters: {
             query?: never;
@@ -8360,197 +10067,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessRuleResponse"][];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    search_threads_threads_search_get: {
-        parameters: {
-            query: {
-                q: string;
-                limit?: number;
-                cursor?: string | null;
-                mode?: components["schemas"]["SearchMode"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    revectorize_threads_threads_revectorize_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
                 };
             };
             /** @description bad request */
@@ -10929,6 +12445,197 @@ export interface operations {
             };
         };
     };
+    search_notes_notes_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+                mode?: components["schemas"]["SearchMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revectorize_notes_notes_revectorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_note_notes__note_id__get: {
         parameters: {
             query?: never;
@@ -11142,197 +12849,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    search_notes_notes_search_get: {
-        parameters: {
-            query: {
-                q: string;
-                limit?: number;
-                cursor?: string | null;
-                mode?: components["schemas"]["SearchMode"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    revectorize_notes_notes_revectorize_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
-                };
             };
             /** @description bad request */
             400: {
@@ -13150,6 +14666,104 @@ export interface operations {
             };
         };
     };
+    upload_file_files_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_files_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_file_files__file_id__get: {
         parameters: {
             query?: never;
@@ -13362,6 +14976,198 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["File"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_file_content_files__file_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_file_url_files__file_id__url_get: {
+        parameters: {
+            query?: {
+                expires_in?: number | null;
+            };
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string | null;
+                    };
                 };
             };
             /** @description bad request */
@@ -14408,6 +16214,197 @@ export interface operations {
             };
         };
     };
+    search_reminders_reminders_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+                mode?: components["schemas"]["SearchMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revectorize_reminders_reminders_revectorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_reminder_reminders__reminder_id__get: {
         parameters: {
             query?: never;
@@ -14817,197 +16814,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Reminder"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    search_reminders_reminders_search_get: {
-        parameters: {
-            query: {
-                q: string;
-                limit?: number;
-                cursor?: string | null;
-                mode?: components["schemas"]["SearchMode"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    revectorize_reminders_reminders_revectorize_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
                 };
             };
             /** @description bad request */

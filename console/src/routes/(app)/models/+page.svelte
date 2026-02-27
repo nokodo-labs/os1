@@ -21,6 +21,17 @@
 
 	type ModelCreateForm = ModelCreate & { adapter?: string | null }
 
+	const ALL_MODALITIES = ['text', 'images', 'audio', 'video'] as const
+	type InputModality = (typeof ALL_MODALITIES)[number]
+
+	const DEFAULT_MODALITIES: Record<string, InputModality[]> = {
+		chat_model: ['text', 'images'],
+		embedding: ['text'],
+		image_generation: ['text', 'images'],
+		audio: ['text', 'audio'],
+		video: ['text', 'images', 'video'],
+	}
+
 	let models = $state<Model[]>([])
 	let providers = $state<Provider[]>([])
 	let showModal = $state(false)
@@ -31,6 +42,7 @@
 	let error = $state<string | null>(null)
 	let submitError = $state<string | null>(null)
 	let searchQuery = $state('')
+	let inputModalities = $state<InputModality[]>(['text', 'images'])
 
 	const hasProviders = $derived(providers.length > 0)
 	const addModelDisabledReason = 'add a provider to enable model creation.'
@@ -53,7 +65,7 @@
 	let formState = $state<ModelCreateForm>({
 		name: '',
 		display_name: '',
-		model_type: 'llm',
+		model_type: 'chat_model',
 		adapter: null,
 		provider_id: '',
 		enabled: true,
@@ -84,6 +96,16 @@
 		}
 	})
 
+	// update default modalities when model type changes during creation
+	$effect(() => {
+		if (showModal && modalMode === 'create') {
+			const defaults = DEFAULT_MODALITIES[formState.model_type]
+			if (defaults) {
+				inputModalities = [...defaults]
+			}
+		}
+	})
+
 	async function fetchData() {
 		isFetching = true
 		try {
@@ -105,29 +127,13 @@
 		fetchData()
 	})
 
-	$effect(() => {
-		if (showModal && modalMode === 'create') {
-			// Auto-select adapter if only one option exists, or clear it if current is invalid
-			if (adapterOptions.length === 1) {
-				formState.adapter = adapterOptions[0].value
-			} else if (!formState.adapter && adapterOptions.length > 0 && modalMode === 'create') {
-				formState.adapter = adapterOptions[0].value
-			} else if (
-				formState.adapter &&
-				!adapterOptions.find((o) => o.value === formState.adapter)
-			) {
-				formState.adapter = null
-			}
-		}
-	})
-
 	function openCreateModal() {
 		if (!hasProviders) return
 		modalMode = 'create'
 		formState = {
 			name: '',
 			display_name: '',
-			model_type: 'llm',
+			model_type: 'chat_model',
 			adapter: null,
 			provider_id: providers.length > 0 ? providers[0].id : '',
 			enabled: true,
@@ -136,6 +142,7 @@
 		contextWindowInput = ''
 		inputCostInput = ''
 		outputCostInput = ''
+		inputModalities = [...(DEFAULT_MODALITIES['chat_model'] ?? ['text'])]
 		showModal = true
 		submitError = null
 	}
@@ -165,6 +172,8 @@
 			model.output_cost === null || model.output_cost === undefined
 				? ''
 				: String(model.output_cost)
+		inputModalities = ((model as unknown as { input_modalities?: string[] }).input_modalities ??
+			DEFAULT_MODALITIES[model.model_type] ?? ['text']) as InputModality[]
 		showModal = true
 		submitError = null
 	}
@@ -189,7 +198,10 @@
 
 		try {
 			if (modalMode === 'create') {
-				const createPayload = { ...formState } as unknown as ModelCreate
+				const createPayload = {
+					...formState,
+					input_modalities: inputModalities,
+				} as unknown as ModelCreate
 				const contextWindow = parseOptionalNumber(contextWindowInput)
 				const inputCost = parseOptionalNumber(inputCostInput)
 				const outputCost = parseOptionalNumber(outputCostInput)
@@ -204,6 +216,7 @@
 				)
 				const updatePayload = {
 					...(rest as unknown as Record<string, unknown>),
+					input_modalities: inputModalities,
 					context_window: parseOptionalNumber(contextWindowInput),
 					input_cost: parseOptionalNumber(inputCostInput),
 					output_cost: parseOptionalNumber(outputCostInput),
@@ -272,13 +285,13 @@
 	}
 
 	function getModelTypeLabel(modelType: Model['model_type']) {
-		if (modelType === 'llm') return 'chat model'
+		if (modelType === 'chat_model') return 'chat model'
 		return modelType
 	}
 
 	function getAdapterOptions(providerKey: string | null, modelType: Model['model_type']) {
 		if (!providerKey) return []
-		if (modelType === 'llm') {
+		if (modelType === 'chat_model') {
 			if (providerKey === 'openai') {
 				return [
 					{ value: 'chat_completions', label: 'chat completions' },
@@ -301,6 +314,14 @@
 			}
 		}
 		return []
+	}
+
+	function toggleModality(modality: InputModality) {
+		if (inputModalities.includes(modality)) {
+			inputModalities = inputModalities.filter((m) => m !== modality)
+		} else {
+			inputModalities = [...inputModalities, modality]
+		}
 	}
 </script>
 
@@ -515,7 +536,7 @@
 								</span>
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="llm">chat model</SelectItem>
+								<SelectItem value="chat_model">chat model</SelectItem>
 								<SelectItem value="embedding">embedding</SelectItem>
 								<SelectItem value="image_generation">image generation</SelectItem>
 								<SelectItem value="audio">audio</SelectItem>
@@ -553,6 +574,30 @@
 							</p>
 						</div>
 					{/if}
+
+					<div class="space-y-2">
+						<Label>input modalities</Label>
+						<p class="text-xs text-zinc-500">
+							select which input types this model accepts.
+						</p>
+						<div class="grid grid-cols-2 gap-2">
+							{#each ALL_MODALITIES as modality (modality)}
+								<label
+									class="flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-800 px-3 py-2 transition-colors select-none hover:border-zinc-600"
+									class:border-zinc-500={inputModalities.includes(modality)}
+									class:bg-zinc-800={inputModalities.includes(modality)}
+								>
+									<input
+										type="checkbox"
+										checked={inputModalities.includes(modality)}
+										onchange={() => toggleModality(modality)}
+										class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 accent-zinc-300"
+									/>
+									<span class="text-sm">{modality}</span>
+								</label>
+							{/each}
+						</div>
+					</div>
 
 					<div class="grid gap-4 sm:grid-cols-2">
 						<div class="space-y-2">

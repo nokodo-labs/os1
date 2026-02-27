@@ -18,9 +18,9 @@ from .utils.validators import validate_callable
 
 
 class ToolDefinition(Base):
-	"""schema-only tool definition for LLM APIs.
+	"""schema-only tool definition for chat model APIs.
 
-	this contains just the metadata needed to describe a tool to an LLM,
+	this contains just the metadata needed to describe a tool to a chat model,
 	without the actual callable implementation. used by ChatModel/adapters
 	which only need to send tool schemas, not execute them.
 	"""
@@ -59,7 +59,7 @@ class Tool[AppContextT = None](Base, ABC):
 
 	@property
 	def definition(self) -> ToolDefinition:
-		"""get the tool definition for LLM APIs.
+		"""get the tool definition for chat model APIs.
 
 		returns just the schema metadata (name, description, parameters)
 		without the callable implementation.

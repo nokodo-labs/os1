@@ -27,6 +27,7 @@ api = [
     "python-dotenv>=1.0.1",
     "jinja2>=3.1.4",
 	"httpx>=0.27.2",
+	"aiobotocore>=2.13.0",
 ]
 
 dev = [
@@ -38,6 +39,7 @@ dev = [
     "httpx>=0.27.2",
     "ruff>=0.7.3",
     "mypy>=1.13.0",
+    "types-aiobotocore[s3]>=2.13.0",
 ]
 
 [build-system]

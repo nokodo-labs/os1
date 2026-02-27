@@ -391,6 +391,7 @@ async def test_runs_router_delegates(monkeypatch):
 			parent_id=None,
 			client_context=None,
 			stream=True,
+			persist=True,
 		),
 		principal=principal,
 		db=None,
@@ -636,14 +637,14 @@ async def test_chat_service_conversions():
 	with pytest.raises(ValueError):
 		chat_service.build_chat_model(_Model(_Provider("")))
 
-	llm = chat_service.build_chat_model(
+	chat_model = chat_service.build_chat_model(
 		_Model(
 			_Provider("ollama", base_url="http://example.test:11434"), adapter="chat"
 		)
 	)
-	assert llm.model_name == "chat"
-	assert llm.adapter.type == "ollama.chat"
-	assert llm.adapter.base_url == "http://example.test:11434"
+	assert chat_model.model_name == "chat"
+	assert chat_model.adapter.type == "ollama.chat"
+	assert chat_model.adapter.base_url == "http://example.test:11434"
 
 	with pytest.raises(HTTPException):
 		await chat_service.resolve_model_for_run(_FakeSession(), model="local:foo")
