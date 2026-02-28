@@ -1,5 +1,7 @@
 """Tests for memory service."""
 
+from typing import Any
+
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
@@ -16,7 +18,7 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest_asyncio.fixture
-async def memory_user(db_session: AsyncSession):
+async def memory_user(db_session: AsyncSession) -> Any:
 	"""Create a user for memory tests."""
 	user_in = UserCreate(
 		email="memory_test@example.com",
@@ -28,7 +30,7 @@ async def memory_user(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_create_memory(db_session: AsyncSession, memory_user) -> None:
+async def test_create_memory(db_session: AsyncSession, memory_user: Any) -> None:
 	"""Test creating a memory."""
 	principal = Principal(user=memory_user, group_ids=(), permissions=frozenset())
 	memory_in = MemoryCreate(
@@ -46,7 +48,7 @@ async def test_create_memory(db_session: AsyncSession, memory_user) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_memories(db_session: AsyncSession, memory_user) -> None:
+async def test_list_memories(db_session: AsyncSession, memory_user: Any) -> None:
 	"""Test listing memories."""
 	principal = Principal(user=memory_user, group_ids=(), permissions=frozenset())
 	# Create memories
@@ -66,7 +68,7 @@ async def test_list_memories(db_session: AsyncSession, memory_user) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_memory(db_session: AsyncSession, memory_user) -> None:
+async def test_get_memory(db_session: AsyncSession, memory_user: Any) -> None:
 	"""Test getting a memory."""
 	principal = Principal(user=memory_user, group_ids=(), permissions=frozenset())
 	memory_in = MemoryCreate(

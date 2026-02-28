@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from api.v1.service import vectorstores as vectorstores_service
 from nokodo_ai.embeddings import EmbeddingModel
 
 
@@ -14,7 +15,6 @@ async def test_async_agentic_flow(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""Exercise the primary architecture entities in a single flow."""
-	from api.v1.service import vectorstores as vectorstores_service
 
 	monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__URL", ":memory:")
 	monkeypatch.setenv("OPENAI_API_KEY", "test")

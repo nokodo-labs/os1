@@ -19,12 +19,14 @@ class TypeIDPrimaryKeyMixin:
 
 	__typeid_prefix__: ClassVar[str]
 
-	@declared_attr.directive
-	def id(self) -> Mapped[TypeID]:
+	@declared_attr
+	@classmethod
+	def id(cls) -> Mapped[TypeID]:
+		prefix = cls.__typeid_prefix__
 		return mapped_column(
 			String(TYPEID_LENGTH),
 			primary_key=True,
-			default=lambda: TypeID(new_typeid(self.__typeid_prefix__)),
+			default=lambda: TypeID(new_typeid(prefix)),
 		)
 
 

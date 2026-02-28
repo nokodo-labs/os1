@@ -92,4 +92,4 @@ SystemContentPart = Annotated[
 ]
 
 # Type adapter for validating content parts from dicts
-ContentPartAdapter = TypeAdapter(ContentPart)
+ContentPartAdapter: TypeAdapter[ContentPart] = TypeAdapter(ContentPart)

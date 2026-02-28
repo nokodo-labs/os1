@@ -459,7 +459,7 @@ async def update_model(
 ) -> Model:
 	model = await _get_model(model_id, session, principal)
 
-	update_data = model_in.model_dump(exclude_unset=True)
+	update_data = model_in.model_dump(exclude_unset=True, by_alias=True)
 
 	if "adapter" in update_data or "model_type" in update_data:
 		adapter = update_data.get("adapter", model.adapter)

@@ -10,7 +10,7 @@ from .base import Base
 from .threads import Thread
 
 
-class Filter[AppContextT](Base, ABC):
+class Filter[AppContextT = None](Base, ABC):
 	"""base class for filters.
 
 	filters run BEFORE an agent sends messages to the model.
@@ -33,7 +33,7 @@ class Filter[AppContextT](Base, ABC):
 	async def process(
 		self,
 		thread: Thread,
-		app_context: AppContextT,
+		app_context: AppContextT | None,
 	) -> Thread:
 		"""process messages through this filter.
 

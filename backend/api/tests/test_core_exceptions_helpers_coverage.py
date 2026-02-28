@@ -16,8 +16,8 @@ def test_make_json_safe_handles_nested_types() -> None:
 	safe = _make_json_safe(value)
 
 	assert isinstance(safe, dict)
-	assert safe["a"] == "nope"
-	assert safe["b"][2]["x"] == str(value["b"][2]["x"])
+	assert safe["a"] == "nope"  # type: ignore[index]
+	assert safe["b"][2]["x"] == str(value["b"][2]["x"])  # type: ignore[index]
 	assert safe["3"][0] is True
 	assert safe["3"][1] is None
 

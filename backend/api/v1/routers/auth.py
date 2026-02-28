@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -20,7 +21,9 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 	max_age = int(
 		timedelta(days=settings.security.refresh_token_expire_days).total_seconds()
 	)
-	samesite = "none" if settings.security.auth_cookie_secure else "strict"
+	samesite: Literal["none", "strict"] = (
+		"none" if settings.security.auth_cookie_secure else "strict"
+	)
 	response.set_cookie(
 		key=auth_service.REFRESH_COOKIE_NAME,
 		value=refresh_token,
@@ -34,7 +37,9 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 def _clear_refresh_cookie(response: Response) -> None:
 	"""clear refresh token cookie."""
-	samesite = "none" if settings.security.auth_cookie_secure else "strict"
+	samesite: Literal["none", "strict"] = (
+		"none" if settings.security.auth_cookie_secure else "strict"
+	)
 	response.delete_cookie(
 		key=auth_service.REFRESH_COOKIE_NAME,
 		path=REFRESH_COOKIE_PATH,

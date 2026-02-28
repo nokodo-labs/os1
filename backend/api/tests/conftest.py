@@ -28,8 +28,20 @@ from sqlalchemy.ext.asyncio import (
 	create_async_engine,
 )
 
+from api.models.model import ModelType
+from api.models.user import User
 from api.permissions import ActionPermission
+from api.schemas.model import ModelCreate
+from api.schemas.provider import ProviderCreate
 from api.settings import settings
+from api.storage import _BACKENDS, register
+from api.storage.local import LocalStorageBackend
+from api.v1.service import models as model_service
+from api.v1.service import providers as provider_service
+from api.v1.service import vectorstores as vectorstores_service
+from api.v1.service.auth import Principal
+from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.utils.security import hash_password
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -41,8 +53,6 @@ def _register_test_storage_backends(
 	uses a dedicated temp dir so test uploads do not pollute the project
 	tree and are cleaned up automatically when the session ends.
 	"""
-	from api.storage import _BACKENDS, register
-	from api.storage.local import LocalStorageBackend
 
 	root = tmp_path_factory.mktemp("storage", numbered=True)
 	register("local", LocalStorageBackend(root_path=str(root)))
@@ -82,8 +92,6 @@ def _api_test_env_defaults() -> Generator[None]:
 @pytest.fixture(autouse=True)
 def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 	"""Stub embeddings per-test so SDK tests aren't affected."""
-	from api.v1.service import vectorstores as vectorstores_service
-	from nokodo_ai.embeddings import EmbeddingModel
 
 	vectorstores_service._vectorstore_adapter.cache_clear()
 
@@ -100,13 +108,6 @@ async def _api_test_seed_default_embedding_model(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""Ensure a usable default embedding model exists for memory flows."""
-	from api.models.model import ModelType
-	from api.models.user import User
-	from api.schemas.model import ModelCreate
-	from api.schemas.provider import ProviderCreate
-	from api.v1.service import models as model_service
-	from api.v1.service import providers as provider_service
-	from api.v1.service.auth import Principal
 
 	principal = Principal(
 		user=User(
@@ -926,8 +927,6 @@ async def user_auth(
 
 @pytest_asyncio.fixture(scope="function")
 async def test_user(db_session: AsyncSession) -> dict[str, object]:
-	from api.models.user import User
-	from nokodo_ai.utils.security import hash_password
 
 	user = User(
 		email="test@example.com",

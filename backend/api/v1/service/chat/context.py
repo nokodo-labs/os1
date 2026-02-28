@@ -29,8 +29,9 @@ class AppContext:
 	- event_emitter: function to broadcast events in real-time
 
 	usage in a tool:
-		async def call(self, agent_ctx, app_ctx: AppContext, **kwargs):
-			# build an Event and emit it
+		async def call(self, agent_ctx, app_ctx: AppContext | None, **kwargs):
+			if app_ctx is None:
+				raise ValueError("AppContext is required for MyTool")
 			event = Event(...)
 			await app_ctx.event_emitter(event)
 			return self.success("done", agent_ctx)

@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from pydantic import Field, field_validator, model_validator
 
 from api.models.message import MessageType
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from api.schemas.content import (
 	ContentPart,
 	TextContent,
@@ -154,7 +154,7 @@ class MessageCreate(MetadataModel):
 				raise ValueError(f"unknown sdk message role: {sdk_msg.role}")
 
 
-class MessageUpdate(MetadataModel):
+class MessageUpdate(MetadataUpdateModel):
 	"""Payload for updating a user message's content in place."""
 
 	content: str | list[dict[str, Any] | ContentPart]

@@ -1,6 +1,9 @@
 """Tests covering the authentication flow."""
 
+from datetime import UTC, datetime
+
 import pytest
+from authlib.jose import jwt
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import insert
@@ -233,9 +236,6 @@ async def test_service_get_current_user(db_session: AsyncSession) -> None:
 @pytest.mark.asyncio
 async def test_service_get_current_user_no_sub(db_session: AsyncSession) -> None:
 	"""Test get_current_user with token missing sub claim."""
-	from datetime import UTC, datetime
-
-	from authlib.jose import jwt
 
 	payload = {"exp": int(datetime.now(UTC).timestamp()) + 3600}
 	headers = {"alg": settings.security.jwt_algorithm, "typ": "JWT"}

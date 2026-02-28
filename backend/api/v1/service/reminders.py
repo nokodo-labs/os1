@@ -102,7 +102,7 @@ async def create_reminder_list(
 		)
 	reminder_list = ReminderList(
 		owner_id=principal.user_id,
-		**data.model_dump(exclude_unset=True),
+		**data.model_dump(exclude_unset=True, by_alias=True),
 	)
 	session.add(reminder_list)
 	await session.flush()
@@ -146,7 +146,8 @@ async def list_reminder_lists(
 		)
 		stmt = stmt.offset(skip).limit(limit)
 		result = await session.execute(stmt)
-		return list(result.scalars().all())
+		no_count_lists = result.scalars().all()
+		return [ReminderListWithCounts.model_validate(rl) for rl in no_count_lists]
 
 	# single query with subquery for counts - fixes N+1
 	counts_subq = (
@@ -165,7 +166,7 @@ async def list_reminder_lists(
 		.subquery()
 	)
 
-	stmt = (
+	counts_stmt = (
 		select(
 			ReminderList,
 			func.coalesce(counts_subq.c.total, 0).label("total_count"),
@@ -175,12 +176,15 @@ async def list_reminder_lists(
 		.outerjoin(counts_subq, ReminderList.id == counts_subq.c.list_id)
 		.where(resource_access_predicate(principal, ResourceType.REMINDER_LIST))
 	)
-	stmt = apply_sort(
-		stmt, sort_by=sort_by, sort_dir=sort_dir, columns=_REMINDER_LIST_SORT_COLUMNS
+	counts_stmt = apply_sort(
+		counts_stmt,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns=_REMINDER_LIST_SORT_COLUMNS,
 	)
-	stmt = stmt.offset(skip).limit(limit)
+	counts_stmt = counts_stmt.offset(skip).limit(limit)
 
-	result = await session.execute(stmt)
+	result = await session.execute(counts_stmt)
 	rows = result.all()
 
 	return [
@@ -263,7 +267,7 @@ async def update_reminder_list(
 ) -> ReminderList:
 	"""update a reminder list."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
-	update_data = data.model_dump(exclude_unset=True)
+	update_data = data.model_dump(exclude_unset=True, by_alias=True)
 	new_project_id = update_data.get("project_id")
 	if new_project_id is not None and str(new_project_id) != str(
 		reminder_list.project_id or ""
@@ -350,7 +354,7 @@ async def create_reminder(
 			)
 	reminder = Reminder(
 		owner_id=principal.user_id,
-		**data.model_dump(exclude_unset=True),
+		**data.model_dump(exclude_unset=True, by_alias=True),
 	)
 	session.add(reminder)
 	await session.flush()
@@ -469,7 +473,7 @@ async def update_reminder(
 ) -> Reminder:
 	"""update a reminder."""
 	reminder = await get_reminder(reminder_id, session, principal=principal)
-	update_data = data.model_dump(exclude_unset=True)
+	update_data = data.model_dump(exclude_unset=True, by_alias=True)
 	previous_list_id = reminder.list_id
 
 	# handle status changes
@@ -502,6 +506,7 @@ async def update_reminder(
 			reminder.completed_at.isoformat() if reminder.completed_at else None
 		)
 	event_data["previous_list_id"] = str(previous_list_id) if previous_list_id else None
+	event_data["list_id"] = str(reminder.list_id) if reminder.list_id else None
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
@@ -552,6 +557,7 @@ async def complete_reminder(
 		completed_at = completed_at_const.isoformat()
 	event_data = {
 		"id": str(reminder.id),
+		"list_id": str(reminder.list_id) if reminder.list_id else None,
 		"status": reminder.status.value,
 		"completed_at": completed_at,
 		"updated_at": reminder.updated_at.isoformat(),

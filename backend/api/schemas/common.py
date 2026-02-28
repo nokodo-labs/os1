@@ -28,6 +28,12 @@ class MetadataModel(ORMModel):
 		return value
 
 
+class MetadataUpdateModel(ORMModel):
+	"""Adds optional metadata for update schemas (nullable = do not change)."""
+
+	metadata: JSONObject | None = Field(default=None, alias="metadata_")
+
+
 class TimestampedModel(ORMModel):
 	"""Adds standard timestamp fields."""
 

@@ -138,11 +138,6 @@
 		"git grep": true,
 		"git branch": true,
 		"/^git branch\\b.*-(d|D|m|M|-delete|-force)\\b/": false,
-		"Get-ChildItem": true,
-		"Get-Content": true,
-		"Get-Date": true,
-		"Get-Random": true,
-		"Get-Location": true,
 		"Write-Host": true,
 		"Write-Output": true,
 		"Split-Path": true,
@@ -154,6 +149,8 @@
 		"/^Compare-[a-z0-9]/i": true,
 		"/^Format-[a-z0-9]/i": true,
 		"/^Sort-[a-z0-9]/i": true,
+		"/^Group-[a-z0-9]/i": true,
+		"/^Get-[a-z0-9]/i": true,
 		"column": true,
 		"/^column\\b.*-c\\s+[0-9]{4,}/": false,
 		"date": true,
@@ -194,7 +191,10 @@
 		"xargs": false,
 		"eval": false,
 		"Invoke-Expression": false,
-		"iex": false
+		"iex": false,
+		"uv run mypy": true,
+		"uv run ruff": true,
+		"uv run pytest": true
 	},
 	"postman.settings.dotenv-detection-notification-visibility": false
 }

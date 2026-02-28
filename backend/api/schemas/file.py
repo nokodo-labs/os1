@@ -7,7 +7,12 @@ from datetime import datetime
 from pydantic import Field
 
 from api.models.file import FileSource, FileStatus
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MetadataModel,
+	MetadataUpdateModel,
+	ORMModel,
+	TimestampedModel,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -29,7 +34,7 @@ class FileCreate(FileBase):
 	checksum_sha256: str | None = None
 
 
-class FileUpdate(MetadataModel):
+class FileUpdate(MetadataUpdateModel):
 	"""payload to update a file record."""
 
 	filename: str | None = None

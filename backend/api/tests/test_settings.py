@@ -7,12 +7,21 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel, Field
+from pydantic_settings import PydanticBaseSettingsSource
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.models.setting import SettingsDocument
-from api.settings import BrandingSettings, DbSettingsSource, SecuritySettings, Settings
-from api.settings.settings import get_field_flags
+from api.settings import (
+	BrandingSettings,
+	DbSettingsSource,
+	SecuritySettings,
+	Settings,
+	settings,
+)
+from api.settings import database as settings_db
+from api.settings.settings import get_field_flags, settings_field
 from api.v1.schemas.settings import SettingsPatch
+from api.v1.service import settings as settings_svc
 
 
 def test_settings_model_config_has_env_file() -> None:
@@ -26,8 +35,6 @@ def test_settings_model_config_has_env_file() -> None:
 def test_settings_reload_updates_imported_singleton(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.settings import database as settings_db
-	from api.settings import settings
 
 	settings_id = id(settings)
 	previous_env = os.environ.get("NOKODO__BRANDING__SITE_NAME")
@@ -56,7 +63,6 @@ def test_settings_reload_updates_imported_singleton(
 
 
 def test_settings_field_flags_and_private_dump() -> None:
-	from api.settings import settings
 
 	assert get_field_flags(SecuritySettings, "secret_key") == {
 		"private": True,
@@ -94,7 +100,6 @@ def test_get_field_flags_empty_cases() -> None:
 
 
 def test_settings_field_helper_sets_flags() -> None:
-	from api.settings.settings import settings_field
 
 	class M(BaseModel):
 		no_flags: str = settings_field(default="x")
@@ -122,11 +127,10 @@ def test_settings_field_helper_sets_flags() -> None:
 async def test_settings_write_locked_fields_not_writable(
 	db_session: AsyncSession,
 ) -> None:
-	from api.v1.service import settings as settings_svc
 
 	# schema doesn't include write_locked fields, but service defends in depth.
 	class MaliciousPatch(SettingsPatch):
-		def model_dump(self, *, exclude_none: bool = True) -> dict[str, Any]:
+		def model_dump(self, *, exclude_none: bool = True) -> dict[str, Any]:  # type: ignore[override]
 			_ = exclude_none
 			return {
 				"branding": {"app_version": "9.9.9"},
@@ -139,7 +143,9 @@ async def test_settings_write_locked_fields_not_writable(
 		await settings_svc.update(db_session, patch)
 
 
-def _make_test_session_local(db_session: AsyncSession):
+def _make_test_session_local(
+	db_session: AsyncSession,
+) -> async_sessionmaker[AsyncSession]:
 	engine = db_session.bind
 	assert engine is not None
 	return async_sessionmaker(
@@ -156,7 +162,6 @@ async def test_db_settings_source_loads_overrides_sync_and_excludes_write_locked
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.settings import database as settings_db
 
 	test_session_local = _make_test_session_local(db_session)
 	monkeypatch.setattr(settings_db, "AsyncSessionLocal", test_session_local)
@@ -187,7 +192,6 @@ async def test_db_settings_source_loads_overrides_inside_running_loop(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.settings import database as settings_db
 
 	test_session_local = _make_test_session_local(db_session)
 	monkeypatch.setattr(settings_db, "AsyncSessionLocal", test_session_local)
@@ -207,7 +211,6 @@ async def test_db_settings_source_loads_overrides_inside_running_loop(
 
 
 def test_settings_customise_sources_includes_db_source() -> None:
-	from pydantic_settings import PydanticBaseSettingsSource
 
 	class StubSource(PydanticBaseSettingsSource):
 		def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
@@ -238,10 +241,9 @@ def test_settings_customise_sources_includes_db_source() -> None:
 def test_db_overrides_filters_invalid_sections_and_non_models(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.settings import database as settings_db
 
 	class DummySettings(Settings):
-		ui: int = 1
+		ui: int = 1  # type: ignore[assignment]
 
 	class Doc:
 		def __init__(self, namespace: str, data: dict[str, Any] | None):
@@ -289,7 +291,6 @@ def test_db_overrides_filters_invalid_sections_and_non_models(
 
 
 def test_is_write_locked_handles_missing_and_non_dict_extra() -> None:
-	from api.settings import database as settings_db
 
 	class WeirdExtra(BaseModel):
 		x: str = Field(json_schema_extra=lambda _: None)
@@ -301,7 +302,6 @@ def test_is_write_locked_handles_missing_and_non_dict_extra() -> None:
 def test_db_settings_source_returns_empty_on_error(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.settings import database as settings_db
 
 	def _boom() -> Any:
 		raise RuntimeError("db down")

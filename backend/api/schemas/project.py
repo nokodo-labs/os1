@@ -23,7 +23,7 @@ class ProjectCreate(ProjectBase):
 	pass
 
 
-class ProjectUpdate(ProjectBase):
+class ProjectUpdate(ORMModel):
 	"""Schema for updating a project."""
 
 	name: str | None = None

@@ -31,8 +31,10 @@ from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.utils.typeid import TypeID
 
 
-_user_content_adapter = TypeAdapter(SDKUserContentPart)
-_system_content_adapter = TypeAdapter(SDKSystemContentPart)
+_user_content_adapter: TypeAdapter[SDKUserContentPart] = TypeAdapter(SDKUserContentPart)
+_system_content_adapter: TypeAdapter[SDKSystemContentPart] = TypeAdapter(
+	SDKSystemContentPart
+)
 
 
 if TYPE_CHECKING:

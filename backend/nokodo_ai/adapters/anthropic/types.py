@@ -65,6 +65,7 @@ __all__ = [
 	"AnthropicTextBlock",
 	"AnthropicTextBlockParam",
 	"AnthropicTextDelta",
+	"AnthropicToolChoice",
 	"AnthropicToolChoiceAnyParam",
 	"AnthropicToolChoiceAutoParam",
 	"AnthropicToolChoiceNoneParam",
@@ -74,3 +75,10 @@ __all__ = [
 	"AnthropicToolUseBlock",
 	"AnthropicToolUseBlockParam",
 ]
+
+type AnthropicToolChoice = (
+	AnthropicToolChoiceAutoParam
+	| AnthropicToolChoiceAnyParam
+	| AnthropicToolChoiceNoneParam
+	| AnthropicToolChoiceToolParam
+)

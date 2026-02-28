@@ -7,6 +7,10 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.plugin import Plugin, PluginType
+from api.schemas.plugin import PluginCreate
+from api.v1.service import plugins as plugin_service
+
 
 class _FakePrincipal:
 	"""minimal principal stub that bypasses permission checks."""
@@ -29,7 +33,6 @@ _admin = _FakePrincipal()
 def test_list_native_description_fallbacks(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.v1.service import plugins as plugin_service
 
 	class DocFilter:
 		"""first line doc."""
@@ -86,7 +89,6 @@ def test_list_native_description_fallbacks(
 
 
 def test_list_native_type_filter(monkeypatch: pytest.MonkeyPatch) -> None:
-	from api.v1.service import plugins as plugin_service
 
 	monkeypatch.setattr(
 		plugin_service,
@@ -110,7 +112,6 @@ def test_list_native_type_filter(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_native_variants(monkeypatch: pytest.MonkeyPatch) -> None:
-	from api.v1.service import plugins as plugin_service
 
 	class DocFilter:
 		"""doc filter."""
@@ -203,7 +204,6 @@ def test_get_native_variants(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_is_native_name_collision(monkeypatch: pytest.MonkeyPatch) -> None:
-	from api.v1.service import plugins as plugin_service
 
 	monkeypatch.setattr(
 		plugin_service,
@@ -218,10 +218,9 @@ def test_is_native_name_collision(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_plugins_with_native_filters_db_by_type(db_session) -> None:
-	from api.models.plugin import PluginType
-	from api.schemas.plugin import PluginCreate
-	from api.v1.service import plugins as plugin_service
+async def test_list_plugins_with_native_filters_db_by_type(
+	db_session: AsyncSession,
+) -> None:
 
 	await plugin_service.create_plugin(
 		PluginCreate(
@@ -233,7 +232,7 @@ async def test_list_plugins_with_native_filters_db_by_type(db_session) -> None:
 			source_code="code",
 		),
 		db_session,
-		principal=_admin,
+		principal=_admin,  # type: ignore[arg-type]
 	)
 	await plugin_service.create_plugin(
 		PluginCreate(
@@ -245,12 +244,12 @@ async def test_list_plugins_with_native_filters_db_by_type(db_session) -> None:
 			source_code="code",
 		),
 		db_session,
-		principal=_admin,
+		principal=_admin,  # type: ignore[arg-type]
 	)
 
-	filtered = await plugin_service.list_plugins(
+	filtered = await plugin_service.list_plugins(  # type: ignore[call-overload]
 		db_session,
-		principal=_admin,
+		principal=_admin,  # type: ignore[arg-type]
 		include_native=True,
 		plugin_type="tool",
 	)
@@ -264,8 +263,6 @@ async def test_list_plugins_with_native_merges_db_plugins(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.models.plugin import Plugin, PluginType
-	from api.v1.service import plugins as plugin_service
 
 	monkeypatch.setattr(plugin_service, "TOOL_REGISTRY", {})
 	monkeypatch.setattr(plugin_service, "FILTER_REGISTRY", {})
@@ -292,13 +289,18 @@ async def test_list_plugins_with_native_merges_db_plugins(
 	db_session.add(filter_plugin)
 	await db_session.commit()
 
-	all_plugins = await plugin_service.list_plugins(
-		db_session, principal=_admin, include_native=True
+	all_plugins = await plugin_service.list_plugins(  # type: ignore[call-overload]
+		db_session,
+		principal=_admin,  # type: ignore[arg-type]
+		include_native=True,
 	)
 	assert any(p.is_native is False and p.name == "db-tool" for p in all_plugins)
 
-	only_tools = await plugin_service.list_plugins(
-		db_session, principal=_admin, include_native=True, plugin_type="tool"
+	only_tools = await plugin_service.list_plugins(  # type: ignore[call-overload]
+		db_session,
+		principal=_admin,  # type: ignore[arg-type]
+		include_native=True,
+		plugin_type="tool",
 	)
 	assert {p.type for p in only_tools} == {"tool"}
 	assert all(p.name == "db-tool" for p in only_tools)

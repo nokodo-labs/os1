@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+
 import pytest
 from httpx import AsyncClient
 
@@ -27,11 +29,13 @@ async def test_thread_run_stream_headers(
 	assert created.status_code == 201
 	thread_id = created.json()["id"]
 
-	async def _stream(*_args, **_kwargs):
+	async def _stream(*_args: object, **_kwargs: object) -> AsyncGenerator[bytes]:
 		if False:
 			yield b""
 
-	async def _fake_start_thread_run(*_args, **_kwargs):
+	async def _fake_start_thread_run(
+		*_args: object, **_kwargs: object
+	) -> AsyncGenerator[bytes]:
 		return _stream()
 
 	monkeypatch.setattr("api.v1.service.runs.chat_run_agent", _stream)

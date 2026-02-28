@@ -859,7 +859,7 @@ async def create_message(
 	else:
 		message_cls = polymorphic_entry.class_
 
-	message = message_cls(
+	message: Message = message_cls(
 		thread_id=thread_id,
 		parent_id=parent_id,
 		**pk,

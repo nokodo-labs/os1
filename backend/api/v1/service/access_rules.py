@@ -197,9 +197,9 @@ async def _set_rules_impl(
 				access_rule.metadata_ = rule.metadata
 
 	# remove rules no longer in the list
-	for key, rule in existing_by_key.items():
+	for key, existing_rule in existing_by_key.items():
 		if key not in desired_keys:
-			await session.delete(rule)
+			await session.delete(existing_rule)
 
 	try:
 		await session.commit()

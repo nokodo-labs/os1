@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import TracebackType
 from typing import Any, ClassVar, Self
 
 from pydantic import ConfigDict, Field, model_validator
@@ -86,7 +87,12 @@ class AdapterEnabledBase[AdapterType: BaseAdapter](Base):
 	async def __aenter__(self) -> AdapterEnabledBase[AdapterType]:
 		return self
 
-	async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+	async def __aexit__(
+		self,
+		exc_type: type[BaseException] | None,
+		exc_value: BaseException | None,
+		traceback: TracebackType | None,
+	) -> None:
 		await self.close()
 
 	async def close(self) -> None:

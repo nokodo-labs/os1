@@ -89,7 +89,7 @@ async def run_chat_model_json_schema(
 		stream=False,
 		params={"response_model": json_schema},
 	)
-	data = assistant.json
+	data = assistant.json_content
 	if data is None:
 		data = json.loads(assistant.text)
 	if not isinstance(data, dict):
@@ -140,13 +140,13 @@ async def resolve_model_for_run(
 	- model (string) treated as Model id
 	"""
 	if agent_id is not None:
-		stmt = (
+		agent_q = (
 			select(Agent)
 			.options(selectinload(Agent.model).selectinload(Model.provider))
 			.where(Agent.id == agent_id)
 		)
-		result = await session.execute(stmt)
-		agent = result.scalars().one_or_none()
+		agent_result = await session.execute(agent_q)
+		agent = agent_result.scalars().one_or_none()
 		if agent is None:
 			raise HTTPException(status_code=404, detail="agent not found")
 		if agent.model is None:

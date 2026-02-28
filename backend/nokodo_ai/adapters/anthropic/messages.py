@@ -37,6 +37,7 @@ from .types import (
 	AnthropicTextBlock,
 	AnthropicTextBlockParam,
 	AnthropicTextDelta,
+	AnthropicToolChoice,
 	AnthropicToolChoiceAnyParam,
 	AnthropicToolChoiceAutoParam,
 	AnthropicToolChoiceNoneParam,
@@ -105,7 +106,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		)
 
 		anthropic_tools = _tools_to_anthropic(tools) if tools else anthropic.omit
-		anthropic_tool_choice = anthropic.omit
+		anthropic_tool_choice: AnthropicToolChoice | anthropic.Omit = anthropic.omit
 		if tools and params.tool_choice is not None:
 			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
 
@@ -182,7 +183,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		)
 
 		anthropic_tools = _tools_to_anthropic(tools) if tools else anthropic.omit
-		anthropic_tool_choice = anthropic.omit
+		anthropic_tool_choice: AnthropicToolChoice | anthropic.Omit = anthropic.omit
 		if tools and params.tool_choice is not None:
 			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
 
@@ -250,25 +251,28 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 						)
 					continue
 				if isinstance(delta, AnthropicInputJSONDelta):
-					provider_id = idx_to_provider_id.get(event.index)
-					if provider_id is None or provider_id not in provider_to_sdk_id:
+					frag_provider_id = idx_to_provider_id.get(event.index)
+					if (
+						frag_provider_id is None
+						or frag_provider_id not in provider_to_sdk_id
+					):
 						continue
 					# yield the argument fragment as a delta
 					if delta.partial_json:
 						tc = ToolCall(
-							id=provider_to_sdk_id[provider_id],
-							name=tc_names.get(provider_id, ""),
+							id=provider_to_sdk_id[frag_provider_id],
+							name=tc_names.get(frag_provider_id, ""),
 							arguments=delta.partial_json,
-							created_at=tc_created_at[provider_id],
+							created_at=tc_created_at[frag_provider_id],
 							updated_at=now,
 							metadata=provider_tool_call_metadata(
 								provider="anthropic.messages",
-								tool_call_id=provider_id,
+								tool_call_id=frag_provider_id,
 							),
 						)
 						yield AssistantMessage(
 							tool_calls=[tc],
-							created_at=tc_created_at[provider_id],
+							created_at=tc_created_at[frag_provider_id],
 							updated_at=now,
 						)
 					continue
@@ -276,19 +280,11 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 
 			if isinstance(event, AnthropicRawContentBlockStopEvent):
 				# all argument fragments already streamed; clean up transport
-				provider_id = idx_to_provider_id.pop(event.index, None)
-				if provider_id:
-					tc_created_at.pop(provider_id, None)
-					tc_names.pop(provider_id, None)
+				stop_provider_id = idx_to_provider_id.pop(event.index, None)
+				if stop_provider_id:
+					tc_created_at.pop(stop_provider_id, None)
+					tc_names.pop(stop_provider_id, None)
 				continue
-
-
-type AnthropicToolChoice = (
-	AnthropicToolChoiceAutoParam
-	| AnthropicToolChoiceAnyParam
-	| AnthropicToolChoiceNoneParam
-	| AnthropicToolChoiceToolParam
-)
 
 
 def _apply_response_model_to_system(
@@ -320,8 +316,8 @@ def _messages_to_anthropic(
 			case AssistantMessage():
 				blocks: list[AnthropicTextBlockParam | AnthropicToolUseBlockParam] = []
 				assistant_text = message.text
-				if not assistant_text and message.json is not None:
-					assistant_text = json.dumps(message.json)
+				if not assistant_text and message.json_content is not None:
+					assistant_text = json.dumps(message.json_content)
 				if assistant_text:
 					blocks.append({"type": "text", "text": assistant_text})
 				if message.tool_calls:

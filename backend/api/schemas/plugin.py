@@ -7,7 +7,12 @@ from typing import Literal
 from pydantic import Field
 
 from api.models.plugin import PluginType
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MetadataModel,
+	MetadataUpdateModel,
+	ORMModel,
+	TimestampedModel,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,7 +38,7 @@ class PluginCreate(PluginBase):
 	pass
 
 
-class PluginUpdate(MetadataModel):
+class PluginUpdate(MetadataUpdateModel):
 	"""Payload for plugin update."""
 
 	name: str | None = None

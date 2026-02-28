@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from api.models.group import GroupMemberRole
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MetadataModel,
+	MetadataUpdateModel,
+	ORMModel,
+	TimestampedModel,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -20,7 +25,7 @@ class GroupCreate(GroupBase):
 	pass
 
 
-class GroupUpdate(GroupBase):
+class GroupUpdate(MetadataUpdateModel):
 	"""Schema for updating a group."""
 
 	name: str | None = None

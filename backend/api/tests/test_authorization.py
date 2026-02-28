@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.access_rule import AccessLevel
 from api.models.thread import Thread
 from api.models.user import User
+from api.permissions import DefaultResourceAccess
 from api.v1.service import authorization
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import new_typeid
@@ -30,7 +31,7 @@ async def test_require_thread_and_project_access(db_session: AsyncSession) -> No
 		group_ids=(),
 		role_ids=(),
 		permissions=frozenset(),
-		role_resource_defaults={},
+		role_resource_defaults=DefaultResourceAccess(),
 	)
 
 	with pytest.raises(HTTPException):
@@ -56,7 +57,7 @@ def test_require_permission_denied() -> None:
 		group_ids=(),
 		role_ids=(),
 		permissions=frozenset(),
-		role_resource_defaults={},
+		role_resource_defaults=DefaultResourceAccess(),
 	)
 	with pytest.raises(HTTPException):
 		authorization.require_permission(principal, "agents:manage")
@@ -74,7 +75,7 @@ def test_require_permission_allows() -> None:
 		group_ids=(),
 		role_ids=(),
 		permissions=frozenset({"agents:manage"}),
-		role_resource_defaults={},
+		role_resource_defaults=DefaultResourceAccess(),
 	)
 
 	authorization.require_permission(principal, "agents:manage")
@@ -95,7 +96,7 @@ async def test_require_thread_access_hidden_forbidden(db_session: AsyncSession) 
 		group_ids=(),
 		role_ids=(),
 		permissions=frozenset(),
-		role_resource_defaults={},
+		role_resource_defaults=DefaultResourceAccess(),
 	)
 
 	with pytest.raises(HTTPException) as exc:
@@ -132,7 +133,7 @@ async def test_authorization_admin_predicates(db_session: AsyncSession) -> None:
 		group_ids=(),
 		role_ids=(),
 		permissions=frozenset(),
-		role_resource_defaults={},
+		role_resource_defaults=DefaultResourceAccess(),
 	)
 
 	assert authorization._allowed_levels(AccessLevel.ADMIN) == (AccessLevel.ADMIN,)

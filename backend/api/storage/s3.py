@@ -6,7 +6,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 import aiobotocore.session
 from botocore.config import Config as BotoConfig
@@ -17,6 +17,13 @@ from api.storage.base import FileInfo, MimeType, StorageBackend
 
 if TYPE_CHECKING:
 	from types_aiobotocore_s3 import S3Client
+	from types_aiobotocore_s3.type_defs import CompletedPartTypeDef
+
+
+class _RetryConfig(TypedDict, total=False):
+	total_max_attempts: int
+	max_attempts: int
+	mode: Literal["legacy", "standard", "adaptive"]
 
 
 log = logging.getLogger(__name__)
@@ -46,7 +53,7 @@ class S3StorageBackend(StorageBackend):
 		multipart_threshold: int = 100 * 1024 * 1024,
 		multipart_chunk_size: int = 10 * 1024 * 1024,
 		max_retries: int = 3,
-		retry_mode: str = "adaptive",
+		retry_mode: Literal["legacy", "standard", "adaptive"] = "adaptive",
 	) -> None:
 		super().__init__(name="s3")
 		self._bucket = bucket
@@ -56,11 +63,12 @@ class S3StorageBackend(StorageBackend):
 		self._multipart_chunk_size = multipart_chunk_size
 
 		self._session = aiobotocore.session.AioSession()
+		retry_cfg: _RetryConfig = {"max_attempts": max_retries, "mode": retry_mode}
 		self._client_kwargs: dict[str, Any] = {
 			"service_name": "s3",
 			"region_name": region,
 			"config": BotoConfig(
-				retries={"max_attempts": max_retries, "mode": retry_mode},
+				retries=retry_cfg,
 			),
 		}
 		if endpoint_url:
@@ -79,9 +87,14 @@ class S3StorageBackend(StorageBackend):
 	async def _get_client(self) -> S3Client:
 		"""lazily create and cache the S3 client."""
 		if self._client is None:
-			self._client_ctx = self._session.create_client(**self._client_kwargs)
-			self._client = await self._client_ctx.__aenter__()
-		return self._client
+			ctx = self._session.create_client(**self._client_kwargs)
+			self._client_ctx = ctx
+			self._client = await ctx.__aenter__()
+		client = self._client
+		if client is None:
+			msg = "S3 client not initialized"
+			raise RuntimeError(msg)
+		return client
 
 	# -- interface --
 
@@ -127,7 +140,8 @@ class S3StorageBackend(StorageBackend):
 				Bucket=self._bucket, Key=self._full_key(key)
 			)
 		except ClientError as exc:
-			if exc.response["Error"]["Code"] in _NOT_FOUND_CODES:
+			error_code = exc.response.get("Error", {}).get("Code", "")
+			if error_code in _NOT_FOUND_CODES:
 				return None
 			raise
 		return FileInfo(
@@ -178,7 +192,7 @@ class S3StorageBackend(StorageBackend):
 			Bucket=self._bucket, Key=key, ContentType=content_type
 		)
 		upload_id = mpu["UploadId"]
-		parts: list[dict[str, object]] = []
+		parts: list[CompletedPartTypeDef] = []
 		try:
 			offset = 0
 			part_num = 1
@@ -218,7 +232,7 @@ class S3StorageBackend(StorageBackend):
 			Bucket=self._bucket, Key=key, ContentType=content_type
 		)
 		upload_id = mpu["UploadId"]
-		parts: list[dict[str, object]] = []
+		parts: list[CompletedPartTypeDef] = []
 		try:
 			buffer = bytearray()
 			part_num = 1

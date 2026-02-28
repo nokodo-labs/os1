@@ -33,6 +33,9 @@ from google.genai.types import (
 from google.genai.types import (
 	ToolConfig as GoogleToolConfig,
 )
+from google.genai.types import (
+	ToolListUnion as GoogleToolListUnion,
+)
 
 
 __all__ = [
@@ -45,4 +48,5 @@ __all__ = [
 	"GooglePart",
 	"GoogleTool",
 	"GoogleToolConfig",
+	"GoogleToolListUnion",
 ]

@@ -211,7 +211,7 @@ async def test_update_provider_api_key(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_provider_model_properties(db_session):
+async def test_provider_model_properties(db_session: AsyncSession) -> None:
 	provider = Provider(
 		name="test-provider-props",
 		adapter_type="openai",

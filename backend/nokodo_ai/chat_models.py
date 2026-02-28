@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable
-from typing import Any, Literal, overload
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, ClassVar, Literal, overload
 
 from pydantic import Field
 
@@ -29,7 +29,9 @@ class ChatModel(ChatGenerationParams, AdapterEnabledBase[ChatAdapter]):
 
 	model_name: str = Field(..., description="model identifier")
 
-	_adapter_resolver: ... = resolve_chat_adapter
+	_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]] = (
+		resolve_chat_adapter
+	)
 
 	@classmethod
 	def create(

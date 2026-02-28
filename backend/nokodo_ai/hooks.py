@@ -10,7 +10,7 @@ from .base import Base
 from .threads import Thread
 
 
-class Hook[AppContextT](Base, ABC):
+class Hook[AppContextT = None](Base, ABC):
 	"""base class for hooks.
 
 	hooks run AFTER an agent has finished processing (after all tool calls
@@ -34,7 +34,7 @@ class Hook[AppContextT](Base, ABC):
 	async def execute(
 		self,
 		thread: Thread,
-		app_context: AppContextT,
+		app_context: AppContextT | None,
 	) -> None:
 		"""execute the hook after agent completion.
 

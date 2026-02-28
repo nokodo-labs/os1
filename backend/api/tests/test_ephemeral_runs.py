@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+
 import pytest
 from httpx import AsyncClient
 
@@ -63,7 +65,9 @@ async def test_ephemeral_run_streams_and_returns_sse(
 	headers = user_auth["headers"]
 	assert isinstance(headers, dict)
 
-	async def _fake_run_agent(*_args, **_kwargs):
+	async def _fake_run_agent(
+		*_args: object, **_kwargs: object
+	) -> AsyncGenerator[bytes]:
 		"""yield a single done frame."""
 		yield b"event: done\ndata: {}\n\n"
 
@@ -127,10 +131,12 @@ async def test_persisted_run_forwards_persist_flag(
 
 	captured_kwargs: dict[str, object] = {}
 
-	async def _capture_start_thread_run(*_args, **kwargs):
+	async def _capture_start_thread_run(
+		*_args: object, **kwargs: object
+	) -> AsyncGenerator[bytes]:
 		captured_kwargs.update(kwargs)
 
-		async def _empty():
+		async def _empty() -> AsyncGenerator[bytes]:
 			if False:
 				yield b""
 

@@ -106,7 +106,7 @@ class Agent[AppContextT = None](Base):
 	async def run(
 		self,
 		thread: Thread,
-		app_context: AppContextT = None,
+		app_context: AppContextT | None = None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 		stream: Literal[False] = False,
 	) -> AgentProducedMessages: ...
@@ -115,7 +115,7 @@ class Agent[AppContextT = None](Base):
 	async def run(
 		self,
 		thread: Thread,
-		app_context: AppContextT = None,
+		app_context: AppContextT | None = None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 		stream: Literal[True] = True,
 	) -> AsyncIterator[AgentDelta]: ...
@@ -123,7 +123,7 @@ class Agent[AppContextT = None](Base):
 	async def run(
 		self,
 		thread: Thread,
-		app_context: AppContextT = None,
+		app_context: AppContextT | None = None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 		stream: bool = False,
 	) -> AgentProducedMessages | AsyncIterator[AgentDelta]:
@@ -152,7 +152,7 @@ class Agent[AppContextT = None](Base):
 	async def _run_sync(
 		self,
 		thread: Thread,
-		app_context: AppContextT,
+		app_context: AppContextT | None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 	) -> AgentProducedMessages:
 		"""run the agent loop synchronously, returning all produced messages."""
@@ -211,7 +211,7 @@ class Agent[AppContextT = None](Base):
 	async def _run_stream(
 		self,
 		thread: Thread,
-		app_context: AppContextT,
+		app_context: AppContextT | None,
 		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
 	) -> AsyncIterator[AgentDelta]:
 		"""run the agent loop, yielding deltas as they are produced."""
@@ -298,7 +298,7 @@ class Agent[AppContextT = None](Base):
 		self,
 		tool_call: ToolCall,
 		agent_context: AgentContext,
-		app_context: AppContextT,
+		app_context: AppContextT | None,
 	) -> ToolMessage:
 		"""execute a single tool call and return the result."""
 		# parse arguments

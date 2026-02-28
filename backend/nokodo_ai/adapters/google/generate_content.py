@@ -36,6 +36,7 @@ from .types import (
 	GooglePart,
 	GoogleTool,
 	GoogleToolConfig,
+	GoogleToolListUnion,
 )
 
 
@@ -68,7 +69,7 @@ def _tool_choice_to_google(tool_choice: str) -> GoogleToolConfig:
 	)
 
 
-def _tools_to_google(tools: list[ToolDefinition]) -> list[GoogleTool]:
+def _tools_to_google(tools: list[ToolDefinition]) -> GoogleToolListUnion:
 	"""convert SDK tools to google format."""
 	function_declarations: list[GoogleFunctionDeclaration] = []
 	for t in tools:
@@ -141,8 +142,8 @@ def _messages_to_google(
 
 				# add text content
 				assistant_text = message.text
-				if not assistant_text and message.json is not None:
-					assistant_text = json.dumps(message.json)
+				if not assistant_text and message.json_content is not None:
+					assistant_text = json.dumps(message.json_content)
 				if assistant_text:
 					parts.append(GooglePart.from_text(text=assistant_text))
 

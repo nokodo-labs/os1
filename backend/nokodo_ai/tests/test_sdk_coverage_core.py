@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from abc import ABCMeta
 from collections.abc import AsyncIterator, Callable
 from typing import Annotated, Any, ClassVar, Literal, cast
 
 import pytest
 from pydantic import ValidationError
 
+from nokodo_ai.adapters.chat import resolve_chat_adapter
+from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.deltas import (
+	AgentDelta,
 	stream_agent_deltas,
 	stream_chat_model_deltas,
 )
@@ -80,10 +84,9 @@ def test_types_compatible_branches() -> None:
 	assert types_compatible(list[int], dict[str, int]) is False
 	assert types_compatible(bool, int)
 
-	from abc import ABCMeta
 
 	class _BoomMeta(ABCMeta):
-		def __subclasscheck__(cls, subclass):
+		def __subclasscheck__(cls: type, subclass: type) -> bool:
 			raise TypeError("boom")
 
 	class _Boom(metaclass=_BoomMeta):
@@ -124,7 +127,7 @@ def test_validate_callable_success_and_failure_modes() -> None:
 	with pytest.raises(TypeError, match="must be named"):
 		validate_callable(ok, expected_arg_names=["x", "b"])
 
-	def missing_anno(a, b: int) -> int:
+	def missing_anno(a, b: int) -> int:  # type: ignore[no-untyped-def]
 		return b
 
 	with pytest.raises(TypeError, match="missing type annotation"):
@@ -133,7 +136,7 @@ def test_validate_callable_success_and_failure_modes() -> None:
 	with pytest.raises(TypeError, match="has type"):
 		validate_callable(ok, expected_arg_types=[str, str])
 
-	def missing_return(a: int):
+	def missing_return(a: int):  # type: ignore[no-untyped-def]
 		return a
 
 	with pytest.raises(TypeError, match="missing return type"):
@@ -148,7 +151,7 @@ def test_validate_callable_success_and_failure_modes() -> None:
 	with pytest.raises(TypeError, match="missing parameter at position"):
 		validate_callable(ok, expected_arg_types=[int, str, int])
 
-	def _bad_forward_ref(a):
+	def _bad_forward_ref(a: object) -> object:
 		return a
 
 	_bad_forward_ref.__annotations__ = {"a": "NoSuchType", "return": "NoSuchType"}
@@ -164,7 +167,7 @@ def test_schema_from_callable_skips_self_dunder_and_varargs() -> None:
 			__agent_context__: object | None = None,
 			*args: object,
 			**kwargs: object,
-		):
+		) -> None:
 			_ = (a, b, __agent_context__, args, kwargs)
 
 	schema = schema_from_callable(X.f)
@@ -207,9 +210,9 @@ async def test_stream_deltas_cover_all_branches() -> None:
 			AssistantMessage.from_text("done"),
 		]
 	)
-	seen2 = []
-	async for d in stream_agent_deltas(agent_stream):
-		seen2.append(d)
+	seen2: list[AgentDelta] = []
+	async for d2 in stream_agent_deltas(agent_stream):
+		seen2.append(d2)
 	assert seen2[-1].done is True
 	assert any(x.tool is not None for x in seen2)
 	assert any(x.chat is not None for x in seen2)
@@ -241,7 +244,7 @@ def test_assistant_message_merge_covers_tool_usage_and_metadata() -> None:
 
 	# json helper
 	base.content.append(JsonContent(data={"x": 1}))
-	assert base.json == {"x": 1}
+	assert base.json_content == {"x": 1}
 
 
 def test_assistant_message_merge_additional_branches() -> None:
@@ -288,7 +291,6 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 		ChatModel.model_validate({"model_name": "weird:thing"})
 
 	# adapter shorthand expanded to fully qualified type
-	from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 
 	monkeypatch.setattr(BaseOpenAIAdapter, "_get_client", lambda self: object())
 	m2 = ChatModel.model_validate(
@@ -309,7 +311,6 @@ def test_chat_model_resolve_adapter_config_and_init_branches(
 	assert m3.adapter.type.startswith("openai.")
 
 	# adapter already fully-qualified (contains a dot) should not be expanded
-	from nokodo_ai.adapters.chat import resolve_chat_adapter
 
 	adapter_type = resolve_chat_adapter("openai", None)
 	assert adapter_type is not None and "." in adapter_type
@@ -375,11 +376,11 @@ def test_embedding_model_resolve_adapter_config_unknown_and_ok() -> None:
 async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 	class MyFilter(Filter[None]):
 		async def process(self, thread: Thread, app_context: None) -> Thread:
-			return await cast(Any, super()).process(thread, app_context)
+			return cast(Thread, await cast(Any, super()).process(thread, app_context))
 
 	class MyHook(Hook[None]):
 		async def execute(self, thread: Thread, app_context: None) -> None:
-			return await cast(Any, super()).execute(thread, app_context)
+			await cast(Any, super()).execute(thread, app_context)
 
 	f = MyFilter(name="f")
 	h = MyHook(name="h")

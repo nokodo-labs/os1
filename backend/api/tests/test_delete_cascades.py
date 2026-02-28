@@ -241,7 +241,7 @@ async def test_delete_user_message_deletes_entire_subtree(
 		principal=principal,
 	)
 
-	followup_assistant = await thread_service.create_message(
+	_ = await thread_service.create_message(
 		tid,
 		MessageCreate(
 			content="follow up reply",
@@ -253,7 +253,7 @@ async def test_delete_user_message_deletes_entire_subtree(
 	)
 
 	# alternate regeneration branch from root_user
-	assistant_2 = await thread_service.create_message(
+	_ = await thread_service.create_message(
 		tid,
 		MessageCreate(
 			content="reply 2",
@@ -295,10 +295,10 @@ async def test_delete_user_message_preserves_siblings(
 	tree structure:
 		precursor_user (root)
 		└── precursor_assistant
-		    ├── user_v1 (original)  ← delete this
-		    │   └── assistant_1
-		    └── user_v2 (edit, same parent)
-		        └── assistant_2
+			├── user_v1 (original)  ← delete this
+			│   └── assistant_1
+			└── user_v2 (edit, same parent)
+				└── assistant_2
 
 	deleting user_v1 should remove user_v1 + assistant_1 but
 	keep precursor_*, user_v2, and assistant_2.

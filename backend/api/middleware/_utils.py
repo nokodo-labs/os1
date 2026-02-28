@@ -5,7 +5,8 @@ from starlette.types import Message, Scope
 
 def get_header(scope: Scope, key: bytes) -> str | None:
 	"""return the first header value for the given key."""
-	for header_key, header_value in scope.get("headers", []):
+	headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
+	for header_key, header_value in headers:
 		if header_key == key:
 			return header_value.decode("latin-1")
 	return None

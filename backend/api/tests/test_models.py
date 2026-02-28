@@ -246,7 +246,7 @@ class EnumForTest(Enum):
 	B = "b"
 
 
-def test_string_enum_none_handling():
+def test_string_enum_none_handling() -> None:
 	string_enum = StringEnum(EnumForTest)
 
 	# Test process_bind_param

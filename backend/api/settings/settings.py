@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 from functools import cache
-from typing import Any, Final, Literal, Self
+from typing import Any, Final, Literal, Self, cast
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import (
@@ -58,8 +58,8 @@ def settings_field[T](
 		**kwargs,
 	)
 	if default_factory is not None:
-		return Field(default_factory=default_factory, **field_kwargs)
-	return Field(default, **field_kwargs)
+		return cast(T, Field(default_factory=default_factory, **field_kwargs))
+	return cast(T, Field(default, **field_kwargs))
 
 
 def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag, bool]:
@@ -69,6 +69,8 @@ def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag,
 		return {}
 	extra = info.json_schema_extra
 	if not extra:
+		return {}
+	if callable(extra):
 		return {}
 	return {
 		flag: bool(extra.get(flag))
@@ -427,7 +429,9 @@ class S3StorageConfig(BaseModel):
 		description="multipart upload chunk size in bytes",
 	)
 	max_retries: int = Field(default=3, description="max retry attempts")
-	retry_mode: str = Field(default="adaptive", description="botocore retry mode")
+	retry_mode: Literal["legacy", "standard", "adaptive"] = Field(
+		default="adaptive", description="botocore retry mode"
+	)
 
 
 class StorageSettings(BaseModel):

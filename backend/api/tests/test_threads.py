@@ -261,7 +261,7 @@ async def test_soft_deleted_threads_hidden(
 
 	admin_default_list = await client.get("/v1/threads", headers=admin_headers)
 	assert admin_default_list.status_code == 200
-	assert thread_id not in {t["id"] for t in admin_default_list.json()}
+	assert thread_id not in {t["id"] for t in admin_default_list.json()}  # type: ignore[index]
 
 	admin_hidden_list = await client.get(
 		"/v1/threads",
@@ -269,7 +269,7 @@ async def test_soft_deleted_threads_hidden(
 		params={"include_hidden": True},
 	)
 	assert admin_hidden_list.status_code == 200
-	admin_user = await db_session.get(User, admin_auth["user"]["id"])
+	admin_user = await db_session.get(User, admin_auth["user"]["id"])  # type: ignore[index]
 	assert admin_user is not None
 	admin_principal = _principal(admin_user)
 	all_threads = list(
@@ -482,7 +482,6 @@ async def test_create_thread_invalid_project(
 async def test_service_create_thread(db_session: AsyncSession) -> None:
 	"""Test creating a thread directly via service."""
 	# Create user
-	from api.models.user import User
 
 	user = User(
 		email="service@example.com",
@@ -751,7 +750,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		return await orig(
 			thread_id,
 			session,
-			principal,
+			principal,  # type: ignore[arg-type]
 			required_level=required_level,
 			include_hidden=include_hidden,
 		)
@@ -820,8 +819,6 @@ async def test_create_message_sender_guard(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_get_thread_not_found_service(db_session: AsyncSession) -> None:
-	from api.models.user import User
-
 	user = User(
 		email="svc_not_found@example.com",
 		username="svc_not_found",
@@ -838,14 +835,14 @@ async def test_get_thread_not_found_service(db_session: AsyncSession) -> None:
 	principal = _principal(user)
 
 	with pytest.raises(HTTPException) as exc:
-		await thread_service.get_thread("nonexistent", db_session, principal=principal)
+		await thread_service.get_thread(
+			TypeID("nonexistent"), db_session, principal=principal
+		)
 	assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_create_thread_invalid_user_service(db_session: AsyncSession) -> None:
-	from api.models.user import User
-
 	admin = User(
 		email="svc_invalid_owner@example.com",
 		username="svc_invalid_owner",
@@ -875,8 +872,6 @@ async def test_create_thread_invalid_user_service(db_session: AsyncSession) -> N
 async def test_create_thread_invalid_project_service(
 	db_session: AsyncSession,
 ) -> None:
-	from api.models.user import User
-
 	user = User(
 		email="svc_invalid_project@example.com",
 		username="svc_invalid_project",
@@ -906,8 +901,6 @@ async def test_create_thread_invalid_project_service(
 async def test_list_threads_filter_owner(
 	db_session: AsyncSession,
 ) -> None:
-	from api.models.user import User
-
 	user = User(
 		email="svc_list_owner@example.com",
 		username="svc_list_owner",
@@ -946,8 +939,6 @@ async def test_list_threads_filter_owner(
 async def test_update_thread_owner_service(
 	db_session: AsyncSession,
 ) -> None:
-	from api.models.user import User
-
 	u1 = User(
 		email="svc_u1@example.com",
 		username="svc_u1_test",
@@ -993,8 +984,6 @@ async def test_update_thread_owner_service(
 async def test_update_thread_fields_service(
 	db_session: AsyncSession,
 ) -> None:
-	from api.models.user import User
-
 	owner = User(
 		email="svc_update_fields@example.com",
 		username="svc_update_fields",
@@ -1032,7 +1021,6 @@ async def test_admin_update_owner_and_create_message(
 	db_session: AsyncSession,
 ) -> None:
 	"""Admin can reassign owner and post a message."""
-	from api.models.user import User
 
 	owner = User(
 		email="admin-thread-owner@example.com",
@@ -1099,8 +1087,6 @@ async def test_admin_update_owner_and_create_message(
 async def test_create_message_types_service(
 	db_session: AsyncSession,
 ) -> None:
-	from api.models.user import User
-
 	user = User(
 		email="svc_msgs@example.com",
 		username="svc_msgs_test",
@@ -1160,7 +1146,6 @@ async def test_create_message_unknown_type_service(
 	db_session: AsyncSession,
 ) -> None:
 	"""Ensure unexpected message types fall back to user messages."""
-	from api.models.user import User
 
 	user = User(
 		email="svc_unknown_type@example.com",
@@ -1199,8 +1184,6 @@ async def test_create_message_unknown_type_service(
 async def test_list_messages_service(
 	db_session: AsyncSession,
 ) -> None:
-	from api.models.user import User
-
 	user = User(
 		email="svc_list_msgs@example.com",
 		username="svc_list_msgs",
@@ -1254,9 +1237,7 @@ async def test_list_threads_no_filter(
 	user = user_auth["user"]
 	assert isinstance(user, dict)
 
-	from api.models.user import User as UserORM
-
-	user_orm = await db_session.get(UserORM, user["id"])
+	user_orm = await db_session.get(User, user["id"])
 	assert user_orm is not None
 	principal = _principal(user_orm)
 
@@ -1278,7 +1259,6 @@ async def test_update_thread_projects(
 	db_session: AsyncSession,
 ) -> None:
 	"""Test updating thread projects."""
-	from api.models.user import User
 
 	user = User(
 		email="svc_update_projects@example.com",
@@ -1296,7 +1276,6 @@ async def test_update_thread_projects(
 	principal = _principal(user)
 
 	# Create project
-	from api.models.project import Project
 
 	project = Project(name="Test Project", description="Test", owner_id=user.id)
 	db_session.add(project)

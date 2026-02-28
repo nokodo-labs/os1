@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import Field
 
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -29,7 +29,7 @@ class AgentCreate(AgentBase):
 	pass
 
 
-class AgentUpdate(MetadataModel):
+class AgentUpdate(MetadataUpdateModel):
 	"""Payload for agent update."""
 
 	name: str | None = None

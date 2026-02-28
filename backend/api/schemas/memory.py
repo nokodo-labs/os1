@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import Base64Bytes
 
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -25,7 +25,7 @@ class MemoryCreate(MemoryBase):
 	user_id: TypeID
 
 
-class MemoryUpdate(MetadataModel):
+class MemoryUpdate(MetadataUpdateModel):
 	"""payload to update a memory."""
 
 	content: str | None = None

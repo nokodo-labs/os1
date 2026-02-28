@@ -1194,6 +1194,11 @@ dev = [
     { name = "types-aiobotocore", extra = ["s3"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "types-authlib" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiobotocore", marker = "extra == 'api'", specifier = ">=2.13.0" },
@@ -1226,6 +1231,9 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.32.0" },
 ]
 provides-extras = ["api", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "types-authlib", specifier = ">=1.6.8.20260215" }]
 
 [[package]]
 name = "numpy"
@@ -1951,6 +1959,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/03/51/bbe7ebdf2c566ecf73ce432e2c2f7419d887a94f840f4c03a92fc0ff5a8e/types_aiobotocore_s3-3.2.0.tar.gz", hash = "sha256:23d03c3f468f47191eb74f0052d6c1ec6a9b49c1b5765fcd5a93b3c06d78e621", size = 76886, upload-time = "2026-02-25T02:31:29.001Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/11/8f/77133f7b8682ad35a79ac644602083f3a1a7a3bf6e2613a8eaad45c84663/types_aiobotocore_s3-3.2.0-py3-none-any.whl", hash = "sha256:07e6093b776e1c4e6801b02bea550a556ecc22f044219d60d57b72b4b2c8b74f", size = 84605, upload-time = "2026-02-25T02:31:27.925Z" },
+]
+
+[[package]]
+name = "types-authlib"
+version = "1.6.8.20260215"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/bc/e5921b705c67b651ceda575de2496b56dd66e9efd74f11395fb0dac7cc69/types_authlib-1.6.8.20260215.tar.gz", hash = "sha256:06d81c64b11949a052b0621124b21e14881f8adbfebf8319ed8f05db913f20e5", size = 46722, upload-time = "2026-02-15T04:10:42.395Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/8e/eb81b3e5020615c1edb24777a4c5aa1119d4a8610a506bf9c7e53a470dc7/types_authlib-1.6.8.20260215-py3-none-any.whl", hash = "sha256:644e8dbb6d59a5abd9917370c79125d630d1eefaf4a314cdf20f1b3ea982787f", size = 103891, upload-time = "2026-02-15T04:10:41.419Z" },
 ]
 
 [[package]]

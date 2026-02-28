@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from api.models.model import InputModality, ModelType
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 
 
 class ModelBase(MetadataModel):
@@ -39,7 +39,7 @@ class Model(ModelBase, TimestampedModel):
 	provider_id: str
 
 
-class ModelUpdate(MetadataModel):
+class ModelUpdate(MetadataUpdateModel):
 	"""payload to update a model."""
 
 	name: str | None = None

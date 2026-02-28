@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Awaitable
+
 import pytest
 
 from nokodo_ai import AgentContext, ChatModel, Tool, ToolMessage, tool
@@ -9,20 +11,21 @@ from nokodo_ai.adapters.base.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
 )
+from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.threads import Thread
 from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
 
 
 class _NoopChatAdapter(BaseChatAdapter):
-	def generate(
+	def generate(  # type: ignore[override]
 		self,
-		messages,
+		messages: list[Message],
 		model: str,
 		stream: bool = False,
 		tools: list[ToolDefinition] = [],
 		params: ChatGenerationParams | None = None,
-	):
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
 		raise AssertionError("adapter.generate should not be called in tool tests")
 
 
@@ -46,7 +49,7 @@ def _make_agent_context(
 
 
 class _AddTool(Tool[None]):
-	async def call(
+	async def call(  # type: ignore[override]
 		self,
 		__agent_context__: AgentContext,
 		__app_context__: None,
@@ -58,13 +61,13 @@ class _AddTool(Tool[None]):
 
 
 class _CallsSuperTool(Tool[None]):
-	async def call(
+	async def call(  # type: ignore[override]
 		self,
 		__agent_context__: AgentContext,
 		__app_context__: None,
 		**kwargs: object,
 	) -> ToolMessage:
-		return await super().call(__agent_context__, __app_context__, **kwargs)
+		return await super().call(__agent_context__, __app_context__, **kwargs)  # type: ignore[safe-super]
 
 
 def test_tool_definition_uses_explicit_parameters() -> None:

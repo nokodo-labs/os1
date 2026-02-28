@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import Field
 
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -25,7 +25,7 @@ class NoteCreate(NoteBase):
 	user_id: TypeID | None = None
 
 
-class NoteUpdate(MetadataModel):
+class NoteUpdate(MetadataUpdateModel):
 	"""payload to update a note."""
 
 	title: str | None = None

@@ -24,33 +24,38 @@
 
 ```
 backend/
-├── api/                    # FastAPI app
-│   ├── v1/                 # API version 1
-│   │   ├── routers/        # Route handlers
-│   │   ├── service/	    # v1 service layer
-│   │   ├── router.py       # v1 router
-│   │   └── schemas/        # DTOs for v1-specific routes
-│   ├── core/               # Config, database
-│   ├── clients/            # External API clients
-│   │   ├── redis.py        # Redis client
-│   │   ├── smtp.py         # SMTP email client
-│   │   └── taskiq.py	    # Taskiq client
-│   ├── tasks/              # Background tasks
-│   ├── models/             # SQLAlchemy models. These are ORM as well as Domain Models.
-│   ├── schemas/            # Common Pydantic schema DTOs across API versions
-│   ├── migrations/         # Alembic setup & migrations
-│   └── tests/              # API & ORM tests
-├── nokodo_ai/              # SDK - publishable, standalone execution library
-│   ├── adapters/           # provider adapters (openai/anthropic/ollama) + capability ABCs
-│   ├── agent.py            # Agent orchestrator (ChatModel + Tools)
-│   ├── llm.py              # ChatModel high-level interface
-│   ├── embedding.py        # EmbeddingModel high-level interface
-│   ├── vectorstore.py      # Vectorstore high-level interface
-│   ├── tool.py             # Tool decorator / Tool class
-│   ├── thread.py           # execution-focused Thread domain model
-│   ├── message.py          # execution-focused Message domain models
-│   └── tests/              # SDK unit tests
-└── tests/                  # E2E integration tests
+├── api/                         # FastAPI backend app
+│   ├── main.py                  # app entrypoint and startup wiring
+│   ├── core/                    # runtime, logging, OpenAPI, shared exceptions
+│   ├── database/                # DB init and search cursor helpers
+│   ├── middleware/              # API versioning, request id, logging, headers
+│   ├── migrations/              # Alembic config and migration scripts
+│   ├── models/                  # SQLAlchemy ORM models
+│   ├── routers/                 # top-level/system routers
+│   ├── schemas/                 # shared Pydantic schemas and API DTOs
+│   ├── settings/                # settings models and DB/env loading
+│   ├── storage/                 # storage backends (local/s3)
+│   ├── tests/                   # API/service/unit coverage for backend package
+│   └── v1/                      # versioned API composition
+│       ├── app.py               # v1 app setup
+│       ├── router.py            # v1 router mount
+│       ├── routers/             # v1 route handlers
+│       ├── schemas/             # v1-only schemas
+│       ├── service/             # v1 service layer (auth/chat/files/etc.)
+│       └── tasks/               # v1 async/background task modules
+├── nokodo_ai/                   # standalone SDK/runtime library
+│   ├── adapters/                # provider adapters + base adapter contracts
+│   ├── agents.py                # agent orchestration
+│   ├── chat_models.py           # chat model abstractions
+│   ├── embeddings.py            # embedding abstractions
+│   ├── vectorstores.py          # vectorstore abstractions
+│   ├── messages.py              # message domain primitives
+│   ├── threads.py               # thread domain primitives
+│   ├── tool.py                  # tool interfaces/decorators
+│   ├── types/                   # SDK type helpers
+│   ├── utils/                   # SDK utility helpers
+│   └── tests/                   # SDK unit tests
+└── tests/                       # backend integration/e2e-style tests
 ```
 
 ## patterns

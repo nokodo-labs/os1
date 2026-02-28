@@ -7,7 +7,12 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MetadataModel,
+	MetadataUpdateModel,
+	ORMModel,
+	TimestampedModel,
+)
 from api.schemas.project import Project as ProjectSchema
 from nokodo_ai.utils.typeid import TypeID
 
@@ -51,7 +56,7 @@ class ThreadCreate(ThreadBase):
 	owner_id: TypeID
 
 
-class ThreadUpdate(MetadataModel):
+class ThreadUpdate(MetadataUpdateModel):
 	"""Payload for updating a thread."""
 
 	title: str | None = None

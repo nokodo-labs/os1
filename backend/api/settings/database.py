@@ -24,7 +24,7 @@ def _is_write_locked(schema: type[BaseModel], field_name: str) -> bool:
 	return bool(extra.get("write_locked"))
 
 
-def _load_db_overrides(settings_cls: type) -> dict[str, dict[str, Any]]:
+def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any]]:
 	"""synchronously load settings overrides from database."""
 
 	async def fetch() -> dict[str, dict[str, Any]]:

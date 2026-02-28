@@ -21,6 +21,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
+from api.models.group import Group
 from api.models.many_to_many import user_role_association
 from api.models.role import Role
 from api.models.thread import Thread
@@ -31,6 +32,7 @@ from api.permissions import (
 	DefaultResourceAccess,
 	ResourceType,
 )
+from api.schemas.role import RoleCreate, RoleUpdate
 from api.v1.service import authorization
 from api.v1.service import roles as roles_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -272,10 +274,7 @@ class TestRoleModel:
 	) -> None:
 		"""verify the raw JSON column stores serialized data correctly."""
 		dp = DefaultPermissions(
-			resource_access=DefaultResourceAccess(
-				agent=AccessLevel.ADMIN,
-				plugin=AccessLevel.READER,
-			),
+			resource_access=DefaultResourceAccess(),
 			action_permissions={
 				ActionPermission.MODELS_READ,
 				ActionPermission.PROVIDERS_MANAGE,
@@ -842,7 +841,6 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_group_rule_grants_access(self, db_session: AsyncSession) -> None:
-		from api.models.group import Group
 
 		owner = User(
 			email="grp-owner@example.com", username="grp_owner", hashed_password="pw"
@@ -1071,7 +1069,6 @@ class TestRolesService:
 	async def test_create_role_with_typed_permissions(
 		self, db_session: AsyncSession
 	) -> None:
-		from api.schemas.role import RoleCreate
 
 		admin_user = User(
 			email="role-admin@example.com",
@@ -1112,7 +1109,6 @@ class TestRolesService:
 	async def test_update_role_default_permissions(
 		self, db_session: AsyncSession
 	) -> None:
-		from api.schemas.role import RoleCreate, RoleUpdate
 
 		admin = User(
 			email="update-admin@example.com",
@@ -1158,7 +1154,6 @@ class TestRolesService:
 
 	@pytest.mark.asyncio
 	async def test_list_and_delete_roles(self, db_session: AsyncSession) -> None:
-		from api.schemas.role import RoleCreate
 
 		admin = User(
 			email="list-admin@example.com",
@@ -1438,11 +1433,11 @@ class TestEdgeCases:
 		)
 		# thread default is editor
 		assert authorization._level_satisfies(
-			principal.role_resource_defaults.thread,
+			principal.role_resource_defaults.thread,  # type: ignore[arg-type]
 			AccessLevel.EDITOR,
 		)
 		# project default is reader (not editor)
 		assert not authorization._level_satisfies(
-			principal.role_resource_defaults.project,
+			principal.role_resource_defaults.project,  # type: ignore[arg-type]
 			AccessLevel.EDITOR,
 		)

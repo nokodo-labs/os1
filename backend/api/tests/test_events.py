@@ -63,7 +63,7 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 
 	event_in = EventCreate(
 		scope=EventScope.USER,
-		scope_id=str(user.id),
+		scope_id=user.id,
 		type=EventType.NOTIFICATION_CUSTOM,
 		data={"foo": "bar"},
 		user_id=user.id,
@@ -117,7 +117,7 @@ async def test_emit_event_non_admin_cannot_notify_other_user(
 		await event_service.emit_event(
 			EventCreate(
 				scope=EventScope.USER,
-				scope_id=str(target.id),
+				scope_id=target.id,
 				type=EventType.NOTIFICATION_CUSTOM,
 				data={"foo": "bar"},
 				user_id=target.id,
@@ -154,7 +154,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	event1 = await event_service.emit_event(
 		EventCreate(
 			scope=EventScope.USER,
-			scope_id=str(user.id),
+			scope_id=user.id,
 			type="test.event.1",
 			data={},
 			user_id=user.id,
@@ -182,10 +182,10 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	event3 = await event_service.emit_event(
 		EventCreate(
 			scope=EventScope.THREAD,
-			scope_id=str(thread.id),
+			scope_id=thread.id,
 			type="test.event.3",
 			data={},
-			thread_id=str(thread.id),
+			thread_id=thread.id,
 		),
 		db_session,
 		principal=principal,
@@ -200,10 +200,10 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	event4 = await event_service.emit_event(
 		EventCreate(
 			scope=EventScope.TASK,
-			scope_id=str(task.id),
+			scope_id=task.id,
 			type="test.event.4",
 			data={},
-			task_id=str(task.id),
+			task_id=task.id,
 		),
 		db_session,
 		principal=principal,
@@ -245,7 +245,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Filter by thread_id
 	thread_events = await event_service.list_events(
 		db_session,
-		thread_id=str(thread.id),
+		thread_id=thread.id,
 		principal=principal,
 	)
 	assert len(thread_events) == 1
@@ -254,7 +254,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Filter by task_id
 	task_events = await event_service.list_events(
 		db_session,
-		task_id=str(task.id),
+		task_id=task.id,
 		principal=principal,
 	)
 	assert len(task_events) == 1

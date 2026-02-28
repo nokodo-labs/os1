@@ -22,6 +22,7 @@ from nokodo_ai import (
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.filters import Filter
 from nokodo_ai.hooks import Hook
+from nokodo_ai.messages import Message
 from nokodo_ai.tool import ToolDefinition
 
 
@@ -44,9 +45,9 @@ class _QueuedChatAdapter(BaseChatAdapter):
 	def calls(self) -> list[dict[str, object]]:
 		return self._calls
 
-	def generate(
+	def generate(  # type: ignore[override]
 		self,
-		messages,
+		messages: list[Message],
 		model: str,
 		stream: bool = False,
 		tools: list[ToolDefinition] = [],
@@ -89,7 +90,7 @@ def _make_chat_model(adapter: BaseChatAdapter) -> ChatModel:
 
 
 class _EchoTool(Tool[None]):
-	async def call(
+	async def call(  # type: ignore[override]
 		self,
 		__agent_context__: AgentContext,
 		__app_context__: None,

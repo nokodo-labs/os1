@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from inspect import Parameter, signature
-from typing import Any, get_type_hints
+from typing import Any, cast, get_type_hints
 
 from pydantic import create_model
 
@@ -50,4 +50,4 @@ def schema_from_callable(
 		return {}
 
 	dynamic_model = create_model(f"{func.__name__}_params", **fields)
-	return dynamic_model.model_json_schema()
+	return cast(JSONObject, dynamic_model.model_json_schema())

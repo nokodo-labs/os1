@@ -102,7 +102,7 @@ def _decode_base32_uuid_suffix(suffix: str) -> bytes:
 	return uuid_int.to_bytes(16, byteorder="big", signed=False)
 
 
-def new_typeid(prefix: str) -> str:
+def new_typeid(prefix: str) -> TypeID:
 	if len(prefix) > TYPEID_MAX_PREFIX_LENGTH:
 		raise ValueError("invalid typeid prefix: must be <= 63 characters")
 	if not _PREFIX_RE.fullmatch(prefix):
@@ -112,8 +112,8 @@ def new_typeid(prefix: str) -> str:
 
 	suffix = _encode_base32_uuid_suffix(_uuid7_bytes())
 	if prefix == "":
-		return suffix
-	return f"{prefix}{TYPEID_SEPARATOR}{suffix}"
+		return TypeID(suffix)
+	return TypeID(f"{prefix}{TYPEID_SEPARATOR}{suffix}")
 
 
 def is_typeid(value: str, *, prefix: str | None = None) -> bool:
@@ -179,7 +179,7 @@ class TypeID(str):
 		_core_schema: pydantic_core_schema.CoreSchema,
 		handler: Any,
 	) -> JsonSchemaValue:
-		schema = handler(_core_schema)
+		schema: JsonSchemaValue = handler(_core_schema)
 		schema.update(
 			{
 				"pattern": (

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import overload
+from collections.abc import Callable
+from typing import ClassVar, overload
 
 from pydantic import Field
 
@@ -36,7 +37,9 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		..., description="collection/namespace within the vectorstore"
 	)
 
-	_adapter_resolver: ... = resolve_vectorstore_adapter
+	_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]] = (
+		resolve_vectorstore_adapter
+	)
 
 	@classmethod
 	def create(

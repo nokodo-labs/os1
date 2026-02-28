@@ -72,7 +72,7 @@ class MemoryRecallTool(Tool[AppContext]):
 	async def call(
 		self,
 		__agent_context__: AgentContext,
-		__app_context__: AppContext,
+		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		"""execute memory recall.
@@ -148,7 +148,7 @@ class MemoryCreateTool(Tool[AppContext]):
 	async def call(
 		self,
 		__agent_context__: AgentContext,
-		__app_context__: AppContext,
+		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		raise NotImplementedError("memory creation is WIP")

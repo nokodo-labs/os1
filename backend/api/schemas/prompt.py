@@ -6,7 +6,7 @@ import re
 
 from pydantic import Field, field_validator
 
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 
 
 _COMMAND_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$"
@@ -48,7 +48,7 @@ class PromptCreate(PromptBase):
 	pass
 
 
-class PromptUpdate(MetadataModel):
+class PromptUpdate(MetadataUpdateModel):
 	"""payload for prompt update."""
 
 	command: str | None = None

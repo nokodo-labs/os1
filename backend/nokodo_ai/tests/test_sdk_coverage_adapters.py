@@ -5,12 +5,15 @@ these tests use dummy clients and monkeypatching to avoid network calls.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Awaitable
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
+from nokodo_ai.adapters.anthropic import base as anthropic_base
+from nokodo_ai.adapters.anthropic import messages as am
 from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
 from nokodo_ai.adapters.anthropic.messages import (
 	AnthropicMessagesAdapter,
@@ -19,10 +22,13 @@ from nokodo_ai.adapters.anthropic.messages import (
 	_tool_choice_to_anthropic,
 	_tools_to_anthropic,
 )
-from nokodo_ai.adapters.base.chat import BaseChatAdapter
+from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.base.client import BaseClientAdapter
 from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
 from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingsAdapter
+from nokodo_ai.adapters.openai import base as openai_base
+from nokodo_ai.adapters.openai import chat_completions as cc
+from nokodo_ai.adapters.openai import responses as resp_mod
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.chat_completions import (
 	OpenAIChatCompletionsAdapter,
@@ -45,6 +51,7 @@ from nokodo_ai.adapters.openai.responses import (
 from nokodo_ai.messages import (
 	AssistantMessage,
 	JsonContent,
+	Message,
 	SystemMessage,
 	ToolCall,
 	ToolMessage,
@@ -55,13 +62,13 @@ from nokodo_ai.tool import ToolDefinition
 
 
 class _DummyAsyncIterator:
-	def __init__(self, items: list[Any]):
+	def __init__(self, items: list[Any]) -> None:
 		self._items = list(items)
 
-	def __aiter__(self):
+	def __aiter__(self) -> _DummyAsyncIterator:
 		return self
 
-	async def __anext__(self):
+	async def __anext__(self) -> Any:
 		if not self._items:
 			raise StopAsyncIteration
 		return self._items.pop(0)
@@ -71,7 +78,7 @@ def test_base_api_adapter_not_implemented_get_client_is_covered() -> None:
 	class _CallsSuperApi(BaseClientAdapter[object]):
 		def _get_client(self) -> object:
 			# explicitly call super to cover the NotImplementedError branch
-			return super()._get_client()
+			return super()._get_client()  # type: ignore[safe-super]
 
 		async def close(self) -> None:
 			return None
@@ -84,7 +91,6 @@ def test_openai_and_anthropic_base_get_client_includes_optional_fields(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	# openai
-	from nokodo_ai.adapters.openai import base as openai_base
 
 	created: list[dict[str, object]] = []
 
@@ -99,7 +105,6 @@ def test_openai_and_anthropic_base_get_client_includes_optional_fields(
 	assert created[-1]["timeout"] == 1.0
 
 	# anthropic
-	from nokodo_ai.adapters.anthropic import base as anthropic_base
 
 	created2: list[dict[str, object]] = []
 
@@ -121,20 +126,23 @@ def test_openai_and_anthropic_base_get_client_includes_optional_fields(
 
 def test_base_chat_adapter_generate_not_implemented_is_covered() -> None:
 	class _CallsSuperChat(BaseChatAdapter):
-		def generate(
+		def generate(  # type: ignore[override]
 			self,
-			messages,
+			messages: list[Message],
 			model: str,
 			stream: bool = False,
-			tools=None,
-			params=None,
-		):
-			return cast(Any, super()).generate(
-				messages,
-				model,
-				stream=stream,
-				tools=tools or [],
-				params=params,
+			tools: list[ToolDefinition] | None = None,
+			params: ChatGenerationParams | None = None,
+		) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+			return cast(
+				Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage],
+				cast(Any, super()).generate(
+					messages,
+					model,
+					stream=stream,
+					tools=tools or [],
+					params=params,
+				),
 			)
 
 	adapter = _CallsSuperChat()
@@ -199,7 +207,7 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	system_text2, msgs2 = _messages_to_anthropic(
 		[user, ToolMessage(tool_call_id="x", tool_output="out", metadata={})]
 	)
-	assert msgs2[1]["content"][0]["tool_use_id"] == "x"
+	assert msgs2[1]["content"][0]["tool_use_id"] == "x"  # type: ignore[index]
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_anthropic([object()])  # type: ignore[list-item]
@@ -327,9 +335,8 @@ class _DummyOpenAIChunk:
 
 def test_openai_chat_helpers_cover_branches(
 	monkeypatch: pytest.MonkeyPatch,
-	caplog,
+	caplog: pytest.LogCaptureFixture,
 ) -> None:
-	from nokodo_ai.adapters.openai import chat_completions as cc
 
 	# make isinstance checks accept our dummy tool call class
 	monkeypatch.setattr(
@@ -378,7 +385,7 @@ def test_openai_chat_helpers_cover_branches(
 			ToolMessage(tool_call_id="fallback_id", tool_output="y"),
 		]
 	)
-	assert tool_msgs[-1]["tool_call_id"] == "fallback_id"
+	assert tool_msgs[-1]["tool_call_id"] == "fallback_id"  # type: ignore[typeddict-item]
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_openai_chatcompletions([object()])  # type: ignore[list-item]
@@ -455,7 +462,7 @@ def test_openai_chat_helpers_cover_branches(
 @pytest.mark.asyncio
 async def test_openai_chat_stream_accumulator_covers_finish_reasons(
 	monkeypatch: pytest.MonkeyPatch,
-	caplog,
+	caplog: pytest.LogCaptureFixture,
 ) -> None:
 	# ensure unknown finish reason warning path is hit
 	caplog.set_level("WARNING")
@@ -501,7 +508,7 @@ async def test_openai_chat_stream_accumulator_covers_finish_reasons(
 
 	stream = _DummyAsyncIterator(chunks)
 	seen: list[AssistantMessage] = []
-	async for delta in _openai_stream_to_assistant_messages(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
 		seen.append(delta)
 
 	assert any(m.text == "a" for m in seen)
@@ -536,7 +543,7 @@ async def test_openai_chat_stream_tool_call_delta_missing_fields() -> None:
 	]
 	stream = _DummyAsyncIterator(chunks)
 	seen: list[AssistantMessage] = []
-	async for delta in _openai_stream_to_assistant_messages(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
 		seen.append(delta)
 	# should not crash; final message should exist due to finish_reason
 	assert any(m.finish_reason == "tool_calls" for m in seen)
@@ -584,7 +591,7 @@ async def test_openai_stream_tool_call_metadata_and_created_at() -> None:
 	]
 	stream = _DummyAsyncIterator(chunks)
 	tc_deltas: list[AssistantMessage] = []
-	async for delta in _openai_stream_to_assistant_messages(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
 		if delta.tool_calls:
 			tc_deltas.append(delta)
 
@@ -671,7 +678,7 @@ async def test_openai_chat_stream_skips_empty_choices_and_indexes() -> None:
 		]
 	)
 	seen: list[AssistantMessage] = []
-	async for delta in _openai_stream_to_assistant_messages(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
 		seen.append(delta)
 	assert seen == []
 
@@ -692,7 +699,7 @@ async def test_openai_chat_stream_content_filter_final_message() -> None:
 		]
 	)
 	seen: list[AssistantMessage] = []
-	async for delta in _openai_stream_to_assistant_messages(stream):
+	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
 		seen.append(delta)
 	assert seen and seen[-1].refusal == "content filtered"
 
@@ -725,14 +732,14 @@ async def test_openai_adapters_generate_and_embedding(
 ) -> None:
 	# patch client creation to avoid real OpenAI client
 	class _DummyOpenAIClient:
-		def __init__(self):
+		def __init__(self) -> None:
 			self.chat = SimpleNamespace(completions=SimpleNamespace(create=None))
 			self.responses = SimpleNamespace(create=None)
 			self.embeddings = SimpleNamespace(create=None)
 
 	dummy = _DummyOpenAIClient()
 
-	async def _create_chat(**kwargs: Any):
+	async def _create_chat(**kwargs: Any) -> Any:
 		_ = kwargs
 		return _DummyOpenAICompletion(
 			choices=[
@@ -749,7 +756,7 @@ async def test_openai_adapters_generate_and_embedding(
 			usage=_DummyOpenAIUsage(),
 		)
 
-	async def _create_chat_stream(**kwargs: Any):
+	async def _create_chat_stream(**kwargs: Any) -> Any:
 		_ = kwargs
 		return _DummyAsyncIterator(
 			[
@@ -775,7 +782,7 @@ async def test_openai_adapters_generate_and_embedding(
 			]
 		)
 
-	async def _create_responses(**kwargs: Any):
+	async def _create_responses(**kwargs: Any) -> Any:
 		_ = kwargs
 		return SimpleNamespace(
 			output=[],
@@ -783,18 +790,18 @@ async def test_openai_adapters_generate_and_embedding(
 			usage=SimpleNamespace(input_tokens=1, output_tokens=1, total_tokens=2),
 		)
 
-	async def _create_responses_stream(**kwargs: Any):
+	async def _create_responses_stream(**kwargs: Any) -> Any:
 		_ = kwargs
 		return _DummyAsyncIterator([_TextDeltaEvent("z")])
 
-	async def _create_embeddings(**kwargs: Any):
+	async def _create_embeddings(**kwargs: Any) -> Any:
 		_ = kwargs
 		return SimpleNamespace(data=[SimpleNamespace(embedding=[0.1, 0.2])])
 
 	dummy.chat.completions.create = _create_chat
 
 	# for stream=True, adapter calls same method; we switch based on kw
-	async def _create_chat_router(**kwargs: Any):
+	async def _create_chat_router(**kwargs: Any) -> Any:
 		if kwargs.get("stream"):
 			return await _create_chat_stream(**kwargs)
 		return await _create_chat(**kwargs)
@@ -804,7 +811,6 @@ async def test_openai_adapters_generate_and_embedding(
 	dummy.embeddings.create = _create_embeddings
 
 	monkeypatch.setattr(BaseOpenAIAdapter, "_get_client", lambda self: dummy)
-	from nokodo_ai.adapters.openai import responses as resp_mod
 
 	class _TextDeltaEvent:
 		def __init__(self, delta: str):
@@ -813,7 +819,7 @@ async def test_openai_adapters_generate_and_embedding(
 	monkeypatch.setattr(resp_mod, "OpenAIResponseTextDeltaEvent", _TextDeltaEvent)
 
 	# now that _TextDeltaEvent exists, route responses.create for stream/non-stream
-	async def _create_responses_router(**kwargs: Any):
+	async def _create_responses_router(**kwargs: Any) -> Any:
 		if kwargs.get("stream"):
 			return await _create_responses_stream(**kwargs)
 		return await _create_responses(**kwargs)
@@ -854,7 +860,7 @@ async def test_openai_adapters_generate_and_embedding(
 		"gpt-4o",
 		params=params,
 	)
-	assert msg2.json == {"a": 1}
+	assert msg2.json_content == {"a": 1}
 
 	seen = []
 	async for part in responses.generate(
@@ -951,7 +957,6 @@ def test_openai_responses_input_happy_paths() -> None:
 async def test_openai_responses_streaming_tools_and_empty_text_delta(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from nokodo_ai.adapters.openai import responses as resp_mod
 
 	class _TextDeltaEvent:
 		def __init__(self, delta: str):
@@ -960,8 +965,8 @@ async def test_openai_responses_streaming_tools_and_empty_text_delta(
 	monkeypatch.setattr(resp_mod, "OpenAIResponseTextDeltaEvent", _TextDeltaEvent)
 
 	class _DummyClient:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _DummyAsyncIterator(
 					[
@@ -1005,7 +1010,6 @@ async def test_openai_responses_streaming_tools_and_empty_text_delta(
 async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallback(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from nokodo_ai.adapters.openai import responses as resp_mod
 
 	class _FunctionToolCall:
 		def __init__(self, call_id: str, name: str, arguments: str):
@@ -1016,8 +1020,8 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 	monkeypatch.setattr(resp_mod, "OpenAIResponseFunctionToolCall", _FunctionToolCall)
 
 	class _DummyClient:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				# return different output_text based on response_model
 				output_text = kwargs.get("text") and "{bad" or "plain"
 				return SimpleNamespace(
@@ -1046,8 +1050,8 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 
 	# output_text empty should yield an empty content list
 	class _DummyClientEmptyText:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return SimpleNamespace(output=[], output_text="", usage=None)
 
@@ -1067,7 +1071,6 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 async def test_anthropic_adapter_generate_once_and_streaming(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from nokodo_ai.adapters.anthropic import messages as am
 
 	# patch type checks to accept dummy event/block classes
 	class _TextBlock:
@@ -1087,7 +1090,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 		cache_read_input_tokens = 0
 
 	class _Response:
-		def __init__(self):
+		def __init__(self) -> None:
 			self.content = [
 				_TextBlock("hi"),
 				_TextBlock(""),
@@ -1128,8 +1131,8 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 	monkeypatch.setattr(am, "AnthropicInputJSONDelta", _InputJSONDelta)
 
 	class _DummyAnthropicClient:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _Response()
 
@@ -1171,13 +1174,13 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 	)
 
 	class _JsonResponse:
-		def __init__(self):
+		def __init__(self) -> None:
 			self.content = [_TextBlock('{"a": 1}')]
 			self.usage = _Usage()
 
 	class _Client2:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _JsonResponse()
 
@@ -1201,17 +1204,17 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 			)
 		],
 	)
-	assert msg_json.json == {"a": 1}
+	assert msg_json.json_content == {"a": 1}
 
 	# response_model parsing: non-dict json -> TextContent
 	class _ListResponse:
-		def __init__(self):
+		def __init__(self) -> None:
 			self.content = [_TextBlock("[1]")]
 			self.usage = _Usage()
 
 	class _ClientList:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _ListResponse()
 
@@ -1239,13 +1242,13 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 
 	# response_model parsing: invalid json -> TextContent
 	class _BadJsonResponse:
-		def __init__(self):
+		def __init__(self) -> None:
 			self.content = [_TextBlock("{bad")]
 			self.usage = _Usage()
 
 	class _Client3:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _BadJsonResponse()
 
@@ -1266,13 +1269,13 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 
 	# response_model parsing: empty combined text should not attempt json parsing
 	class _EmptyTextResponse:
-		def __init__(self):
+		def __init__(self) -> None:
 			self.content = [_TextBlock("")]
 			self.usage = _Usage()
 
 	class _ClientEmptyText:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _EmptyTextResponse()
 
@@ -1293,8 +1296,8 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 
 	# streaming
 	class _DummyStreamClient:
-		def __init__(self):
-			async def _create(**kwargs: Any):
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
 				return _DummyAsyncIterator(
 					[

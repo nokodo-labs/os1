@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC
 from time import time
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 from pydantic import Field, TypeAdapter
 
@@ -78,7 +78,7 @@ ContentPart = Annotated[
 	Field(discriminator="type"),
 ]
 
-ContentPartAdapter = TypeAdapter(ContentPart)
+ContentPartAdapter: TypeAdapter[ContentPart] = TypeAdapter(ContentPart)
 
 
 # --- usage tracking ---
@@ -123,7 +123,7 @@ class _HasTextContentHelpers(ABC):
 	"""shared helpers for messages that support a text constructor."""
 
 	@classmethod
-	def from_text(cls, text: str):
+	def from_text(cls, text: str) -> Self:
 		raise NotImplementedError
 
 	@property
@@ -186,7 +186,7 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 		)
 
 	@property
-	def json(self) -> JSONObject | None:
+	def json_content(self) -> JSONObject | None:
 		for part in self.content:
 			if isinstance(part, JsonContent):
 				return part.data
@@ -332,4 +332,4 @@ Message = Annotated[
 	Field(discriminator="role"),
 ]
 
-MessageAdapter = TypeAdapter(Message)
+MessageAdapter: TypeAdapter[Message] = TypeAdapter(Message)

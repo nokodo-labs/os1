@@ -285,9 +285,7 @@ async def update_plugin(
 	require_permission(principal, "plugins:manage")
 	plugin = await _get_db_plugin(plugin_id, session)
 
-	update_data = plugin_in.model_dump(exclude_unset=True)
-	if "metadata" in update_data:
-		update_data["metadata_"] = update_data.pop("metadata")
+	update_data = plugin_in.model_dump(exclude_unset=True, by_alias=True)
 
 	if plugin_in.name is not None:
 		await _ensure_name_available(

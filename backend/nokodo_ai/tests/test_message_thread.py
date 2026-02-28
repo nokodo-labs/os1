@@ -34,7 +34,7 @@ def test_assistant_message_with_tool_calls() -> None:
 	msg = AssistantMessage(content=[], tool_calls=[tool_call])
 	assert len(msg.tool_calls) == 1
 	assert msg.tool_calls[0].name == "get_weather"
-	assert msg.tool_calls[0].arguments["city"] == "paris"
+	assert msg.tool_calls[0].arguments["city"] == "paris"  # type: ignore[index, call-overload]
 
 
 def test_tool_call_default_id_is_set() -> None:
@@ -77,11 +77,11 @@ def test_assistant_json_and_refusal_helpers() -> None:
 			RefusalContent(reason="nope"),
 		],
 	)
-	assert msg.json == {"foo": "bar"}
+	assert msg.json_content == {"foo": "bar"}
 	assert msg.refusal == "nope"
 
 	plain = AssistantMessage.from_text("hi")
-	assert plain.json is None
+	assert plain.json_content is None
 	assert plain.refusal is None
 
 

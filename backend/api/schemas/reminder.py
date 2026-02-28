@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import Field
 
 from api.models.reminder import ReminderStatus
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -31,7 +31,7 @@ class ReminderListCreate(ReminderListBase):
 	pass
 
 
-class ReminderListUpdate(MetadataModel):
+class ReminderListUpdate(MetadataUpdateModel):
 	"""schema for updating a reminder list."""
 
 	name: str | None = Field(default=None, max_length=100)
@@ -81,7 +81,7 @@ class ReminderCreate(ReminderBase):
 	pass
 
 
-class ReminderUpdate(MetadataModel):
+class ReminderUpdate(MetadataUpdateModel):
 	"""schema for updating a reminder."""
 
 	title: str | None = Field(default=None, max_length=200)

@@ -51,7 +51,7 @@ async def test_refresh_clears_cookie_on_flag(
 ) -> None:
 	cleared = {"called": False}
 
-	def _mark_cleared(_response) -> None:
+	def _mark_cleared(_response: object) -> None:
 		cleared["called"] = True
 
 	monkeypatch.setattr(
@@ -107,7 +107,7 @@ async def test_refresh_does_not_clear_cookie_without_header(
 ) -> None:
 	cleared = {"called": False}
 
-	def _mark_cleared(_response) -> None:
+	def _mark_cleared(_response: object) -> None:
 		cleared["called"] = True
 
 	monkeypatch.setattr(
@@ -161,7 +161,7 @@ async def test_login_does_not_set_cookie_when_refresh_token_missing(
 	assert isinstance(user_email, str)
 	assert isinstance(user_password, str)
 
-	async def _ok(_user) -> Token:
+	async def _ok(_user: object) -> Token:
 		return Token(access_token="a", token_type="bearer", refresh_token=None)
 
 	monkeypatch.setattr(
@@ -184,7 +184,7 @@ async def test_logout_clears_cookie(
 ) -> None:
 	cleared = {"called": False}
 
-	def _mark_cleared(_response) -> None:
+	def _mark_cleared(_response: object) -> None:
 		cleared["called"] = True
 
 	monkeypatch.setattr(

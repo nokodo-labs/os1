@@ -115,11 +115,9 @@ async def update_role(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="role not found",
 		)
-	update_data = role_in.model_dump(exclude_unset=True)
+	update_data = role_in.model_dump(exclude_unset=True, by_alias=True)
 	for field, value in update_data.items():
-		if field == "metadata":
-			role.metadata_ = value
-		elif field == "default_permissions" and value is not None:
+		if field == "default_permissions" and value is not None:
 			dp = DefaultPermissions.model_validate(value)
 			role.default_permissions = dp.model_dump(
 				mode="json",

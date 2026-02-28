@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -47,11 +48,11 @@ class DummyApp:
 		self.scope = scope
 
 
-async def empty_receive():
+async def empty_receive() -> dict[str, str]:
 	return {"type": "http.request"}
 
 
-async def empty_send(message):
+async def empty_send(message: object) -> None:
 	return None
 
 
@@ -146,7 +147,6 @@ async def test_middleware_resets_context_after_request(test_app: Starlette) -> N
 @pytest.mark.asyncio
 async def test_middleware_isolates_concurrent_requests(test_app: Starlette) -> None:
 	"""test that concurrent requests have isolated contexts."""
-	import asyncio
 
 	results: list[dict] = []
 
@@ -280,7 +280,7 @@ async def test_request_logging_passthrough_non_http() -> None:
 async def test_exception_middleware_allows_http_exception() -> None:
 	"""HTTPException should bubble without conversion."""
 
-	async def app(scope, receive, send):  # type: ignore[override]
+	async def app(scope: Scope, receive: Receive, send: Send) -> None:  # type: ignore[override]
 		raise HTTPException(status_code=418)
 
 	req = Request(

@@ -96,3 +96,9 @@ python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+enable_incomplete_feature = ["TypeForm"]
+
+[dependency-groups]
+dev = [
+    "types-authlib>=1.6.8.20260215",
+]

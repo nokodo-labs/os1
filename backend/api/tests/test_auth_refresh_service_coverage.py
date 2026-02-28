@@ -7,6 +7,9 @@ from authlib.jose import JoseError
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.settings import settings
+from api.v1.service import auth as auth_service
+from nokodo_ai.utils.security import create_jwt_token
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -15,9 +18,8 @@ async def test_refresh_token_for_user_decode_error_raises_401(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.v1.service import auth as auth_service
 
-	def _boom(*_args, **_kwargs):
+	def _boom(*_args: object, **_kwargs: object) -> None:
 		raise JoseError("bad")
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _boom)
@@ -33,9 +35,8 @@ async def test_refresh_token_for_user_rejects_non_refresh_token(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.v1.service import auth as auth_service
 
-	def _decode(*_args, **_kwargs):
+	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"sub": new_typeid("user"), "typ": "access"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
@@ -50,9 +51,8 @@ async def test_refresh_token_for_user_rejects_missing_sub(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.v1.service import auth as auth_service
 
-	def _decode(*_args, **_kwargs):
+	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"typ": "refresh"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
@@ -67,9 +67,8 @@ async def test_refresh_token_for_user_rejects_bad_sub_prefix(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	from api.v1.service import auth as auth_service
 
-	def _decode(*_args, **_kwargs):
+	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"sub": "not-a-typeid", "typ": "refresh"}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
@@ -83,9 +82,6 @@ async def test_refresh_token_for_user_rejects_bad_sub_prefix(
 async def test_refresh_token_for_user_signals_clear_cookie_for_missing_user(
 	db_session: AsyncSession,
 ) -> None:
-	from api.settings import settings
-	from api.v1.service import auth as auth_service
-	from nokodo_ai.utils.security import create_jwt_token
 
 	missing_user_id = new_typeid("user")
 	refresh_token = create_jwt_token(

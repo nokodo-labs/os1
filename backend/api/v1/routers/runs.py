@@ -120,10 +120,10 @@ async def resume_run_stream(
 			for frame in sse_log:
 				yield frame
 			while True:
-				frame = await live_queue.get()
-				if frame is None:
+				live_frame = await live_queue.get()
+				if live_frame is None:
 					return
-				yield frame
+				yield live_frame
 		finally:
 			await run_status_store.unsubscribe(run_id, live_queue)
 

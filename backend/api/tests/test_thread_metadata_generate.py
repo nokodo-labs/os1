@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from httpx import AsyncClient
+
+from api.v1.service import threads as thread_service
 
 
 @pytest.mark.asyncio
@@ -15,13 +19,14 @@ async def test_generate_thread_metadata_fills_missing(
 	user = user_auth["user"]
 	assert isinstance(user, dict)
 
-	async def fake_resolve_task_chat_model(*_args, **_kwargs):
+	async def fake_resolve_task_chat_model(*_args: object, **_kwargs: object) -> Any:
 		return object()
 
-	async def fake_run_chat_model_json_schema(*_args, **_kwargs):
+	async def fake_run_chat_model_json_schema(
+		*_args: object, **_kwargs: object
+	) -> dict[str, object]:
 		return {"title": "🔧 fix login", "tags": ["auth", "bug"]}
 
-	from api.v1.service import threads as thread_service
 
 	monkeypatch.setattr(
 		thread_service,
@@ -71,13 +76,14 @@ async def test_generate_thread_metadata_does_not_replace_when_fill_missing(
 	user = user_auth["user"]
 	assert isinstance(user, dict)
 
-	async def fake_resolve_task_chat_model(*_args, **_kwargs):
+	async def fake_resolve_task_chat_model(*_args: object, **_kwargs: object) -> Any:
 		return object()
 
-	async def fake_run_chat_model_json_schema(*_args, **_kwargs):
+	async def fake_run_chat_model_json_schema(
+		*_args: object, **_kwargs: object
+	) -> dict[str, object]:
 		return {"title": "🧠 new title", "tags": ["new"]}
 
-	from api.v1.service import threads as thread_service
 
 	monkeypatch.setattr(
 		thread_service,
@@ -134,13 +140,14 @@ async def test_generate_thread_metadata_replaces_when_replace_true(
 	user = user_auth["user"]
 	assert isinstance(user, dict)
 
-	async def fake_resolve_task_chat_model(*_args, **_kwargs):
+	async def fake_resolve_task_chat_model(*_args: object, **_kwargs: object) -> Any:
 		return object()
 
-	async def fake_run_chat_model_json_schema(*_args, **_kwargs):
+	async def fake_run_chat_model_json_schema(
+		*_args: object, **_kwargs: object
+	) -> dict[str, object]:
 		return {"title": "🧠 new title", "tags": ["new"]}
 
-	from api.v1.service import threads as thread_service
 
 	monkeypatch.setattr(
 		thread_service,

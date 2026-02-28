@@ -85,7 +85,7 @@ def validate[T](
 def _validate_pydantic[T](value: object, expected_type: TypeForm[T]) -> T:
 	"""validate that a value is of the expected pydantic model type."""
 
-	adapter = TypeAdapter(expected_type)
+	adapter: TypeAdapter[T] = TypeAdapter(expected_type)
 	return cast(T, adapter.validate_python(value))
 
 

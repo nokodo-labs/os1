@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from api.models.message import MessageType
 from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
 from api.schemas.content import TextContent
@@ -14,7 +15,7 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.message import MessageCreate
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
-from api.schemas.runs import RunRequest
+from api.schemas.runs import RunRequest, ThreadCreateAndRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
 from nokodo_ai.utils.typeid import new_typeid
@@ -51,7 +52,7 @@ def test_project_schema_populates_thread_ids() -> None:
 	project.threads = [thread]
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == [thread_id]
+	assert serialized.thread_ids == [thread_id]  # type: ignore[attr-defined]
 
 
 def test_project_schema_handles_empty_threads() -> None:
@@ -63,7 +64,7 @@ def test_project_schema_handles_empty_threads() -> None:
 	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == []
+	assert serialized.thread_ids == []  # type: ignore[attr-defined]
 
 
 def test_project_schema_respects_existing_thread_ids() -> None:
@@ -73,11 +74,11 @@ def test_project_schema_respects_existing_thread_ids() -> None:
 		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
 		project_id=new_typeid("proj"),
 	)
-	project.thread_ids = [preloaded_thread_id]
+	project.thread_ids = [preloaded_thread_id]  # type: ignore[attr-defined]
 	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == [preloaded_thread_id]
+	assert serialized.thread_ids == [preloaded_thread_id]  # type: ignore[attr-defined]
 
 
 def test_thread_schema_populates_project_ids() -> None:
@@ -107,7 +108,7 @@ def test_message_create_normalizes_content_variants() -> None:
 	from_list = MessageCreate(content=[part_dict, model_part])
 	from_empty = MessageCreate(content="")
 
-	assert from_str.content[0]["text"] == text
+	assert from_str.content[0]["text"] == text  # type: ignore[index]
 	assert from_list.content == [part_dict, model_part.model_dump()]
 	assert from_empty.content == []
 
@@ -146,7 +147,6 @@ def test_run_request_requires_agent_id() -> None:
 	assert req_with_input.input == "hello"
 
 	# ThreadCreateAndRunRequest
-	from api.schemas.runs import ThreadCreateAndRunRequest
 
 	car_req = ThreadCreateAndRunRequest(agent_id=new_typeid("agent"), input="hi")
 	assert car_req.is_temporary is False
@@ -181,7 +181,6 @@ def test_schema_coerces_none_metadata_to_empty_dict() -> None:
 
 
 def test_message_create_validates_type_specific_fields() -> None:
-	from api.models.message import MessageType
 
 	# tool messages require tool_call_id and is_error
 	with pytest.raises(ValueError, match="tool_call_id is required"):

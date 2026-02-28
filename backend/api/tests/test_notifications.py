@@ -1,5 +1,7 @@
 """Tests for notification service and endpoints."""
 
+from typing import Any
+
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
@@ -19,7 +21,7 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest_asyncio.fixture
-async def notification_fixture(db_session: AsyncSession):
+async def notification_fixture(db_session: AsyncSession) -> dict[str, Any]:
 	"""Create a user, event, and notification."""
 	# Create user
 	user_in = UserCreate(
@@ -54,7 +56,7 @@ async def notification_fixture(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_list_user_notifications(
-	db_session: AsyncSession, notification_fixture
+	db_session: AsyncSession, notification_fixture: dict[str, Any]
 ) -> None:
 	"""Test listing notifications."""
 	user = notification_fixture["user"]
@@ -70,7 +72,7 @@ async def test_list_user_notifications(
 
 @pytest.mark.asyncio
 async def test_mark_notification_read(
-	db_session: AsyncSession, notification_fixture
+	db_session: AsyncSession, notification_fixture: dict[str, Any]
 ) -> None:
 	"""Test marking notification as read."""
 	notification = notification_fixture["notification"]
@@ -88,7 +90,7 @@ async def test_mark_notification_read(
 
 @pytest.mark.asyncio
 async def test_dismiss_notification(
-	db_session: AsyncSession, notification_fixture
+	db_session: AsyncSession, notification_fixture: dict[str, Any]
 ) -> None:
 	"""Test dismissing notification."""
 	notification = notification_fixture["notification"]
@@ -108,7 +110,7 @@ async def test_dismiss_notification(
 
 @pytest.mark.asyncio
 async def test_list_unread_notifications(
-	db_session: AsyncSession, notification_fixture
+	db_session: AsyncSession, notification_fixture: dict[str, Any]
 ) -> None:
 	"""Test listing only unread notifications."""
 	user = notification_fixture["user"]
@@ -215,7 +217,7 @@ async def test_notification_access_guard(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_dismiss_notification_endpoint(
-	client: AsyncClient, db_session: AsyncSession, notification_fixture
+	client: AsyncClient, db_session: AsyncSession, notification_fixture: dict[str, Any]
 ) -> None:
 	"""Ensure POST /v1/notifications/{id}/dismiss toggles the state."""
 	notification = notification_fixture["notification"]

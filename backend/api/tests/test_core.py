@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+import types
 from unittest.mock import MagicMock
 
 import pytest
 
 from api.boot_settings import BootSettings
-from api.core import database as database_module
 from api.core import runtime as config_module
+from api.core import runtime as runtime_module
+from api.database import main as database_module
 from api.settings.settings import SecuritySettings
 
 
@@ -41,15 +43,15 @@ class _DummySessionContext:
 	async def __aenter__(self) -> _DummySession:
 		return self._session
 
-	async def __aexit__(self, exc_type, exc, tb) -> None:
+	async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
 		self.exited = True
 
 
 class _DummyConnection:
 	def __init__(self) -> None:
-		self.called_with = None
+		self.called_with: object = None
 
-	async def run_sync(self, fn):
+	async def run_sync(self, fn: object) -> None:
 		self.called_with = fn
 
 
@@ -57,14 +59,16 @@ class _DummyEngine:
 	def __init__(self, connection: _DummyConnection) -> None:
 		self._connection = connection
 
-	def begin(self):
+	def begin(self) -> object:
 		connection = self._connection
 
 		class _BeginContext:
-			async def __aenter__(self):
+			async def __aenter__(self) -> _DummyConnection:
 				return connection
 
-			async def __aexit__(self, exc_type, exc, tb):  # pragma: no cover
+			async def __aexit__(
+				self, exc_type: object, exc: object, tb: object
+			) -> bool:  # pragma: no cover
 				return False
 
 		return _BeginContext()
@@ -91,13 +95,10 @@ def test_psycopg_event_loop_policy_noop_off_windows(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""Policy helper should be a no-op when not on Windows."""
-	import types
-
-	from api.core import runtime as runtime_module
 
 	called = False
 
-	def _mark_called(_policy) -> None:
+	def _mark_called(_policy: object) -> None:
 		nonlocal called
 		called = True
 

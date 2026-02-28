@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
+from collections.abc import AsyncGenerator, AsyncIterator
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.file import FileSource, FileStatus
+from api.storage import get_storage_backend
 from api.v1.service.files import delete_content, read_content, store_file
 from nokodo_ai.utils.typeid import new_typeid
 
@@ -290,7 +293,6 @@ class TestFileRoundTrip:
 	) -> None:
 		"""verify a file larger than the chunk size round-trips correctly."""
 		headers = admin_auth["headers"]
-		import os
 
 		original = os.urandom(512 * 1024)  # 512 KB
 		upload_resp = await client.post(
@@ -360,7 +362,7 @@ class TestMetadataCreateFile:
 # ---------------------------------------------------------------------------
 
 
-async def _collect(stream) -> bytes:
+async def _collect(stream: AsyncIterator[bytes]) -> bytes:
 	parts: list[bytes] = []
 	async for chunk in stream:
 		parts.append(chunk)
@@ -397,7 +399,7 @@ class TestStoreFile:
 		owner_id = admin_auth["user"]["id"]
 		chunks = [b"chunk1", b"chunk2"]
 
-		async def gen():
+		async def gen() -> AsyncGenerator[bytes]:
 			for c in chunks:
 				yield c
 
@@ -472,7 +474,6 @@ class TestReadContent:
 			owner_id=owner_id,
 		)
 		# manually delete storage object
-		from api.storage import get_storage_backend
 
 		backend = get_storage_backend(file.storage_backend)
 		await backend.delete(file.storage_key)
@@ -491,7 +492,6 @@ class TestDeleteContent:
 			data=b"deletable",
 			owner_id=owner_id,
 		)
-		from api.storage import get_storage_backend
 
 		backend = get_storage_backend(file.storage_backend)
 		assert await backend.exists(file.storage_key)
@@ -508,7 +508,6 @@ class TestDeleteContent:
 			data=b"gone",
 			owner_id=owner_id,
 		)
-		from api.storage import get_storage_backend
 
 		backend = get_storage_backend(file.storage_backend)
 		await backend.delete(file.storage_key)

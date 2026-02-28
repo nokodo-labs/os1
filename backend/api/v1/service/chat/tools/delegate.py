@@ -91,7 +91,7 @@ class DelegateTool(Tool[AppContext]):
 	async def call(
 		self,
 		__agent_context__: AgentContext,
-		__app_context__: AppContext,
+		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		"""create a new sub-agent and delegate a task to it."""

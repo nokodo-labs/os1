@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from openai import AsyncOpenAI
 
 from ..base import BaseClientAdapter
@@ -19,7 +21,7 @@ class BaseOpenAIAdapter(BaseClientAdapter[AsyncOpenAI]):
 
 	def _get_client(self) -> AsyncOpenAI:
 		"""get (or create) an AsyncOpenAI client."""
-		args = {}
+		args: dict[str, Any] = {}
 		args["timeout"] = self.timeout
 		if self.api_key is not None:
 			args["api_key"] = self.api_key

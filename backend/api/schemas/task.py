@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from api.models.task import TaskStatus, TaskType
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -27,7 +27,7 @@ class TaskCreate(TaskBase):
 	spawned_thread_id: TypeID | None = None
 
 
-class TaskUpdate(MetadataModel):
+class TaskUpdate(MetadataUpdateModel):
 	"""Mutable task fields for PATCH operations."""
 
 	status: TaskStatus | None = None

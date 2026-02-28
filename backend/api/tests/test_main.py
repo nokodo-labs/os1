@@ -76,7 +76,7 @@ async def test_lifespan_skips_db_init_when_testing(
 
 
 @pytest.mark.asyncio
-async def test_system_status_endpoint(client):
+async def test_system_status_endpoint(client: AsyncClient) -> None:
 	response = await client.get("/system/status")
 	assert response.status_code == 200
 	data = response.json()
@@ -85,7 +85,7 @@ async def test_system_status_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_public_settings_endpoint(client):
+async def test_public_settings_endpoint(client: AsyncClient) -> None:
 	response = await client.get("/v1/settings")
 	assert response.status_code == 200
 	data = response.json()

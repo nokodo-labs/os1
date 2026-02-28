@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from api.models.provider import ProviderStatus, ProviderType
-from api.schemas.common import MetadataModel, TimestampedModel
+from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 
 
 class ProviderBase(MetadataModel):
@@ -29,7 +29,7 @@ class ProviderCreate(ProviderBase):
 	api_key: str | None = None
 
 
-class ProviderUpdate(MetadataModel):
+class ProviderUpdate(MetadataUpdateModel):
 	"""Partial provider update payload."""
 
 	adapter_type: str | None = None

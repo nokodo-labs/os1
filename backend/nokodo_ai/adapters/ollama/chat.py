@@ -23,7 +23,6 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		model: str,
 		stream: Literal[False] = False,
 		tools: list[ToolDefinition] = [],
@@ -34,7 +33,6 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		model: str,
 		stream: Literal[True],
 		tools: list[ToolDefinition] = [],
@@ -44,7 +42,6 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 	def generate(
 		self,
 		messages: list[Message],
-		*,
 		model: str,
 		stream: bool = False,
 		tools: list[ToolDefinition] = [],
@@ -54,10 +51,10 @@ class OllamaChatAdapter(BaseOllamaAdapter, BaseChatAdapter):
 			return self._stream(messages)
 		return self._complete(messages)
 
-	async def _complete(self, messages: list[Message]) -> Awaitable[AssistantMessage]:
+	async def _complete(self, messages: list[Message]) -> AssistantMessage:
 		"""generate a completion using ollama chat API."""
 		raise NotImplementedError("ollama chat adapter not yet implemented")
 
-	async def _stream(self, messages: list[Message]) -> AsyncIterator[AssistantMessage]:
+	def _stream(self, messages: list[Message]) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using ollama chat API."""
 		raise NotImplementedError("ollama chat adapter not yet implemented")

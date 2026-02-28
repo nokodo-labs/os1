@@ -7,7 +7,12 @@ from typing import Any
 from pydantic import Field
 
 from api.permissions import DefaultPermissions
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MetadataModel,
+	MetadataUpdateModel,
+	ORMModel,
+	TimestampedModel,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -24,10 +29,10 @@ class RoleBase(MetadataModel):
 class RoleCreate(RoleBase):
 	"""schema for creating a role."""
 
-	priority: int | None = None
+	# inherits priority: int = 0 from RoleBase
 
 
-class RoleUpdate(ORMModel):
+class RoleUpdate(MetadataUpdateModel):
 	"""schema for updating a role."""
 
 	name: str | None = None
@@ -35,7 +40,6 @@ class RoleUpdate(ORMModel):
 	quotas: dict[str, Any] | None = None
 	priority: int | None = None
 	default_permissions: DefaultPermissions | None = None
-	metadata: dict[str, Any] | None = None
 
 
 class Role(RoleBase, TimestampedModel, ORMModel):

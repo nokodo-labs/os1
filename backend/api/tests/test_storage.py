@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import os
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
+from api.storage import _BACKENDS, close_all, get_storage_backend, register
 from api.storage.base import FileInfo, StorageBackend
 from api.storage.local import LocalStorageBackend
 
@@ -23,7 +24,7 @@ def _sha256(data: bytes) -> str:
 	return hashlib.sha256(data).hexdigest()
 
 
-async def _collect(stream) -> bytes:
+async def _collect(stream: AsyncIterator[bytes]) -> bytes:
 	"""collect an async iterator into bytes."""
 	parts: list[bytes] = []
 	async for chunk in stream:
@@ -79,25 +80,32 @@ class TestStorageBackendABC:
 		"""concrete close() should be callable without error."""
 
 		class Stub(StorageBackend):
-			async def put(self, key, data, content_type):
+			async def put(
+				self,
+				key: str,
+				data: bytes | AsyncIterator[bytes],
+				content_type: str | None,
+			) -> None:
 				pass
 
-			async def get(self, key):
+			async def get(self, key: str) -> AsyncIterator[bytes]:  # type: ignore[override, misc]
 				yield b""
 
-			async def delete(self, key):
+			async def delete(self, key: str) -> None:
 				pass
 
-			async def exists(self, key):
+			async def exists(self, key: str) -> bool:
 				return False
 
-			async def stat(self, key):
+			async def stat(self, key: str) -> FileInfo | None:
 				return None
 
-			async def copy(self, src_key, dst_key):
+			async def copy(self, src_key: str, dst_key: str) -> None:
 				pass
 
-			async def get_url(self, key, expires_in=None):
+			async def get_url(
+				self, key: str, expires_in: int | None = None
+			) -> str | None:
 				return None
 
 		stub = Stub(name="stub")
@@ -109,28 +117,35 @@ class TestStorageBackendABC:
 		expected = _sha256(payload)
 
 		class Stub(StorageBackend):
-			async def put(self, key, data, content_type):
+			async def put(
+				self,
+				key: str,
+				data: bytes | AsyncIterator[bytes],
+				content_type: str | None,
+			) -> None:
 				pass
 
-			async def get(self, key):
-				async def _gen():
+			async def get(self, key: str) -> AsyncIterator[bytes]:
+				async def _gen() -> AsyncGenerator[bytes]:
 					yield payload
 
 				return _gen()
 
-			async def delete(self, key):
+			async def delete(self, key: str) -> None:
 				pass
 
-			async def exists(self, key):
+			async def exists(self, key: str) -> bool:
 				return True
 
-			async def stat(self, key):
+			async def stat(self, key: str) -> FileInfo | None:
 				return None
 
-			async def copy(self, src_key, dst_key):
+			async def copy(self, src_key: str, dst_key: str) -> None:
 				pass
 
-			async def get_url(self, key, expires_in=None):
+			async def get_url(
+				self, key: str, expires_in: int | None = None
+			) -> str | None:
 				return None
 
 		stub = Stub(name="stub")
@@ -164,7 +179,7 @@ class TestLocalStorageBackend:
 	async def test_put_and_get_stream(self, local_backend: LocalStorageBackend) -> None:
 		chunks = [b"chunk1", b"chunk2", b"chunk3"]
 
-		async def stream():
+		async def stream() -> AsyncGenerator[bytes]:
 			for c in chunks:
 				yield c
 
@@ -290,7 +305,7 @@ class TestLocalStorageBackend:
 	) -> None:
 		"""verify temp file is cleaned up on write error."""
 
-		async def bad_stream():
+		async def bad_stream() -> AsyncGenerator[bytes]:
 			yield b"some data"
 			raise RuntimeError("write failed")
 
@@ -311,7 +326,6 @@ class TestStorageRegistry:
 
 	@pytest.fixture(autouse=True)
 	def _isolate(self) -> Generator[None]:
-		from api.storage import _BACKENDS
 
 		saved = dict(_BACKENDS)
 		_BACKENDS.clear()
@@ -323,7 +337,6 @@ class TestStorageRegistry:
 
 	def test_register_and_get(self, local_root: Path) -> None:
 		"""register a backend then retrieve it by name."""
-		from api.storage import get_storage_backend, register
 
 		backend = LocalStorageBackend(root_path=str(local_root))
 		register("local", backend)
@@ -333,7 +346,6 @@ class TestStorageRegistry:
 
 	def test_register_twice_replaces(self, local_root: Path) -> None:
 		"""registering the same name replaces the previous instance."""
-		from api.storage import get_storage_backend, register
 
 		a = LocalStorageBackend(root_path=str(local_root / "a"))
 		b = LocalStorageBackend(root_path=str(local_root / "b"))
@@ -344,14 +356,12 @@ class TestStorageRegistry:
 
 	def test_unregistered_backend_raises(self) -> None:
 		"""get_storage_backend raises ValueError for unknown names."""
-		from api.storage import get_storage_backend
 
 		with pytest.raises(ValueError, match="not registered"):
 			get_storage_backend("nonexistent")
 
 	async def test_close_all(self) -> None:
 		"""close_all calls close() on every backend and empties the registry."""
-		from api.storage import _BACKENDS, close_all
 
 		mock_backend = AsyncMock(spec=StorageBackend)
 		mock_backend.name = "mock"

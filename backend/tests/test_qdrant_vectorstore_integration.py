@@ -2,6 +2,7 @@ import hashlib
 import math
 import os
 import uuid
+from typing import Any
 
 import pytest
 from qdrant_client import AsyncQdrantClient
@@ -30,7 +31,7 @@ def _toy_embed(text: str, *, dim: int = 64) -> list[float]:
 
 
 async def _qdrant_reachable(url: str) -> bool:
-	client_kwargs: dict[str, object]
+	client_kwargs: dict[str, Any]
 	if url == ":memory:" or "://" not in url:
 		client_kwargs = {"location": url}
 	else:

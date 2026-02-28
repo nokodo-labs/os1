@@ -74,7 +74,7 @@ class Tool[AppContextT = None](Base, ABC):
 	async def call(
 		self,
 		__agent_context__: AgentContext,
-		__app_context__: AppContextT,
+		__app_context__: AppContextT | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		"""execute the tool with the given arguments.
@@ -118,11 +118,16 @@ class Tool[AppContextT = None](Base, ABC):
 		)
 
 
-def tool[AppContextT = None](name: str | None = None, description: str | None = None):
+def tool[AppContextT = None](
+	name: str | None = None, description: str | None = None
+) -> Callable[
+	[Callable[Concatenate[AgentContext, AppContextT | None, ...], ToolMessage]],
+	Tool[AppContextT],
+]:
 	"""decorator to define a function as a Tool subclass."""
 
 	def decorator(
-		func: Callable[Concatenate[AgentContext, AppContextT, ...], ToolMessage],
+		func: Callable[Concatenate[AgentContext, AppContextT | None, ...], ToolMessage],
 	) -> Tool[AppContextT]:
 		# validate structure only - skip type check on __app_context__ since it's
 		# a TypeVar that can be any type
@@ -141,7 +146,7 @@ def tool[AppContextT = None](name: str | None = None, description: str | None = 
 			async def call(
 				self,
 				__agent_context__: AgentContext,
-				__app_context__: AppContextT,
+				__app_context__: AppContextT | None,
 				**kwargs: object,
 			) -> ToolMessage:
 				return func(

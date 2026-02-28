@@ -177,8 +177,8 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 	) -> AsyncIterator[AssistantMessage]:
 		"""stream a completion using /v1/responses."""
 
-		openai_tools = openai.omit
-		openai_tool_choice = openai.omit
+		openai_tools: list[OpenAIResponseFunctionToolParam] | openai.Omit = openai.omit
+		openai_tool_choice: OpenAIResponseToolChoice | openai.Omit = openai.omit
 		if tools:
 			openai_tools = _tools_to_openai_responses(tools)
 			if params.tool_choice is not None:
@@ -253,19 +253,19 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 
 			# --- tool call: argument fragment ---
 			if isinstance(event, OpenAIResponseFunctionCallArgumentsDeltaEvent):
-				call_id = idx_to_call_id.get(event.output_index)
-				if call_id and call_id in call_id_to_sdk_id and event.delta:
+				frag_call_id = idx_to_call_id.get(event.output_index)
+				if frag_call_id and frag_call_id in call_id_to_sdk_id and event.delta:
 					tc = ToolCall(
-						id=call_id_to_sdk_id[call_id],
-						name=tc_names.get(call_id, ""),
+						id=call_id_to_sdk_id[frag_call_id],
+						name=tc_names.get(frag_call_id, ""),
 						arguments=event.delta,
-						created_at=tc_created_at[call_id],
+						created_at=tc_created_at[frag_call_id],
 						updated_at=now,
-						metadata=tc_metadata.get(call_id),
+						metadata=tc_metadata.get(frag_call_id),
 					)
 					yield AssistantMessage(
 						tool_calls=[tc],
-						created_at=tc_created_at[call_id],
+						created_at=tc_created_at[frag_call_id],
 						updated_at=now,
 					)
 				continue
@@ -378,6 +378,10 @@ def _tools_to_openai_responses(
 
 
 def _tool_choice_to_openai_responses(tool_choice: str) -> OpenAIResponseToolChoice:
-	if tool_choice in ("auto", "none", "required"):
-		return tool_choice
+	if tool_choice == "auto":
+		return "auto"
+	if tool_choice == "none":
+		return "none"
+	if tool_choice == "required":
+		return "required"
 	return {"type": "function", "name": tool_choice}

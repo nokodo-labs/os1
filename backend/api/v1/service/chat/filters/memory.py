@@ -32,8 +32,10 @@ class MemoryContextFilter(Filter):
 	async def process(
 		self,
 		thread: SDKThread,
-		app_context: AppContext,
+		app_context: AppContext | None,
 	) -> SDKThread:
+		if app_context is None:
+			raise ValueError("AppContext is required for MemoryContextFilter")
 		memories = await self._fetch_memories(app_context)
 		if not memories:
 			return thread

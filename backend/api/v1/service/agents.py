@@ -137,7 +137,7 @@ async def update_agent(
 	if agent_in.model_id is not None:
 		await _ensure_model(agent_in.model_id, session)
 
-	update_data = agent_in.model_dump(exclude_unset=True)
+	update_data = agent_in.model_dump(exclude_unset=True, by_alias=True)
 	for field, value in update_data.items():
 		setattr(agent, field, value)
 

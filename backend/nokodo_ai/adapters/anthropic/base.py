@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from anthropic import AsyncAnthropic
 
 from ..base import BaseClientAdapter
@@ -25,7 +27,7 @@ class BaseAnthropicAdapter(BaseClientAdapter[AsyncAnthropic]):
 
 	def _get_client(self) -> AsyncAnthropic:
 		"""get (or create) an AsyncAnthropic client."""
-		args = {}
+		args: dict[str, Any] = {}
 		args["timeout"] = self.timeout
 		if self.api_key is not None:
 			args["api_key"] = self.api_key
