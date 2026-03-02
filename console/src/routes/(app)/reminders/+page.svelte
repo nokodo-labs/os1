@@ -2,11 +2,11 @@
 	import { browser } from '$app/environment'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type Reminder = Schemas['Reminder']
 	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
 	type SearchResultItem = Schemas['SearchResultItem']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import ReminderListDetailsModal from '$lib/components/ReminderListDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
@@ -21,13 +21,12 @@
 	import {
 		ArrowDown,
 		ArrowUp,
-		ChevronDown,
-		ChevronRight,
 		Circle,
 		CircleCheck,
 		Clock,
 		Hash,
 		ListChecks,
+		Search,
 		User,
 	} from '@lucide/svelte'
 
@@ -56,18 +55,16 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 
-	let expandedListId = $state<string | null>(null)
-	let listReminders = $state<Reminder[]>([])
-	let isRemindersLoading = $state(false)
-	let remindersError = $state<string | null>(null)
-
-	let isUserDetailsOpen = $state(false)
-	let selectedUserId = $state<string | null>(null)
-
 	let searchResults = $state<SearchResultItem[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
+
+	let isUserDetailsOpen = $state(false)
+	let selectedUserId = $state<string | null>(null)
+
+	let isListDetailsOpen = $state(false)
+	let selectedListId = $state<string | null>(null)
 
 	$effect(() => {
 		const q = searchQuery.trim()
@@ -100,6 +97,11 @@
 		isUserDetailsOpen = true
 	}
 
+	function openList(listId: string) {
+		selectedListId = listId
+		isListDetailsOpen = true
+	}
+
 	function refresh() {
 		refreshToken += 1
 	}
@@ -111,37 +113,6 @@
 
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
-	}
-
-	async function toggleExpand(listId: string) {
-		if (expandedListId === listId) {
-			expandedListId = null
-			listReminders = []
-			return
-		}
-		expandedListId = listId
-		isRemindersLoading = true
-		remindersError = null
-		try {
-			listReminders = unwrap(
-				await api.GET('/v1/reminders', {
-					params: {
-						query: {
-							list_id: listId,
-							include_subtasks: true,
-							limit: 100,
-							sort_by: 'position',
-							sort_dir: 'asc',
-						},
-					},
-				})
-			)
-		} catch (e: unknown) {
-			remindersError = e instanceof Error ? e.message : 'failed to load reminders'
-			listReminders = []
-		} finally {
-			isRemindersLoading = false
-		}
 	}
 
 	$effect(() => {
@@ -184,12 +155,17 @@
 			<p class="text-zinc-400">all reminder lists and their reminders.</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			<Input
-				type="search"
-				placeholder="search lists..."
-				bind:value={searchQuery}
-				class="h-9 w-50 lg:w-75"
-			/>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search lists..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as ListSortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">
@@ -321,27 +297,25 @@
 
 				{#each lists as list (list.id)}
 					<div
-						class="rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-zinc-700"
+						role="button"
+						tabindex="0"
+						class="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-zinc-700"
+						onclick={(e: MouseEvent) => {
+							if (
+								(e.target as HTMLElement).closest('button:not([data-row-click])') ==
+								null
+							) {
+								openList(list.id)
+							}
+						}}
+						onkeydown={(e: KeyboardEvent) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault()
+								openList(list.id)
+							}
+						}}
 					>
-						<div
-							role="button"
-							tabindex="0"
-							class="flex w-full cursor-pointer items-start gap-3 p-4 text-left"
-							onclick={() => toggleExpand(list.id)}
-							onkeydown={(e: KeyboardEvent) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault()
-									toggleExpand(list.id)
-								}
-							}}
-						>
-							<div class="mt-0.5 shrink-0 text-zinc-500">
-								{#if expandedListId === list.id}
-									<ChevronDown class="h-4 w-4" />
-								{:else}
-									<ChevronRight class="h-4 w-4" />
-								{/if}
-							</div>
+						<div class="flex w-full items-start gap-3 p-4 text-left">
 							<div class="min-w-0 flex-1 space-y-2">
 								<div class="flex items-center gap-2">
 									{#if list.color}
@@ -408,93 +382,6 @@
 								</div>
 							</div>
 						</div>
-						{#if expandedListId === list.id}
-							<div class="border-t border-zinc-800 px-4 py-3">
-								{#if isRemindersLoading}
-									<div class="flex items-center justify-center p-6">
-										<NokodoLoader />
-									</div>
-								{:else if remindersError}
-									<div
-										class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
-									>
-										{remindersError}
-									</div>
-								{:else if listReminders.length === 0}
-									<div class="py-4 text-center text-sm text-zinc-500">
-										no reminders in this list
-									</div>
-								{:else}
-									<div class="space-y-1">
-										{#each listReminders as reminder (reminder.id)}
-											<div
-												class="flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
-											>
-												<div class="mt-0.5 shrink-0">
-													{#if reminder.status === 'completed'}
-														<CircleCheck
-															class="h-4 w-4 text-emerald-400"
-														/>
-													{:else}
-														<Circle class="h-4 w-4 text-zinc-500" />
-													{/if}
-												</div>
-												<div class="min-w-0 flex-1">
-													<div
-														class="text-sm font-medium {reminder.status ===
-														'completed'
-															? 'text-zinc-500 line-through'
-															: ''}"
-													>
-														{reminder.title}
-													</div>
-													{#if reminder.description}
-														<div
-															class="mt-0.5 line-clamp-1 text-xs text-zinc-400"
-														>
-															{reminder.description}
-														</div>
-													{/if}
-													<div
-														class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500"
-													>
-														<div>id: {reminder.id}</div>
-														{#if reminder.due_at}
-															<div>
-																due: {new Date(
-																	reminder.due_at
-																).toLocaleString()}
-															</div>
-														{/if}
-														{#if reminder.completed_at}
-															<div>
-																completed: {new Date(
-																	reminder.completed_at
-																).toLocaleString()}
-															</div>
-														{/if}
-														<div>
-															owner:
-															<button
-																type="button"
-																class="ml-1 underline underline-offset-4 hover:text-zinc-200"
-																onclick={() =>
-																	openUser(reminder.owner_id)}
-															>
-																{reminder.owner_id}
-															</button>
-														</div>
-													</div>
-												</div>
-												<div class="shrink-0 text-xs text-zinc-500">
-													{new Date(reminder.updated_at).toLocaleString()}
-												</div>
-											</div>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
 					</div>
 				{/each}
 			{/if}
@@ -503,3 +390,15 @@
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
+<ReminderListDetailsModal
+	bind:open={isListDetailsOpen}
+	listId={selectedListId}
+	onViewUser={(userId) => openUser(userId)}
+	onUpdated={(l) => {
+		lists = lists.map((x) => (x.id === l.id ? { ...x, ...l } : x))
+	}}
+	onDeleted={(id) => {
+		lists = lists.filter((x) => x.id !== id)
+		isListDetailsOpen = false
+	}}
+/>

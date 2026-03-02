@@ -15,7 +15,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Pencil, Plus, Trash2, X } from '@lucide/svelte'
+	import { Pencil, Plus, Search, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -355,12 +355,17 @@
 	</div>
 
 	<div class="flex w-full shrink-0 items-center space-x-2">
-		<Input
-			type="search"
-			placeholder="search models..."
-			bind:value={searchQuery}
-			class="h-9 max-w-sm"
-		/>
+		<div class="relative">
+			<Search
+				class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+			/>
+			<Input
+				type="search"
+				placeholder="search models..."
+				bind:value={searchQuery}
+				class="h-9 max-w-sm pl-8"
+			/>
+		</div>
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-y-auto">

@@ -19,6 +19,22 @@
 
 	const categories: Category[] = [
 		{
+			label: 'filter injection points',
+			description:
+				'variables that activate filters. include them in your system prompt to enable the corresponding filter',
+			variables: [
+				{
+					name: 'user_memories',
+					description: 'injects saved user memories (requires memory_context filter)',
+				},
+				{
+					name: 'referenced_attachments',
+					description:
+						'injects decayed attachment manifest (requires attachment_decay filter)',
+				},
+			],
+		},
+		{
 			label: 'user profile',
 			description: 'information about the authenticated user',
 			variables: [

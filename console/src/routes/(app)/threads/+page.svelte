@@ -28,6 +28,7 @@
 		Clock,
 		Hash,
 		MessageSquare,
+		Search,
 		Timer,
 		Trash2,
 		User,
@@ -239,12 +240,17 @@
 			<p class="text-zinc-400">all threads in the system (including hidden).</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			<Input
-				type="search"
-				placeholder="search threads..."
-				bind:value={searchQuery}
-				class="h-9 w-50 lg:w-75"
-			/>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search threads..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">{sortLabel(sortKey)}</span>

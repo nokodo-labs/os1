@@ -27,6 +27,7 @@
 		Hash,
 		MessageSquare,
 		Percent,
+		Search,
 		Tag,
 		User,
 	} from '@lucide/svelte'
@@ -225,12 +226,17 @@
 			<p class="text-zinc-400">user-scoped memories (use filters; start from a user).</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			<Input
-				type="search"
-				placeholder="search memories..."
-				bind:value={searchQuery}
-				class="h-9 w-50 lg:w-75"
-			/>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search memories..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">

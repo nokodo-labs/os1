@@ -23,7 +23,7 @@
 	>
 		<Check class="h-3 w-3" />
 	</span>
-	<span class="ml-6 flex-1 truncate">
+	<span class="flex-1 truncate">
 		{@render children?.()}
 	</span>
 </SelectPrimitive.Item>

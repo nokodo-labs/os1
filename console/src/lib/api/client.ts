@@ -18,6 +18,7 @@ function getApiBase(): string {
 }
 
 const DEFAULT_API_BASE = getApiBase()
+export { DEFAULT_API_BASE }
 
 // ── deduped refresh ──────────────────────────────────────────────────
 let refreshInFlight: Promise<string | null> | null = null
@@ -51,7 +52,7 @@ async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 }
 
 /** authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
-async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	await authReady
 
 	const req = input instanceof Request ? input : new Request(input, init)

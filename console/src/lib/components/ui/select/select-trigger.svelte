@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils'
+	import { ChevronDown } from '@lucide/svelte'
 	import { Select as SelectPrimitive } from 'bits-ui'
 
 	let { class: className = '', children, ...rest }: SelectPrimitive.TriggerProps = $props()
@@ -12,5 +13,8 @@
 	)}
 	{...rest}
 >
-	{@render children?.()}
+	{#if children}
+		<span class="min-w-0 flex-1 truncate text-left">{@render children()}</span>
+	{/if}
+	<ChevronDown class="ml-1 h-4 w-4 shrink-0 opacity-50" />
 </SelectPrimitive.Trigger>

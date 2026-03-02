@@ -23,9 +23,18 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { BookOpen, Pencil, Plus, Shield, Trash2, X } from '@lucide/svelte'
+	import { BookOpen, FileText, Pencil, Plus, Shield, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
+
+	const TEMPLATE_SYSTEM_PROMPT = `you are a helpful AI assistant.
+
+today is {{ current_datetime_full }}.
+user: {{ user_name }}.
+
+{{ user_memories }}
+
+{{ referenced_attachments }}`
 
 	let agents = $state<Agent[]>([])
 	let models = $state<Model[]>([])
@@ -468,16 +477,30 @@
 					<div class="space-y-2">
 						<div class="flex items-center justify-between">
 							<Label for="system_prompt">system prompt (optional)</Label>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
-								onclick={() => (showVariablesLegend = true)}
-							>
-								<BookOpen class="h-3.5 w-3.5" />
-								variables
-							</Button>
+							<div class="flex items-center gap-1">
+								{#if !formSystemPrompt.trim()}
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+										onclick={() => (formSystemPrompt = TEMPLATE_SYSTEM_PROMPT)}
+									>
+										<FileText class="h-3.5 w-3.5" />
+										use template
+									</Button>
+								{/if}
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+									onclick={() => (showVariablesLegend = true)}
+								>
+									<BookOpen class="h-3.5 w-3.5" />
+									variables
+								</Button>
+							</div>
 						</div>
 						<textarea
 							id="system_prompt"

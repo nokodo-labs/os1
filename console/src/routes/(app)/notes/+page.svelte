@@ -20,7 +20,7 @@
 	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, FileText, Hash, Tag, User } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Clock, FileText, Hash, Search, Tag, User } from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'title'
@@ -208,12 +208,17 @@
 			<p class="text-zinc-400">all notes in the system.</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			<Input
-				type="search"
-				placeholder="search notes..."
-				bind:value={searchQuery}
-				class="h-9 w-50 lg:w-75"
-			/>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search notes..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">
@@ -464,4 +469,12 @@
 	bind:open={isNoteDetailsOpen}
 	note={selectedNote}
 	onViewUser={(userId) => openUser(userId)}
+	onUpdated={(n) => {
+		notes = notes.map((x) => (x.id === n.id ? n : x))
+		selectedNote = n
+	}}
+	onDeleted={(id) => {
+		notes = notes.filter((n) => n.id !== id)
+		isNoteDetailsOpen = false
+	}}
 />

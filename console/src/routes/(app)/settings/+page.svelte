@@ -151,6 +151,21 @@
 	let assetsRerankDefaultStrategy = $state('native')
 	let assetsRerankTopK = $state<string>('')
 
+	// branding extras
+	let brandingPublicConsoleOrigin = $state('')
+
+	// media
+	let mediaBaseUrl = $state('')
+	let mediaFaviconUrl = $state('')
+	let mediaAppleTouchIconUrl = $state('')
+	let mediaSidebarLogoUrl = $state('')
+	let mediaSplashLogoUrl = $state('')
+
+	// soft delete
+	let softDeleteThreads = $state(true)
+	let softDeleteNotes = $state(true)
+	let softDeleteFiles = $state(true)
+
 	let defaultPermissions = $state<DefaultPermissionsSettings>({
 		resource_access: {
 			thread: null,
@@ -223,6 +238,15 @@
 		assetsEmbeddingsBatchSize: '',
 		assetsRerankDefaultStrategy: 'native',
 		assetsRerankTopK: '',
+		brandingPublicConsoleOrigin: '',
+		mediaBaseUrl: '',
+		mediaFaviconUrl: '',
+		mediaAppleTouchIconUrl: '',
+		mediaSidebarLogoUrl: '',
+		mediaSplashLogoUrl: '',
+		softDeleteThreads: true,
+		softDeleteNotes: true,
+		softDeleteFiles: true,
 		defaultPermissions: {
 			resource_access: {
 				thread: null,
@@ -296,6 +320,15 @@
 			assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize ||
 			assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
 			assetsRerankTopK !== original.assetsRerankTopK ||
+			brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin ||
+			mediaBaseUrl !== original.mediaBaseUrl ||
+			mediaFaviconUrl !== original.mediaFaviconUrl ||
+			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl ||
+			mediaSidebarLogoUrl !== original.mediaSidebarLogoUrl ||
+			mediaSplashLogoUrl !== original.mediaSplashLogoUrl ||
+			softDeleteThreads !== original.softDeleteThreads ||
+			softDeleteNotes !== original.softDeleteNotes ||
+			softDeleteFiles !== original.softDeleteFiles ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
 
@@ -401,10 +434,23 @@
 		brandingPrimaryColor = branding?.primary_color ?? ''
 		brandingPublicFrontendOrigin = toStringOrEmpty(branding?.public_frontend_origin)
 		brandingPublicCdnOrigin = toStringOrEmpty(branding?.public_cdn_origin)
+		brandingPublicConsoleOrigin = toStringOrEmpty(branding?.public_console_origin)
 		brandingPwaManifestUrl = toStringOrEmpty(branding?.pwa_manifest_url)
 
 		brandingAppVersion = branding?.app_version ?? ''
 		brandingAnalyticsKeyConfigured = Boolean(branding?.analytics_key)
+
+		const media = r.data.media
+		mediaBaseUrl = toStringOrEmpty(media?.base_url)
+		mediaFaviconUrl = toStringOrEmpty(media?.favicon_url)
+		mediaAppleTouchIconUrl = toStringOrEmpty(media?.apple_touch_icon_url)
+		mediaSidebarLogoUrl = toStringOrEmpty(media?.sidebar_logo_url)
+		mediaSplashLogoUrl = toStringOrEmpty(media?.splash_logo_url)
+
+		const softDelete = r.data.soft_delete
+		softDeleteThreads = softDelete?.threads ?? true
+		softDeleteNotes = softDelete?.notes ?? true
+		softDeleteFiles = softDelete?.files ?? true
 
 		const limits = r.data.limits
 		limitsMaxThreadsPerUser = toStringOrEmpty(limits?.max_threads_per_user)
@@ -488,6 +534,7 @@
 			brandingPrimaryColor,
 			brandingPublicFrontendOrigin,
 			brandingPublicCdnOrigin,
+			brandingPublicConsoleOrigin,
 			brandingPwaManifestUrl,
 			limitsMaxThreadsPerUser,
 			limitsMaxMessagesPerThread,
@@ -526,6 +573,14 @@
 			assetsEmbeddingsBatchSize,
 			assetsRerankDefaultStrategy,
 			assetsRerankTopK,
+			mediaBaseUrl,
+			mediaFaviconUrl,
+			mediaAppleTouchIconUrl,
+			mediaSidebarLogoUrl,
+			mediaSplashLogoUrl,
+			softDeleteThreads,
+			softDeleteNotes,
+			softDeleteFiles,
 			defaultPermissions,
 			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
 		}
@@ -594,6 +649,7 @@
 		brandingPrimaryColor = original.brandingPrimaryColor
 		brandingPublicFrontendOrigin = original.brandingPublicFrontendOrigin
 		brandingPublicCdnOrigin = original.brandingPublicCdnOrigin
+		brandingPublicConsoleOrigin = original.brandingPublicConsoleOrigin
 		brandingPwaManifestUrl = original.brandingPwaManifestUrl
 		limitsMaxThreadsPerUser = original.limitsMaxThreadsPerUser
 		limitsMaxMessagesPerThread = original.limitsMaxMessagesPerThread
@@ -632,6 +688,15 @@
 		assetsEmbeddingsBatchSize = original.assetsEmbeddingsBatchSize
 		assetsRerankDefaultStrategy = original.assetsRerankDefaultStrategy
 		assetsRerankTopK = original.assetsRerankTopK
+		brandingPublicConsoleOrigin = original.brandingPublicConsoleOrigin
+		mediaBaseUrl = original.mediaBaseUrl
+		mediaFaviconUrl = original.mediaFaviconUrl
+		mediaAppleTouchIconUrl = original.mediaAppleTouchIconUrl
+		mediaSidebarLogoUrl = original.mediaSidebarLogoUrl
+		mediaSplashLogoUrl = original.mediaSplashLogoUrl
+		softDeleteThreads = original.softDeleteThreads
+		softDeleteNotes = original.softDeleteNotes
+		softDeleteFiles = original.softDeleteFiles
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
@@ -768,6 +833,8 @@
 				data.branding.public_frontend_origin = brandingPublicFrontendOrigin || null
 			if (brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin)
 				data.branding.public_cdn_origin = brandingPublicCdnOrigin || null
+			if (brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin)
+				data.branding.public_console_origin = brandingPublicConsoleOrigin || null
 			if (brandingPwaManifestUrl !== original.brandingPwaManifestUrl)
 				data.branding.pwa_manifest_url = brandingPwaManifestUrl || null
 		}
@@ -1001,6 +1068,39 @@
 			data.assets = assetsPatch
 		}
 
+		if (
+			mediaBaseUrl !== original.mediaBaseUrl ||
+			mediaFaviconUrl !== original.mediaFaviconUrl ||
+			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl ||
+			mediaSidebarLogoUrl !== original.mediaSidebarLogoUrl ||
+			mediaSplashLogoUrl !== original.mediaSplashLogoUrl
+		) {
+			data.media = {}
+			if (mediaBaseUrl !== original.mediaBaseUrl) data.media.base_url = mediaBaseUrl || null
+			if (mediaFaviconUrl !== original.mediaFaviconUrl)
+				data.media.favicon_url = mediaFaviconUrl || null
+			if (mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl)
+				data.media.apple_touch_icon_url = mediaAppleTouchIconUrl || null
+			if (mediaSidebarLogoUrl !== original.mediaSidebarLogoUrl)
+				data.media.sidebar_logo_url = mediaSidebarLogoUrl || null
+			if (mediaSplashLogoUrl !== original.mediaSplashLogoUrl)
+				data.media.splash_logo_url = mediaSplashLogoUrl || null
+		}
+
+		if (
+			softDeleteThreads !== original.softDeleteThreads ||
+			softDeleteNotes !== original.softDeleteNotes ||
+			softDeleteFiles !== original.softDeleteFiles
+		) {
+			data.soft_delete = {}
+			if (softDeleteThreads !== original.softDeleteThreads)
+				data.soft_delete.threads = softDeleteThreads
+			if (softDeleteNotes !== original.softDeleteNotes)
+				data.soft_delete.notes = softDeleteNotes
+			if (softDeleteFiles !== original.softDeleteFiles)
+				data.soft_delete.files = softDeleteFiles
+		}
+
 		if (defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey) {
 			data.default_permissions = buildDefaultPermissionsPatch()
 		}
@@ -1104,6 +1204,9 @@
 						<CardContent class="space-y-5">
 							<div class="space-y-2">
 								<Label for="default_theme">default theme</Label>
+								<p class="text-xs text-zinc-500">
+									color scheme applied to the frontend app by default.
+								</p>
 								<Select
 									value={uiDefaultTheme}
 									onValueChange={(v: string) => (uiDefaultTheme = v as ThemeMode)}
@@ -1137,6 +1240,9 @@
 
 							<div class="space-y-2">
 								<Label for="default_background">default background</Label>
+								<p class="text-xs text-zinc-500">
+									animated background shown in the main app interface.
+								</p>
 								<Select
 									value={uiDefaultBackground || 'darkveil'}
 									onValueChange={(v: string) =>
@@ -1159,6 +1265,9 @@
 
 							<div class="space-y-2">
 								<Label for="auth_pages_background">auth pages background</Label>
+								<p class="text-xs text-zinc-500">
+									animated background shown on login and signup pages.
+								</p>
 								<Select
 									value={uiAuthPagesBackground || 'lightrays'}
 									onValueChange={(v: string) =>
@@ -1303,6 +1412,10 @@
 								<div class="grid gap-4 md:grid-cols-2">
 									<div class="space-y-2">
 										<Label for="ai_similarity">similarity threshold</Label>
+										<p class="text-xs text-zinc-500">
+											minimum cosine similarity for a memory to be retrieved
+											(0 = any, 1 = exact).
+										</p>
 										<Input
 											id="ai_similarity"
 											type="number"
@@ -1315,6 +1428,9 @@
 									</div>
 									<div class="space-y-2">
 										<Label for="ai_top_k">top k</Label>
+										<p class="text-xs text-zinc-500">
+											max memories retrieved per conversation turn.
+										</p>
 										<Input
 											id="ai_top_k"
 											type="number"
@@ -1325,6 +1441,10 @@
 									</div>
 									<div class="space-y-2">
 										<Label for="ai_messages">messages to consider</Label>
+										<p class="text-xs text-zinc-500">
+											recent messages scanned when retrieving or consolidating
+											memories.
+										</p>
 										<Input
 											id="ai_messages"
 											type="number"
@@ -1344,6 +1464,10 @@
 								<div class="grid gap-4 md:grid-cols-2">
 									<div class="space-y-2">
 										<Label for="ai_chat_mode">mode</Label>
+										<p class="text-xs text-zinc-500">
+											determines which past chats are included in the agent's
+											context window.
+										</p>
 										<Select
 											value={aiChatContextMode}
 											onValueChange={(v: string) =>
@@ -1363,6 +1487,9 @@
 									</div>
 									<div class="space-y-2">
 										<Label for="ai_chat_top_k">top k</Label>
+										<p class="text-xs text-zinc-500">
+											number of past chats to include in context per turn.
+										</p>
 										<Input
 											id="ai_chat_top_k"
 											type="number"
@@ -1389,6 +1516,9 @@
 								<div class="grid gap-4 md:grid-cols-2">
 									<div class="space-y-2">
 										<Label for="task_default_model">default model</Label>
+										<p class="text-xs text-zinc-500">
+											fallback model used when no task-specific model is set.
+										</p>
 										<Select
 											value={aiTaskDefaultModelId}
 											onValueChange={(v: string) =>
@@ -1416,6 +1546,10 @@
 										<Label for="task_thread_metadata_model"
 											>thread metadata model</Label
 										>
+										<p class="text-xs text-zinc-500">
+											model used to generate thread titles and tags
+											automatically.
+										</p>
 										<Select
 											value={aiTaskThreadMetadataModelId}
 											onValueChange={(v: string) =>
@@ -1445,6 +1579,9 @@
 										<Label for="task_input_autocomplete_model">
 											input autocomplete model
 										</Label>
+										<p class="text-xs text-zinc-500">
+											model used to suggest completions as the user types.
+										</p>
 										<Select
 											value={aiTaskInputAutocompleteModelId}
 											onValueChange={(v: string) =>
@@ -1487,6 +1624,9 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="site_name">site name</Label>
+									<p class="text-xs text-zinc-500">
+										display name shown in the browser tab, emails, and UI.
+									</p>
 									<Input
 										id="site_name"
 										bind:value={brandingSiteName}
@@ -1518,6 +1658,9 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="primary_color">primary color</Label>
+									<p class="text-xs text-zinc-500">
+										accent color used throughout the frontend (CSS hex value).
+									</p>
 									<Input
 										id="primary_color"
 										bind:value={brandingPrimaryColor}
@@ -1552,6 +1695,10 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="logo_url">logo url</Label>
+									<p class="text-xs text-zinc-500">
+										URL for the app logo used in the sidebar and outgoing
+										emails.
+									</p>
 									<Input
 										id="logo_url"
 										bind:value={brandingLogoUrl}
@@ -1561,6 +1708,9 @@
 								</div>
 								<div class="space-y-2">
 									<Label for="favicon_url">favicon url</Label>
+									<p class="text-xs text-zinc-500">
+										URL for the browser tab favicon.
+									</p>
 									<Input
 										id="favicon_url"
 										bind:value={brandingFaviconUrl}
@@ -1575,6 +1725,10 @@
 									<Label for="public_frontend_origin"
 										>public frontend origin</Label
 									>
+									<p class="text-xs text-zinc-500">
+										base URL of the user-facing frontend; used to build absolute
+										links in emails and OIDC.
+									</p>
 									<Input
 										id="public_frontend_origin"
 										bind:value={brandingPublicFrontendOrigin}
@@ -1584,6 +1738,9 @@
 								</div>
 								<div class="space-y-2">
 									<Label for="public_cdn_origin">public cdn origin</Label>
+									<p class="text-xs text-zinc-500">
+										base URL for CDN-hosted static assets.
+									</p>
 									<Input
 										id="public_cdn_origin"
 										bind:value={brandingPublicCdnOrigin}
@@ -1591,6 +1748,20 @@
 										class="rounded-xl"
 									/>
 								</div>
+							</div>
+
+							<div class="space-y-2">
+								<Label for="public_console_origin">public console origin</Label>
+								<p class="text-xs text-zinc-500">
+									base URL of this admin console; used for OIDC redirect URIs and
+									internal links.
+								</p>
+								<Input
+									id="public_console_origin"
+									bind:value={brandingPublicConsoleOrigin}
+									placeholder="https://console.nokodo.net"
+									class="rounded-xl"
+								/>
 							</div>
 
 							<div class="space-y-2">
@@ -1611,6 +1782,83 @@
 
 					<Card class="border-zinc-800 bg-zinc-900">
 						<CardHeader>
+							<CardTitle>media</CardTitle>
+							<CardDescription
+								>URL overrides for individual frontend media assets. these take
+								precedence over the base URL.</CardDescription
+							>
+						</CardHeader>
+						<CardContent class="space-y-5">
+							<div class="space-y-2">
+								<Label for="media_base_url">base url</Label>
+								<p class="text-xs text-zinc-500">
+									fallback base URL for all media assets not explicitly overridden
+									below.
+								</p>
+								<Input
+									id="media_base_url"
+									bind:value={mediaBaseUrl}
+									placeholder="https://cdn.nokodo.net/media"
+									class="rounded-xl"
+								/>
+							</div>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<Label for="media_favicon_url">favicon url</Label>
+									<p class="text-xs text-zinc-500">
+										overrides the branding favicon for frontend pages.
+									</p>
+									<Input
+										id="media_favicon_url"
+										bind:value={mediaFaviconUrl}
+										placeholder="https://…"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="media_apple_touch_icon_url"
+										>apple touch icon url</Label
+									>
+									<p class="text-xs text-zinc-500">
+										icon used when adding the app to an iOS home screen.
+									</p>
+									<Input
+										id="media_apple_touch_icon_url"
+										bind:value={mediaAppleTouchIconUrl}
+										placeholder="https://…"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="media_sidebar_logo_url">sidebar logo url</Label>
+									<p class="text-xs text-zinc-500">
+										logo shown in the frontend sidebar.
+									</p>
+									<Input
+										id="media_sidebar_logo_url"
+										bind:value={mediaSidebarLogoUrl}
+										placeholder="https://…"
+										class="rounded-xl"
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label for="media_splash_logo_url">splash logo url</Label>
+									<p class="text-xs text-zinc-500">
+										logo shown on the splash/loading screen.
+									</p>
+									<Input
+										id="media_splash_logo_url"
+										bind:value={mediaSplashLogoUrl}
+										placeholder="https://…"
+										class="rounded-xl"
+									/>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
 							<CardTitle>assets</CardTitle>
 							<CardDescription
 								>vector database, embeddings, and reranking configuration.</CardDescription
@@ -1622,6 +1870,10 @@
 									<Label for="assets_embedding_model"
 										>default embedding model</Label
 									>
+									<p class="text-xs text-zinc-500">
+										model used to embed text when no per-request override is
+										set.
+									</p>
 									<Select
 										type="single"
 										value={assetsDefaultEmbeddingModelId}
@@ -1645,6 +1897,9 @@
 									<Label for="assets_vector_db_provider"
 										>vector database provider</Label
 									>
+									<p class="text-xs text-zinc-500">
+										backend used for storing and querying vector embeddings.
+									</p>
 									<Select
 										type="single"
 										value={assetsVectorDatabaseProvider}
@@ -1670,6 +1925,9 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="assets_vector_db_url">vector database endpoint</Label>
+								<p class="text-xs text-zinc-500">
+									connection URL or host for the selected vector database.
+								</p>
 								<Input
 									id="assets_vector_db_url"
 									bind:value={assetsVectorDatabaseUrl}
@@ -1758,6 +2016,10 @@
 								</div>
 								<div class="space-y-2">
 									<Label for="assets_prefetch_limit">prefetch limit</Label>
+									<p class="text-xs text-zinc-500">
+										maximum candidates fetched before score fusion and
+										reranking.
+									</p>
 									<Input
 										id="assets_prefetch_limit"
 										type="number"
@@ -1796,6 +2058,9 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="assets_fusion_algorithm">fusion algorithm</Label>
+									<p class="text-xs text-zinc-500">
+										algorithm used to combine dense and sparse search scores.
+									</p>
 									<Select
 										type="single"
 										value={assetsVectorFusionAlgorithm}
@@ -1824,6 +2089,10 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="assets_vector_size">vector size (dimensions)</Label>
+									<p class="text-xs text-zinc-500">
+										dimensions of the embedding vectors; must match the chosen
+										model.
+									</p>
 									<Input
 										id="assets_vector_size"
 										type="number"
@@ -1834,6 +2103,9 @@
 								</div>
 								<div class="space-y-2">
 									<Label for="assets_batch_size">batch size</Label>
+									<p class="text-xs text-zinc-500">
+										texts embedded per API call during bulk vectorization.
+									</p>
 									<Input
 										id="assets_batch_size"
 										type="number"
@@ -1848,6 +2120,9 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="assets_rerank_strategy">default strategy</Label>
+									<p class="text-xs text-zinc-500">
+										controls when and how results are reranked after retrieval.
+									</p>
 									<Select
 										type="single"
 										value={assetsRerankDefaultStrategy}
@@ -1867,6 +2142,9 @@
 								</div>
 								<div class="space-y-2">
 									<Label for="assets_rerank_top_k">rerank top-k</Label>
+									<p class="text-xs text-zinc-500">
+										final results kept after reranking.
+									</p>
 									<Input
 										id="assets_rerank_top_k"
 										type="number"
@@ -1887,6 +2165,9 @@
 						<CardContent class="grid gap-4 md:grid-cols-2">
 							<div class="space-y-2">
 								<Label for="max_threads">max threads per user</Label>
+								<p class="text-xs text-zinc-500">
+									hard cap on threads per account; prevents runaway data growth.
+								</p>
 								<Input
 									id="max_threads"
 									type="number"
@@ -1896,6 +2177,9 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="max_messages">max messages per thread</Label>
+								<p class="text-xs text-zinc-500">
+									hard cap on messages per thread.
+								</p>
 								<Input
 									id="max_messages"
 									type="number"
@@ -1905,6 +2189,9 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="max_file_size">max file size (MB)</Label>
+								<p class="text-xs text-zinc-500">
+									maximum allowed size for a single file upload.
+								</p>
 								<Input
 									id="max_file_size"
 									type="number"
@@ -1914,11 +2201,65 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="rate_limit">rate limit (requests/min)</Label>
+								<p class="text-xs text-zinc-500">
+									API requests allowed per minute per authenticated user.
+								</p>
 								<Input
 									id="rate_limit"
 									type="number"
 									bind:value={limitsRateLimitRequestsPerMinute}
 									class="rounded-xl"
+								/>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card class="border-zinc-800 bg-zinc-900">
+						<CardHeader>
+							<CardTitle>soft delete</CardTitle>
+							<CardDescription
+								>when enabled, deleting a resource marks it as deleted rather than
+								permanently removing it from the database.</CardDescription
+							>
+						</CardHeader>
+						<CardContent class="space-y-3">
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="soft_delete_threads">threads</Label>
+									<p class="text-xs text-zinc-500">
+										soft-delete threads instead of permanently removing them.
+									</p>
+								</div>
+								<Switch
+									id="soft_delete_threads"
+									checked={softDeleteThreads}
+									onCheckedChange={(v: boolean) => (softDeleteThreads = v)}
+								/>
+							</div>
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="soft_delete_notes">notes</Label>
+									<p class="text-xs text-zinc-500">
+										soft-delete notes instead of permanently removing them.
+									</p>
+								</div>
+								<Switch
+									id="soft_delete_notes"
+									checked={softDeleteNotes}
+									onCheckedChange={(v: boolean) => (softDeleteNotes = v)}
+								/>
+							</div>
+							<div class="flex items-center justify-between">
+								<div class="space-y-0.5">
+									<Label for="soft_delete_files">files</Label>
+									<p class="text-xs text-zinc-500">
+										soft-delete files instead of permanently removing them.
+									</p>
+								</div>
+								<Switch
+									id="soft_delete_files"
+									checked={softDeleteFiles}
+									onCheckedChange={(v: boolean) => (softDeleteFiles = v)}
 								/>
 							</div>
 						</CardContent>
@@ -2021,6 +2362,10 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="access_expire">access token expire minutes</Label>
+									<p class="text-xs text-zinc-500">
+										how long access tokens remain valid before the client must
+										refresh.
+									</p>
 									<Input
 										id="access_expire"
 										type="number"
@@ -2030,6 +2375,10 @@
 								</div>
 								<div class="space-y-2">
 									<Label for="refresh_expire">refresh token expire days</Label>
+									<p class="text-xs text-zinc-500">
+										how long refresh tokens remain valid; controls maximum
+										session length.
+									</p>
 									<Input
 										id="refresh_expire"
 										type="number"
@@ -2042,6 +2391,10 @@
 							<div class="grid gap-4 md:grid-cols-2">
 								<div class="space-y-2">
 									<Label for="session_timeout">session timeout minutes</Label>
+									<p class="text-xs text-zinc-500">
+										idle timeout after which the user is automatically logged
+										out.
+									</p>
 									<Input
 										id="session_timeout"
 										type="number"
@@ -2057,7 +2410,10 @@
 										placeholder="example.com, example.org"
 										class="rounded-xl"
 									/>
-									<p class="text-xs text-zinc-500">comma-separated list.</p>
+									<p class="text-xs text-zinc-500">
+										only emails from these domains can register. leave empty to
+										allow all.
+									</p>
 								</div>
 							</div>
 
@@ -2102,6 +2458,10 @@
 									<Label for="email_verification"
 										>require email verification</Label
 									>
+									<p class="text-xs text-zinc-500">
+										require users to verify their email address before accessing
+										the app.
+									</p>
 								</div>
 								<Switch
 									id="email_verification"

@@ -6,6 +6,7 @@
 
 	type Group = Schemas['Group']
 
+	import GroupDetailsModal from '$lib/components/GroupDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -18,7 +19,7 @@
 	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, User, Users } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Clock, Hash, Search, User, Users } from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'name'
@@ -56,6 +57,9 @@
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
 
+	let isGroupDetailsOpen = $state(false)
+	let selectedGroupId = $state<string | null>(null)
+
 	const filteredGroups = $derived(
 		groups.filter((g) => {
 			const q = searchQuery.toLowerCase()
@@ -66,6 +70,11 @@
 			)
 		})
 	)
+
+	function openGroup(groupId: string) {
+		selectedGroupId = groupId
+		isGroupDetailsOpen = true
+	}
 
 	function openUser(userId: string) {
 		selectedUserId = userId
@@ -178,12 +187,17 @@
 			<p class="text-zinc-400">all groups in the system.</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			<Input
-				type="search"
-				placeholder="search groups..."
-				bind:value={searchQuery}
-				class="h-9 w-50 lg:w-75"
-			/>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search groups..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
 			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
 				<SelectTrigger class="w-56 rounded-xl">
 					<span class="truncate text-left">
@@ -293,7 +307,22 @@
 
 			{#each filteredGroups as g (g.id)}
 				<div
+					role="button"
+					tabindex="0"
 					class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+					onclick={(e) => {
+						if (
+							(e.target as HTMLElement).closest('button:not([data-row-click])') ==
+							null
+						)
+							openGroup(g.id)
+					}}
+					onkeydown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault()
+							openGroup(g.id)
+						}
+					}}
 				>
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="min-w-0 flex-1 space-y-2">
@@ -330,20 +359,6 @@
 									{g.memberships.length === 1 ? 'member' : 'members'}
 								</span>
 							</div>
-							{#if g.memberships.length > 0}
-								<div class="flex flex-wrap gap-1">
-									{#each g.memberships as m (m.id)}
-										<button
-											type="button"
-											class="rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800"
-											onclick={() => openUser(m.user_id)}
-										>
-											{m.user_id}
-											<span class="text-zinc-500">({m.role})</span>
-										</button>
-									{/each}
-								</div>
-							{/if}
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
 							<div class="flex items-center gap-1">
@@ -363,3 +378,17 @@
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
+
+<GroupDetailsModal
+	bind:open={isGroupDetailsOpen}
+	groupId={selectedGroupId}
+	onDeleted={() => {
+		groups = groups.filter((g) => g.id !== selectedGroupId)
+		selectedGroupId = null
+	}}
+	onUpdated={(updated) => {
+		groups = groups.map((g) =>
+			g.id === updated.id ? { ...g, name: updated.name, description: updated.description } : g
+		)
+	}}
+/>

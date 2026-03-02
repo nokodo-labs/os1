@@ -27,6 +27,7 @@
 		Hash,
 		Mail,
 		Plus,
+		Search,
 		Shield,
 		User as UserIcon,
 		XCircle,
@@ -184,12 +185,17 @@
 			<p class="text-zinc-400">manage users and access.</p>
 		</div>
 		<div class="flex items-center gap-2">
-			<Input
-				type="search"
-				placeholder="search users..."
-				bind:value={searchQuery}
-				class="h-9 w-50 lg:w-75"
-			/>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search users..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
 			<Button class="gap-2 rounded-xl" onclick={() => (isCreateUserOpen = true)}>
 				<Plus class="h-4 w-4" />
 				add user
