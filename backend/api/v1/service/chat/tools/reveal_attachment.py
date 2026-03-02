@@ -31,8 +31,8 @@ class RevealAttachmentInput(BaseModel):
 		min_length=1,
 		description=(
 			"list of attachment file ids to reveal. "
-			"ids are found in the referenced attachments "
-			"section of the system prompt."
+			"ids are found in the attachments "
+			"section."
 		),
 	)
 
@@ -49,14 +49,14 @@ class RevealAttachmentTool(Tool[AppContext]):
 	name: str = Field(default="reveal_attachment")
 	description: str = Field(
 		default=(
-			"re-activate one or more referenced attachments so you "
-			"can see their full content on the next turn. only use "
-			"this when the attachment summary is insufficient and you "
+			"re-activate one or more `referenced` state attachments so you "
+			"can see their content natively. use this only if you "
 			"genuinely need to see the original file. check the "
-			"referenced attachments list for available ids.\n\n"
+			"attachments list for available ids. "
+			"upon use, attachments will be revealed for a few turns before "
+			"decaying again.\n\n"
 			"IMPORTANT: before revealing, always check if the "
-			"summary in the referenced attachments section answers "
-			"your question. revealing costs tokens."
+			"summary answers your question. revealing costs tokens."
 		)
 	)
 	parameters: JSONObject = Field(

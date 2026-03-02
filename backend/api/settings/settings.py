@@ -97,10 +97,6 @@ class UISettings(BaseModel):
 	sidebar_collapsed: bool = Field(default=False, description="collapse sidebar")
 
 
-class FeaturesSettings(BaseModel):
-	enable_file_uploads: bool = Field(default=True, description="enable file uploads")
-
-
 class AIMemorySettings(BaseModel):
 	enable_memory: bool = Field(default=True, description="enable memory")
 	similarity_threshold: float = Field(
@@ -156,6 +152,68 @@ class AITaskSettings(BaseModel):
 	)
 
 
+class AIAttachmentSettings(BaseModel):
+	"""per-type decay thresholds for native attachments.
+
+	after N turns without interaction, an active attachment auto-decays
+	to reference state. a 'turn' is one user-assistant exchange.
+	"""
+
+	image_decay_turns: int = Field(
+		default=4,
+		ge=1,
+		description="turns before image attachments decay to reference",
+	)
+	audio_decay_turns: int = Field(
+		default=3,
+		ge=1,
+		description="turns before audio attachments decay to reference",
+	)
+	video_decay_turns: int = Field(
+		default=2,
+		ge=1,
+		description="turns before video attachments decay to reference",
+	)
+	reveal_decay_turns: int = Field(
+		default=3,
+		ge=1,
+		description="turns before a revealed attachment decays again",
+	)
+
+
+class AIWindowingSettings(BaseModel):
+	"""message window settings for context management.
+
+	controls how many messages are included in the context window
+	sent to the chat model, and configures async summarization
+	for conversations that exceed the window.
+	"""
+
+	enabled: bool = Field(
+		default=False,
+		description="enable message windowing and summarization",
+	)
+	max_messages: int = Field(
+		default=50,
+		ge=1,
+		description="maximum number of messages in the context window",
+	)
+	summary_trigger_offset: int = Field(
+		default=10,
+		ge=1,
+		description=(
+			"how many messages before the window limit to trigger "
+			"async summarization. e.g. if max_messages=50 and offset=10, "
+			"summarization starts at 40 messages"
+		),
+	)
+	summary_batch_size: int = Field(
+		default=20,
+		ge=1,
+		description="number of oldest messages to include in each summary batch",
+	)
+
+
 class AISettings(BaseModel):
 	default_agent_ids: list[str] = Field(
 		default_factory=list,
@@ -169,6 +227,14 @@ class AISettings(BaseModel):
 	)
 	tasks: AITaskSettings = Field(
 		default_factory=AITaskSettings, description="background task model settings"
+	)
+	attachments: AIAttachmentSettings = Field(
+		default_factory=AIAttachmentSettings,
+		description="native attachment decay settings",
+	)
+	windowing: AIWindowingSettings = Field(
+		default_factory=AIWindowingSettings,
+		description="message window and summarization settings",
 	)
 
 
@@ -399,22 +465,26 @@ class LocalStorageConfig(BaseModel):
 
 
 class S3StorageConfig(BaseModel):
-	"""S3-compatible storage configuration."""
+	"""S3-compatible storage configuration.
+
+	defaults target the dev MinIO container from the compose stack.
+	for production, override via environment variables or DB settings.
+	"""
 
 	endpoint_url: str | None = Field(
-		default=None,
-		description="S3-compatible endpoint (MinIO, R2, etc.)",
+		default="http://localhost:9000",
+		description="S3-compatible endpoint (MinIO, R2, etc.). set to None for AWS S3.",
 	)
 	bucket: str = Field(
 		default="nokodo-ai",
-		description=("S3 bucket name. must be globally unique per deployment."),
+		description="S3 bucket name. must be globally unique per deployment.",
 	)
 	region: str = Field(default="us-east-1", description="AWS region")
 	access_key_id: str | None = settings_field(
-		default=None, private=True, description="S3 access key id"
+		default="minioadmin", private=True, description="S3 access key id"
 	)
 	secret_access_key: str | None = settings_field(
-		default=None, private=True, description="S3 secret access key"
+		default="minioadmin", private=True, description="S3 secret access key"
 	)
 	prefix: str = Field(default="", description="key prefix within the bucket")
 	presigned_url_ttl: int = Field(
@@ -676,7 +746,6 @@ class Settings(BaseSettings):
 		extra="ignore",
 	)
 	ui: UISettings = Field(default_factory=UISettings)
-	features: FeaturesSettings = Field(default_factory=FeaturesSettings)
 	ai: AISettings = Field(default_factory=AISettings)
 	branding: BrandingSettings = Field(default_factory=BrandingSettings)
 	media: MediaSettings = Field(default_factory=MediaSettings)

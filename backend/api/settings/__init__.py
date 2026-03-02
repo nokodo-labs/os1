@@ -4,7 +4,6 @@ from api.settings.database import DbSettingsSource
 from api.settings.settings import (
 	AssetsSettings,
 	BrandingSettings,
-	FeaturesSettings,
 	LimitsSettings,
 	OIDCSettings,
 	SecuritySettings,
@@ -22,7 +21,6 @@ __all__ = [
 	"AssetsSettings",
 	"BrandingSettings",
 	"DbSettingsSource",
-	"FeaturesSettings",
 	"LimitsSettings",
 	"OIDCSettings",
 	"SecuritySettings",

@@ -45,9 +45,12 @@ async def update(
 	origin_session_id: str | None = None,
 ) -> SettingsVersions:
 	"""apply patch to db overrides, return new versions."""
+	# exclude_unset=True: only include fields present in the request body.
+	# this lets callers explicitly send null to clear a nullable field,
+	# while omitted fields stay default (None) and are excluded.
 	updates = {
 		section: fields
-		for section, fields in patch.model_dump(exclude_none=True).items()
+		for section, fields in patch.model_dump(exclude_unset=True).items()
 		if isinstance(fields, dict) and fields
 	}
 

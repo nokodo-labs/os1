@@ -38,15 +38,6 @@ class UISettingsPatch(BaseModel):
 	sidebar_collapsed: bool | None = Field(default=None, description="collapse sidebar")
 
 
-class FeaturesSettingsPatch(BaseModel):
-	model_config = ConfigDict(extra="forbid")
-
-	enable_file_uploads: bool | None = Field(
-		default=None,
-		description="enable file uploads",
-	)
-
-
 class MediaSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -362,6 +353,32 @@ class AITaskSettingsPatch(BaseModel):
 	)
 
 
+class AIWindowingSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = Field(
+		default=None,
+		description="enable message windowing and summarization",
+	)
+	max_messages: int | None = Field(
+		default=None,
+		ge=1,
+		description="maximum number of messages in the context window",
+	)
+	summary_trigger_offset: int | None = Field(
+		default=None,
+		ge=1,
+		description=(
+			"how many messages before the window limit to trigger summarization"
+		),
+	)
+	summary_batch_size: int | None = Field(
+		default=None,
+		ge=1,
+		description="number of oldest messages to include in each summary batch",
+	)
+
+
 class AISettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -371,6 +388,7 @@ class AISettingsPatch(BaseModel):
 	memory: AIMemorySettingsPatch | None = None
 	chat_context: AIChatContextSettingsPatch | None = None
 	tasks: AITaskSettingsPatch | None = None
+	windowing: AIWindowingSettingsPatch | None = None
 
 
 class DefaultPermissionsSettingsPatch(BaseModel):
@@ -398,7 +416,6 @@ class SettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	ui: UISettingsPatch | None = None
-	features: FeaturesSettingsPatch | None = None
 	ai: AISettingsPatch | None = None
 	branding: BrandingSettingsPatch | None = None
 	media: MediaSettingsPatch | None = None
@@ -413,7 +430,6 @@ class SettingsVersions(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	ui: int = 0
-	features: int = 0
 	ai: int = 0
 	branding: int = 0
 	media: int = 0

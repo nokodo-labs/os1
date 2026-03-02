@@ -54,22 +54,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	# register the configured storage backend
 	storage_cfg = settings.assets.storage
 	if storage_cfg.backend == "s3":
-		register_storage(
-			"s3",
-			S3StorageBackend(
-				bucket=storage_cfg.s3.bucket,
-				region=storage_cfg.s3.region,
-				endpoint_url=storage_cfg.s3.endpoint_url,
-				access_key_id=storage_cfg.s3.access_key_id,
-				secret_access_key=storage_cfg.s3.secret_access_key,
-				prefix=storage_cfg.s3.prefix,
-				presigned_url_ttl=storage_cfg.s3.presigned_url_ttl,
-				multipart_threshold=storage_cfg.s3.multipart_threshold,
-				multipart_chunk_size=storage_cfg.s3.multipart_chunk_size,
-				max_retries=storage_cfg.s3.max_retries,
-				retry_mode=storage_cfg.s3.retry_mode,
-			),
+		s3 = S3StorageBackend(
+			bucket=storage_cfg.s3.bucket,
+			region=storage_cfg.s3.region,
+			endpoint_url=storage_cfg.s3.endpoint_url,
+			access_key_id=storage_cfg.s3.access_key_id,
+			secret_access_key=storage_cfg.s3.secret_access_key,
+			prefix=storage_cfg.s3.prefix,
+			presigned_url_ttl=storage_cfg.s3.presigned_url_ttl,
+			multipart_threshold=storage_cfg.s3.multipart_threshold,
+			multipart_chunk_size=storage_cfg.s3.multipart_chunk_size,
+			max_retries=storage_cfg.s3.max_retries,
+			retry_mode=storage_cfg.s3.retry_mode,
 		)
+		await s3.ensure_bucket()
+		register_storage("s3", s3)
 	else:
 		register_storage(
 			"local", LocalStorageBackend(root_path=storage_cfg.local.root_path)

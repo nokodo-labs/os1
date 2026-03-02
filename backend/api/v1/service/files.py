@@ -227,14 +227,14 @@ async def read_content(
 async def resolve_file_data(
 	file_id: str,
 	session: AsyncSession,
-) -> tuple[str | None, str | None]:
-	"""resolve a file record to inline-ready data (no access check).
+) -> tuple[None, str | None]:
+	"""resolve a file record to base64-encoded data (no access check).
 
-	looks up the file by id, then tries presigned URL first (fast, no
-	memory cost on S3 backends). falls back to reading bytes via
-	read_content and encoding as base64.
+	always reads bytes through the storage backend and encodes as base64.
+	this keeps the backend as the single auth gatekeeper - the storage
+	layer is never exposed directly, regardless of which backend is active.
 
-	returns (url, base64) - exactly one will be set, the other None.
+	returns (None, base64) on success.
 	returns (None, None) when the file or storage object is missing.
 	"""
 	result = await session.execute(
@@ -244,12 +244,6 @@ async def resolve_file_data(
 	if file is None:
 		log.warning("resolve_file_data: file %s not found", file_id)
 		return None, None
-
-	backend = get_storage_backend(file.storage_backend)
-
-	url = await backend.get_url(file.storage_key)
-	if url:
-		return url, None
 
 	try:
 		stream, _, _ = await read_content(file)

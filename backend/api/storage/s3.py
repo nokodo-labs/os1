@@ -96,6 +96,29 @@ class S3StorageBackend(StorageBackend):
 			raise RuntimeError(msg)
 		return client
 
+	# -- bucket management --
+
+	async def ensure_bucket(self) -> None:
+		"""create the bucket if it does not already exist.
+
+		safe to call on every startup - ignores already-exists errors from
+		both AWS S3 and S3-compatible services (MinIO, R2, B2, etc.).
+		"""
+		client = await self._get_client()
+		kwargs: dict[str, Any] = {"Bucket": self._bucket}
+		# AWS S3 requires a LocationConstraint for every region except us-east-1
+		region = self._client_kwargs.get("region_name", "us-east-1")
+		if region and region != "us-east-1":
+			kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
+		try:
+			await client.create_bucket(**kwargs)
+			log.info("created S3 bucket: %s", self._bucket)
+		except ClientError as exc:
+			code = exc.response.get("Error", {}).get("Code", "")
+			if code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+				return
+			raise
+
 	# -- interface --
 
 	async def put(
