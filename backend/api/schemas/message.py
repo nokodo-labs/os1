@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from collections.abc import Sequence
+from typing import Annotated
 
 from pydantic import Field, field_validator, model_validator
 
@@ -10,9 +11,11 @@ from api.models.message import MessageType
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from api.schemas.content import (
 	ContentPart,
+	ContentPartAdapter,
 	TextContent,
 )
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
+from nokodo_ai.messages import BaseContentPart as SDKContentPart
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
@@ -31,8 +34,8 @@ class MessageBase(MetadataModel):
 	content: ContentPartList = Field(default_factory=list)
 	tool_call_id: str | None = None
 	is_error: bool | None = None
-	tool_calls: list[dict[str, Any]] = Field(default_factory=list)
-	usage: dict[str, Any] | None = None
+	tool_calls: list[dict[str, object]] = Field(default_factory=list)
+	usage: dict[str, object] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
 
 
@@ -41,15 +44,15 @@ class MessageCreate(MetadataModel):
 
 	Content can be provided as:
 	- A string (converted to [TextContent(text=...)])
-	- A list of content part dicts or ContentPart objects
+	- A list of ContentPart objects (validated via discriminated union)
 	"""
 
 	type: MessageType = MessageType.USER
-	content: str | list[dict[str, Any] | ContentPart] = ""
+	content: str | list[ContentPart] = ""
 	tool_call_id: str | None = None
 	is_error: bool | None = None
-	tool_calls: list[dict[str, Any]] = Field(default_factory=list)
-	usage: dict[str, Any] | None = None
+	tool_calls: list[dict[str, object]] = Field(default_factory=list)
+	usage: dict[str, object] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
 	parent_id: TypeID | None = None
 	task_id: TypeID | None = None
@@ -95,19 +98,16 @@ class MessageCreate(MetadataModel):
 	@classmethod
 	def normalize_content(
 		cls,
-		v: str | list[dict[str, Any] | ContentPart],
-	) -> list[dict[str, Any]]:
-		"""Normalize content to list of content part dicts."""
+		v: str | list[object],
+	) -> list[ContentPart]:
+		"""Normalize content to list of ContentPart models.
+
+		Accepts strings, dicts (validated via discriminated union), or
+		ContentPart instances.
+		"""
 		if isinstance(v, str):
-			return [{"type": "text", "text": v}] if v else []
-		result = []
-		for item in v:
-			if isinstance(item, dict):
-				result.append(item)
-			else:
-				# It's a ContentPart model
-				result.append(item.model_dump())
-		return result
+			return [TextContent(text=v)] if v else []
+		return [ContentPartAdapter.validate_python(item) for item in v]
 
 	@classmethod
 	def from_sdk_message(
@@ -118,25 +118,31 @@ class MessageCreate(MetadataModel):
 		sender_user_id: TypeID | None = None,
 	) -> MessageCreate:
 		"""convert an sdk message to an orm MessageCreate for persistence."""
+
+		def _to_api_parts(
+			parts: Sequence[SDKContentPart],
+		) -> list[ContentPart]:
+			return [ContentPartAdapter.validate_python(p.model_dump()) for p in parts]
+
 		match sdk_msg.role:
 			case "user":
 				assert isinstance(sdk_msg, SDKUserMessage)
 				return cls(
 					type=MessageType.USER,
-					content=[part.model_dump() for part in sdk_msg.content],
+					content=_to_api_parts(sdk_msg.content),
 					sender_user_id=sender_user_id,
 				)
 			case "system":
 				assert isinstance(sdk_msg, SDKSystemMessage)
 				return cls(
 					type=MessageType.SYSTEM,
-					content=[part.model_dump() for part in sdk_msg.content],
+					content=_to_api_parts(sdk_msg.content),
 				)
 			case "assistant":
 				assert isinstance(sdk_msg, SDKAssistantMessage)
 				return cls(
 					type=MessageType.ASSISTANT,
-					content=[part.model_dump() for part in sdk_msg.content],
+					content=_to_api_parts(sdk_msg.content),
 					tool_calls=[tc.model_dump() for tc in sdk_msg.tool_calls],
 					usage=sdk_msg.usage.model_dump() if sdk_msg.usage else None,
 					sender_agent_id=sender_agent_id,
@@ -145,7 +151,7 @@ class MessageCreate(MetadataModel):
 				assert isinstance(sdk_msg, SDKToolMessage)
 				return cls(
 					type=MessageType.TOOL,
-					content=[TextContent(text=sdk_msg.tool_output).model_dump()],
+					content=[TextContent(text=sdk_msg.tool_output)],
 					tool_call_id=sdk_msg.tool_call_id,
 					is_error=sdk_msg.is_error,
 					metadata_=dict(sdk_msg.metadata or {}),
@@ -157,24 +163,18 @@ class MessageCreate(MetadataModel):
 class MessageUpdate(MetadataUpdateModel):
 	"""Payload for updating a user message's content in place."""
 
-	content: str | list[dict[str, Any] | ContentPart]
+	content: str | list[ContentPart]
 
 	@field_validator("content", mode="before")
 	@classmethod
 	def normalize_content(
 		cls,
-		v: str | list[dict[str, Any] | ContentPart],
-	) -> list[dict[str, Any]]:
-		"""Normalize content to list of content part dicts."""
+		v: str | list[object],
+	) -> list[ContentPart]:
+		"""Normalize content to list of ContentPart models."""
 		if isinstance(v, str):
-			return [{"type": "text", "text": v}] if v else []
-		result = []
-		for item in v:
-			if isinstance(item, dict):
-				result.append(item)
-			else:
-				result.append(item.model_dump())
-		return result
+			return [TextContent(text=v)] if v else []
+		return [ContentPartAdapter.validate_python(item) for item in v]
 
 
 class Message(MessageBase, TimestampedModel):

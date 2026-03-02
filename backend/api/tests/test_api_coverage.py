@@ -430,6 +430,7 @@ async def test_runs_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 			client_context=None,
 			stream=True,
 			persist=True,
+			tool_choice=None,
 		),
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]

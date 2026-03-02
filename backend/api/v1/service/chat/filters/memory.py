@@ -10,6 +10,7 @@ from sqlalchemy import select
 from api.database import AsyncSessionLocal
 from api.models.memory import Memory
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.prompt_runtime import SENTINEL_USER_MEMORIES
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
 
@@ -19,7 +20,11 @@ if TYPE_CHECKING:
 
 
 class MemoryContextFilter(Filter):
-	"""pre-filter that injects memory context into the system prompt."""
+	"""pre-filter that injects memory context into the system prompt.
+
+	only activates when the admin includes {{ user_memories }} in the
+	agent's system prompt. if the variable is absent, the filter is a no-op.
+	"""
 
 	name: str = Field(default="memory_context")
 	description: str = Field(default="injects relevant memories into the system prompt")
@@ -36,24 +41,29 @@ class MemoryContextFilter(Filter):
 	) -> SDKThread:
 		if app_context is None:
 			raise ValueError("AppContext is required for MemoryContextFilter")
-		memories = await self._fetch_memories(app_context)
-		if not memories:
-			return thread
 
-		memory_context = self._format_memory_context(memories)
-
+		# locate system message and check for the injection sentinel.
+		# if the admin didn't include {{ user_memories }}, skip entirely.
 		system_idx = next(
 			(i for i, m in enumerate(thread.messages) if m.role == "system"),
 			None,
 		)
+		if system_idx is None:
+			return thread
 
-		if system_idx is not None:
-			existing = thread.messages[system_idx]
-			if isinstance(existing, SDKSystemMessage) and existing.text:
-				augmented_text = f"{existing.text}\n\n{memory_context}"
-				thread.messages[system_idx] = SDKSystemMessage.from_text(augmented_text)
-		else:
-			thread.messages.insert(0, SDKSystemMessage.from_text(memory_context))
+		existing = thread.messages[system_idx]
+		if not isinstance(existing, SDKSystemMessage) or not existing.text:
+			return thread
+
+		system_text = existing.text
+		if SENTINEL_USER_MEMORIES not in system_text:
+			return thread
+
+		memories = await self._fetch_memories(app_context)
+		content = self._format_memory_context(memories) if memories else ""
+
+		new_text = system_text.replace(SENTINEL_USER_MEMORIES, content)
+		thread.messages[system_idx] = SDKSystemMessage.from_text(new_text)
 
 		return thread
 

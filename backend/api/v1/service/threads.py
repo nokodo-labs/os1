@@ -673,10 +673,12 @@ async def list_events_for_message_ids(
 	*,
 	principal: Principal,
 	include_hidden: bool = False,
+	event_types: list[EventType] | None = None,
 ) -> list[Event]:
 	"""Return events associated with the given messages in this thread.
 
 	authz is based on thread access (viewer+), not the global events permission.
+	when event_types is provided, only events of those types are returned.
 	"""
 	_ensure_admin_for_hidden(include_hidden, principal)
 	await require_thread_access(
@@ -690,15 +692,14 @@ async def list_events_for_message_ids(
 	if not message_ids:
 		return []
 
-	stmt = (
-		select(Event)
-		.where(
-			Event.thread_id == str(thread_id),
-			Event.message_id.in_([str(mid) for mid in message_ids]),
-		)
-		.order_by(Event.created_at)
-		.limit(2000)
-	)
+	conditions = [
+		Event.thread_id == str(thread_id),
+		Event.message_id.in_([str(mid) for mid in message_ids]),
+	]
+	if event_types:
+		conditions.append(Event.type.in_(event_types))
+
+	stmt = select(Event).where(*conditions).order_by(Event.created_at).limit(2000)
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
 

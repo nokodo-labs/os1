@@ -171,6 +171,8 @@ frontend/
     - `/DeleteButton.svelte`
     - `/SidebarListItem.svelte`
     - `/Tooltip.svelte`
+- effects at `/effects/`
+    - `ShimmerText.svelte` - **required** for any label representing an in-progress/ongoing state (loading, deleting, enhancing, processing, saving, etc.). never use plain text like `"loading..."` for ongoing operations.
 - primitives at `/primitives/`
 
 ## testing instructions

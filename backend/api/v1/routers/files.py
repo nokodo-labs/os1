@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
@@ -21,6 +21,17 @@ from api.v1.service import files as file_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
+
+
+# media types that browsers can render inline (images, audio, video, pdf)
+_INLINE_PREFIXES = ("image/", "audio/", "video/", "application/pdf")
+
+
+def _is_inline_type(content_type: str | None) -> bool:
+	"""return True if the content type should be served inline."""
+	if not content_type:
+		return False
+	return any(content_type.startswith(p) for p in _INLINE_PREFIXES)
 
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -101,6 +112,10 @@ async def get_file(
 @router.get("/{file_id}/content")
 async def get_file_content(
 	file_id: TypeID,
+	download: bool = Query(
+		default=False,
+		description="force browser download instead of inline display",
+	),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
@@ -111,8 +126,15 @@ async def get_file_content(
 	headers: dict[str, str] = {}
 	if filename:
 		encoded = quote(filename, safe="")
+		# use inline disposition for media types so browsers render them
+		# directly (e.g. <img> tags); attachment for everything else.
+		# download=True forces attachment regardless of content type.
+		if download:
+			disposition = "attachment"
+		else:
+			disposition = "inline" if _is_inline_type(content_type) else "attachment"
 		headers["Content-Disposition"] = (
-			f"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}"
+			f"{disposition}; filename=\"{encoded}\"; filename*=UTF-8''{encoded}"
 		)
 	if size_bytes is not None:
 		headers["Content-Length"] = str(size_bytes)

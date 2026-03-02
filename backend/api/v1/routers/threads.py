@@ -86,7 +86,7 @@ async def create_and_run(
 			detail="non-streaming runs are not yet implemented",
 		)
 
-	if not req.input:
+	if not req.input or (not req.input.text and not req.input.attachment_ids):
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail="input is required when creating a new thread",
@@ -102,6 +102,7 @@ async def create_and_run(
 		project_ids=req.project_ids,
 		client_context=req.client_context,
 		origin_session_id=x_session_id,
+		tool_choice=req.tool_choice,
 	)
 	return sse_response(stream)
 

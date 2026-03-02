@@ -12,7 +12,10 @@ import anthropic
 from ...messages import (
 	AssistantMessage,
 	ContentPart,
+	FileContent,
+	ImageContent,
 	JsonContent,
+	RefusalContent,
 	SystemMessage,
 	TextContent,
 	ToolCall,
@@ -29,6 +32,9 @@ from ...utils.provider_meta import (
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseAnthropicAdapter
 from .types import (
+	AnthropicBase64ImageSourceParam,
+	AnthropicContentBlockParam,
+	AnthropicImageBlockParam,
 	AnthropicInputJSONDelta,
 	AnthropicMessageParam,
 	AnthropicRawContentBlockDeltaEvent,
@@ -46,6 +52,7 @@ from .types import (
 	AnthropicToolResultBlockParam,
 	AnthropicToolUseBlock,
 	AnthropicToolUseBlockParam,
+	AnthropicURLImageSourceParam,
 )
 
 
@@ -301,6 +308,150 @@ def _apply_response_model_to_system(
 	return instruction
 
 
+_ANTHROPIC_IMAGE_TYPES = (
+	"image/jpeg",
+	"image/png",
+	"image/gif",
+	"image/webp",
+)
+
+
+def _content_part_to_anthropic(
+	part: ContentPart,
+) -> AnthropicTextBlockParam | AnthropicImageBlockParam | None:
+	"""convert any SDK ContentPart to an anthropic content block.
+
+	returns none for parts that have no representable content
+	(empty text, images without data, etc).
+	only returns text or image blocks - the two types valid in all
+	anthropic content slots (user messages and tool results).
+	"""
+	match part:
+		case TextContent():
+			if not part.text:
+				return None
+			return AnthropicTextBlockParam(
+				type="text",
+				text=part.text,
+			)
+		case JsonContent():
+			if part.data is None:
+				return None
+			return AnthropicTextBlockParam(
+				type="text",
+				text=json.dumps(part.data),
+			)
+		case ImageContent():
+			if part.base64 and part.media_type:
+				if part.media_type not in _ANTHROPIC_IMAGE_TYPES:
+					return None
+				return AnthropicImageBlockParam(
+					type="image",
+					source=AnthropicBase64ImageSourceParam(
+						type="base64",
+						media_type=part.media_type,
+						data=part.base64,
+					),
+				)
+			if part.url:
+				return AnthropicImageBlockParam(
+					type="image",
+					source=AnthropicURLImageSourceParam(
+						type="url",
+						url=part.url,
+					),
+				)
+			return None
+		case FileContent():
+			if part.filename:
+				return AnthropicTextBlockParam(
+					type="text",
+					text=f"[file: {part.filename}]",
+				)
+			return None
+		case RefusalContent():
+			if part.reason:
+				return AnthropicTextBlockParam(
+					type="text",
+					text=f"[refused: {part.reason}]",
+				)
+			return None
+
+
+def _content_parts_to_anthropic(
+	parts: list[ContentPart],
+) -> str | list[AnthropicContentBlockParam]:
+	"""convert a list of SDK content parts to anthropic format.
+
+	returns plain string when only text parts exist.
+	returns typed content list when multimodal parts are present.
+	"""
+	has_non_text = any(not isinstance(p, TextContent) for p in parts)
+	if not has_non_text:
+		return "".join(p.text for p in parts if isinstance(p, TextContent))
+
+	result: list[AnthropicContentBlockParam] = []
+	for part in parts:
+		converted = _content_part_to_anthropic(part)
+		if converted is not None:
+			result.append(converted)
+	if not result:
+		return "".join(p.text for p in parts if isinstance(p, TextContent))
+	return result
+
+
+def _tool_message_to_anthropic(
+	message: ToolMessage,
+) -> AnthropicMessageParam:
+	"""convert a ToolMessage to an anthropic tool_result message.
+
+	anthropic supports multimodal tool results (text + image blocks),
+	so attachments are converted to native content blocks rather than
+	text placeholders.
+	"""
+	tool_use_id = (
+		get_provider_tool_call_id(
+			metadata=message.metadata,
+			provider="anthropic.messages",
+			fallback_id=message.tool_call_id,
+		)
+		or message.tool_call_id
+	)
+
+	tool_blocks: list[AnthropicTextBlockParam | AnthropicImageBlockParam] = []
+	if message.tool_output:
+		tool_blocks.append(
+			AnthropicTextBlockParam(type="text", text=message.tool_output)
+		)
+	for att in message.attachments:
+		block = _content_part_to_anthropic(att)
+		if block is not None:
+			tool_blocks.append(block)
+
+	# collapse single text block to plain string
+	tool_result: str | list[AnthropicTextBlockParam | AnthropicImageBlockParam]
+	if (
+		len(tool_blocks) == 1
+		and isinstance(tool_blocks[0], dict)
+		and tool_blocks[0].get("type") == "text"
+	):
+		tool_result = message.tool_output
+	else:
+		tool_result = tool_blocks if tool_blocks else message.tool_output
+
+	return {
+		"role": "user",
+		"content": [
+			AnthropicToolResultBlockParam(
+				type="tool_result",
+				tool_use_id=tool_use_id,
+				content=tool_result,
+				is_error=message.is_error,
+			)
+		],
+	}
+
+
 def _messages_to_anthropic(
 	messages: list[Message],
 ) -> tuple[str | None, list[AnthropicMessageParam]]:
@@ -312,7 +463,10 @@ def _messages_to_anthropic(
 				if message.text:
 					system_parts.append(message.text)
 			case UserMessage():
-				result.append({"role": "user", "content": message.text})
+				content = _content_parts_to_anthropic(
+					list(message.content),
+				)
+				result.append({"role": "user", "content": content})
 			case AssistantMessage():
 				blocks: list[AnthropicTextBlockParam | AnthropicToolUseBlockParam] = []
 				assistant_text = message.text
@@ -332,7 +486,9 @@ def _messages_to_anthropic(
 						)
 						input_map: dict[str, object] = {}
 						if isinstance(call.arguments, dict):
-							input_map = dict[str, object](call.arguments)
+							input_map = dict[str, object](
+								call.arguments,
+							)
 						elif isinstance(call.arguments, str):
 							try:
 								parsed = (
@@ -343,7 +499,9 @@ def _messages_to_anthropic(
 							except json.JSONDecodeError:
 								parsed = {}
 							if isinstance(parsed, dict):
-								input_map = dict[str, object](parsed)
+								input_map = dict[str, object](
+									parsed,
+								)
 						blocks.append(
 							{
 								"type": "tool_use",
@@ -355,31 +513,16 @@ def _messages_to_anthropic(
 				if not blocks:
 					result.append({"role": "assistant", "content": ""})
 				elif len(blocks) == 1 and blocks[0]["type"] == "text":
-					result.append({"role": "assistant", "content": blocks[0]["text"]})
+					result.append(
+						{
+							"role": "assistant",
+							"content": blocks[0]["text"],
+						}
+					)
 				else:
 					result.append({"role": "assistant", "content": blocks})
 			case ToolMessage():
-				tool_use_id_value = (
-					get_provider_tool_call_id(
-						metadata=message.metadata,
-						provider="anthropic.messages",
-						fallback_id=message.tool_call_id,
-					)
-					or message.tool_call_id
-				)
-				result.append(
-					{
-						"role": "user",
-						"content": [
-							AnthropicToolResultBlockParam(
-								type="tool_result",
-								tool_use_id=tool_use_id_value,
-								content=message.tool_output,
-								is_error=message.is_error,
-							)
-						],
-					}
-				)
+				result.append(_tool_message_to_anthropic(message))
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
 

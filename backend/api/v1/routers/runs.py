@@ -53,11 +53,12 @@ async def create_run(
 			client_context=req.client_context,
 			origin_session_id=x_session_id,
 			persist=req.persist,
+			tool_choice=req.tool_choice,
 		)
 		return sse_response(stream)
 
 	# ephemeral run - no thread, no persistence
-	if not req.input:
+	if not req.input or (not req.input.text and not req.input.attachment_ids):
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail="input is required for ephemeral runs",
@@ -71,6 +72,7 @@ async def create_run(
 		client_context=req.client_context,
 		origin_session_id=x_session_id,
 		persist=False,
+		tool_choice=req.tool_choice,
 	)
 	return sse_response(stream)
 

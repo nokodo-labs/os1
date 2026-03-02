@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy import BigInteger, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -67,6 +67,7 @@ class File(
 	mime_type: Mapped[str | None] = mapped_column(String(255))
 	size_bytes: Mapped[int | None] = mapped_column(BigInteger())
 	checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+	description: Mapped[str | None] = mapped_column(Text, nullable=True)
 	status: Mapped[FileStatus] = mapped_column(
 		StringEnum(FileStatus),
 		default=FileStatus.PENDING,

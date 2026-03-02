@@ -12,7 +12,10 @@ import openai
 from ...messages import (
 	AssistantMessage,
 	ContentPart,
+	FileContent,
+	ImageContent,
 	JsonContent,
+	RefusalContent,
 	SystemMessage,
 	TextContent,
 	ToolCall,
@@ -38,8 +41,11 @@ from .types import (
 	OpenAIResponseFunctionToolCall,
 	OpenAIResponseFunctionToolCallParam,
 	OpenAIResponseFunctionToolParam,
+	OpenAIResponseInputContentParam,
+	OpenAIResponseInputImageParam,
 	OpenAIResponseInputItemParam,
 	OpenAIResponseInputParam,
+	OpenAIResponseInputTextParam,
 	OpenAIResponseOutputItemAddedEvent,
 	OpenAIResponsesModel,
 	OpenAIResponseTextConfigParam,
@@ -287,6 +293,97 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 					yield AssistantMessage(usage=usage)
 
 
+def _content_part_to_responses(
+	part: ContentPart,
+) -> OpenAIResponseInputContentParam | None:
+	"""convert any SDK ContentPart to an openai responses input part.
+
+	returns none for parts that have no representable content
+	(empty text, images without data, etc).
+	"""
+	match part:
+		case TextContent():
+			if not part.text:
+				return None
+			return OpenAIResponseInputTextParam(
+				type="input_text",
+				text=part.text,
+			)
+		case JsonContent():
+			if part.data is None:
+				return None
+			return OpenAIResponseInputTextParam(
+				type="input_text",
+				text=json.dumps(part.data),
+			)
+		case ImageContent():
+			if part.base64 and part.media_type:
+				return OpenAIResponseInputImageParam(
+					type="input_image",
+					image_url=(f"data:{part.media_type};base64,{part.base64}"),
+					detail="auto",
+				)
+			if part.url:
+				return OpenAIResponseInputImageParam(
+					type="input_image",
+					image_url=part.url,
+					detail="auto",
+				)
+			return None
+		case FileContent():
+			if part.filename:
+				return OpenAIResponseInputTextParam(
+					type="input_text",
+					text=f"[file: {part.filename}]",
+				)
+			return None
+		case RefusalContent():
+			if part.reason:
+				return OpenAIResponseInputTextParam(
+					type="input_text",
+					text=f"[refused: {part.reason}]",
+				)
+			return None
+
+
+def _content_parts_to_responses(
+	parts: list[ContentPart],
+) -> str | list[OpenAIResponseInputContentParam]:
+	"""convert a list of SDK content parts to responses format.
+
+	returns plain string when only text parts exist.
+	returns typed content list when multimodal parts are present.
+	"""
+	has_non_text = any(not isinstance(p, TextContent) for p in parts)
+	if not has_non_text:
+		return "".join(p.text for p in parts if isinstance(p, TextContent))
+
+	result: list[OpenAIResponseInputContentParam] = []
+	for part in parts:
+		converted = _content_part_to_responses(part)
+		if converted is not None:
+			result.append(converted)
+	if not result:
+		return "".join(p.text for p in parts if isinstance(p, TextContent))
+	return result
+
+
+def _tool_output_with_attachments(message: ToolMessage) -> str:
+	"""build tool output string including attachment placeholders.
+
+	Responses tool output only supports text. if the tool message
+	has attachments, append filename placeholders so the model
+	knows they exist.
+	"""
+	if not message.attachments:
+		return message.tool_output
+	parts = [message.tool_output]
+	for att in message.attachments:
+		label = att.filename or "attachment"
+		parts.append(f"[attached: {label}]")
+	return "\n".join(parts)
+
+
 def _messages_to_openai_responses_input(
 	messages: list[Message],
 ) -> OpenAIResponseInputParam:
@@ -295,11 +392,14 @@ def _messages_to_openai_responses_input(
 	for message in messages:
 		match message:
 			case UserMessage():
+				content = _content_parts_to_responses(
+					list(message.content),
+				)
 				openai_messages.append(
 					OpenAIEasyInputMessageParam(
 						type="message",
 						role="user",
-						content=message.text,
+						content=content,
 					)
 				)
 			case SystemMessage():
@@ -340,6 +440,8 @@ def _messages_to_openai_responses_input(
 							)
 						)
 			case ToolMessage():
+				# Responses tool output only supports text -
+				# append attachment placeholders
 				openai_tool_call_id = (
 					get_provider_tool_call_id(
 						metadata=message.metadata,
@@ -352,7 +454,9 @@ def _messages_to_openai_responses_input(
 					OpenAIResponseFunctionCallOutput(
 						type="function_call_output",
 						call_id=openai_tool_call_id,
-						output=message.tool_output,
+						output=_tool_output_with_attachments(
+							message,
+						),
 					)
 				)
 			case _:

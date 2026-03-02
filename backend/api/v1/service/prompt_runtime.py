@@ -34,6 +34,13 @@ if TYPE_CHECKING:
 	from api.schemas.runs import ClientContext
 
 
+# sentinel markers for filter injection points.
+# jinja2 renders {{ variable_name }} into these sentinels at template time.
+# filters find-and-replace the sentinel with actual content.
+# if the sentinel is absent from the rendered prompt, the filter is a no-op.
+SENTINEL_REFERENCED_ATTACHMENTS = "<<FILTER:referenced_attachments>>"
+SENTINEL_USER_MEMORIES = "<<FILTER:user_memories>>"
+
 _PROMPT_REF_RE = re.compile(r"{{\s*PROMPTS\.([a-zA-Z0-9-_]+)\s*}}")
 _INCLUDE_RE = re.compile(r"{%-?\s*include\s+['\"]([a-zA-Z0-9-_/]+)['\"]\s*-?%}")
 _MAX_DEPTH = 50
@@ -516,6 +523,12 @@ def build_prompt_variables(
 
 	# location variables (from browser geolocation)
 	variables.update(_build_location_variables(client_context))
+
+	# filter injection sentinels - filters find-and-replace these at runtime.
+	# if the admin didn't include the variable in their prompt, the sentinel
+	# is absent and the filter skips all processing.
+	variables["referenced_attachments"] = SENTINEL_REFERENCED_ATTACHMENTS
+	variables["user_memories"] = SENTINEL_USER_MEMORIES
 
 	if user is None:
 		variables.update(

@@ -6,6 +6,18 @@ stay small and type check cleanly.
 
 from __future__ import annotations
 
+from anthropic.types import (
+	Base64ImageSourceParam as AnthropicBase64ImageSourceParam,
+)
+from anthropic.types import (
+	ContentBlockParam as AnthropicContentBlockParam,
+)
+from anthropic.types import (
+	ImageBlockParam as AnthropicImageBlockParam,
+)
+from anthropic.types import (
+	URLImageSourceParam as AnthropicURLImageSourceParam,
+)
 from anthropic.types.input_json_delta import (
 	InputJSONDelta as AnthropicInputJSONDelta,
 )
@@ -57,6 +69,10 @@ from anthropic.types.tool_use_block_param import (
 
 
 __all__ = [
+	"AnthropicBase64ImageSourceParam",
+	"AnthropicContentBlockParam",
+	"AnthropicImageBlockParam",
+	"AnthropicURLImageSourceParam",
 	"AnthropicInputJSONDelta",
 	"AnthropicMessageParam",
 	"AnthropicRawContentBlockDeltaEvent",

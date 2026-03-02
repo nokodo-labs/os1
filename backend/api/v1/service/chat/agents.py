@@ -15,26 +15,30 @@ from api.database import AsyncSessionLocal
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
 from api.models.event import Event
-from api.models.event_types import EventType
-from api.models.message import Message as MessageORM
 from api.models.model import Model
 from api.permissions import ResourceType
 from api.schemas.message import MessageCreate
-from api.schemas.runs import ClientContext
+from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import (
-	list_accessible_user_ids,
-	require_resource_access,
-)
+from api.v1.service.authorization import require_resource_access
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import resolve_filters
+from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.hooks import resolve_hooks
 from api.v1.service.chat.models import build_chat_model
+from api.v1.service.chat.run_helpers import (
+	broadcast_run_event,
+	inject_system_instructions,
+	load_sdk_thread,
+	message_to_sse_data,
+	safe_rollback,
+	sse_event,
+)
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.chat.tools import resolve_tools
-from api.v1.service.events import build_event_emitter, event_connections
-from api.v1.service.prompt_runtime import render_agent_instructions
+from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
+from api.v1.service.events import build_event_emitter
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
 from nokodo_ai import Hook as SDKHook
@@ -42,24 +46,14 @@ from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.deltas import AgentDelta
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
-from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import TextContent
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.tool import Tool
-from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 logger = logging.getLogger(__name__)
-
-
-async def _safe_rollback(session: AsyncSession) -> None:
-	"""rollback the session, swallowing errors if already closed."""
-	try:
-		await session.rollback()
-	except Exception:
-		pass
 
 
 async def _load_agent(agent_id: TypeID, session: AsyncSession) -> AgentORM:
@@ -151,6 +145,8 @@ async def build_agent_from_orm(
 		context=context,
 	)
 	filters = resolve_filters(agent_orm.plugin_ids)
+	# file_resolve always runs last - resolves file_id -> base64/url
+	filters.append(FileResolveFilter())
 	hooks = resolve_hooks(agent_orm.plugin_ids)
 
 	# extract max_iterations from agent config
@@ -168,96 +164,17 @@ async def build_agent_from_orm(
 	)
 
 
-async def inject_system_instructions(
-	agent_orm: AgentORM,
-	thread: SDKThread,
-	*,
-	session: AsyncSession,
-	principal: Principal | None = None,
-	client_context: ClientContext | None = None,
-) -> SDKThread:
-	"""inject an agent's rendered system instructions at the start of a thread."""
-	if not agent_orm.system_prompt:
-		return thread
-
-	user = principal.user if principal else None
-	rendered = await render_agent_instructions(
-		session,
-		text=agent_orm.system_prompt,
-		user=user,
-		client_context=client_context,
-	)
-	if not rendered:
-		return thread
-
-	system_msg = SDKSystemMessage.from_text(rendered)
-	return thread.model_copy(update={"messages": [system_msg, *thread.messages]})
-
-
-def _sse_event(*, event: str, data: dict[str, object]) -> bytes:
-	"""format an sse event (delegates to sse utils)."""
-	return sse_encode(event=event, data=data)
-
-
-def _message_to_sse_data(msg: MessageORM) -> dict[str, object]:
-	"""serialize a persisted orm message for sse streaming."""
-	content_parts: list[dict[str, object]] = []
-	for part in msg.content or []:
-		if isinstance(part, dict):
-			content_parts.append(part)
-		else:
-			content_parts.append({"type": "text", "text": str(part)})
-
-	return {
-		"id": str(msg.id),
-		"thread_id": str(msg.thread_id),
-		"parent_id": str(msg.parent_id) if msg.parent_id else None,
-		"type": msg.type.value,
-		"content": content_parts,
-		"metadata_": msg.metadata_ or {},
-		"sender_agent_id": str(msg.sender_agent_id) if msg.sender_agent_id else None,
-		"sender_user_id": str(msg.sender_user_id) if msg.sender_user_id else None,
-		"created_at": msg.created_at.isoformat() if msg.created_at else None,
-	}
-
-
-async def _broadcast_run_event(
-	*,
-	thread_id: str,
-	agent_id: str,
-	run_id: str,
-	started: bool,
-) -> None:
-	"""broadcast run.started / run.completed to all users with access to a thread."""
-	msg_type = EventType.RUN_STARTED if started else EventType.RUN_COMPLETED
-	payload: dict[str, object] = {
-		"type": msg_type,
-		"data": {
-			"thread_id": thread_id,
-			"agent_id": agent_id,
-			"run_id": run_id,
-		},
-	}
-
-	async with AsyncSessionLocal() as db_session:
-		recipient_ids = await list_accessible_user_ids(
-			ResourceType.THREAD, thread_id, db_session
-		)
-
-	if recipient_ids:
-		await event_connections.send_to_users(recipient_ids, payload)
-
-
 async def run_agent(
 	thread_id: TypeID | None,
 	agent_id: TypeID,
 	principal: Principal,
 	*,
-	input: str | None = None,
+	input: RunInput | None = None,
 	parent_id: TypeID | None = None,
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
 	persist: bool = True,
+	tool_choice: ToolChoice | None = None,
 ) -> AsyncIterator[bytes]:
 	"""stream a thread run as sse events.
 
@@ -299,6 +216,9 @@ async def run_agent(
 
 		initial_parent_id: TypeID | None = None
 
+		# resolve structured input to content parts
+		resolved_input = await resolve_run_input(input, session) if input else []
+
 		if persist:
 			assert thread_id is not None  # persist=True requires a thread_id
 			# register run in status store + broadcast run.started
@@ -311,7 +231,7 @@ async def run_agent(
 			_track_async_task(
 				"broadcast_run_started",
 				asyncio.create_task(
-					_broadcast_run_event(
+					broadcast_run_event(
 						thread_id=str(thread_id),
 						agent_id=str(agent_id),
 						run_id=run_id_str,
@@ -319,20 +239,19 @@ async def run_agent(
 					)
 				),
 			)
-			if input is not None and input.strip():
-				user_msg = await thread_service.create_message(
+			if resolved_input:
+				user_msg = await create_run_user_message(
 					thread_id,
-					MessageCreate(
-						content=input,
-						metadata_={"run_id": run_id},
-						parent_id=parent_id,
-					),
 					session,
 					principal=principal,
+					resolved_input=resolved_input,
+					parent_id=parent_id,
+					run_id=run_id,
 					origin_session_id=origin_session_id,
+					attachment_actions=(input.attachment_actions if input else None),
 				)
-				user_msg_data = _message_to_sse_data(user_msg)
-				frame = _sse_event(event="message_created", data=user_msg_data)
+				user_msg_data = message_to_sse_data(user_msg)
+				frame = sse_event(event="message_created", data=user_msg_data)
 				await run_status_store.publish(run_id_str, frame)
 				yield frame
 				initial_parent_id = TypeID(str(user_msg.id))
@@ -357,8 +276,8 @@ async def run_agent(
 			raise
 		except Exception:
 			logger.exception("failed to load agent")
-			err = _sse_event(event="error", data={"message": "failed to load agent"})
-			done = _sse_event(event="done", data={})
+			err = sse_event(event="error", data={"message": "failed to load agent"})
+			done = sse_event(event="done", data={})
 			if persist:
 				await run_status_store.publish(run_id_str, err)
 				await run_status_store.publish(run_id_str, done)
@@ -428,13 +347,21 @@ async def run_agent(
 		def _message_id_provider() -> str | None:
 			return active_message_id_for_events
 
-		if persist:
+		_has_user_message = persist and bool(resolved_input)
+		if _has_user_message:
 			emitter = build_event_emitter(
 				message_id_provider=_message_id_provider,
 				before_persist=_before_persist_event,
 			)
 		else:
-			emitter = lambda _event: asyncio.sleep(0)  # noqa: E731
+			# no user message (regeneration / ephemeral) - suppress attachment
+			# lifecycle events. decay/reveal still work via message history,
+			# but events are not persisted since there is no message to scope
+			# them to.
+			async def _noop_emitter(_event: Event) -> None:
+				pass
+
+			emitter = _noop_emitter
 
 		ctx = AppContext(
 			session=session,
@@ -443,14 +370,15 @@ async def run_agent(
 			thread_id=thread_id,
 			event_emitter=emitter,
 		)
+
 		try:
 			sdk_agent = await build_agent_from_orm(agent, ctx)
 		except Exception:
 			logger.exception("failed to build agent")
-			err = _sse_event(
+			err = sse_event(
 				event="error", data={"message": "failed to initialize agent"}
 			)
-			done = _sse_event(event="done", data={})
+			done = sse_event(event="done", data={})
 			if persist:
 				await run_status_store.publish(run_id_str, err)
 				await run_status_store.publish(run_id_str, done)
@@ -460,63 +388,29 @@ async def run_agent(
 
 		if persist:
 			assert thread_id is not None  # persist=True requires a thread_id
-			thread_orm = await thread_service.get_thread(
+			sdk_thread, head_id = await load_sdk_thread(
 				thread_id,
 				session,
 				principal=principal,
+				parent_id=initial_parent_id,
 			)
 			if initial_parent_id is None:
-				initial_parent_id = (
-					TypeID(str(thread_orm.current_message_id))
-					if thread_orm.current_message_id
-					else None
-				)
-
-			original_head = thread_orm.current_message_id
-			if initial_parent_id and original_head != initial_parent_id:
-				thread_orm.current_message_id = initial_parent_id
-
-			try:
-				branch_orm = await thread_service.get_current_branch(
-					thread_id,
-					session,
-					principal=principal,
-					include_hidden=False,
-				)
-				sdk_thread = SDKThread(
-					created_at=thread_orm.created_at,
-					messages=[m.to_sdk() for m in branch_orm],
-					metadata=thread_orm.metadata_,
-				)
-				thread = await inject_system_instructions(
-					agent,
-					sdk_thread,
-					session=session,
-					principal=principal,
-					client_context=client_context,
-				)
-			finally:
-				if initial_parent_id and original_head != initial_parent_id:
-					thread_orm.current_message_id = original_head
+				initial_parent_id = TypeID(str(head_id)) if head_id else None
+			thread = await inject_system_instructions(
+				agent,
+				sdk_thread,
+				session=session,
+				principal=principal,
+				client_context=client_context,
+			)
 		else:
 			# ephemeral: no persistence; load thread context if thread_id provided
 			if thread_id is not None:
 				try:
-					thread_orm = await thread_service.get_thread(
+					sdk_thread, _ = await load_sdk_thread(
 						thread_id,
 						session,
 						principal=principal,
-					)
-					branch_orm = await thread_service.get_current_branch(
-						thread_id,
-						session,
-						principal=principal,
-						include_hidden=False,
-					)
-					sdk_thread = SDKThread(
-						created_at=thread_orm.created_at,
-						messages=[m.to_sdk() for m in branch_orm],
-						metadata=thread_orm.metadata_,
 					)
 				except HTTPException:
 					raise
@@ -531,12 +425,12 @@ async def run_agent(
 					)
 			else:
 				sdk_thread = SDKThread(messages=[])
-			if input:
+			if resolved_input:
 				sdk_thread = sdk_thread.model_copy(
 					update={
 						"messages": [
 							*sdk_thread.messages,
-							SDKUserMessage.from_text(input),
+							SDKUserMessage(content=resolved_input),
 						]
 					}
 				)
@@ -562,7 +456,7 @@ async def run_agent(
 			stream = await sdk_agent.run(
 				thread,
 				app_context=ctx,
-				tool_choice="auto",
+				tool_choice=tool_choice or "auto",
 				stream=True,
 			)
 
@@ -628,7 +522,7 @@ async def run_agent(
 					if delta.chat.message.content:
 						for part in delta.chat.message.content:
 							if isinstance(part, TextContent) and part.text:
-								yield _sse_event(
+								yield sse_event(
 									event="text_delta", data={"text": part.text}
 								)
 
@@ -675,7 +569,7 @@ async def run_agent(
 				if delta.done:
 					message_id = None
 
-				frame = _sse_event(
+				frame = sse_event(
 					event="delta",
 					data=_delta_envelope(message_id=message_id, delta=delta),
 				)
@@ -689,13 +583,13 @@ async def run_agent(
 					streaming_parent_id = message_id
 
 		except GeneratorExit:
-			await _safe_rollback(session)
+			await safe_rollback(session)
 			if persist:
 				await run_status_store.fail_run(run_id_str)
 				_track_async_task(
 					"broadcast_run_completed",
 					asyncio.create_task(
-						_broadcast_run_event(
+						broadcast_run_event(
 							thread_id=str(thread_id),
 							agent_id=str(agent_id),
 							run_id=run_id_str,
@@ -706,13 +600,13 @@ async def run_agent(
 			return
 		except Exception:
 			logger.exception("error during agent streaming")
-			await _safe_rollback(session)
+			await safe_rollback(session)
 			if persist:
 				await run_status_store.fail_run(run_id_str)
 				_track_async_task(
 					"broadcast_run_completed",
 					asyncio.create_task(
-						_broadcast_run_event(
+						broadcast_run_event(
 							thread_id=str(thread_id),
 							agent_id=str(agent_id),
 							run_id=run_id_str,
@@ -720,8 +614,8 @@ async def run_agent(
 						)
 					),
 				)
-			yield _sse_event(event="error", data={"message": "generation failed"})
-			yield _sse_event(event="done", data={})
+			yield sse_event(event="error", data={"message": "generation failed"})
+			yield sse_event(event="done", data={})
 			return
 		finally:
 			if persist and worker_task is not None and not worker_task.done():
@@ -733,7 +627,7 @@ async def run_agent(
 			_track_async_task(
 				"broadcast_run_completed",
 				asyncio.create_task(
-					_broadcast_run_event(
+					broadcast_run_event(
 						thread_id=str(thread_id),
 						agent_id=str(agent_id),
 						run_id=run_id_str,
@@ -742,7 +636,7 @@ async def run_agent(
 				),
 			)
 
-		yield _sse_event(event="done", data={})
+		yield sse_event(event="done", data={})
 
 	if persist:
 		assert thread_id is not None  # persist=True requires a thread_id

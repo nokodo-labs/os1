@@ -100,6 +100,10 @@ class EventType(StrEnum):
 	# --- user events ---
 	USER_PREFERENCES_UPDATED = "user.preferences_updated"
 
+	# --- attachment lifecycle events ---
+	ATTACHMENT_DECAYED = "attachment.decayed"
+	ATTACHMENT_REVEALED = "attachment.revealed"
+
 	# --- tool events (scoped to tool_call_id) ---
 	TOOL_PROGRESS = "tool.progress"
 	TOOL_CUSTOM = "tool.custom"  # generic tool event. can include custom UI components
@@ -210,4 +214,9 @@ TASK_EVENTS = {
 	EventType.TASK_UPDATED,
 	EventType.TASK_COMPLETED,
 	EventType.TASK_FAILED,
+}
+
+ATTACHMENT_EVENTS = {
+	EventType.ATTACHMENT_DECAYED,
+	EventType.ATTACHMENT_REVEALED,
 }

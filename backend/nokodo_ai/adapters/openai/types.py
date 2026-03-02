@@ -26,6 +26,15 @@ from openai.types.chat import (
 	ChatCompletionChunk as OpenAIChatCompletionChunk,
 )
 from openai.types.chat import (
+	ChatCompletionContentPartImageParam as OpenAIChatCompletionContentPartImageParam,
+)
+from openai.types.chat import (
+	ChatCompletionContentPartParam as OpenAIChatCompletionContentPartParam,
+)
+from openai.types.chat import (
+	ChatCompletionContentPartTextParam as OpenAIChatCompletionContentPartTextParam,
+)
+from openai.types.chat import (
 	ChatCompletionMessageFunctionToolCall,
 	ChatCompletionMessageFunctionToolCallParam,
 )
@@ -87,10 +96,19 @@ from openai.types.responses import (
 	ResponseFunctionToolCallParam as OpenAIResponseFunctionToolCallParam,
 )
 from openai.types.responses import (
+	ResponseInputContentParam as OpenAIResponseInputContentParam,
+)
+from openai.types.responses import (
+	ResponseInputImageParam as OpenAIResponseInputImageParam,
+)
+from openai.types.responses import (
 	ResponseInputItemParam as OpenAIResponseInputItemParam,
 )
 from openai.types.responses import (
 	ResponseInputParam as OpenAIResponseInputParam,
+)
+from openai.types.responses import (
+	ResponseInputTextParam as OpenAIResponseInputTextParam,
 )
 from openai.types.responses import (
 	ResponseOutputItemAddedEvent as OpenAIResponseOutputItemAddedEvent,
@@ -134,6 +152,9 @@ __all__ = [
 	"OpenAIChatCompletionMessageToolCallUnion",
 	"OpenAIChatCompletion",
 	"OpenAIChatCompletionChunk",
+	"OpenAIChatCompletionContentPartImageParam",
+	"OpenAIChatCompletionContentPartParam",
+	"OpenAIChatCompletionContentPartTextParam",
 	"OpenAIChatCompletionMessageParam",
 	"OpenAIChatCompletionAssistantMessageParam",
 	"OpenAIChatCompletionSystemMessageParam",
@@ -149,6 +170,9 @@ __all__ = [
 	"OpenAIResponsesModel",
 	"OpenAIResponseInputParam",
 	"OpenAIResponseInputItemParam",
+	"OpenAIResponseInputContentParam",
+	"OpenAIResponseInputTextParam",
+	"OpenAIResponseInputImageParam",
 	"OpenAIResponseToolChoice",
 	"OpenAIResponseFunctionCallOutput",
 	"OpenAIResponseFunctionToolCall",

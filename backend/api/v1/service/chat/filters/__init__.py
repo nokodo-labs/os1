@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.filters.attachment_decay import AttachmentDecayFilter
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.filters.memory import MemoryContextFilter
 from nokodo_ai.filters import Filter as SDKFilter
 
@@ -13,6 +15,7 @@ type AppFilter = SDKFilter[AppContext]
 
 FILTER_REGISTRY: dict[str, AppFilter] = {
 	"memory_context": MemoryContextFilter(),
+	"attachment_decay": AttachmentDecayFilter(),
 }
 
 
@@ -33,6 +36,8 @@ def resolve_filters(filter_ids: list[str]) -> list[AppFilter]:
 
 
 __all__ = [
+	"AttachmentDecayFilter",
+	"FileResolveFilter",
 	"Filter",
 	"MemoryContextFilter",
 	"FILTER_REGISTRY",

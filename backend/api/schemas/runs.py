@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -162,6 +163,33 @@ class ClientContext(BaseModel):
 	)
 
 
+class RunInput(BaseModel):
+	"""structured input for an agent run.
+
+	supports plain text, file attachments via IDs, or both.
+	"""
+
+	text: str | None = Field(
+		default=None,
+		description="user message text content",
+	)
+	attachment_ids: list[TypeID] = Field(
+		default_factory=list,
+		description="file IDs to include as content parts in the message. "
+		"each ID is resolved server-side to an image or file content part.",
+	)
+	attachment_actions: dict[str, Literal["reveal", "reference"]] | None = Field(
+		default=None,
+		description="one-off user attachment actions. keys are file_ids, values are "
+		"'reveal' (make active) or 'reference' (force decay). "
+		"persisted as events and applied by the decay filter.",
+	)
+
+
+# allowed tool_choice values - only specific tools can be forced by the client
+ToolChoice = Literal["web_search", "think", "generate_image"]
+
+
 # base run fields shared across request types
 
 
@@ -169,7 +197,16 @@ class _RunBase(BaseModel):
 	"""fields common to every run request."""
 
 	agent_id: TypeID
-	input: str | None = None
+	input: RunInput | None = Field(
+		default=None,
+		description="structured user input with text and/or attachment IDs. "
+		"omit for regeneration/retry on an existing thread.",
+	)
+	tool_choice: ToolChoice | None = Field(
+		default=None,
+		description="optional tool choice override for this run. "
+		"only specific tools can be forced.",
+	)
 	stream: bool = Field(
 		default=True,
 		description="when true (default) the response is an SSE stream; "

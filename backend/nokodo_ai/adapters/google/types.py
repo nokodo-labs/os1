@@ -7,6 +7,9 @@ stay small and type check cleanly.
 from __future__ import annotations
 
 from google.genai.types import (
+	Blob as GoogleBlob,
+)
+from google.genai.types import (
 	Content as GoogleContent,
 )
 from google.genai.types import (
@@ -39,6 +42,7 @@ from google.genai.types import (
 
 
 __all__ = [
+	"GoogleBlob",
 	"GoogleContent",
 	"GoogleFunctionCallingConfig",
 	"GoogleFunctionDeclaration",

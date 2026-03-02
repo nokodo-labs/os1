@@ -11,6 +11,7 @@ programmatic flow that doesn't originate from an HTTP request.
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import time
@@ -221,6 +222,49 @@ async def read_content(
 		)
 	stream = await backend.get(file.storage_key)
 	return stream, file.mime_type, file.size_bytes
+
+
+async def resolve_file_data(
+	file_id: str,
+	session: AsyncSession,
+) -> tuple[str | None, str | None]:
+	"""resolve a file record to inline-ready data (no access check).
+
+	looks up the file by id, then tries presigned URL first (fast, no
+	memory cost on S3 backends). falls back to reading bytes and
+	encoding as base64.
+
+	returns (url, base64) - exactly one will be set, the other None.
+	returns (None, None) when the file or storage object is missing.
+	"""
+	result = await session.execute(
+		select(File).where(File.id == file_id, File.deleted_at.is_(None))
+	)
+	file = result.scalars().one_or_none()
+	if file is None:
+		log.warning("resolve_file_data: file %s not found", file_id)
+		return None, None
+
+	backend = get_storage_backend(file.storage_backend)
+
+	url = await backend.get_url(file.storage_key)
+	if url:
+		return url, None
+
+	if not await backend.exists(file.storage_key):
+		log.warning(
+			"resolve_file_data: storage object missing for file %s",
+			file.id,
+		)
+		return None, None
+
+	stream = await backend.get(file.storage_key)
+	chunks: list[bytes] = []
+	async for chunk in stream:
+		chunks.append(chunk)
+	raw = b"".join(chunks)
+	b64 = base64.standard_b64encode(raw).decode("ascii")
+	return None, b64
 
 
 async def delete_content(file: File) -> None:

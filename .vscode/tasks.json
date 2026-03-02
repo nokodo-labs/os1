@@ -290,9 +290,9 @@
 			}
 		},
 		{
-			"label": "console: generate API",
+			"label": "console: generate API types",
 			"type": "shell",
-			"command": "pnpm run generate:api",
+			"command": "pnpm run generate:api-types",
 			"options": {
 				"cwd": "${workspaceFolder}/console"
 			},

@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel
-from api.schemas.runs import ClientContext
+from api.schemas.runs import ClientContext, RunInput
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadCreate
 from api.v1.service import threads as thread_service
@@ -24,11 +24,12 @@ async def start_thread_run(
 	thread_id: TypeID,
 	agent_id: TypeID,
 	principal: Principal,
-	input: str | None = None,
+	input: RunInput | None = None,
 	parent_id: TypeID | None = None,
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
 	persist: bool = True,
+	tool_choice: str | None = None,
 ) -> AsyncIterator[bytes]:
 	"""validate access and return a streaming agent run on an existing thread.
 
@@ -50,6 +51,7 @@ async def start_thread_run(
 		client_context=client_context,
 		origin_session_id=origin_session_id,
 		persist=persist,
+		tool_choice=tool_choice,
 	)
 
 
@@ -58,12 +60,13 @@ async def create_thread_and_run_stream(
 	*,
 	principal: Principal,
 	agent_id: TypeID,
-	input: str,
+	input: RunInput,
 	is_temporary: bool = False,
 	tags: list[str] | None = None,
 	project_ids: list[TypeID] | None = None,
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
+	tool_choice: str | None = None,
 ) -> AsyncIterator[bytes]:
 	"""create a thread and return a streaming agent run.
 
@@ -98,6 +101,7 @@ async def create_thread_and_run_stream(
 			input=input,
 			client_context=client_context,
 			origin_session_id=origin_session_id,
+			tool_choice=tool_choice,
 		):
 			yield chunk
 

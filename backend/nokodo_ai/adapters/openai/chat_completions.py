@@ -13,7 +13,10 @@ import openai
 from ...messages import (
 	AssistantMessage,
 	ContentPart,
+	FileContent,
 	FinishReason,
+	ImageContent,
+	JsonContent,
 	RefusalContent,
 	SystemMessage,
 	TextContent,
@@ -36,6 +39,9 @@ from .types import (
 	OpenAIChatCompletion,
 	OpenAIChatCompletionAssistantMessageParam,
 	OpenAIChatCompletionChunk,
+	OpenAIChatCompletionContentPartImageParam,
+	OpenAIChatCompletionContentPartParam,
+	OpenAIChatCompletionContentPartTextParam,
 	OpenAIChatCompletionFunctionDefinition,
 	OpenAIChatCompletionFunctionToolCall,
 	OpenAIChatCompletionFunctionToolCallParam,
@@ -475,6 +481,101 @@ def _chat_completion_to_assistant_message(
 	)
 
 
+def _content_part_to_openai_cc(
+	part: ContentPart,
+) -> OpenAIChatCompletionContentPartParam | None:
+	"""convert any SDK ContentPart to an openai chat.completions part.
+
+	returns none for parts that have no representable content
+	(empty text, images without data, etc).
+	"""
+	match part:
+		case TextContent():
+			if not part.text:
+				return None
+			return OpenAIChatCompletionContentPartTextParam(
+				type="text",
+				text=part.text,
+			)
+		case JsonContent():
+			if part.data is None:
+				return None
+			return OpenAIChatCompletionContentPartTextParam(
+				type="text",
+				text=json.dumps(part.data),
+			)
+		case ImageContent():
+			if part.base64 and part.media_type:
+				return OpenAIChatCompletionContentPartImageParam(
+					type="image_url",
+					image_url={
+						"url": (f"data:{part.media_type};base64,{part.base64}"),
+						"detail": "auto",
+					},
+				)
+			if part.url:
+				return OpenAIChatCompletionContentPartImageParam(
+					type="image_url",
+					image_url={
+						"url": part.url,
+						"detail": "auto",
+					},
+				)
+			return None
+		case FileContent():
+			if part.filename:
+				return OpenAIChatCompletionContentPartTextParam(
+					type="text",
+					text=f"[file: {part.filename}]",
+				)
+			return None
+		case RefusalContent():
+			if part.reason:
+				return OpenAIChatCompletionContentPartTextParam(
+					type="text",
+					text=f"[refused: {part.reason}]",
+				)
+			return None
+
+
+def _content_parts_to_openai_cc(
+	parts: list[ContentPart],
+) -> str | list[OpenAIChatCompletionContentPartParam]:
+	"""convert a list of SDK content parts to openai CC format.
+
+	returns plain string when only text parts exist (cheaper).
+	returns typed content list when multimodal parts are present.
+	"""
+	has_non_text = any(not isinstance(p, TextContent) for p in parts)
+	if not has_non_text:
+		return "".join(p.text for p in parts if isinstance(p, TextContent))
+
+	result: list[OpenAIChatCompletionContentPartParam] = []
+	for part in parts:
+		converted = _content_part_to_openai_cc(part)
+		if converted is not None:
+			result.append(converted)
+	if not result:
+		return "".join(p.text for p in parts if isinstance(p, TextContent))
+	return result
+
+
+def _tool_output_with_attachments(message: ToolMessage) -> str:
+	"""build tool output string including attachment placeholders.
+
+	CC/Responses tool results only support text. if the tool message
+	has attachments, append filename placeholders so the model
+	knows they exist.
+	"""
+	if not message.attachments:
+		return message.tool_output
+	parts = [message.tool_output]
+	for att in message.attachments:
+		label = att.filename or "attachment"
+		parts.append(f"[attached: {label}]")
+	return "\n".join(parts)
+
+
 def _messages_to_openai_chatcompletions(
 	messages: list[Message],
 ) -> list[OpenAIChatCompletionMessageParam]:
@@ -486,7 +587,9 @@ def _messages_to_openai_chatcompletions(
 				openai_messages.append(
 					OpenAIChatCompletionUserMessageParam(
 						role="user",
-						content=message.text,
+						content=_content_parts_to_openai_cc(
+							list(message.content),
+						),
 					)
 				)
 			case SystemMessage():
@@ -497,9 +600,10 @@ def _messages_to_openai_chatcompletions(
 					)
 				)
 			case AssistantMessage():
+				# CC assistant messages only support text + refusal
 				openai_message = OpenAIChatCompletionAssistantMessageParam(
 					role="assistant",
-					content=message.text,
+					content=message.text or None,
 				)
 				if message.tool_calls:
 					openai_message["tool_calls"] = [
@@ -522,6 +626,9 @@ def _messages_to_openai_chatcompletions(
 					]
 				openai_messages.append(openai_message)
 			case ToolMessage():
+				# CC tool messages only support text -
+				# append attachment placeholders so the model
+				# knows they exist
 				openai_tool_call_id = (
 					get_provider_tool_call_id(
 						metadata=message.metadata,
@@ -530,11 +637,14 @@ def _messages_to_openai_chatcompletions(
 					)
 					or message.tool_call_id
 				)
+				content = _tool_output_with_attachments(
+					message,
+				)
 				openai_messages.append(
 					OpenAIChatCompletionToolMessageParam(
 						role="tool",
 						tool_call_id=openai_tool_call_id,
-						content=message.tool_output,
+						content=content,
 					)
 				)
 			case _:

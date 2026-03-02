@@ -12,6 +12,10 @@ from google.genai.types import FunctionCallingConfigMode
 from ...messages import (
 	AssistantMessage,
 	ContentPart,
+	FileContent,
+	ImageContent,
+	JsonContent,
+	RefusalContent,
 	SystemMessage,
 	TextContent,
 	ToolCall,
@@ -28,6 +32,7 @@ from ...utils.provider_meta import (
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseGoogleAdapter
 from .types import (
+	GoogleBlob,
 	GoogleContent,
 	GoogleFunctionCallingConfig,
 	GoogleFunctionDeclaration,
@@ -118,6 +123,90 @@ def _find_tool_name_from_history(
 	return None
 
 
+def _content_part_to_google(
+	part: ContentPart,
+) -> GooglePart | None:
+	"""convert any SDK ContentPart to a google Part.
+
+	returns none for parts that have no representable content
+	(empty text, images without data, etc).
+	"""
+	match part:
+		case TextContent():
+			if not part.text:
+				return None
+			return GooglePart.from_text(text=part.text)
+		case JsonContent():
+			if part.data is None:
+				return None
+			return GooglePart.from_text(
+				text=json.dumps(part.data),
+			)
+		case ImageContent():
+			if part.base64 and part.media_type:
+				import base64
+
+				return GooglePart(
+					inline_data=GoogleBlob(
+						data=base64.b64decode(part.base64),
+						mime_type=part.media_type,
+					)
+				)
+			if part.url:
+				return GooglePart.from_uri(
+					file_uri=part.url,
+					mime_type=(part.media_type or "application/octet-stream"),
+				)
+			return None
+		case FileContent():
+			if part.filename:
+				return GooglePart.from_text(
+					text=f"[file: {part.filename}]",
+				)
+			return None
+		case RefusalContent():
+			if part.reason:
+				return GooglePart.from_text(
+					text=f"[refused: {part.reason}]",
+				)
+			return None
+
+
+def _content_parts_to_google(
+	parts: list[ContentPart],
+) -> list[GooglePart]:
+	"""convert a list of SDK content parts to google parts.
+
+	always returns a list of GooglePart (google API requires parts list).
+	falls back to empty text part if nothing converts.
+	"""
+	result: list[GooglePart] = []
+	for part in parts:
+		converted = _content_part_to_google(part)
+		if converted is not None:
+			result.append(converted)
+	if not result:
+		text = "".join(p.text for p in parts if isinstance(p, TextContent))
+		return [GooglePart.from_text(text=text)]
+	return result
+
+
+def _tool_output_with_attachments(message: ToolMessage) -> str:
+	"""build tool output string including attachment placeholders.
+
+	google function_response is dict-only, no multimodal. if the tool
+	message has attachments, append filename placeholders so the model
+	knows they exist.
+	"""
+	if not message.attachments:
+		return message.tool_output
+	parts = [message.tool_output]
+	for att in message.attachments:
+		label = att.filename or "attachment"
+		parts.append(f"[attached: {label}]")
+	return "\n".join(parts)
+
+
 def _messages_to_google(
 	messages: list[Message],
 ) -> tuple[str | None, list[GoogleContent]]:
@@ -134,18 +223,15 @@ def _messages_to_google(
 				contents.append(
 					GoogleContent(
 						role="user",
-						parts=[GooglePart.from_text(text=message.text)],
+						parts=_content_parts_to_google(
+							list(message.content),
+						),
 					)
 				)
 			case AssistantMessage():
-				parts: list[GooglePart] = []
-
-				# add text content
-				assistant_text = message.text
-				if not assistant_text and message.json_content is not None:
-					assistant_text = json.dumps(message.json_content)
-				if assistant_text:
-					parts.append(GooglePart.from_text(text=assistant_text))
+				parts: list[GooglePart] = _content_parts_to_google(
+					list(message.content),
+				)
 
 				# add function calls as parts
 				for tc in message.tool_calls:
@@ -177,12 +263,15 @@ def _messages_to_google(
 					tool_name = message.tool_call_id
 
 				# parse tool output as json if possible, otherwise wrap in result key
+				# google function_response is dict-only, no multimodal -
+				# include attachments as text
+				output = _tool_output_with_attachments(message)
 				try:
-					response_dict = json.loads(message.tool_output)
+					response_dict = json.loads(output)
 					if not isinstance(response_dict, dict):
 						response_dict = {"result": response_dict}
 				except json.JSONDecodeError:
-					response_dict = {"result": message.tool_output}
+					response_dict = {"result": output}
 
 				contents.append(
 					GoogleContent(
