@@ -35,10 +35,12 @@ services:
       - "1383:1383"
     environment:
       DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-production
-      APP_ENV: production
-      DEBUG: "False"
-      SECRET_KEY: change-this-in-production
-      CORS_ORIGINS: '["https://app.yourdomain.com"]'
+      ENV: production
+      DEBUG: "false"
+      JSON_LOGS: "true"
+      NOKODO__SECURITY__SECRET_KEY: change-this-in-production
+      NOKODO__SECURITY__CORS_ORIGINS: "https://app.yourdomain.com"
+      NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "https://app.yourdomain.com"
     depends_on:
       db:
         condition: service_healthy

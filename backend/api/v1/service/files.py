@@ -231,8 +231,8 @@ async def resolve_file_data(
 	"""resolve a file record to inline-ready data (no access check).
 
 	looks up the file by id, then tries presigned URL first (fast, no
-	memory cost on S3 backends). falls back to reading bytes and
-	encoding as base64.
+	memory cost on S3 backends). falls back to reading bytes via
+	read_content and encoding as base64.
 
 	returns (url, base64) - exactly one will be set, the other None.
 	returns (None, None) when the file or storage object is missing.
@@ -251,14 +251,15 @@ async def resolve_file_data(
 	if url:
 		return url, None
 
-	if not await backend.exists(file.storage_key):
+	try:
+		stream, _, _ = await read_content(file)
+	except FileNotFoundError:
 		log.warning(
 			"resolve_file_data: storage object missing for file %s",
 			file.id,
 		)
 		return None, None
 
-	stream = await backend.get(file.storage_key)
 	chunks: list[bytes] = []
 	async for chunk in stream:
 		chunks.append(chunk)

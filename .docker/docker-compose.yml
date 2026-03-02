@@ -31,6 +31,26 @@ services:
       - qdrant_data:/qdrant/storage
     profiles: ["deps", "local"]
 
+  minio:
+    image: minio/minio:latest
+    container_name: nokodo-ai-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles: ["deps", "local"]
+
   backend:
     build:
       context: ../backend
@@ -41,15 +61,23 @@ services:
       - "1383:1383"
     environment:
       DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-dev
-      APP_ENV: dev
-      DEBUG: "True"
-      SECRET_KEY: dev-secret-key-change-in-production
-      CORS_ORIGINS: '["http://localhost:888", "http://localhost:8383", "http://localhost:3000"]'
+      ENV: dev
+      DEBUG: "true"
+      NOKODO__SECURITY__SECRET_KEY: dev-secret-key-change-in-production
+      NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888,http://localhost:8383,http://localhost:3000"
+      NOKODO__SECURITY__AUTH_COOKIE_SECURE: "false"
+      NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
+      NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN: "http://localhost:8383"
+      NOKODO__ASSETS__STORAGE__S3__ENDPOINT_URL: http://minio:9000
+      NOKODO__ASSETS__STORAGE__S3__ACCESS_KEY_ID: minioadmin
+      NOKODO__ASSETS__STORAGE__S3__SECRET_ACCESS_KEY: minioadmin
     depends_on:
       db:
         condition: service_healthy
       qdrant:
         condition: service_started
+      minio:
+        condition: service_healthy
     volumes:
       - ../backend:/app
       - ../backend/data:/app/data
@@ -89,6 +117,8 @@ volumes:
   postgres_data:
     driver: local
   qdrant_data:
+    driver: local
+  minio_data:
     driver: local
 
 networks:
