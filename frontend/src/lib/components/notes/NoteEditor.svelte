@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DocParticipant } from '$lib/collaboration'
 	import SharedEditor from '$lib/components/editor/SharedEditor.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowUturnLeft from '$lib/components/icons/ArrowUturnLeft.svelte'
 	import ArrowUturnRight from '$lib/components/icons/ArrowUturnRight.svelte'
 	import Bars3BottomLeft from '$lib/components/icons/Bars3BottomLeft.svelte'
@@ -20,8 +21,10 @@
 	import NumberedList from '$lib/components/icons/NumberedList.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Strikethrough from '$lib/components/icons/Strikethrough.svelte'
 	import Underline from '$lib/components/icons/Underline.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { MenuItem, PopupMenu, Switch } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -55,6 +58,7 @@
 	let isRawMode = $state(false)
 	let menuOpen = $state(false)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
+	let isEnhancing = $state(false)
 	let saveTimeout: number | null = null
 	let textareaEl: HTMLTextAreaElement | null = $state(null)
 	let sharedEditor: SharedEditor | null = $state(null)
@@ -225,6 +229,17 @@
 		console.log('show properties for:', noteId)
 	}
 
+	async function handleEnhance(): Promise<void> {
+		menuOpen = false
+		if (isEnhancing) return
+		isEnhancing = true
+		try {
+			await notes.enhance(noteId)
+		} finally {
+			isEnhancing = false
+		}
+	}
+
 	// keyboard shortcuts for raw mode
 	function handleRawKeyDown(event: KeyboardEvent): void {
 		const isMod = event.metaKey || event.ctrlKey
@@ -259,7 +274,7 @@
 	{#if onBack && device.isMobile}
 		<button
 			type="button"
-			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
+			class="rounded-pill hover:text-foreground flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97]"
 			onclick={() => onBack?.()}
 			aria-label="back to notes"
 		>
@@ -300,11 +315,17 @@
 		<EllipsisHorizontal />
 	</button>
 	<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={() => (menuOpen = false)}>
+		<MenuItem onclick={() => void handleEnhance()} disabled={isEnhancing}>
+			{#snippet icon()}<Sparkles class="h-4 w-4" />{/snippet}
+			{#if isEnhancing}<ShimmerText className="inline-block">enhancing</ShimmerText
+				>{:else}enhance{/if}
+		</MenuItem>
+		<div class="bg-foreground/10 my-1 h-px w-full"></div>
 		<button
 			type="button"
 			role="menuitemcheckbox"
 			aria-checked={isRawMode}
-			class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/85 transition-all duration-150 hover:bg-foreground/10 hover:text-foreground"
+			class="rounded-pill text-foreground/85 hover:bg-foreground/10 hover:text-foreground flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150"
 			onclick={() => setRawMode(!isRawMode)}
 		>
 			<span class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full">
@@ -314,7 +335,7 @@
 			<Switch size="sm" checked={isRawMode} />
 		</button>
 		{#if device.isMobile}
-			<div class="my-1 h-px w-full bg-foreground/10"></div>
+			<div class="bg-foreground/10 my-1 h-px w-full"></div>
 			<MenuItem onclick={handleShare}>
 				{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
 				share
@@ -328,13 +349,19 @@
 {/snippet}
 
 {#if !note}
-	<div class="mx-auto mt-10 max-w-3xl">
-		<div
-			class="rounded-container liquid-glass liquid-glass--frosted border border-foreground/10 p-5 text-sm text-foreground/70"
-		>
-			note not found.
+	{#if !notes.hydrated}
+		<div class="flex flex-1 items-center justify-center">
+			<NokodoLoader className="opacity-70" expanded={false} />
 		</div>
-	</div>
+	{:else}
+		<div class="mx-auto mt-10 max-w-3xl">
+			<div
+				class="rounded-container liquid-glass liquid-glass--frosted border-foreground/10 text-foreground/70 border p-5 text-sm"
+			>
+				note not found
+			</div>
+		</div>
+	{/if}
 {:else}
 	<div class="flex w-full flex-1 flex-col" id="note-editor">
 		<!-- header section -->
@@ -342,7 +369,7 @@
 			<!-- title row -->
 			<div class="mb-2 flex w-full items-center gap-2">
 				<input
-					class="min-w-0 flex-1 bg-transparent text-2xl font-medium text-foreground/95 outline-none placeholder:text-foreground/42"
+					class="text-foreground/95 placeholder:text-foreground/42 min-w-0 flex-1 bg-transparent text-2xl font-medium outline-none"
 					placeholder="title"
 					bind:value={title}
 					oninput={handleTitleInput}
@@ -351,7 +378,7 @@
 
 			<!-- meta row -->
 			<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
-				<div class="flex w-fit items-center gap-1 text-xs font-medium text-foreground/55">
+				<div class="text-foreground/55 flex w-fit items-center gap-1 text-xs font-medium">
 					<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 						<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
 						<Timestamp timestamp={{ getTime: () => note.updatedAt }} mode="calendar" />
@@ -393,7 +420,7 @@
 						<!-- TODO: clicking on a viewer should open the User Profile modal once implemented -->
 						<div class="flex shrink-0 items-center gap-2">
 							<div
-								class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-foreground shadow-sm"
+								class="text-foreground flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold shadow-sm"
 								style:background-color={color}
 							>
 								{#if peer.avatarUrl}
@@ -406,7 +433,7 @@
 									{initials}
 								{/if}
 							</div>
-							<span class="text-sm font-bold whitespace-nowrap text-foreground/70"
+							<span class="text-foreground/70 text-sm font-bold whitespace-nowrap"
 								>{name}</span
 							>
 						</div>
@@ -421,13 +448,13 @@
 					: 'max-h-20 opacity-100'}"
 			>
 				<div
-					class="scrollbar-none mt-3 flex items-center justify-between overflow-x-auto border-t border-foreground/10 pt-3"
+					class="scrollbar-none border-foreground/10 mt-3 flex items-center justify-between overflow-x-auto border-t pt-3"
 					use:wheelToHScroll
 				>
 					<div class="flex min-w-fit items-center gap-0.5">
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleHeading(1)}
 							title="heading 1"
 						>
@@ -435,7 +462,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleHeading(2)}
 							title="heading 2"
 						>
@@ -443,18 +470,18 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleHeading(3)}
 							title="heading 3"
 						>
 							<H3 class="h-4 w-4" />
 						</button>
 
-						<div class="mx-1 h-4 w-px bg-foreground/15"></div>
+						<div class="bg-foreground/15 mx-1 h-4 w-px"></div>
 
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleBold()}
 							title="bold (ctrl+b)"
 						>
@@ -462,7 +489,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleItalic()}
 							title="italic (ctrl+i)"
 						>
@@ -470,7 +497,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleUnderline()}
 							title="underline (ctrl+u)"
 						>
@@ -478,18 +505,18 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleStrike()}
 							title="strikethrough"
 						>
 							<Strikethrough class="h-4 w-4" />
 						</button>
 
-						<div class="mx-1 h-4 w-px bg-foreground/15"></div>
+						<div class="bg-foreground/15 mx-1 h-4 w-px"></div>
 
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleBulletList()}
 							title="bullet list"
 						>
@@ -497,18 +524,18 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleOrderedList()}
 							title="numbered list"
 						>
 							<NumberedList class="h-4 w-4" />
 						</button>
 
-						<div class="mx-1 h-4 w-px bg-foreground/15"></div>
+						<div class="bg-foreground/15 mx-1 h-4 w-px"></div>
 
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleCode()}
 							title="inline code"
 						>
@@ -516,7 +543,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-pill cursor-pointer p-1.5 text-foreground transition hover:bg-foreground/8"
+							class="rounded-pill text-foreground hover:bg-foreground/8 cursor-pointer p-1.5 transition"
 							onclick={() => sharedEditor?.toggleCodeBlock()}
 							title="code block"
 						>
@@ -536,7 +563,7 @@
 			{#if isRawMode}
 				<textarea
 					bind:this={textareaEl}
-					class="min-h-24 w-full flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed text-foreground/90 outline-none placeholder:text-foreground/42"
+					class="text-foreground/90 placeholder:text-foreground/42 min-h-24 w-full flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed outline-none"
 					placeholder="write something... (Ctrl+S to save)"
 					bind:value={content}
 					oninput={handleRawInput}

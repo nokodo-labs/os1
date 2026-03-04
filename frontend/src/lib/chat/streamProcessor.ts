@@ -2,7 +2,13 @@
  * SSE stream processing - processDelta, consumeStream, runThreadStream, resumeCreateAndRun.
  */
 
-import { runChatStream, type ChatStreamDelta, type UnknownSseEvent } from '$lib/api/streaming'
+import {
+	runChatStream,
+	type ChatStreamDelta,
+	type RunInput,
+	type UnknownSseEvent,
+} from '$lib/api/streaming'
+import type { ToolChoiceValue } from '$lib/chat/types'
 import { notifications } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
@@ -272,9 +278,10 @@ export async function runThreadStream(
 	opts: {
 		threadId: string
 		agentId: string
-		input: string | null
+		input: RunInput | null
 		runId: number
 		parentId?: string | null
+		toolChoice?: ToolChoiceValue | null
 	},
 	ctx: ChatContext
 ): Promise<void> {
@@ -294,6 +301,7 @@ export async function runThreadStream(
 		agentId: opts.agentId,
 		input: opts.input,
 		parentId,
+		toolChoice: opts.toolChoice,
 		signal: ctx.runAbortController.signal,
 	})
 

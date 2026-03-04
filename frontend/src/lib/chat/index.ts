@@ -4,7 +4,13 @@
 export { createChatState } from './createChatState.svelte'
 
 // types
-export type { ChatContext, ChatState, StreamDeltaContext } from './types'
+export type {
+	AttachmentStatus,
+	ChatContext,
+	ChatState,
+	StreamDeltaContext,
+	ThreadAttachment,
+} from './types'
 
 // helpers (pure functions + types)
 export {
@@ -14,16 +20,22 @@ export {
 	buildMessageChildren,
 	buildRunBlocks,
 	computeIsAtBottom,
+	computeThreadAttachments,
 	contentPartsToText,
+	extractFileParts,
+	extractMediaParts,
 	getBlockFirstAssistant,
 	getBlockResponseItems,
 	getMessageCreatedAt,
 	getRunId,
+	hasAttachmentParts,
 	sdkPartsToText,
 	upsertToolCalls,
 	type ApiMessage,
 	type BuildRunBlocksInput,
 	type BuildRunBlocksResult,
+	type FileContentPart,
+	type MediaContentPart,
 	type RunBlock,
 	type RunItem,
 	type StreamingAssistantState,
@@ -42,7 +54,7 @@ export {
 
 // data loading
 export {
-	fetchToolEventsForThread,
+	fetchEventsForThread,
 	ingestMessages,
 	loadOlderMessages,
 	loadTree,

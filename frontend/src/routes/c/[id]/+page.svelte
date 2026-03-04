@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { page } from '$app/state'
+	import { getApiBaseUrl } from '$lib/api/client'
 	import {
 		blockHasStreamingAssistant,
 		contentPartsToText,
 		createChatState,
+		extractFileParts,
+		extractMediaParts,
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
+		hasAttachmentParts,
 		type ApiMessage,
 	} from '$lib/chat'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
@@ -16,6 +20,7 @@
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
 	import CopyButton from '$lib/components/chat/CopyButton.svelte'
 	import FloatingButtons from '$lib/components/chat/FloatingButtons.svelte'
+	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import RegenerateMenu from '$lib/components/chat/RegenerateMenu.svelte'
 	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
@@ -405,6 +410,7 @@
 										[]}
 									<UserChatMessage
 										content={contentPartsToText(item.message.content)}
+										contentParts={item.message.content}
 										timestamp={getMessageCreatedAt(item.message)}
 										align={item.align}
 										siblingCount={siblings.length}
@@ -515,6 +521,20 @@
 										<div class="relative">
 											{#each responseItems as item, idx (idx)}
 												{#if item.kind === 'assistant'}
+													{#if hasAttachmentParts(item.message.content)}
+														<div class="mb-2">
+															<MediaAttachments
+																mediaParts={extractMediaParts(
+																	item.message.content,
+																	getApiBaseUrl()
+																)}
+																fileParts={extractFileParts(
+																	item.message.content,
+																	getApiBaseUrl()
+																)}
+															/>
+														</div>
+													{/if}
 													<div
 														class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
 													>
@@ -663,6 +683,8 @@
 					placeholder="send a message"
 					focusToken={inputFocusToken}
 					viewTransitionName="chat-input"
+					threadAttachments={chat.threadAttachments}
+					onToggleAttachmentStatus={chat.toggleAttachmentStatus}
 				/>
 			</div>
 		</div>

@@ -243,8 +243,8 @@
 		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
 		: undefined}
 	class="reminder-row group relative cursor-pointer overflow-visible rounded-4xl transition-colors duration-150 {props.expanded
-		? 'border border-foreground/14 bg-foreground/6'
-		: 'border border-transparent hover:bg-foreground/6'} {isCompleted
+		? 'border-foreground/14 bg-foreground/6 border'
+		: 'hover:bg-foreground/6 border border-transparent'} {isCompleted
 		? 'is-completed opacity-65'
 		: ''} {isMotionIn ? 'is-incoming' : ''} {isMotionOutComplete
 		? 'is-out is-out-complete'
@@ -258,7 +258,7 @@
 		<button
 			data-circle-button
 			type="button"
-			class="circle-btn flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center text-foreground/55 transition-colors duration-150 {props.kind ===
+			class="circle-btn text-foreground/55 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center transition-colors duration-150 {props.kind ===
 			'edit'
 				? 'hover:text-foreground/80'
 				: ''} {isCompleted ? 'text-emerald-400' : ''}"
@@ -295,7 +295,7 @@
 					<input
 						bind:this={titleInputEl}
 						type="text"
-						class="title-input m-0 w-full appearance-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 text-foreground/90 outline-none placeholder:text-foreground/40 {isCompleted
+						class="title-input text-foreground/90 placeholder:text-foreground/40 m-0 w-full appearance-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 outline-none {isCompleted
 							? 'line-through'
 							: ''}"
 						placeholder={props.kind === 'create' ? 'new reminder' : 'reminder title'}
@@ -307,7 +307,7 @@
 					<span class="title-text title-overlay" aria-hidden="true">{editedTitle}</span>
 				</div>
 			{:else}
-				<div class="min-w-0 truncate text-[0.95rem] leading-6 text-foreground/90">
+				<div class="text-foreground/90 min-w-0 truncate text-[0.95rem] leading-6">
 					<span class="title-text">
 						{props.kind === 'edit' ? props.reminder.title : editedTitle}
 					</span>
@@ -320,7 +320,7 @@
 				<button
 					bind:this={menuButtonEl}
 					type="button"
-					class="rounded-circle flex h-9 w-9 cursor-pointer items-center justify-center text-foreground/70 transition-all duration-150 hover:bg-foreground/10 hover:text-foreground {device.isTouch ||
+					class="rounded-circle text-foreground/70 hover:bg-foreground/10 hover:text-foreground flex h-9 w-9 cursor-pointer items-center justify-center transition-all duration-150 {device.isTouch ||
 					!device.hasHover
 						? 'opacity-100'
 						: 'opacity-0 group-hover:opacity-100'}"
@@ -340,7 +340,7 @@
 		<div class="details-inner">
 			<div class="space-y-3 px-3 pt-1 pb-3">
 				<textarea
-					class="w-full resize-none bg-transparent pl-9 text-sm leading-5 text-foreground/70 outline-none placeholder:text-foreground/35"
+					class="text-foreground/70 placeholder:text-foreground/35 w-full resize-none bg-transparent pl-9 text-sm leading-5 outline-none"
 					placeholder="add details"
 					rows="2"
 					bind:value={editedDescription}
@@ -351,7 +351,7 @@
 				<div class="flex flex-wrap items-center gap-2 pl-9">
 					<button
 						type="button"
-						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-foreground/14 bg-foreground/4 px-3 py-1.5 text-xs transition-colors hover:bg-foreground/8 {hasDueDate
+						class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {hasDueDate
 							? isOverdue
 								? 'text-red-400'
 								: 'text-foreground/70'
@@ -363,7 +363,7 @@
 
 					<button
 						type="button"
-						class="rounded-pill flex cursor-pointer items-center gap-1.5 border border-foreground/14 bg-foreground/4 px-3 py-1.5 text-xs text-foreground/55 transition-colors hover:bg-foreground/8"
+						class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
 					>
 						<ArrowPath class="h-3.5 w-3.5" />
 						<span>repeat</span>
@@ -372,7 +372,7 @@
 					{#if props.kind === 'create'}
 						<button
 							type="button"
-							class="rounded-pill ml-auto cursor-pointer border border-foreground/14 bg-foreground/8 px-3 py-1.5 text-xs font-medium text-foreground/85 transition-colors hover:bg-foreground/12 disabled:cursor-not-allowed disabled:opacity-45"
+							class="rounded-pill border-foreground/14 bg-foreground/8 text-foreground/85 hover:bg-foreground/12 ml-auto cursor-pointer border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
 							onclick={(event) => {
 								event.stopPropagation()
 								void submitCreate()
@@ -399,11 +399,11 @@
 
 	{#if props.kind === 'edit'}
 		<PopupMenu open={isMenuOpen} anchorEl={menuButtonEl} onClose={() => (isMenuOpen = false)}>
-			<div class="px-3 pt-2 pb-1 text-xs font-medium text-foreground/55">move</div>
+			<div class="text-foreground/55 px-3 pt-2 pb-1 text-xs font-medium">move</div>
 			<div class="max-h-44 overflow-auto">
 				<button
 					type="button"
-					class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+					class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 					onclick={(event) => {
 						event.stopPropagation()
 						isMenuOpen = false
@@ -416,7 +416,7 @@
 				{#each props.availableLists as list (list.id)}
 					<button
 						type="button"
-						class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+						class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 						onclick={(event) => {
 							event.stopPropagation()
 							isMenuOpen = false
@@ -428,7 +428,7 @@
 				{/each}
 			</div>
 
-			<div class="my-1 h-px w-full bg-foreground/10"></div>
+			<div class="bg-foreground/10 my-1 h-px w-full"></div>
 			<div class="mt-1">
 				<DeleteButton
 					confirm={true}

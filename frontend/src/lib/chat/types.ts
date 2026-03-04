@@ -1,14 +1,108 @@
 /**
  * shared type definitions for the chat module.
- * ChatContext is the internal contract for extracted module functions.
- * ChatState extends it with everything the page UI needs.
+ * all chat-related types live here - types should not be defined in utility
+ * modules like helpers.ts or attachments.ts.
  */
 
 import type { ChatStreamDelta } from '$lib/api/streaming'
+import type { components } from '$lib/api/types'
 import type { Thread } from '$lib/stores/chat.svelte'
-import type { ToolExecution, ToolExecutionTracker } from '$lib/tools'
+import type { ToolCall, ToolExecution, ToolExecutionTracker } from '$lib/tools'
 import type { SvelteMap, SvelteSet } from 'svelte/reactivity'
-import type { ApiMessage, RunBlock, StreamingAssistantState } from './helpers'
+
+// --- API types ---
+
+export type ApiMessage = components['schemas']['Message']
+
+// --- content part types ---
+
+/** an image or video content part with resolved URL */
+export interface MediaContentPart {
+	type: 'image' | 'video' | 'audio'
+	url: string
+	filename?: string | null
+	mediaType?: string | null
+	fileId?: string
+	attachmentStatus?: string
+}
+
+/** a non-media file content part */
+export interface FileContentPart {
+	type: 'file'
+	url?: string | null
+	filename?: string | null
+	mediaType?: string | null
+	fileId?: string
+	attachmentStatus?: string
+}
+
+// --- attachment types ---
+
+export type AttachmentMediaCategory = 'image' | 'audio' | 'video' | 'file'
+export type AttachmentStatus = 'active' | 'reference'
+
+/** a file that has been uploaded and is pending inclusion in the next message */
+export interface PendingAttachment {
+	fileId: string
+	filename: string
+	mediaType: string
+	category: AttachmentMediaCategory
+	/** local object URL for preview (images/video) - revoked after send */
+	previewUrl?: string
+}
+
+/** an attachment already present in the thread (derived from message content) */
+export interface ThreadAttachment {
+	fileId: string
+	filename: string | null
+	mediaType: string | null
+	category: AttachmentMediaCategory
+	status: AttachmentStatus
+	/** the turn index where this attachment was first introduced */
+	turn: number
+}
+
+/** modifiers toggled by the user in AddContext */
+export interface RunModifiers {
+	webSearch: boolean
+	thinkLonger: boolean
+	generateImage: boolean
+	attachments: PendingAttachment[]
+}
+
+/** allowed tool_choice values that can be forced by the user */
+export type ToolChoiceValue = 'web_search' | 'think' | 'generate_image'
+
+// --- run/block types ---
+
+export type RunItem =
+	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
+	| { kind: 'optimistic_user'; content: string; timestamp: Date }
+	| { kind: 'assistant'; message: ApiMessage }
+	| { kind: 'tool'; toolCallId: string }
+	| { kind: 'streaming_assistant' }
+	| { kind: 'streaming_tool'; toolCallId: string }
+
+export interface RunBlock {
+	runId: string
+	title: string
+	startedAt: Date
+	items: RunItem[]
+	responseRootId: string | null
+}
+
+export interface StreamingAssistantState {
+	runId: string | null
+	messageId: string
+	content: string
+	timestamp: Date
+	senderAgentId: string | null
+	toolCalls: ToolCall[]
+	isError: boolean
+	errorMessage: string | null
+}
+
+// --- chat state types ---
 
 /**
  * reactive state proxy passed to all extracted chat module functions.
@@ -56,6 +150,11 @@ export interface ChatContext {
 	confirmDeleteMessage: { id: string; preview: string } | null
 	isDeletingMessage: boolean
 	deleteMessageError: string | null
+
+	// attachment tray
+	readonly pendingActions: Map<string, 'reveal' | 'reference'>
+	readonly attachmentStates: SvelteMap<string, AttachmentStatus>
+	readonly threadAttachments: ThreadAttachment[]
 
 	// realtime
 	readonly typingUsers: SvelteSet<string>
@@ -107,9 +206,12 @@ export interface ChatState extends ChatContext {
 	// tools
 	getToolExecution(toolCallId: string): ToolExecution | undefined
 
+	// attachment tray
+	toggleAttachmentStatus(fileId: string, action: 'reveal' | 'reference'): void
+
 	// delegated actions
 	loadTree(threadId: string): Promise<boolean>
-	handleSendMessage(content: string): Promise<void>
+	handleSendMessage(content: string, modifiers?: RunModifiers): Promise<void>
 	handleRegenerateMessage(parentId?: string | null, prompt?: string | null): Promise<void>
 	handleStopGeneration(): void
 	handleSaveEditMessage(messageId: string, newContent: string): Promise<void>

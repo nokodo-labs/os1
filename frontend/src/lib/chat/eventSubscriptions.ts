@@ -235,6 +235,21 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
+	// attachment events (state changes from backend)
+
+	function handleAttachmentEvent(ev: StreamEvent): void {
+		if (ev.thread_id !== threadId) return
+		const data = (ev.data ?? {}) as Record<string, unknown>
+		const fileId = data.file_id as string | undefined
+		if (!fileId) return
+
+		if (ev.type === 'attachment.decayed') {
+			ctx.attachmentStates.set(fileId, 'reference')
+		} else if (ev.type === 'attachment.revealed') {
+			ctx.attachmentStates.set(fileId, 'active')
+		}
+	}
+
 	// single unified listener
 
 	const unsub = eventStreamClient.subscribe((msg) => {
@@ -248,6 +263,8 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleMessageEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('typing.')) {
 			handleTypingEvent(ev as StreamEvent)
+		} else if (ev.type.startsWith('attachment.')) {
+			handleAttachmentEvent(ev as StreamEvent)
 		} else if (
 			ev.type === 'runs.active' ||
 			ev.type === 'run.started' ||

@@ -1,5 +1,5 @@
 /**
- * data loading - tool events, message ingestion, pagination, tree loading, cache sync.
+ * data loading - events, message ingestion, pagination, tree loading, cache sync.
  */
 
 import { apiClient } from '$lib/api/client'
@@ -12,8 +12,8 @@ import type { ChatContext } from './types'
 
 type ApiEvent = components['schemas']['Event']
 
-/** fetch and process tool events for a batch of message ids */
-export async function fetchToolEventsForThread(
+/** fetch and process events (tool + attachment) for a batch of message ids */
+export async function fetchEventsForThread(
 	threadId: string,
 	msgIds: string[],
 	ctx: ChatContext
@@ -46,6 +46,7 @@ export async function fetchToolEventsForThread(
 			)
 			if (!error && data) {
 				for (const ev of data as ApiEvent[]) {
+					// tool events
 					const toolEv = parseToolEvent({
 						id: ev.id,
 						type: ev.type,
@@ -53,7 +54,22 @@ export async function fetchToolEventsForThread(
 						created_at: ev.created_at ?? undefined,
 						message_id: ev.message_id ?? undefined,
 					})
-					if (toolEv) ctx.toolTracker.processEvent(toolEv)
+					if (toolEv) {
+						ctx.toolTracker.processEvent(toolEv)
+						continue
+					}
+
+					// attachment state events
+					if (ev.type.startsWith('attachment.')) {
+						const evData = (ev.data ?? {}) as Record<string, unknown>
+						const fileId = evData.file_id as string | undefined
+						if (!fileId) continue
+						if (ev.type === 'attachment.decayed') {
+							ctx.attachmentStates.set(fileId, 'reference')
+						} else if (ev.type === 'attachment.revealed') {
+							ctx.attachmentStates.set(fileId, 'active')
+						}
+					}
 				}
 			}
 			for (const id of batch) ctx.fetchedToolEventMessageIds.add(id)
@@ -103,9 +119,9 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 		ctx.messageSkip += page.length
 		ingestMessages(page, ctx)
 
-		await fetchToolEventsForThread(
+		await fetchEventsForThread(
 			threadId,
-			page.filter((m) => m.type === 'assistant').map((m) => m.id),
+			page.map((m) => m.id),
 			ctx
 		)
 
@@ -200,11 +216,9 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		ctx.currentLeafId = null
 	}
 
-	await fetchToolEventsForThread(
+	await fetchEventsForThread(
 		threadId,
-		Array.from(ctx.messageTree.values())
-			.filter((m) => m.type === 'assistant')
-			.map((m) => m.id),
+		Array.from(ctx.messageTree.values()).map((m) => m.id),
 		ctx
 	)
 	ctx.rebuildRunBlocks()

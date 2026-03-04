@@ -42,9 +42,9 @@
 <div
 	role="button"
 	tabindex="0"
-	class={`group/sidebar-item ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-foreground/8 text-left transition-all duration-200 ${className}`}
+	class={`group/sidebar-item ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-interactive-hover text-left transition-all duration-200 ${className}`}
 	style={selected
-		? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
+		? 'background-color: rgb(var(--accent-rgb) / 0.3); border-color: rgb(var(--accent-rgb) / 0.55);'
 		: ''}
 	onmouseenter={() => onPrefetch?.()}
 	onclick={() => void onSelect?.()}

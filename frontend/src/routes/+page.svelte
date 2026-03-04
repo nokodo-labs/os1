@@ -3,8 +3,9 @@
 	import { goto, onNavigate } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { runCreateAndRunStream } from '$lib/api/streaming'
+	import { runCreateAndRunStream, type RunInput } from '$lib/api/streaming'
 	import { getAccessToken } from '$lib/auth/session.svelte'
+	import { deriveToolChoice, type RunModifiers } from '$lib/chat/attachments'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
@@ -197,7 +198,10 @@
 		}
 	}
 
-	async function createThreadAndNavigate(content: string): Promise<void> {
+	async function createThreadAndNavigate(
+		content: string,
+		modifiers?: RunModifiers
+	): Promise<void> {
 		const token = getAccessToken()
 		if (!token) {
 			chatStartError = 'please log in again'
@@ -216,14 +220,23 @@
 		isGenerating = true
 		inputValue = ''
 
+		// build RunInput shape
+		const runInput: RunInput = { text: content || null }
+		if (modifiers?.attachments && modifiers.attachments.length > 0) {
+			runInput.attachment_ids = modifiers.attachments.map((a) => a.fileId)
+		}
+
+		const toolChoice = modifiers ? deriveToolChoice(modifiers) : null
+
 		const controller = new AbortController()
 		createAndRunAbort = controller
 
 		try {
 			const generator = runCreateAndRunStream({
 				agentId: selectedAgent.id,
-				input: content,
+				input: runInput,
 				isTemporary: isTemporaryChatMode,
+				toolChoice,
 				signal: controller.signal,
 			})
 
@@ -272,13 +285,13 @@
 		}
 	}
 
-	function handleSendMessage(content: string) {
+	function handleSendMessage(content: string, modifiers?: RunModifiers) {
 		chatStartError = null
 		void (async () => {
 			if (!isChatMode) {
 				await setHomeChatMode('new', { replace: true })
 			}
-			await createThreadAndNavigate(content)
+			await createThreadAndNavigate(content, modifiers)
 		})()
 	}
 
@@ -353,7 +366,7 @@
 								{#snippet lead()}
 									{#if !chatStartError}
 										<div
-											class="assistant-markdown text-[0.95rem] leading-relaxed text-foreground/60"
+											class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
 										>
 											<div class="my-3">
 												<ChatGptLoadingIndicator />
@@ -365,7 +378,7 @@
 									{#if chatStartError}
 										<button
 											type="button"
-											class="rounded-xl bg-transparent px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:text-foreground/95"
+											class="text-foreground/70 hover:text-foreground/95 rounded-xl bg-transparent px-3 py-1.5 text-sm transition-colors"
 											onclick={() => {
 												chatStartError = null
 												optimisticContent = null
@@ -386,7 +399,7 @@
 					>
 						<div class="max-w-md text-center">
 							<div
-								class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-foreground/5 text-foreground/85"
+								class="bg-foreground/5 text-foreground/85 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
 							>
 								{#if isTemporaryChatMode}
 									<EyeSlash class="h-7 w-7" />
@@ -395,12 +408,14 @@
 								{/if}
 							</div>
 							{#if isTemporaryChatMode}
-								<h2 class="text-2xl font-semibold text-foreground/90">temporary chat</h2>
-								<p class="mt-2 text-sm text-foreground/60">
+								<h2 class="text-foreground/90 text-2xl font-semibold">
+									temporary chat
+								</h2>
+								<p class="text-foreground/60 mt-2 text-sm">
 									messages here won't be saved
 								</p>
 							{:else}
-								<h2 class="text-2xl font-semibold text-foreground/90">new chat</h2>
+								<h2 class="text-foreground/90 text-2xl font-semibold">new chat</h2>
 							{/if}
 						</div>
 					</div>
@@ -458,14 +473,14 @@
 					style="view-transition-name: landing-greeting;"
 					class="mb-12 flex flex-col items-center justify-center gap-2 text-center"
 				>
-					<h1 class="text-4xl font-medium text-foreground">
+					<h1 class="text-foreground text-4xl font-medium">
 						hi <span
 							class="bg-clip-text text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
 							style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 							>{session.userDisplay.name}</span
 						>
 					</h1>
-					<p class="text-xl text-foreground/60">good afternoon</p>
+					<p class="text-foreground/60 text-xl">good afternoon</p>
 				</div>
 			{/if}
 
@@ -496,7 +511,7 @@
 				<div
 					class="flex min-h-0 flex-col {device.virtualKeyboardOpen && device.isMobile
 						? 'flex-1 justify-end'
-					: 'absolute top-0 right-0 left-0 z-20 max-h-full pt-3'}"
+						: 'absolute top-0 right-0 left-0 z-20 max-h-full pt-3'}"
 				>
 					<HomeSuggestions
 						query={inputValue}

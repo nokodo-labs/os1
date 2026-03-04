@@ -38,7 +38,8 @@ const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 /** id → note (ordered: newest first) */
 const notesMap = new SvelteMap<string, Note>()
-let fetchedAt: number | null = null
+let fetchedAt = $state<number | null>(null)
+let isLoading = $state(true)
 let inFlight: Promise<Note[]> | null = null
 let currentSortMode = $state<NotesSortMode>('updated_at:desc')
 
@@ -68,6 +69,9 @@ export const notes = {
 	get hydrated() {
 		return fetchedAt !== null
 	},
+	get loading() {
+		return isLoading
+	},
 	/** all notes (ordered: newest first) */
 	get all(): Note[] {
 		return [...notesMap.values()]
@@ -87,11 +91,13 @@ export const notes = {
 		const force = options?.force ?? false
 
 		if (!force && isFresh()) {
+			isLoading = false
 			return this.all
 		}
 
 		if (inFlight) return inFlight
 
+		isLoading = true
 		inFlight = (async () => {
 			const { sort_by, sort_dir } = parseSortMode(currentSortMode)
 			const { data, error } = await apiClient().GET('/v1/notes', {
@@ -112,6 +118,7 @@ export const notes = {
 			return await inFlight
 		} finally {
 			inFlight = null
+			isLoading = false
 		}
 	},
 
@@ -162,6 +169,25 @@ export const notes = {
 			// rollback on failure
 			notesMap.set(noteId, existing)
 		}
+	},
+
+	/**
+	 * use AI to reformat and improve a note's content.
+	 * returns the updated note or null on failure.
+	 *
+	 * NOTE: wired up pending backend endpoint POST /v1/notes/{note_id}/enhance.
+	 */
+	async enhance(noteId: string): Promise<Note | null> {
+		if (!notesMap.has(noteId)) return null
+
+		const { data, error } = await apiClient().POST('/v1/notes/{note_id}/enhance', {
+			params: { path: { note_id: noteId } },
+		})
+		if (error || !data) return null
+
+		const updated = toNote(data)
+		notesMap.set(noteId, updated)
+		return updated
 	},
 
 	async remove(noteId: string): Promise<boolean> {

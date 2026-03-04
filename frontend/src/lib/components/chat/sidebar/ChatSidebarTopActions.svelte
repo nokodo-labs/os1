@@ -32,7 +32,7 @@
 		<Search class={iconClass} />
 	</div>
 	<span
-		class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
+	class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
 			? 'max-w-40 opacity-100'
 			: 'max-w-0 opacity-0'}"
 		aria-hidden={!showTopLabels}

@@ -2197,6 +2197,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AIAttachmentSettings
+         * @description per-type decay thresholds for native attachments.
+         *
+         *     after N turns without interaction, an active attachment auto-decays
+         *     to reference state. a 'turn' is one user-assistant exchange.
+         */
+        AIAttachmentSettings: {
+            /**
+             * Image Decay Turns
+             * @description turns before image attachments decay to reference
+             * @default 4
+             */
+            image_decay_turns: number;
+            /**
+             * Audio Decay Turns
+             * @description turns before audio attachments decay to reference
+             * @default 3
+             */
+            audio_decay_turns: number;
+            /**
+             * Video Decay Turns
+             * @description turns before video attachments decay to reference
+             * @default 2
+             */
+            video_decay_turns: number;
+            /**
+             * Reveal Decay Turns
+             * @description turns before a revealed attachment decays again
+             * @default 3
+             */
+            reveal_decay_turns: number;
+        };
         /** AIChatContextSettings */
         AIChatContextSettings: {
             /**
@@ -2330,6 +2363,8 @@ export interface components {
             chat_context?: components["schemas"]["AIChatContextSettings"];
             /** @description background task model settings */
             tasks?: components["schemas"]["AITaskSettings"];
+            /** @description native attachment decay settings */
+            attachments?: components["schemas"]["AIAttachmentSettings"];
         };
         /** AISettingsPatch */
         AISettingsPatch: {
@@ -2623,7 +2658,7 @@ export interface components {
          * @description Payload for agent update.
          */
         AgentUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Name */
             name?: string | null;
             /** Description */
@@ -3241,23 +3276,6 @@ export interface components {
             /** Message Ids */
             message_ids?: string[];
         };
-        /** FeaturesSettings */
-        FeaturesSettings: {
-            /**
-             * Enable File Uploads
-             * @description enable file uploads
-             * @default true
-             */
-            enable_file_uploads: boolean;
-        };
-        /** FeaturesSettingsPatch */
-        FeaturesSettingsPatch: {
-            /**
-             * Enable File Uploads
-             * @description enable file uploads
-             */
-            enable_file_uploads?: boolean | null;
-        };
         /**
          * File
          * @description file response schema.
@@ -3372,7 +3390,7 @@ export interface components {
          * @description payload to update a file record.
          */
         FileUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Filename */
             filename?: string | null;
             /** Project Id */
@@ -3574,7 +3592,7 @@ export interface components {
          * @description Schema for updating a group.
          */
         GroupUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Name */
             name?: string | null;
             /** Description */
@@ -3875,7 +3893,7 @@ export interface components {
          * @description payload to update a memory.
          */
         MemoryUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Content */
             content?: string | null;
             /** Confidence */
@@ -3989,7 +4007,7 @@ export interface components {
          * @description Payload for updating a user message's content in place.
          */
         MessageUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Content */
             content: string | ({
                 [key: string]: unknown;
@@ -4096,7 +4114,7 @@ export interface components {
          * @description payload to update a model.
          */
         ModelUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Name */
             name?: string | null;
             /** Display Name */
@@ -4186,7 +4204,7 @@ export interface components {
          * @description payload to update a note.
          */
         NoteUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Title */
             title?: string | null;
             /** Content */
@@ -4561,7 +4579,7 @@ export interface components {
          * @description Payload for plugin update.
          */
         PluginUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Name */
             name?: string | null;
             /** Description */
@@ -4692,7 +4710,6 @@ export interface components {
          * @description Schema for updating a project.
          */
         ProjectUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string | null;
             /** Description */
@@ -4743,7 +4760,7 @@ export interface components {
          * @description payload for prompt update.
          */
         PromptUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Command */
             command?: string | null;
             /** Content */
@@ -4844,7 +4861,7 @@ export interface components {
          * @description Partial provider update payload.
          */
         ProviderUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -5037,7 +5054,7 @@ export interface components {
          * @description schema for updating a reminder list.
          */
         ReminderListUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Name */
             name?: string | null;
             /** Description */
@@ -5119,7 +5136,7 @@ export interface components {
          * @description schema for updating a reminder.
          */
         ReminderUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Title */
             title?: string | null;
             /** Description */
@@ -5275,8 +5292,11 @@ export interface components {
             quotas?: {
                 [key: string]: unknown;
             };
-            /** Priority */
-            priority?: number | null;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
             default_permissions?: components["schemas"]["DefaultPermissions-Input"];
         };
         /**
@@ -5284,6 +5304,7 @@ export interface components {
          * @description schema for updating a role.
          */
         RoleUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Name */
             name?: string | null;
             /** Description */
@@ -5295,10 +5316,25 @@ export interface components {
             /** Priority */
             priority?: number | null;
             default_permissions?: components["schemas"]["DefaultPermissions-Input"] | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
+        };
+        /**
+         * RunInput
+         * @description structured input for an agent run.
+         *
+         *     supports plain text, file attachments via IDs, or both.
+         *     attachment_ids are resolved server-side to full content parts.
+         */
+        RunInput: {
+            /**
+             * Text
+             * @description user message text content
+             */
+            text?: string | null;
+            /**
+             * Attachment Ids
+             * @description file IDs to include as content parts in the message. each ID is resolved server-side to an image or file content part.
+             */
+            attachment_ids?: string[];
         };
         /**
          * RunRequest
@@ -5319,8 +5355,13 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             agent_id: string;
-            /** Input */
-            input?: string | null;
+            /** @description structured user input with text and/or attachment IDs. omit for regeneration/retry on an existing thread. */
+            input?: components["schemas"]["RunInput"] | null;
+            /**
+             * Tool Choice
+             * @description optional tool choice override for this run. only specific tools can be forced.
+             */
+            tool_choice?: ("web_search" | "think" | "generate_image") | null;
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
@@ -5405,8 +5446,9 @@ export interface components {
              * Retry Mode
              * @description botocore retry mode
              * @default adaptive
+             * @enum {string}
              */
-            retry_mode: string;
+            retry_mode: "legacy" | "standard" | "adaptive";
         };
         /**
          * SearchMode
@@ -5598,7 +5640,6 @@ export interface components {
         /** Settings */
         Settings: {
             ui?: components["schemas"]["UISettings"];
-            features?: components["schemas"]["FeaturesSettings"];
             ai?: components["schemas"]["AISettings"];
             branding?: components["schemas"]["BrandingSettings"];
             media?: components["schemas"]["MediaSettings"];
@@ -5611,7 +5652,6 @@ export interface components {
         /** SettingsPatch */
         SettingsPatch: {
             ui?: components["schemas"]["UISettingsPatch"] | null;
-            features?: components["schemas"]["FeaturesSettingsPatch"] | null;
             ai?: components["schemas"]["AISettingsPatch"] | null;
             branding?: components["schemas"]["BrandingSettingsPatch"] | null;
             media?: components["schemas"]["MediaSettingsPatch"] | null;
@@ -5638,11 +5678,6 @@ export interface components {
              * @default 0
              */
             ui: number;
-            /**
-             * Features
-             * @default 0
-             */
-            features: number;
             /**
              * Ai
              * @default 0
@@ -5841,7 +5876,7 @@ export interface components {
          * @description Mutable task fields for PATCH operations.
          */
         TaskUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             status?: components["schemas"]["TaskStatus"] | null;
             /** Progress */
             progress?: number | null;
@@ -5967,8 +6002,13 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             agent_id: string;
-            /** Input */
-            input?: string | null;
+            /** @description structured user input with text and/or attachment IDs. omit for regeneration/retry on an existing thread. */
+            input?: components["schemas"]["RunInput"] | null;
+            /**
+             * Tool Choice
+             * @description optional tool choice override for this run. only specific tools can be forced.
+             */
+            tool_choice?: ("web_search" | "think" | "generate_image") | null;
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
@@ -6026,7 +6066,7 @@ export interface components {
          * @description Payload for updating a thread.
          */
         ThreadUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Title */
             title?: string | null;
             /** Tags */

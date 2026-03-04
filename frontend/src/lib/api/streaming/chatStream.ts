@@ -8,6 +8,7 @@
  */
 
 import { getAccessToken } from '$lib/auth/session.svelte'
+import type { ToolChoiceValue } from '$lib/chat/types'
 import { getClientContext } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
@@ -267,14 +268,24 @@ async function* readSseFrames(
 	}
 }
 
+// run input shape
+
+/** structured input for a run request. */
+export interface RunInput {
+	text?: string | null
+	attachment_ids?: string[]
+	attachment_actions?: Record<string, 'reveal' | 'reference'> | null
+}
+
 // run chat stream
 
 export interface ChatStreamOptions {
 	threadId?: string | null
 	agentId: string
-	input: string | null
+	input: RunInput | null
 	parentId?: string | null
 	persist?: boolean
+	toolChoice?: ToolChoiceValue | null
 	signal?: AbortSignal
 }
 
@@ -304,6 +315,7 @@ export async function* runChatStream(
 	}
 	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.persist === false) body.persist = false
+	if (opts.toolChoice) body.tool_choice = opts.toolChoice
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })
@@ -331,10 +343,11 @@ export type CreateAndRunStreamDelta =
 
 export interface CreateAndRunStreamOptions {
 	agentId: string
-	input: string
+	input: RunInput
 	isTemporary?: boolean
 	tags?: string[]
 	projectIds?: string[]
+	toolChoice?: ToolChoiceValue | null
 	signal?: AbortSignal
 }
 
@@ -364,6 +377,7 @@ export async function* runCreateAndRunStream(
 		project_ids: opts.projectIds ?? [],
 		stream: true,
 	}
+	if (opts.toolChoice) body.tool_choice = opts.toolChoice
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })

@@ -90,14 +90,14 @@
 				<div class="mt-1 flex items-center gap-1 overflow-hidden">
 					{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
 						<span
-							class="inline-flex max-w-20 shrink-0 items-center truncate rounded-full bg-foreground/8 px-1.5 py-px text-[10px] leading-tight text-foreground/50"
+							class="bg-foreground/8 text-foreground/50 inline-flex max-w-20 shrink-0 items-center truncate rounded-full px-1.5 py-px text-[10px] leading-tight"
 							title={tag}
 						>
 							{tag}
 						</span>
 					{/each}
 					{#if (thread.tags ?? []).length > 3}
-						<span class="shrink-0 text-[10px] text-foreground/30">
+						<span class="text-foreground/30 shrink-0 text-[10px]">
 							+{(thread.tags ?? []).length - 3}
 						</span>
 					{/if}
@@ -108,7 +108,7 @@
 		{#snippet actions()}
 			<button
 				type="button"
-				class="rounded-circle inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent text-foreground/55 transition-all duration-200 hover:bg-foreground/10 hover:text-foreground"
+				class="rounded-circle text-foreground/55 hover:bg-foreground/10 hover:text-foreground inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-transparent bg-transparent transition-all duration-200"
 				onpointerdown={(e) => e.stopPropagation()}
 				onclick={(e) => {
 					e.stopPropagation()
@@ -143,7 +143,7 @@
 	>
 		<button
 			type="button"
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+			class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
@@ -159,7 +159,7 @@
 		</button>
 		<button
 			type="button"
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+			class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
@@ -171,7 +171,7 @@
 		</button>
 		<button
 			type="button"
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+			class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
@@ -181,16 +181,13 @@
 			<ArchiveBox class="h-4 w-4" />
 			archive
 		</button>
-		<div class="my-1 h-px w-full bg-foreground/15"></div>
+		<div class="bg-foreground/15 my-1 h-px w-full"></div>
 		<div class="mt-1">
 			<DeleteButton
 				confirm={true}
 				stopPropagation={true}
 				onTrigger={onCloseMenu}
-				modalText={{
-					title: 'delete chat?',
-					description: thread.title || 'new chat',
-				}}
+				modalText={{ title: 'delete chat?', description: thread.title || 'new chat' }}
 				onDelete={() => onDeleteThread(thread)}
 			/>
 		</div>

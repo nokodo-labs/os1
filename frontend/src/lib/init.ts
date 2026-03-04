@@ -5,17 +5,20 @@
  * order of operations:
  * 1. init device/PWA state (sync, browser-only)
  * 2. ensure API origin is configured
- * 3. attempt token refresh (restore session)
+ * 3. attempt token refresh (restore session) - throws BackendUnreachableError if network is down
  * 4. mark auth as ready (unblocks API requests)
  * 5. concurrently fetch all critical data (user, settings)
  * 6. connect event stream + start preference sync
+ *
+ * if the backend is unreachable at any point, returns { backendUnreachable: true } so the
+ * layout can show a reconnect screen instead of a broken page or a useless login redirect.
  *
  * the splash screen stays up until initApp completes via appReadiness blocker.
  * call initApp() once from the root layout's onMount.
  */
 
 import { browser } from '$app/environment'
-import { refreshAccessToken } from '$lib/api/client'
+import { BackendUnreachableError, refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
@@ -31,6 +34,7 @@ import { loadSettings } from '$lib/stores/settings.svelte'
 export interface InitResult {
 	authenticated: boolean
 	token: string | null
+	backendUnreachable?: boolean
 }
 
 /**
@@ -62,7 +66,17 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		// 3. restore session from refresh token cookie
 		let token = getAccessToken()
 		if (!options?.skipAuthRestore && !token) {
-			token = await refreshAccessToken()
+			try {
+				token = await refreshAccessToken()
+			} catch (err) {
+				if (err instanceof BackendUnreachableError) {
+					// backend is down - still mark auth ready so we don't deadlock,
+					// then signal the layout to show the reconnect screen.
+					markAuthReady()
+					return { authenticated: false, token: null, backendUnreachable: true }
+				}
+				throw err
+			}
 		}
 
 		// 4. unblock authenticated API requests
@@ -72,7 +86,14 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		//    settings are public (loaded regardless of auth).
 		//    user data + event stream only when authenticated.
 		if (token) {
-			await Promise.all([session.refreshUser(), loadSettings()])
+			try {
+				await Promise.all([session.refreshUser(), loadSettings()])
+			} catch (err) {
+				if (err instanceof BackendUnreachableError) {
+					return { authenticated: false, token: null, backendUnreachable: true }
+				}
+				throw err
+			}
 
 			// 6. event stream + preferences (needs user data from step 5)
 			eventStreamClient.connect()

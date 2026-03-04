@@ -3,7 +3,9 @@
  */
 
 import { apiClient } from '$lib/api/client'
+import type { RunInput } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
+import { deriveToolChoice, type RunModifiers } from '$lib/chat/attachments'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
@@ -12,14 +14,31 @@ import { runThreadStream } from './streamProcessor'
 import type { ChatContext } from './types'
 
 /** send a new user message and stream the agent response */
-export async function handleSendMessage(content: string, ctx: ChatContext): Promise<void> {
+export async function handleSendMessage(
+	content: string,
+	ctx: ChatContext,
+	modifiers?: RunModifiers
+): Promise<void> {
 	const trimmed = content.trim()
-	if (!trimmed) return
+	const hasAttachments = modifiers?.attachments && modifiers.attachments.length > 0
+	if (!trimmed && !hasAttachments) return
 	if (!ctx.thread) return
-	const runBaseMessage = trimmed
+
+	const runInput: RunInput = { text: trimmed || null }
+	if (hasAttachments) {
+		runInput.attachment_ids = modifiers.attachments.map((a) => a.fileId)
+	}
+
+	// include user attachment actions (reveals/references)
+	if (ctx.pendingActions.size > 0) {
+		runInput.attachment_actions = Object.fromEntries(ctx.pendingActions)
+	}
+
+	const displayText = trimmed || modifiers?.attachments.map((a) => a.filename).join(', ') || ''
+
 	if (!selectedAgent) {
-		ctx.lastRunInput = runBaseMessage
-		ctx.optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
+		ctx.lastRunInput = displayText
+		ctx.optimisticUserMessage = { content: displayText, timestamp: new SvelteDate() }
 		ctx.viewingStreamingBranch = true
 		ctx.streamingAssistant = {
 			runId: null,
@@ -34,9 +53,9 @@ export async function handleSendMessage(content: string, ctx: ChatContext): Prom
 		ctx.rebuildRunBlocks()
 		return
 	}
-	ctx.lastRunInput = runBaseMessage
+	ctx.lastRunInput = displayText
 	ctx.inputValue = ''
-	ctx.optimisticUserMessage = { content: runBaseMessage, timestamp: new SvelteDate() }
+	ctx.optimisticUserMessage = { content: displayText, timestamp: new SvelteDate() }
 	const shouldAutoScroll = ctx.scrollContainer ? computeIsAtBottom(ctx.scrollContainer) : true
 	ctx.isGenerating = true
 	ctx.streamingAssistant = null
@@ -59,20 +78,25 @@ export async function handleSendMessage(content: string, ctx: ChatContext): Prom
 		void ctx.queueScrollToBottom('smooth')
 	}
 
+	const toolChoice = modifiers ? deriveToolChoice(modifiers) : null
+
 	try {
 		await runThreadStream(
 			{
 				threadId: ctx.thread.id,
 				agentId: selectedAgent.id,
-				input: runBaseMessage,
+				input: runInput,
 				runId,
 				parentId: ctx.currentLeafId,
+				toolChoice,
 			},
 			ctx
 		)
 		if (runId !== ctx.activeRun) return
 		ctx.optimisticUserMessage = null
 		ctx.streamingAssistant = null
+		// clear pending actions - they've been persisted as events by the backend
+		ctx.pendingActions.clear()
 		ctx.rebuildRunBlocks()
 		syncCacheAfterRun(ctx)
 	} catch (e) {
@@ -123,11 +147,22 @@ export async function handleRegenerateMessage(
 	ctx.rebuildRunBlocks()
 
 	try {
+		const regenInput: RunInput = prompt
+			? { text: prompt }
+			: ctx.optimisticUserMessage
+				? { text: ctx.lastRunInput }
+				: {}
+
+		// include pending attachment actions with the regeneration
+		if (ctx.pendingActions.size > 0) {
+			regenInput.attachment_actions = Object.fromEntries(ctx.pendingActions)
+		}
+
 		await runThreadStream(
 			{
 				threadId: ctx.thread.id,
 				agentId: selectedAgent.id,
-				input: prompt ?? (ctx.optimisticUserMessage ? ctx.lastRunInput : null),
+				input: Object.keys(regenInput).length > 0 ? regenInput : null,
 				runId,
 				parentId: resolvedParent,
 			},
@@ -137,6 +172,7 @@ export async function handleRegenerateMessage(
 		ctx.optimisticUserMessage = null
 		ctx.streamingAssistant = null
 		ctx.streamingAssistantParentId = null
+		ctx.pendingActions.clear()
 		ctx.rebuildRunBlocks()
 		syncCacheAfterRun(ctx)
 	} catch (e) {

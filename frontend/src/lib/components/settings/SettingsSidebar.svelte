@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
-	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
@@ -12,6 +11,7 @@
 	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import type { Component } from 'svelte'
 
@@ -157,39 +157,25 @@
 	<nav class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
 		<div class="space-y-1">
 			{#each effectiveSections as section (section.id)}
-				<div
-					role="button"
-					tabindex="0"
-					class="group rounded-pill hover:border-foreground/12 hover:bg-foreground/8 flex w-full cursor-pointer items-center gap-3 border border-transparent bg-transparent px-3 py-2.5 text-left transition-all duration-200"
-					style={selectedSection === section.id
-						? 'background-color: var(--accent-bg); border-color: var(--accent-border);'
-						: ''}
-					onmouseenter={() => prefetchSection(section.id)}
-					onclick={() => selectSection(section.id)}
-					onkeydown={(event) => {
-						if (event.key !== 'Enter' && event.key !== ' ') return
-						event.preventDefault()
-						selectSection(section.id)
-					}}
+				<SidebarListItem
+					selected={selectedSection === section.id}
+					onSelect={() => selectSection(section.id)}
+					onPrefetch={() => prefetchSection(section.id)}
+					showChevron={true}
 				>
-					<span
-						class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
-							? 'bg-foreground/8'
-							: ''}"
-					>
-						<section.icon variant="solid" class="h-5 w-5" />
-					</span>
-
-					<span class="flex min-w-0 flex-1 items-center gap-2">
-						<span class="text-foreground/90 min-w-0 truncate text-[0.95rem] font-medium"
-							>{section.label}</span
+					{#snippet leading()}
+						<span
+							class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
+								? 'bg-foreground/8'
+								: ''}"
 						>
-					</span>
-
-					<ChevronRight
-						class="text-foreground/50 group-hover:text-foreground/55 h-4 w-4 transition-colors"
-					/>
-				</div>
+							<section.icon variant="solid" class="h-5 w-5" />
+						</span>
+					{/snippet}
+					<span class="text-foreground/90 min-w-0 truncate text-[0.95rem] font-medium"
+						>{section.label}</span
+					>
+				</SidebarListItem>
 			{/each}
 		</div>
 	</nav>

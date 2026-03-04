@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { getApiBaseUrl } from '$lib/api/client'
+	import { extractFileParts, extractMediaParts } from '$lib/chat/helpers'
+	import type { ApiMessage } from '$lib/chat/types'
+	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
@@ -11,6 +15,7 @@
 
 	interface Props {
 		content: string
+		contentParts?: ApiMessage['content']
 		timestamp?: Date
 		align?: 'left' | 'right'
 		actions?: Snippet
@@ -26,6 +31,7 @@
 
 	let {
 		content,
+		contentParts,
 		timestamp,
 		align = 'right',
 		actions,
@@ -38,6 +44,11 @@
 		onEditSave,
 		onEditSaveAsCopy,
 	}: Props = $props()
+
+	const apiBase = getApiBaseUrl()
+	const mediaParts = $derived(contentParts ? extractMediaParts(contentParts, apiBase) : [])
+	const fileParts = $derived(contentParts ? extractFileParts(contentParts, apiBase) : [])
+	const hasMedia = $derived(mediaParts.length > 0 || fileParts.length > 0)
 
 	let showActions = $state(false)
 	let isHovered = $state(false)
@@ -236,89 +247,111 @@
 		/>
 	{/if}
 
-	<div
-		class="bubble-wrapper"
-		class:imessage-right={!isEditing &&
-			showTail &&
-			tailStyle === 'imessage' &&
-			align === 'right'}
-		class:imessage-left={!isEditing && showTail && tailStyle === 'imessage' && align === 'left'}
-		class:whatsapp-right={!isEditing &&
-			showTail &&
-			tailStyle === 'whatsapp' &&
-			align === 'right'}
-		class:whatsapp-left={!isEditing && showTail && tailStyle === 'whatsapp' && align === 'left'}
-	>
-		<div
-			class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
-			class:px-5={isEditing}
-			class:py-3={isEditing}
-			style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
-		>
-			{#if isEditing}
-				<div class="max-h-96 overflow-auto">
-					<textarea
-						bind:this={editTextarea}
-						bind:value={editContent}
-						class="text-foreground placeholder:text-foreground/40 w-full resize-none bg-transparent leading-relaxed wrap-break-word outline-none disabled:opacity-60"
-						placeholder="edit your message..."
-						disabled={isSaving}
-						rows={1}
-						oninput={(e) => {
-							const t = e.currentTarget
-							t.style.height = ''
-							t.style.height = `${t.scrollHeight}px`
-						}}
-						onkeydown={(e) => {
-							if (e.key === 'Escape') cancelEditing()
-							if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && onEditSaveAsCopy)
-								saveAsCopy()
-							if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-								e.preventDefault()
-								if (onEditSave) saveEdit()
-							}
-						}}
-					></textarea>
-				</div>
-				<!-- button row: save (left), cancel + send (right) -->
-				<div class="mt-2 mb-1 flex justify-between text-sm font-medium">
-					<div>
-						{#if onEditSave}
-							<button
-								onclick={saveEdit}
-								disabled={isSaving || !editContent.trim()}
-								class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 cursor-pointer rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
-							>
-								save
-							</button>
-						{/if}
-					</div>
-					<div class="flex space-x-1.5">
-						<button
-							onclick={cancelEditing}
-							disabled={isSaving}
-							class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground cursor-pointer rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							cancel
-						</button>
-						{#if onEditSaveAsCopy}
-							<button
-								onclick={saveAsCopy}
-								disabled={isSaving || !editContent.trim()}
-								class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
-							>
-								{isSaving ? 'saving…' : 'send'}
-							</button>
-						{/if}
-					</div>
-				</div>
-			{:else}
-				<div class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap">
-					{content}
-				</div>
-			{/if}
+	<!-- media attachments rendered OUTSIDE the bubble -->
+	{#if hasMedia && !isEditing}
+		<div class="w-full max-w-sm space-y-1.5 overflow-hidden rounded-2xl">
+			<MediaAttachments {mediaParts} {fileParts} />
 		</div>
-	</div>
+	{/if}
+
+	<!-- text bubble (only shown when there is text content or editing) -->
+	{#if content.trim().length > 0 || isEditing}
+		<div
+			class="bubble-wrapper"
+			class:imessage-right={!isEditing &&
+				showTail &&
+				tailStyle === 'imessage' &&
+				align === 'right'}
+			class:imessage-left={!isEditing &&
+				showTail &&
+				tailStyle === 'imessage' &&
+				align === 'left'}
+			class:whatsapp-right={!isEditing &&
+				showTail &&
+				tailStyle === 'whatsapp' &&
+				align === 'right'}
+			class:whatsapp-left={!isEditing &&
+				showTail &&
+				tailStyle === 'whatsapp' &&
+				align === 'left'}
+		>
+			<div
+				class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
+				class:px-5={isEditing}
+				class:py-3={isEditing}
+				style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
+			>
+				{#if isEditing}
+					<div class="max-h-96 overflow-auto">
+						<textarea
+							bind:this={editTextarea}
+							bind:value={editContent}
+							class="text-foreground placeholder:text-foreground/40 w-full resize-none bg-transparent leading-relaxed wrap-break-word outline-none disabled:opacity-60"
+							placeholder="edit your message..."
+							disabled={isSaving}
+							rows={1}
+							oninput={(e) => {
+								const t = e.currentTarget
+								t.style.height = ''
+								t.style.height = `${t.scrollHeight}px`
+							}}
+							onkeydown={(e) => {
+								if (e.key === 'Escape') cancelEditing()
+								if (
+									(e.metaKey || e.ctrlKey) &&
+									e.key === 'Enter' &&
+									onEditSaveAsCopy
+								)
+									saveAsCopy()
+								if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+									e.preventDefault()
+									if (onEditSave) saveEdit()
+								}
+							}}
+						></textarea>
+					</div>
+					<!-- button row: save (left), cancel + send (right) -->
+					<div class="mt-2 mb-1 flex justify-between text-sm font-medium">
+						<div>
+							{#if onEditSave}
+								<button
+									onclick={saveEdit}
+									disabled={isSaving || !editContent.trim()}
+									class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 cursor-pointer rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
+								>
+									save
+								</button>
+							{/if}
+						</div>
+						<div class="flex space-x-1.5">
+							<button
+								onclick={cancelEditing}
+								disabled={isSaving}
+								class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground cursor-pointer rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								cancel
+							</button>
+							{#if onEditSaveAsCopy}
+								<button
+									onclick={saveAsCopy}
+									disabled={isSaving || !editContent.trim()}
+									class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
+								>
+									{isSaving ? 'saving...' : 'send'}
+								</button>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					<div
+						class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap"
+					>
+						{content}
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	{#if !isEditing && (actions || siblingCount > 1 || canEdit)}
 		<div class="flex items-center gap-2 px-1" role="none">

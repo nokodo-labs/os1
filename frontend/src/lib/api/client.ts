@@ -19,6 +19,17 @@ let refreshInFlight: Promise<string | null> | null = null
 
 export { getApiOrigin as getApiBaseUrl }
 
+/**
+ * thrown when the backend is unreachable (network error, not an auth failure).
+ * callers can use this to show a reconnect screen rather than redirecting to login.
+ */
+export class BackendUnreachableError extends Error {
+	constructor() {
+		super('backend unreachable')
+		this.name = 'BackendUnreachableError'
+	}
+}
+
 async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	await apiOriginReady
 	const req = input instanceof Request ? input : new Request(input, init)
@@ -65,12 +76,17 @@ export async function refreshAccessToken(): Promise<string | null> {
 	refreshInFlight = (async () => {
 		try {
 			const { data, response } = await rawClient().POST('/v1/auth/refresh', {})
-			if (!response.ok || !data?.access_token) {
+			if (!response || !response.ok || !data?.access_token) {
+				// server responded but auth failed - session is genuinely invalid
 				clearAccessToken()
 				return null
 			}
 			setAccessToken(data.access_token)
 			return data.access_token
+		} catch {
+			// fetch threw - backend is unreachable, not an auth failure.
+			// do NOT clear the token; the session may still be valid once the backend is back.
+			throw new BackendUnreachableError()
 		} finally {
 			refreshInFlight = null
 		}

@@ -1,6 +1,6 @@
 import { browser } from '$app/environment'
 
-import { apiClient } from '$lib/api/client'
+import { apiClient, BackendUnreachableError } from '$lib/api/client'
 import { eventStreamClient } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtEmail, getJwtUserId } from '$lib/auth/jwt'
@@ -62,6 +62,10 @@ class SessionStore {
 				params: { path: { user_id: userId } },
 			})
 			this.currentUser = data ?? null
+		} catch (err) {
+			if (err instanceof BackendUnreachableError) throw err
+			// other unexpected errors - clear user, don't crash
+			this.currentUser = null
 		} finally {
 			this.isLoadingUser = false
 		}

@@ -9,10 +9,12 @@
 	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import AddFriendsModal from '$lib/components/modals/AddFriendsModal.svelte'
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
+	import ConfirmDeleteModal from '$lib/components/modals/ConfirmDeleteModal.svelte'
 	import CreateGroupModal from '$lib/components/modals/CreateGroupModal.svelte'
 	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
+	import BackendReconnect from '$lib/components/system/BackendReconnect.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
 	import Island from '$lib/components/system/Island.svelte'
 	import NotificationToast from '$lib/components/system/NotificationToast.svelte'
@@ -102,6 +104,7 @@
 
 	// access gate state
 	let pendingApproval = $state<boolean>(false)
+	let backendUnreachable = $state<boolean>(false)
 
 	// reactive media asset URLs from settings
 	const mediaUrls = $derived(getMediaUrls())
@@ -121,6 +124,8 @@
 			mainEl.style.setProperty('--chrome-island-offset', `${offset}px`)
 			// align the island shell left edge with the main content area
 			islandEl.style.setProperty('--island-left', `${mainRect.left}px`)
+			// also expose on :root so portal'd elements (AddContext) can read it
+			document.documentElement.style.setProperty('--island-left', `${mainRect.left}px`)
 		}
 		update()
 		const ro = new ResizeObserver(update)
@@ -156,7 +161,13 @@
 		}
 
 		// initialize app (auth restoration, settings, event stream)
-		const { authenticated, token } = await initApp()
+		const { authenticated, token, backendUnreachable: unreachable } = await initApp()
+
+		if (unreachable) {
+			backendUnreachable = true
+			return
+		}
+
 		const isPublic = PUBLIC_PATHS.has(page.url.pathname)
 
 		// auth guard: redirect unauthenticated users from private routes
@@ -187,9 +198,9 @@
 		return path === '/login' || path === '/signup'
 	})
 
-	// auth pages use the admin-configured auth background
+	// auth pages (and backend-unreachable screen) use the admin-configured auth background
 	$effect(() => {
-		if (isAuthRoute) {
+		if (isAuthRoute || backendUnreachable) {
 			background.setPage(background.auth)
 		} else {
 			background.clearPage()
@@ -342,7 +353,9 @@
 	}}
 	onReady={handleBackgroundReady}
 >
-	{#if pendingApproval}
+	{#if backendUnreachable}
+		<BackendReconnect />
+	{:else if pendingApproval}
 		<PendingApproval
 			supportEmail={settingsState.data?.branding?.support_email ?? null}
 			adminEmail={settingsState.data?.branding?.admin_email ?? null}
@@ -429,6 +442,11 @@
 
 			<AddFriendsModal open={modals.isOpen('add-friends')} onClose={modals.close} />
 			<ArchivedChatsModal open={modals.isOpen('archived-chats')} onClose={modals.close} />
+			<ConfirmDeleteModal
+				open={modals.isOpen('confirm-delete')}
+				payload={modals.confirmDeletePayload}
+				onClose={modals.close}
+			/>
 			<CreateGroupModal open={modals.isOpen('create-group')} onClose={modals.close} />
 			<MemoriesModal open={modals.isOpen('memories')} onClose={modals.close} />
 			<ShareResourceModal

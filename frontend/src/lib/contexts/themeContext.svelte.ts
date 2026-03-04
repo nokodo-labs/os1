@@ -12,70 +12,81 @@ let prefersDark = $state(false)
 // we'll use CSS variables for more flexibility, but these helpers can be useful
 export const accentColors: Record<
 	AccentColorKey,
-	{ primary: string; bg: string; border: string; shadow: string }
+	{ primary: string; rgb: string; bg: string; border: string; shadow: string }
 > = {
 	purple: {
 		primary: '#a855f7', // purple-500
+		rgb: '168 85 247',
 		bg: 'rgba(168, 85, 247, 0.02)',
 		border: 'rgba(168, 85, 247, 0.2)',
 		shadow: 'rgba(168, 85, 247, 0.25)',
 	},
 	blue: {
 		primary: '#3b82f6', // blue-500
+		rgb: '59 130 246',
 		bg: 'rgba(59, 130, 246, 0.02)',
 		border: 'rgba(59, 130, 246, 0.2)',
 		shadow: 'rgba(59, 130, 246, 0.25)',
 	},
 	green: {
 		primary: '#65C466', // messages green
+		rgb: '101 196 102',
 		bg: 'rgba(101, 196, 102, 0.02)',
 		border: 'rgba(101, 196, 102, 0.2)',
 		shadow: 'rgba(101, 196, 102, 0.25)',
 	},
 	orange: {
 		primary: '#f97316', // orange-500
+		rgb: '249 115 22',
 		bg: 'rgba(249, 115, 22, 0.02)',
 		border: 'rgba(249, 115, 22, 0.2)',
 		shadow: 'rgba(249, 115, 22, 0.25)',
 	},
 	pink: {
 		primary: '#ec4899', // pink-500
+		rgb: '236 72 153',
 		bg: 'rgba(236, 72, 153, 0.02)',
 		border: 'rgba(236, 72, 153, 0.2)',
 		shadow: 'rgba(236, 72, 153, 0.25)',
 	},
 	red: {
 		primary: '#ef4444', // red-500
+		rgb: '239 68 68',
 		bg: 'rgba(239, 68, 68, 0.02)',
 		border: 'rgba(239, 68, 68, 0.2)',
 		shadow: 'rgba(239, 68, 68, 0.25)',
 	},
 	yellow: {
 		primary: '#fde68a', // library folder yellow
+		rgb: '253 230 138',
 		bg: 'rgba(253, 230, 138, 0.02)',
 		border: 'rgba(253, 230, 138, 0.2)',
 		shadow: 'rgba(253, 230, 138, 0.25)',
 	},
 	gray: {
 		primary: '#6b7280', // gray-500
+		rgb: '107 114 128',
 		bg: 'rgba(107, 114, 128, 0.02)',
 		border: 'rgba(107, 114, 128, 0.2)',
 		shadow: 'rgba(107, 114, 128, 0.25)',
 	},
 	notes: {
 		primary: '#fbbc04', // notes app yellow
+		rgb: '251 188 4',
 		bg: 'rgba(251, 188, 4, 0.02)',
 		border: 'rgba(251, 188, 4, 0.2)',
 		shadow: 'rgba(251, 188, 4, 0.25)',
 	},
 	reminders: {
 		primary: '#4285f4', // reminders app blue
+		rgb: '66 133 244',
 		bg: 'rgba(66, 133, 244, 0.02)',
 		border: 'rgba(66, 133, 244, 0.2)',
 		shadow: 'rgba(66, 133, 244, 0.25)',
 	},
 	lilac: {
 		primary: '#c4b5fd', // lilac (violet-300)
+		rgb: '196 181 253',
 		bg: 'rgba(196, 181, 253, 0.02)',
 		border: 'rgba(196, 181, 253, 0.2)',
 		shadow: 'rgba(196, 181, 253, 0.25)',
@@ -105,6 +116,7 @@ function updateDOM(nextResolvedMode: 'light' | 'dark', nextAccent: AccentColorKe
 	// update CSS variables for accent color
 	const colors = accentColors[nextAccent]
 	root.style.setProperty('--accent-primary', colors.primary)
+	root.style.setProperty('--accent-rgb', colors.rgb)
 	root.style.setProperty('--accent-bg', colors.bg)
 	root.style.setProperty('--accent-border', colors.border)
 	root.style.setProperty('--accent-shadow', colors.shadow)

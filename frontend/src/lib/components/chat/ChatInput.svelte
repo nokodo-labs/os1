@@ -1,11 +1,20 @@
 <script lang="ts">
-	// import LiquidMetal from '$lib/components/effects/LiquidMetal.svelte'
+	import {
+		categorizeMediaType,
+		type PendingAttachment,
+		revokePreviewUrls,
+		type RunModifiers,
+		uploadFile,
+	} from '$lib/chat/attachments'
+	import type { ThreadAttachment } from '$lib/chat/types'
+	import AddContext from '$lib/components/chat/AddContext.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Stop from '$lib/components/icons/Stop.svelte'
+	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { device } from '$lib/stores/device.svelte'
+	import { files } from '$lib/stores/files.svelte'
 	import { tick } from 'svelte'
-	import { scale } from 'svelte/transition'
 
 	interface ChatInputProps {
 		value?: string
@@ -13,9 +22,11 @@
 		disabled?: boolean
 		isGenerating?: boolean
 		focusToken?: number
-		onSubmit?: (message: string) => void
+		threadAttachments?: ThreadAttachment[]
+		onSubmit?: (message: string, modifiers?: RunModifiers) => void
 		onStop?: () => void
 		onKeyDown?: (event: KeyboardEvent) => boolean | void
+		onToggleAttachmentStatus?: (fileId: string, action: 'reveal' | 'reference') => void
 		viewTransitionName?: string
 	}
 
@@ -25,19 +36,57 @@
 		disabled = false,
 		isGenerating = false,
 		focusToken,
+		threadAttachments = [],
 		onSubmit,
 		onStop,
 		onKeyDown,
+		onToggleAttachmentStatus,
 		viewTransitionName,
 	}: ChatInputProps = $props()
 
 	let textarea: HTMLTextAreaElement
+	let formEl = $state<HTMLFormElement | null>(null)
 	let isComposing = $state(false)
-	let isAddMenuOpen = $state(false)
+	let isAddContextOpen = $state(false)
 	let isMultiLine = $state(false)
 
-	let fileInput: HTMLInputElement
-	let imageInput: HTMLInputElement
+	// attachment + modifier state
+	let webSearchEnabled = $state(false)
+	let thinkLongerEnabled = $state(false)
+	let generateImageEnabled = $state(false)
+	let pendingAttachments = $state<PendingAttachment[]>([])
+	let isUploading = $state(false)
+
+	// combine pending uploads and thread-level attachments for the tray
+	const pendingAsNative = $derived(
+		pendingAttachments.map((att) => ({
+			id: att.fileId,
+			filename: att.filename,
+			type: att.category as 'image' | 'audio' | 'video' | 'file',
+			status: 'active' as const,
+			isPending: true,
+			previewUrl: att.previewUrl,
+		}))
+	)
+	const threadAsNative = $derived(
+		threadAttachments.map((att) => ({
+			id: att.fileId,
+			filename: att.filename ?? att.fileId,
+			type: att.category,
+			status: att.status,
+			isPending: false,
+		}))
+	)
+	const activeAttachments = $derived([...pendingAsNative, ...threadAsNative])
+
+	// track whether context is active for the badge indicator
+	const hasContextActive = $derived(
+		pendingAttachments.length > 0 ||
+			threadAttachments.length > 0 ||
+			webSearchEnabled ||
+			thinkLongerEnabled ||
+			generateImageEnabled
+	)
 
 	$effect(() => {
 		if (!textarea) return
@@ -58,48 +107,47 @@
 		tick().then(resize)
 	})
 
-	function closeAddMenu() {
-		isAddMenuOpen = false
+	function closeAddContext() {
+		isAddContextOpen = false
 	}
 
-	function toggleAddMenu() {
-		isAddMenuOpen = !isAddMenuOpen
+	function toggleAddContext() {
+		isAddContextOpen = !isAddContextOpen
 	}
 
-	function handleAddMenuKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Escape') {
-			event.stopPropagation()
-			closeAddMenu()
+	async function handleFileUpload(files: FileList) {
+		isUploading = true
+		try {
+			const uploads = await Promise.all(Array.from(files).map(uploadFile))
+			pendingAttachments = [...pendingAttachments, ...uploads]
+		} catch (e) {
+			console.error('file upload failed:', e)
+		} finally {
+			isUploading = false
 		}
 	}
 
-	function handleClickOutside(event: MouseEvent) {
-		const target = event.target as HTMLElement
-		if (!target.closest('[data-chat-add-menu-root]')) {
-			closeAddMenu()
-		}
+	function removeAttachment(fileId: string) {
+		const att = pendingAttachments.find((a) => a.fileId === fileId)
+		if (att?.previewUrl) URL.revokeObjectURL(att.previewUrl)
+		pendingAttachments = pendingAttachments.filter((a) => a.fileId !== fileId)
+		void files.remove(fileId)
 	}
 
-	$effect(() => {
-		if (!isAddMenuOpen) return
-		document.addEventListener('click', handleClickOutside)
-		document.addEventListener('keydown', handleAddMenuKeyDown)
-		return () => {
-			document.removeEventListener('click', handleClickOutside)
-			document.removeEventListener('keydown', handleAddMenuKeyDown)
-		}
-	})
-
-	function handleFileSelected(event: Event) {
-		const input = event.currentTarget as HTMLInputElement
-		const files = Array.from(input.files ?? [])
-		if (files.length === 0) return
-		console.log(
-			'Selected files:',
-			files.map((f) => f.name)
-		)
-		input.value = ''
-		closeAddMenu()
+	function handleAttachResource(resource: ResourceItem) {
+		if (resource.type !== 'file') return
+		if (pendingAttachments.some((a) => a.fileId === resource.id)) return
+		const mime = (resource.meta?.mime_type as string) ?? 'application/octet-stream'
+		pendingAttachments = [
+			...pendingAttachments,
+			{
+				fileId: resource.id,
+				filename: resource.title,
+				mediaType: mime,
+				category: categorizeMediaType(mime),
+				previewUrl: files.getThumbnailUrl(resource.id),
+			},
+		]
 	}
 
 	function resize() {
@@ -125,10 +173,32 @@
 	}
 
 	function handleSubmit() {
-		if (!value.trim() || disabled || !onSubmit) return
-		onSubmit(value)
+		const hasAttachments = pendingAttachments.length > 0
+		if ((!value.trim() && !hasAttachments) || disabled || !onSubmit) return
+
+		const modifiers: RunModifiers = {
+			webSearch: webSearchEnabled,
+			thinkLonger: thinkLongerEnabled,
+			generateImage: generateImageEnabled,
+			attachments: [...pendingAttachments],
+		}
+
+		const hasModifiers =
+			modifiers.webSearch ||
+			modifiers.thinkLonger ||
+			modifiers.generateImage ||
+			modifiers.attachments.length > 0
+
+		onSubmit(value, hasModifiers ? modifiers : undefined)
+
+		// reset state after send
 		value = ''
 		isMultiLine = false
+		revokePreviewUrls(pendingAttachments)
+		pendingAttachments = []
+		webSearchEnabled = false
+		thinkLongerEnabled = false
+		generateImageEnabled = false
 		if (textarea) {
 			textarea.style.height = 'auto'
 		}
@@ -157,7 +227,7 @@
 	}
 </script>
 
-<form class="w-full" onsubmit={handleFormSubmit}>
+<form class="w-full" bind:this={formEl} onsubmit={handleFormSubmit}>
 	<div
 		class="liquid-glass chat-input relative w-full transition-all duration-300"
 		class:rounded-pill={!isMultiLine}
@@ -176,58 +246,24 @@
 					class:items-center={!isMultiLine}
 					class:items-end={isMultiLine}
 					class:pb-1={isMultiLine}
-					data-chat-add-menu-root
 				>
 					<button
 						type="button"
-						aria-label="Add attachment"
-						aria-haspopup="menu"
-						aria-expanded={isAddMenuOpen}
-						class="text-foreground/65 hover:text-foreground flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+						aria-label="add context"
+						aria-haspopup="dialog"
+						aria-expanded={isAddContextOpen}
+						class="text-foreground/65 hover:text-foreground relative flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
 						{disabled}
-						onclick={toggleAddMenu}
+						onclick={toggleAddContext}
 					>
 						<Plus class="h-5.5 w-5.5" strokeWidth="2" />
+						{#if hasContextActive}
+							<span
+								class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+								style="background-color: var(--accent-primary);"
+							></span>
+						{/if}
 					</button>
-
-					<input
-						bind:this={fileInput}
-						type="file"
-						class="hidden"
-						onchange={handleFileSelected}
-					/>
-					<input
-						bind:this={imageInput}
-						type="file"
-						accept="image/*"
-						class="hidden"
-						onchange={handleFileSelected}
-					/>
-
-					{#if isAddMenuOpen}
-						<div
-							transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
-							class="animate-popup-up rounded-container border-foreground/10 bg-popover/95 text-popover-foreground absolute bottom-full left-0 mb-3 w-56 overflow-hidden border p-1 shadow-[0_24px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm"
-							role="menu"
-						>
-							<button
-								type="button"
-								class="rounded-pill hover:bg-foreground/10 flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors"
-								role="menuitem"
-								onclick={() => fileInput?.click()}
-							>
-								upload file
-							</button>
-							<button
-								type="button"
-								class="rounded-pill hover:bg-foreground/10 flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm transition-colors"
-								role="menuitem"
-								onclick={() => imageInput?.click()}
-							>
-								upload image
-							</button>
-						</div>
-					{/if}
 				</div>
 
 				<div class="flex flex-1 items-center px-1.5">
@@ -265,11 +301,13 @@
 							type="submit"
 							aria-label="send message"
 							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
-								value.trim() === '' || disabled
+								(value.trim() === '' && pendingAttachments.length === 0) ||
+								disabled
 							)
 								? 'hover:brightness-110'
 								: 'bg-foreground/10 text-foreground/35'}"
-							disabled={value.trim() === '' || disabled}
+							disabled={(value.trim() === '' && pendingAttachments.length === 0) ||
+								disabled}
 						>
 							<ArrowUp class="h-5 w-5" strokeWidth="2" />
 						</button>
@@ -279,6 +317,23 @@
 		</div>
 	</div>
 </form>
+
+<AddContext
+	open={isAddContextOpen}
+	onClose={closeAddContext}
+	{activeAttachments}
+	{isUploading}
+	{webSearchEnabled}
+	{thinkLongerEnabled}
+	{generateImageEnabled}
+	onFileUpload={handleFileUpload}
+	onAttachResource={handleAttachResource}
+	onToggleWebSearch={() => (webSearchEnabled = !webSearchEnabled)}
+	onToggleThinkLonger={() => (thinkLongerEnabled = !thinkLongerEnabled)}
+	onToggleGenerateImage={() => (generateImageEnabled = !generateImageEnabled)}
+	onToggleAttachmentStatus={(id, action) => onToggleAttachmentStatus?.(id, action)}
+	onRemoveAttachment={removeAttachment}
+/>
 
 <style>
 	.chat-input {

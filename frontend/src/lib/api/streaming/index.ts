@@ -3,6 +3,7 @@
  * - SSE: /runs (POST), /threads/create_and_run (POST), /runs/{run_id}/stream (GET)
  * - WebSocket: /events/stream
  */
+export type { ToolChoiceValue } from '$lib/chat/types'
 export {
 	resumeRunStream,
 	runChatStream,
@@ -14,6 +15,7 @@ export {
 	type CreateAndRunStreamOptions,
 	type CreateAndRunThread,
 	type ResumeRunStreamOptions,
+	type RunInput,
 	type StreamedMessage,
 	type StreamError,
 	type TextDelta,

@@ -13,6 +13,7 @@
 	import { type ResourceFilterMode, type ResourceItem } from '$lib/components/widgets/types'
 	import type { Thread } from '$lib/stores/chat.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
+	import { apiFileToResource, files } from '$lib/stores/files.svelte'
 	import { notes, type Note } from '$lib/stores/notes.svelte'
 	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
 
@@ -94,6 +95,13 @@
 		}
 	}
 
+	async function loadFileResources(): Promise<ResourceItem[]> {
+		const allFiles = await files.load()
+		const resources = allFiles.filter((f) => !excludeIds.has(f.id)).map(apiFileToResource)
+		void files.loadThumbnails(resources.map((r) => r.id))
+		return resources
+	}
+
 	function searchResultToResource(result: SearchResult): ResourceItem {
 		const typeMap: Record<string, ResourceItem['type']> = {
 			thread: 'thread',
@@ -137,6 +145,16 @@
 		return items
 	}
 
+	async function buildLocalResultsWithFiles(): Promise<ResourceItem[]> {
+		const items = buildLocalResults()
+		if (activeFilter === 'all' || activeFilter === 'files') {
+			const fileResources = await loadFileResources()
+			items.push(...fileResources)
+		}
+		items.sort((a, b) => b.updatedAt - a.updatedAt)
+		return items
+	}
+
 	async function runSearch(query: string) {
 		abortController?.abort()
 		if (!query.trim()) {
@@ -148,19 +166,22 @@
 		loading = true
 		abortController = new AbortController()
 
+		// files filter: use local filtering on the API results
+		if (activeFilter === 'files') {
+			const fileItems = await loadFileResources()
+			const lowerQ = query.toLowerCase()
+			searchResults = fileItems.filter((f) => f.title.toLowerCase().includes(lowerQ))
+			loading = false
+			return
+		}
+
 		const typeMap: Record<string, string[]> = {
 			all: ['thread', 'note', 'reminder'],
 			threads: ['thread'],
 			notes: ['note'],
 			reminders: ['reminder'],
-			files: [],
 		}
-		const types = typeMap[activeFilter] ?? []
-		if (types.length === 0 && activeFilter === 'files') {
-			searchResults = []
-			loading = false
-			return
-		}
+		const types = typeMap[activeFilter] ?? ['thread', 'note', 'reminder']
 
 		const seen = new Set<string>()
 		const results: ResourceItem[] = []
@@ -227,7 +248,7 @@
 	async function loadLocal() {
 		loading = true
 		await Promise.all([chat.refreshThreads(), notes.load(), reminders.loadListsAndCounts()])
-		localResults = buildLocalResults()
+		localResults = await buildLocalResultsWithFiles()
 		loading = false
 	}
 
@@ -246,7 +267,9 @@
 	$effect(() => {
 		activeFilter
 		if (open && !searchQuery.trim()) {
-			localResults = buildLocalResults()
+			void (async () => {
+				localResults = await buildLocalResultsWithFiles()
+			})()
 		}
 	})
 
@@ -274,11 +297,11 @@
 		<!-- search bar -->
 		<div class="relative">
 			<Search
-				class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40"
+				class="text-foreground/40 pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
 			/>
 			<input
 				type="text"
-				class="rounded-pill w-full border border-foreground/10 bg-foreground/5 py-2.5 pr-3 pl-9 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border py-2.5 pr-3 pl-9 text-sm transition-colors outline-none"
 				placeholder="search resources..."
 				value={searchQuery}
 				oninput={(e) => handleSearchInput(e.currentTarget.value)}
@@ -294,7 +317,7 @@
 						class="rounded-pill shrink-0 cursor-pointer border px-3 py-1.5 text-xs transition-colors duration-150 {activeFilter ===
 						opt.value
 							? 'border-foreground/20 bg-foreground/12 text-foreground/90'
-							: 'border-foreground/8 bg-transparent text-foreground/50 hover:bg-foreground/5 hover:text-foreground/70'}"
+							: 'border-foreground/8 text-foreground/50 hover:bg-foreground/5 hover:text-foreground/70 bg-transparent'}"
 						onclick={() => {
 							activeFilter = opt.value
 							if (searchQuery.trim()) void runSearch(searchQuery)
@@ -335,12 +358,12 @@
 			{#if loading}
 				<div class="flex items-center justify-center py-12">
 					<div
-						class="size-5 animate-spin rounded-full border-2 border-foreground/20 border-t-white/60"
+						class="border-foreground/20 size-5 animate-spin rounded-full border-2 border-t-white/60"
 					></div>
 				</div>
 			{:else if displayResults.length === 0}
 				<div class="flex flex-col items-center justify-center py-12 text-center">
-					<p class="text-sm text-foreground/40">
+					<p class="text-foreground/40 text-sm">
 						{searchQuery.trim()
 							? 'no matching resources found'
 							: 'no resources available'}
@@ -352,20 +375,29 @@
 						{@const typeInfo = getTypeIcon(resource.type)}
 						<button
 							type="button"
-							class="rounded-pill flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-colors duration-150 hover:bg-foreground/8 active:scale-[0.99]"
+							class="rounded-pill hover:bg-foreground/8 flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-colors duration-150 active:scale-[0.99]"
 							onclick={() => handleSelect(resource)}
 						>
-							<div
-								class="flex size-8 shrink-0 items-center justify-center rounded-lg {typeInfo.color}"
-							>
-								<typeInfo.icon class="size-4" />
-							</div>
+							{#if files.hasThumbnail(resource.id)}
+								<img
+									src={files.getThumbnailUrl(resource.id)}
+									alt={resource.title}
+									class="size-8 shrink-0 rounded-lg object-cover"
+									draggable="false"
+								/>
+							{:else}
+								<div
+									class="flex size-8 shrink-0 items-center justify-center rounded-lg {typeInfo.color}"
+								>
+									<typeInfo.icon class="size-4" />
+								</div>
+							{/if}
 							<div class="min-w-0 flex-1">
-								<div class="truncate text-sm font-medium text-foreground/90">
+								<div class="text-foreground/90 truncate text-sm font-medium">
 									{resource.title}
 								</div>
 								{#if resource.subtitle || resource.preview}
-									<div class="truncate text-xs text-foreground/50">
+									<div class="text-foreground/50 truncate text-xs">
 										{resource.subtitle ?? resource.preview}
 									</div>
 								{/if}
@@ -384,24 +416,33 @@
 						{@const typeInfo = getTypeIcon(resource.type)}
 						<button
 							type="button"
-							class="flex cursor-pointer flex-col gap-2 rounded-2xl border border-foreground/8 bg-foreground/4 p-4 text-left transition-all duration-150 hover:bg-foreground/8 active:scale-[0.98]"
+							class="border-foreground/8 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer flex-col gap-2 rounded-2xl border p-4 text-left transition-all duration-150 active:scale-[0.98]"
 							onclick={() => handleSelect(resource)}
 						>
 							<div class="flex items-center gap-2">
-								<div
-									class="flex size-8 items-center justify-center rounded-lg {typeInfo.color}"
-								>
-									<typeInfo.icon class="size-4" />
-								</div>
-								<span class="text-[11px] text-foreground/40"
+								{#if files.hasThumbnail(resource.id)}
+									<img
+										src={files.getThumbnailUrl(resource.id)}
+										alt={resource.title}
+										class="size-8 shrink-0 rounded-lg object-cover"
+										draggable="false"
+									/>
+								{:else}
+									<div
+										class="flex size-8 items-center justify-center rounded-lg {typeInfo.color}"
+									>
+										<typeInfo.icon class="size-4" />
+									</div>
+								{/if}
+								<span class="text-foreground/40 text-[11px]"
 									>{resource.type.replace('_', ' ')}</span
 								>
 							</div>
-							<div class="truncate text-sm font-medium text-foreground/90">
+							<div class="text-foreground/90 truncate text-sm font-medium">
 								{resource.title}
 							</div>
 							{#if resource.subtitle || resource.preview}
-								<div class="line-clamp-2 text-xs text-foreground/50">
+								<div class="text-foreground/50 line-clamp-2 text-xs">
 									{resource.subtitle ?? resource.preview}
 								</div>
 							{/if}

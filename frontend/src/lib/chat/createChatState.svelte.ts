@@ -20,6 +20,7 @@ import {
 	buildMessageChildren,
 	buildRunBlocks,
 	computeIsAtBottom,
+	computeThreadAttachments,
 	type ApiMessage,
 	type RunBlock,
 	type StreamingAssistantState,
@@ -42,7 +43,7 @@ import {
  * returns a single ChatState object used by both the page and library modules.
  */
 export function createChatState(): ChatState {
-	// ── core state ───────────────────────────────────────────────────────
+	// core state
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
@@ -54,21 +55,21 @@ export function createChatState(): ChatState {
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
 
-	// ── thread state ─────────────────────────────────────────────────────
+	// thread state
 	let thread = $state<Thread | null>(null)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
 
-	// ── message paging (latest-first from backend) ───────────────────────
+	// message paging (latest-first from backend)
 	let messageSkip = $state(0)
 	let hasMoreMessages = $state(true)
 	let isLoadingOlderMessages = $state(false)
 
-	// ── message tree (for branching) ─────────────────────────────────────
+	// message tree (for branching)
 	const messageTree = new SvelteMap<string, ApiMessage>()
 	let currentLeafId = $state<string | null>(null)
 
-	// ── scroll state ─────────────────────────────────────────────────────
+	// scroll state
 	let scrollContainer = $state<HTMLElement | null>(null)
 	let inputOverlay = $state<HTMLElement | null>(null)
 	let autoScroll = $state(true)
@@ -77,30 +78,37 @@ export function createChatState(): ChatState {
 	let inputOverlayHeight = $state(0)
 	let scrollQueued = false
 
-	// ── tool tracking ────────────────────────────────────────────────────
+	// tool tracking
 	const toolTracker = new ToolExecutionTracker()
 	const fetchedToolEventMessageIds = new SvelteSet<string>()
 	const toolEventsPendingIds = new SvelteSet<string>()
 	let toolEventsInFlight = $state(false)
 
-	// ── delete confirmation ──────────────────────────────────────────────
+	// delete confirmation
 	let confirmDeleteMessage = $state<{ id: string; preview: string } | null>(null)
 	let isDeletingMessage = $state(false)
 	let deleteMessageError = $state<string | null>(null)
 
-	// ── typing indicators (other users typing in this thread) ────────────
+	// attachment tray - pending user actions (reveal/reference) accumulated
+	// until sent with the next RunInput, then cleared.
+	const pendingActions = new SvelteMap<string, 'reveal' | 'reference'>()
+	// event-derived ground truth for attachment states, updated from
+	// WebSocket events (attachment.decayed / attachment.revealed)
+	const attachmentStates = new SvelteMap<string, 'active' | 'reference'>()
+
+	// typing indicators (other users typing in this thread)
 	const typingUsers = new SvelteSet<string>()
 
-	// ── active agent runs ────────────────────────────────────────────────
+	// active agent runs
 	const activeAgentRuns = new SvelteMap<
 		string,
 		{ threadId: string; runId: string; agentId: string }
 	>()
 
-	// ── abort controller for streaming ───────────────────────────────────
+	// abort controller for streaming
 	let runAbortController: AbortController | null = null
 
-	// ── derived state ────────────────────────────────────────────────────
+	// derived state
 	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
 	const currentUserId = $derived(session.currentUser?.id ?? null)
@@ -133,7 +141,12 @@ export function createChatState(): ChatState {
 		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
 	)
 
-	// ── run block management ─────────────────────────────────────────────
+	// thread-level attachment state (derived from messages + event state)
+	const threadAttachments = $derived.by(() =>
+		computeThreadAttachments(messages, attachmentStates)
+	)
+
+	// run block management
 	function rebuildRunBlocks(): void {
 		const result = buildRunBlocks({
 			messages,
@@ -150,7 +163,7 @@ export function createChatState(): ChatState {
 		runBlocks = result.blocks
 	}
 
-	// ── scroll management ────────────────────────────────────────────────
+	// scroll management
 	// position-based auto-scroll: every scroll event checks if we're at the
 	// bottom. if yes → autoScroll stays/becomes true. if no → false.
 	function handleScroll() {
@@ -186,7 +199,7 @@ export function createChatState(): ChatState {
 		})
 	}
 
-	// ── thread lifecycle ─────────────────────────────────────────────────
+	// thread lifecycle
 	function setThread(t: Thread | null) {
 		thread = t
 		chatStore.activeThread = t
@@ -211,13 +224,16 @@ export function createChatState(): ChatState {
 		fetchedToolEventMessageIds.clear()
 		toolEventsPendingIds.clear()
 		toolTracker.clear()
+		// clear attachment state for previous thread
+		pendingActions.clear()
+		attachmentStates.clear()
 	}
 
-	// ── unified state object ─────────────────────────────────────────────
+	// unified state object
 	// single object serving both as ChatContext for module functions and
 	// ChatState for the page UI. eliminates the double-proxy pattern.
 	const state: ChatState = {
-		// ── thread ───────────────────────────────────────────────────────
+		// thread
 		get thread() {
 			return thread
 		},
@@ -225,7 +241,7 @@ export function createChatState(): ChatState {
 			thread = v
 		},
 
-		// ── message tree ─────────────────────────────────────────────────
+		// message tree
 		get messageTree() {
 			return messageTree
 		},
@@ -242,7 +258,7 @@ export function createChatState(): ChatState {
 			return messages
 		},
 
-		// ── streaming ────────────────────────────────────────────────────
+		// streaming
 		get isGenerating() {
 			return isGenerating
 		},
@@ -304,7 +320,7 @@ export function createChatState(): ChatState {
 			runAbortController = v
 		},
 
-		// ── paging ───────────────────────────────────────────────────────
+		// paging
 		get messageSkip() {
 			return messageSkip
 		},
@@ -324,7 +340,7 @@ export function createChatState(): ChatState {
 			isLoadingOlderMessages = v
 		},
 
-		// ── scroll ───────────────────────────────────────────────────────
+		// scroll
 		get scrollContainer() {
 			return scrollContainer
 		},
@@ -338,7 +354,7 @@ export function createChatState(): ChatState {
 			autoScroll = v
 		},
 
-		// ── tools ────────────────────────────────────────────────────────
+		// tools
 		get toolTracker() {
 			return toolTracker
 		},
@@ -355,7 +371,7 @@ export function createChatState(): ChatState {
 			toolEventsInFlight = v
 		},
 
-		// ── delete ───────────────────────────────────────────────────────
+		// delete
 		get confirmDeleteMessage() {
 			return confirmDeleteMessage
 		},
@@ -375,7 +391,23 @@ export function createChatState(): ChatState {
 			deleteMessageError = v
 		},
 
-		// ── realtime ─────────────────────────────────────────────────────
+		// attachment tray
+		get pendingActions() {
+			return pendingActions
+		},
+		get attachmentStates() {
+			return attachmentStates
+		},
+		get threadAttachments() {
+			return threadAttachments
+		},
+		toggleAttachmentStatus(fileId: string, action: 'reveal' | 'reference') {
+			pendingActions.set(fileId, action)
+			// optimistic: update local state immediately
+			attachmentStates.set(fileId, action === 'reveal' ? 'active' : 'reference')
+		},
+
+		// realtime
 		get typingUsers() {
 			return typingUsers
 		},
@@ -383,7 +415,7 @@ export function createChatState(): ChatState {
 			return activeAgentRuns
 		},
 
-		// ── derived ──────────────────────────────────────────────────────
+		// derived
 		get isTemporaryChat() {
 			return isTemporaryChat
 		},
@@ -411,7 +443,7 @@ export function createChatState(): ChatState {
 			return agentAvatarById
 		},
 
-		// ── page-specific state ──────────────────────────────────────────
+		// page-specific state
 		get isThreadLoading() {
 			return isThreadLoading
 		},
@@ -449,7 +481,7 @@ export function createChatState(): ChatState {
 			inputOverlayHeight = v
 		},
 
-		// ── coordinator methods ──────────────────────────────────────────
+		// coordinator methods
 		incrementActiveRun() {
 			return ++activeRun
 		},
@@ -463,9 +495,9 @@ export function createChatState(): ChatState {
 			return toolTracker.get(toolCallId)
 		},
 
-		// ── delegated to $lib/chat modules ───────────────────────────────
+		// delegated to $lib/chat modules
 		loadTree: (threadId) => loadTree(threadId, state),
-		handleSendMessage: (content) => handleSendMessage(content, state),
+		handleSendMessage: (content, modifiers) => handleSendMessage(content, state, modifiers),
 		handleRegenerateMessage: (parentId, prompt) =>
 			handleRegenerateMessage(parentId ?? null, state, prompt),
 		handleStopGeneration: () => handleStopGeneration(state),

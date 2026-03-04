@@ -1,7 +1,7 @@
 <script lang="ts">
-	import PageTitle from '$lib/components/PageTitle.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import Clip from '$lib/components/icons/Clip.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type {
@@ -11,13 +11,13 @@
 	} from '$lib/components/widgets'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { files } from '$lib/stores/files.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
 	const chrome = useSystemChrome()
 
 	let sort = $state<ResourceSortMode>('updated_at:desc')
 	let layout = $state<ResourceLayoutMode>('grid')
-	let loading = $state(true)
 
 	let isSortMenuOpen = $state(false)
 	let sortButtonEl: HTMLButtonElement | null = $state(null)
@@ -30,19 +30,25 @@
 		isSortMenuOpen = !isSortMenuOpen
 	}
 
-	// TODO: load files from a files store once available
 	const resourceItems = $derived.by((): ResourceItem[] => {
-		return []
+		const [field, dir] = sort.split(':') as [string, 'asc' | 'desc']
+		const sorted = [...files.resources]
+		sorted.sort((a, b) => {
+			let cmp = 0
+			if (field === 'title') {
+				cmp = a.title.localeCompare(b.title)
+			} else if (field === 'created_at') {
+				cmp = a.createdAt - b.createdAt
+			} else {
+				cmp = a.updatedAt - b.updatedAt
+			}
+			return dir === 'desc' ? -cmp : cmp
+		})
+		return sorted
 	})
 
-	async function loadFiles() {
-		loading = true
-		// TODO: await files.load() once the files store is implemented
-		loading = false
-	}
-
 	$effect(() => {
-		void loadFiles()
+		void files.load()
 	})
 
 	$effect(() => {
@@ -85,7 +91,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+				class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 				onclick={() => {
 					sort = option.value
 					closeSortMenu()
@@ -103,14 +109,14 @@
 >
 	<div>
 		<PageTitle icon={Clip} label="files" />
-		<p class="mt-2 text-sm text-foreground/60">
+		<p class="text-foreground/60 mt-2 text-sm">
 			all your uploaded, created and shared files in one place
 		</p>
 	</div>
 
 	<ResourcesView
 		resources={resourceItems}
-		{loading}
+		loading={files.loading}
 		bind:layout
 		filter="files"
 		{sort}

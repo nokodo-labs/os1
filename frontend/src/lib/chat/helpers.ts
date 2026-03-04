@@ -1,40 +1,28 @@
 /**
- * pure utility functions and types for chat - no reactive state, no side effects.
- * moved from routes/c/[id]/chatHelpers.ts to $lib/chat/ for proper module boundaries.
+ * pure utility functions for chat - no reactive state, no side effects.
+ * types are defined in $lib/chat/types.ts, not here.
  */
 
-import type { components } from '$lib/api/types'
 import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from '$lib/tools'
+import type {
+	ApiMessage,
+	AttachmentMediaCategory,
+	AttachmentStatus,
+	FileContentPart,
+	MediaContentPart,
+	RunBlock,
+	RunItem,
+	StreamingAssistantState,
+	ThreadAttachment,
+} from './types'
 
-export type ApiMessage = components['schemas']['Message']
-
-// types
-
-export type RunItem =
-	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-	| { kind: 'optimistic_user'; content: string; timestamp: Date }
-	| { kind: 'assistant'; message: ApiMessage }
-	| { kind: 'tool'; toolCallId: string }
-	| { kind: 'streaming_assistant' }
-	| { kind: 'streaming_tool'; toolCallId: string }
-
-export interface RunBlock {
-	runId: string
-	title: string
-	startedAt: Date
-	items: RunItem[]
-	responseRootId: string | null
-}
-
-export interface StreamingAssistantState {
-	runId: string | null
-	messageId: string
-	content: string
-	timestamp: Date
-	senderAgentId: string | null
-	toolCalls: ToolCall[]
-	isError: boolean
-	errorMessage: string | null
+export type {
+	ApiMessage,
+	FileContentPart,
+	MediaContentPart,
+	RunBlock,
+	RunItem,
+	StreamingAssistantState,
 }
 
 // message helpers
@@ -64,6 +52,184 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 		})
 		.filter((v): v is string => v !== null)
 		.join('\n')
+}
+
+// content part extraction
+
+/**
+ * extract renderable media parts (image/audio/video) from message content.
+ * resolves file_id to a download URL when no direct url is present.
+ */
+export function extractMediaParts(
+	parts: ApiMessage['content'],
+	apiBaseUrl?: string
+): MediaContentPart[] {
+	if (!parts || parts.length === 0) return []
+	const results: MediaContentPart[] = []
+	for (const part of parts) {
+		if (!part) continue
+		if (part.type === 'image') {
+			const fileId = part.metadata?.file_id as string | undefined
+			const url =
+				part.url ??
+				part.base64 ??
+				(fileId && apiBaseUrl ? `${apiBaseUrl}/v1/files/${fileId}/content` : undefined)
+			if (url) {
+				results.push({
+					type: 'image',
+					url,
+					filename: part.filename,
+					mediaType: part.media_type,
+					fileId,
+					attachmentStatus: part.metadata?.attachment_status as string | undefined,
+				})
+			}
+		} else if (part.type === 'file') {
+			const mime = part.media_type ?? ''
+			const isMedia = mime.startsWith('audio/') || mime.startsWith('video/')
+			if (isMedia) {
+				const fileId = part.metadata?.file_id as string | undefined
+				const url =
+					part.url ??
+					(fileId && apiBaseUrl ? `${apiBaseUrl}/v1/files/${fileId}/content` : undefined)
+				if (url) {
+					results.push({
+						type: mime.startsWith('audio/') ? 'audio' : 'video',
+						url,
+						filename: part.filename,
+						mediaType: part.media_type,
+						fileId,
+						attachmentStatus: part.metadata?.attachment_status as string | undefined,
+					})
+				}
+			}
+		}
+	}
+	return results
+}
+
+/**
+ * extract non-media file parts from message content.
+ */
+export function extractFileParts(
+	parts: ApiMessage['content'],
+	apiBaseUrl?: string
+): FileContentPart[] {
+	if (!parts || parts.length === 0) return []
+	const results: FileContentPart[] = []
+	for (const part of parts) {
+		if (!part) continue
+		if (part.type !== 'file') continue
+		const mime = part.media_type ?? ''
+		if (mime.startsWith('audio/') || mime.startsWith('video/')) continue
+		const fileId = part.metadata?.file_id as string | undefined
+		const url =
+			part.url ??
+			(fileId && apiBaseUrl ? `${apiBaseUrl}/v1/files/${fileId}/content` : undefined)
+		results.push({
+			type: 'file',
+			url,
+			filename: part.filename,
+			mediaType: part.media_type,
+			fileId,
+			attachmentStatus: part.metadata?.attachment_status as string | undefined,
+		})
+	}
+	return results
+}
+
+/**
+ * check if a message has any media or file content parts (beyond text).
+ */
+export function hasAttachmentParts(parts: ApiMessage['content']): boolean {
+	if (!parts || parts.length === 0) return false
+	return parts.some((p) => p && (p.type === 'image' || p.type === 'file'))
+}
+
+function classifyMediaCategory(mime: string | null | undefined): AttachmentMediaCategory {
+	if (!mime) return 'file'
+	const lower = mime.toLowerCase()
+	if (lower.startsWith('image/')) return 'image'
+	if (lower.startsWith('audio/')) return 'audio'
+	if (lower.startsWith('video/')) return 'video'
+	return 'file'
+}
+
+/**
+ * derive all unique file attachments from the current message branch
+ * with status determined from the event-derived state map.
+ *
+ * attachmentStates is populated from backend events (attachment.decayed,
+ * attachment.revealed) so the frontend displays authoritative state
+ * rather than guessing decay client-side.
+ *
+ * attachments without an entry in attachmentStates default to 'active'
+ * (newly uploaded files before the first run).
+ */
+export function computeThreadAttachments(
+	messages: ApiMessage[],
+	attachmentStates?: Map<string, AttachmentStatus>
+): ThreadAttachment[] {
+	// compute turn indices (same logic as backend _compute_turn_indices)
+	const turnIndices: number[] = []
+	let currentTurn = 0
+	let sawUserInTurn = false
+
+	for (const msg of messages) {
+		if (msg.type === 'system') {
+			turnIndices.push(currentTurn)
+			continue
+		}
+		if (msg.type === 'user') {
+			sawUserInTurn = true
+			turnIndices.push(currentTurn)
+			continue
+		}
+		if (msg.type === 'assistant') {
+			turnIndices.push(currentTurn)
+			if (sawUserInTurn) {
+				currentTurn++
+				sawUserInTurn = false
+			}
+			continue
+		}
+		// tool or unknown
+		turnIndices.push(currentTurn)
+	}
+
+	// collect unique attachments (earliest occurrence)
+	const seen = new Map<string, ThreadAttachment>()
+
+	for (let i = 0; i < messages.length; i++) {
+		const msg = messages[i]
+		if (msg.type !== 'user') continue
+		if (!msg.content) continue
+
+		for (const part of msg.content) {
+			if (!part || (part.type !== 'image' && part.type !== 'file')) continue
+			const fileId = (part.metadata as Record<string, unknown> | undefined)?.file_id
+			if (!fileId || typeof fileId !== 'string') continue
+			if (seen.has(fileId)) continue
+
+			const mime = part.media_type ?? null
+			const category = classifyMediaCategory(mime)
+			const turn = turnIndices[i] ?? 0
+
+			// use event-derived state if available, else default to active
+			const status = attachmentStates?.get(fileId) ?? 'active'
+
+			seen.set(fileId, {
+				fileId,
+				filename: part.filename ?? null,
+				mediaType: mime,
+				category,
+				status,
+				turn,
+			})
+		}
+	}
+
+	return [...seen.values()]
 }
 
 /**

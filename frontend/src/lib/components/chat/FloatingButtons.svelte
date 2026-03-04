@@ -195,7 +195,7 @@
 			const stream = runChatStream({
 				agentId: selectedAgent.id,
 				threadId: threadId ?? null,
-				input: question,
+				input: { text: question },
 				persist: false,
 				signal: chatAbortController.signal,
 			})
