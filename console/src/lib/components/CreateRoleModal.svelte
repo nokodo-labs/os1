@@ -63,6 +63,7 @@
 		return {
 			name: name.trim(),
 			description: description.trim() ? description.trim() : null,
+			priority: 0,
 			default_permissions: normalizePermissions(defaultPermissions),
 		}
 	}

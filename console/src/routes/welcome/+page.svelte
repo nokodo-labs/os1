@@ -15,6 +15,7 @@
 	let step = $state<'welcome' | 'register'>('welcome')
 	let email = $state('')
 	let password = $state('')
+	let username = $state('')
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 
@@ -24,7 +25,7 @@
 		error = null
 
 		try {
-			await auth.register(email, password)
+			await auth.register(email, password, username)
 			await auth.login(email, password)
 			// Force a reload or re-check of initialization status if needed,
 			// but navigation to / should trigger the layout logic which might need a refresh.
@@ -69,6 +70,16 @@
 							{error}
 						</div>
 					{/if}
+					<div class="space-y-2">
+						<Label for="username">username</Label>
+						<Input
+							id="username"
+							type="text"
+							placeholder="admin"
+							required
+							bind:value={username}
+						/>
+					</div>
 					<div class="space-y-2">
 						<Label for="email">email</Label>
 						<Input

@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { api, unwrap, type BackgroundType, type Schemas } from '$lib/api'
 
 	type Agent = Schemas['Agent']
@@ -8,45 +8,21 @@
 	type SettingsResponse = Schemas['SettingsResponse']
 	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
 
-	import DefaultPermissionsEditor from '$lib/components/DefaultPermissionsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import RolePicker from '$lib/components/RolePicker.svelte'
+	import SettingsAI from '$lib/components/settings/SettingsAI.svelte'
+	import SettingsAssets from '$lib/components/settings/SettingsAssets.svelte'
+	import SettingsBranding from '$lib/components/settings/SettingsBranding.svelte'
+	import SettingsDefaultPermissions from '$lib/components/settings/SettingsDefaultPermissions.svelte'
+	import SettingsLimits from '$lib/components/settings/SettingsLimits.svelte'
+	import SettingsMedia from '$lib/components/settings/SettingsMedia.svelte'
+	import SettingsSecurity from '$lib/components/settings/SettingsSecurity.svelte'
+	import SettingsSoftDelete from '$lib/components/settings/SettingsSoftDelete.svelte'
+	import SettingsUI from '$lib/components/settings/SettingsUI.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
-	import { Input } from '$lib/components/ui/input'
-	import { Label } from '$lib/components/ui/label'
-	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { Switch } from '$lib/components/ui/switch'
-	import { ChevronDown, ChevronUp, Lock, X } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
 	type ThemeMode = 'light' | 'dark' | 'system'
-
-	function themeLabel(v: ThemeMode): string {
-		if (v === 'light') return 'light'
-		if (v === 'dark') return 'dark'
-		return 'system'
-	}
-
-	const backgroundOptions: { value: BackgroundType; label: string }[] = [
-		{ value: 'galaxy', label: 'galaxy' },
-		{ value: 'darkveil', label: 'dark veil' },
-		{ value: 'lightbends', label: 'light bends' },
-		{ value: 'lightrays', label: 'light rays' },
-		{ value: 'silk', label: 'silk' },
-		{ value: 'static', label: 'static' },
-		{ value: 'none', label: 'none' },
-	]
-
-	function backgroundLabel(v: string): string {
-		return backgroundOptions.find((o) => o.value === v)?.label ?? v
-	}
+	type StorageBackend = 'local' | 's3'
 
 	let isFetching = $state(true)
 	let isSaving = $state(false)
@@ -101,6 +77,25 @@
 	let aiTaskDefaultModelId = $state<string>('')
 	let aiTaskThreadMetadataModelId = $state<string>('')
 	let aiTaskInputAutocompleteModelId = $state<string>('')
+	let aiTaskSummarizationModelId = $state<string>('')
+
+	// attachment decay
+	let aiAttachmentImageDecayTurns = $state<string>('')
+	let aiAttachmentAudioDecayTurns = $state<string>('')
+	let aiAttachmentVideoDecayTurns = $state<string>('')
+	let aiAttachmentRevealDecayTurns = $state<string>('')
+
+	// message windowing
+	let aiWindowingEnabled = $state(true)
+	let aiWindowingMaxMessages = $state<string>('')
+	let aiWindowingTriggerRatio = $state<string>('')
+	let aiWindowingHardRatio = $state<string>('')
+	let aiWindowingSummaryBatchSize = $state<string>('')
+	let aiWindowingMaxSummariesBeforeCondense = $state<string>('')
+	let aiWindowingToolResultMaxShare = $state<string>('')
+	let aiWindowingToolResultHardCap = $state<string>('')
+	let aiWindowingToolResultsCombinedMaxShare = $state<string>('')
+	let aiWindowingResponseHeadroom = $state<string>('')
 
 	let brandingSiteName = $state('')
 	let brandingLogoUrl = $state('')
@@ -151,8 +146,21 @@
 	let assetsRerankDefaultStrategy = $state('native')
 	let assetsRerankTopK = $state<string>('')
 
+	// assets: storage
+	let assetsStorageBackend = $state<StorageBackend>('local')
+	let assetsStorageLocalRootPath = $state('')
+	let assetsStorageS3EndpointUrl = $state('')
+	let assetsStorageS3Bucket = $state('')
+	let assetsStorageS3Region = $state('')
+	let assetsStorageS3AccessKeyId = $state('')
+	let assetsStorageS3SecretAccessKey = $state('')
+	let assetsStorageS3Prefix = $state('')
+	let assetsStorageS3PresignedUrlTtl = $state<string>('')
+
 	// branding extras
 	let brandingPublicConsoleOrigin = $state('')
+	let brandingSupportEmail = $state('')
+	let brandingAdminEmail = $state('')
 
 	// media
 	let mediaBaseUrl = $state('')
@@ -194,12 +202,28 @@
 		aiTaskDefaultModelId: '',
 		aiTaskThreadMetadataModelId: '',
 		aiTaskInputAutocompleteModelId: '',
+		aiTaskSummarizationModelId: '',
+		aiAttachmentImageDecayTurns: '',
+		aiAttachmentAudioDecayTurns: '',
+		aiAttachmentVideoDecayTurns: '',
+		aiAttachmentRevealDecayTurns: '',
+		aiWindowingEnabled: true,
+		aiWindowingMaxMessages: '',
+		aiWindowingTriggerRatio: '',
+		aiWindowingHardRatio: '',
+		aiWindowingSummaryBatchSize: '',
+		aiWindowingMaxSummariesBeforeCondense: '',
+		aiWindowingToolResultMaxShare: '',
+		aiWindowingToolResultHardCap: '',
+		aiWindowingToolResultsCombinedMaxShare: '',
+		aiWindowingResponseHeadroom: '',
 		brandingSiteName: '',
 		brandingLogoUrl: '',
 		brandingFaviconUrl: '',
 		brandingPrimaryColor: '',
 		brandingPublicFrontendOrigin: '',
 		brandingPublicCdnOrigin: '',
+		brandingPublicConsoleOrigin: '',
 		brandingPwaManifestUrl: '',
 		limitsMaxThreadsPerUser: '',
 		limitsMaxMessagesPerThread: '',
@@ -238,7 +262,17 @@
 		assetsEmbeddingsBatchSize: '',
 		assetsRerankDefaultStrategy: 'native',
 		assetsRerankTopK: '',
-		brandingPublicConsoleOrigin: '',
+		assetsStorageBackend: 'local' as StorageBackend,
+		assetsStorageLocalRootPath: '',
+		assetsStorageS3EndpointUrl: '',
+		assetsStorageS3Bucket: '',
+		assetsStorageS3Region: '',
+		assetsStorageS3AccessKeyId: '',
+		assetsStorageS3SecretAccessKey: '',
+		assetsStorageS3Prefix: '',
+		assetsStorageS3PresignedUrlTtl: '',
+		brandingSupportEmail: '',
+		brandingAdminEmail: '',
 		mediaBaseUrl: '',
 		mediaFaviconUrl: '',
 		mediaAppleTouchIconUrl: '',
@@ -275,13 +309,33 @@
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
+			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
+			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
+			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
+			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
+			aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns ||
+			aiWindowingEnabled !== original.aiWindowingEnabled ||
+			aiWindowingMaxMessages !== original.aiWindowingMaxMessages ||
+			aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio ||
+			aiWindowingHardRatio !== original.aiWindowingHardRatio ||
+			aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize ||
+			aiWindowingMaxSummariesBeforeCondense !==
+				original.aiWindowingMaxSummariesBeforeCondense ||
+			aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare ||
+			aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
+			aiWindowingToolResultsCombinedMaxShare !==
+				original.aiWindowingToolResultsCombinedMaxShare ||
+			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
 			brandingSiteName !== original.brandingSiteName ||
 			brandingLogoUrl !== original.brandingLogoUrl ||
 			brandingFaviconUrl !== original.brandingFaviconUrl ||
 			brandingPrimaryColor !== original.brandingPrimaryColor ||
 			brandingPublicFrontendOrigin !== original.brandingPublicFrontendOrigin ||
 			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin ||
+			brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin ||
 			brandingPwaManifestUrl !== original.brandingPwaManifestUrl ||
+			brandingSupportEmail !== original.brandingSupportEmail ||
+			brandingAdminEmail !== original.brandingAdminEmail ||
 			limitsMaxThreadsPerUser !== original.limitsMaxThreadsPerUser ||
 			limitsMaxMessagesPerThread !== original.limitsMaxMessagesPerThread ||
 			limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb ||
@@ -320,7 +374,15 @@
 			assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize ||
 			assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
 			assetsRerankTopK !== original.assetsRerankTopK ||
-			brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin ||
+			assetsStorageBackend !== original.assetsStorageBackend ||
+			assetsStorageLocalRootPath !== original.assetsStorageLocalRootPath ||
+			assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl ||
+			assetsStorageS3Bucket !== original.assetsStorageS3Bucket ||
+			assetsStorageS3Region !== original.assetsStorageS3Region ||
+			assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId ||
+			assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey ||
+			assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
+			assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl ||
 			mediaBaseUrl !== original.mediaBaseUrl ||
 			mediaFaviconUrl !== original.mediaFaviconUrl ||
 			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl ||
@@ -344,32 +406,6 @@
 	function toBool(v: unknown): boolean {
 		return Boolean(v)
 	}
-
-	function agentLabel(a: Agent): string {
-		return a.name || a.id
-	}
-
-	function modelLabel(m: Model): string {
-		return m.display_name || m.name || m.id
-	}
-
-	function getModelLabel(modelId: string): string {
-		if (!modelId) return 'none'
-		const m = models.find((x) => x.id === modelId)
-		return m ? modelLabel(m) : modelId
-	}
-
-	const selectedAgentLabel = $derived(() => {
-		if (aiDefaultAgentIds.length === 0) return 'none'
-		return aiDefaultAgentIds
-			.map((id) => {
-				const a = agents.find((x) => x.id === id)
-				return a ? agentLabel(a) : id
-			})
-			.join(', ')
-	})
-
-	const availableAgentsToAdd = $derived(agents.filter((a) => !aiDefaultAgentIds.includes(a.id)))
 
 	function parseCommaList(value: string): string[] {
 		return value
@@ -426,6 +462,29 @@
 		aiTaskDefaultModelId = tasks?.default_model_id ?? ''
 		aiTaskThreadMetadataModelId = tasks?.thread_metadata_model_id ?? ''
 		aiTaskInputAutocompleteModelId = tasks?.input_autocomplete_model_id ?? ''
+		aiTaskSummarizationModelId = tasks?.summarization_model_id ?? ''
+
+		const attachments = ai?.attachments
+		aiAttachmentImageDecayTurns = toStringOrEmpty(attachments?.image_decay_turns)
+		aiAttachmentAudioDecayTurns = toStringOrEmpty(attachments?.audio_decay_turns)
+		aiAttachmentVideoDecayTurns = toStringOrEmpty(attachments?.video_decay_turns)
+		aiAttachmentRevealDecayTurns = toStringOrEmpty(attachments?.reveal_decay_turns)
+
+		const windowing = ai?.windowing
+		aiWindowingEnabled = windowing?.enabled ?? true
+		aiWindowingMaxMessages = toStringOrEmpty(windowing?.max_messages)
+		aiWindowingTriggerRatio = toStringOrEmpty(windowing?.trigger_ratio)
+		aiWindowingHardRatio = toStringOrEmpty(windowing?.hard_ratio)
+		aiWindowingSummaryBatchSize = toStringOrEmpty(windowing?.summary_batch_size)
+		aiWindowingMaxSummariesBeforeCondense = toStringOrEmpty(
+			windowing?.max_summaries_before_condense
+		)
+		aiWindowingToolResultMaxShare = toStringOrEmpty(windowing?.tool_result_max_share)
+		aiWindowingToolResultHardCap = toStringOrEmpty(windowing?.tool_result_hard_cap)
+		aiWindowingToolResultsCombinedMaxShare = toStringOrEmpty(
+			windowing?.tool_results_combined_max_share
+		)
+		aiWindowingResponseHeadroom = toStringOrEmpty(windowing?.response_headroom)
 
 		const branding = r.data.branding
 		brandingSiteName = branding?.site_name ?? ''
@@ -436,6 +495,8 @@
 		brandingPublicCdnOrigin = toStringOrEmpty(branding?.public_cdn_origin)
 		brandingPublicConsoleOrigin = toStringOrEmpty(branding?.public_console_origin)
 		brandingPwaManifestUrl = toStringOrEmpty(branding?.pwa_manifest_url)
+		brandingSupportEmail = toStringOrEmpty(branding?.support_email)
+		brandingAdminEmail = toStringOrEmpty(branding?.admin_email)
 
 		brandingAppVersion = branding?.app_version ?? ''
 		brandingAnalyticsKeyConfigured = Boolean(branding?.analytics_key)
@@ -508,6 +569,17 @@
 		assetsRerankDefaultStrategy = rerank?.default_strategy ?? 'native'
 		assetsRerankTopK = toStringOrEmpty(rerank?.top_k)
 
+		const storage = assets?.storage
+		assetsStorageBackend = (storage?.backend ?? 'local') as StorageBackend
+		assetsStorageLocalRootPath = storage?.local?.root_path ?? ''
+		assetsStorageS3EndpointUrl = storage?.s3?.endpoint_url ?? ''
+		assetsStorageS3Bucket = storage?.s3?.bucket ?? ''
+		assetsStorageS3Region = storage?.s3?.region ?? ''
+		assetsStorageS3AccessKeyId = storage?.s3?.access_key_id ?? ''
+		assetsStorageS3SecretAccessKey = storage?.s3?.secret_access_key ?? ''
+		assetsStorageS3Prefix = storage?.s3?.prefix ?? ''
+		assetsStorageS3PresignedUrlTtl = toStringOrEmpty(storage?.s3?.presigned_url_ttl)
+
 		const defaults = r.data.default_permissions
 		defaultPermissions = normalizeDefaultPermissions(
 			defaults ?? { resource_access: {}, action_permissions: [] }
@@ -528,6 +600,21 @@
 			aiTaskDefaultModelId,
 			aiTaskThreadMetadataModelId,
 			aiTaskInputAutocompleteModelId,
+			aiTaskSummarizationModelId,
+			aiAttachmentImageDecayTurns,
+			aiAttachmentAudioDecayTurns,
+			aiAttachmentVideoDecayTurns,
+			aiAttachmentRevealDecayTurns,
+			aiWindowingEnabled,
+			aiWindowingMaxMessages,
+			aiWindowingTriggerRatio,
+			aiWindowingHardRatio,
+			aiWindowingSummaryBatchSize,
+			aiWindowingMaxSummariesBeforeCondense,
+			aiWindowingToolResultMaxShare,
+			aiWindowingToolResultHardCap,
+			aiWindowingToolResultsCombinedMaxShare,
+			aiWindowingResponseHeadroom,
 			brandingSiteName,
 			brandingLogoUrl,
 			brandingFaviconUrl,
@@ -536,6 +623,8 @@
 			brandingPublicCdnOrigin,
 			brandingPublicConsoleOrigin,
 			brandingPwaManifestUrl,
+			brandingSupportEmail,
+			brandingAdminEmail,
 			limitsMaxThreadsPerUser,
 			limitsMaxMessagesPerThread,
 			limitsMaxFileSizeMb,
@@ -573,6 +662,15 @@
 			assetsEmbeddingsBatchSize,
 			assetsRerankDefaultStrategy,
 			assetsRerankTopK,
+			assetsStorageBackend,
+			assetsStorageLocalRootPath,
+			assetsStorageS3EndpointUrl,
+			assetsStorageS3Bucket,
+			assetsStorageS3Region,
+			assetsStorageS3AccessKeyId,
+			assetsStorageS3SecretAccessKey,
+			assetsStorageS3Prefix,
+			assetsStorageS3PresignedUrlTtl,
 			mediaBaseUrl,
 			mediaFaviconUrl,
 			mediaAppleTouchIconUrl,
@@ -619,7 +717,8 @@
 		modelsError = null
 		try {
 			const list = unwrap(await api.GET('/v1/models'))
-			models = [...list].sort((a, b) => modelLabel(a).localeCompare(modelLabel(b)))
+			const label = (m: Model) => m.display_name || m.name || m.id
+			models = [...list].sort((a, b) => label(a).localeCompare(label(b)))
 		} catch (e) {
 			console.error('Failed to fetch models', e)
 			modelsError = 'failed to load models'
@@ -643,6 +742,21 @@
 		aiTaskDefaultModelId = original.aiTaskDefaultModelId
 		aiTaskThreadMetadataModelId = original.aiTaskThreadMetadataModelId
 		aiTaskInputAutocompleteModelId = original.aiTaskInputAutocompleteModelId
+		aiTaskSummarizationModelId = original.aiTaskSummarizationModelId
+		aiAttachmentImageDecayTurns = original.aiAttachmentImageDecayTurns
+		aiAttachmentAudioDecayTurns = original.aiAttachmentAudioDecayTurns
+		aiAttachmentVideoDecayTurns = original.aiAttachmentVideoDecayTurns
+		aiAttachmentRevealDecayTurns = original.aiAttachmentRevealDecayTurns
+		aiWindowingEnabled = original.aiWindowingEnabled
+		aiWindowingMaxMessages = original.aiWindowingMaxMessages
+		aiWindowingTriggerRatio = original.aiWindowingTriggerRatio
+		aiWindowingHardRatio = original.aiWindowingHardRatio
+		aiWindowingSummaryBatchSize = original.aiWindowingSummaryBatchSize
+		aiWindowingMaxSummariesBeforeCondense = original.aiWindowingMaxSummariesBeforeCondense
+		aiWindowingToolResultMaxShare = original.aiWindowingToolResultMaxShare
+		aiWindowingToolResultHardCap = original.aiWindowingToolResultHardCap
+		aiWindowingToolResultsCombinedMaxShare = original.aiWindowingToolResultsCombinedMaxShare
+		aiWindowingResponseHeadroom = original.aiWindowingResponseHeadroom
 		brandingSiteName = original.brandingSiteName
 		brandingLogoUrl = original.brandingLogoUrl
 		brandingFaviconUrl = original.brandingFaviconUrl
@@ -651,6 +765,8 @@
 		brandingPublicCdnOrigin = original.brandingPublicCdnOrigin
 		brandingPublicConsoleOrigin = original.brandingPublicConsoleOrigin
 		brandingPwaManifestUrl = original.brandingPwaManifestUrl
+		brandingSupportEmail = original.brandingSupportEmail
+		brandingAdminEmail = original.brandingAdminEmail
 		limitsMaxThreadsPerUser = original.limitsMaxThreadsPerUser
 		limitsMaxMessagesPerThread = original.limitsMaxMessagesPerThread
 		limitsMaxFileSizeMb = original.limitsMaxFileSizeMb
@@ -688,7 +804,15 @@
 		assetsEmbeddingsBatchSize = original.assetsEmbeddingsBatchSize
 		assetsRerankDefaultStrategy = original.assetsRerankDefaultStrategy
 		assetsRerankTopK = original.assetsRerankTopK
-		brandingPublicConsoleOrigin = original.brandingPublicConsoleOrigin
+		assetsStorageBackend = original.assetsStorageBackend
+		assetsStorageLocalRootPath = original.assetsStorageLocalRootPath
+		assetsStorageS3EndpointUrl = original.assetsStorageS3EndpointUrl
+		assetsStorageS3Bucket = original.assetsStorageS3Bucket
+		assetsStorageS3Region = original.assetsStorageS3Region
+		assetsStorageS3AccessKeyId = original.assetsStorageS3AccessKeyId
+		assetsStorageS3SecretAccessKey = original.assetsStorageS3SecretAccessKey
+		assetsStorageS3Prefix = original.assetsStorageS3Prefix
+		assetsStorageS3PresignedUrlTtl = original.assetsStorageS3PresignedUrlTtl
 		mediaBaseUrl = original.mediaBaseUrl
 		mediaFaviconUrl = original.mediaFaviconUrl
 		mediaAppleTouchIconUrl = original.mediaAppleTouchIconUrl
@@ -752,7 +876,24 @@
 			aiChatContextTopK !== original.aiChatContextTopK ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
-			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId
+			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
+			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
+			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
+			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
+			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
+			aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns ||
+			aiWindowingEnabled !== original.aiWindowingEnabled ||
+			aiWindowingMaxMessages !== original.aiWindowingMaxMessages ||
+			aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio ||
+			aiWindowingHardRatio !== original.aiWindowingHardRatio ||
+			aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize ||
+			aiWindowingMaxSummariesBeforeCondense !==
+				original.aiWindowingMaxSummariesBeforeCondense ||
+			aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare ||
+			aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
+			aiWindowingToolResultsCombinedMaxShare !==
+				original.aiWindowingToolResultsCombinedMaxShare ||
+			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom
 		) {
 			const aiPatch: NonNullable<NonNullable<SettingsUpdateRequest['data']>['ai']> = {}
 			if (JSON.stringify(aiDefaultAgentIds) !== JSON.stringify(original.aiDefaultAgentIds))
@@ -791,7 +932,8 @@
 			if (
 				aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 				aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
-				aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId
+				aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
+				aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId
 			) {
 				aiPatch.tasks = {}
 				if (aiTaskDefaultModelId !== original.aiTaskDefaultModelId)
@@ -806,6 +948,90 @@
 					aiPatch.tasks.input_autocomplete_model_id = aiTaskInputAutocompleteModelId
 						? aiTaskInputAutocompleteModelId
 						: null
+				if (aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId)
+					aiPatch.tasks.summarization_model_id = aiTaskSummarizationModelId
+						? aiTaskSummarizationModelId
+						: null
+			}
+
+			if (
+				aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
+				aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
+				aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
+				aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns
+			) {
+				aiPatch.attachments = {}
+				if (aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns)
+					aiPatch.attachments.image_decay_turns = asNumberOrNull(
+						aiAttachmentImageDecayTurns
+					)
+				if (aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns)
+					aiPatch.attachments.audio_decay_turns = asNumberOrNull(
+						aiAttachmentAudioDecayTurns
+					)
+				if (aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns)
+					aiPatch.attachments.video_decay_turns = asNumberOrNull(
+						aiAttachmentVideoDecayTurns
+					)
+				if (aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns)
+					aiPatch.attachments.reveal_decay_turns = asNumberOrNull(
+						aiAttachmentRevealDecayTurns
+					)
+			}
+
+			if (
+				aiWindowingEnabled !== original.aiWindowingEnabled ||
+				aiWindowingMaxMessages !== original.aiWindowingMaxMessages ||
+				aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio ||
+				aiWindowingHardRatio !== original.aiWindowingHardRatio ||
+				aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize ||
+				aiWindowingMaxSummariesBeforeCondense !==
+					original.aiWindowingMaxSummariesBeforeCondense ||
+				aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare ||
+				aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
+				aiWindowingToolResultsCombinedMaxShare !==
+					original.aiWindowingToolResultsCombinedMaxShare ||
+				aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom
+			) {
+				aiPatch.windowing = {}
+				if (aiWindowingEnabled !== original.aiWindowingEnabled)
+					aiPatch.windowing.enabled = aiWindowingEnabled
+				if (aiWindowingMaxMessages !== original.aiWindowingMaxMessages)
+					aiPatch.windowing.max_messages = asNumberOrNull(aiWindowingMaxMessages)
+				if (aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio)
+					aiPatch.windowing.trigger_ratio = asNumberOrNull(aiWindowingTriggerRatio)
+				if (aiWindowingHardRatio !== original.aiWindowingHardRatio)
+					aiPatch.windowing.hard_ratio = asNumberOrNull(aiWindowingHardRatio)
+				if (aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize)
+					aiPatch.windowing.summary_batch_size = asNumberOrNull(
+						aiWindowingSummaryBatchSize
+					)
+				if (
+					aiWindowingMaxSummariesBeforeCondense !==
+					original.aiWindowingMaxSummariesBeforeCondense
+				)
+					aiPatch.windowing.max_summaries_before_condense = asNumberOrNull(
+						aiWindowingMaxSummariesBeforeCondense
+					)
+				if (aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare)
+					aiPatch.windowing.tool_result_max_share = asNumberOrNull(
+						aiWindowingToolResultMaxShare
+					)
+				if (aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap)
+					aiPatch.windowing.tool_result_hard_cap = asNumberOrNull(
+						aiWindowingToolResultHardCap
+					)
+				if (
+					aiWindowingToolResultsCombinedMaxShare !==
+					original.aiWindowingToolResultsCombinedMaxShare
+				)
+					aiPatch.windowing.tool_results_combined_max_share = asNumberOrNull(
+						aiWindowingToolResultsCombinedMaxShare
+					)
+				if (aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom)
+					aiPatch.windowing.response_headroom = asNumberOrNull(
+						aiWindowingResponseHeadroom
+					)
 			}
 
 			data.ai = aiPatch
@@ -818,7 +1044,10 @@
 			brandingPrimaryColor !== original.brandingPrimaryColor ||
 			brandingPublicFrontendOrigin !== original.brandingPublicFrontendOrigin ||
 			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin ||
-			brandingPwaManifestUrl !== original.brandingPwaManifestUrl
+			brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin ||
+			brandingPwaManifestUrl !== original.brandingPwaManifestUrl ||
+			brandingSupportEmail !== original.brandingSupportEmail ||
+			brandingAdminEmail !== original.brandingAdminEmail
 		) {
 			data.branding = {}
 			if (brandingSiteName !== original.brandingSiteName)
@@ -837,6 +1066,10 @@
 				data.branding.public_console_origin = brandingPublicConsoleOrigin || null
 			if (brandingPwaManifestUrl !== original.brandingPwaManifestUrl)
 				data.branding.pwa_manifest_url = brandingPwaManifestUrl || null
+			if (brandingSupportEmail !== original.brandingSupportEmail)
+				data.branding.support_email = brandingSupportEmail || null
+			if (brandingAdminEmail !== original.brandingAdminEmail)
+				data.branding.admin_email = brandingAdminEmail || null
 		}
 
 		if (
@@ -945,7 +1178,16 @@
 			assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
 			assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize ||
 			assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
-			assetsRerankTopK !== original.assetsRerankTopK
+			assetsRerankTopK !== original.assetsRerankTopK ||
+			assetsStorageBackend !== original.assetsStorageBackend ||
+			assetsStorageLocalRootPath !== original.assetsStorageLocalRootPath ||
+			assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl ||
+			assetsStorageS3Bucket !== original.assetsStorageS3Bucket ||
+			assetsStorageS3Region !== original.assetsStorageS3Region ||
+			assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId ||
+			assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey ||
+			assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
+			assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl
 		) {
 			const assetsPatch: Record<string, unknown> = {}
 			if (assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId)
@@ -1063,6 +1305,58 @@
 				if (assetsRerankTopK !== original.assetsRerankTopK)
 					rerankPatch.top_k = asNumberOrNull(assetsRerankTopK)
 				assetsPatch.rerank = rerankPatch
+			}
+
+			if (
+				assetsStorageBackend !== original.assetsStorageBackend ||
+				assetsStorageLocalRootPath !== original.assetsStorageLocalRootPath ||
+				assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl ||
+				assetsStorageS3Bucket !== original.assetsStorageS3Bucket ||
+				assetsStorageS3Region !== original.assetsStorageS3Region ||
+				assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId ||
+				assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey ||
+				assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
+				assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl
+			) {
+				const storagePatch: Record<string, unknown> = {}
+				if (assetsStorageBackend !== original.assetsStorageBackend)
+					storagePatch.backend = assetsStorageBackend
+				if (
+					assetsStorageLocalRootPath !== original.assetsStorageLocalRootPath &&
+					assetsStorageBackend === 'local'
+				) {
+					storagePatch.local = { root_path: assetsStorageLocalRootPath || null }
+				}
+				if (
+					(assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl ||
+						assetsStorageS3Bucket !== original.assetsStorageS3Bucket ||
+						assetsStorageS3Region !== original.assetsStorageS3Region ||
+						assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId ||
+						assetsStorageS3SecretAccessKey !==
+							original.assetsStorageS3SecretAccessKey ||
+						assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
+						assetsStorageS3PresignedUrlTtl !==
+							original.assetsStorageS3PresignedUrlTtl) &&
+					assetsStorageBackend === 's3'
+				) {
+					const s3Patch: Record<string, unknown> = {}
+					if (assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl)
+						s3Patch.endpoint_url = assetsStorageS3EndpointUrl || null
+					if (assetsStorageS3Bucket !== original.assetsStorageS3Bucket)
+						s3Patch.bucket = assetsStorageS3Bucket || null
+					if (assetsStorageS3Region !== original.assetsStorageS3Region)
+						s3Patch.region = assetsStorageS3Region || null
+					if (assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId)
+						s3Patch.access_key_id = assetsStorageS3AccessKeyId || null
+					if (assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey)
+						s3Patch.secret_access_key = assetsStorageS3SecretAccessKey || null
+					if (assetsStorageS3Prefix !== original.assetsStorageS3Prefix)
+						s3Patch.prefix = assetsStorageS3Prefix || null
+					if (assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl)
+						s3Patch.presigned_url_ttl = asNumberOrNull(assetsStorageS3PresignedUrlTtl)
+					storagePatch.s3 = s3Patch
+				}
+				assetsPatch.storage = storagePatch
 			}
 
 			data.assets = assetsPatch
@@ -1196,1381 +1490,143 @@
 				</div>
 			{:else if response}
 				<div class="space-y-6">
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>ui</CardTitle>
-							<CardDescription>console UX defaults.</CardDescription>
-						</CardHeader>
-						<CardContent class="space-y-5">
-							<div class="space-y-2">
-								<Label for="default_theme">default theme</Label>
-								<p class="text-xs text-zinc-500">
-									color scheme applied to the frontend app by default.
-								</p>
-								<Select
-									value={uiDefaultTheme}
-									onValueChange={(v: string) => (uiDefaultTheme = v as ThemeMode)}
-								>
-									<SelectTrigger id="default_theme" class="rounded-xl">
-										<span class="truncate text-left"
-											>{themeLabel(uiDefaultTheme)}</span
-										>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="system">system</SelectItem>
-										<SelectItem value="light">light</SelectItem>
-										<SelectItem value="dark">dark</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
+					<SettingsUI
+						bind:defaultTheme={uiDefaultTheme}
+						bind:defaultBackground={uiDefaultBackground}
+						bind:authPagesBackground={uiAuthPagesBackground}
+						bind:sidebarCollapsed={uiSidebarCollapsed}
+					/>
 
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="sidebar_collapsed">sidebar collapsed</Label>
-									<p class="text-xs text-zinc-500">
-										collapse sidebar by default.
-									</p>
-								</div>
-								<Switch
-									id="sidebar_collapsed"
-									checked={uiSidebarCollapsed}
-									onCheckedChange={(v: boolean) => (uiSidebarCollapsed = v)}
-								/>
-							</div>
+					<SettingsAI
+						bind:defaultAgentIds={aiDefaultAgentIds}
+						bind:memoryEnable={aiMemoryEnable}
+						bind:memorySimilarityThreshold={aiMemorySimilarityThreshold}
+						bind:memoryTopK={aiMemoryTopK}
+						bind:memoryMessagesToConsider={aiMemoryMessagesToConsider}
+						bind:chatContextMode={aiChatContextMode}
+						bind:chatContextTopK={aiChatContextTopK}
+						bind:taskDefaultModelId={aiTaskDefaultModelId}
+						bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
+						bind:taskInputAutocompleteModelId={aiTaskInputAutocompleteModelId}
+						bind:taskSummarizationModelId={aiTaskSummarizationModelId}
+						bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
+						bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
+						bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
+						bind:attachmentRevealDecayTurns={aiAttachmentRevealDecayTurns}
+						bind:windowingEnabled={aiWindowingEnabled}
+						bind:windowingMaxMessages={aiWindowingMaxMessages}
+						bind:windowingTriggerRatio={aiWindowingTriggerRatio}
+						bind:windowingHardRatio={aiWindowingHardRatio}
+						bind:windowingSummaryBatchSize={aiWindowingSummaryBatchSize}
+						bind:windowingMaxSummariesBeforeCondense={
+							aiWindowingMaxSummariesBeforeCondense
+						}
+						bind:windowingToolResultMaxShare={aiWindowingToolResultMaxShare}
+						bind:windowingToolResultHardCap={aiWindowingToolResultHardCap}
+						bind:windowingToolResultsCombinedMaxShare={
+							aiWindowingToolResultsCombinedMaxShare
+						}
+						bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
+						{agents}
+						{models}
+						{isFetchingAgents}
+						{isFetchingModels}
+						{agentsError}
+						{modelsError}
+					/>
 
-							<div class="space-y-2">
-								<Label for="default_background">default background</Label>
-								<p class="text-xs text-zinc-500">
-									animated background shown in the main app interface.
-								</p>
-								<Select
-									value={uiDefaultBackground || 'darkveil'}
-									onValueChange={(v: string) =>
-										(uiDefaultBackground = v as BackgroundType)}
-								>
-									<SelectTrigger id="default_background" class="rounded-xl">
-										<span class="truncate text-left"
-											>{backgroundLabel(
-												uiDefaultBackground || 'darkveil'
-											)}</span
-										>
-									</SelectTrigger>
-									<SelectContent>
-										{#each backgroundOptions as opt (opt.value)}
-											<SelectItem value={opt.value}>{opt.label}</SelectItem>
-										{/each}
-									</SelectContent>
-								</Select>
-							</div>
+					<SettingsBranding
+						bind:siteName={brandingSiteName}
+						bind:logoUrl={brandingLogoUrl}
+						bind:faviconUrl={brandingFaviconUrl}
+						bind:primaryColor={brandingPrimaryColor}
+						bind:supportEmail={brandingSupportEmail}
+						bind:adminEmail={brandingAdminEmail}
+						bind:publicFrontendOrigin={brandingPublicFrontendOrigin}
+						bind:publicCdnOrigin={brandingPublicCdnOrigin}
+						bind:publicConsoleOrigin={brandingPublicConsoleOrigin}
+						bind:pwaManifestUrl={brandingPwaManifestUrl}
+						appVersion={brandingAppVersion}
+						analyticsKeyConfigured={brandingAnalyticsKeyConfigured}
+					/>
 
-							<div class="space-y-2">
-								<Label for="auth_pages_background">auth pages background</Label>
-								<p class="text-xs text-zinc-500">
-									animated background shown on login and signup pages.
-								</p>
-								<Select
-									value={uiAuthPagesBackground || 'lightrays'}
-									onValueChange={(v: string) =>
-										(uiAuthPagesBackground = v as BackgroundType)}
-								>
-									<SelectTrigger id="auth_pages_background" class="rounded-xl">
-										<span class="truncate text-left"
-											>{backgroundLabel(
-												uiAuthPagesBackground || 'lightrays'
-											)}</span
-										>
-									</SelectTrigger>
-									<SelectContent>
-										{#each backgroundOptions as opt (opt.value)}
-											<SelectItem value={opt.value}>{opt.label}</SelectItem>
-										{/each}
-									</SelectContent>
-								</Select>
-							</div>
-						</CardContent>
-					</Card>
+					<SettingsMedia
+						bind:baseUrl={mediaBaseUrl}
+						bind:faviconUrl={mediaFaviconUrl}
+						bind:appleTouchIconUrl={mediaAppleTouchIconUrl}
+						bind:sidebarLogoUrl={mediaSidebarLogoUrl}
+						bind:splashLogoUrl={mediaSplashLogoUrl}
+					/>
 
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>ai</CardTitle>
-							<CardDescription>agent defaults and behavior.</CardDescription>
-						</CardHeader>
-						<CardContent class="space-y-6">
-							<div class="space-y-2">
-								<div class="flex items-center justify-between gap-2">
-									<div>
-										<Label for="default_agents">default agents</Label>
-										<p class="text-xs text-zinc-500">
-											tried in order; first available agent is used.
-										</p>
-									</div>
-									{#if isFetchingAgents}
-										<span class="text-xs text-zinc-500">loading…</span>
-									{/if}
-								</div>
-								{#if aiDefaultAgentIds.length > 0}
-									<ul class="space-y-1">
-										{#each aiDefaultAgentIds as agentId, idx (agentId)}
-											{@const label = agents.find((x) => x.id === agentId)}
-											<li
-												class="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-											>
-												<span
-													class="w-5 shrink-0 font-mono text-xs text-zinc-500"
-													>{idx + 1}.</span
-												>
-												<span class="flex-1 truncate"
-													>{label ? agentLabel(label) : agentId}</span
-												>
-												<button
-													class="text-zinc-500 hover:text-zinc-300 disabled:opacity-30"
-													disabled={idx === 0}
-													onclick={() => {
-														const copy = [...aiDefaultAgentIds]
-														;[copy[idx - 1], copy[idx]] = [
-															copy[idx],
-															copy[idx - 1],
-														]
-														aiDefaultAgentIds = copy
-													}}
-													title="move up"
-												>
-													<ChevronUp class="h-4 w-4" />
-												</button>
-												<button
-													class="text-zinc-500 hover:text-zinc-300 disabled:opacity-30"
-													disabled={idx === aiDefaultAgentIds.length - 1}
-													onclick={() => {
-														const copy = [...aiDefaultAgentIds]
-														;[copy[idx], copy[idx + 1]] = [
-															copy[idx + 1],
-															copy[idx],
-														]
-														aiDefaultAgentIds = copy
-													}}
-													title="move down"
-												>
-													<ChevronDown class="h-4 w-4" />
-												</button>
-												<button
-													class="text-zinc-500 hover:text-red-400"
-													onclick={() => {
-														aiDefaultAgentIds =
-															aiDefaultAgentIds.filter(
-																(_, i) => i !== idx
-															)
-													}}
-													title="remove"
-												>
-													<X class="h-4 w-4" />
-												</button>
-											</li>
-										{/each}
-									</ul>
-								{:else}
-									<p class="text-xs text-zinc-500 italic">
-										no default agents configured
-									</p>
-								{/if}
-								{#if availableAgentsToAdd.length > 0}
-									<Select
-										value=""
-										onValueChange={(v: string) => {
-											if (v) aiDefaultAgentIds = [...aiDefaultAgentIds, v]
-										}}
-									>
-										<SelectTrigger id="default_agents" class="rounded-xl">
-											<span class="text-zinc-500">add agent…</span>
-										</SelectTrigger>
-										<SelectContent>
-											{#each availableAgentsToAdd as a (a.id)}
-												<SelectItem value={a.id}>{agentLabel(a)}</SelectItem
-												>
-											{/each}
-										</SelectContent>
-									</Select>
-								{/if}
-								{#if agentsError}
-									<p class="text-xs text-red-300">{agentsError}</p>
-								{/if}
-							</div>
+					<SettingsAssets
+						bind:defaultEmbeddingModelId={assetsDefaultEmbeddingModelId}
+						bind:vectorDatabaseProvider={assetsVectorDatabaseProvider}
+						bind:vectorDatabaseUrl={assetsVectorDatabaseUrl}
+						bind:vectorDatabaseQdrantApiKey={assetsVectorDatabaseQdrantApiKey}
+						bind:vectorDatabasePineconeApiKey={assetsVectorDatabasePineconeApiKey}
+						bind:vectorDatabaseWeaviateApiKey={assetsVectorDatabaseWeaviateApiKey}
+						bind:vectorDatabaseMilvusToken={assetsVectorDatabaseMilvusToken}
+						bind:vectorDatabaseRedisPassword={assetsVectorDatabaseRedisPassword}
+						bind:vectorDatabaseOpensearchApiKey={assetsVectorDatabaseOpensearchApiKey}
+						bind:vectorCollectionTemplate={assetsVectorCollectionTemplate}
+						bind:vectorSparseEnabled={assetsVectorSparseEnabled}
+						bind:vectorPrefetchLimit={assetsVectorPrefetchLimit}
+						bind:vectorFusionAlgorithm={assetsVectorFusionAlgorithm}
+						bind:vectorNormalizeScores={assetsVectorNormalizeScores}
+						bind:embeddingsVectorSize={assetsEmbeddingsVectorSize}
+						bind:embeddingsBatchSize={assetsEmbeddingsBatchSize}
+						bind:rerankDefaultStrategy={assetsRerankDefaultStrategy}
+						bind:rerankTopK={assetsRerankTopK}
+						bind:storageBackend={assetsStorageBackend}
+						bind:storageLocalRootPath={assetsStorageLocalRootPath}
+						bind:storageS3EndpointUrl={assetsStorageS3EndpointUrl}
+						bind:storageS3Bucket={assetsStorageS3Bucket}
+						bind:storageS3Region={assetsStorageS3Region}
+						bind:storageS3AccessKeyId={assetsStorageS3AccessKeyId}
+						bind:storageS3SecretAccessKey={assetsStorageS3SecretAccessKey}
+						bind:storageS3Prefix={assetsStorageS3Prefix}
+						bind:storageS3PresignedUrlTtl={assetsStorageS3PresignedUrlTtl}
+						{models}
+						{isFetchingModels}
+						{modelsError}
+					/>
 
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-								<div class="mb-4 flex items-center justify-between">
-									<div>
-										<p class="text-sm font-medium">memory</p>
-										<p class="text-xs text-zinc-500">
-											retrieval and consolidation settings.
-										</p>
-									</div>
-									<Switch
-										id="ai_memory_enable"
-										checked={aiMemoryEnable}
-										onCheckedChange={(v: boolean) => (aiMemoryEnable = v)}
-									/>
-								</div>
-								<div class="grid gap-4 md:grid-cols-2">
-									<div class="space-y-2">
-										<Label for="ai_similarity">similarity threshold</Label>
-										<p class="text-xs text-zinc-500">
-											minimum cosine similarity for a memory to be retrieved
-											(0 = any, 1 = exact).
-										</p>
-										<Input
-											id="ai_similarity"
-											type="number"
-											step="0.01"
-											min="0"
-											max="1"
-											bind:value={aiMemorySimilarityThreshold}
-											class="rounded-xl"
-										/>
-									</div>
-									<div class="space-y-2">
-										<Label for="ai_top_k">top k</Label>
-										<p class="text-xs text-zinc-500">
-											max memories retrieved per conversation turn.
-										</p>
-										<Input
-											id="ai_top_k"
-											type="number"
-											min="1"
-											bind:value={aiMemoryTopK}
-											class="rounded-xl"
-										/>
-									</div>
-									<div class="space-y-2">
-										<Label for="ai_messages">messages to consider</Label>
-										<p class="text-xs text-zinc-500">
-											recent messages scanned when retrieving or consolidating
-											memories.
-										</p>
-										<Input
-											id="ai_messages"
-											type="number"
-											min="1"
-											bind:value={aiMemoryMessagesToConsider}
-											class="rounded-xl"
-										/>
-									</div>
-								</div>
-							</div>
+					<SettingsLimits
+						bind:maxThreadsPerUser={limitsMaxThreadsPerUser}
+						bind:maxMessagesPerThread={limitsMaxMessagesPerThread}
+						bind:maxFileSizeMb={limitsMaxFileSizeMb}
+						bind:rateLimitRequestsPerMinute={limitsRateLimitRequestsPerMinute}
+					/>
 
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-								<p class="mb-1 text-sm font-medium">chat context</p>
-								<p class="mb-4 text-xs text-zinc-500">
-									how prior chats are added to context.
-								</p>
-								<div class="grid gap-4 md:grid-cols-2">
-									<div class="space-y-2">
-										<Label for="ai_chat_mode">mode</Label>
-										<p class="text-xs text-zinc-500">
-											determines which past chats are included in the agent's
-											context window.
-										</p>
-										<Select
-											value={aiChatContextMode}
-											onValueChange={(v: string) =>
-												(aiChatContextMode = v as ChatContextMode)}
-										>
-											<SelectTrigger id="ai_chat_mode" class="rounded-xl">
-												<span class="truncate text-left"
-													>{aiChatContextMode}</span
-												>
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value="recent">recent</SelectItem>
-												<SelectItem value="relevant">relevant</SelectItem>
-												<SelectItem value="pinned">pinned</SelectItem>
-											</SelectContent>
-										</Select>
-									</div>
-									<div class="space-y-2">
-										<Label for="ai_chat_top_k">top k</Label>
-										<p class="text-xs text-zinc-500">
-											number of past chats to include in context per turn.
-										</p>
-										<Input
-											id="ai_chat_top_k"
-											type="number"
-											min="1"
-											bind:value={aiChatContextTopK}
-											class="rounded-xl"
-										/>
-									</div>
-								</div>
-							</div>
+					<SettingsSoftDelete
+						bind:threads={softDeleteThreads}
+						bind:notes={softDeleteNotes}
+						bind:files={softDeleteFiles}
+					/>
 
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-								<div class="mb-4 flex items-center justify-between">
-									<div>
-										<p class="text-sm font-medium">task models</p>
-										<p class="text-xs text-zinc-500">
-											overrides for background task runs.
-										</p>
-									</div>
-									{#if isFetchingModels}
-										<span class="text-xs text-zinc-500">loading…</span>
-									{/if}
-								</div>
-								<div class="grid gap-4 md:grid-cols-2">
-									<div class="space-y-2">
-										<Label for="task_default_model">default model</Label>
-										<p class="text-xs text-zinc-500">
-											fallback model used when no task-specific model is set.
-										</p>
-										<Select
-											value={aiTaskDefaultModelId}
-											onValueChange={(v: string) =>
-												(aiTaskDefaultModelId = v)}
-										>
-											<SelectTrigger
-												id="task_default_model"
-												class="rounded-xl"
-											>
-												<span class="truncate text-left"
-													>{getModelLabel(aiTaskDefaultModelId)}</span
-												>
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value="">none</SelectItem>
-												{#each models as model (model.id)}
-													<SelectItem value={model.id}>
-														{modelLabel(model)}
-													</SelectItem>
-												{/each}
-											</SelectContent>
-										</Select>
-									</div>
-									<div class="space-y-2">
-										<Label for="task_thread_metadata_model"
-											>thread metadata model</Label
-										>
-										<p class="text-xs text-zinc-500">
-											model used to generate thread titles and tags
-											automatically.
-										</p>
-										<Select
-											value={aiTaskThreadMetadataModelId}
-											onValueChange={(v: string) =>
-												(aiTaskThreadMetadataModelId = v)}
-										>
-											<SelectTrigger
-												id="task_thread_metadata_model"
-												class="rounded-xl"
-											>
-												<span class="truncate text-left"
-													>{getModelLabel(
-														aiTaskThreadMetadataModelId
-													)}</span
-												>
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value="">none</SelectItem>
-												{#each models as model (model.id)}
-													<SelectItem value={model.id}>
-														{modelLabel(model)}
-													</SelectItem>
-												{/each}
-											</SelectContent>
-										</Select>
-									</div>
-									<div class="space-y-2">
-										<Label for="task_input_autocomplete_model">
-											input autocomplete model
-										</Label>
-										<p class="text-xs text-zinc-500">
-											model used to suggest completions as the user types.
-										</p>
-										<Select
-											value={aiTaskInputAutocompleteModelId}
-											onValueChange={(v: string) =>
-												(aiTaskInputAutocompleteModelId = v)}
-										>
-											<SelectTrigger
-												id="task_input_autocomplete_model"
-												class="rounded-xl"
-											>
-												<span class="truncate text-left"
-													>{getModelLabel(
-														aiTaskInputAutocompleteModelId
-													)}</span
-												>
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value="">none</SelectItem>
-												{#each models as model (model.id)}
-													<SelectItem value={model.id}>
-														{modelLabel(model)}
-													</SelectItem>
-												{/each}
-											</SelectContent>
-										</Select>
-									</div>
-								</div>
-								{#if modelsError}
-									<p class="mt-3 text-xs text-red-300">{modelsError}</p>
-								{/if}
-							</div>
-						</CardContent>
-					</Card>
+					<SettingsSecurity
+						bind:accessTokenExpireMinutes={securityAccessTokenExpireMinutes}
+						bind:refreshTokenExpireDays={securityRefreshTokenExpireDays}
+						bind:authCookieSecure={securityAuthCookieSecure}
+						bind:sessionTimeoutMinutes={securitySessionTimeoutMinutes}
+						bind:requireEmailVerification={securityRequireEmailVerification}
+						bind:allowedEmailDomains={securityAllowedEmailDomains}
+						bind:allowSignups={securityAllowSignups}
+						bind:autoSignupRoleIds={securityAutoSignupRoleIds}
+						bind:oidcEnabled={securityOidcEnabled}
+						bind:oidcIssuerUrl={securityOidcIssuerUrl}
+						bind:oidcClientId={securityOidcClientId}
+						bind:oidcClientSecret={securityOidcClientSecret}
+						bind:oidcRedirectUri={securityOidcRedirectUri}
+						bind:oidcScopes={securityOidcScopes}
+						bind:oidcOnly={securityOidcOnly}
+						secretKeyConfigured={securitySecretKeyConfigured}
+						jwtAlgorithm={securityJwtAlgorithm}
+						enableOauth={securityEnableOauth}
+						corsOrigins={securityCorsOrigins}
+					/>
 
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>branding</CardTitle>
-							<CardDescription>public-facing brand configuration.</CardDescription>
-						</CardHeader>
-						<CardContent class="space-y-5">
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="site_name">site name</Label>
-									<p class="text-xs text-zinc-500">
-										display name shown in the browser tab, emails, and UI.
-									</p>
-									<Input
-										id="site_name"
-										bind:value={brandingSiteName}
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<div class="flex items-center justify-between gap-2">
-										<Label for="app_version">app version</Label>
-										<span
-											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Lock class="h-3 w-3" />
-											env-only
-										</span>
-									</div>
-									<Input
-										id="app_version"
-										value={brandingAppVersion}
-										disabled
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										set via environment variables only.
-									</p>
-								</div>
-							</div>
-
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="primary_color">primary color</Label>
-									<p class="text-xs text-zinc-500">
-										accent color used throughout the frontend (CSS hex value).
-									</p>
-									<Input
-										id="primary_color"
-										bind:value={brandingPrimaryColor}
-										placeholder="#6366f1"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<div class="flex items-center justify-between gap-2">
-										<Label for="analytics_key">analytics key</Label>
-										<span
-											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Lock class="h-3 w-3" />
-											env-only
-										</span>
-									</div>
-									<Input
-										id="analytics_key"
-										value={brandingAnalyticsKeyConfigured
-											? '(configured)'
-											: '(not set)'}
-										disabled
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										set via environment variables only.
-									</p>
-								</div>
-							</div>
-
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="logo_url">logo url</Label>
-									<p class="text-xs text-zinc-500">
-										URL for the app logo used in the sidebar and outgoing
-										emails.
-									</p>
-									<Input
-										id="logo_url"
-										bind:value={brandingLogoUrl}
-										placeholder="https://…"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="favicon_url">favicon url</Label>
-									<p class="text-xs text-zinc-500">
-										URL for the browser tab favicon.
-									</p>
-									<Input
-										id="favicon_url"
-										bind:value={brandingFaviconUrl}
-										placeholder="https://…"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="public_frontend_origin"
-										>public frontend origin</Label
-									>
-									<p class="text-xs text-zinc-500">
-										base URL of the user-facing frontend; used to build absolute
-										links in emails and OIDC.
-									</p>
-									<Input
-										id="public_frontend_origin"
-										bind:value={brandingPublicFrontendOrigin}
-										placeholder="https://app.nokodo.net"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="public_cdn_origin">public cdn origin</Label>
-									<p class="text-xs text-zinc-500">
-										base URL for CDN-hosted static assets.
-									</p>
-									<Input
-										id="public_cdn_origin"
-										bind:value={brandingPublicCdnOrigin}
-										placeholder="https://cdn.nokodo.net"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-
-							<div class="space-y-2">
-								<Label for="public_console_origin">public console origin</Label>
-								<p class="text-xs text-zinc-500">
-									base URL of this admin console; used for OIDC redirect URIs and
-									internal links.
-								</p>
-								<Input
-									id="public_console_origin"
-									bind:value={brandingPublicConsoleOrigin}
-									placeholder="https://console.nokodo.net"
-									class="rounded-xl"
-								/>
-							</div>
-
-							<div class="space-y-2">
-								<Label for="pwa_manifest_url">pwa manifest url</Label>
-								<Input
-									id="pwa_manifest_url"
-									bind:value={brandingPwaManifestUrl}
-									placeholder="https://cdn.example.com/manifest.json"
-									class="rounded-xl"
-								/>
-								<p class="text-xs text-zinc-500">
-									external manifest.json for PWA configuration. served directly in
-									the frontend HTML.
-								</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>media</CardTitle>
-							<CardDescription
-								>URL overrides for individual frontend media assets. these take
-								precedence over the base URL.</CardDescription
-							>
-						</CardHeader>
-						<CardContent class="space-y-5">
-							<div class="space-y-2">
-								<Label for="media_base_url">base url</Label>
-								<p class="text-xs text-zinc-500">
-									fallback base URL for all media assets not explicitly overridden
-									below.
-								</p>
-								<Input
-									id="media_base_url"
-									bind:value={mediaBaseUrl}
-									placeholder="https://cdn.nokodo.net/media"
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="media_favicon_url">favicon url</Label>
-									<p class="text-xs text-zinc-500">
-										overrides the branding favicon for frontend pages.
-									</p>
-									<Input
-										id="media_favicon_url"
-										bind:value={mediaFaviconUrl}
-										placeholder="https://…"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="media_apple_touch_icon_url"
-										>apple touch icon url</Label
-									>
-									<p class="text-xs text-zinc-500">
-										icon used when adding the app to an iOS home screen.
-									</p>
-									<Input
-										id="media_apple_touch_icon_url"
-										bind:value={mediaAppleTouchIconUrl}
-										placeholder="https://…"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="media_sidebar_logo_url">sidebar logo url</Label>
-									<p class="text-xs text-zinc-500">
-										logo shown in the frontend sidebar.
-									</p>
-									<Input
-										id="media_sidebar_logo_url"
-										bind:value={mediaSidebarLogoUrl}
-										placeholder="https://…"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="media_splash_logo_url">splash logo url</Label>
-									<p class="text-xs text-zinc-500">
-										logo shown on the splash/loading screen.
-									</p>
-									<Input
-										id="media_splash_logo_url"
-										bind:value={mediaSplashLogoUrl}
-										placeholder="https://…"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>assets</CardTitle>
-							<CardDescription
-								>vector database, embeddings, and reranking configuration.</CardDescription
-							>
-						</CardHeader>
-						<CardContent class="space-y-6">
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="assets_embedding_model"
-										>default embedding model</Label
-									>
-									<p class="text-xs text-zinc-500">
-										model used to embed text when no per-request override is
-										set.
-									</p>
-									<Select
-										type="single"
-										value={assetsDefaultEmbeddingModelId}
-										onValueChange={(v: string) => {
-											assetsDefaultEmbeddingModelId = v ?? ''
-										}}
-									>
-										<SelectTrigger class="rounded-xl">
-											{getModelLabel(assetsDefaultEmbeddingModelId)}
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="">none</SelectItem>
-											{#each models as m (m.id)}
-												<SelectItem value={m.id}>{modelLabel(m)}</SelectItem
-												>
-											{/each}
-										</SelectContent>
-									</Select>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_vector_db_provider"
-										>vector database provider</Label
-									>
-									<p class="text-xs text-zinc-500">
-										backend used for storing and querying vector embeddings.
-									</p>
-									<Select
-										type="single"
-										value={assetsVectorDatabaseProvider}
-										onValueChange={(v: string) => {
-											assetsVectorDatabaseProvider = (v ??
-												'qdrant') as VectorDatabaseProvider
-										}}
-									>
-										<SelectTrigger class="rounded-xl">
-											{assetsVectorDatabaseProvider}
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="qdrant">qdrant</SelectItem>
-											<SelectItem value="pinecone">pinecone</SelectItem>
-											<SelectItem value="weaviate">weaviate</SelectItem>
-											<SelectItem value="milvus">milvus</SelectItem>
-											<SelectItem value="pgvector">pgvector</SelectItem>
-											<SelectItem value="redis">redis</SelectItem>
-											<SelectItem value="opensearch">opensearch</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-							<div class="space-y-2">
-								<Label for="assets_vector_db_url">vector database endpoint</Label>
-								<p class="text-xs text-zinc-500">
-									connection URL or host for the selected vector database.
-								</p>
-								<Input
-									id="assets_vector_db_url"
-									bind:value={assetsVectorDatabaseUrl}
-									placeholder="http://localhost:6333"
-									class="rounded-xl"
-								/>
-							</div>
-
-							<h4 class="pt-2 text-sm font-medium text-zinc-400">
-								vector database API keys
-							</h4>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="assets_qdrant_api_key">qdrant api key</Label>
-									<Input
-										id="assets_qdrant_api_key"
-										bind:value={assetsVectorDatabaseQdrantApiKey}
-										type="password"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_pinecone_api_key">pinecone api key</Label>
-									<Input
-										id="assets_pinecone_api_key"
-										bind:value={assetsVectorDatabasePineconeApiKey}
-										type="password"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_weaviate_api_key">weaviate api key</Label>
-									<Input
-										id="assets_weaviate_api_key"
-										bind:value={assetsVectorDatabaseWeaviateApiKey}
-										type="password"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_milvus_token">milvus token</Label>
-									<Input
-										id="assets_milvus_token"
-										bind:value={assetsVectorDatabaseMilvusToken}
-										type="password"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_redis_password">redis password</Label>
-									<Input
-										id="assets_redis_password"
-										bind:value={assetsVectorDatabaseRedisPassword}
-										type="password"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_opensearch_api_key">opensearch api key</Label
-									>
-									<Input
-										id="assets_opensearch_api_key"
-										bind:value={assetsVectorDatabaseOpensearchApiKey}
-										type="password"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-
-							<h4 class="pt-2 text-sm font-medium text-zinc-400">vector settings</h4>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="assets_collection_template"
-										>collection name template</Label
-									>
-									<Input
-										id="assets_collection_template"
-										bind:value={assetsVectorCollectionTemplate}
-										placeholder="{'{model}'}_bm25"
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										template for auto-generated collection names. use {'{model}'}
-										as a placeholder.
-									</p>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_prefetch_limit">prefetch limit</Label>
-									<p class="text-xs text-zinc-500">
-										maximum candidates fetched before score fusion and
-										reranking.
-									</p>
-									<Input
-										id="assets_prefetch_limit"
-										type="number"
-										bind:value={assetsVectorPrefetchLimit}
-										placeholder="256"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div
-									class="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 p-3"
-								>
-									<Label for="assets_sparse_enabled">sparse vectors (BM25)</Label>
-									<Switch
-										id="assets_sparse_enabled"
-										checked={assetsVectorSparseEnabled}
-										onCheckedChange={(v) => {
-											assetsVectorSparseEnabled = v
-										}}
-									/>
-								</div>
-								<div
-									class="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 p-3"
-								>
-									<Label for="assets_normalize_scores">normalize scores</Label>
-									<Switch
-										id="assets_normalize_scores"
-										checked={assetsVectorNormalizeScores}
-										onCheckedChange={(v) => {
-											assetsVectorNormalizeScores = v
-										}}
-									/>
-								</div>
-							</div>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="assets_fusion_algorithm">fusion algorithm</Label>
-									<p class="text-xs text-zinc-500">
-										algorithm used to combine dense and sparse search scores.
-									</p>
-									<Select
-										type="single"
-										value={assetsVectorFusionAlgorithm}
-										onValueChange={(v: string) => {
-											assetsVectorFusionAlgorithm = v ?? 'rrf'
-										}}
-									>
-										<SelectTrigger class="rounded-xl">
-											{assetsVectorFusionAlgorithm === 'rrf'
-												? 'reciprocal rank fusion (RRF)'
-												: 'distribution-based score fusion (DBSF)'}
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="rrf"
-												>reciprocal rank fusion (RRF)</SelectItem
-											>
-											<SelectItem value="dbsf"
-												>distribution-based score fusion (DBSF)</SelectItem
-											>
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-
-							<h4 class="pt-2 text-sm font-medium text-zinc-400">embeddings</h4>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="assets_vector_size">vector size (dimensions)</Label>
-									<p class="text-xs text-zinc-500">
-										dimensions of the embedding vectors; must match the chosen
-										model.
-									</p>
-									<Input
-										id="assets_vector_size"
-										type="number"
-										bind:value={assetsEmbeddingsVectorSize}
-										placeholder="1536"
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_batch_size">batch size</Label>
-									<p class="text-xs text-zinc-500">
-										texts embedded per API call during bulk vectorization.
-									</p>
-									<Input
-										id="assets_batch_size"
-										type="number"
-										bind:value={assetsEmbeddingsBatchSize}
-										placeholder="64"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-
-							<h4 class="pt-2 text-sm font-medium text-zinc-400">reranking</h4>
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="assets_rerank_strategy">default strategy</Label>
-									<p class="text-xs text-zinc-500">
-										controls when and how results are reranked after retrieval.
-									</p>
-									<Select
-										type="single"
-										value={assetsRerankDefaultStrategy}
-										onValueChange={(v: string) => {
-											assetsRerankDefaultStrategy = v ?? 'native'
-										}}
-									>
-										<SelectTrigger class="rounded-xl">
-											{assetsRerankDefaultStrategy}
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="none">none</SelectItem>
-											<SelectItem value="native">native</SelectItem>
-											<SelectItem value="external">external</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-								<div class="space-y-2">
-									<Label for="assets_rerank_top_k">rerank top-k</Label>
-									<p class="text-xs text-zinc-500">
-										final results kept after reranking.
-									</p>
-									<Input
-										id="assets_rerank_top_k"
-										type="number"
-										bind:value={assetsRerankTopK}
-										placeholder="10"
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>limits</CardTitle>
-							<CardDescription>protect the system with sane caps.</CardDescription>
-						</CardHeader>
-						<CardContent class="grid gap-4 md:grid-cols-2">
-							<div class="space-y-2">
-								<Label for="max_threads">max threads per user</Label>
-								<p class="text-xs text-zinc-500">
-									hard cap on threads per account; prevents runaway data growth.
-								</p>
-								<Input
-									id="max_threads"
-									type="number"
-									bind:value={limitsMaxThreadsPerUser}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="max_messages">max messages per thread</Label>
-								<p class="text-xs text-zinc-500">
-									hard cap on messages per thread.
-								</p>
-								<Input
-									id="max_messages"
-									type="number"
-									bind:value={limitsMaxMessagesPerThread}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="max_file_size">max file size (MB)</Label>
-								<p class="text-xs text-zinc-500">
-									maximum allowed size for a single file upload.
-								</p>
-								<Input
-									id="max_file_size"
-									type="number"
-									bind:value={limitsMaxFileSizeMb}
-									class="rounded-xl"
-								/>
-							</div>
-							<div class="space-y-2">
-								<Label for="rate_limit">rate limit (requests/min)</Label>
-								<p class="text-xs text-zinc-500">
-									API requests allowed per minute per authenticated user.
-								</p>
-								<Input
-									id="rate_limit"
-									type="number"
-									bind:value={limitsRateLimitRequestsPerMinute}
-									class="rounded-xl"
-								/>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>soft delete</CardTitle>
-							<CardDescription
-								>when enabled, deleting a resource marks it as deleted rather than
-								permanently removing it from the database.</CardDescription
-							>
-						</CardHeader>
-						<CardContent class="space-y-3">
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="soft_delete_threads">threads</Label>
-									<p class="text-xs text-zinc-500">
-										soft-delete threads instead of permanently removing them.
-									</p>
-								</div>
-								<Switch
-									id="soft_delete_threads"
-									checked={softDeleteThreads}
-									onCheckedChange={(v: boolean) => (softDeleteThreads = v)}
-								/>
-							</div>
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="soft_delete_notes">notes</Label>
-									<p class="text-xs text-zinc-500">
-										soft-delete notes instead of permanently removing them.
-									</p>
-								</div>
-								<Switch
-									id="soft_delete_notes"
-									checked={softDeleteNotes}
-									onCheckedChange={(v: boolean) => (softDeleteNotes = v)}
-								/>
-							</div>
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="soft_delete_files">files</Label>
-									<p class="text-xs text-zinc-500">
-										soft-delete files instead of permanently removing them.
-									</p>
-								</div>
-								<Switch
-									id="soft_delete_files"
-									checked={softDeleteFiles}
-									onCheckedChange={(v: boolean) => (softDeleteFiles = v)}
-								/>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>security</CardTitle>
-							<CardDescription>authentication and session behavior.</CardDescription>
-						</CardHeader>
-						<CardContent class="space-y-5">
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<div class="flex items-center justify-between gap-2">
-										<Label for="secret_key">secret key</Label>
-										<span
-											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Lock class="h-3 w-3" />
-											env-only
-										</span>
-									</div>
-									<Input
-										id="secret_key"
-										value={securitySecretKeyConfigured
-											? '(configured)'
-											: '(not set)'}
-										disabled
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										set via environment variables only.
-									</p>
-								</div>
-								<div class="space-y-2">
-									<div class="flex items-center justify-between gap-2">
-										<Label for="jwt_algorithm">jwt algorithm</Label>
-										<span
-											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Lock class="h-3 w-3" />
-											env-only
-										</span>
-									</div>
-									<Input
-										id="jwt_algorithm"
-										value={securityJwtAlgorithm || '(not set)'}
-										disabled
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										set via environment variables only.
-									</p>
-								</div>
-							</div>
-
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<div class="flex items-center justify-between gap-2">
-										<Label for="enable_oauth">enable oauth</Label>
-										<span
-											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Lock class="h-3 w-3" />
-											env-only
-										</span>
-									</div>
-									<Input
-										id="enable_oauth"
-										value={securityEnableOauth ? 'true' : 'false'}
-										disabled
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										set via environment variables only.
-									</p>
-								</div>
-								<div class="space-y-2">
-									<div class="flex items-center justify-between gap-2">
-										<Label for="cors_origins">cors origins</Label>
-										<span
-											class="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Lock class="h-3 w-3" />
-											env-only
-										</span>
-									</div>
-									<Input
-										id="cors_origins"
-										value={securityCorsOrigins || '(not set)'}
-										disabled
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										set via environment variables only.
-									</p>
-								</div>
-							</div>
-
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="access_expire">access token expire minutes</Label>
-									<p class="text-xs text-zinc-500">
-										how long access tokens remain valid before the client must
-										refresh.
-									</p>
-									<Input
-										id="access_expire"
-										type="number"
-										bind:value={securityAccessTokenExpireMinutes}
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="refresh_expire">refresh token expire days</Label>
-									<p class="text-xs text-zinc-500">
-										how long refresh tokens remain valid; controls maximum
-										session length.
-									</p>
-									<Input
-										id="refresh_expire"
-										type="number"
-										bind:value={securityRefreshTokenExpireDays}
-										class="rounded-xl"
-									/>
-								</div>
-							</div>
-
-							<div class="grid gap-4 md:grid-cols-2">
-								<div class="space-y-2">
-									<Label for="session_timeout">session timeout minutes</Label>
-									<p class="text-xs text-zinc-500">
-										idle timeout after which the user is automatically logged
-										out.
-									</p>
-									<Input
-										id="session_timeout"
-										type="number"
-										bind:value={securitySessionTimeoutMinutes}
-										class="rounded-xl"
-									/>
-								</div>
-								<div class="space-y-2">
-									<Label for="allowed_domains">allowed email domains</Label>
-									<Input
-										id="allowed_domains"
-										bind:value={securityAllowedEmailDomains}
-										placeholder="example.com, example.org"
-										class="rounded-xl"
-									/>
-									<p class="text-xs text-zinc-500">
-										only emails from these domains can register. leave empty to
-										allow all.
-									</p>
-								</div>
-							</div>
-
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="allow_signups">allow new user signups</Label>
-									<p class="text-xs text-zinc-500">
-										when off, admins or users with users:manage only.
-									</p>
-								</div>
-								<Switch
-									id="allow_signups"
-									checked={securityAllowSignups}
-									onCheckedChange={(v: boolean) => (securityAllowSignups = v)}
-								/>
-							</div>
-
-							<div class="space-y-2">
-								<Label>auto-apply roles</Label>
-								<RolePicker bind:value={securityAutoSignupRoleIds} />
-								<p class="text-xs text-zinc-500">
-									roles automatically assigned to new users on signup.
-								</p>
-							</div>
-
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="cookie_secure">auth cookie secure</Label>
-									<p class="text-xs text-zinc-500">
-										recommended true in production.
-									</p>
-								</div>
-								<Switch
-									id="cookie_secure"
-									checked={securityAuthCookieSecure}
-									onCheckedChange={(v: boolean) => (securityAuthCookieSecure = v)}
-								/>
-							</div>
-
-							<div class="flex items-center justify-between">
-								<div class="space-y-0.5">
-									<Label for="email_verification"
-										>require email verification</Label
-									>
-									<p class="text-xs text-zinc-500">
-										require users to verify their email address before accessing
-										the app.
-									</p>
-								</div>
-								<Switch
-									id="email_verification"
-									checked={securityRequireEmailVerification}
-									onCheckedChange={(v: boolean) =>
-										(securityRequireEmailVerification = v)}
-								/>
-							</div>
-
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-								<p class="mb-1 text-sm font-medium">oidc</p>
-								<p class="mb-4 text-xs text-zinc-500">
-									openid connect provider settings for single sign-on.
-								</p>
-
-								<div class="mb-4 flex items-center justify-between">
-									<div class="space-y-0.5">
-										<Label for="oidc_enabled">enable oidc</Label>
-										<p class="text-xs text-zinc-500">
-											allow users to sign in with an oidc provider.
-										</p>
-									</div>
-									<Switch
-										id="oidc_enabled"
-										checked={securityOidcEnabled}
-										onCheckedChange={(v: boolean) => (securityOidcEnabled = v)}
-									/>
-								</div>
-
-								<div class="grid gap-4 md:grid-cols-2">
-									<div class="space-y-2">
-										<Label for="oidc_issuer">issuer url</Label>
-										<Input
-											id="oidc_issuer"
-											bind:value={securityOidcIssuerUrl}
-											placeholder="https://issuer.example.com"
-											class="rounded-xl"
-										/>
-									</div>
-									<div class="space-y-2">
-										<Label for="oidc_client_id">client id</Label>
-										<Input
-											id="oidc_client_id"
-											bind:value={securityOidcClientId}
-											class="rounded-xl"
-										/>
-									</div>
-									<div class="space-y-2">
-										<Label for="oidc_client_secret">client secret</Label>
-										<Input
-											id="oidc_client_secret"
-											type="password"
-											bind:value={securityOidcClientSecret}
-											class="rounded-xl"
-										/>
-									</div>
-									<div class="space-y-2">
-										<Label for="oidc_redirect">redirect uri</Label>
-										<Input
-											id="oidc_redirect"
-											bind:value={securityOidcRedirectUri}
-											placeholder="https://app.example.com/oidc/callback"
-											class="rounded-xl"
-										/>
-									</div>
-									<div class="space-y-2 md:col-span-2">
-										<Label for="oidc_scopes">scopes</Label>
-										<Input
-											id="oidc_scopes"
-											bind:value={securityOidcScopes}
-											placeholder="openid, profile, email"
-											class="rounded-xl"
-										/>
-										<p class="text-xs text-zinc-500">comma-separated list.</p>
-									</div>
-								</div>
-
-								<div class="mt-4 flex items-center justify-between">
-									<div class="space-y-0.5">
-										<Label for="oidc_only">oidc only</Label>
-										<p class="text-xs text-zinc-500">
-											disable password login. requires oidc to be enabled
-											&amp; configured.
-										</p>
-									</div>
-									<Switch
-										id="oidc_only"
-										checked={securityOidcOnly}
-										onCheckedChange={(v: boolean) => (securityOidcOnly = v)}
-									/>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card class="border-zinc-800 bg-zinc-900">
-						<CardHeader>
-							<CardTitle>default permissions</CardTitle>
-							<CardDescription>
-								global defaults applied when no role or explicit rule grants access.
-							</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<DefaultPermissionsEditor
-								bind:value={defaultPermissions}
-								allowInherit={false}
-							/>
-						</CardContent>
-					</Card>
+					<SettingsDefaultPermissions bind:value={defaultPermissions} />
 				</div>
 			{:else}
 				<div class="rounded-lg border border-zinc-800 p-8 text-zinc-400">

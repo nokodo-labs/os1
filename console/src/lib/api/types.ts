@@ -2230,6 +2230,17 @@ export interface components {
              */
             reveal_decay_turns: number;
         };
+        /** AIAttachmentSettingsPatch */
+        AIAttachmentSettingsPatch: {
+            /** @description turns before image attachments decay to reference */
+            image_decay_turns?: number | null;
+            /** @description turns before audio attachments decay to reference */
+            audio_decay_turns?: number | null;
+            /** @description turns before video attachments decay to reference */
+            video_decay_turns?: number | null;
+            /** @description turns before a revealed attachment decays again */
+            reveal_decay_turns?: number | null;
+        };
         /** AIChatContextSettings */
         AIChatContextSettings: {
             /**
@@ -2365,6 +2376,8 @@ export interface components {
             tasks?: components["schemas"]["AITaskSettings"];
             /** @description native attachment decay settings */
             attachments?: components["schemas"]["AIAttachmentSettings"];
+            /** @description message window and summarization settings */
+            windowing?: components["schemas"]["AIWindowingSettings"];
         };
         /** AISettingsPatch */
         AISettingsPatch: {
@@ -2376,6 +2389,8 @@ export interface components {
             memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
             tasks?: components["schemas"]["AITaskSettingsPatch"] | null;
+            attachments?: components["schemas"]["AIAttachmentSettingsPatch"] | null;
+            windowing?: components["schemas"]["AIWindowingSettingsPatch"] | null;
         };
         /**
          * AITaskSettings
@@ -2399,6 +2414,11 @@ export interface components {
              * @description model for input autocomplete suggestions
              */
             input_autocomplete_model_id?: string | null;
+            /**
+             * Summarization Model Id
+             * @description model for thread context summarization
+             */
+            summarization_model_id?: string | null;
         };
         /** AITaskSettingsPatch */
         AITaskSettingsPatch: {
@@ -2417,6 +2437,100 @@ export interface components {
              * @description model for input autocomplete suggestions
              */
             input_autocomplete_model_id?: string | null;
+            /**
+             * Summarization Model Id
+             * @description model for thread context summarization
+             */
+            summarization_model_id?: string | null;
+        };
+        /**
+         * AIWindowingSettings
+         * @description context window management settings.
+         */
+        AIWindowingSettings: {
+            /**
+             * Enabled
+             * @description enable context window management and summarization
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Max Messages
+             * @description secondary message count guard
+             * @default 50
+             */
+            max_messages: number;
+            /**
+             * Trigger Ratio
+             * @description fraction of token budget to trigger background summarization
+             * @default 0.7
+             */
+            trigger_ratio: number;
+            /**
+             * Hard Ratio
+             * @description fraction of token budget for hard truncation
+             * @default 0.9
+             */
+            hard_ratio: number;
+            /**
+             * Summary Batch Size
+             * @description number of oldest unsummarized messages per summary batch
+             * @default 20
+             */
+            summary_batch_size: number;
+            /**
+             * Max Summaries Before Condense
+             * @description condense summaries when this many accumulate
+             * @default 4
+             */
+            max_summaries_before_condense: number;
+            /**
+             * Tool Result Max Share
+             * @description max fraction of budget for a single tool result
+             * @default 0.25
+             */
+            tool_result_max_share: number;
+            /**
+             * Tool Result Hard Cap
+             * @description absolute character ceiling per tool result
+             * @default 100000
+             */
+            tool_result_hard_cap: number;
+            /**
+             * Tool Results Combined Max Share
+             * @description max fraction of budget for ALL tool results combined
+             * @default 0.5
+             */
+            tool_results_combined_max_share: number;
+            /**
+             * Response Headroom
+             * @description tokens reserved for the model's response
+             * @default 4096
+             */
+            response_headroom: number;
+        };
+        /** AIWindowingSettingsPatch */
+        AIWindowingSettingsPatch: {
+            /** @description enable context window management and summarization */
+            enabled?: boolean | null;
+            /** @description secondary message count guard */
+            max_messages?: number | null;
+            /** @description fraction of token budget to trigger background summarization */
+            trigger_ratio?: number | null;
+            /** @description fraction of token budget for hard truncation */
+            hard_ratio?: number | null;
+            /** @description number of oldest unsummarized messages per summary batch */
+            summary_batch_size?: number | null;
+            /** @description condense summaries when this many accumulate */
+            max_summaries_before_condense?: number | null;
+            /** @description max fraction of budget for a single tool result */
+            tool_result_max_share?: number | null;
+            /** @description absolute character ceiling per tool result */
+            tool_result_hard_cap?: number | null;
+            /** @description max fraction of budget for ALL tool results combined */
+            tool_results_combined_max_share?: number | null;
+            /** @description tokens reserved for the model's response */
+            response_headroom?: number | null;
         };
         /**
          * AccessLevel
@@ -2748,6 +2862,36 @@ export interface components {
             vector?: components["schemas"]["VectorSettingsPatch"] | null;
             embeddings?: components["schemas"]["EmbeddingsSettingsPatch"] | null;
             rerank?: components["schemas"]["RerankSettingsPatch"] | null;
+            storage?: components["schemas"]["StorageSettingsPatch"] | null;
+        };
+        /** LocalStorageConfigPatch */
+        LocalStorageConfigPatch: {
+            /** @description absolute filesystem path for uploads */
+            root_path?: string | null;
+        };
+        /** S3StorageConfigPatch */
+        S3StorageConfigPatch: {
+            /** @description S3-compatible endpoint URL */
+            endpoint_url?: string | null;
+            /** @description S3 bucket name */
+            bucket?: string | null;
+            /** @description AWS region */
+            region?: string | null;
+            /** @description S3 access key id */
+            access_key_id?: string | null;
+            /** @description S3 secret access key */
+            secret_access_key?: string | null;
+            /** @description key prefix within the bucket */
+            prefix?: string | null;
+            /** @description presigned URL expiration in seconds */
+            presigned_url_ttl?: number | null;
+        };
+        /** StorageSettingsPatch */
+        StorageSettingsPatch: {
+            /** @description active storage backend: 'local' or 's3' */
+            backend?: "local" | "s3" | null;
+            local?: components["schemas"]["LocalStorageConfigPatch"] | null;
+            s3?: components["schemas"]["S3StorageConfigPatch"] | null;
         };
         /** Body_login_access_token_auth_login_access_token_post */
         Body_login_access_token_auth_login_access_token_post: {
@@ -2873,6 +3017,16 @@ export interface components {
              * @description primary color hex
              */
             primary_color?: string | null;
+            /**
+             * Support Email
+             * @description support email
+             */
+            support_email?: string | null;
+            /**
+             * Admin Email
+             * @description admin email
+             */
+            admin_email?: string | null;
             /**
              * Public Frontend Origin
              * @description public frontend origin
@@ -3275,23 +3429,6 @@ export interface components {
             metadata_?: components["schemas"]["JSONObject-Input"];
             /** Message Ids */
             message_ids?: string[];
-        };
-        /** FeaturesSettings */
-        FeaturesSettings: {
-            /**
-             * Enable File Uploads
-             * @description enable file uploads
-             * @default true
-             */
-            enable_file_uploads: boolean;
-        };
-        /** FeaturesSettingsPatch */
-        FeaturesSettingsPatch: {
-            /**
-             * Enable File Uploads
-             * @description enable file uploads
-             */
-            enable_file_uploads?: boolean | null;
         };
         /**
          * File
@@ -3977,7 +4114,7 @@ export interface components {
          *
          *     Content can be provided as:
          *     - A string (converted to [TextContent(text=...)])
-         *     - A list of content part dicts or ContentPart objects
+         *     - A list of ContentPart objects (validated via discriminated union)
          */
         MessageCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -3987,9 +4124,7 @@ export interface components {
              * Content
              * @default
              */
-            content: string | ({
-                [key: string]: unknown;
-            } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
+            content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
             /** Tool Call Id */
             tool_call_id?: string | null;
             /** Is Error */
@@ -4026,9 +4161,7 @@ export interface components {
         MessageUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Content */
-            content: string | ({
-                [key: string]: unknown;
-            } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
+            content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
         };
         /**
          * Model
@@ -5339,7 +5472,6 @@ export interface components {
          * @description structured input for an agent run.
          *
          *     supports plain text, file attachments via IDs, or both.
-         *     attachment_ids are resolved server-side to full content parts.
          */
         RunInput: {
             /**
@@ -5352,6 +5484,13 @@ export interface components {
              * @description file IDs to include as content parts in the message. each ID is resolved server-side to an image or file content part.
              */
             attachment_ids?: string[];
+            /**
+             * Attachment Actions
+             * @description one-off user attachment actions. keys are file_ids, values are 'reveal' (make active) or 'reference' (force decay). persisted as events and applied by the decay filter.
+             */
+            attachment_actions?: {
+                [key: string]: "reveal" | "reference";
+            } | null;
         };
         /**
          * RunRequest
@@ -5376,9 +5515,9 @@ export interface components {
             input?: components["schemas"]["RunInput"] | null;
             /**
              * Tool Choice
-             * @description optional tool choice override for this run. set to a tool name to force that tool on the first turn.
+             * @description optional tool choice override for this run. only specific tools can be forced.
              */
-            tool_choice?: string | null;
+            tool_choice?: ("web_search" | "think" | "generate_image") | null;
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
@@ -5400,13 +5539,17 @@ export interface components {
         /**
          * S3StorageConfig
          * @description S3-compatible storage configuration.
+         *
+         *     defaults target the dev MinIO container from the compose stack.
+         *     for production, override via environment variables or DB settings.
          */
         S3StorageConfig: {
             /**
              * Endpoint Url
-             * @description S3-compatible endpoint (MinIO, R2, etc.)
+             * @description S3-compatible endpoint (MinIO, R2, etc.). set to None for AWS S3.
+             * @default http://localhost:9000
              */
-            endpoint_url?: string | null;
+            endpoint_url: string | null;
             /**
              * Bucket
              * @description S3 bucket name. must be globally unique per deployment.
@@ -5422,13 +5565,15 @@ export interface components {
             /**
              * Access Key Id
              * @description S3 access key id
+             * @default minioadmin
              */
-            access_key_id?: string | null;
+            access_key_id: string | null;
             /**
              * Secret Access Key
              * @description S3 secret access key
+             * @default minioadmin
              */
-            secret_access_key?: string | null;
+            secret_access_key: string | null;
             /**
              * Prefix
              * @description key prefix within the bucket
@@ -5657,7 +5802,6 @@ export interface components {
         /** Settings */
         Settings: {
             ui?: components["schemas"]["UISettings"];
-            features?: components["schemas"]["FeaturesSettings"];
             ai?: components["schemas"]["AISettings"];
             branding?: components["schemas"]["BrandingSettings"];
             media?: components["schemas"]["MediaSettings"];
@@ -5670,7 +5814,6 @@ export interface components {
         /** SettingsPatch */
         SettingsPatch: {
             ui?: components["schemas"]["UISettingsPatch"] | null;
-            features?: components["schemas"]["FeaturesSettingsPatch"] | null;
             ai?: components["schemas"]["AISettingsPatch"] | null;
             branding?: components["schemas"]["BrandingSettingsPatch"] | null;
             media?: components["schemas"]["MediaSettingsPatch"] | null;
@@ -5697,11 +5840,6 @@ export interface components {
              * @default 0
              */
             ui: number;
-            /**
-             * Features
-             * @default 0
-             */
-            features: number;
             /**
              * Ai
              * @default 0
@@ -6030,9 +6168,9 @@ export interface components {
             input?: components["schemas"]["RunInput"] | null;
             /**
              * Tool Choice
-             * @description optional tool choice override for this run. set to a tool name to force that tool on the first turn.
+             * @description optional tool choice override for this run. only specific tools can be forced.
              */
-            tool_choice?: string | null;
+            tool_choice?: ("web_search" | "think" | "generate_image") | null;
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
@@ -15118,7 +15256,10 @@ export interface operations {
     };
     get_file_content_files__file_id__content_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description force browser download instead of inline display */
+                download?: boolean;
+            };
             header?: never;
             path: {
                 file_id: string;

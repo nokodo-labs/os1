@@ -95,11 +95,12 @@ class AuthState {
 		this.user = data as User
 	}
 
-	async register(email: string, password: string) {
+	async register(email: string, password: string, username: string) {
 		await rawApi.POST('/v1/users', {
 			body: {
 				email,
 				password,
+				username,
 				is_active: true,
 				is_superuser: true,
 			},
