@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths'
 	import Document from '$lib/components/icons/Document.svelte'
 	import Label from '$lib/components/icons/Label.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
@@ -26,7 +27,7 @@
 </script>
 
 <a
-	href={resource.href}
+	href={resolve(`/notes/${resource.id}`)}
 	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
@@ -40,29 +41,29 @@
 				<Document variant="solid" class="size-5" />
 			</div>
 			<div class="flex flex-col">
-				<span class="text-[13px] font-medium text-foreground/60">note</span>
+				<span class="text-foreground/60 text-[13px] font-medium">note</span>
 				{#if wordCount > 0}
-					<span class="text-[11px] text-foreground/40">{wordCount} words</span>
+					<span class="text-foreground/40 text-[11px]">{wordCount} words</span>
 				{/if}
 			</div>
 		</div>
-		<h3 class="mb-1.5 truncate text-xl font-semibold text-foreground">
+		<h3 class="text-foreground mb-1.5 truncate text-xl font-semibold">
 			{resource.title || 'untitled note'}
 		</h3>
 		{#if resource.preview}
-			<p class="mb-3 line-clamp-3 text-sm leading-relaxed text-foreground/70">
+			<p class="text-foreground/70 mb-3 line-clamp-3 text-sm leading-relaxed">
 				{stripMarkdown(resource.preview)}
 			</p>
 		{:else}
-			<p class="mb-3 text-sm text-foreground/40 italic">empty note</p>
+			<p class="text-foreground/40 mb-3 text-sm italic">empty note</p>
 		{/if}
 		<div class="mt-auto flex items-center gap-2">
 			{#if labels.length > 0}
 				<div class="flex items-center gap-1 overflow-hidden">
-					<Label class="size-3.5 shrink-0 text-foreground/45" />
+					<Label class="text-foreground/45 size-3.5 shrink-0" />
 					{#each labels.slice(0, 3) as label (label)}
 						<span
-							class="truncate rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-medium text-foreground/50"
+							class="bg-foreground/8 text-foreground/50 truncate rounded-full px-2 py-0.5 text-[11px] font-medium"
 						>
 							{label}
 						</span>
@@ -82,19 +83,21 @@
 			<Document variant="solid" class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-semibold text-foreground">
+			<h3 class="text-foreground truncate text-base font-semibold">
 				{resource.title || 'untitled note'}
 			</h3>
 			{#if resource.preview}
-				<p class="truncate text-sm text-foreground/65">{stripMarkdown(resource.preview)}</p>
+				<p class="text-foreground/65 truncate text-sm">{stripMarkdown(resource.preview)}</p>
 			{:else}
-				<p class="truncate text-sm text-foreground/45 italic">empty note</p>
+				<p class="text-foreground/45 truncate text-sm italic">empty note</p>
 			{/if}
 		</div>
 		{#if labels.length > 0}
 			<div class="flex shrink-0 gap-1">
 				{#each labels.slice(0, 2) as label (label)}
-					<span class="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] text-foreground/50">
+					<span
+						class="bg-foreground/8 text-foreground/50 rounded-full px-2 py-0.5 text-[11px]"
+					>
 						{label}
 					</span>
 				{/each}

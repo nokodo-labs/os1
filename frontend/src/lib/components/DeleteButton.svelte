@@ -15,6 +15,7 @@
 		onTrigger?: () => void
 		stopPropagation?: boolean
 		showTrigger?: boolean
+		open?: boolean
 	}
 
 	let {
@@ -25,17 +26,18 @@
 		onTrigger,
 		stopPropagation = false,
 		showTrigger = true,
+		open = $bindable(false),
 	}: Props = $props()
 
-	let isDeleting = $state(false)
+	// when open is set externally (e.g. showTrigger=false), open the confirm modal
+	$effect(() => {
+		if (!open) return
+		open = false
+		modals.open('confirm-delete', { ...modalText, onDelete })
+	})
 
 	async function runDelete(): Promise<void> {
-		isDeleting = true
-		try {
-			await onDelete()
-		} finally {
-			isDeleting = false
-		}
+		await onDelete()
 	}
 
 	function handleTriggerClick(event: MouseEvent): void {

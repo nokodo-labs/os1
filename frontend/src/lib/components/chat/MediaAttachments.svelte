@@ -7,6 +7,7 @@
 	import Headphone from '$lib/components/icons/Headphone.svelte'
 	import { fetchAuthenticatedBlob } from '$lib/stores/files.svelte'
 	import { onDestroy } from 'svelte'
+	import { SvelteMap } from 'svelte/reactivity'
 
 	interface Props {
 		mediaParts?: MediaContentPart[]
@@ -36,7 +37,7 @@
 	}
 
 	// authenticated blob URLs for media that needs auth
-	let blobUrls = $state<Map<string, string>>(new Map())
+	let blobUrls = new SvelteMap<string, string>()
 
 	function resolveMediaUrl(part: MediaContentPart): string | undefined {
 		// if we already have a blob URL, use it
@@ -47,11 +48,11 @@
 		// otherwise start fetching and return undefined until ready
 		fetchAuthenticatedBlob(part.url)
 			.then((blobUrl) => {
-				blobUrls = new Map(blobUrls).set(part.url, blobUrl)
+				blobUrls.set(part.url, blobUrl)
 			})
 			.catch(() => {
 				// fallback: try the raw URL (might work with cookies)
-				blobUrls = new Map(blobUrls).set(part.url, part.url)
+				blobUrls.set(part.url, part.url)
 			})
 		return undefined
 	}
@@ -164,7 +165,7 @@
 					<a
 						href={downloadUrl}
 						target="_blank"
-						rel="noopener noreferrer"
+						rel="external noopener noreferrer"
 						class="text-foreground/70 hover:text-foreground max-w-36 truncate text-xs font-medium transition-colors"
 					>
 						{file.filename ?? 'file'}

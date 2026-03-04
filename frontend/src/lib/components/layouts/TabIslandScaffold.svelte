@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths'
+	import type { Pathname } from '$app/types'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import type { Component, Snippet } from 'svelte'
 
@@ -18,7 +20,7 @@
 		id: string
 		label: string
 		icon: Component
-		href: string
+		href: Pathname
 	}
 
 	interface Props {
@@ -92,9 +94,10 @@
 			{#each sections as section (section.id)}
 				{@const active = activeId === section.id}
 				{@const Icon = section.icon}
+				{@const link = resolve(section.href as '/')}
 				<a
 					bind:this={tabEls[section.id]}
-					href={section.href}
+					href={link}
 					class="relative z-1 flex flex-col items-center gap-0.5 rounded-full px-5 py-1.5 transition-colors duration-200
 						{active ? 'text-(--accent-primary)' : 'text-foreground/50 hover:text-foreground/75'}"
 					aria-current={active ? 'page' : undefined}

@@ -62,8 +62,7 @@
 	{/if}
 {/snippet}
 
-<a
-	href={resource.href}
+<div
 	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
@@ -140,4 +139,4 @@
 			className="shrink-0 text-xs text-foreground/45"
 		/>
 	{/if}
-</a>
+</div>

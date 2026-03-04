@@ -22,7 +22,6 @@
 	let editing = $state(false)
 	let profileUser = $state<Record<string, unknown> | null>(null)
 	let friendsCount = $state(0)
-	let loading = $state(true)
 
 	// edit fields
 	let editDisplayName = $state('')
@@ -70,7 +69,6 @@
 	})
 
 	async function fetchProfile() {
-		loading = true
 		try {
 			if (isOwnProfile) {
 				const { data: friends } = await apiClient().GET('/v1/users/{user_id}/friends', {
@@ -85,8 +83,6 @@
 			}
 		} catch {
 			// silently handle
-		} finally {
-			loading = false
 		}
 	}
 

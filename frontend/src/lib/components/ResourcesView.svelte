@@ -83,9 +83,8 @@
 
 	// reset page when filter/sort changes
 	$effect(() => {
-		filter
-		sort
-		currentPage = 0
+		const key = `${filter}:${sort}`
+		if (key) currentPage = 0
 	})
 
 	function prevPage() {
@@ -133,7 +132,7 @@
 				? 'grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-4'
 				: 'flex flex-col gap-2'}
 		>
-			{#each { length: 6 } as _}
+			{#each [0, 1, 2, 3, 4, 5] as i (i)}
 				<div
 					class="liquid-glass liquid-glass--frosted animate-pulse overflow-hidden rounded-2xl {layout ===
 					'grid'
@@ -146,7 +145,7 @@
 		<div
 			class="liquid-glass liquid-glass--frosted flex flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl py-16 text-center"
 		>
-			<p class="text-sm text-foreground/50">{emptyMessage}</p>
+			<p class="text-foreground/50 text-sm">{emptyMessage}</p>
 		</div>
 	{:else}
 		<div
@@ -179,18 +178,18 @@
 		<div class="flex items-center justify-center gap-3 pt-2">
 			<button
 				type="button"
-				class="rounded-pill cursor-pointer border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/60 transition-colors duration-150 hover:bg-foreground/10 disabled:cursor-default disabled:opacity-30"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 cursor-pointer border px-3 py-1.5 text-xs transition-colors duration-150 disabled:cursor-default disabled:opacity-30"
 				onclick={prevPage}
 				disabled={currentPage === 0}
 			>
 				previous
 			</button>
-			<span class="text-xs text-foreground/40">
+			<span class="text-foreground/40 text-xs">
 				{currentPage + 1} / {totalPages}
 			</span>
 			<button
 				type="button"
-				class="rounded-pill cursor-pointer border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/60 transition-colors duration-150 hover:bg-foreground/10 disabled:cursor-default disabled:opacity-30"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 cursor-pointer border px-3 py-1.5 text-xs transition-colors duration-150 disabled:cursor-default disabled:opacity-30"
 				onclick={nextPage}
 				disabled={currentPage >= totalPages - 1}
 			>

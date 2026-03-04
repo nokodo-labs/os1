@@ -8,8 +8,8 @@
 	let { children }: { children: Snippet } = $props()
 
 	const sections = [
-		{ id: 'friends', label: 'friends', icon: Users, href: '/social/friends' },
-		{ id: 'groups', label: 'groups', icon: UserGroup, href: '/social/groups' },
+		{ id: 'friends', label: 'friends', icon: Users, href: '/social/friends' as const },
+		{ id: 'groups', label: 'groups', icon: UserGroup, href: '/social/groups' as const },
 	]
 
 	const activeId = $derived(page.url.pathname.includes('/groups') ? 'groups' : 'friends')

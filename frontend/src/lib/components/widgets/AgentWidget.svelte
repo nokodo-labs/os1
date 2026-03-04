@@ -15,8 +15,7 @@
 	const toolCount = $derived((resource.meta?.tool_count as number) ?? 0)
 </script>
 
-<a
-	href={resource.href}
+<div
 	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
@@ -29,22 +28,22 @@
 			>
 				<Brain class="size-5" />
 			</div>
-			<span class="text-xs text-foreground/50">agent</span>
+			<span class="text-foreground/50 text-xs">agent</span>
 		</div>
-		<h3 class="mb-1 truncate text-base font-medium text-foreground/90">
+		<h3 class="text-foreground/90 mb-1 truncate text-base font-medium">
 			{resource.title || 'untitled agent'}
 		</h3>
 		{#if resource.subtitle}
-			<p class="mb-3 line-clamp-2 text-sm leading-relaxed text-foreground/60">
+			<p class="text-foreground/60 mb-3 line-clamp-2 text-sm leading-relaxed">
 				{resource.subtitle}
 			</p>
 		{/if}
 		<div class="mt-auto flex items-center gap-2">
 			{#if toolCount > 0}
-				<span class="text-xs text-foreground/40">{toolCount} tools</span>
+				<span class="text-foreground/40 text-xs">{toolCount} tools</span>
 			{/if}
 			{#if author}
-				<span class="text-xs text-foreground/40">by {author}</span>
+				<span class="text-foreground/40 text-xs">by {author}</span>
 			{/if}
 			<Timestamp
 				timestamp={new Date(resource.updatedAt)}
@@ -59,15 +58,15 @@
 			<Brain class="size-5" />
 		</div>
 		<div class="min-w-0 flex-1">
-			<h3 class="truncate text-base font-medium text-foreground/90">
+			<h3 class="text-foreground/90 truncate text-base font-medium">
 				{resource.title || 'untitled agent'}
 			</h3>
 			{#if resource.subtitle}
-				<p class="truncate text-sm text-foreground/60">{resource.subtitle}</p>
+				<p class="text-foreground/60 truncate text-sm">{resource.subtitle}</p>
 			{/if}
 		</div>
 		{#if toolCount > 0}
-			<span class="shrink-0 text-xs text-foreground/40">{toolCount} tools</span>
+			<span class="text-foreground/40 shrink-0 text-xs">{toolCount} tools</span>
 		{/if}
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}
@@ -75,4 +74,4 @@
 			className="shrink-0 text-xs text-foreground/40"
 		/>
 	{/if}
-</a>
+</div>

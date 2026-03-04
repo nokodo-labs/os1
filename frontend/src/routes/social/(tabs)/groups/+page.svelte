@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import PageTitle from '$lib/components/PageTitle.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { groups, type Group } from '$lib/stores/groups.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -30,7 +30,7 @@
 		<PageTitle icon={UserGroup} label="groups" />
 		<LiquidGlass class="rounded-full" style="view-transition-name: social-action-btn;">
 			<button
-				class="interactive flex items-center gap-1.5 rounded-full border-none bg-transparent px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground"
+				class="interactive text-foreground/80 hover:text-foreground flex items-center gap-1.5 rounded-full border-none bg-transparent px-4 py-2 text-sm font-medium"
 				onclick={() => modals.open('create-group')}
 			>
 				<Plus class="h-4 w-4" />
@@ -41,8 +41,8 @@
 
 	{#if isLoading}
 		<div class="flex flex-col gap-3">
-			{#each { length: 3 } as _item, i (i)}
-				<div class="h-20 animate-pulse rounded-2xl bg-foreground/5"></div>
+			{#each [0, 1, 2] as i (i)}
+				<div class="bg-foreground/5 h-20 animate-pulse rounded-2xl"></div>
 			{/each}
 		</div>
 	{:else if groups.list.length === 0}
@@ -54,8 +54,8 @@
 				<UserGroup class="h-10 w-10 text-(--accent-primary)" />
 			</div>
 			<div class="flex flex-col items-center gap-2 text-center">
-				<p class="text-base font-medium text-foreground/80">no groups yet</p>
-				<p class="max-w-xs text-sm text-foreground/50">
+				<p class="text-foreground/80 text-base font-medium">no groups yet</p>
+				<p class="text-foreground/50 max-w-xs text-sm">
 					create your first group to start collaborating. share notes, reminders, and
 					threads with your team.
 				</p>
@@ -65,7 +65,7 @@
 		<div class="flex flex-col gap-2">
 			{#each groups.list as group (group.id)}
 				<button
-					class="flex w-full items-center gap-4 rounded-2xl bg-foreground/5 p-4 text-left transition-all hover:bg-foreground/8 active:scale-[0.98]"
+					class="bg-foreground/5 hover:bg-foreground/8 flex w-full items-center gap-4 rounded-2xl p-4 text-left transition-all active:scale-[0.98]"
 					onclick={() => navigateToGroup(group)}
 				>
 					<div
@@ -74,10 +74,10 @@
 						<UserGroup class="h-5 w-5 text-(--accent-primary)" />
 					</div>
 					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-						<span class="truncate text-sm font-medium text-foreground">
+						<span class="text-foreground truncate text-sm font-medium">
 							{group.name}
 						</span>
-						<div class="flex items-center gap-2 text-xs text-foreground/50">
+						<div class="text-foreground/50 flex items-center gap-2 text-xs">
 							<span>{group.memberships?.length ?? 0} members</span>
 							<span class="text-foreground/25">-</span>
 							<Timestamp timestamp={new Date(group.updated_at)} mode="relative" />

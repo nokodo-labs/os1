@@ -16,6 +16,7 @@
 	import { apiFileToResource, files } from '$lib/stores/files.svelte'
 	import { notes, type Note } from '$lib/stores/notes.svelte'
 	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
+	import { SvelteSet } from 'svelte/reactivity'
 
 	interface Props {
 		open: boolean
@@ -183,7 +184,7 @@
 		}
 		const types = typeMap[activeFilter] ?? ['thread', 'note', 'reminder']
 
-		const seen = new Set<string>()
+		const seen = new SvelteSet<string>()
 		const results: ResourceItem[] = []
 		try {
 			for await (const result of searchStream({
@@ -218,7 +219,7 @@
 	// deduplicate search results against local results
 	const displayResults = $derived.by((): ResourceItem[] => {
 		if (searchQuery.trim()) {
-			const seen = new Set<string>()
+			const seen = new SvelteSet<string>()
 			const merged: ResourceItem[] = []
 			for (const r of searchResults) {
 				const key = `${r.type}:${r.id}`
@@ -265,7 +266,6 @@
 
 	// rebuild local results when filter changes
 	$effect(() => {
-		activeFilter
 		if (open && !searchQuery.trim()) {
 			void (async () => {
 				localResults = await buildLocalResultsWithFiles()

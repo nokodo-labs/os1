@@ -627,6 +627,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/{thread_id}/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run - cancel an active agent run by id. */
+        post: {
+            parameters: {
+                path: { thread_id: string; run_id: string };
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: { [name: string]: unknown };
+                    content: { "application/json": unknown };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -1056,6 +1087,36 @@ export interface paths {
          * @description delete a note.
          */
         delete: operations["delete_note_notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notes/{note_id}/enhance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enhance Note - use AI to reformat and improve a note's content. */
+        post: {
+            parameters: {
+                path: { note_id: string };
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: { [name: string]: unknown };
+                    content: { "application/json": components["schemas"]["Note"] };
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
