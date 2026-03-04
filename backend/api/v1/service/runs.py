@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel
-from api.schemas.runs import ClientContext, RunInput
+from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadCreate
 from api.v1.service import threads as thread_service
@@ -29,7 +29,7 @@ async def start_thread_run(
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
 	persist: bool = True,
-	tool_choice: str | None = None,
+	tool_choice: ToolChoice | None = None,
 ) -> AsyncIterator[bytes]:
 	"""validate access and return a streaming agent run on an existing thread.
 
@@ -66,7 +66,7 @@ async def create_thread_and_run_stream(
 	project_ids: list[TypeID] | None = None,
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
-	tool_choice: str | None = None,
+	tool_choice: ToolChoice | None = None,
 ) -> AsyncIterator[bytes]:
 	"""create a thread and return a streaming agent run.
 

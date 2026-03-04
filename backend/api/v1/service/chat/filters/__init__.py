@@ -5,8 +5,12 @@ from __future__ import annotations
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.attachment_decay import AttachmentDecayFilter
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.filters.memory import MemoryContextFilter
+from api.v1.service.chat.filters.tool_result_truncation import (
+	ToolResultTruncationFilter,
+)
 from nokodo_ai.filters import Filter as SDKFilter
 
 
@@ -37,9 +41,11 @@ def resolve_filters(filter_ids: list[str]) -> list[AppFilter]:
 
 __all__ = [
 	"AttachmentDecayFilter",
+	"ContextWindowingFilter",
 	"FileResolveFilter",
 	"Filter",
 	"MemoryContextFilter",
+	"ToolResultTruncationFilter",
 	"FILTER_REGISTRY",
 	"get_registered_names",
 	"resolve_filters",

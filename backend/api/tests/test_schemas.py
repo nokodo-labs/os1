@@ -15,7 +15,7 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.message import MessageCreate
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
-from api.schemas.runs import RunRequest, ThreadCreateAndRunRequest
+from api.schemas.runs import RunInput, RunRequest, ThreadCreateAndRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
 from nokodo_ai.utils.typeid import new_typeid
@@ -105,11 +105,22 @@ def test_message_create_normalizes_content_variants() -> None:
 	model_part = TextContent(text="model")
 
 	from_str = MessageCreate(content=text)
-	from_list = MessageCreate(content=[part_dict, model_part])
+	from_list = MessageCreate.model_validate(
+		{"content": [part_dict, model_part.model_dump()]}
+	)
 	from_empty = MessageCreate(content="")
 
-	assert from_str.content[0]["text"] == text  # type: ignore[index]
-	assert from_list.content == [part_dict, model_part.model_dump()]
+	first = from_str.content[0]
+	assert isinstance(first, TextContent)
+	assert first.text == text
+
+	assert len(from_list.content) == 2
+	part_0 = from_list.content[0]
+	part_1 = from_list.content[1]
+	assert isinstance(part_0, TextContent)
+	assert isinstance(part_1, TextContent)
+	assert part_0.text == "world"
+	assert part_1.text == "model"
 	assert from_empty.content == []
 
 
@@ -143,12 +154,19 @@ def test_run_request_requires_agent_id() -> None:
 	assert req.thread_id is None
 	assert req.stream is True
 
-	req_with_input = RunRequest(agent_id=new_typeid("agent"), input="hello")
-	assert req_with_input.input == "hello"
+	req_with_input = RunRequest(
+		agent_id=new_typeid("agent"),
+		input=RunInput(text="hello"),
+	)
+	assert req_with_input.input is not None
+	assert req_with_input.input.text == "hello"
 
 	# ThreadCreateAndRunRequest
 
-	car_req = ThreadCreateAndRunRequest(agent_id=new_typeid("agent"), input="hi")
+	car_req = ThreadCreateAndRunRequest(
+		agent_id=new_typeid("agent"),
+		input=RunInput(text="hi"),
+	)
 	assert car_req.is_temporary is False
 	assert car_req.tags == []
 	assert car_req.stream is True
@@ -181,7 +199,6 @@ def test_schema_coerces_none_metadata_to_empty_dict() -> None:
 
 
 def test_message_create_validates_type_specific_fields() -> None:
-
 	# tool messages require tool_call_id and is_error
 	with pytest.raises(ValueError, match="tool_call_id is required"):
 		MessageCreate(type=MessageType.TOOL, content="output")

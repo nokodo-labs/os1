@@ -1,6 +1,7 @@
 """database configuration and session management."""
 
 import asyncio
+import contextlib
 from collections.abc import AsyncGenerator
 from functools import partial
 from pathlib import Path
@@ -40,6 +41,22 @@ AsyncSessionLocal = async_sessionmaker(
 	autocommit=False,
 	autoflush=False,
 )
+
+
+@contextlib.asynccontextmanager
+async def session_scope(
+	session: AsyncSession | None = None,
+) -> AsyncGenerator[AsyncSession]:
+	"""use the given session or create a fresh one.
+
+	avoids the need for ``contextlib.AsyncExitStack`` when a function
+	accepts an optional session and must fall back to a new one.
+	"""
+	if session is not None:
+		yield session
+	else:
+		async with AsyncSessionLocal() as new_session:
+			yield new_session
 
 
 @event.listens_for(Session, "do_orm_execute")

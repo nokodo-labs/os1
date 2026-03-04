@@ -36,7 +36,7 @@ def _user(is_admin: bool = False, *, active: bool = True) -> User:
 	uid = new_typeid("user")
 	return User(
 		email=f"u-{uid}@example.com",
-		username=f"u{uid[:8].replace('-', '')}",
+		username=f"u{uid[-12:]}",
 		hashed_password=hash_password("password"),
 		is_active=active,
 		is_superuser=is_admin,

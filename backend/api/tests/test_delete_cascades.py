@@ -9,6 +9,8 @@ Ensures backend delete operations clean up dependent rows:
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,11 +62,15 @@ async def test_soft_delete_thread_does_not_delete_messages(
 	)
 	assert int(count_before or 0) == 1
 
-	await thread_service.delete_thread(
-		TypeID(thread.id),
-		db_session,
-		principal=principal,
-	)
+	with patch(
+		"api.v1.service.threads.remove_vectorized_resource",
+		new=AsyncMock(),
+	):
+		await thread_service.delete_thread(
+			TypeID(thread.id),
+			db_session,
+			principal=principal,
+		)
 
 	remaining = list(
 		(

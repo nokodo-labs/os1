@@ -27,6 +27,7 @@ class AppContext:
 	- session: database access
 	- principal: authenticated user
 	- event_emitter: function to broadcast events in real-time
+	- context_window: model context window in tokens (from Model ORM)
 
 	usage in a tool:
 		async def call(self, agent_ctx, app_ctx: AppContext | None, **kwargs):
@@ -42,6 +43,7 @@ class AppContext:
 	event_emitter: EventEmitter
 	agent_id: TypeID | None = None
 	thread_id: TypeID | None = None
+	context_window: int | None = None
 
 	@property
 	def user_id(self) -> TypeID:
@@ -55,6 +57,7 @@ class AppContext:
 			agent_id=self.agent_id,
 			thread_id=self.thread_id,
 			event_emitter=emitter,
+			context_window=self.context_window,
 		)
 
 

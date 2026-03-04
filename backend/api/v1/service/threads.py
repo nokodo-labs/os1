@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 from collections.abc import Coroutine
@@ -17,7 +16,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.database import AsyncSessionLocal, build_cursor_page, decode_cursor
+from api.database import (
+	build_cursor_page,
+	decode_cursor,
+	session_scope,
+)
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -111,10 +114,7 @@ async def generate_thread_metadata(
 
 	raises on failure - never returns ``None``.
 	"""
-	async with contextlib.AsyncExitStack() as stack:
-		if session is None:
-			session = await stack.enter_async_context(AsyncSessionLocal())
-
+	async with session_scope(session) as session:
 		# auth: caller must have admin-level access on the thread
 		await require_thread_access(
 			str(thread_id),

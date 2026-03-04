@@ -91,15 +91,30 @@ def _api_test_env_defaults() -> Generator[None]:
 
 @pytest.fixture(autouse=True)
 def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
-	"""Stub embeddings per-test so SDK tests aren't affected."""
+	"""Stub embeddings and vectorstore ops so tests don't need Qdrant."""
 
 	vectorstores_service._vectorstore_adapter.cache_clear()
+	vectorstores_service._cached_collection_name = None
 
 	async def _fake_embed(self: EmbeddingModel, texts: list[str]) -> list[list[float]]:
 		_ = self
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
 
 	monkeypatch.setattr(EmbeddingModel, "embed", _fake_embed)
+
+	# stub vectorstore CRUD so no Qdrant connection is needed
+	async def _noop_upsert(*args: object, **kwargs: object) -> None:
+		pass
+
+	async def _noop_delete(*args: object, **kwargs: object) -> None:
+		pass
+
+	async def _noop_search(*args: object, **kwargs: object) -> list[object]:
+		return []
+
+	monkeypatch.setattr(vectorstores_service, "upsert_chunks", _noop_upsert)
+	monkeypatch.setattr(vectorstores_service, "delete", _noop_delete)
+	monkeypatch.setattr(vectorstores_service, "search", _noop_search)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -145,6 +160,9 @@ async def _api_test_seed_default_embedding_model(
 		str(model.id),
 	)
 	settings.reload()
+	# DbSettingsSource has higher priority than env_settings, so the env
+	# var may be overridden by a production DB value. set it explicitly.
+	settings.assets.default_embedding_model_id = str(model.id)
 	settings.security.auto_signup_role_ids = []
 	settings.default_permissions.action_permissions = [
 		ActionPermission.SETTINGS_READ,
@@ -927,7 +945,6 @@ async def user_auth(
 
 @pytest_asyncio.fixture(scope="function")
 async def test_user(db_session: AsyncSession) -> dict[str, object]:
-
 	user = User(
 		email="test@example.com",
 		username="test_user",

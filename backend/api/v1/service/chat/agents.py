@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.tasks import create_background_task
 from api.database import AsyncSessionLocal
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
@@ -23,7 +24,8 @@ from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_resource_access
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.filters import resolve_filters
+from api.v1.service.chat.filters import ToolResultTruncationFilter, resolve_filters
+from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.hooks import resolve_hooks
 from api.v1.service.chat.models import build_chat_model
@@ -145,8 +147,9 @@ async def build_agent_from_orm(
 		context=context,
 	)
 	filters = resolve_filters(agent_orm.plugin_ids)
-	# file_resolve always runs last - resolves file_id -> base64/url
+	filters.insert(0, ToolResultTruncationFilter())
 	filters.append(FileResolveFilter())
+	filters.append(ContextWindowingFilter())
 	hooks = resolve_hooks(agent_orm.plugin_ids)
 
 	# extract max_iterations from agent config
@@ -193,17 +196,6 @@ async def run_agent(
 	run_id = new_typeid("run")
 	run_id_str = str(run_id)
 
-	def _track_async_task(name: str, task: asyncio.Task[object]) -> None:
-		"""ensure exceptions from background tasks are visible in logs."""
-
-		def _log_result(done: asyncio.Task[object]) -> None:
-			try:
-				done.result()
-			except Exception:
-				logger.exception("background task failed: %s", name)
-
-		task.add_done_callback(_log_result)
-
 	async with AsyncSessionLocal() as session:
 		# authorize: principal must have READER+ on the agent
 		await require_resource_access(
@@ -228,16 +220,14 @@ async def run_agent(
 				agent_id=str(agent_id),
 				user_id=principal.user_id,
 			)
-			_track_async_task(
-				"broadcast_run_started",
-				asyncio.create_task(
-					broadcast_run_event(
-						thread_id=str(thread_id),
-						agent_id=str(agent_id),
-						run_id=run_id_str,
-						started=True,
-					)
+			create_background_task(
+				broadcast_run_event(
+					thread_id=str(thread_id),
+					agent_id=str(agent_id),
+					run_id=run_id_str,
+					started=True,
 				),
+				name="broadcast_run_started",
 			)
 			if resolved_input:
 				user_msg = await create_run_user_message(
@@ -290,6 +280,11 @@ async def run_agent(
 		message_persisted: dict[str, asyncio.Event] = {}
 		active_message_id_for_events: str | None = None
 
+		# capture model_id for message metadata before the worker starts.
+		# this lets downstream consumers (e.g. windowing) know which model
+		# produced each assistant message without re-loading the agent.
+		_model_id_for_persist: str | None = str(agent.model.id) if agent.model else None
+
 		async def _persist_message_worker(*, parent_id: TypeID | None) -> None:
 			assert thread_id is not None  # only runs when persist=True
 			last_parent_id = parent_id
@@ -306,6 +301,8 @@ async def run_agent(
 							sender_agent_id=agent_id,
 						)
 						create_in.metadata["run_id"] = run_id
+						if _model_id_for_persist:
+							create_in.metadata["model_id"] = _model_id_for_persist
 						create_in.parent_id = last_parent_id
 						persisted = await thread_service.create_message(
 							thread_id=thread_id,
@@ -369,6 +366,7 @@ async def run_agent(
 			agent_id=agent_id,
 			thread_id=thread_id,
 			event_emitter=emitter,
+			context_window=(agent.model.context_window if agent.model else None),
 		)
 
 		try:
@@ -449,8 +447,9 @@ async def run_agent(
 		worker_task: asyncio.Task[object] | None = None
 		try:
 			if persist:
-				worker_task = asyncio.create_task(
-					_persist_message_worker(parent_id=initial_parent_id)
+				worker_task = create_background_task(
+					_persist_message_worker(parent_id=initial_parent_id),
+					name="message_persist_worker",
 				)
 
 			stream = await sdk_agent.run(
@@ -586,16 +585,14 @@ async def run_agent(
 			await safe_rollback(session)
 			if persist:
 				await run_status_store.fail_run(run_id_str)
-				_track_async_task(
-					"broadcast_run_completed",
-					asyncio.create_task(
-						broadcast_run_event(
-							thread_id=str(thread_id),
-							agent_id=str(agent_id),
-							run_id=run_id_str,
-							started=False,
-						)
+				create_background_task(
+					broadcast_run_event(
+						thread_id=str(thread_id),
+						agent_id=str(agent_id),
+						run_id=run_id_str,
+						started=False,
 					),
+					name="broadcast_run_completed",
 				)
 			return
 		except Exception:
@@ -603,16 +600,14 @@ async def run_agent(
 			await safe_rollback(session)
 			if persist:
 				await run_status_store.fail_run(run_id_str)
-				_track_async_task(
-					"broadcast_run_completed",
-					asyncio.create_task(
-						broadcast_run_event(
-							thread_id=str(thread_id),
-							agent_id=str(agent_id),
-							run_id=run_id_str,
-							started=False,
-						)
+				create_background_task(
+					broadcast_run_event(
+						thread_id=str(thread_id),
+						agent_id=str(agent_id),
+						run_id=run_id_str,
+						started=False,
 					),
+					name="broadcast_run_completed",
 				)
 			yield sse_event(event="error", data={"message": "generation failed"})
 			yield sse_event(event="done", data={})
@@ -620,32 +615,27 @@ async def run_agent(
 		finally:
 			if persist and worker_task is not None and not worker_task.done():
 				await message_queue.put(("__STOP__", SDKAssistantMessage()))
-				_track_async_task("message_persist_worker", worker_task)
 
 		if persist:
 			await run_status_store.complete_run(run_id_str)
-			_track_async_task(
-				"broadcast_run_completed",
-				asyncio.create_task(
-					broadcast_run_event(
-						thread_id=str(thread_id),
-						agent_id=str(agent_id),
-						run_id=run_id_str,
-						started=False,
-					)
+			create_background_task(
+				broadcast_run_event(
+					thread_id=str(thread_id),
+					agent_id=str(agent_id),
+					run_id=run_id_str,
+					started=False,
 				),
+				name="broadcast_run_completed",
 			)
 
 		yield sse_event(event="done", data={})
 
 	if persist:
 		assert thread_id is not None  # persist=True requires a thread_id
-		_track_async_task(
-			"generate_thread_metadata",
-			asyncio.create_task(
-				thread_service.generate_thread_metadata(
-					thread_id=thread_id,
-					principal=principal,
-				)
+		create_background_task(
+			thread_service.generate_thread_metadata(
+				thread_id=thread_id,
+				principal=principal,
 			),
+			name="generate_thread_metadata",
 		)

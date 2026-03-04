@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -21,6 +21,7 @@ from fastapi import Header, HTTPException, WebSocket, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.tasks import create_background_task
 from api.database import AsyncSessionLocal
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -280,14 +281,8 @@ def build_event_emitter(
 		else:
 			await event_connections.broadcast(event_data)
 
-	def _track(name: str, task: asyncio.Task[object]) -> None:
-		def _log_result(done: asyncio.Task[object]) -> None:
-			try:
-				done.result()
-			except Exception:
-				logger.exception("background task failed: %s", name)
-
-		task.add_done_callback(_log_result)
+	def _track(name: str, coro: Coroutine[object, object, object]) -> None:
+		create_background_task(coro, name=name)
 
 	async def emit(event: Event) -> None:
 		# ensure stable id for correlation
@@ -303,7 +298,7 @@ def build_event_emitter(
 		# broadcast immediately (with access-based routing)
 		_track(
 			"event_broadcast",
-			asyncio.create_task(_broadcast_with_routing(event)),
+			_broadcast_with_routing(event),
 		)
 
 		# persist in background (without broadcasting again)
@@ -329,7 +324,7 @@ def build_event_emitter(
 				bg_session.add(copy)
 				await bg_session.commit()
 
-		_track("event_persist", asyncio.create_task(_persist()))
+		_track("event_persist", _persist())
 
 	return emit
 

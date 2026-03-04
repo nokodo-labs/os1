@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 	from api.models.project import Project
 	from api.models.task import Task
 	from api.models.thread_participant import ThreadParticipant
+	from api.models.thread_summary import ThreadSummary
 	from api.models.user import User
 
 
@@ -120,6 +121,12 @@ class Thread(
 	tasks: Mapped[list[Task]] = relationship(
 		"Task",
 		back_populates="spawned_thread",
+	)
+	summaries: Mapped[list[ThreadSummary]] = relationship(
+		"ThreadSummary",
+		back_populates="thread",
+		cascade="all, delete-orphan",
+		passive_deletes=True,
 	)
 
 	def to_sdk(self) -> SDKThread:

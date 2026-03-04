@@ -22,6 +22,7 @@ from api.models.setting import SettingsDocument
 from api.models.task import Task
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
+from api.models.thread_summary import ThreadSummary
 from api.models.user import User
 from api.permissions import AccessLevel
 
@@ -52,5 +53,6 @@ __all__ = [
 	"Task",
 	"Thread",
 	"ThreadParticipant",
+	"ThreadSummary",
 	"User",
 ]

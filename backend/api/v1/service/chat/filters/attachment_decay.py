@@ -37,6 +37,7 @@ from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
 )
 from nokodo_ai.messages import (
+	ContentPart,
 	FileContent,
 	ImageContent,
 	TextContent,
@@ -586,48 +587,58 @@ class AttachmentDecayFilter(Filter):
 		# replace decayed attachment content parts with text markers
 		for msg in messages:
 			if isinstance(msg, SDKUserMessage):
-				for i, part in enumerate(msg.content):
-					if isinstance(part, (ImageContent, FileContent)):
-						fid = _extract_file_id(part)
-						if fid and fid in decayed_file_ids:
-							label = part.filename or fid
-							marker = (
-								f"[attachment '{label}']"
+				new_user_content: list[TextContent | ImageContent | FileContent] = []
+				for user_part in msg.content:
+					if isinstance(user_part, (ImageContent, FileContent)):
+						u_fid = _extract_file_id(user_part)
+						if u_fid and u_fid in decayed_file_ids:
+							u_label = (
+								user_part.filename if user_part.filename else u_fid
 							)
-							msg.content[i] = TextContent(
-								text=marker,
-								metadata={"decayed_file_id": fid},
+							new_user_content.append(
+								TextContent(
+									text=f"[attachment '{u_label}']",
+									metadata={"decayed_file_id": u_fid},
+								)
 							)
+							continue
+					new_user_content.append(user_part)
+				msg.content = new_user_content
 
 			elif isinstance(msg, SDKAssistantMessage):
-				for i, part in enumerate(msg.content):
-					if isinstance(part, (ImageContent, FileContent)):
-						fid = _extract_file_id(part)
-						if fid and fid in decayed_file_ids:
-							label = part.filename or fid
-							marker = (
-								f"[attachment '{label}']"
+				new_asst_content: list[ContentPart] = []
+				for asst_part in msg.content:
+					if isinstance(asst_part, (ImageContent, FileContent)):
+						a_fid = _extract_file_id(asst_part)
+						if a_fid and a_fid in decayed_file_ids:
+							a_label = (
+								asst_part.filename if asst_part.filename else a_fid
 							)
-							msg.content[i] = TextContent(
-								text=marker,
-								metadata={"decayed_file_id": fid},
+							new_asst_content.append(
+								TextContent(
+									text=f"[attachment '{a_label}']",
+									metadata={"decayed_file_id": a_fid},
+								)
 							)
+							continue
+					new_asst_content.append(asst_part)
+				msg.content = new_asst_content
 
 			elif isinstance(msg, SDKToolMessage):
-				for i, part in enumerate(msg.attachments):
-					if isinstance(part, (ImageContent, FileContent)):
-						fid = _extract_file_id(part)
-						if fid and fid in decayed_file_ids:
+				for t_idx, tool_part in enumerate(msg.attachments):
+					if isinstance(tool_part, (ImageContent, FileContent)):
+						t_fid = _extract_file_id(tool_part)
+						if t_fid and t_fid in decayed_file_ids:
 							# tool attachments can't be replaced in-place
 							# since the list type is constrained -
 							# we clear decayed attachments instead
-							msg.attachments[i] = ImageContent(
+							msg.attachments[t_idx] = ImageContent(
 								url=None,
 								base64=None,
-								filename=part.filename,
-								media_type=part.media_type,
+								filename=tool_part.filename,
+								media_type=tool_part.media_type,
 								metadata={
-									"decayed_file_id": fid,
+									"decayed_file_id": t_fid,
 									"status": "reference",
 								},
 							)

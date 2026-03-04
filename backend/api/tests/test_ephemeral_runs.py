@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 import pytest
 from httpx import AsyncClient
 
-from api.schemas.runs import RunRequest
+from api.schemas.runs import RunInput, RunRequest
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -22,7 +22,11 @@ def test_run_request_persist_defaults_true() -> None:
 
 def test_run_request_persist_false() -> None:
 	"""persist=False is accepted and round-trips correctly."""
-	req = RunRequest(agent_id=TypeID(new_typeid("agent")), input="hi", persist=False)
+	req = RunRequest(
+		agent_id=TypeID(new_typeid("agent")),
+		input=RunInput(text="hi"),
+		persist=False,
+	)
 	assert req.persist is False
 	assert req.thread_id is None
 
@@ -71,14 +75,14 @@ async def test_ephemeral_run_streams_and_returns_sse(
 		"""yield a single done frame."""
 		yield b"event: done\ndata: {}\n\n"
 
-	monkeypatch.setattr("api.v1.service.chat.run_agent", _fake_run_agent)
+	monkeypatch.setattr("api.v1.routers.runs.chat_run_agent", _fake_run_agent)
 
 	resp = await client.post(
 		"/v1/runs",
 		headers=headers,
 		json={
 			"agent_id": new_typeid("agent"),
-			"input": "hello",
+			"input": {"text": "hello"},
 			"persist": False,
 		},
 	)
@@ -101,7 +105,7 @@ async def test_ephemeral_run_not_streaming_returns_501(
 		headers=headers,
 		json={
 			"agent_id": new_typeid("agent"),
-			"input": "hello",
+			"input": {"text": "hello"},
 			"persist": False,
 			"stream": False,
 		},
@@ -153,7 +157,7 @@ async def test_persisted_run_forwards_persist_flag(
 		json={
 			"agent_id": new_typeid("agent"),
 			"thread_id": thread_id,
-			"input": "hello",
+			"input": {"text": "hello"},
 			"persist": False,
 		},
 	)

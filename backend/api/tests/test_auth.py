@@ -105,7 +105,7 @@ async def test_login_wrong_password_rejected(client: AsyncClient) -> None:
 		data={"username": user_payload["email"], "password": "wrong"},
 	)
 	assert login_resp.status_code == 400
-	assert login_resp.json()["detail"] == "incorrect email or password"
+	assert login_resp.json()["detail"] == "incorrect email, username, or password"
 
 
 @pytest.mark.asyncio

@@ -73,11 +73,17 @@ async def test_delete_thread_forbidden_for_non_owner(
 
 	# create a second non-admin user and attempt delete
 	email = f"other-{new_typeid('user')}@example.com"
+	username = f"other{new_typeid('user')[-12:]}"
 	password = "password"
 	user_resp = await client.post(
 		"/v1/users",
 		headers=admin_headers,
-		json={"email": email, "password": password, "is_superuser": False},
+		json={
+			"email": email,
+			"username": username,
+			"password": password,
+			"is_superuser": False,
+		},
 	)
 	assert user_resp.status_code == 201
 
@@ -120,11 +126,17 @@ async def test_delete_thread_forbidden_when_editor_not_owner(
 
 	# Create a second non-admin user.
 	email = f"editor-{new_typeid('user')}@example.com"
+	username = f"editor{new_typeid('user')[-12:]}"
 	password = "password"
 	user_resp = await client.post(
 		"/v1/users",
 		headers=admin_headers,
-		json={"email": email, "password": password, "is_superuser": False},
+		json={
+			"email": email,
+			"username": username,
+			"password": password,
+			"is_superuser": False,
+		},
 	)
 	assert user_resp.status_code == 201
 	other_user_id = user_resp.json()["id"]

@@ -166,12 +166,17 @@ Well-known filenames appended to `base_url`: `favicon.ico`, `apple-touch-icon.pn
 
 #### Message windowing (`NOKODO__AI__WINDOWING__*`)
 
-| Variable                                        | Type | Default | Description                                                       |
-| ----------------------------------------------- | ---- | ------- | ----------------------------------------------------------------- |
-| `NOKODO__AI__WINDOWING__ENABLED`                | bool | `false` | Enable message windowing and async summarization.                 |
-| `NOKODO__AI__WINDOWING__MAX_MESSAGES`           | int  | `50`    | Maximum messages kept in the context window.                      |
-| `NOKODO__AI__WINDOWING__SUMMARY_TRIGGER_OFFSET` | int  | `10`    | Messages before window limit at which summarization is triggered. |
-| `NOKODO__AI__WINDOWING__SUMMARY_BATCH_SIZE`     | int  | `20`    | Oldest messages included in each summarization batch.             |
+| Variable                                                   | Type  | Default  | Description                                                                 |
+| ---------------------------------------------------------- | ----- | -------- | --------------------------------------------------------------------------- |
+| `NOKODO__AI__WINDOWING__ENABLED`                           | bool  | `false`  | Enable context window management and summarization.                         |
+| `NOKODO__AI__WINDOWING__MAX_MESSAGES`                      | int   | `50`     | Secondary message count guard (even if tokens fit, cap at this).            |
+| `NOKODO__AI__WINDOWING__TRIGGER_RATIO`                     | float | `0.70`   | Token budget fraction at which background summarization starts.             |
+| `NOKODO__AI__WINDOWING__HARD_RATIO`                        | float | `0.90`   | Token budget fraction for hard truncation (last resort).                    |
+| `NOKODO__AI__WINDOWING__SUMMARY_BATCH_SIZE`                | int   | `20`     | Oldest unsummarized messages per summary batch.                             |
+| `NOKODO__AI__WINDOWING__MAX_SUMMARIES_BEFORE_CONDENSE`     | int   | `4`      | Condense existing summaries into one when this many accumulate.             |
+| `NOKODO__AI__WINDOWING__TOOL_RESULT_MAX_SHARE`             | float | `0.25`   | Max fraction of budget a single tool result may consume.                    |
+| `NOKODO__AI__WINDOWING__TOOL_RESULT_HARD_CAP`              | int   | `100000` | Absolute character ceiling per tool result.                                 |
+| `NOKODO__AI__WINDOWING__RESPONSE_HEADROOM`                 | int   | `4096`   | Tokens reserved for the model's response.                                   |
 
 ---
 

@@ -150,6 +150,10 @@ class AITaskSettings(BaseModel):
 		default=None,
 		description="model for input autocomplete suggestions",
 	)
+	summarization_model_id: str | None = Field(
+		default=None,
+		description="model for thread context summarization",
+	)
 
 
 class AIAttachmentSettings(BaseModel):
@@ -182,35 +186,84 @@ class AIAttachmentSettings(BaseModel):
 
 
 class AIWindowingSettings(BaseModel):
-	"""message window settings for context management.
+	"""context window management settings.
 
-	controls how many messages are included in the context window
-	sent to the chat model, and configures async summarization
-	for conversations that exceed the window.
+	controls token-aware windowing, summarization triggers, tool result
+	truncation, and recursive summary condensation. all budget decisions
+	are based on estimated token weight, not naive message counts.
 	"""
 
 	enabled: bool = Field(
-		default=False,
-		description="enable message windowing and summarization",
+		default=True,
+		description="enable context window management and summarization",
 	)
 	max_messages: int = Field(
 		default=50,
 		ge=1,
-		description="maximum number of messages in the context window",
-	)
-	summary_trigger_offset: int = Field(
-		default=10,
-		ge=1,
 		description=(
-			"how many messages before the window limit to trigger "
-			"async summarization. e.g. if max_messages=50 and offset=10, "
-			"summarization starts at 40 messages"
+			"secondary message count guard. even if tokens are within budget, "
+			"cap at this many unsummarized messages"
+		),
+	)
+	trigger_ratio: float = Field(
+		default=0.70,
+		ge=0.1,
+		le=0.95,
+		description=(
+			"start background summarization when unsummarized messages "
+			"consume this fraction of the available token budget"
+		),
+	)
+	hard_ratio: float = Field(
+		default=0.90,
+		ge=0.5,
+		le=1.0,
+		description=(
+			"hard-truncate oldest messages when token usage exceeds this "
+			"fraction of the available budget (last resort if no summary is ready)"
 		),
 	)
 	summary_batch_size: int = Field(
 		default=20,
 		ge=1,
-		description="number of oldest messages to include in each summary batch",
+		description="number of oldest unsummarized messages per summary batch",
+	)
+	max_summaries_before_condense: int = Field(
+		default=4,
+		ge=2,
+		description=(
+			"condense existing summaries into one when this many window "
+			"summaries accumulate. enables truly unlimited threads"
+		),
+	)
+	tool_result_max_share: float = Field(
+		default=0.25,
+		ge=0.05,
+		le=0.75,
+		description=(
+			"maximum fraction of available budget that a single tool result "
+			"may consume. results exceeding this are truncated"
+		),
+	)
+	tool_result_hard_cap: int = Field(
+		default=100_000,
+		ge=1000,
+		description="absolute character ceiling per tool result",
+	)
+	tool_results_combined_max_share: float = Field(
+		default=0.50,
+		ge=0.10,
+		le=0.95,
+		description=(
+			"maximum fraction of available budget for ALL tool results "
+			"combined. when total tool result tokens exceed this, the "
+			"oldest tool results are compacted first (Layer 2 guard)"
+		),
+	)
+	response_headroom: int = Field(
+		default=4096,
+		ge=256,
+		description="tokens reserved for the model's response",
 	)
 
 

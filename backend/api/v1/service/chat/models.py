@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
+from api.settings.settings import settings
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.chat_models import ChatModel
@@ -244,7 +245,6 @@ async def resolve_task_chat_model(
 
 	resolution: per-task model_id → default_model_id → error.
 	"""
-	from api.settings.settings import settings
 
 	task_settings = settings.ai.tasks
 
@@ -253,6 +253,8 @@ async def resolve_task_chat_model(
 		model_id_str = task_settings.thread_metadata_model_id
 	elif task == "input_autocomplete":
 		model_id_str = task_settings.input_autocomplete_model_id
+	elif task == "summarization":
+		model_id_str = task_settings.summarization_model_id
 
 	if model_id_str is None:
 		model_id_str = task_settings.default_model_id

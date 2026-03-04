@@ -75,6 +75,22 @@ async def test_async_agentic_flow(
 	assert model_resp.status_code == 201
 	model_id = model_resp.json()["id"]
 
+	# register an embedding model so vectorize_resource can resolve one
+	embed_resp = await client.post(
+		"/v1/models",
+		json={
+			"provider_id": provider_id,
+			"name": "text-embedding-3-small",
+			"display_name": "Embedding Small",
+			"model_type": "embedding",
+		},
+		headers=headers,
+	)
+	assert embed_resp.status_code == 201
+
+	# clear cached collection name so the new embedding model is picked up
+	vectorstores_service._cached_collection_name = None
+
 	agent_resp = await client.post(
 		"/v1/agents",
 		json={

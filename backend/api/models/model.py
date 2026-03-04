@@ -58,7 +58,11 @@ class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		StringEnum(ModelType),
 		default=ModelType.CHAT_MODEL,
 	)
-	input_modalities: Mapped[list[str]] = mapped_column(JSONB)
+	input_modalities: Mapped[list[str]] = mapped_column(
+		JSONB,
+		default=list,
+		server_default="[]",
+	)
 	endpoint: Mapped[str | None] = mapped_column(String(255))
 	adapter: Mapped[str | None] = mapped_column(String(100))
 	capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)

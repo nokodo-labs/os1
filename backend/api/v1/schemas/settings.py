@@ -163,6 +163,45 @@ class RerankSettingsPatch(BaseModel):
 	)
 
 
+class LocalStorageConfigPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	root_path: str | None = Field(
+		default=None,
+		description="root directory for local file storage",
+	)
+
+
+class S3StorageConfigPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	endpoint_url: str | None = Field(
+		default=None,
+		description="S3-compatible endpoint url (None for AWS S3)",
+	)
+	bucket: str | None = Field(default=None, description="S3 bucket name")
+	region: str | None = Field(default=None, description="AWS region")
+	access_key_id: str | None = Field(default=None, description="S3 access key id")
+	secret_access_key: str | None = Field(
+		default=None, description="S3 secret access key"
+	)
+	prefix: str | None = Field(default=None, description="key prefix within the bucket")
+	presigned_url_ttl: int | None = Field(
+		default=None, ge=1, description="presigned URL expiration in seconds"
+	)
+
+
+class StorageSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	backend: Literal["local", "s3"] | None = Field(
+		default=None,
+		description="active storage backend: 'local' or 's3'",
+	)
+	local: LocalStorageConfigPatch | None = None
+	s3: S3StorageConfigPatch | None = None
+
+
 class AssetsSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -174,6 +213,7 @@ class AssetsSettingsPatch(BaseModel):
 	vector: VectorSettingsPatch | None = None
 	embeddings: EmbeddingsSettingsPatch | None = None
 	rerank: RerankSettingsPatch | None = None
+	storage: StorageSettingsPatch | None = None
 
 
 class BrandingSettingsPatch(BaseModel):
@@ -183,6 +223,8 @@ class BrandingSettingsPatch(BaseModel):
 	logo_url: str | None = Field(default=None, description="logo url")
 	favicon_url: str | None = Field(default=None, description="favicon url")
 	primary_color: str | None = Field(default=None, description="primary color hex")
+	support_email: str | None = Field(default=None, description="support email")
+	admin_email: str | None = Field(default=None, description="admin email")
 	public_frontend_origin: str | None = Field(
 		default=None,
 		description="public frontend origin",
@@ -351,6 +393,35 @@ class AITaskSettingsPatch(BaseModel):
 		default=None,
 		description="model for input autocomplete suggestions",
 	)
+	summarization_model_id: str | None = Field(
+		default=None,
+		description="model for thread context summarization",
+	)
+
+
+class AIAttachmentSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	image_decay_turns: int | None = Field(
+		default=None,
+		ge=1,
+		description="turns before image attachments decay to reference",
+	)
+	audio_decay_turns: int | None = Field(
+		default=None,
+		ge=1,
+		description="turns before audio attachments decay to reference",
+	)
+	video_decay_turns: int | None = Field(
+		default=None,
+		ge=1,
+		description="turns before video attachments decay to reference",
+	)
+	reveal_decay_turns: int | None = Field(
+		default=None,
+		ge=1,
+		description="turns before a revealed attachment decays again",
+	)
 
 
 class AIWindowingSettingsPatch(BaseModel):
@@ -358,24 +429,56 @@ class AIWindowingSettingsPatch(BaseModel):
 
 	enabled: bool | None = Field(
 		default=None,
-		description="enable message windowing and summarization",
+		description="enable context window management and summarization",
 	)
 	max_messages: int | None = Field(
 		default=None,
 		ge=1,
-		description="maximum number of messages in the context window",
+		description="secondary message count guard",
 	)
-	summary_trigger_offset: int | None = Field(
+	trigger_ratio: float | None = Field(
 		default=None,
-		ge=1,
-		description=(
-			"how many messages before the window limit to trigger summarization"
-		),
+		ge=0.1,
+		le=0.95,
+		description="fraction of token budget to trigger background summarization",
+	)
+	hard_ratio: float | None = Field(
+		default=None,
+		ge=0.5,
+		le=1.0,
+		description="fraction of token budget for hard truncation",
 	)
 	summary_batch_size: int | None = Field(
 		default=None,
 		ge=1,
-		description="number of oldest messages to include in each summary batch",
+		description="number of oldest unsummarized messages per summary batch",
+	)
+	max_summaries_before_condense: int | None = Field(
+		default=None,
+		ge=2,
+		description="condense summaries when this many accumulate",
+	)
+	tool_result_max_share: float | None = Field(
+		default=None,
+		ge=0.05,
+		le=0.75,
+		description="max fraction of budget for a single tool result",
+	)
+	tool_result_hard_cap: int | None = Field(
+		default=None,
+		ge=1000,
+		description="absolute character ceiling per tool result",
+	)
+	tool_results_combined_max_share: float | None = Field(
+		default=None,
+		ge=0.10,
+		le=0.95,
+		description="max fraction of budget for ALL tool results combined (Layer 2)",
+	)
+	response_headroom: int | None = Field(
+		default=None,
+		ge=256,
+		description="tokens reserved for the model's response",
 	)
 
 
@@ -388,6 +491,7 @@ class AISettingsPatch(BaseModel):
 	memory: AIMemorySettingsPatch | None = None
 	chat_context: AIChatContextSettingsPatch | None = None
 	tasks: AITaskSettingsPatch | None = None
+	attachments: AIAttachmentSettingsPatch | None = None
 	windowing: AIWindowingSettingsPatch | None = None
 
 
