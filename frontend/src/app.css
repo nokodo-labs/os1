@@ -424,9 +424,10 @@
 }
 
 /* during ViewTransitions, force remove backdrop-filters on sidebars.
-	otherwise, it will not transition with the element but will linger for the duration of the transition then pop out
+	otherwise, it will not transition with the element but will linger for the duration of the transition then pop out.
+	whitelisted: transitions between homepage and chat pages keep the filter intact.
 */
-html[data-vt-active='1'] .chat-sidebar {
+html[data-vt-active='1']:not([data-vt-keep-filter]) .chat-sidebar {
 	-webkit-backdrop-filter: none;
 	backdrop-filter: none;
 }

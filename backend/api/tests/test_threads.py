@@ -161,12 +161,12 @@ async def test_list_threads_sorting(
 
 
 @pytest.mark.asyncio
-async def test_temporary_threads_hidden_by_default(
+async def test_temporary_threads_hidden_from_listing_but_accessible(
 	client: AsyncClient,
 	user_auth: dict[str, object],
 	admin_auth: dict[str, object],
 ) -> None:
-	"""Temporary threads are persisted but hidden unless admin opts in."""
+	"""Temporary threads are hidden from listings but accessible by direct GET."""
 	user_headers = user_auth["headers"]
 	assert isinstance(user_headers, dict)
 	user = user_auth["user"]
@@ -180,6 +180,7 @@ async def test_temporary_threads_hidden_by_default(
 	assert create_resp.status_code == 201
 	temp_thread_id = create_resp.json()["id"]
 
+	# listing excludes temporary threads
 	user_list = await client.get(
 		f"/v1/threads?owner_id={user['id']}",
 		headers=user_headers,
@@ -187,16 +188,20 @@ async def test_temporary_threads_hidden_by_default(
 	assert user_list.status_code == 200
 	assert temp_thread_id not in {t["id"] for t in user_list.json()}
 
+	# direct GET by owner is allowed (is_temporary is just a flag)
 	user_get = await client.get(f"/v1/threads/{temp_thread_id}", headers=user_headers)
-	assert user_get.status_code == 404
+	assert user_get.status_code == 200
+	assert user_get.json()["is_temporary"] is True
 
 	admin_headers = admin_auth["headers"]
 	assert isinstance(admin_headers, dict)
 
+	# admin listing also excludes temporary by default
 	admin_default_list = await client.get("/v1/threads", headers=admin_headers)
 	assert admin_default_list.status_code == 200
 	assert temp_thread_id not in {t["id"] for t in admin_default_list.json()}
 
+	# admin include_hidden shows temporary threads
 	admin_hidden_list = await client.get(
 		"/v1/threads",
 		headers=admin_headers,
@@ -204,14 +209,6 @@ async def test_temporary_threads_hidden_by_default(
 	)
 	assert admin_hidden_list.status_code == 200
 	assert temp_thread_id in {t["id"] for t in admin_hidden_list.json()}
-
-	admin_get_hidden = await client.get(
-		f"/v1/threads/{temp_thread_id}",
-		headers=admin_headers,
-		params={"include_hidden": True},
-	)
-	assert admin_get_hidden.status_code == 200
-	assert admin_get_hidden.json()["is_temporary"] is True
 
 
 @pytest.mark.asyncio

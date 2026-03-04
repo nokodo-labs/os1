@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import logging
+import selectors
 from typing import Any
 
 from pydantic import BaseModel
@@ -12,6 +14,9 @@ from sqlalchemy import select
 
 from api.database import AsyncSessionLocal
 from api.models.setting import SettingsDocument
+
+
+logger = logging.getLogger(__name__)
 
 
 def _is_write_locked(schema: type[BaseModel], field_name: str) -> bool:
@@ -33,6 +38,7 @@ def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any
 				result = await db.execute(select(SettingsDocument))
 				docs = result.scalars().all()
 		except Exception:
+			logger.warning("failed to load settings from database", exc_info=True)
 			return {}
 
 		overrides: dict[str, dict[str, Any]] = {}
@@ -56,6 +62,11 @@ def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any
 
 		return overrides
 
+	# psycopg requires a selector-based event loop (not Windows ProactorEventLoop).
+	# use loop_factory to guarantee SelectorEventLoop on all platforms.
+	def _selector_loop() -> asyncio.AbstractEventLoop:
+		return asyncio.SelectorEventLoop(selectors.SelectSelector())
+
 	try:
 		loop = asyncio.get_running_loop()
 	except RuntimeError:
@@ -63,8 +74,13 @@ def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any
 
 	if loop is not None:
 		with concurrent.futures.ThreadPoolExecutor() as pool:
-			return pool.submit(asyncio.run, fetch()).result()
-	return asyncio.run(fetch())
+			future = pool.submit(
+				asyncio.run,
+				fetch(),
+				loop_factory=_selector_loop,
+			)
+			return future.result()
+	return asyncio.run(fetch(), loop_factory=_selector_loop)
 
 
 class DbSettingsSource(PydanticBaseSettingsSource):

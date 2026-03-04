@@ -54,6 +54,7 @@ export async function uploadFile(file: File): Promise<PendingAttachment> {
 		category,
 		previewUrl:
 			category === 'image' || category === 'video' ? URL.createObjectURL(file) : undefined,
+		source: 'upload',
 	}
 }
 

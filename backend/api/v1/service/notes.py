@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import build_cursor_page, decode_cursor
+from api.database.main import session_scope
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -450,21 +451,34 @@ async def search_notes(
 		SearchMode.SPARSE,
 		SearchMode.FULL,
 	)
-	# hybrid first - wins on deduplication (higher quality than autocomplete)
-	if run_hybrid:
-		coros.append(
-			_hybrid_search_notes(
+
+	# each parallel coroutine gets its own session to avoid
+	# "prepared state" errors from concurrent use of a single session
+	async def _run_hybrid() -> list[SearchResultItem]:
+		async with session_scope(None) as s:
+			return await _hybrid_search_notes(
 				query,
-				db,
+				s,
 				principal=principal,
 				limit=limit + 1,
 				search_params=params,
 			)
-		)
+
+	async def _run_autocomplete() -> list[SearchResultItem]:
+		assert query_text is not None
+		async with session_scope(None) as s:
+			return await _autocomplete_notes(
+				query_text,
+				s,
+				principal=principal,
+				limit=limit + 1,
+			)
+
+	# hybrid first - wins on deduplication (higher quality than autocomplete)
+	if run_hybrid:
+		coros.append(_run_hybrid())
 	if run_autocomplete and query_text is not None:
-		coros.append(
-			_autocomplete_notes(query_text, db, principal=principal, limit=limit + 1)
-		)
+		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
 	items = vectorstore_service.merge_deduplicate(
 		results, limit + 1, resource_name="notes"

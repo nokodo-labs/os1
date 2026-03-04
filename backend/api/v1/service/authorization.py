@@ -39,7 +39,6 @@ class ResourceConfig:
 	rule_fk: InstrumentedAttribute
 	owner_fk: InstrumentedAttribute | None
 	deleted_at_col: InstrumentedAttribute | None
-	is_temporary_col: InstrumentedAttribute | None = None
 
 
 # resource type → access control config
@@ -49,7 +48,6 @@ RESOURCE_CONFIG: dict[ResourceType, ResourceConfig] = {
 		rule_fk=AccessRule.thread_id,
 		owner_fk=Thread.owner_id,
 		deleted_at_col=Thread.deleted_at,
-		is_temporary_col=Thread.is_temporary,
 	),
 	ResourceType.PROJECT: ResourceConfig(
 		id_col=Project.id,
@@ -162,6 +160,7 @@ def resource_access_predicate(
 	config = RESOURCE_CONFIG[resource_type]
 
 	# visibility filter (soft-deletable resources)
+	visibility: ColumnElement[bool]
 	if config.deleted_at_col is not None:
 		visibility = (
 			true()

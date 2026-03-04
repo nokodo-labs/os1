@@ -131,7 +131,10 @@
 		const att = pendingAttachments.find((a) => a.fileId === fileId)
 		if (att?.previewUrl) URL.revokeObjectURL(att.previewUrl)
 		pendingAttachments = pendingAttachments.filter((a) => a.fileId !== fileId)
-		void files.remove(fileId)
+		// only delete the backend file if it was uploaded in this chat session
+		if (att?.source === 'upload') {
+			void files.remove(fileId)
+		}
 	}
 
 	function handleAttachResource(resource: ResourceItem) {
@@ -146,6 +149,7 @@
 				mediaType: mime,
 				category: categorizeMediaType(mime),
 				previewUrl: files.getThumbnailUrl(resource.id),
+				source: 'resource',
 			},
 		]
 	}
@@ -256,7 +260,7 @@
 						{disabled}
 						onclick={toggleAddContext}
 					>
-						<Plus class="h-5.5 w-5.5" strokeWidth="2" />
+						<Plus class="h-8 w-8" strokeWidth="2" />
 						{#if hasContextActive}
 							<span
 								class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"

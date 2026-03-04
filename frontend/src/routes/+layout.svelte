@@ -53,6 +53,11 @@
 	// this ensures transitions run for ALL navigations (links, goto(), back/forward popstate).
 	// we intentionally skip same-path navigations (e.g. / <-> /?chat=new) so in-page
 	// animations keep controls interactive without the ViewTransition overlay.
+	/** home or chat page - transitions between these keep the sidebar filter */
+	function isChatOrHome(pathname: string): boolean {
+		return pathname === '/' || pathname.startsWith('/c/')
+	}
+
 	onNavigate((navigation) => {
 		const start = (document as ViewTransitionCapableDocument).startViewTransition
 		if (!start) return
@@ -66,6 +71,12 @@
 			const root = document.documentElement
 			root.dataset.vtActive = '1'
 
+			// keep sidebar backdrop-filter when both sides are home/chat pages
+			const bothChatOrHome = isChatOrHome(from.pathname) && isChatOrHome(to.pathname)
+			if (bothChatOrHome) {
+				root.dataset.vtKeepFilter = '1'
+			}
+
 			const transition = start.call(document, async () => {
 				resolve()
 				await navigation.complete
@@ -73,6 +84,7 @@
 
 			const done = () => {
 				delete root.dataset.vtActive
+				delete root.dataset.vtKeepFilter
 			}
 
 			// prefer the ViewTransition lifecycle when available.

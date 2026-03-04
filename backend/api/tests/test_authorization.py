@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import and_, true
+from sqlalchemy import true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel
@@ -137,7 +137,7 @@ async def test_authorization_admin_predicates(db_session: AsyncSession) -> None:
 	)
 
 	assert authorization._allowed_levels(AccessLevel.ADMIN) == (AccessLevel.ADMIN,)
-	visibility = and_(Thread.deleted_at.is_(None), Thread.is_temporary.is_(False))
+	visibility = Thread.deleted_at.is_(None)
 	assert authorization.thread_access_predicate(principal).compare(visibility)
 	assert authorization.thread_access_predicate(
 		principal, include_hidden=True

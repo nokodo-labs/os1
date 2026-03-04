@@ -92,7 +92,10 @@ async def run_chat_model_json_schema(
 	)
 	data = assistant.json_content
 	if data is None:
-		data = json.loads(assistant.text)
+		raw = assistant.text.strip()
+		if not raw:
+			raise ValueError("model returned empty structured output")
+		data = json.loads(raw)
 	if not isinstance(data, dict):
 		raise ValueError("structured output must be an object")
 	return dict[str, object](data)

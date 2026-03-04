@@ -49,6 +49,8 @@ export interface PendingAttachment {
 	category: AttachmentMediaCategory
 	/** local object URL for preview (images/video) - revoked after send */
 	previewUrl?: string
+	/** how this attachment was added - 'upload' = new file, 'resource' = existing resource */
+	source: 'upload' | 'resource'
 }
 
 /** an attachment already present in the thread (derived from message content) */
