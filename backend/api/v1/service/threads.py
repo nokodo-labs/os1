@@ -1087,6 +1087,8 @@ async def handle_typing_event(
 	"""broadcast a typing indicator to all users with access to a thread.
 
 	ephemeral: no event persistence, just fan-out over WS.
+	the sender must be among the accessible users; if not, the event is
+	silently dropped (prevents spam for threads the user has no access to).
 	"""
 	recipient_ids = await list_accessible_user_ids(
 		ResourceType.THREAD,
@@ -1094,7 +1096,7 @@ async def handle_typing_event(
 		session,
 	)
 
-	if not recipient_ids:
+	if not recipient_ids or user_id not in recipient_ids:
 		return
 
 	msg_type = "typing.start" if typing else "typing.stop"

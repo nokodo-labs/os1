@@ -72,6 +72,7 @@ class FileResolveFilter(Filter):
 			raise ValueError("AppContext is required for FileResolveFilter")
 
 		session = app_context.session
+		principal = app_context.principal
 		new_messages = list(thread.messages)
 		changed = False
 
@@ -93,11 +94,10 @@ class FileResolveFilter(Filter):
 					continue
 
 				try:
-					url, b64 = await resolve_file_data(file_id, session)
-					if url:
-						new_parts[part_idx] = part.model_copy(update={"url": url})
-						msg_changed = True
-					elif b64:
+					b64 = await resolve_file_data(
+						file_id, session, principal=principal
+					)
+					if b64:
 						new_parts[part_idx] = part.model_copy(update={"base64": b64})
 						msg_changed = True
 					else:

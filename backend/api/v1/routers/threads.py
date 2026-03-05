@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
-from api.models.access_rule import AccessRule
+from api.models.access_rule import AccessLevel, AccessRule
 from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
@@ -39,7 +39,7 @@ from api.v1.service import access_rules as access_rules_service
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin
+from api.v1.service.authorization import require_admin, require_thread_access
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_response
@@ -433,7 +433,21 @@ async def cancel_run(
 	thread_id: TypeID,
 	run_id: str,
 	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
 	"""cancel an active agent run on a thread."""
+	await require_thread_access(
+		str(thread_id),
+		db,
+		principal,
+		required_level=AccessLevel.EDITOR,
+	)
+	# verify run belongs to this thread
+	rs = await run_status_store.get_run(run_id)
+	if rs is None or rs.thread_id != str(thread_id):
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="run not found",
+		)
 	await run_status_store.fail_run(run_id)
 	return {"status": "cancelled"}

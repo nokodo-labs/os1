@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from pydantic import Field
 
 from api.database import AsyncSessionLocal
@@ -15,6 +17,9 @@ from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
+
+
+logger = logging.getLogger(__name__)
 
 
 _TOOL_PARAMETERS: JSONObject = {
@@ -94,28 +99,35 @@ class SendNotificationTool(Tool[AppContext]):
 
 		# use an isolated session to avoid dirtying the shared request session.
 		# if any DB operation fails, only this session is affected.
-		async with AsyncSessionLocal() as tool_session:
-			if target_user_id:
-				target_user_ids = [str(target_user_id)]
-			elif ctx.thread_id is not None:
-				target_user_ids = await list_accessible_user_ids(
-					ResourceType.THREAD,
-					str(ctx.thread_id),
-					tool_session,
-				)
-			else:
-				return self.error(
-					"no recipients: provide user_id or run inside a thread",
-					__agent_context__,
-				)
+		try:
+			async with AsyncSessionLocal() as tool_session:
+				if target_user_id:
+					target_user_ids = [str(target_user_id)]
+				elif ctx.thread_id is not None:
+					target_user_ids = await list_accessible_user_ids(
+						ResourceType.THREAD,
+						str(ctx.thread_id),
+						tool_session,
+					)
+				else:
+					return self.error(
+						"no recipients: provide user_id or run inside a thread",
+						__agent_context__,
+					)
 
-			# thread-scoped by default; user_id is opt-in for single-user targeting
-			notifications = await notification_service.send_agent_notification(
-				tool_session,
-				title=title,
-				body=body,
-				agent_id=agent_id,
-				user_ids=target_user_ids,
+				# thread-scoped by default; user_id is opt-in for single-user targeting
+				notifications = await notification_service.send_agent_notification(
+					tool_session,
+					title=title,
+					body=body,
+					agent_id=agent_id,
+					user_ids=target_user_ids,
+				)
+		except Exception:
+			logger.exception("send_notification tool failed")
+			return self.error(
+				"failed to send notification",
+				__agent_context__,
 			)
 
 		# emit tool event for chat UI (with first notification ID for reference)

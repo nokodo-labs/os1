@@ -125,7 +125,7 @@ async def init_db() -> None:
 			partial(command.upgrade, alembic_cfg, migration_target),
 		)
 	except Exception as exc:
-		logger.error(f"error running migrations: {exc}")
+		logger.error("error running migrations: %s", exc)
 		raise
 
 	logger.info("database initialized")

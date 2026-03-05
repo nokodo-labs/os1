@@ -177,9 +177,9 @@ async def events_stream(websocket: WebSocket) -> None:
 					ws_session_id,
 				)
 	except WebSocketDisconnect:
-		logger.debug(f"websocket disconnected for user {user_id}")
-	except Exception as e:
-		logger.debug(f"websocket error for user {user_id}: {e}")
+		logger.debug("websocket disconnected for user %s", user_id)
+	except Exception:
+		logger.debug("websocket error for user %s", user_id, exc_info=True)
 	finally:
 		# clean up document sessions
 		await handle_disconnect(user_id, ws_session_id)

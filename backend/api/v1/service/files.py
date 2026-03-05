@@ -227,15 +227,19 @@ async def read_content(
 async def resolve_file_data(
 	file_id: str,
 	session: AsyncSession,
-) -> tuple[None, str | None]:
-	"""resolve a file record to base64-encoded data (no access check).
+	*,
+	principal: Principal,
+) -> str | None:
+	"""resolve a file record to base64-encoded data (access-checked).
 
 	always reads bytes through the storage backend and encodes as base64.
 	this keeps the backend as the single auth gatekeeper - the storage
 	layer is never exposed directly, regardless of which backend is active.
 
-	returns (None, base64) on success.
-	returns (None, None) when the file or storage object is missing.
+	the caller must supply a principal so file ownership / ACL is enforced.
+
+	returns base64 string on success, or None when the file or storage
+	object is missing, or the principal lacks access.
 	"""
 	result = await session.execute(
 		select(File).where(File.id == file_id, File.deleted_at.is_(None))
@@ -243,7 +247,25 @@ async def resolve_file_data(
 	file = result.scalars().one_or_none()
 	if file is None:
 		log.warning("resolve_file_data: file %s not found", file_id)
-		return None, None
+		return None
+
+	# enforce access - silently return None when denied so the caller
+	# treats it identically to "file not found" (no info leak).
+	try:
+		await require_resource_access(
+			str(file_id),
+			session,
+			principal,
+			ResourceType.FILE,
+			required_level=AccessLevel.READER,
+		)
+	except HTTPException:
+		log.warning(
+			"resolve_file_data: access denied for file %s (user %s)",
+			file_id,
+			principal.user_id,
+		)
+		return None
 
 	try:
 		stream, _, _ = await read_content(file)
@@ -252,14 +274,13 @@ async def resolve_file_data(
 			"resolve_file_data: storage object missing for file %s",
 			file.id,
 		)
-		return None, None
+		return None
 
 	chunks: list[bytes] = []
 	async for chunk in stream:
 		chunks.append(chunk)
 	raw = b"".join(chunks)
-	b64 = base64.standard_b64encode(raw).decode("ascii")
-	return None, b64
+	return base64.standard_b64encode(raw).decode("ascii")
 
 
 async def delete_content(file: File) -> None:

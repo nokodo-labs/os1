@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.files import resolve_file_data
 from api.v1.service.media import MediaError, generate_image
@@ -84,9 +85,11 @@ def _build_attachments(results: Sequence[ImageResult]) -> list[ToolAttachment]:
 	return attachments
 
 
-async def _load_file_bytes(file_id: str, session: AsyncSession) -> bytes | None:
-	"""load raw bytes for a stored file (no access check - tool context)."""
-	_, b64 = await resolve_file_data(file_id, session)
+async def _load_file_bytes(
+	file_id: str, session: AsyncSession, *, principal: Principal
+) -> bytes | None:
+	"""load raw bytes for a stored file (access-checked)."""
+	b64 = await resolve_file_data(file_id, session, principal=principal)
 	if b64:
 		return base64.b64decode(b64)
 	return None
@@ -121,7 +124,11 @@ class GenerateImageTool(Tool[AppContext]):
 		# resolve source image bytes for editing, if requested
 		image_bytes: bytes | None = None
 		if inp.file_id:
-			image_bytes = await _load_file_bytes(inp.file_id, __app_context__.session)
+			image_bytes = await _load_file_bytes(
+				inp.file_id,
+				__app_context__.session,
+				principal=__app_context__.principal,
+			)
 			if image_bytes is None:
 				return self.error(
 					f"could not load image file '{inp.file_id}'.",
@@ -138,8 +145,12 @@ class GenerateImageTool(Tool[AppContext]):
 				n=inp.n,
 				size=inp.size,
 			)
-		except MediaError as exc:
-			return self.error(str(exc), __agent_context__)
+		except MediaError:
+			logger.exception("image generation failed")
+			return self.error(
+				"image generation failed. please try again.",
+				__agent_context__,
+			)
 
 		attachments = _build_attachments(results)
 		count = len(results)
