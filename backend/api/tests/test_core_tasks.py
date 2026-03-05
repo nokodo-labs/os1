@@ -1,4 +1,4 @@
-"""tests for api.core.tasks - shared background task utilities."""
+"""tests for api.tasks - shared background task utilities."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.core.tasks import _background_tasks, _on_task_done, create_background_task
+from api.tasks import _background_tasks, _on_task_done, create_background_task
 
 
 class TestCreateBackgroundTask:
@@ -44,7 +44,7 @@ class TestCreateBackgroundTask:
 		task = create_background_task(_fail(), name="test_fail")
 		assert task in _background_tasks
 
-		with patch("api.core.tasks.logger") as mock_logger:
+		with patch("api.tasks.logger") as mock_logger:
 			# wait for the task to finish (it will raise)
 			with pytest.raises(RuntimeError, match="test error"):
 				await task
@@ -79,7 +79,7 @@ class TestCreateBackgroundTask:
 		task = create_background_task(_block(), name="test_cancel")
 		task.cancel()
 
-		with patch("api.core.tasks.logger") as mock_logger:
+		with patch("api.tasks.logger") as mock_logger:
 			with pytest.raises(asyncio.CancelledError):
 				await task
 			await asyncio.sleep(0)
@@ -108,7 +108,7 @@ class TestOnTaskDone:
 		exc = RuntimeError("boom")
 		task.exception.return_value = exc
 
-		with patch("api.core.tasks.logger") as mock_logger:
+		with patch("api.tasks.logger") as mock_logger:
 			_on_task_done(task, "my_bg_task")
 			mock_logger.exception.assert_called_once()
 			assert "my_bg_task" in mock_logger.exception.call_args[0][1]

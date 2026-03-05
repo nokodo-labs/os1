@@ -21,12 +21,12 @@ from fastapi import Header, HTTPException, WebSocket, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.tasks import create_background_task
 from api.database import AsyncSessionLocal
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.schemas.event import EventCreate
+from api.tasks import create_background_task
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import list_accessible_user_ids, require_permission
 from nokodo_ai.utils.typeid import TypeID, new_typeid

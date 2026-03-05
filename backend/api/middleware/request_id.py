@@ -2,7 +2,7 @@
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from api.core.logging import request_id_ctx
+from api.logging import request_id_ctx
 from nokodo_ai.utils.typeid import new_typeid
 
 from ._utils import append_header, get_header

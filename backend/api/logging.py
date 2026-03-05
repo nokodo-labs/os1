@@ -115,7 +115,7 @@ class ConsoleFormatter(logging.Formatter):
 		return request_id[-8:]
 
 	def _shorten_name(self, name: str) -> str:
-		"""shorten logger name: api.core.database -> a.c.database"""
+		"""shorten logger name: api.v1.routers.users -> a.v.r.users"""
 		parts = name.split(".")
 		if len(parts) <= 2:
 			return name
@@ -294,7 +294,7 @@ def get_logger(name: str) -> logging.Logger:
 	get a logger instance.
 
 	usage:
-		from api.core.logging import get_logger
+		from api.logging import get_logger
 		logger = get_logger(__name__)
 		logger.info("something happened", extra={"user_id": 123})
 	"""

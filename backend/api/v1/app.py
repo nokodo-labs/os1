@@ -3,13 +3,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 
-from api.core.exceptions import (
+from api.exceptions import (
 	http_exception_handler,
 	unhandled_exception_handler,
 	validation_exception_handler,
 )
-from api.core.openapi import DEFAULT_RESPONSES
 from api.middleware import APIVersionHeaderMiddleware
+from api.openapi import DEFAULT_RESPONSES
 from api.v1.router import api_router
 
 

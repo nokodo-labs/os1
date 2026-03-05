@@ -1,14 +1,14 @@
-"""memory recall tool - retrieves relevant memories for the current context."""
+"""memories tools - search and create memories."""
 
 from __future__ import annotations
 
 import logging
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
-from api.database import AsyncSessionLocal
-from api.models.memory import Memory
+from api.schemas.memory import MemoryCreate
+from api.v1.service import memories as memory_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
@@ -19,14 +19,14 @@ from nokodo_ai.types.json import JSONObject
 logger = logging.getLogger(__name__)
 
 
-class MemoryRecallInput(BaseModel):
-	"""input schema for memory recall tool."""
+class MemorySearchInput(BaseModel):
+	"""input schema for memory_search tool."""
 
 	query: str = Field(
 		...,
 		description=(
 			"natural language query describing what memories to recall. "
-			"be specific about the topic or context you need."
+			"hybrid BM25 + semantic search is used."
 		),
 	)
 	limit: int = Field(
@@ -38,7 +38,7 @@ class MemoryRecallInput(BaseModel):
 
 
 class MemoryCreateInput(BaseModel):
-	"""input schema for memory create tool."""
+	"""input schema for memory_create tool."""
 
 	content: str = Field(
 		...,
@@ -51,22 +51,18 @@ class MemoryCreateInput(BaseModel):
 
 
 class MemoryRecallTool(Tool[AppContext]):
-	"""tool for recalling user memories based on a query.
-
-	this tool searches the user's stored memories and returns
-	relevant information based on semantic similarity to the query.
-	"""
+	"""search user memories using hybrid BM25 + semantic search."""
 
 	name: str = Field(default="memory_recall")
 	description: str = Field(
 		default=(
-			"recall relevant memories and stored information about the user. "
-			"use this to retrieve context from past conversations, preferences, "
-			"or facts the user has shared."
+			"recall relevant memories about the user using a semantic query. "
+			"use this to retrieve context from past conversations, stated "
+			"preferences, or facts the user has shared."
 		)
 	)
 	parameters: JSONObject = Field(
-		default_factory=lambda: MemoryRecallInput.model_json_schema()
+		default_factory=lambda: MemorySearchInput.model_json_schema()
 	)
 
 	async def call(
@@ -75,74 +71,43 @@ class MemoryRecallTool(Tool[AppContext]):
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
-		"""execute memory recall.
+		if __app_context__ is None:
+			return self.error("app context is required", __agent_context__)
+		inp = MemorySearchInput.model_validate(kwargs)
+		try:
+			page = await memory_service.search_memories(
+				inp.query,
+				__app_context__.session,
+				principal=__app_context__.principal,
+				limit=inp.limit,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), __agent_context__)
 
-		args:
-			__agent_context__: sdk agent context
-			__app_context__: application context with session
-			**kwargs: tool arguments (query, limit)
-
-		returns:
-			ToolMessage with recalled memories
-		"""
-		raise NotImplementedError("memory recall is WIP")
-		# query param is available for semantic search (future use)
-		_ = str(kwargs.get("query", ""))
-		limit_val = kwargs.get("limit", 5)
-		limit = int(limit_val) if isinstance(limit_val, (int, str, float)) else 5
-
-		user_id = __app_context__.user_id
-
-		# simple keyword-based search for now
-		# TODO: implement semantic search with embeddings
-		stmt = (
-			select(Memory)
-			.where(Memory.user_id == user_id)
-			.order_by(Memory.updated_at.desc())
-			.limit(limit)
-		)
-
-		async with AsyncSessionLocal() as tool_session:
-			result = await tool_session.execute(stmt)
-			memories = list(result.scalars().all())
-
-		if not memories:
+		if not page.items:
 			return self.success("no relevant memories found", __agent_context__)
 
-		# format memories for the agent
-		formatted = []
-		for i, mem in enumerate(memories, 1):
-			category = f" [{mem.category}]" if mem.category else ""
-			formatted.append(f"{i}. {mem.content}{category}")
-
-		output = "recalled memories:\n" + "\n".join(formatted)
-		return self.success(output, __agent_context__)
+		lines = []
+		for item in page.items:
+			subtitle = f" - {item.subtitle}" if item.subtitle else ""
+			lines.append(f"- [{item.id}] {item.title}{subtitle}")
+		return self.success(
+			"recalled memories:\n" + "\n".join(lines), __agent_context__
+		)
 
 
 class MemoryCreateTool(Tool[AppContext]):
+	"""store a new memory for the user."""
+
 	name: str = Field(default="memory_create")
 	description: str = Field(
 		default=(
-			"create a new memory for the user. use this to store important "
-			"information, facts, or preferences that the user shares during "
-			"the conversation."
+			"store a new memory. use this to permanently save important facts, "
+			"preferences, or context the user has shared during the conversation."
 		)
 	)
 	parameters: JSONObject = Field(
-		default={
-			"type": "object",
-			"properties": {
-				"content": {
-					"type": "string",
-					"description": "the content of the memory to store",
-				},
-				"category": {
-					"type": "string",
-					"description": "optional category or tag for the memory",
-				},
-			},
-			"required": ["content"],
-		}
+		default_factory=lambda: MemoryCreateInput.model_json_schema()
 	)
 
 	async def call(
@@ -151,21 +116,24 @@ class MemoryCreateTool(Tool[AppContext]):
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
-		raise NotImplementedError("memory creation is WIP")
+		if __app_context__ is None:
+			return self.error("app context is required", __agent_context__)
+		inp = MemoryCreateInput.model_validate(kwargs)
 		try:
-			input_memory = MemoryCreateInput.model_validate(kwargs)
-
-			new_memory = Memory(
-				user_id=__app_context__.user_id,
-				content=input_memory.content,
-				category=input_memory.category,
+			memory = await memory_service.create_memory(
+				MemoryCreate(
+					content=inp.content,
+					category=inp.category,
+					user_id=__app_context__.user_id,
+				),
+				__app_context__.session,
+				__app_context__.principal,
 			)
-			async with AsyncSessionLocal() as tool_session:
-				tool_session.add(new_memory)
-				await tool_session.commit()
+		except HTTPException as exc:
+			return self.error(str(exc.detail), __agent_context__)
 
-		except Exception as e:
-			logger.error(f"failed to create memory: {str(e)}", exc_info=True)
-			return self.error("failed to create memory", __agent_context__)
-
-		return self.success("memory created successfully", __agent_context__)
+		category = f" [{memory.category}]" if memory.category else ""
+		return self.success(
+			f"memory stored: [{memory.id}]{category} {memory.content[:80]}",
+			__agent_context__,
+		)

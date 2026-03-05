@@ -17,7 +17,14 @@ from api.permissions import (
 	DefaultResourceAccess,
 )
 from api.schemas.preferences import BackgroundType
-from api.settings import Settings
+from api.settings import (
+	CodeInterpreterEngine,
+	PerplexityModel,
+	SearchAgent,
+	SearchContextUsage,
+	SearchRecencyFilter,
+	Settings,
+)
 
 
 class UISettingsPatch(BaseModel):
@@ -397,6 +404,10 @@ class AITaskSettingsPatch(BaseModel):
 		default=None,
 		description="model for thread context summarization",
 	)
+	memory_post_processing_model_id: str | None = Field(
+		default=None,
+		description="model for memory post-processing (dedup, update, delete)",
+	)
 
 
 class AIAttachmentSettingsPatch(BaseModel):
@@ -482,6 +493,99 @@ class AIWindowingSettingsPatch(BaseModel):
 	)
 
 
+class ImageGenerationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = Field(
+		default=None,
+		description="enable image generation capabilities",
+	)
+	model: str | None = Field(
+		default=None,
+		description="model identifier for image generation",
+	)
+	default_size: str | None = Field(
+		default=None,
+		description="default image size in WIDTHxHEIGHT format",
+	)
+	default_steps: int | None = Field(
+		default=None,
+		ge=1,
+		description="default number of generation steps",
+	)
+	default_n: int | None = Field(
+		default=None,
+		ge=1,
+		le=10,
+		description="default number of images per prompt",
+	)
+	max_n: int | None = Field(
+		default=None,
+		ge=1,
+		le=10,
+		description="maximum number of images per request",
+	)
+
+
+class VideoGenerationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = Field(
+		default=None,
+		description="enable video generation capabilities",
+	)
+
+
+class AudioGenerationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = Field(
+		default=None,
+		description="enable audio generation capabilities",
+	)
+
+
+class AIMediaSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	images: ImageGenerationSettingsPatch | None = None
+	videos: VideoGenerationSettingsPatch | None = None
+	audio: AudioGenerationSettingsPatch | None = None
+
+
+class E2bSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	api_key: str | None = Field(
+		default=None,
+		description="E2B API key",
+	)
+	template: str | None = Field(
+		default=None,
+		description="E2B sandbox template",
+	)
+
+
+class CodeInterpreterSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = Field(
+		default=None,
+		description="enable code interpreter capabilities",
+	)
+	engine: CodeInterpreterEngine | None = Field(
+		default=None,
+		description="sandbox engine",
+	)
+	e2b: E2bSettingsPatch | None = None
+	timeout: int | None = Field(
+		default=None,
+		ge=5,
+		le=300,
+		description="execution timeout in seconds",
+	)
+
+
 class AISettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -493,6 +597,7 @@ class AISettingsPatch(BaseModel):
 	tasks: AITaskSettingsPatch | None = None
 	attachments: AIAttachmentSettingsPatch | None = None
 	windowing: AIWindowingSettingsPatch | None = None
+	media: AIMediaSettingsPatch | None = None
 
 
 class DefaultPermissionsSettingsPatch(BaseModel):
@@ -516,6 +621,129 @@ class SoftDeleteSettingsPatch(BaseModel):
 	files: bool | None = Field(default=None, description="soft-delete files")
 
 
+class SearxngSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	instance_url: str | None = Field(
+		default=None,
+		description="base url for the searxng instance",
+	)
+	max_results: int | None = Field(
+		default=None,
+		ge=1,
+		description="max results to return from searxng",
+	)
+	max_concurrent_requests: int | None = Field(
+		default=None,
+		ge=1,
+		description="max concurrent requests to searxng",
+	)
+	timeout_seconds: int | None = Field(
+		default=None,
+		ge=1,
+		description="timeout for searxng API calls in seconds",
+	)
+
+
+class TavilySettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	extract_depth: Literal["basic", "advanced"] | None = Field(
+		default=None,
+		description="depth of content extraction for tavily web loader",
+	)
+	api_key: str | None = Field(
+		default=None,
+		description="api key for tavily web loader",
+	)
+	max_concurrent_requests: int | None = Field(
+		default=None,
+		ge=1,
+		description="max concurrent requests to tavily",
+	)
+
+
+class WebLoaderSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	engine: Literal["native", "tavily", "playwright"] | None = Field(
+		default=None,
+		description="web loader engine to use",
+	)
+	timeout_seconds: int | None = Field(
+		default=None,
+		ge=1,
+		description="timeout for web loader fetch operations",
+	)
+	user_agent: str | None = Field(
+		default=None,
+		description="user agent string for web loader requests",
+	)
+	tavily: TavilySettingsPatch | None = None
+
+
+class SearchEngineSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	engine: Literal["google", "searxng"] | None = Field(
+		default=None,
+		description="web search engine to use",
+	)
+	searxng: SearxngSettingsPatch | None = None
+
+
+class PerplexitySettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	api_key: str | None = Field(
+		default=None,
+		description="api key for perplexity web search",
+	)
+	model: PerplexityModel | None = Field(
+		default=None,
+		description="perplexity model to use for agentic search",
+	)
+	search_context_usage: SearchContextUsage | None = Field(
+		default=None,
+		description="how much search context perplexity should use",
+	)
+	temperature: float | None = Field(
+		default=None,
+		ge=0.0,
+		le=2.0,
+		description="sampling temperature (lower = more factual)",
+	)
+	search_recency_filter: SearchRecencyFilter | None = Field(
+		default=None,
+		description="restrict search results to a time window",
+	)
+	return_images: bool | None = Field(
+		default=None,
+		description="include image URLs in perplexity search results",
+	)
+	max_concurrent_requests: int | None = Field(
+		default=None,
+		ge=1,
+		description="max concurrent requests to perplexity",
+	)
+
+
+class WebSearchSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	search_agent: SearchAgent | None = Field(
+		default=None,
+		description="agent to use for agentic web search tool",
+	)
+	blacklisted_domains: list[str] | None = Field(
+		default=None,
+		description="domains to exclude from web search results",
+	)
+	search_engines: SearchEngineSettingsPatch | None = None
+	web_loaders: WebLoaderSettingsPatch | None = None
+	perplexity: PerplexitySettingsPatch | None = None
+
+
 class SettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -527,6 +755,8 @@ class SettingsPatch(BaseModel):
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
 	soft_delete: SoftDeleteSettingsPatch | None = None
+	web_search: WebSearchSettingsPatch | None = None
+	code_interpreter: CodeInterpreterSettingsPatch | None = None
 	default_permissions: DefaultPermissionsSettingsPatch | None = None
 
 
@@ -541,6 +771,8 @@ class SettingsVersions(BaseModel):
 	limits: int = 0
 	security: int = 0
 	soft_delete: int = 0
+	web_search: int = 0
+	code_interpreter: int = 0
 	default_permissions: int = 0
 
 

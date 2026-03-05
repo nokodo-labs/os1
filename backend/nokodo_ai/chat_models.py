@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable
 from typing import Any, ClassVar, Literal, overload
 
 from pydantic import Field
 
-from .adapter_enabled import AdapterEnabledBase
+from .adapter_enabled import AdapterEnabledBase, AdapterResolver
 from .adapters.base.chat import ChatGenerationParams
 from .adapters.chat import ChatAdapter, resolve_chat_adapter
 from .deltas import ChatModelDelta, stream_chat_model_deltas
@@ -29,9 +29,7 @@ class ChatModel(ChatGenerationParams, AdapterEnabledBase[ChatAdapter]):
 
 	model_name: str = Field(..., description="model identifier")
 
-	_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]] = (
-		resolve_chat_adapter
-	)
+	_adapter_resolver: ClassVar[AdapterResolver] = resolve_chat_adapter
 
 	@classmethod
 	def create(

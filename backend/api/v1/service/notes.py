@@ -26,7 +26,7 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.settings.settings import settings
+from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal

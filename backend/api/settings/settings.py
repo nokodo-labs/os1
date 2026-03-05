@@ -154,6 +154,10 @@ class AITaskSettings(BaseModel):
 		default=None,
 		description="model for thread context summarization",
 	)
+	memory_post_processing_model_id: str | None = Field(
+		default=None,
+		description="model for memory post-processing (dedup, update, delete)",
+	)
 
 
 class AIAttachmentSettings(BaseModel):
@@ -267,6 +271,114 @@ class AIWindowingSettings(BaseModel):
 	)
 
 
+class E2bSettings(BaseModel):
+	"""E2B code interpreter sandbox settings."""
+
+	api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="E2B API key for code execution",
+	)
+	template: str = Field(
+		default="code-interpreter-v1",
+		description="E2B sandbox template to use for code execution",
+	)
+
+
+CodeInterpreterEngine = Literal["native", "e2b"]
+
+
+class CodeInterpreterSettings(BaseModel):
+	"""code interpreter (sandbox) configuration."""
+
+	enabled: bool = Field(
+		default=True,
+		description="enable code interpreter capabilities",
+	)
+	engine: CodeInterpreterEngine = Field(
+		default="e2b",
+		description="sandbox engine to use",
+	)
+	e2b: E2bSettings = Field(
+		default_factory=E2bSettings,
+		description="E2B sandbox settings",
+	)
+	timeout: int = Field(
+		default=60,
+		ge=5,
+		description="execution timeout in seconds",
+	)
+
+
+class ImageGenerationSettings(BaseModel):
+	"""image generation engine configuration."""
+
+	enabled: bool = Field(
+		default=True,
+		description="enable image generation capabilities",
+	)
+	model: str | None = Field(
+		default=None,
+		description="model ID referencing a Model ORM record with IMAGE type",
+	)
+	default_size: str = Field(
+		default="1024x1024",
+		description="default image size in WIDTHxHEIGHT format",
+	)
+	default_steps: int | None = Field(
+		default=None,
+		ge=1,
+		description=("default number of generation steps (if supported by the engine)"),
+	)
+	default_n: int = Field(
+		default=1,
+		ge=1,
+		le=10,
+		description="default number of images to generate per prompt",
+	)
+	max_n: int = Field(
+		default=4,
+		ge=1,
+		le=10,
+		description="maximum number of images per request",
+	)
+
+
+class VideoGenerationSettings(BaseModel):
+	"""video generation engine configuration (scaffold)."""
+
+	enabled: bool = Field(
+		default=False,
+		description="enable video generation capabilities",
+	)
+
+
+class AudioGenerationSettings(BaseModel):
+	"""audio generation engine configuration (scaffold)."""
+
+	enabled: bool = Field(
+		default=False,
+		description="enable audio generation capabilities",
+	)
+
+
+class AIMediaSettings(BaseModel):
+	"""AI media generation settings."""
+
+	images: ImageGenerationSettings = Field(
+		default_factory=ImageGenerationSettings,
+		description="image generation settings",
+	)
+	videos: VideoGenerationSettings = Field(
+		default_factory=VideoGenerationSettings,
+		description="video generation settings (future)",
+	)
+	audio: AudioGenerationSettings = Field(
+		default_factory=AudioGenerationSettings,
+		description="audio generation settings (future)",
+	)
+
+
 class AISettings(BaseModel):
 	default_agent_ids: list[str] = Field(
 		default_factory=list,
@@ -288,6 +400,10 @@ class AISettings(BaseModel):
 	windowing: AIWindowingSettings = Field(
 		default_factory=AIWindowingSettings,
 		description="message window and summarization settings",
+	)
+	media: AIMediaSettings = Field(
+		default_factory=AIMediaSettings,
+		description="AI media generation settings",
 	)
 
 
@@ -739,7 +855,163 @@ class SecuritySettings(BaseModel):
 		return v
 
 
-# soft-delete section
+class SearxngSettings(BaseModel):
+	"""searxng-specific settings for web search."""
+
+	instance_url: HttpUrl = Field(
+		default=HttpUrl("http://searxng:8080"),
+		description="base url for the searxng instance",
+	)
+	max_results: int = Field(
+		default=20,
+		description="max results to return from searxng",
+		ge=1,
+	)
+	max_concurrent_requests: int = Field(
+		default=5,
+		description="max concurrent requests to searxng (queue excess)",
+		ge=1,
+	)
+	timeout_seconds: int = Field(
+		default=10,
+		ge=1,
+		description="timeout for searxng API calls in seconds",
+	)
+
+
+class TavilySettings(BaseModel):
+	"""tavily-specific settings for web loading."""
+
+	extract_depth: Literal["basic", "advanced"] = Field(
+		default="advanced",
+		description=("depth of content extraction for tavily web loader."),
+	)
+	api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for tavily web loader",
+	)
+	max_concurrent_requests: int = Field(
+		default=10,
+		description="max concurrent requests to tavily (queue excess)",
+		ge=1,
+	)
+
+
+class WebLoaderSettings(BaseModel):
+	"""web loader configuration for fetching and processing web content."""
+
+	engine: Literal["native", "tavily", "playwright"] = Field(
+		default="native",
+		description="web loader engine to use",
+	)
+	timeout_seconds: int = Field(
+		default=10,
+		ge=1,
+		description="timeout for web loader fetch operations in seconds",
+	)
+	user_agent: str = Field(
+		default="Mozilla/5.0 (compatible; NokodoAI/1.0; +https://nokodo.ai)",
+		description="user agent string for web loader requests",
+	)
+	tavily: TavilySettings = Field(
+		default_factory=TavilySettings,
+		description="tavily-specific settings for web loading",
+	)
+
+
+class SearchEngineSettings(BaseModel):
+	"""search engine configuration for web search"""
+
+	engine: Literal["google", "searxng"] = Field(
+		default="searxng",
+		description="web search engine to use for web search tool",
+	)
+	searxng: SearxngSettings = Field(
+		default_factory=SearxngSettings,
+		description="searxng-specific settings",
+	)
+
+
+PerplexityModel = Literal[
+	"sonar",
+	"sonar-pro",
+	"sonar-reasoning",
+	"sonar-reasoning-pro",
+	"sonar-deep-research",
+]
+
+SearchContextUsage = Literal["low", "medium", "high"]
+
+SearchRecencyFilter = Literal["month", "week", "day", "hour"]
+
+SearchAgent = Literal["native", "perplexity"]
+
+
+class PerplexitySettings(BaseModel):
+	"""perplexity-specific settings for web search."""
+
+	api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for perplexity web search",
+	)
+	model: PerplexityModel = Field(
+		default="sonar",
+		description="perplexity model to use for agentic search",
+	)
+	search_context_usage: SearchContextUsage = Field(
+		default="medium",
+		description=(
+			"how much search context perplexity should use. "
+			"low = faster/cheaper, high = more thorough"
+		),
+	)
+	temperature: float = Field(
+		default=0.2,
+		ge=0.0,
+		le=2.0,
+		description="sampling temperature (lower = more factual)",
+	)
+	search_recency_filter: SearchRecencyFilter | None = Field(
+		default=None,
+		description=(
+			"restrict search results to a time window. None = no filter (all results)"
+		),
+	)
+	return_images: bool = Field(
+		default=False,
+		description="include image URLs in perplexity search results",
+	)
+	max_concurrent_requests: int = Field(
+		default=10,
+		description="max concurrent requests to perplexity (queue excess)",
+		ge=1,
+	)
+
+
+class WebSearchSettings(BaseModel):
+	"""web search provider configuration."""
+
+	search_agent: SearchAgent = Field(
+		default="native", description="agent to use for agentic web search tool."
+	)
+	blacklisted_domains: list[str] = Field(
+		default_factory=list,
+		description="domains to exclude from web search results (e.g. 'twitter.com')",
+	)
+	search_engines: SearchEngineSettings = Field(
+		default_factory=SearchEngineSettings,
+		description="configuration for the supported web search engines",
+	)
+	web_loaders: WebLoaderSettings = Field(
+		default_factory=WebLoaderSettings,
+		description="configuration for fetching and processing web content",
+	)
+	perplexity: PerplexitySettings = Field(
+		default_factory=PerplexitySettings,
+		description="perplexity-specific settings for agentic web search",
+	)
 
 
 class SoftDeleteSettings(BaseModel):
@@ -806,6 +1078,14 @@ class Settings(BaseSettings):
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)
 	soft_delete: SoftDeleteSettings = Field(default_factory=SoftDeleteSettings)
+	web_search: WebSearchSettings = Field(
+		default_factory=WebSearchSettings,
+		description="web search provider settings",
+	)
+	code_interpreter: CodeInterpreterSettings = Field(
+		default_factory=CodeInterpreterSettings,
+		description="code interpreter sandbox settings",
+	)
 	default_permissions: DefaultPermissionsSettings = Field(
 		default_factory=DefaultPermissionsSettings
 	)

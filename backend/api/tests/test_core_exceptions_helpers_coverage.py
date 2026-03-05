@@ -1,10 +1,10 @@
-"""Coverage-focused tests for api.core.exceptions helpers."""
+"""Coverage-focused tests for api.exceptions helpers."""
 
 from __future__ import annotations
 
 from fastapi.exceptions import RequestValidationError
 
-from api.core.exceptions import _make_json_safe, _parse_validation_issues, _status_title
+from api.exceptions import _make_json_safe, _parse_validation_issues, _status_title
 
 
 def test_make_json_safe_handles_nested_types() -> None:

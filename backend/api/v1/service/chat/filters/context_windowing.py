@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import Field, PrivateAttr
 
-from api.core.tasks import create_background_task
-from api.settings.settings import settings as app_settings
+from api.settings import settings as app_settings
+from api.tasks import create_background_task
 from api.v1.service import thread_summaries as summary_service
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.summarization import condense_summaries, summarize_messages

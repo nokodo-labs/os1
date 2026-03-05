@@ -13,11 +13,13 @@ from sqlalchemy.orm import selectinload
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
-from api.settings.settings import settings
+from api.settings import settings
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
+from nokodo_ai.adapters.images import resolve_image_adapter
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.image_models import ImageModel
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -258,6 +260,8 @@ async def resolve_task_chat_model(
 		model_id_str = task_settings.input_autocomplete_model_id
 	elif task == "summarization":
 		model_id_str = task_settings.summarization_model_id
+	elif task == "memory_post_processing":
+		model_id_str = task_settings.memory_post_processing_model_id
 
 	if model_id_str is None:
 		model_id_str = task_settings.default_model_id
@@ -280,3 +284,51 @@ async def resolve_task_chat_model(
 		raise ValueError(f"task model not found: {model_id_str}")
 
 	return build_chat_model(model)
+
+
+def build_image_model(model: Model) -> ImageModel:
+	"""create an sdk ImageModel with fully explicit adapter configuration.
+
+	args:
+		model: orm Model instance with provider relationship loaded
+
+	returns:
+		configured ImageModel ready for use
+	"""
+	if model.model_type != ModelType.IMAGE:
+		raise ValueError(f"model {model.id} is not an image model")
+
+	provider_key = model.provider.adapter_type
+	if not provider_key:
+		raise ValueError("provider adapter_type is empty")
+
+	variant = model.adapter
+	adapter_type = resolve_image_adapter(provider_key, variant)
+	if adapter_type is None:
+		raise ValueError(f"unknown image provider: {provider_key}")
+
+	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
+	return ImageModel.create(model.name, adapter=adapter_config)
+
+
+async def resolve_image_model(
+	session: AsyncSession,
+	model_id: TypeID,
+) -> ImageModel:
+	"""resolve and build an sdk ImageModel from a model id.
+
+	args:
+		session: database session
+		model_id: id of the image model
+
+	returns:
+		configured ImageModel ready for use
+	"""
+	stmt = (
+		select(Model).options(selectinload(Model.provider)).where(Model.id == model_id)
+	)
+	result = await session.execute(stmt)
+	model = result.scalars().one_or_none()
+	if model is None:
+		raise HTTPException(status_code=404, detail="image model not found")
+	return build_image_model(model)

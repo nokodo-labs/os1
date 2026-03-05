@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import AsyncIterator, Awaitable
 from time import time
@@ -144,8 +145,6 @@ def _content_part_to_google(
 			)
 		case ImageContent():
 			if part.base64 and part.media_type:
-				import base64
-
 				return GooglePart(
 					inline_data=GoogleBlob(
 						data=base64.b64decode(part.base64),

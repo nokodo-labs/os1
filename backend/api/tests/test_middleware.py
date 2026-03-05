@@ -16,14 +16,14 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
+from api import exceptions as exceptions_module
 from api.boot_settings import boot_settings
-from api.core import exceptions as exceptions_module
-from api.core.exceptions import (
+from api.exceptions import (
 	http_exception_handler,
 	unhandled_exception_handler,
 	validation_exception_handler,
 )
-from api.core.logging import request_id_ctx
+from api.logging import request_id_ctx
 from api.middleware import (
 	APIVersionHeaderMiddleware,
 	RequestIDMiddleware,

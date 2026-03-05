@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any, ClassVar
 
 from pydantic import ConfigDict, Field
 
-from .adapter_enabled import AdapterEnabledBase
+from .adapter_enabled import AdapterEnabledBase, AdapterResolver
 from .adapters.embeddings import (
 	EmbeddingsAdapter,
 	resolve_embeddings_adapter,
@@ -29,9 +28,7 @@ class EmbeddingModel(AdapterEnabledBase[EmbeddingsAdapter]):
 
 	model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
-	_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]] = (
-		resolve_embeddings_adapter
-	)
+	_adapter_resolver: ClassVar[AdapterResolver] = resolve_embeddings_adapter
 
 	@classmethod
 	def create(

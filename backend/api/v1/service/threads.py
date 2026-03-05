@@ -40,7 +40,7 @@ from api.schemas.search import (
 from api.schemas.sorting import CommonSortBy
 from api.schemas.thread import Thread as ThreadOut
 from api.schemas.thread import ThreadCreate, ThreadUpdate
-from api.settings.settings import settings
+from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
 from api.v1.service import vectorstores as vectorstore_service
@@ -87,8 +87,13 @@ class _ThreadMetadataOut(BaseModel):
 	"""structured output schema for thread metadata generation."""
 
 	title: str = Field(
-		description="emoji followed by 1-3 lowercase words, e.g. '🔧 fix login bug'",
+		description="emoji followed by 1-3 lowercase words.",
 		max_length=50,
+		examples=[
+			"🧠 brainstorm new app features",
+			"📚 research quantum computing",
+			"🫂 help with friends",
+		],
 	)
 	tags: list[str] = Field(
 		default_factory=list,
@@ -166,9 +171,7 @@ async def generate_thread_metadata(
 		sdk_thread = SDKThread(
 			messages=[
 				SDKSystemMessage.from_text(
-					"generate thread metadata. "
-					"title must be: one emoji + 1-3 lowercase words. "
-					"tags: 0-6 short lowercase labels. return only valid json."
+					"given the following chat history, generate thread metadata. "
 				),
 				SDKUserMessage.from_text(json.dumps(payload)),
 			]

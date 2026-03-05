@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import Session, with_loader_criteria
 
 from api.boot_settings import boot_settings
-from api.core.logging import get_logger
+from api.logging import get_logger
 from api.models.mixins import SoftDeleteMixin
 
 

@@ -14,6 +14,9 @@ from openai.types import (
 	CompletionUsage as OpenAICompletionUsage,
 )
 from openai.types import (
+	ImageModel as OpenAIImageModel,
+)
+from openai.types import (
 	ResponsesModel as OpenAIResponsesModel,
 )
 from openai.types.chat import (
@@ -61,6 +64,9 @@ from openai.types.chat import (
 )
 from openai.types.chat.chat_completion_tool_param import (
 	FunctionDefinition as OpenAIChatCompletionFunctionDefinition,
+)
+from openai.types.images_response import (
+	ImagesResponse as OpenAIImagesResponse,
 )
 from openai.types.responses import (
 	EasyInputMessageParam as OpenAIEasyInputMessageParam,
@@ -142,6 +148,8 @@ OpenAIChatCompletionFunctionToolCallParam = ChatCompletionMessageFunctionToolCal
 __all__ = [
 	# shared
 	"OpenAIChatModel",
+	"OpenAIImageModel",
+	"OpenAIImagesResponse",
 	"OpenAIJSONSchema",
 	"OpenAIResponseFormatJSONSchema",
 	# streaming

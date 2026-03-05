@@ -29,7 +29,7 @@ from api.models.agent import Agent
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.model import Model
-from api.settings.settings import settings as app_settings
+from api.settings import settings as app_settings
 from api.v1.service import threads as thread_service
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.prompt_runtime import SENTINEL_REFERENCED_ATTACHMENTS

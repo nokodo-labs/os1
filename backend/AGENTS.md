@@ -26,7 +26,12 @@
 backend/
 ├── api/                         # FastAPI backend app
 │   ├── main.py                  # app entrypoint and startup wiring
-│   ├── core/                    # runtime, logging, OpenAPI, shared exceptions
+│   ├── exceptions.py            # exception handlers
+│   ├── logging.py               # logging configuration and utilities
+│   ├── openapi.py               # OpenAPI response defaults
+│   ├── runtime.py               # event loop and runtime configuration
+│   ├── tasks.py                 # shared background task utilities
+│   ├── ...                      # perplexity, tavily, searxng API clients, etc.
 │   ├── database/                # DB init and search cursor helpers
 │   ├── middleware/              # API versioning, request id, logging, headers
 │   ├── migrations/              # Alembic config and migration scripts
@@ -42,6 +47,14 @@ backend/
 │       ├── routers/             # v1 route handlers
 │       ├── schemas/             # v1-only schemas
 │       ├── service/             # v1 service layer (auth/chat/files/etc.)
+│       │   ├── chat/            # ai chat orchestration
+│       │   │   ├── tools/       # chat tool implementations + registry
+│       │   │   ├── hooks/       # post-execution hooks + registry
+│       │   │   ├── filters/     # pre-execution filters (context injection)
+│       │   │   └── models.py    # chat model resolution + JSON schema calls
+│       │   ├── web_search/      # agentic web search + web loaders
+│       │   ├── media/           # media generation (images, video, audio)
+│       │   └── ...              # auth, files, memories, threads, etc.
 │       └── tasks/               # v1 async/background task modules
 ├── nokodo_ai/                   # standalone SDK/runtime library
 │   ├── adapters/                # provider adapters + base adapter contracts

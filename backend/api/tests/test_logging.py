@@ -7,7 +7,7 @@ import logging
 import sys
 from unittest.mock import patch
 
-from api.core.logging import (
+from api.logging import (
 	Colors,
 	ConsoleFormatter,
 	JSONFormatter,
@@ -337,19 +337,19 @@ class TestGetLogLevel:
 	"""tests for log level detection."""
 
 	def test_debug_mode_returns_debug(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = True
 			mock_settings.ENV = "production"
 			assert get_log_level() == logging.DEBUG
 
 	def test_dev_env_returns_debug(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			assert get_log_level() == logging.DEBUG
 
 	def test_production_env_returns_info(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "production"
 			assert get_log_level() == logging.INFO
@@ -365,7 +365,7 @@ class TestConfigureLogging:
 		root.setLevel(logging.WARNING)
 
 	def test_configure_with_console_formatter(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
@@ -375,7 +375,7 @@ class TestConfigureLogging:
 		assert isinstance(root.handlers[0].formatter, ConsoleFormatter)
 
 	def test_configure_with_json_formatter(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "production"
 			configure_logging(json_logs=True)
@@ -385,7 +385,7 @@ class TestConfigureLogging:
 		assert isinstance(root.handlers[0].formatter, JSONFormatter)
 
 	def test_configure_with_custom_level(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			configure_logging(level=logging.ERROR, json_logs=False)
@@ -404,7 +404,7 @@ class TestConfigureLogging:
 		root.addHandler(test_handler1)
 		root.addHandler(test_handler2)
 
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
@@ -423,7 +423,7 @@ class TestConfigureLogging:
 		assert len(our_handlers) == 1
 
 	def test_configure_suppresses_noisy_loggers(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
@@ -433,7 +433,7 @@ class TestConfigureLogging:
 			assert logger.level == logging.WARNING
 
 	def test_configure_uvicorn_propagates(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
@@ -444,7 +444,7 @@ class TestConfigureLogging:
 			assert len(logger.handlers) == 0
 
 	def test_auto_json_in_production(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "production"
 			mock_settings.JSON_LOGS = True
@@ -454,7 +454,7 @@ class TestConfigureLogging:
 		assert isinstance(root.handlers[0].formatter, JSONFormatter)
 
 	def test_auto_console_in_dev(self) -> None:
-		with patch("api.core.logging.boot_settings") as mock_settings:
+		with patch("api.logging.boot_settings") as mock_settings:
 			mock_settings.DEBUG = False
 			mock_settings.ENV = "dev"
 			mock_settings.JSON_LOGS = False

@@ -27,7 +27,7 @@ from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
 from api.permissions import ResourceType
 from api.schemas.file import FileCreate, FileUpdate
-from api.settings.settings import settings
+from api.settings import settings
 from api.storage import get_storage_backend
 from api.storage.base import MimeType
 from api.v1.service import events as event_service

@@ -11,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.tasks import create_background_task
 from api.database import AsyncSessionLocal
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
@@ -20,6 +19,7 @@ from api.models.model import Model
 from api.permissions import ResourceType
 from api.schemas.message import MessageCreate
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
+from api.tasks import create_background_task
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_resource_access
@@ -144,7 +144,6 @@ async def build_agent_from_orm(
 	# resolve plugins from agent's plugin_ids
 	tools = await resolve_tools(
 		tool_ids=agent_orm.plugin_ids,
-		context=context,
 	)
 	filters = resolve_filters(agent_orm.plugin_ids)
 	filters.insert(0, ToolResultTruncationFilter())

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from api import runtime as config_module
+from api import runtime as runtime_module
 from api.boot_settings import BootSettings
-from api.core import runtime as config_module
-from api.core import runtime as runtime_module
 from api.database import main as database_module
 from api.settings.settings import SecuritySettings
 

@@ -33,6 +33,7 @@ from .deltas import AgentDelta, ChatModelDelta
 from .embeddings import EmbeddingModel
 from .filters import Filter
 from .hooks import Hook
+from .image_models import ImageModel
 from .messages import (
 	AssistantMessage,
 	BaseMessage,
@@ -59,6 +60,7 @@ __all__ = [
 	# high-level interfaces
 	"ChatModel",
 	"EmbeddingModel",
+	"ImageModel",
 	"Vectorstore",
 	"Agent",
 	"ChatModelDelta",

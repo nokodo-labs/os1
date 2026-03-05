@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import Field
 
-from api.settings.settings import settings as app_settings
+from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.threads import Thread as SDKThread

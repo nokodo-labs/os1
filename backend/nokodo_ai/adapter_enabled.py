@@ -12,6 +12,11 @@ from .adapters.base.adapter import BaseAdapter
 from .base import Base
 
 
+# reusable type for adapter resolver functions.
+# (provider, variant) -> fully-qualified adapter type string or None.
+AdapterResolver = Callable[[str, str | None], str | None]
+
+
 class AdapterEnabledBase[AdapterType: BaseAdapter](Base):
 	"""base model for interfaces that resolve an adapter.
 
@@ -28,7 +33,7 @@ class AdapterEnabledBase[AdapterType: BaseAdapter](Base):
 	will be resolved to the full adapter type (e.g., "openai.chat_completions").
 	"""
 
-	_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]]
+	_adapter_resolver: ClassVar[AdapterResolver]
 	adapter: AdapterType = Field(
 		description="resolved adapter instance",
 	)

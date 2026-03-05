@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.thread_summary import ThreadSummary
-from api.settings.settings import settings as app_settings
+from api.settings import settings as app_settings
 from api.v1.service import thread_summaries as summary_service
 from api.v1.service.prompt_runtime import SENTINEL_CHAT_WINDOW_INFO
 from nokodo_ai.messages import Message as SDKMessage

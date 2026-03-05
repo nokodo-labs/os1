@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from api import models  # noqa: F401
 from api.boot_settings import boot_settings
-from api.core.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.models.base import Base
+from api.runtime import configure_psycopg_asyncio_event_loop_policy
 
 
 configure_psycopg_asyncio_event_loop_policy()

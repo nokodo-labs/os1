@@ -4,7 +4,7 @@ import time
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from api.core.logging import get_logger
+from api.logging import get_logger
 
 from ._utils import append_header, get_client_ip
 

@@ -8,7 +8,7 @@ from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from api.core.logging import get_logger, request_id_ctx
+from api.logging import get_logger, request_id_ctx
 from api.schemas.errors import ProblemDetails, ValidationIssue, ValidationProblemDetails
 
 

@@ -4,6 +4,7 @@ from .base import (
 	BaseChatAdapter,
 	BaseClientAdapter,
 	BaseEmbeddingAdapter,
+	BaseImageAdapter,
 	BaseVectorstoreAdapter,
 )
 
@@ -12,5 +13,6 @@ __all__ = [
 	"BaseClientAdapter",
 	"BaseChatAdapter",
 	"BaseEmbeddingAdapter",
+	"BaseImageAdapter",
 	"BaseVectorstoreAdapter",
 ]

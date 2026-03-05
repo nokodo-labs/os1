@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.hooks.base import Hook
+from api.v1.service.chat.hooks.memory_post_processing import (
+	MemoryPostProcessingHook,
+)
 from nokodo_ai.hooks import Hook as SDKHook
 
 
@@ -11,8 +14,7 @@ type AppHook = SDKHook[AppContext]
 
 
 HOOK_REGISTRY: dict[str, AppHook] = {
-	# no hooks registered yet
-	# add hooks here as they are implemented
+	"memory_post_processing": MemoryPostProcessingHook(),
 }
 
 
@@ -34,6 +36,7 @@ def resolve_hooks(hook_ids: list[str]) -> list[AppHook]:
 
 __all__ = [
 	"Hook",
+	"MemoryPostProcessingHook",
 	"HOOK_REGISTRY",
 	"get_registered_names",
 	"resolve_hooks",

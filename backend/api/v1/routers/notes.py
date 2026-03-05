@@ -139,3 +139,13 @@ async def delete_note(
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+
+
+@router.post("/{note_id}/enhance", response_model=NoteSchema)
+async def enhance_note(
+	note_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> Note:
+	"""enhance a note using AI. stub - returns the note unchanged until implemented."""
+	return await note_service.get_note(note_id, db, principal=principal)

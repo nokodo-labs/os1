@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, _patch, patch
 
 import pytest
 
-from api.core.tasks import _on_task_done
+from api.tasks import _on_task_done
 from api.v1.service.chat.filters.context_windowing import (
 	ContextWindowingFilter,
 )
@@ -140,7 +140,7 @@ class TestOnTaskDone:
 		exc = RuntimeError("boom")
 		task.exception.return_value = exc
 
-		with patch("api.core.tasks.logger") as mock_log:
+		with patch("api.tasks.logger") as mock_log:
 			_on_task_done(task, "test_task")
 			mock_log.exception.assert_called_once()
 			assert "test_task" in mock_log.exception.call_args[0][1]

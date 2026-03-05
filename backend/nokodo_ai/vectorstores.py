@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import ClassVar, overload
 
 from pydantic import Field
 
-from .adapter_enabled import AdapterEnabledBase
+from .adapter_enabled import AdapterEnabledBase, AdapterResolver
 from .adapters.base.vectorstores import (
 	Chunk,
 	ChunkFilter,
@@ -37,9 +36,7 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		..., description="collection/namespace within the vectorstore"
 	)
 
-	_adapter_resolver: ClassVar[Callable[[str, str | None], str | None]] = (
-		resolve_vectorstore_adapter
-	)
+	_adapter_resolver: ClassVar[AdapterResolver] = resolve_vectorstore_adapter
 
 	@classmethod
 	def create(

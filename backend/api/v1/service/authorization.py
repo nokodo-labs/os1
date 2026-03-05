@@ -26,7 +26,7 @@ from api.models.task import Task
 from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import ResourceType
-from api.settings.settings import settings
+from api.settings import settings
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID
 

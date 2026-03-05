@@ -40,6 +40,7 @@ from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
+from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
@@ -425,3 +426,14 @@ async def set_thread_access_rules(
 	return await access_rules_service.set_access_rules(
 		ResourceType.THREAD, str(thread_id), rules, db, principal=principal
 	)
+
+
+@router.post("/{thread_id}/runs/{run_id}/cancel")
+async def cancel_run(
+	thread_id: TypeID,
+	run_id: str,
+	principal: Principal = Depends(get_current_principal),
+) -> dict[str, str]:
+	"""cancel an active agent run on a thread."""
+	await run_status_store.fail_run(run_id)
+	return {"status": "cancelled"}

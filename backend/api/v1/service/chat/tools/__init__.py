@@ -2,8 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
+from api.v1.service.chat.tools.code_interpreter import CodeInterpreterTool
+from api.v1.service.chat.tools.files import FileEditTool, FileGetTool
+from api.v1.service.chat.tools.image_generation import GenerateImageTool
+from api.v1.service.chat.tools.memories import (
+	MemoryCreateTool,
+	MemoryRecallTool,
+)
+from api.v1.service.chat.tools.notes import NoteGetTool, NoteWriteTool
+from api.v1.service.chat.tools.reminders import (
+	ReminderGetTool,
+	ReminderWriteTool,
+)
+from api.v1.service.chat.tools.reveal_attachment import RevealAttachmentTool
+from api.v1.service.chat.tools.send_notification import (
+	SendNotificationTool,
+)
+from api.v1.service.chat.tools.think import ThinkingTool
+from api.v1.service.chat.tools.web_search import (
+	AgenticWebSearchTool,
+	FetchUrlTool,
+)
 from nokodo_ai.tool import Tool
 
 
@@ -11,25 +33,30 @@ if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 
-from api.v1.service.chat.tools.memories import MemoryCreateTool, MemoryRecallTool
-from api.v1.service.chat.tools.reveal_attachment import RevealAttachmentTool
-from api.v1.service.chat.tools.send_notification import SendNotificationTool
-from api.v1.service.chat.tools.think import ThinkingTool
+logger = logging.getLogger(__name__)
 
 
 _TOOLS: list[Tool[AppContext]] = [
 	MemoryRecallTool(),
 	MemoryCreateTool(),
+	NoteGetTool(),
+	NoteWriteTool(),
+	ReminderGetTool(),
+	ReminderWriteTool(),
+	FileGetTool(),
+	FileEditTool(),
+	AgenticWebSearchTool(),
+	FetchUrlTool(),
+	GenerateImageTool(),
+	CodeInterpreterTool(),
 	RevealAttachmentTool(),
 	SendNotificationTool(),
 	ThinkingTool(),
 ]
 
-TOOL_REGISTRY: dict[str, Tool[AppContext]] = {}
-for tool in _TOOLS:
-	if tool.name in TOOL_REGISTRY:
-		raise ValueError(f"duplicate tool name: {tool.name}")
-	TOOL_REGISTRY[tool.name] = tool
+TOOL_REGISTRY: dict[str, Tool[AppContext]] = {t.name: t for t in _TOOLS}
+if len(TOOL_REGISTRY) != len(_TOOLS):
+	raise ValueError("duplicate tool names detected in TOOL_REGISTRY")
 
 
 def get_registered_names() -> frozenset[str]:
@@ -39,32 +66,31 @@ def get_registered_names() -> frozenset[str]:
 
 async def resolve_tools(
 	tool_ids: list[str],
-	*,
-	context: AppContext,
 ) -> list[Tool[AppContext]]:
-	"""resolve tool ids to instantiated Tool objects.
-
-	args:
-		tool_ids: list of tool identifiers to resolve
-		context: agent execution context
-
-	returns:
-		list of instantiated Tool objects
-	"""
+	"""resolve tool ids to instantiated Tool objects."""
 	tools: list[Tool[AppContext]] = []
-
 	for tool_id in tool_ids:
 		tool = TOOL_REGISTRY.get(tool_id)
 		if tool is None:
+			logger.warning("unknown tool id requested: %s", tool_id)
 			continue
-
 		tools.append(tool)
 	return tools
 
 
 __all__ = [
-	"MemoryRecallTool",
+	"AgenticWebSearchTool",
+	"CodeInterpreterTool",
+	"FetchUrlTool",
+	"FileEditTool",
+	"FileGetTool",
+	"GenerateImageTool",
 	"MemoryCreateTool",
+	"MemoryRecallTool",
+	"NoteGetTool",
+	"NoteWriteTool",
+	"ReminderGetTool",
+	"ReminderWriteTool",
 	"RevealAttachmentTool",
 	"SendNotificationTool",
 	"ThinkingTool",
