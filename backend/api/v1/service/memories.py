@@ -442,3 +442,61 @@ async def search_memories(
 	_sk = MEMORY_SPEC.sort_key
 	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
 	return build_cursor_page(items, limit, sort_key=MEMORY_SPEC.sort_key)
+
+
+async def query_relevant_memories(
+	query: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	score_threshold: float = 0.0,
+) -> list[Memory]:
+	"""hybrid search returning full Memory objects in relevance order.
+
+	intended for internal consumers (filters, tools) that need full
+	memory content rather than the truncated SearchResultItem used by
+	UI search endpoints.
+
+	args:
+		query: natural-language search text.
+		db: async database session.
+		principal: authenticated user.
+		limit: max memories to return.
+		score_threshold: minimum normalized score (0-1). results below
+			this threshold are dropped.
+
+	returns:
+		full Memory objects ordered by relevance (best first).
+	"""
+	query_emb = await embed_text(text=query, session=db)
+	query_filter = vectorstore_service.resource_filter(
+		"memory",
+		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+	)
+	results = await vectorstore_service.search(
+		session=db,
+		query=query_emb,
+		text_query=query,
+		limit=limit,
+		query_filter=query_filter,
+		normalize=True,
+	)
+	if not results:
+		return []
+
+	# apply score threshold.
+	results = [r for r in results if r.score >= score_threshold]
+	if not results:
+		return []
+
+	# fetch full Memory objects.
+	resource_ids = [r.metadata["resource_id"] for r in results]
+	stmt = select(Memory).where(Memory.id.in_(resource_ids))
+	if not principal.is_admin:
+		stmt = stmt.where(Memory.user_id == principal.user.id)
+	db_result = await db.execute(stmt)
+	by_id = {str(m.id): m for m in db_result.scalars().all()}
+
+	# preserve relevance order from vector search.
+	return [by_id[rid] for rid in resource_ids if rid in by_id]

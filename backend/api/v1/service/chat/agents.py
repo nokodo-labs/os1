@@ -480,7 +480,11 @@ async def run_agent(
 				}
 
 			current_assistant_id: str | None = None
-			assistant_accum = SDKAssistantMessage()
+			# deferred merge: collect deltas, merge once on completion
+			_chat_deltas: list[SDKAssistantMessage] = []
+			# incremental tracking for run status (avoids per-token merge)
+			_streaming_text = ""
+			_streaming_tc: list[dict[str, object]] = []
 
 			async for delta in stream:
 				message_id: str | None = None
@@ -488,44 +492,61 @@ async def run_agent(
 				if delta.chat is not None:
 					if current_assistant_id is None:
 						current_assistant_id = _alloc_message_id()
-						assistant_accum = SDKAssistantMessage()
+						_chat_deltas = []
+						_streaming_text = ""
+						_streaming_tc = []
 					message_id = current_assistant_id
-					assistant_accum = assistant_accum.merge(delta.chat.message)
+					_chat_deltas.append(delta.chat.message)
 
 					if persist:
-						streaming_text = ""
-						tool_calls_data: list[dict[str, object]] = []
-						for part in assistant_accum.content or []:
-							if isinstance(part, TextContent):
-								streaming_text += part.text
-						has_tc = (
-							hasattr(assistant_accum, "tool_calls")
-							and assistant_accum.tool_calls
-						)
-						if has_tc:
-							tool_calls_data = [
-								tc.model_dump(mode="json")
-								if hasattr(tc, "model_dump")
-								else {}
-								for tc in assistant_accum.tool_calls
-							]
+						# incremental text accumulation
+						delta_text = delta.chat.message.text
+						if delta_text:
+							_streaming_text += delta_text
+
+						# incremental tool call accumulation
+						tc_update: list[dict[str, object]] | None = None
+						if delta.chat.message.tool_calls:
+							for tc in delta.chat.message.tool_calls:
+								existing = next(
+									(t for t in _streaming_tc if t.get("id") == tc.id),
+									None,
+								)
+								if existing is not None:
+									if isinstance(tc.arguments, str) and tc.arguments:
+										existing["arguments"] = (
+											str(existing.get("arguments", ""))
+											+ tc.arguments
+										)
+									if tc.name:
+										existing["name"] = tc.name
+								else:
+									_streaming_tc.append(
+										{
+											"id": tc.id,
+											"name": tc.name,
+											"arguments": (
+												tc.arguments
+												if isinstance(tc.arguments, str)
+												else ""
+											),
+										}
+									)
+							tc_update = _streaming_tc
+
 						await run_status_store.update_streaming(
 							run_id_str,
 							message_id=current_assistant_id,
-							content=streaming_text,
-							tool_calls=tool_calls_data,
+							content=_streaming_text,
+							tool_calls=tc_update,
 						)
-
-					# emit text_delta for streaming text chunks (ephemeral and persist)
-					if delta.chat.message.content:
-						for part in delta.chat.message.content:
-							if isinstance(part, TextContent) and part.text:
-								yield sse_event(
-									event="text_delta", data={"text": part.text}
-								)
 
 					if delta.chat.done:
 						if persist:
+							# deferred merge - build full message only on completion
+							assistant_accum = SDKAssistantMessage()
+							for dm in _chat_deltas:
+								assistant_accum = assistant_accum.merge(dm)
 							active_message_id_for_events = current_assistant_id
 							await message_queue.put(
 								(current_assistant_id, assistant_accum)
@@ -536,13 +557,21 @@ async def run_agent(
 									content_parts.append(
 										{"type": "text", "text": part.text}
 									)
+							tc_data = (
+								[
+									tc.model_dump(mode="json")
+									for tc in assistant_accum.tool_calls
+								]
+								if assistant_accum.tool_calls
+								else []
+							)
 							await run_status_store.add_message(
 								run_id_str,
 								message_id=current_assistant_id,
 								message_type="assistant",
 								content=content_parts,
 								sender_agent_id=str(agent_id),
-								tool_calls=tool_calls_data,
+								tool_calls=tc_data,
 							)
 						current_assistant_id = None
 

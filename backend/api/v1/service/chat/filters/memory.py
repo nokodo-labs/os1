@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from pydantic import Field
-from sqlalchemy import select
 
-from api.database import AsyncSessionLocal
 from api.models.memory import Memory
+from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.memories import query_relevant_memories
 from api.v1.service.prompt_runtime import SENTINEL_USER_MEMORIES
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -20,7 +21,13 @@ if TYPE_CHECKING:
 
 
 class MemoryContextFilter(Filter):
-	"""pre-filter that injects memory context into the system prompt.
+	"""pre-filter that injects relevant memories into the system prompt.
+
+	uses hybrid (dense + BM25) vector search against recent user messages
+	to retrieve contextually relevant memories.
+
+	respects app_settings.ai.memory for top_k, messages_to_consider,
+	and similarity_threshold.
 
 	only activates when the admin includes {{ user_memories }} in the
 	agent's system prompt. if the variable is absent, the filter is a no-op.
@@ -28,11 +35,6 @@ class MemoryContextFilter(Filter):
 
 	name: str = Field(default="memory_context")
 	description: str = Field(default="injects relevant memories into the system prompt")
-	max_memories: int = Field(default=10, exclude=True)
-	memory_section_header: str = Field(
-		default="## user context and memories",
-		exclude=True,
-	)
 
 	async def process(
 		self,
@@ -59,35 +61,48 @@ class MemoryContextFilter(Filter):
 		if SENTINEL_USER_MEMORIES not in system_text:
 			return thread
 
-		memories = await self._fetch_memories(app_context)
-		content = self._format_memory_context(memories) if memories else ""
+		mem_cfg = app_settings.ai.memory
 
-		new_text = system_text.replace(SENTINEL_USER_MEMORIES, content)
-		thread.messages[system_idx] = SDKSystemMessage.from_text(new_text)
+		# build query from the N most recent user messages.
+		user_texts = [
+			m.text
+			for m in reversed(thread.messages)
+			if m.role == "user" and getattr(m, "text", None)
+		][: mem_cfg.messages_to_consider]
 
+		if not user_texts:
+			# no user message yet - clear the sentinel and return.
+			thread.messages[system_idx] = SDKSystemMessage.from_text(
+				system_text.replace(SENTINEL_USER_MEMORIES, "")
+			)
+			return thread
+
+		query = "\n".join(reversed(user_texts))
+
+		memories = await query_relevant_memories(
+			query,
+			app_context.session,
+			principal=app_context.principal,
+			limit=mem_cfg.top_k,
+			score_threshold=mem_cfg.similarity_threshold,
+		)
+		content = self._format_memories(memories) if memories else ""
+
+		thread.messages[system_idx] = SDKSystemMessage.from_text(
+			system_text.replace(SENTINEL_USER_MEMORIES, content)
+		)
 		return thread
 
-	async def _fetch_memories(self, context: AppContext) -> list[Memory]:
-		stmt = (
-			select(Memory)
-			.where(Memory.user_id == context.user_id)
-			.order_by(Memory.updated_at.desc())
-			.limit(self.max_memories)
-		)
-
-		async with AsyncSessionLocal() as tool_session:
-			result = await tool_session.execute(stmt)
-			items = list(result.scalars().all())
-		return [mem for mem in items if isinstance(mem, Memory)]
-
-	def _format_memory_context(self, memories: list[Memory]) -> str:
-		lines = [self.memory_section_header, ""]
-
+	def _format_memories(self, memories: list[Memory]) -> str:
+		entries = []
 		for mem in memories:
-			category = f" ({mem.category})" if mem.category else ""
-			lines.append(f"- {mem.content}{category}")
-
-		lines.append("")
-		lines.append("use this context to personalize responses when relevant.")
-
-		return "\n".join(lines)
+			entry: dict = {"content": mem.content}
+			if mem.category:
+				entry["category"] = mem.category
+			if mem.created_at:
+				entry["created_at"] = mem.created_at.isoformat()
+			if mem.updated_at:
+				entry["updated_at"] = mem.updated_at.isoformat()
+			entries.append(entry)
+		memories_json = json.dumps(entries, indent=2, ensure_ascii=False)
+		return f"<long_term_memory>\n{memories_json}\n</long_term_memory>"

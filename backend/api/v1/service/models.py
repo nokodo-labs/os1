@@ -28,7 +28,7 @@ def _default_input_modalities(model_type: str) -> list[str]:
 			return [InputModality.TEXT, InputModality.IMAGES]
 		case "embedding":
 			return [InputModality.TEXT]
-		case "image_generation":
+		case "image":
 			return [InputModality.TEXT, InputModality.IMAGES]
 		case "audio":
 			return [InputModality.TEXT, InputModality.AUDIO]
@@ -65,6 +65,12 @@ def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
 		match provider_key:
 			case "openai" | "ollama":
 				return "embedding"
+	if model_type == "image":
+		match provider_key:
+			case "openai":
+				return "images"
+			case "google":
+				return "predict_images"
 	return None
 
 
@@ -375,9 +381,18 @@ def _check_valid_adapter(
 	elif model_type == "embedding":
 		if provider_type in ("openai", "ollama"):
 			valid = adapter == "embedding"
+	elif model_type == "image":
+		if provider_type == "openai":
+			valid = adapter == "images"
+		elif provider_type == "google":
+			valid = adapter in ("predict_images", "generate_content_images")
 
 	if not valid:
-		display_model_type = "chat model" if model_type == "chat_model" else model_type
+		_labels: dict[str, str] = {
+			"chat_model": "chat model",
+			"image": "image",
+		}
+		display_model_type = _labels.get(model_type, model_type)
 		msg = (
 			f"Invalid adapter '{adapter}' for provider type '{provider_type}' "
 			f"and model type '{display_model_type}'."

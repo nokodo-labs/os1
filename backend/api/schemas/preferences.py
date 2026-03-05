@@ -20,7 +20,11 @@ BackgroundType = Literal[
 	"silk",
 	"fog",
 	"clouds",
+	"clouds-dark",
 	"clouds2",
+	"clouds2-dark",
+	"grainient",
+	"iridescence",
 	"static",
 	"none",
 ]

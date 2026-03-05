@@ -20,7 +20,7 @@
 		{
 			"label": "backend: run server",
 			"type": "shell",
-			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop api.core.runtime:selector_loop_factory",
+			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop api.runtime:selector_loop_factory",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},

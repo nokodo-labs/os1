@@ -14,7 +14,7 @@
 				"--port",
 				"1383",
 				"--loop",
-				"api.core.runtime:selector_loop_factory"
+				"api.runtime:selector_loop_factory"
 			],
 			"jinja": true,
 			"justMyCode": true,

@@ -36,7 +36,7 @@ class ModelType(StrEnum):
 
 	CHAT_MODEL = "chat_model"
 	EMBEDDING = "embedding"
-	IMAGE = "image_generation"
+	IMAGE = "image"
 	AUDIO = "audio"
 	VIDEO = "video"
 

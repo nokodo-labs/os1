@@ -25,7 +25,6 @@ from ...messages import (
 	UserMessage,
 )
 from ...tool import ToolDefinition
-from ...types import JSONObject
 from ...utils.provider_meta import (
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
@@ -87,20 +86,6 @@ def _tools_to_google(tools: list[ToolDefinition]) -> GoogleToolListUnion:
 			)
 		)
 	return [GoogleTool(function_declarations=function_declarations)]
-
-
-def _apply_response_model_to_system(
-	system_text: str | None,
-	response_model: JSONObject | None,
-) -> str | None:
-	if response_model is None:
-		return system_text
-
-	schema_json = json.dumps(response_model)
-	instruction = "return only valid json that matches this json schema: " + schema_json
-	if system_text:
-		return system_text + "\n\n" + instruction
-	return instruction
 
 
 def _find_tool_name_from_history(
@@ -409,9 +394,6 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		system_text, contents = _messages_to_google(messages)
-		system_text = _apply_response_model_to_system(
-			system_text, params.response_model
-		)
 
 		google_tools = _tools_to_google(tools) if tools else None
 		google_tool_config: GoogleToolConfig | None = None
@@ -427,6 +409,10 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			tools=google_tools,
 			tool_config=google_tool_config,
 			stop_sequences=params.stop if params.stop else None,
+			response_mime_type="application/json" if params.response_model else None,
+			response_json_schema=dict[str, object](params.response_model)
+			if params.response_model
+			else None,
 		)
 
 		response = await self._client.models.generate_content(
@@ -435,7 +421,23 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			config=config,
 		)
 
-		return _response_to_assistant_message(response)
+		msg = _response_to_assistant_message(response)
+		if params.response_model:
+			text = "".join(p.text for p in msg.content if isinstance(p, TextContent))
+			if text:
+				try:
+					parsed = json.loads(text)
+					if isinstance(parsed, dict):
+						non_text = [
+							p for p in msg.content
+							if not isinstance(p, TextContent)
+						]
+						msg = msg.model_copy(
+							update={"content": [JsonContent(data=parsed)] + non_text}
+						)
+				except json.JSONDecodeError:
+					pass
+		return msg
 
 	async def _generate_streaming(
 		self,
@@ -446,9 +448,6 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		system_text, contents = _messages_to_google(messages)
-		system_text = _apply_response_model_to_system(
-			system_text, params.response_model
-		)
 
 		google_tools = _tools_to_google(tools) if tools else None
 		google_tool_config: GoogleToolConfig | None = None
@@ -464,6 +463,10 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			tools=google_tools,
 			tool_config=google_tool_config,
 			stop_sequences=params.stop if params.stop else None,
+			response_mime_type="application/json" if params.response_model else None,
+			response_json_schema=dict[str, object](params.response_model)
+			if params.response_model
+			else None,
 		)
 
 		stream = await self._client.models.generate_content_stream(
