@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import overload
 
 from fastapi import HTTPException, status
@@ -17,9 +18,37 @@ from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.utils.typeid import TypeID
 
 
+logger = logging.getLogger(__name__)
+
+# process-level cache - resolved once, reused for every embed call.
+# avoids a DB round-trip + object construction on every search.
+_cached_embedding_model: EmbeddingModel | None = None
+
+
+def reset_embedding_model_cache() -> None:
+	"""invalidate the cached embedding model (e.g. after settings change)."""
+	global _cached_embedding_model
+	_cached_embedding_model = None
+
+
+async def _get_embedding_model(session: AsyncSession) -> EmbeddingModel:
+	"""return the cached EmbeddingModel, resolving from DB on first call."""
+	global _cached_embedding_model
+	if _cached_embedding_model is not None:
+		return _cached_embedding_model
+	model = await resolve_embedding_model(session)
+	_cached_embedding_model = build_embedding_model(model)
+	logger.info(
+		"cached embedding model: %s (provider=%s)",
+		model.name,
+		model.provider.name,
+	)
+	return _cached_embedding_model
+
+
 async def embed_text(text: str, session: AsyncSession) -> list[float]:
 	"""embed a single text string."""
-	model = build_embedding_model(await resolve_embedding_model(session))
+	model = await _get_embedding_model(session)
 	return (await model.embed([text]))[0]
 
 
@@ -38,7 +67,7 @@ async def embed_texts(
 	"""
 	if not texts:
 		return []
-	model = build_embedding_model(await resolve_embedding_model(session))
+	model = await _get_embedding_model(session)
 	actual_batch = batch_size or settings.assets.embeddings.batch_size
 	batches = [texts[i : i + actual_batch] for i in range(0, len(texts), actual_batch)]
 	if parallel:

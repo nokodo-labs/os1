@@ -159,15 +159,11 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		limit: int = 10,
 		offset: int | None = None,
 		query_filter: ChunkFilter | None = None,
-		prefetch_limit: int | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
 	) -> list[ChunkSearchResult]:
 		"""search with mode determined by argument combinations."""
 		qf = self._to_qdrant_filter(query_filter) if query_filter else None
-		exists = await self._client.collection_exists(collection_name=collection)
-		if not exists:
-			return []
 		if query is not None and text_query is not None:
 			return await self._search_hybrid(
 				collection,
@@ -176,7 +172,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				limit=limit,
 				offset=offset,
 				query_filter=qf,
-				prefetch_limit=prefetch_limit or 50,
 				fusion=fusion,
 				normalize=normalize,
 			)
@@ -302,25 +297,27 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		limit: int,
 		offset: int | None,
 		query_filter: Filter | None,
-		prefetch_limit: int,
 		fusion: str,
 		normalize: bool,
 	) -> list[ChunkSearchResult]:
 		"""hybrid fusion of dense + BM25 search."""
 		fusion_mode = Fusion.DBSF if fusion == "dbsf" else Fusion.RRF
+		# qdrant runs prefetch stages in parallel; give each enough
+		# candidates for the fusion algorithm to work well.
+		prefetch_n = max(limit * 3, 30)
 		response = await self._client.query_points(
 			collection_name=collection,
 			prefetch=[
 				Prefetch(
 					query=query,
 					using="dense",
-					limit=prefetch_limit,
+					limit=prefetch_n,
 					filter=query_filter,
 				),
 				Prefetch(
 					query=Document(text=text_query, model="Qdrant/bm25"),
 					using="bm25",
-					limit=prefetch_limit,
+					limit=prefetch_n,
 					filter=query_filter,
 				),
 			],

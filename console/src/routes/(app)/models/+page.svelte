@@ -27,7 +27,7 @@
 	const DEFAULT_MODALITIES: Record<string, InputModality[]> = {
 		chat_model: ['text', 'images'],
 		embedding: ['text'],
-		image_generation: ['text', 'images'],
+		image: ['text', 'images'],
 		audio: ['text', 'audio'],
 		video: ['text', 'images', 'video'],
 	}
@@ -80,12 +80,41 @@
 	let providerKey = $derived(formState.provider_id ? getProviderKey(formState.provider_id) : null)
 	let adapterOptions = $derived(getAdapterOptions(providerKey, formState.model_type))
 
+	// types supported per provider (based on available adapters)
+	const PROVIDER_MODEL_TYPES: Partial<Record<string, Model['model_type'][]>> = {
+		openai: ['chat_model', 'embedding', 'image'],
+		anthropic: ['chat_model'],
+		google: ['chat_model', 'image'],
+		ollama: ['chat_model', 'embedding'],
+	}
+	const ALL_MODEL_TYPES: Model['model_type'][] = [
+		'chat_model',
+		'embedding',
+		'image',
+		'audio',
+		'video',
+	]
+	let availableModelTypes = $derived(
+		providerKey && PROVIDER_MODEL_TYPES[providerKey]
+			? (PROVIDER_MODEL_TYPES[providerKey] as Model['model_type'][])
+			: ALL_MODEL_TYPES
+	)
+
 	$effect(() => {
-		if (showModal && modalMode === 'create') {
-			// Auto-select adapter if only one option exists, or clear it if current is invalid
+		if (showModal) {
+			// reset model type if not available for current provider
+			if (!availableModelTypes.includes(formState.model_type)) {
+				formState.model_type = availableModelTypes[0] ?? 'chat_model'
+			}
+		}
+	})
+
+	$effect(() => {
+		if (showModal) {
+			// auto-select adapter when only one option, clear if invalid
 			if (adapterOptions.length === 1) {
 				formState.adapter = adapterOptions[0].value
-			} else if (!formState.adapter && adapterOptions.length > 0 && modalMode === 'create') {
+			} else if (!formState.adapter && adapterOptions.length > 0) {
 				formState.adapter = adapterOptions[0].value
 			} else if (
 				formState.adapter &&
@@ -285,8 +314,20 @@
 	}
 
 	function getModelTypeLabel(modelType: Model['model_type']) {
-		if (modelType === 'chat_model') return 'chat model'
-		return modelType
+		switch (modelType) {
+			case 'chat_model':
+				return 'chat model'
+			case 'image':
+				return 'image'
+			case 'embedding':
+				return 'embedding'
+			case 'audio':
+				return 'audio'
+			case 'video':
+				return 'video'
+			default:
+				return modelType
+		}
 	}
 
 	function getAdapterOptions(providerKey: string | null, modelType: Model['model_type']) {
@@ -311,6 +352,20 @@
 		if (modelType === 'embedding') {
 			if (providerKey === 'openai' || providerKey === 'ollama') {
 				return [{ value: 'embedding', label: 'embedding' }]
+			}
+		}
+		if (modelType === 'image') {
+			if (providerKey === 'openai') {
+				return [{ value: 'images', label: 'openai images (dall-e / gpt-image)' }]
+			}
+			if (providerKey === 'google') {
+				return [
+					{ value: 'predict_images', label: 'imagen (predict api)' },
+					{
+						value: 'generate_content_images',
+						label: 'gemini (generate content)',
+					},
+				]
 			}
 		}
 		return []
@@ -541,11 +596,11 @@
 								</span>
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="chat_model">chat model</SelectItem>
-								<SelectItem value="embedding">embedding</SelectItem>
-								<SelectItem value="image_generation">image generation</SelectItem>
-								<SelectItem value="audio">audio</SelectItem>
-								<SelectItem value="video">video</SelectItem>
+								{#each ALL_MODEL_TYPES.filter( (t) => availableModelTypes.includes(t) ) as typeOpt (typeOpt)}
+									<SelectItem value={typeOpt}
+										>{getModelTypeLabel(typeOpt)}</SelectItem
+									>
+								{/each}
 							</SelectContent>
 						</Select>
 					</div>
@@ -678,7 +733,12 @@
 						>
 							cancel
 						</Button>
-						<Button type="submit" disabled={isLoading} class="rounded-xl">
+						<Button
+							type="submit"
+							disabled={isLoading ||
+								(adapterOptions.length > 0 && !formState.adapter)}
+							class="rounded-xl"
+						>
 							{isLoading
 								? 'saving...'
 								: modalMode === 'create'

@@ -12,12 +12,14 @@
 	import SettingsAI from '$lib/components/settings/SettingsAI.svelte'
 	import SettingsAssets from '$lib/components/settings/SettingsAssets.svelte'
 	import SettingsBranding from '$lib/components/settings/SettingsBranding.svelte'
+	import SettingsCodeInterpreter from '$lib/components/settings/SettingsCodeInterpreter.svelte'
 	import SettingsDefaultPermissions from '$lib/components/settings/SettingsDefaultPermissions.svelte'
 	import SettingsLimits from '$lib/components/settings/SettingsLimits.svelte'
 	import SettingsMedia from '$lib/components/settings/SettingsMedia.svelte'
 	import SettingsSecurity from '$lib/components/settings/SettingsSecurity.svelte'
 	import SettingsSoftDelete from '$lib/components/settings/SettingsSoftDelete.svelte'
 	import SettingsUI from '$lib/components/settings/SettingsUI.svelte'
+	import SettingsWebSearch from '$lib/components/settings/SettingsWebSearch.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { onMount } from 'svelte'
 
@@ -63,6 +65,18 @@
 		| 'pgvector'
 		| 'redis'
 		| 'opensearch'
+	type CodeInterpreterEngine = 'native' | 'e2b'
+	type SearchAgent = 'native' | 'perplexity'
+	type SearchEngine = 'google' | 'searxng'
+	type WebLoaderEngine = 'native' | 'tavily' | 'playwright'
+	type PerplexityModel =
+		| 'sonar'
+		| 'sonar-pro'
+		| 'sonar-reasoning'
+		| 'sonar-reasoning-pro'
+		| 'sonar-deep-research'
+	type SearchContextUsage = 'low' | 'medium' | 'high'
+	type SearchRecencyFilter = 'month' | 'week' | 'day' | 'hour'
 
 	let aiDefaultAgentIds = $state<string[]>([])
 
@@ -78,6 +92,17 @@
 	let aiTaskThreadMetadataModelId = $state<string>('')
 	let aiTaskInputAutocompleteModelId = $state<string>('')
 	let aiTaskSummarizationModelId = $state<string>('')
+	let aiTaskMemoryPostProcessingModelId = $state<string>('')
+
+	// AI media
+	let aiMediaImagesEnabled = $state(true)
+	let aiMediaImagesModel = $state<string>('')
+	let aiMediaImagesDefaultSize = $state<string>('')
+	let aiMediaImagesDefaultSteps = $state<string>('')
+	let aiMediaImagesDefaultN = $state<string>('')
+	let aiMediaImagesMaxN = $state<string>('')
+	let aiMediaVideosEnabled = $state(false)
+	let aiMediaAudioEnabled = $state(false)
 
 	// attachment decay
 	let aiAttachmentImageDecayTurns = $state<string>('')
@@ -138,7 +163,6 @@
 	let assetsVectorDatabaseOpensearchApiKey = $state('')
 	let assetsVectorCollectionTemplate = $state('')
 	let assetsVectorSparseEnabled = $state(true)
-	let assetsVectorPrefetchLimit = $state<string>('')
 	let assetsVectorFusionAlgorithm = $state('rrf')
 	let assetsVectorNormalizeScores = $state(true)
 	let assetsEmbeddingsVectorSize = $state<string>('')
@@ -174,6 +198,35 @@
 	let softDeleteNotes = $state(true)
 	let softDeleteFiles = $state(true)
 
+	// web search
+	let webSearchSearchAgent = $state<SearchAgent>('native')
+	let webSearchBlacklistedDomains = $state<string>('')
+	let webSearchEngineEngine = $state<SearchEngine>('searxng')
+	let webSearchSearxngInstanceUrl = $state<string>('')
+	let webSearchSearxngMaxResults = $state<string>('')
+	let webSearchSearxngMaxConcurrentRequests = $state<string>('')
+	let webSearchSearxngTimeoutSeconds = $state<string>('')
+	let webSearchWebLoaderEngine = $state<WebLoaderEngine>('native')
+	let webSearchWebLoaderTimeoutSeconds = $state<string>('')
+	let webSearchWebLoaderUserAgent = $state<string>('')
+	let webSearchTavilyExtractDepth = $state<'basic' | 'advanced'>('advanced')
+	let webSearchTavilyApiKey = $state<string>('')
+	let webSearchTavilyMaxConcurrentRequests = $state<string>('')
+	let webSearchPerplexityApiKey = $state<string>('')
+	let webSearchPerplexityModel = $state<PerplexityModel>('sonar')
+	let webSearchPerplexitySearchContextUsage = $state<SearchContextUsage>('medium')
+	let webSearchPerplexityTemperature = $state<string>('')
+	let webSearchPerplexitySearchRecencyFilter = $state<SearchRecencyFilter | ''>('')
+	let webSearchPerplexityReturnImages = $state(false)
+	let webSearchPerplexityMaxConcurrentRequests = $state<string>('')
+
+	// code interpreter
+	let codeInterpreterEnabled = $state(true)
+	let codeInterpreterEngine = $state<CodeInterpreterEngine>('e2b')
+	let codeInterpreterE2bApiKey = $state<string>('')
+	let codeInterpreterE2bTemplate = $state<string>('')
+	let codeInterpreterTimeout = $state<string>('')
+
 	let defaultPermissions = $state<DefaultPermissionsSettings>({
 		resource_access: {
 			thread: null,
@@ -203,6 +256,15 @@
 		aiTaskThreadMetadataModelId: '',
 		aiTaskInputAutocompleteModelId: '',
 		aiTaskSummarizationModelId: '',
+		aiTaskMemoryPostProcessingModelId: '',
+		aiMediaImagesEnabled: true,
+		aiMediaImagesModel: '',
+		aiMediaImagesDefaultSize: '',
+		aiMediaImagesDefaultSteps: '',
+		aiMediaImagesDefaultN: '',
+		aiMediaImagesMaxN: '',
+		aiMediaVideosEnabled: false,
+		aiMediaAudioEnabled: false,
 		aiAttachmentImageDecayTurns: '',
 		aiAttachmentAudioDecayTurns: '',
 		aiAttachmentVideoDecayTurns: '',
@@ -255,7 +317,6 @@
 		assetsVectorDatabaseOpensearchApiKey: '',
 		assetsVectorCollectionTemplate: '',
 		assetsVectorSparseEnabled: true,
-		assetsVectorPrefetchLimit: '',
 		assetsVectorFusionAlgorithm: 'rrf',
 		assetsVectorNormalizeScores: true,
 		assetsEmbeddingsVectorSize: '',
@@ -281,6 +342,31 @@
 		softDeleteThreads: true,
 		softDeleteNotes: true,
 		softDeleteFiles: true,
+		webSearchSearchAgent: 'native' as SearchAgent,
+		webSearchBlacklistedDomains: '',
+		webSearchEngineEngine: 'searxng' as SearchEngine,
+		webSearchSearxngInstanceUrl: '',
+		webSearchSearxngMaxResults: '',
+		webSearchSearxngMaxConcurrentRequests: '',
+		webSearchSearxngTimeoutSeconds: '',
+		webSearchWebLoaderEngine: 'native' as WebLoaderEngine,
+		webSearchWebLoaderTimeoutSeconds: '',
+		webSearchWebLoaderUserAgent: '',
+		webSearchTavilyExtractDepth: 'advanced' as 'basic' | 'advanced',
+		webSearchTavilyApiKey: '',
+		webSearchTavilyMaxConcurrentRequests: '',
+		webSearchPerplexityApiKey: '',
+		webSearchPerplexityModel: 'sonar' as PerplexityModel,
+		webSearchPerplexitySearchContextUsage: 'medium' as SearchContextUsage,
+		webSearchPerplexityTemperature: '',
+		webSearchPerplexitySearchRecencyFilter: '' as SearchRecencyFilter | '',
+		webSearchPerplexityReturnImages: false,
+		webSearchPerplexityMaxConcurrentRequests: '',
+		codeInterpreterEnabled: true,
+		codeInterpreterEngine: 'e2b' as CodeInterpreterEngine,
+		codeInterpreterE2bApiKey: '',
+		codeInterpreterE2bTemplate: '',
+		codeInterpreterTimeout: '',
 		defaultPermissions: {
 			resource_access: {
 				thread: null,
@@ -310,6 +396,7 @@
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
+			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
 			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
 			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
@@ -367,7 +454,6 @@
 				original.assetsVectorDatabaseOpensearchApiKey ||
 			assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate ||
 			assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled ||
-			assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit ||
 			assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
 			assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores ||
 			assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
@@ -391,6 +477,44 @@
 			softDeleteThreads !== original.softDeleteThreads ||
 			softDeleteNotes !== original.softDeleteNotes ||
 			softDeleteFiles !== original.softDeleteFiles ||
+			aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
+			aiMediaImagesModel !== original.aiMediaImagesModel ||
+			aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
+			aiMediaImagesDefaultSteps !== original.aiMediaImagesDefaultSteps ||
+			aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN ||
+			aiMediaImagesMaxN !== original.aiMediaImagesMaxN ||
+			aiMediaVideosEnabled !== original.aiMediaVideosEnabled ||
+			aiMediaAudioEnabled !== original.aiMediaAudioEnabled ||
+			webSearchSearchAgent !== original.webSearchSearchAgent ||
+			webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains ||
+			webSearchEngineEngine !== original.webSearchEngineEngine ||
+			webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
+			webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
+			webSearchSearxngMaxConcurrentRequests !==
+				original.webSearchSearxngMaxConcurrentRequests ||
+			webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds ||
+			webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine ||
+			webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds ||
+			webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent ||
+			webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
+			webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
+			webSearchTavilyMaxConcurrentRequests !==
+				original.webSearchTavilyMaxConcurrentRequests ||
+			webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey ||
+			webSearchPerplexityModel !== original.webSearchPerplexityModel ||
+			webSearchPerplexitySearchContextUsage !==
+				original.webSearchPerplexitySearchContextUsage ||
+			webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
+			webSearchPerplexitySearchRecencyFilter !==
+				original.webSearchPerplexitySearchRecencyFilter ||
+			webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages ||
+			webSearchPerplexityMaxConcurrentRequests !==
+				original.webSearchPerplexityMaxConcurrentRequests ||
+			codeInterpreterEnabled !== original.codeInterpreterEnabled ||
+			codeInterpreterEngine !== original.codeInterpreterEngine ||
+			codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey ||
+			codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
+			codeInterpreterTimeout !== original.codeInterpreterTimeout ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
 
@@ -463,6 +587,8 @@
 		aiTaskThreadMetadataModelId = tasks?.thread_metadata_model_id ?? ''
 		aiTaskInputAutocompleteModelId = tasks?.input_autocomplete_model_id ?? ''
 		aiTaskSummarizationModelId = tasks?.summarization_model_id ?? ''
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		aiTaskMemoryPostProcessingModelId = (tasks as any)?.memory_post_processing_model_id ?? ''
 
 		const attachments = ai?.attachments
 		aiAttachmentImageDecayTurns = toStringOrEmpty(attachments?.image_decay_turns)
@@ -485,6 +611,18 @@
 			windowing?.tool_results_combined_max_share
 		)
 		aiWindowingResponseHeadroom = toStringOrEmpty(windowing?.response_headroom)
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const aiMedia = (ai as any)?.media
+		const aiMediaImages = aiMedia?.images
+		aiMediaImagesEnabled = aiMediaImages?.enabled ?? true
+		aiMediaImagesModel = aiMediaImages?.model ?? ''
+		aiMediaImagesDefaultSize = aiMediaImages?.default_size ?? ''
+		aiMediaImagesDefaultSteps = toStringOrEmpty(aiMediaImages?.default_steps)
+		aiMediaImagesDefaultN = toStringOrEmpty(aiMediaImages?.default_n)
+		aiMediaImagesMaxN = toStringOrEmpty(aiMediaImages?.max_n)
+		aiMediaVideosEnabled = aiMedia?.videos?.enabled ?? false
+		aiMediaAudioEnabled = aiMedia?.audio?.enabled ?? false
 
 		const branding = r.data.branding
 		brandingSiteName = branding?.site_name ?? ''
@@ -512,6 +650,46 @@
 		softDeleteThreads = softDelete?.threads ?? true
 		softDeleteNotes = softDelete?.notes ?? true
 		softDeleteFiles = softDelete?.files ?? true
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const webSearch = (r.data as any).web_search
+		webSearchSearchAgent = (webSearch?.search_agent ?? 'native') as SearchAgent
+		webSearchBlacklistedDomains = (webSearch?.blacklisted_domains ?? []).join(', ')
+		webSearchEngineEngine = (webSearch?.search_engines?.engine ?? 'searxng') as SearchEngine
+		const searxng = webSearch?.search_engines?.searxng
+		webSearchSearxngInstanceUrl = toStringOrEmpty(searxng?.instance_url)
+		webSearchSearxngMaxResults = toStringOrEmpty(searxng?.max_results)
+		webSearchSearxngMaxConcurrentRequests = toStringOrEmpty(searxng?.max_concurrent_requests)
+		webSearchSearxngTimeoutSeconds = toStringOrEmpty(searxng?.timeout_seconds)
+		const webLoader = webSearch?.web_loaders
+		webSearchWebLoaderEngine = (webLoader?.engine ?? 'native') as WebLoaderEngine
+		webSearchWebLoaderTimeoutSeconds = toStringOrEmpty(webLoader?.timeout_seconds)
+		webSearchWebLoaderUserAgent = webLoader?.user_agent ?? ''
+		const tavily = webLoader?.tavily
+		webSearchTavilyExtractDepth = (tavily?.extract_depth ?? 'advanced') as 'basic' | 'advanced'
+		webSearchTavilyApiKey = tavily?.api_key ?? ''
+		webSearchTavilyMaxConcurrentRequests = toStringOrEmpty(tavily?.max_concurrent_requests)
+		const perplexity = webSearch?.perplexity
+		webSearchPerplexityApiKey = perplexity?.api_key ?? ''
+		webSearchPerplexityModel = (perplexity?.model ?? 'sonar') as PerplexityModel
+		webSearchPerplexitySearchContextUsage = (perplexity?.search_context_usage ??
+			'medium') as SearchContextUsage
+		webSearchPerplexityTemperature = toStringOrEmpty(perplexity?.temperature)
+		webSearchPerplexitySearchRecencyFilter = (perplexity?.search_recency_filter ?? '') as
+			| SearchRecencyFilter
+			| ''
+		webSearchPerplexityReturnImages = perplexity?.return_images ?? false
+		webSearchPerplexityMaxConcurrentRequests = toStringOrEmpty(
+			perplexity?.max_concurrent_requests
+		)
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const ci = (r.data as any).code_interpreter
+		codeInterpreterEnabled = ci?.enabled ?? true
+		codeInterpreterEngine = (ci?.engine ?? 'e2b') as CodeInterpreterEngine
+		codeInterpreterE2bApiKey = ci?.e2b?.api_key ?? ''
+		codeInterpreterE2bTemplate = ci?.e2b?.template ?? ''
+		codeInterpreterTimeout = toStringOrEmpty(ci?.timeout)
 
 		const limits = r.data.limits
 		limitsMaxThreadsPerUser = toStringOrEmpty(limits?.max_threads_per_user)
@@ -559,7 +737,6 @@
 		const vector = assets?.vector
 		assetsVectorCollectionTemplate = vector?.collection_template ?? ''
 		assetsVectorSparseEnabled = vector?.sparse_vectors_enabled ?? true
-		assetsVectorPrefetchLimit = toStringOrEmpty(vector?.prefetch_limit)
 		assetsVectorFusionAlgorithm = vector?.fusion_algorithm ?? 'rrf'
 		assetsVectorNormalizeScores = vector?.normalize_scores ?? true
 		const embeddings = assets?.embeddings
@@ -601,6 +778,7 @@
 			aiTaskThreadMetadataModelId,
 			aiTaskInputAutocompleteModelId,
 			aiTaskSummarizationModelId,
+			aiTaskMemoryPostProcessingModelId,
 			aiAttachmentImageDecayTurns,
 			aiAttachmentAudioDecayTurns,
 			aiAttachmentVideoDecayTurns,
@@ -655,7 +833,6 @@
 			assetsVectorDatabaseOpensearchApiKey,
 			assetsVectorCollectionTemplate,
 			assetsVectorSparseEnabled,
-			assetsVectorPrefetchLimit,
 			assetsVectorFusionAlgorithm,
 			assetsVectorNormalizeScores,
 			assetsEmbeddingsVectorSize,
@@ -679,6 +856,39 @@
 			softDeleteThreads,
 			softDeleteNotes,
 			softDeleteFiles,
+			aiMediaImagesEnabled,
+			aiMediaImagesModel,
+			aiMediaImagesDefaultSize,
+			aiMediaImagesDefaultSteps,
+			aiMediaImagesDefaultN,
+			aiMediaImagesMaxN,
+			aiMediaVideosEnabled,
+			aiMediaAudioEnabled,
+			webSearchSearchAgent,
+			webSearchBlacklistedDomains,
+			webSearchEngineEngine,
+			webSearchSearxngInstanceUrl,
+			webSearchSearxngMaxResults,
+			webSearchSearxngMaxConcurrentRequests,
+			webSearchSearxngTimeoutSeconds,
+			webSearchWebLoaderEngine,
+			webSearchWebLoaderTimeoutSeconds,
+			webSearchWebLoaderUserAgent,
+			webSearchTavilyExtractDepth,
+			webSearchTavilyApiKey,
+			webSearchTavilyMaxConcurrentRequests,
+			webSearchPerplexityApiKey,
+			webSearchPerplexityModel,
+			webSearchPerplexitySearchContextUsage,
+			webSearchPerplexityTemperature,
+			webSearchPerplexitySearchRecencyFilter,
+			webSearchPerplexityReturnImages,
+			webSearchPerplexityMaxConcurrentRequests,
+			codeInterpreterEnabled,
+			codeInterpreterEngine,
+			codeInterpreterE2bApiKey,
+			codeInterpreterE2bTemplate,
+			codeInterpreterTimeout,
 			defaultPermissions,
 			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
 		}
@@ -743,6 +953,7 @@
 		aiTaskThreadMetadataModelId = original.aiTaskThreadMetadataModelId
 		aiTaskInputAutocompleteModelId = original.aiTaskInputAutocompleteModelId
 		aiTaskSummarizationModelId = original.aiTaskSummarizationModelId
+		aiTaskMemoryPostProcessingModelId = original.aiTaskMemoryPostProcessingModelId
 		aiAttachmentImageDecayTurns = original.aiAttachmentImageDecayTurns
 		aiAttachmentAudioDecayTurns = original.aiAttachmentAudioDecayTurns
 		aiAttachmentVideoDecayTurns = original.aiAttachmentVideoDecayTurns
@@ -757,6 +968,14 @@
 		aiWindowingToolResultHardCap = original.aiWindowingToolResultHardCap
 		aiWindowingToolResultsCombinedMaxShare = original.aiWindowingToolResultsCombinedMaxShare
 		aiWindowingResponseHeadroom = original.aiWindowingResponseHeadroom
+		aiMediaImagesEnabled = original.aiMediaImagesEnabled
+		aiMediaImagesModel = original.aiMediaImagesModel
+		aiMediaImagesDefaultSize = original.aiMediaImagesDefaultSize
+		aiMediaImagesDefaultSteps = original.aiMediaImagesDefaultSteps
+		aiMediaImagesDefaultN = original.aiMediaImagesDefaultN
+		aiMediaImagesMaxN = original.aiMediaImagesMaxN
+		aiMediaVideosEnabled = original.aiMediaVideosEnabled
+		aiMediaAudioEnabled = original.aiMediaAudioEnabled
 		brandingSiteName = original.brandingSiteName
 		brandingLogoUrl = original.brandingLogoUrl
 		brandingFaviconUrl = original.brandingFaviconUrl
@@ -797,7 +1016,6 @@
 		assetsVectorDatabaseOpensearchApiKey = original.assetsVectorDatabaseOpensearchApiKey
 		assetsVectorCollectionTemplate = original.assetsVectorCollectionTemplate
 		assetsVectorSparseEnabled = original.assetsVectorSparseEnabled
-		assetsVectorPrefetchLimit = original.assetsVectorPrefetchLimit
 		assetsVectorFusionAlgorithm = original.assetsVectorFusionAlgorithm
 		assetsVectorNormalizeScores = original.assetsVectorNormalizeScores
 		assetsEmbeddingsVectorSize = original.assetsEmbeddingsVectorSize
@@ -821,6 +1039,31 @@
 		softDeleteThreads = original.softDeleteThreads
 		softDeleteNotes = original.softDeleteNotes
 		softDeleteFiles = original.softDeleteFiles
+		webSearchSearchAgent = original.webSearchSearchAgent
+		webSearchBlacklistedDomains = original.webSearchBlacklistedDomains
+		webSearchEngineEngine = original.webSearchEngineEngine
+		webSearchSearxngInstanceUrl = original.webSearchSearxngInstanceUrl
+		webSearchSearxngMaxResults = original.webSearchSearxngMaxResults
+		webSearchSearxngMaxConcurrentRequests = original.webSearchSearxngMaxConcurrentRequests
+		webSearchSearxngTimeoutSeconds = original.webSearchSearxngTimeoutSeconds
+		webSearchWebLoaderEngine = original.webSearchWebLoaderEngine
+		webSearchWebLoaderTimeoutSeconds = original.webSearchWebLoaderTimeoutSeconds
+		webSearchWebLoaderUserAgent = original.webSearchWebLoaderUserAgent
+		webSearchTavilyExtractDepth = original.webSearchTavilyExtractDepth
+		webSearchTavilyApiKey = original.webSearchTavilyApiKey
+		webSearchTavilyMaxConcurrentRequests = original.webSearchTavilyMaxConcurrentRequests
+		webSearchPerplexityApiKey = original.webSearchPerplexityApiKey
+		webSearchPerplexityModel = original.webSearchPerplexityModel
+		webSearchPerplexitySearchContextUsage = original.webSearchPerplexitySearchContextUsage
+		webSearchPerplexityTemperature = original.webSearchPerplexityTemperature
+		webSearchPerplexitySearchRecencyFilter = original.webSearchPerplexitySearchRecencyFilter
+		webSearchPerplexityReturnImages = original.webSearchPerplexityReturnImages
+		webSearchPerplexityMaxConcurrentRequests = original.webSearchPerplexityMaxConcurrentRequests
+		codeInterpreterEnabled = original.codeInterpreterEnabled
+		codeInterpreterEngine = original.codeInterpreterEngine
+		codeInterpreterE2bApiKey = original.codeInterpreterE2bApiKey
+		codeInterpreterE2bTemplate = original.codeInterpreterE2bTemplate
+		codeInterpreterTimeout = original.codeInterpreterTimeout
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
@@ -878,6 +1121,7 @@
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
+			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
 			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
 			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
@@ -893,7 +1137,15 @@
 			aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
 			aiWindowingToolResultsCombinedMaxShare !==
 				original.aiWindowingToolResultsCombinedMaxShare ||
-			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom
+			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
+			aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
+			aiMediaImagesModel !== original.aiMediaImagesModel ||
+			aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
+			aiMediaImagesDefaultSteps !== original.aiMediaImagesDefaultSteps ||
+			aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN ||
+			aiMediaImagesMaxN !== original.aiMediaImagesMaxN ||
+			aiMediaVideosEnabled !== original.aiMediaVideosEnabled ||
+			aiMediaAudioEnabled !== original.aiMediaAudioEnabled
 		) {
 			const aiPatch: NonNullable<NonNullable<SettingsUpdateRequest['data']>['ai']> = {}
 			if (JSON.stringify(aiDefaultAgentIds) !== JSON.stringify(original.aiDefaultAgentIds))
@@ -933,7 +1185,8 @@
 				aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 				aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
 				aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
-				aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId
+				aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
+				aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId
 			) {
 				aiPatch.tasks = {}
 				if (aiTaskDefaultModelId !== original.aiTaskDefaultModelId)
@@ -952,6 +1205,13 @@
 					aiPatch.tasks.summarization_model_id = aiTaskSummarizationModelId
 						? aiTaskSummarizationModelId
 						: null
+				if (
+					aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId
+				) {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					;(aiPatch.tasks as any).memory_post_processing_model_id =
+						aiTaskMemoryPostProcessingModelId ? aiTaskMemoryPostProcessingModelId : null
+				}
 			}
 
 			if (
@@ -1032,6 +1292,48 @@
 					aiPatch.windowing.response_headroom = asNumberOrNull(
 						aiWindowingResponseHeadroom
 					)
+			}
+
+			if (
+				aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
+				aiMediaImagesModel !== original.aiMediaImagesModel ||
+				aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
+				aiMediaImagesDefaultSteps !== original.aiMediaImagesDefaultSteps ||
+				aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN ||
+				aiMediaImagesMaxN !== original.aiMediaImagesMaxN ||
+				aiMediaVideosEnabled !== original.aiMediaVideosEnabled ||
+				aiMediaAudioEnabled !== original.aiMediaAudioEnabled
+			) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const mediaPatch = {} as any
+				if (
+					aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
+					aiMediaImagesModel !== original.aiMediaImagesModel ||
+					aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
+					aiMediaImagesDefaultSteps !== original.aiMediaImagesDefaultSteps ||
+					aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN ||
+					aiMediaImagesMaxN !== original.aiMediaImagesMaxN
+				) {
+					mediaPatch.images = {}
+					if (aiMediaImagesEnabled !== original.aiMediaImagesEnabled)
+						mediaPatch.images.enabled = aiMediaImagesEnabled
+					if (aiMediaImagesModel !== original.aiMediaImagesModel)
+						mediaPatch.images.model = aiMediaImagesModel || null
+					if (aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize)
+						mediaPatch.images.default_size = aiMediaImagesDefaultSize || null
+					if (aiMediaImagesDefaultSteps !== original.aiMediaImagesDefaultSteps)
+						mediaPatch.images.default_steps = asNumberOrNull(aiMediaImagesDefaultSteps)
+					if (aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN)
+						mediaPatch.images.default_n = asNumberOrNull(aiMediaImagesDefaultN)
+					if (aiMediaImagesMaxN !== original.aiMediaImagesMaxN)
+						mediaPatch.images.max_n = asNumberOrNull(aiMediaImagesMaxN)
+				}
+				if (aiMediaVideosEnabled !== original.aiMediaVideosEnabled)
+					mediaPatch.videos = { enabled: aiMediaVideosEnabled }
+				if (aiMediaAudioEnabled !== original.aiMediaAudioEnabled)
+					mediaPatch.audio = { enabled: aiMediaAudioEnabled }
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				;(aiPatch as any).media = mediaPatch
 			}
 
 			data.ai = aiPatch
@@ -1172,7 +1474,6 @@
 				original.assetsVectorDatabaseOpensearchApiKey ||
 			assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate ||
 			assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled ||
-			assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit ||
 			assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
 			assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores ||
 			assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
@@ -1265,7 +1566,6 @@
 			if (
 				assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate ||
 				assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled ||
-				assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit ||
 				assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
 				assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores
 			) {
@@ -1274,8 +1574,6 @@
 					vectorPatch.collection_template = assetsVectorCollectionTemplate || null
 				if (assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled)
 					vectorPatch.sparse_vectors_enabled = assetsVectorSparseEnabled
-				if (assetsVectorPrefetchLimit !== original.assetsVectorPrefetchLimit)
-					vectorPatch.prefetch_limit = asNumberOrNull(assetsVectorPrefetchLimit)
 				if (assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm)
 					vectorPatch.fusion_algorithm = assetsVectorFusionAlgorithm
 				if (assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores)
@@ -1395,6 +1693,191 @@
 				data.soft_delete.files = softDeleteFiles
 		}
 
+		if (
+			webSearchSearchAgent !== original.webSearchSearchAgent ||
+			webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains ||
+			webSearchEngineEngine !== original.webSearchEngineEngine ||
+			webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
+			webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
+			webSearchSearxngMaxConcurrentRequests !==
+				original.webSearchSearxngMaxConcurrentRequests ||
+			webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds ||
+			webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine ||
+			webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds ||
+			webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent ||
+			webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
+			webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
+			webSearchTavilyMaxConcurrentRequests !==
+				original.webSearchTavilyMaxConcurrentRequests ||
+			webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey ||
+			webSearchPerplexityModel !== original.webSearchPerplexityModel ||
+			webSearchPerplexitySearchContextUsage !==
+				original.webSearchPerplexitySearchContextUsage ||
+			webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
+			webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages ||
+			webSearchPerplexitySearchRecencyFilter !==
+				original.webSearchPerplexitySearchRecencyFilter ||
+			webSearchPerplexityMaxConcurrentRequests !==
+				original.webSearchPerplexityMaxConcurrentRequests
+		) {
+			const wsPatch: Record<string, unknown> = {}
+			if (webSearchSearchAgent !== original.webSearchSearchAgent)
+				wsPatch.search_agent = webSearchSearchAgent
+			if (webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains)
+				wsPatch.blacklisted_domains = parseCommaList(webSearchBlacklistedDomains)
+
+			if (
+				webSearchEngineEngine !== original.webSearchEngineEngine ||
+				webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
+				webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
+				webSearchSearxngMaxConcurrentRequests !==
+					original.webSearchSearxngMaxConcurrentRequests ||
+				webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds
+			) {
+				const sePatch: Record<string, unknown> = {}
+				if (webSearchEngineEngine !== original.webSearchEngineEngine)
+					sePatch.engine = webSearchEngineEngine
+				if (
+					webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
+					webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
+					webSearchSearxngMaxConcurrentRequests !==
+						original.webSearchSearxngMaxConcurrentRequests ||
+					webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds
+				) {
+					const searxngPatch: Record<string, unknown> = {}
+					if (webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl)
+						searxngPatch.instance_url = webSearchSearxngInstanceUrl || null
+					if (webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults)
+						searxngPatch.max_results = asNumberOrNull(webSearchSearxngMaxResults)
+					if (
+						webSearchSearxngMaxConcurrentRequests !==
+						original.webSearchSearxngMaxConcurrentRequests
+					)
+						searxngPatch.max_concurrent_requests = asNumberOrNull(
+							webSearchSearxngMaxConcurrentRequests
+						)
+					if (webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds)
+						searxngPatch.timeout_seconds = asNumberOrNull(
+							webSearchSearxngTimeoutSeconds
+						)
+					sePatch.searxng = searxngPatch
+				}
+				wsPatch.search_engines = sePatch
+			}
+
+			if (
+				webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine ||
+				webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds ||
+				webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent ||
+				webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
+				webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
+				webSearchTavilyMaxConcurrentRequests !==
+					original.webSearchTavilyMaxConcurrentRequests
+			) {
+				const wlPatch: Record<string, unknown> = {}
+				if (webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine)
+					wlPatch.engine = webSearchWebLoaderEngine
+				if (webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds)
+					wlPatch.timeout_seconds = asNumberOrNull(webSearchWebLoaderTimeoutSeconds)
+				if (webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent)
+					wlPatch.user_agent = webSearchWebLoaderUserAgent || null
+				if (
+					webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
+					webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
+					webSearchTavilyMaxConcurrentRequests !==
+						original.webSearchTavilyMaxConcurrentRequests
+				) {
+					const tavilyPatch: Record<string, unknown> = {}
+					if (webSearchTavilyApiKey !== original.webSearchTavilyApiKey)
+						tavilyPatch.api_key = webSearchTavilyApiKey || null
+					if (webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth)
+						tavilyPatch.extract_depth = webSearchTavilyExtractDepth
+					if (
+						webSearchTavilyMaxConcurrentRequests !==
+						original.webSearchTavilyMaxConcurrentRequests
+					)
+						tavilyPatch.max_concurrent_requests = asNumberOrNull(
+							webSearchTavilyMaxConcurrentRequests
+						)
+					wlPatch.tavily = tavilyPatch
+				}
+				wsPatch.web_loaders = wlPatch
+			}
+
+			if (
+				webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey ||
+				webSearchPerplexityModel !== original.webSearchPerplexityModel ||
+				webSearchPerplexitySearchContextUsage !==
+					original.webSearchPerplexitySearchContextUsage ||
+				webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
+				webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages ||
+				webSearchPerplexitySearchRecencyFilter !==
+					original.webSearchPerplexitySearchRecencyFilter ||
+				webSearchPerplexityMaxConcurrentRequests !==
+					original.webSearchPerplexityMaxConcurrentRequests
+			) {
+				const plxPatch: Record<string, unknown> = {}
+				if (webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey)
+					plxPatch.api_key = webSearchPerplexityApiKey || null
+				if (webSearchPerplexityModel !== original.webSearchPerplexityModel)
+					plxPatch.model = webSearchPerplexityModel || null
+				if (
+					webSearchPerplexitySearchContextUsage !==
+					original.webSearchPerplexitySearchContextUsage
+				)
+					plxPatch.search_context_usage = webSearchPerplexitySearchContextUsage || null
+				if (webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature)
+					plxPatch.temperature = asNumberOrNull(webSearchPerplexityTemperature)
+				if (webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages)
+					plxPatch.return_images = webSearchPerplexityReturnImages
+				if (
+					webSearchPerplexitySearchRecencyFilter !==
+					original.webSearchPerplexitySearchRecencyFilter
+				)
+					plxPatch.search_recency_filter = webSearchPerplexitySearchRecencyFilter || null
+				if (
+					webSearchPerplexityMaxConcurrentRequests !==
+					original.webSearchPerplexityMaxConcurrentRequests
+				)
+					plxPatch.max_concurrent_requests = asNumberOrNull(
+						webSearchPerplexityMaxConcurrentRequests
+					)
+				wsPatch.perplexity = plxPatch
+			}
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			;(data as any).web_search = wsPatch
+		}
+
+		if (
+			codeInterpreterEnabled !== original.codeInterpreterEnabled ||
+			codeInterpreterEngine !== original.codeInterpreterEngine ||
+			codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey ||
+			codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
+			codeInterpreterTimeout !== original.codeInterpreterTimeout
+		) {
+			const ciPatch: Record<string, unknown> = {}
+			if (codeInterpreterEnabled !== original.codeInterpreterEnabled)
+				ciPatch.enabled = codeInterpreterEnabled
+			if (codeInterpreterEngine !== original.codeInterpreterEngine)
+				ciPatch.engine = codeInterpreterEngine
+			if (
+				codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey ||
+				codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate
+			) {
+				const e2bPatch: Record<string, unknown> = {}
+				if (codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey)
+					e2bPatch.api_key = codeInterpreterE2bApiKey || null
+				if (codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate)
+					e2bPatch.template = codeInterpreterE2bTemplate || null
+				ciPatch.e2b = e2bPatch
+			}
+			if (codeInterpreterTimeout !== original.codeInterpreterTimeout)
+				ciPatch.timeout = asNumberOrNull(codeInterpreterTimeout)
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			;(data as any).code_interpreter = ciPatch
+		}
+
 		if (defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey) {
 			data.default_permissions = buildDefaultPermissionsPatch()
 		}
@@ -1509,6 +1992,15 @@
 						bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
 						bind:taskInputAutocompleteModelId={aiTaskInputAutocompleteModelId}
 						bind:taskSummarizationModelId={aiTaskSummarizationModelId}
+						bind:taskMemoryPostProcessingModelId={aiTaskMemoryPostProcessingModelId}
+						bind:mediaImagesEnabled={aiMediaImagesEnabled}
+						bind:mediaImagesModel={aiMediaImagesModel}
+						bind:mediaImagesDefaultSize={aiMediaImagesDefaultSize}
+						bind:mediaImagesDefaultSteps={aiMediaImagesDefaultSteps}
+						bind:mediaImagesDefaultN={aiMediaImagesDefaultN}
+						bind:mediaImagesMaxN={aiMediaImagesMaxN}
+						bind:mediaVideosEnabled={aiMediaVideosEnabled}
+						bind:mediaAudioEnabled={aiMediaAudioEnabled}
 						bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
 						bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
 						bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
@@ -1570,7 +2062,6 @@
 						bind:vectorDatabaseOpensearchApiKey={assetsVectorDatabaseOpensearchApiKey}
 						bind:vectorCollectionTemplate={assetsVectorCollectionTemplate}
 						bind:vectorSparseEnabled={assetsVectorSparseEnabled}
-						bind:vectorPrefetchLimit={assetsVectorPrefetchLimit}
 						bind:vectorFusionAlgorithm={assetsVectorFusionAlgorithm}
 						bind:vectorNormalizeScores={assetsVectorNormalizeScores}
 						bind:embeddingsVectorSize={assetsEmbeddingsVectorSize}
@@ -1602,6 +2093,39 @@
 						bind:threads={softDeleteThreads}
 						bind:notes={softDeleteNotes}
 						bind:files={softDeleteFiles}
+					/>
+
+					<SettingsWebSearch
+						bind:searchAgent={webSearchSearchAgent}
+						bind:blacklistedDomains={webSearchBlacklistedDomains}
+						bind:engineEngine={webSearchEngineEngine}
+						bind:searxngInstanceUrl={webSearchSearxngInstanceUrl}
+						bind:searxngMaxResults={webSearchSearxngMaxResults}
+						bind:searxngMaxConcurrentRequests={webSearchSearxngMaxConcurrentRequests}
+						bind:searxngTimeoutSeconds={webSearchSearxngTimeoutSeconds}
+						bind:webLoaderEngine={webSearchWebLoaderEngine}
+						bind:webLoaderTimeoutSeconds={webSearchWebLoaderTimeoutSeconds}
+						bind:webLoaderUserAgent={webSearchWebLoaderUserAgent}
+						bind:tavilyExtractDepth={webSearchTavilyExtractDepth}
+						bind:tavilyApiKey={webSearchTavilyApiKey}
+						bind:tavilyMaxConcurrentRequests={webSearchTavilyMaxConcurrentRequests}
+						bind:perplexityApiKey={webSearchPerplexityApiKey}
+						bind:perplexityModel={webSearchPerplexityModel}
+						bind:perplexitySearchContextUsage={webSearchPerplexitySearchContextUsage}
+						bind:perplexityTemperature={webSearchPerplexityTemperature}
+						bind:perplexityReturnImages={webSearchPerplexityReturnImages}
+						bind:perplexitySearchRecencyFilter={webSearchPerplexitySearchRecencyFilter}
+						bind:perplexityMaxConcurrentRequests={
+							webSearchPerplexityMaxConcurrentRequests
+						}
+					/>
+
+					<SettingsCodeInterpreter
+						bind:enabled={codeInterpreterEnabled}
+						bind:engine={codeInterpreterEngine}
+						bind:e2bApiKey={codeInterpreterE2bApiKey}
+						bind:e2bTemplate={codeInterpreterE2bTemplate}
+						bind:timeout={codeInterpreterTimeout}
 					/>
 
 					<SettingsSecurity

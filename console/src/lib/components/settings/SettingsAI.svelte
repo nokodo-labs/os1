@@ -43,6 +43,18 @@
 		taskThreadMetadataModelId?: string
 		taskInputAutocompleteModelId?: string
 		taskSummarizationModelId?: string
+		taskMemoryPostProcessingModelId?: string
+		// media - images
+		mediaImagesEnabled?: boolean
+		mediaImagesModel?: string
+		mediaImagesDefaultSize?: string
+		mediaImagesDefaultSteps?: string
+		mediaImagesDefaultN?: string
+		mediaImagesMaxN?: string
+		// media - videos
+		mediaVideosEnabled?: boolean
+		// media - audio
+		mediaAudioEnabled?: boolean
 		// attachments
 		attachmentImageDecayTurns?: string
 		attachmentAudioDecayTurns?: string
@@ -80,6 +92,15 @@
 		taskThreadMetadataModelId = $bindable(''),
 		taskInputAutocompleteModelId = $bindable(''),
 		taskSummarizationModelId = $bindable(''),
+		taskMemoryPostProcessingModelId = $bindable(''),
+		mediaImagesEnabled = $bindable(true),
+		mediaImagesModel = $bindable(''),
+		mediaImagesDefaultSize = $bindable(''),
+		mediaImagesDefaultSteps = $bindable(''),
+		mediaImagesDefaultN = $bindable(''),
+		mediaImagesMaxN = $bindable(''),
+		mediaVideosEnabled = $bindable(false),
+		mediaAudioEnabled = $bindable(false),
 		attachmentImageDecayTurns = $bindable(''),
 		attachmentAudioDecayTurns = $bindable(''),
 		attachmentVideoDecayTurns = $bindable(''),
@@ -405,6 +426,28 @@
 						</SelectContent>
 					</Select>
 				</div>
+				<div class="space-y-2">
+					<Label for="task_memory_pp_model">memory post-processing model</Label>
+					<p class="text-xs text-zinc-500">
+						model used for memory deduplication, updates, and deletions.
+					</p>
+					<Select
+						value={taskMemoryPostProcessingModelId}
+						onValueChange={(v: string) => (taskMemoryPostProcessingModelId = v)}
+					>
+						<SelectTrigger id="task_memory_pp_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskMemoryPostProcessingModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each models as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
 			</div>
 			{#if modelsError}
 				<p class="mt-3 text-xs text-red-300">{modelsError}</p>
@@ -608,6 +651,133 @@
 					</div>
 				</div>
 			{/if}
+		</div>
+
+		<!-- media generation -->
+		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+			<p class="mb-4 text-sm font-medium">media generation</p>
+
+			<!-- images -->
+			<div class="mb-4 space-y-3">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm">image generation</p>
+						<p class="text-xs text-zinc-500">
+							enable AI image generation capabilities.
+						</p>
+					</div>
+					<Switch
+						id="ai_media_images_enabled"
+						checked={mediaImagesEnabled}
+						onCheckedChange={(v: boolean) => (mediaImagesEnabled = v)}
+					/>
+				</div>
+				{#if mediaImagesEnabled}
+					<div class="grid gap-4 md:grid-cols-2">
+						<div class="space-y-2">
+							<Label for="ai_img_model">image model</Label>
+							<p class="text-xs text-zinc-500">model used for image generation.</p>
+							<Select
+								value={mediaImagesModel}
+								onValueChange={(v: string) => (mediaImagesModel = v)}
+							>
+								<SelectTrigger id="ai_img_model" class="rounded-xl">
+									<span class="truncate text-left">
+										{mediaImagesModel
+											? (models.find((m) => m.id === mediaImagesModel)
+													?.display_name ??
+												models.find((m) => m.id === mediaImagesModel)
+													?.name ??
+												mediaImagesModel)
+											: 'none'}
+									</span>
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="">none</SelectItem>
+									{#each models as model (model.id)}
+										<SelectItem value={model.id}
+											>{model.display_name ||
+												model.name ||
+												model.id}</SelectItem
+										>
+									{/each}
+								</SelectContent>
+							</Select>
+						</div>
+						<div class="space-y-2">
+							<Label for="ai_img_size">default size</Label>
+							<p class="text-xs text-zinc-500">WIDTHxHEIGHT format.</p>
+							<Input
+								id="ai_img_size"
+								placeholder="1024x1024"
+								bind:value={mediaImagesDefaultSize}
+								class="rounded-xl"
+							/>
+						</div>
+						<div class="space-y-2">
+							<Label for="ai_img_steps">default steps</Label>
+							<p class="text-xs text-zinc-500">generation steps (if supported).</p>
+							<Input
+								id="ai_img_steps"
+								type="number"
+								min="1"
+								bind:value={mediaImagesDefaultSteps}
+								class="rounded-xl"
+							/>
+						</div>
+						<div class="space-y-2">
+							<Label for="ai_img_default_n">default n</Label>
+							<p class="text-xs text-zinc-500">default images per prompt (1–10).</p>
+							<Input
+								id="ai_img_default_n"
+								type="number"
+								min="1"
+								max="10"
+								bind:value={mediaImagesDefaultN}
+								class="rounded-xl"
+							/>
+						</div>
+						<div class="space-y-2">
+							<Label for="ai_img_max_n">max n</Label>
+							<p class="text-xs text-zinc-500">max images per request (1–10).</p>
+							<Input
+								id="ai_img_max_n"
+								type="number"
+								min="1"
+								max="10"
+								bind:value={mediaImagesMaxN}
+								class="rounded-xl"
+							/>
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- videos -->
+			<div class="mb-4 flex items-center justify-between">
+				<div>
+					<p class="text-sm">video generation</p>
+					<p class="text-xs text-zinc-500">enable AI video generation (scaffold).</p>
+				</div>
+				<Switch
+					id="ai_media_videos_enabled"
+					checked={mediaVideosEnabled}
+					onCheckedChange={(v: boolean) => (mediaVideosEnabled = v)}
+				/>
+			</div>
+
+			<!-- audio -->
+			<div class="flex items-center justify-between">
+				<div>
+					<p class="text-sm">audio generation</p>
+					<p class="text-xs text-zinc-500">enable AI audio generation (scaffold).</p>
+				</div>
+				<Switch
+					id="ai_media_audio_enabled"
+					checked={mediaAudioEnabled}
+					onCheckedChange={(v: boolean) => (mediaAudioEnabled = v)}
+				/>
+			</div>
 		</div>
 	</CardContent>
 </Card>

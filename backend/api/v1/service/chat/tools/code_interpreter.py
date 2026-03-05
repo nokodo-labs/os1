@@ -159,7 +159,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 
 		if not ci_settings.e2b.api_key:
 			return self.error(
-				"E2B API key is not configured",
+				"code interpreter is not configured",
 				__agent_context__,
 			)
 
@@ -176,9 +176,12 @@ class CodeInterpreterTool(Tool[AppContext]):
 		try:
 			await client.connect(sandbox_id)
 			result = await client.run_code(inp.code, timeout=ci_settings.timeout)
-		except Exception as exc:
+		except Exception:
 			logger.exception("code interpreter execution failed")
-			return self.error(f"execution failed: {exc}", __agent_context__)
+			return self.error(
+				"code interpreter execution failed. please try again.",
+				__agent_context__,
+			)
 		finally:
 			try:
 				await client.pause()

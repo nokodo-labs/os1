@@ -512,12 +512,6 @@ class VectorSettings(BaseModel):
 		default=True,
 		description="enable BM25 sparse vectors for hybrid search",
 	)
-	prefetch_limit: int = Field(
-		default=100,
-		ge=1,
-		le=10000,
-		description="how many candidates to prefetch before fusion/reranking",
-	)
 	fusion_algorithm: Literal["rrf", "dbsf"] = Field(
 		default="rrf",
 		description="score fusion algorithm: rrf (reciprocal rank fusion) or "

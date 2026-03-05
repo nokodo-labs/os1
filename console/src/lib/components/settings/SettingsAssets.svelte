@@ -44,7 +44,6 @@
 		// vector settings
 		vectorCollectionTemplate?: string
 		vectorSparseEnabled?: boolean
-		vectorPrefetchLimit?: string
 		vectorFusionAlgorithm?: string
 		vectorNormalizeScores?: boolean
 		// embeddings
@@ -81,7 +80,6 @@
 		vectorDatabaseOpensearchApiKey = $bindable(''),
 		vectorCollectionTemplate = $bindable(''),
 		vectorSparseEnabled = $bindable(true),
-		vectorPrefetchLimit = $bindable(''),
 		vectorFusionAlgorithm = $bindable('rrf'),
 		vectorNormalizeScores = $bindable(true),
 		embeddingsVectorSize = $bindable(''),
@@ -264,21 +262,8 @@
 					class="rounded-xl"
 				/>
 				<p class="text-xs text-zinc-500">
-					template for auto-generated collection names. use {'{'}{'}model'}{'}'} as a placeholder.
+					template for auto-generated collection names. use {'{'}}model} as a placeholder.
 				</p>
-			</div>
-			<div class="space-y-2">
-				<Label for="assets_prefetch_limit">prefetch limit</Label>
-				<p class="text-xs text-zinc-500">
-					maximum candidates fetched before score fusion and reranking.
-				</p>
-				<Input
-					id="assets_prefetch_limit"
-					type="number"
-					bind:value={vectorPrefetchLimit}
-					placeholder="256"
-					class="rounded-xl"
-				/>
 			</div>
 		</div>
 		<div class="grid gap-4 md:grid-cols-2">

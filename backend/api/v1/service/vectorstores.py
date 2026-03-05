@@ -276,7 +276,6 @@ async def search(
 	text_query: str | None = None,
 	limit: int = 10,
 	query_filter: ChunkFilter | None = None,
-	prefetch_limit: int | None = None,
 	fusion: str | None = None,
 	normalize: bool | None = None,
 	collection: str | None = None,
@@ -284,7 +283,7 @@ async def search(
 ) -> list[ChunkSearchResult]:
 	"""search the given or default collection via the vectorstore facade.
 
-	prefetch_limit, fusion, and normalize default to settings values when not set.
+	fusion and normalize default to settings values when not set.
 	"""
 	coll = collection or await get_collection(session)
 	vs = store or get_vectorstore(collection=coll)
@@ -293,11 +292,6 @@ async def search(
 		text_query=text_query,
 		limit=limit,
 		query_filter=query_filter,
-		prefetch_limit=(
-			prefetch_limit
-			if prefetch_limit is not None
-			else settings.assets.vector.prefetch_limit
-		),
 		fusion=fusion or settings.assets.vector.fusion_algorithm,
 		normalize=(
 			normalize

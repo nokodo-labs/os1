@@ -1216,6 +1216,7 @@ async def _autocomplete_threads(
 	stmt = (
 		select(Thread)
 		.where(
+			Thread.is_temporary.is_(False),
 			thread_access_predicate(
 				principal,
 				required_level=AccessLevel.READER,
@@ -1277,7 +1278,7 @@ async def _hybrid_search_threads(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
-		limit=settings.assets.vector.prefetch_limit,
+		limit=limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
 	)

@@ -38,6 +38,7 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 			url=self.base_url,
 			api_key=self.api_key,
 			timeout=timeout,
+			prefer_grpc=True,
 		)
 
 	async def close(self) -> None:

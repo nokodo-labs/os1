@@ -65,17 +65,15 @@ async def _fetch_tavily(url: str) -> str:
 	ws = settings.web_search
 	api_key = ws.web_loaders.tavily.api_key
 	if not api_key:
-		raise WebSearchError(
-			"tavily web loader requires an API key "
-			"(settings.web_search.web_loaders.tavily.api_key)"
-		)
+		raise WebSearchError("tavily web loader is not configured")
 	client = TavilyClient(api_key=api_key)
 	pages, failures = await client.extract(
 		[url],
 		extract_depth=ws.web_loaders.tavily.extract_depth,
 	)
 	if failures:
-		raise WebSearchError(f"tavily extraction failed for {url}: {failures[0].error}")
+		logger.error("tavily extraction failed for %s: %s", url, failures[0].error)
+		raise WebSearchError(f"tavily extraction failed for {url}")
 	if not pages:
 		raise WebSearchError(f"tavily returned no content for {url}")
 	return pages[0].raw_content

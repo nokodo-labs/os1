@@ -39,7 +39,6 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
@@ -808,7 +807,7 @@ async def _hybrid_search_reminders(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
-		limit=settings.assets.vector.prefetch_limit,
+		limit=limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
 	)

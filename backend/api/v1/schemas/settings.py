@@ -123,12 +123,6 @@ class VectorSettingsPatch(BaseModel):
 		default=None,
 		description="enable sparse vectors",
 	)
-	prefetch_limit: int | None = Field(
-		default=None,
-		ge=1,
-		le=10000,
-		description="prefetch candidate limit",
-	)
 	fusion_algorithm: Literal["rrf", "dbsf"] | None = Field(
 		default=None,
 		description="fusion algorithm",

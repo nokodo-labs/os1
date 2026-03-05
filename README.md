@@ -3,168 +3,221 @@
 <img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo" width=83% />
 <div style="height: 30px;"></div>
 
-**your AI-native workspace - chat, code, create, and control everything from one beautiful interface**
+**the AI workspace you actually want to use**
 
 [![License](https://img.shields.io/github/license/nokodo-labs/nokodo-ai)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/nokodo-ai?style=social)](https://github.com/nokodo-labs/nokodo-ai/stargazers)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2)](DISCORD_INVITE_LINK_HERE)
 [![Issues](https://img.shields.io/github/issues/nokodo-labs/nokodo-ai)](https://github.com/nokodo-labs/nokodo-ai/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/nokodo-labs/nokodo-ai)](https://github.com/nokodo-labs/nokodo-ai/pulls)
-[![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![Node](https://img.shields.io/badge/node-24+-green.svg)](https://nodejs.org/)
 
 </div>
 
 ---
 
-nokodo is a next-gen AI platform that goes beyond chat. it combines powerful agentic capabilities with a unified workspace for conversations, autonomous coding, deep research, and life management - all wrapped in a stunning UI designed for the future.
+nokodo is an open-source AI platform built for teams and power users. it combines autonomous agents, deep research, real-time collaboration, and a flexible tool system - all in a beautiful, self-hostable workspace.
 
 https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 > [!WARNING]
 > 🚧 this project is in **prototype stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
 
+**links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](DISCORD_INVITE_LINK_HERE)
+
 ---
 
 ## ✨ features
 
-### 🤖 agentic AI
+### 🤖 autonomous AI agents
 
-- **multi-turn agent sessions** - agents that think, act, and iterate until the job is done
-- **agent delegation** - agents can spawn sub-agents for specialized tasks, each in isolated threads
-- **tool use** - native, built-in tools allow agents to take actions across the entire platform and beyond
-- **intelligence router** - automatically selects the right model for each query (cost optimization)
+- **multi-turn agent sessions** - agents that plan, act, and iterate until the job is done
+- **agent delegation** - agents spawn sub-agents for specialized tasks, each in isolated context
+- **native tool use** - agents can search the web, execute code, manage files, generate media, and more
+- **intelligence router** - automatically picks the right model for each query, minimizing cost
 
-### 🔥 autonomous coding agent
+### 🔥 coding agent
 
-- **full sandbox environment** - terminal access, code changes, test execution
-- **iterative workflow** - reads code → makes changes → runs tests → refines until done
-- **automatic PR creation** - pushes to GitHub and opens a pull request when complete
-- **multi-model support** - use any model, extensively customizable
+- **full sandbox environment** - terminal access, file editing, test execution via E2B
+- **end-to-end workflow** - reads code → makes changes → runs tests → refines until complete
+- **automatic PR creation** - pushes changes to GitHub and opens a pull request when done
+- **any model, fully customizable** - bring your own provider and tune every parameter
 
 ### 🔍 deep research
 
-- **multi-iteration search** - AI performs comprehensive research over several minutes
-- **document synthesis** - builds structured reports from multiple sources
-- **async execution** - works in background, notifies when complete
+- **multi-iteration search** - AI plans and executes comprehensive research over several minutes
+- **document synthesis** - builds structured reports from multiple sources and searches
+- **runs in background** - async execution, notifies when done
 
-### 💬 unified chats
+### 💬 collaborative chats
 
-- **mixed participants** - multiple humans and AIs in the same conversation
-- **real-time AI assistance** - summarize, translate, or assist in any thread
-- **branching conversations** - fork and explore alternative paths
+- **real-time collaboration** - WebSocket-based live UX lets multiple users work in the same thread simultaneously, with instant updates for everyone
+- **mixed participants** - humans and AI models share the same conversation naturally
+- **thread branching** - fork any message to explore alternative paths without losing context
+- **real-time AI assistance** - summon AI to summarize, translate, or assist inline at any time
 
-### 🧠 intelligent memory
+### 🧠 persistent memory
 
-- **persistent context** - remembers important information across sessions
-- **smart retrieval** - surfaces relevant memories when you need them
-- **chat recall** - pulls context from previous conversations automatically
+- **remembers what matters** - stores important context across sessions automatically
+- **smart retrieval** - surfaces relevant memories when they are most useful
+- **conversation recall** - pulls context from past threads into new ones seamlessly
 
-### 🖥️ admin console
+### ✍️ powerful prompting engine
 
-- **separate frontend app** - dedicated Svelte-based console for admins
-- **user and backend management** - monitor usage, manage users, view logs
-- **secure access** - OIDC SSO, role-based permissions, audit logging
+- **Jinja2-based rendering** - full template language with variables, conditionals, and loops
+- **composable prompts** - prompts can include other prompts for modular, reusable building blocks
+- **runtime context injection** - user preferences, conversation state, and tool results are injected automatically at render time
+- **validation** - circular reference detection, depth limiting, and strict undefined enforcement
+
+### 📊 native tracking _(coming soon)_
+
+- **token usage per message** - tracks input, output, and cache tokens at the message level
+- **cost accounting** - maps usage to model pricing for per-user and per-group spend visibility
+- **activity over time** - full audit trail of user activity, requests, and resource consumption
+- **admin dashboards** - monitor platform health, usage trends, and anomalies from the console
 
 ### 📂 AI-generated artifacts
 
-- **auto-generated files** - agents can create, edit, and manage files using the Canvas tool
-- **rich media support** - images, videos, documents, code files, and more
-- **artifact library** - centralized storage and management of all AI-generated content
+- **canvas tool** - agents create, edit, and refine files directly in the conversation
+- **rich media** - images, videos, code, documents - any AI output becomes a managed artifact
+- **artifact library** - centralized storage for all AI-generated content
+
+### 📱 Progressive Web App
+
+- **installable** - add nokodo to your desktop or mobile home screen from any browser
+- **push notifications** - real-time alerts even when the app is in the background
+- **native iOS and Android apps** - coming soon
 
 ### 🎨 liquid UI
 
-- **glassmorphism** - Apple-inspired aesthetic with depth, blur, and transparency
-- **beautiful markdown** - enhanced stream rendering thanks to Vercel Streamdown
-- **persistent chrome** - Island header + Dock sidebar anchor your experience
-
-### 📱 Progressive Web App (PWA)
-
-- **installable** - add nokodo to your desktop or mobile home screen
-- **offline support** - access recent conversations and files without internet
-- **push notifications** - stay informed with real-time updates
-
-### 🛠️ built-in tools
-
-| tool                 | capability                                              |
-| -------------------- | ------------------------------------------------------- |
-| **web search**       | tiered: fast basic search + deep agentic research       |
-| **webpage fetch**    | scrape and parse any URL                                |
-| **code execution**   | sandboxed Python with file creation                     |
-| **file handling**    | upload, generate, edit, and download files              |
-| **media generation** | create and edit images and videos via multiple backends |
-| **memory**           | store and retrieve contextual information               |
+- **glassmorphism design** - Apple-inspired aesthetic with depth, blur, and transparency
+- **beautiful markdown** - enhanced streaming rendering powered by Vercel Streamdown
+- **persistent chrome** - Island header and Dock sidebar keep you oriented at all times
 
 ### 🔐 enterprise-ready
 
-- **OIDC authentication** - SSO with any provider, federated users and groups
+- **OIDC / SSO** - federated login with any identity provider
 - **role-based access** - granular permissions, invisible to end users
 - **user groups** - shared threads, files, and projects with group-level quotas
-- **rate limiting** - per-user, global, by time period, with clear messaging
+- **rate limiting** - per-user and global limits, by time period, with clear user-facing messages
+- **audit logging** - full record of admin actions and system events
 
-### 🖌️ no branding restrictions
+### 🛠️ built-in tools
 
-- **fully open source** - use, modify, and deploy without limitations
-- **customizable UI** - easily rebrand and tailor the interface to your needs
-- **self-hosting** - complete control over your deployment and data
+- **resouce management** - native tools for managing notes, reminders, files, chats, and more
+- **memory system** - automatically stores and retrieves important context across sessions
+- **web search** - up-to-date information from the web, with source citations
 
-### 📱 workspace features
+### 🖥️ admin console
 
-- **projects** - organize threads, files, and resources together
-- **notifications** - PWA push, email (SMTP), Telegram, and more
-- **user groups** - share threads, files, and projects with teams
+- **dedicated app** - separate Svelte-based console for platform administrators
+- **user management** - create, edit, suspend users and groups
+- **usage monitoring** - view logs, track activity, manage settings
 
 ### 🌐 extensibility
 
-- **custom tools** - add your own capabilities
-- **custom filters and hooks** - modify core behaviors
-- **plugin architecture** - extend with community-made additions
+- **custom tools** - add new capabilities with minimal boilerplate
+- **filters and hooks** - modify context injection and post-response behavior
+- **plugin architecture** - extend with community-built additions
+
+### 🖌️ self-hostable, no restrictions
+
+- **fully open source** - BSD 3-Clause, use and modify freely
+- **rebrand-friendly** - swap logos and colors, make it yours
+- **complete data control** - all data stays in your infrastructure
 
 ---
 
-## 🛠️ stack
+## 🚀 quickstart
 
-| layer        | technologies                                                                      |
-| ------------ | --------------------------------------------------------------------------------- |
-| **backend**  | FastAPI, Python 3.13+, custom AI library, SQLAlchemy 2.0+, PostgreSQL 17, Alembic |
-| **frontend** | Svelte 5, Vite, Vercel Streamdown, Tailwind 4, TypeScript                         |
-| **console**  | Svelte 5, Vite, shadcn-svelte, Tailwind 4, TypeScript                             |
-| **infra**    | Docker Compose, Nginx, GitHub Actions, Release Please                             |
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+    db:
+        image: postgres:17-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: nokodo
+            POSTGRES_PASSWORD: nokodo
+            POSTGRES_DB: nokodo
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U nokodo"]
+            interval: 10s
+            retries: 5
+
+    qdrant:
+        image: qdrant/qdrant:v1.16.2
+        restart: unless-stopped
+        volumes:
+            - qdrant_data:/qdrant/storage
+
+    backend:
+        image: ghcr.io/nokodo-labs/nokodo-ai-backend:latest
+        restart: unless-stopped
+        ports:
+            - "1383:1383"
+        environment:
+            DATABASE_URL: postgresql+psycopg://nokodo:nokodo@db:5432/nokodo
+            NOKODO__SECURITY__SECRET_KEY: change-me
+            NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888"
+            NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
+        depends_on:
+            db:
+                condition: service_healthy
+        volumes:
+            - uploads:/app/data
+
+    frontend:
+        image: ghcr.io/nokodo-labs/nokodo-ai-frontend:latest
+        restart: unless-stopped
+        ports:
+            - "888:80"
+        depends_on:
+            - backend
+
+volumes:
+    postgres_data:
+    qdrant_data:
+    uploads:
+```
+
+Then:
+
+```bash
+docker compose up -d
+```
+
+Open `http://localhost:888`.
+
+> Change `NOKODO__SECURITY__SECRET_KEY` to a long random string. For a custom domain, update the two origin vars to your URL.
+
+For environment variable reference, building from source, and development setup see [docs/setup.md](docs/setup.md).
 
 ---
 
-## 🚀 quick start
+## 🗺️ roadmap
 
-### 1. start dependencies
-
-```bash
-cd .docker && docker compose --profile deps up -d
-```
-
-### 2. run the backend
-
-```bash
-cd backend
-uv sync --all-extras
-cp .env.example .env
-uv run uvicorn api.main:app --reload
-```
-
-### 3. run the frontend
-
-```bash
-cd frontend && pnpm install && pnpm run dev
-```
-
-> 💡 **VS Code** - open the workspace for tasks, debugger configs, and recommended extensions.
-
-see [docs/setup.md](docs/setup.md) for detailed setup, production deployment, and environment configuration.
-
----
+See [ROADMAP.md](ROADMAP.md) for planned features and release milestones.
 
 ## 🤝 contributing
 
-contributions are welcome! please check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+contributions are welcome! see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## 📄 license
 
 BSD 3-Clause - see [LICENSE](LICENSE) for details.
+
+---
+
+<details>
+<summary>tech stack</summary>
+
+| layer        | technologies                                                   |
+| ------------ | -------------------------------------------------------------- |
+| **backend**  | FastAPI, Python 3.13+, SQLAlchemy 2.0+, PostgreSQL 17, Alembic |
+| **frontend** | Svelte 5, Vite, Vercel Streamdown, Tailwind 4, TypeScript      |
+| **console**  | Svelte 5, Vite, shadcn-svelte, Tailwind 4, TypeScript          |
+| **infra**    | Docker Compose, Nginx, GitHub Actions, Release Please          |
+
+</details>

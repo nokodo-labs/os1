@@ -84,10 +84,7 @@ async def _search_perplexity(
 	"""search using the perplexity chat completions API."""
 	pplx = settings.web_search.perplexity
 	if not pplx.api_key:
-		raise WebSearchError(
-			"perplexity web search requires an API key "
-			"(settings.web_search.perplexity.api_key)"
-		)
+		raise WebSearchError("perplexity web search is not configured")
 	client = PerplexityClient(api_key=pplx.api_key)
 	try:
 		result = await client.search(

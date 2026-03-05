@@ -89,6 +89,7 @@ async def test_qdrant_create_upsert_search_and_cleanup() -> None:
 	]
 
 	try:
+		await store.ensure_collection(vector_size=64)
 		await store.add(chunks)
 		client = adapter._client if local_mode else admin
 		assert client is not None

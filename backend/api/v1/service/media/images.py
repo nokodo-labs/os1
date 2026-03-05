@@ -104,8 +104,9 @@ async def generate_image(
 
 	try:
 		image_model = await resolve_image_model(session, TypeID(effective_model_id))
-	except Exception as exc:
-		raise MediaError(f"failed to resolve image model: {exc}") from exc
+	except Exception:
+		logger.exception("failed to resolve image model %s", effective_model_id)
+		raise MediaError("failed to resolve image generation model") from None
 
 	effective_n = min(n or img_settings.default_n, img_settings.max_n)
 
@@ -126,8 +127,9 @@ async def generate_image(
 			result = await image_model.generate(
 				prompt, image=image, mask=mask, params=params
 			)
-	except Exception as exc:
-		raise MediaError(f"image generation failed: {exc}") from exc
+	except Exception:
+		logger.exception("image generation failed for model %s", effective_model_id)
+		raise MediaError("image generation failed") from None
 
 	# persist each generated image as a File record
 	results: list[ImageResult] = []

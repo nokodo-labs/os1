@@ -72,7 +72,6 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		limit: int = 10,
 		offset: int | None = None,
 		query_filter: ChunkFilter | None = None,
-		prefetch_limit: int | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
 	) -> list[ChunkSearchResult]:
@@ -93,7 +92,6 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 			limit=limit,
 			offset=offset,
 			query_filter=query_filter,
-			prefetch_limit=prefetch_limit,
 			fusion=fusion,
 			normalize=normalize,
 		)

@@ -142,7 +142,6 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		limit: int = 10,
 		offset: int | None = None,
 		query_filter: ChunkFilter | None = None,
-		prefetch_limit: int | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
 	) -> list[ChunkSearchResult]:
@@ -163,7 +162,6 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 			limit: maximum number of results to return
 			offset: number of results to skip (for pagination)
 			query_filter: adapter-agnostic filter conditions
-			prefetch_limit: candidates per sub-query before fusion (hybrid)
 			fusion: fusion algorithm for hybrid search ("rrf" or "dbsf")
 			normalize: normalize scores to 0-1 range (default True)
 

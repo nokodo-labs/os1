@@ -19,6 +19,13 @@
 		{ value: 'lightbends', label: 'light bends' },
 		{ value: 'lightrays', label: 'light rays' },
 		{ value: 'silk', label: 'silk' },
+		{ value: 'fog', label: 'fog' },
+		{ value: 'clouds', label: 'clouds' },
+		{ value: 'clouds-dark', label: 'clouds dark' },
+		{ value: 'clouds2', label: 'clouds 2' },
+		{ value: 'clouds2-dark', label: 'clouds 2 dark' },
+		{ value: 'grainient', label: 'grainient' },
+		{ value: 'iridescence', label: 'iridescence' },
 		{ value: 'static', label: 'static' },
 		{ value: 'none', label: 'none' },
 	]

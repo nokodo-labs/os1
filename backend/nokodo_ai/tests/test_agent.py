@@ -319,7 +319,7 @@ async def test_agent_sync_tool_exception_returns_error() -> None:
 
 	tool_msg = next(m for m in result if isinstance(m, ToolMessage))
 	assert tool_msg.is_error is True
-	assert "error executing tool" in tool_msg.tool_output
+	assert "an internal error occurred" in tool_msg.tool_output
 
 
 @pytest.mark.asyncio

@@ -166,17 +166,17 @@ Well-known filenames appended to `base_url`: `favicon.ico`, `apple-touch-icon.pn
 
 #### Message windowing (`NOKODO__AI__WINDOWING__*`)
 
-| Variable                                                   | Type  | Default  | Description                                                                 |
-| ---------------------------------------------------------- | ----- | -------- | --------------------------------------------------------------------------- |
-| `NOKODO__AI__WINDOWING__ENABLED`                           | bool  | `false`  | Enable context window management and summarization.                         |
-| `NOKODO__AI__WINDOWING__MAX_MESSAGES`                      | int   | `50`     | Secondary message count guard (even if tokens fit, cap at this).            |
-| `NOKODO__AI__WINDOWING__TRIGGER_RATIO`                     | float | `0.70`   | Token budget fraction at which background summarization starts.             |
-| `NOKODO__AI__WINDOWING__HARD_RATIO`                        | float | `0.90`   | Token budget fraction for hard truncation (last resort).                    |
-| `NOKODO__AI__WINDOWING__SUMMARY_BATCH_SIZE`                | int   | `20`     | Oldest unsummarized messages per summary batch.                             |
-| `NOKODO__AI__WINDOWING__MAX_SUMMARIES_BEFORE_CONDENSE`     | int   | `4`      | Condense existing summaries into one when this many accumulate.             |
-| `NOKODO__AI__WINDOWING__TOOL_RESULT_MAX_SHARE`             | float | `0.25`   | Max fraction of budget a single tool result may consume.                    |
-| `NOKODO__AI__WINDOWING__TOOL_RESULT_HARD_CAP`              | int   | `100000` | Absolute character ceiling per tool result.                                 |
-| `NOKODO__AI__WINDOWING__RESPONSE_HEADROOM`                 | int   | `4096`   | Tokens reserved for the model's response.                                   |
+| Variable                                               | Type  | Default  | Description                                                      |
+| ------------------------------------------------------ | ----- | -------- | ---------------------------------------------------------------- |
+| `NOKODO__AI__WINDOWING__ENABLED`                       | bool  | `false`  | Enable context window management and summarization.              |
+| `NOKODO__AI__WINDOWING__MAX_MESSAGES`                  | int   | `50`     | Secondary message count guard (even if tokens fit, cap at this). |
+| `NOKODO__AI__WINDOWING__TRIGGER_RATIO`                 | float | `0.70`   | Token budget fraction at which background summarization starts.  |
+| `NOKODO__AI__WINDOWING__HARD_RATIO`                    | float | `0.90`   | Token budget fraction for hard truncation (last resort).         |
+| `NOKODO__AI__WINDOWING__SUMMARY_BATCH_SIZE`            | int   | `20`     | Oldest unsummarized messages per summary batch.                  |
+| `NOKODO__AI__WINDOWING__MAX_SUMMARIES_BEFORE_CONDENSE` | int   | `4`      | Condense existing summaries into one when this many accumulate.  |
+| `NOKODO__AI__WINDOWING__TOOL_RESULT_MAX_SHARE`         | float | `0.25`   | Max fraction of budget a single tool result may consume.         |
+| `NOKODO__AI__WINDOWING__TOOL_RESULT_HARD_CAP`          | int   | `100000` | Absolute character ceiling per tool result.                      |
+| `NOKODO__AI__WINDOWING__RESPONSE_HEADROOM`             | int   | `4096`   | Tokens reserved for the model's response.                        |
 
 ---
 
@@ -207,7 +207,6 @@ Well-known filenames appended to `base_url`: `favicon.ico`, `apple-touch-icon.pn
 | ------------------------------------------------ | --------------- | -------------- | ----------------------------------------------------------------------------------------- |
 | `NOKODO__ASSETS__VECTOR__COLLECTION_TEMPLATE`    | string          | `{model}_bm25` | Collection name template. `{model}` is replaced with the slugified embedding model name.  |
 | `NOKODO__ASSETS__VECTOR__SPARSE_VECTORS_ENABLED` | bool            | `true`         | Enable BM25 sparse vectors for hybrid search.                                             |
-| `NOKODO__ASSETS__VECTOR__PREFETCH_LIMIT`         | int             | `100`          | Candidate count to prefetch before fusion/reranking (1-10000).                            |
 | `NOKODO__ASSETS__VECTOR__FUSION_ALGORITHM`       | `rrf` \| `dbsf` | `rrf`          | Score fusion: `rrf` (reciprocal rank fusion) or `dbsf` (distribution-based score fusion). |
 | `NOKODO__ASSETS__VECTOR__NORMALIZE_SCORES`       | bool            | `true`         | Normalize fused scores to 0-1 range.                                                      |
 

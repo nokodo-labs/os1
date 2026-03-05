@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from functools import cached_property
 from typing import Literal, overload
@@ -27,6 +28,8 @@ from .tool import Tool, ToolDefinition
 from .types.json import JSONObject
 from .utils.dicts import deep_merge
 
+
+logger = logging.getLogger(__name__)
 
 AgentProducedMessages = list[AssistantMessage | ToolMessage]
 
@@ -359,10 +362,11 @@ class Agent[AppContextT = None](Base):
 		# execute
 		try:
 			tool_message = await tool.call(tool_ctx, app_context, **args)
-		except Exception as e:
+		except Exception:
+			logger.exception("unhandled error executing tool %s", tool.name)
 			return ToolMessage(
 				tool_call_id=tool_call.id,
-				tool_output=f"error executing tool: {e}",
+				tool_output="an internal error occurred while executing this tool",
 				is_error=True,
 				metadata=tool_call.metadata,
 			)

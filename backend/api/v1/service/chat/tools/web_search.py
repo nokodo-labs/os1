@@ -78,8 +78,12 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			result = await search_web(
 				inp.query, limit=inp.limit, search_agent=inp.search_agent
 			)
-		except WebSearchError as exc:
-			return self.error(str(exc), __agent_context__)
+		except WebSearchError:
+			logger.exception("agentic web search failed for query: %s", inp.query)
+			return self.error(
+				"web search failed. please try again.",
+				__agent_context__,
+			)
 
 		parts = [result.summary]
 		if result.citations:
@@ -139,16 +143,21 @@ class FetchUrlTool(Tool[AppContext]):
 
 		try:
 			content = await fetch_url(inp.url)
-		except WebSearchError as exc:
-			return self.error(str(exc), __agent_context__)
+		except WebSearchError:
+			logger.exception("fetch_url web search error for %s", inp.url)
+			return self.error(
+				f"failed to fetch {inp.url}",
+				__agent_context__,
+			)
 		except httpx.HTTPStatusError as exc:
 			return self.error(
 				f"HTTP {exc.response.status_code} fetching {inp.url}",
 				__agent_context__,
 			)
-		except httpx.RequestError as exc:
+		except httpx.RequestError:
+			logger.exception("fetch_url request error for %s", inp.url)
 			return self.error(
-				f"request failed for {inp.url}: {exc}",
+				f"failed to fetch {inp.url}",
 				__agent_context__,
 			)
 
