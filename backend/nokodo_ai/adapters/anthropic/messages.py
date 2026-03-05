@@ -24,7 +24,7 @@ from ...messages import (
 	UserMessage,
 )
 from ...tool import ToolDefinition
-from ...types import JSONObject
+from ...utils.json_schema import process_schema
 from ...utils.provider_meta import (
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
@@ -108,14 +108,32 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		params: ChatGenerationParams,
 	) -> AssistantMessage:
 		system_text, anthropic_messages = _messages_to_anthropic(messages)
-		system_text = _apply_response_model_to_system(
-			system_text, params.response_model
-		)
 
 		anthropic_tools = _tools_to_anthropic(tools) if tools else anthropic.omit
 		anthropic_tool_choice: AnthropicToolChoice | anthropic.Omit = anthropic.omit
 		if tools and params.tool_choice is not None:
 			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
+
+		extra_headers: dict[str, str] | None = None
+		extra_body: dict[str, object] | None = None
+		if params.response_model is not None:
+			extra_headers = {"anthropic-beta": "structured-outputs-2025-11-13"}
+			processed = process_schema(
+				dict(params.response_model),
+				make_all_required=True,
+				set_additionalproperties_field=True,
+				process_defaults=False,
+				process_examples=False,
+				process_enums=False,
+				process_array_constraints=True,
+			)
+			assert isinstance(processed, dict)
+			extra_body = {
+				"output_format": {
+					"type": "json_schema",
+					"schema": processed,
+				}
+			}
 
 		response = await self._client.messages.create(
 			model=model,
@@ -130,6 +148,8 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			stop_sequences=params.stop if params.stop else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
+			extra_headers=extra_headers,
+			extra_body=extra_body,
 		)
 
 		tool_calls: list[ToolCall] = []
@@ -137,7 +157,17 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		for block in response.content:
 			if isinstance(block, AnthropicTextBlock):
 				if block.text:
-					content.append(TextContent(text=block.text))
+					if params.response_model:
+						try:
+							parsed = json.loads(block.text)
+							if isinstance(parsed, dict):
+								content.append(JsonContent(data=parsed))
+							else:
+								content.append(TextContent(text=block.text))
+						except json.JSONDecodeError:
+							content.append(TextContent(text=block.text))
+					else:
+						content.append(TextContent(text=block.text))
 				continue
 			if isinstance(block, AnthropicToolUseBlock):
 				raw_args = json.dumps(block.input) if block.input else "{}"
@@ -152,20 +182,6 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 					)
 				)
 				continue
-
-		if params.response_model:
-			combined_text = "".join(
-				part.text for part in content if isinstance(part, TextContent)
-			)
-			if combined_text:
-				try:
-					parsed = json.loads(combined_text)
-					if isinstance(parsed, dict):
-						content = [JsonContent(data=parsed)]
-					else:
-						content = [TextContent(text=combined_text)]
-				except json.JSONDecodeError:
-					content = [TextContent(text=combined_text)]
 
 		usage = Usage(
 			input_tokens=response.usage.input_tokens,
@@ -185,14 +201,32 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		params: ChatGenerationParams,
 	) -> AsyncIterator[AssistantMessage]:
 		system_text, anthropic_messages = _messages_to_anthropic(messages)
-		system_text = _apply_response_model_to_system(
-			system_text, params.response_model
-		)
 
 		anthropic_tools = _tools_to_anthropic(tools) if tools else anthropic.omit
 		anthropic_tool_choice: AnthropicToolChoice | anthropic.Omit = anthropic.omit
 		if tools and params.tool_choice is not None:
 			anthropic_tool_choice = _tool_choice_to_anthropic(params.tool_choice)
+
+		extra_headers: dict[str, str] | None = None
+		extra_body: dict[str, object] | None = None
+		if params.response_model is not None:
+			extra_headers = {"anthropic-beta": "structured-outputs-2025-11-13"}
+			processed = process_schema(
+				dict(params.response_model),
+				make_all_required=True,
+				set_additionalproperties_field=True,
+				process_defaults=False,
+				process_examples=False,
+				process_enums=False,
+				process_array_constraints=True,
+			)
+			assert isinstance(processed, dict)
+			extra_body = {
+				"output_format": {
+					"type": "json_schema",
+					"schema": processed,
+				}
+			}
 
 		stream = await self._client.messages.create(
 			model=model,
@@ -207,6 +241,8 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			stop_sequences=params.stop if params.stop else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
+			extra_headers=extra_headers,
+			extra_body=extra_body,
 			stream=True,
 		)
 
@@ -292,20 +328,6 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 					tc_created_at.pop(stop_provider_id, None)
 					tc_names.pop(stop_provider_id, None)
 				continue
-
-
-def _apply_response_model_to_system(
-	system_text: str | None,
-	response_model: JSONObject | None,
-) -> str | None:
-	if response_model is None:
-		return system_text
-
-	schema_json = json.dumps(response_model)
-	instruction = "return only valid json that matches this json schema: " + schema_json
-	if system_text:
-		return system_text + "\n\n" + instruction
-	return instruction
 
 
 _ANTHROPIC_IMAGE_TYPES = (
