@@ -13,7 +13,7 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import ResourcePickerModal from '$lib/components/modals/ResourcePickerModal.svelte'
-	import Switch from '$lib/components/primitives/liquid-glass/Switch.svelte'
+	import Switch from '$lib/components/primitives/ResolverSwitch.svelte'
 	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { device } from '$lib/stores/device.svelte'
 	import { cubicOut } from 'svelte/easing'

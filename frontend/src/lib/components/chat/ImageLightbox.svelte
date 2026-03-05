@@ -21,6 +21,9 @@
 
 	const MIN_SCALE = 1
 	const MAX_SCALE = 8
+	const PAN_MARGIN = 80 // px of image that must always remain visible
+
+	let imgEl: HTMLImageElement | null = $state(null)
 
 	function resetTransform() {
 		scale = 1
@@ -67,8 +70,24 @@
 
 	function handlePointerMove(e: PointerEvent) {
 		if (!isPanning) return
-		translateX = panOrigin.x + (e.clientX - panStart.x)
-		translateY = panOrigin.y + (e.clientY - panStart.y)
+		const rawTx = panOrigin.x + (e.clientX - panStart.x)
+		const rawTy = panOrigin.y + (e.clientY - panStart.y)
+		// clamp so at least PAN_MARGIN px of image stays visible at each edge
+		if (imgEl) {
+			const vw = window.innerWidth
+			const vh = window.innerHeight
+			const iw = imgEl.offsetWidth * scale
+			const ih = imgEl.offsetHeight * scale
+			const maxTx = vw / 2 + iw / 2 - PAN_MARGIN
+			const minTx = -(vw / 2 + iw / 2 - PAN_MARGIN)
+			const maxTy = vh / 2 + ih / 2 - PAN_MARGIN
+			const minTy = -(vh / 2 + ih / 2 - PAN_MARGIN)
+			translateX = Math.max(minTx, Math.min(maxTx, rawTx))
+			translateY = Math.max(minTy, Math.min(maxTy, rawTy))
+		} else {
+			translateX = rawTx
+			translateY = rawTy
+		}
 	}
 
 	function handlePointerUp() {
@@ -126,9 +145,9 @@
 				<XMark class="h-5 w-5" />
 			</button>
 
-			<!-- zoom/pan container -->
+			<!-- zoom/pan container — fills the backdrop so the image is truly fullscreen-centered -->
 			<div
-				class="flex max-h-[90vh] max-w-[90vw] items-center justify-center overflow-hidden"
+				class="absolute inset-0 flex items-center justify-center"
 				style="cursor: {scale > 1 ? (isPanning ? 'grabbing' : 'grab') : 'zoom-in'};"
 				role="presentation"
 				onwheel={handleWheel}
@@ -141,6 +160,7 @@
 				onkeydown={(e) => e.stopPropagation()}
 			>
 				<img
+					bind:this={imgEl}
 					{src}
 					{alt}
 					class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl select-none"

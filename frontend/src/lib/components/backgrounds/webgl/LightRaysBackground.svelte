@@ -19,6 +19,7 @@
 		onReady?: () => void
 		raysOrigin?: RaysOrigin
 		raysColor?: string
+		backgroundColor?: string
 		raysSpeed?: number
 		lightSpread?: number
 		rayLength?: number
@@ -37,6 +38,7 @@
 		onReady,
 		raysOrigin = 'top-center',
 		raysColor = '#ffffff',
+		backgroundColor = '#000000',
 		raysSpeed = 1,
 		lightSpread = 0.5,
 		rayLength = 1.0,
@@ -122,13 +124,13 @@ float rayStrength(vec2 raySource, vec2 rayRefDirection, vec2 coord,
 	float cosAngle = dot(dirNorm, rayRefDirection);
 
 	float distortedAngle = cosAngle + distortion * sin(iTime * 2.0 + length(sourceToCoord) * 0.01) * 0.2;
-	
+
 	float spreadFactor = pow(max(distortedAngle, 0.0), 1.0 / max(lightSpread, 0.001));
 
 	float distance = length(sourceToCoord);
 	float maxDistance = iResolution.x * rayLength;
 	float lengthFalloff = clamp((maxDistance - distance) / maxDistance, 0.0, 1.0);
-	
+
 	float fadeFalloff = clamp((iResolution.x * fadeDistance - distance) / (iResolution.x * fadeDistance), 0.5, 1.0);
 	float pulse = pulsating > 0.5 ? (0.8 + 0.2 * sin(iTime * speed * 3.0)) : 1.0;
 
@@ -143,7 +145,7 @@ float rayStrength(vec2 raySource, vec2 rayRefDirection, vec2 coord,
 
 void mainImage(out vec4 color, in vec2 fragCoord) {
 	vec2 coord = vec2(fragCoord.x, iResolution.y - fragCoord.y);
-	
+
 	vec2 finalRayDir = rayDir;
 	if (mouseInfluence > 0.0) {
 		vec2 mouseScreenPos = mousePos * iResolution.xy;
@@ -291,11 +293,12 @@ void main() {
 		smoothMouseRef.x = smoothMouseRef.x * smoothing + mouseRef.x * (1 - smoothing)
 		smoothMouseRef.y = smoothMouseRef.y * smoothing + mouseRef.y * (1 - smoothing)
 
-		// Clear with black or transparent background
+		// Clear with transparent or background color
 		if (transparent) {
 			gl.clearColor(0, 0, 0, 0)
 		} else {
-			gl.clearColor(0, 0, 0, 1)
+			const bg = hexToRgb(backgroundColor)
+			gl.clearColor(bg.r, bg.g, bg.b, 1)
 		}
 		gl.clear(gl.COLOR_BUFFER_BIT)
 
@@ -496,7 +499,7 @@ void main() {
 	<canvas
 		class="pointer-events-none absolute inset-0 block h-full w-full"
 		bind:this={canvasRef}
-		style="background-color: {transparent ? 'transparent' : '#000000'};"
+		style="background-color: {transparent ? 'transparent' : backgroundColor};"
 	></canvas>
 
 	<!-- Slotted content rendered on top of background -->

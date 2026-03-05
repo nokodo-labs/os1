@@ -88,7 +88,7 @@
 <LiquidGlass
 	component="island"
 	tag="header"
-	class="overflow-visible rounded-full px-[clamp(5px,2vw,14px)] py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+	class="overflow-visible rounded-full px-3 py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
 	style="view-transition-name: island;"
 	blurRadius={4}
 >
@@ -120,7 +120,7 @@
 					<span class="text-xs font-medium">offline</span>
 				</div>
 			{:else if chrome.island.pulse}
-				<div class="max-w-160 truncate text-sm text-foreground/70">
+				<div class="text-foreground/70 max-w-160 truncate text-sm">
 					{chrome.island.pulse}
 				</div>
 			{/if}
@@ -149,7 +149,7 @@
 			<!-- PWA: install button -->
 			{#if showInstall}
 				<button
-					class="island-pwa-btn flex cursor-pointer items-center justify-center gap-1.5 text-foreground/80 transition-transform duration-300 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
+					class="island-pwa-btn text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center gap-1.5 transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 					onclick={promptInstall}
 					aria-label="install app"
 				>
@@ -166,7 +166,7 @@
 
 			{#if !isHomeLayout}
 				<button
-					class="flex cursor-pointer items-center justify-center text-foreground/80 transition-transform duration-300 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
+					class="text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 					onclick={handleHome}
 					aria-label="home"
 				>
@@ -175,7 +175,7 @@
 			{/if}
 
 			<button
-				class="flex cursor-pointer items-center justify-center text-foreground/80 transition-transform duration-300 hover:scale-[1.05] hover:text-foreground active:scale-[0.97]"
+				class="text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 				onclick={() => chrome.toggleDock()}
 				aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 				aria-expanded={chrome.isDockOpen}

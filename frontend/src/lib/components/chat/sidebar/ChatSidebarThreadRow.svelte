@@ -147,10 +147,10 @@
 			onclick={(e) => {
 				e.stopPropagation()
 				onCloseMenu()
-				modals.open('share-resource', {
-					resource: 'thread',
-					id: thread.id,
-					title: thread.title ?? null,
+				modals.open('resource-access', {
+					resourceType: 'thread',
+					resourceId: thread.id,
+					title: thread.title ?? thread.id,
 				})
 			}}
 		>

@@ -11,9 +11,11 @@
 	import PageTitle from '$lib/components/PageTitle.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { reminders, type ReminderListsSortMode } from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import InfoCircle from '../icons/InfoCircle.svelte'
+	import Share from '../icons/Share.svelte'
 	import EditReminderListModal from './EditReminderListModal.svelte'
 
 	interface Props {
@@ -211,6 +213,22 @@
 							onClose={closeListMenu}
 							data-reminders-list-menu
 						>
+							<button
+								type="button"
+								class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+								onclick={(event) => {
+									event.stopPropagation()
+									closeListMenu()
+									modals.open('resource-access', {
+										resourceType: 'reminder_list',
+										resourceId: list.id,
+										title: list.name,
+									})
+								}}
+							>
+								<Share class="h-4 w-4" />
+								share
+							</button>
 							<button
 								type="button"
 								class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"

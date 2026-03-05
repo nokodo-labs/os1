@@ -631,27 +631,16 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                thread_id: string;
-                run_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         get?: never;
         put?: never;
-        /** Cancel Run - cancel an active agent run by id. */
-        post: {
-            parameters: {
-                path: { thread_id: string; run_id: string };
-            };
-            requestBody?: never;
-            responses: {
-                200: {
-                    headers: { [name: string]: unknown };
-                    content: { "application/json": unknown };
-                };
-            };
-        };
+        /**
+         * Cancel Run
+         * @description cancel an active agent run on a thread.
+         */
+        post: operations["cancel_run_threads__thread_id__runs__run_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1096,26 +1085,16 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                note_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         get?: never;
         put?: never;
-        /** Enhance Note - use AI to reformat and improve a note's content. */
-        post: {
-            parameters: {
-                path: { note_id: string };
-            };
-            requestBody?: never;
-            responses: {
-                200: {
-                    headers: { [name: string]: unknown };
-                    content: { "application/json": components["schemas"]["Note"] };
-                };
-            };
-        };
+        /**
+         * Enhance Note
+         * @description enhance a note using AI. stub - returns the note unchanged until implemented.
+         */
+        post: operations["enhance_note_notes__note_id__enhance_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2291,6 +2270,29 @@ export interface components {
              */
             reveal_decay_turns: number;
         };
+        /** AIAttachmentSettingsPatch */
+        AIAttachmentSettingsPatch: {
+            /**
+             * Image Decay Turns
+             * @description turns before image attachments decay to reference
+             */
+            image_decay_turns?: number | null;
+            /**
+             * Audio Decay Turns
+             * @description turns before audio attachments decay to reference
+             */
+            audio_decay_turns?: number | null;
+            /**
+             * Video Decay Turns
+             * @description turns before video attachments decay to reference
+             */
+            video_decay_turns?: number | null;
+            /**
+             * Reveal Decay Turns
+             * @description turns before a revealed attachment decays again
+             */
+            reveal_decay_turns?: number | null;
+        };
         /** AIChatContextSettings */
         AIChatContextSettings: {
             /**
@@ -2319,6 +2321,24 @@ export interface components {
              * @description number of chats to use for context enrichment
              */
             top_k?: number | null;
+        };
+        /**
+         * AIMediaSettings
+         * @description AI media generation settings.
+         */
+        AIMediaSettings: {
+            /** @description image generation settings */
+            images?: components["schemas"]["ImageGenerationSettings"];
+            /** @description video generation settings (future) */
+            videos?: components["schemas"]["VideoGenerationSettings"];
+            /** @description audio generation settings (future) */
+            audio?: components["schemas"]["AudioGenerationSettings"];
+        };
+        /** AIMediaSettingsPatch */
+        AIMediaSettingsPatch: {
+            images?: components["schemas"]["ImageGenerationSettingsPatch"] | null;
+            videos?: components["schemas"]["VideoGenerationSettingsPatch"] | null;
+            audio?: components["schemas"]["AudioGenerationSettingsPatch"] | null;
         };
         /** AIMemorySettings */
         AIMemorySettings: {
@@ -2426,6 +2446,10 @@ export interface components {
             tasks?: components["schemas"]["AITaskSettings"];
             /** @description native attachment decay settings */
             attachments?: components["schemas"]["AIAttachmentSettings"];
+            /** @description message window and summarization settings */
+            windowing?: components["schemas"]["AIWindowingSettings"];
+            /** @description AI media generation settings */
+            media?: components["schemas"]["AIMediaSettings"];
         };
         /** AISettingsPatch */
         AISettingsPatch: {
@@ -2437,6 +2461,9 @@ export interface components {
             memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
             tasks?: components["schemas"]["AITaskSettingsPatch"] | null;
+            attachments?: components["schemas"]["AIAttachmentSettingsPatch"] | null;
+            windowing?: components["schemas"]["AIWindowingSettingsPatch"] | null;
+            media?: components["schemas"]["AIMediaSettingsPatch"] | null;
         };
         /**
          * AITaskSettings
@@ -2460,6 +2487,16 @@ export interface components {
              * @description model for input autocomplete suggestions
              */
             input_autocomplete_model_id?: string | null;
+            /**
+             * Summarization Model Id
+             * @description model for thread context summarization
+             */
+            summarization_model_id?: string | null;
+            /**
+             * Memory Post Processing Model Id
+             * @description model for memory post-processing (dedup, update, delete)
+             */
+            memory_post_processing_model_id?: string | null;
         };
         /** AITaskSettingsPatch */
         AITaskSettingsPatch: {
@@ -2478,6 +2515,139 @@ export interface components {
              * @description model for input autocomplete suggestions
              */
             input_autocomplete_model_id?: string | null;
+            /**
+             * Summarization Model Id
+             * @description model for thread context summarization
+             */
+            summarization_model_id?: string | null;
+            /**
+             * Memory Post Processing Model Id
+             * @description model for memory post-processing (dedup, update, delete)
+             */
+            memory_post_processing_model_id?: string | null;
+        };
+        /**
+         * AIWindowingSettings
+         * @description context window management settings.
+         *
+         *     controls token-aware windowing, summarization triggers, tool result
+         *     truncation, and recursive summary condensation. all budget decisions
+         *     are based on estimated token weight, not naive message counts.
+         */
+        AIWindowingSettings: {
+            /**
+             * Enabled
+             * @description enable context window management and summarization
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Max Messages
+             * @description secondary message count guard. even if tokens are within budget, cap at this many unsummarized messages
+             * @default 50
+             */
+            max_messages: number;
+            /**
+             * Trigger Ratio
+             * @description start background summarization when unsummarized messages consume this fraction of the available token budget
+             * @default 0.7
+             */
+            trigger_ratio: number;
+            /**
+             * Hard Ratio
+             * @description hard-truncate oldest messages when token usage exceeds this fraction of the available budget (last resort if no summary is ready)
+             * @default 0.9
+             */
+            hard_ratio: number;
+            /**
+             * Summary Batch Size
+             * @description number of oldest unsummarized messages per summary batch
+             * @default 20
+             */
+            summary_batch_size: number;
+            /**
+             * Max Summaries Before Condense
+             * @description condense existing summaries into one when this many window summaries accumulate. enables truly unlimited threads
+             * @default 4
+             */
+            max_summaries_before_condense: number;
+            /**
+             * Tool Result Max Share
+             * @description maximum fraction of available budget that a single tool result may consume. results exceeding this are truncated
+             * @default 0.25
+             */
+            tool_result_max_share: number;
+            /**
+             * Tool Result Hard Cap
+             * @description absolute character ceiling per tool result
+             * @default 100000
+             */
+            tool_result_hard_cap: number;
+            /**
+             * Tool Results Combined Max Share
+             * @description maximum fraction of available budget for ALL tool results combined. when total tool result tokens exceed this, the oldest tool results are compacted first (Layer 2 guard)
+             * @default 0.5
+             */
+            tool_results_combined_max_share: number;
+            /**
+             * Response Headroom
+             * @description tokens reserved for the model's response
+             * @default 4096
+             */
+            response_headroom: number;
+        };
+        /** AIWindowingSettingsPatch */
+        AIWindowingSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable context window management and summarization
+             */
+            enabled?: boolean | null;
+            /**
+             * Max Messages
+             * @description secondary message count guard
+             */
+            max_messages?: number | null;
+            /**
+             * Trigger Ratio
+             * @description fraction of token budget to trigger background summarization
+             */
+            trigger_ratio?: number | null;
+            /**
+             * Hard Ratio
+             * @description fraction of token budget for hard truncation
+             */
+            hard_ratio?: number | null;
+            /**
+             * Summary Batch Size
+             * @description number of oldest unsummarized messages per summary batch
+             */
+            summary_batch_size?: number | null;
+            /**
+             * Max Summaries Before Condense
+             * @description condense summaries when this many accumulate
+             */
+            max_summaries_before_condense?: number | null;
+            /**
+             * Tool Result Max Share
+             * @description max fraction of budget for a single tool result
+             */
+            tool_result_max_share?: number | null;
+            /**
+             * Tool Result Hard Cap
+             * @description absolute character ceiling per tool result
+             */
+            tool_result_hard_cap?: number | null;
+            /**
+             * Tool Results Combined Max Share
+             * @description max fraction of budget for ALL tool results combined (Layer 2)
+             */
+            tool_results_combined_max_share?: number | null;
+            /**
+             * Response Headroom
+             * @description tokens reserved for the model's response
+             */
+            response_headroom?: number | null;
         };
         /**
          * AccessLevel
@@ -2763,7 +2933,7 @@ export interface components {
              * Background
              * @description background wallpaper preference used when auto_background is disabled
              */
-            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none") | null;
+            background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none") | null;
             /**
              * Autobackground
              * @description when enabled, background changes automatically based on context
@@ -2809,6 +2979,27 @@ export interface components {
             vector?: components["schemas"]["VectorSettingsPatch"] | null;
             embeddings?: components["schemas"]["EmbeddingsSettingsPatch"] | null;
             rerank?: components["schemas"]["RerankSettingsPatch"] | null;
+            storage?: components["schemas"]["StorageSettingsPatch"] | null;
+        };
+        /**
+         * AudioGenerationSettings
+         * @description audio generation engine configuration (scaffold).
+         */
+        AudioGenerationSettings: {
+            /**
+             * Enabled
+             * @description enable audio generation capabilities
+             * @default false
+             */
+            enabled: boolean;
+        };
+        /** AudioGenerationSettingsPatch */
+        AudioGenerationSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable audio generation capabilities
+             */
+            enabled?: boolean | null;
         };
         /** Body_login_access_token_auth_login_access_token_post */
         Body_login_access_token_auth_login_access_token_post: {
@@ -2934,6 +3125,16 @@ export interface components {
              * @description primary color hex
              */
             primary_color?: string | null;
+            /**
+             * Support Email
+             * @description support email
+             */
+            support_email?: string | null;
+            /**
+             * Admin Email
+             * @description admin email
+             */
+            admin_email?: string | null;
             /**
              * Public Frontend Origin
              * @description public frontend origin
@@ -3115,6 +3316,52 @@ export interface components {
              */
             locationLabel?: string | null;
         };
+        /**
+         * CodeInterpreterSettings
+         * @description code interpreter (sandbox) configuration.
+         */
+        CodeInterpreterSettings: {
+            /**
+             * Enabled
+             * @description enable code interpreter capabilities
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Engine
+             * @description sandbox engine to use
+             * @default e2b
+             * @enum {string}
+             */
+            engine: "native" | "e2b";
+            /** @description E2B sandbox settings */
+            e2b?: components["schemas"]["E2bSettings"];
+            /**
+             * Timeout
+             * @description execution timeout in seconds
+             * @default 60
+             */
+            timeout: number;
+        };
+        /** CodeInterpreterSettingsPatch */
+        CodeInterpreterSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable code interpreter capabilities
+             */
+            enabled?: boolean | null;
+            /**
+             * Engine
+             * @description sandbox engine
+             */
+            engine?: ("native" | "e2b") | null;
+            e2b?: components["schemas"]["E2bSettingsPatch"] | null;
+            /**
+             * Timeout
+             * @description execution timeout in seconds
+             */
+            timeout?: number | null;
+        };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
         /** CursorPage[SearchResultItem] */
@@ -3211,6 +3458,36 @@ export interface components {
             note?: components["schemas"]["AccessLevel"] | null;
             group?: components["schemas"]["AccessLevel"] | null;
             reminder_list?: components["schemas"]["AccessLevel"] | null;
+        };
+        /**
+         * E2bSettings
+         * @description E2B code interpreter sandbox settings.
+         */
+        E2bSettings: {
+            /**
+             * Api Key
+             * @description E2B API key for code execution
+             */
+            api_key?: string | null;
+            /**
+             * Template
+             * @description E2B sandbox template to use for code execution
+             * @default code-interpreter-v1
+             */
+            template: string;
+        };
+        /** E2bSettingsPatch */
+        E2bSettingsPatch: {
+            /**
+             * Api Key
+             * @description E2B API key
+             */
+            api_key?: string | null;
+            /**
+             * Template
+             * @description E2B sandbox template
+             */
+            template?: string | null;
         };
         /**
          * EmbeddingsSettings
@@ -3723,6 +4000,79 @@ export interface components {
             media_type?: string | null;
         };
         /**
+         * ImageGenerationSettings
+         * @description image generation engine configuration.
+         */
+        ImageGenerationSettings: {
+            /**
+             * Enabled
+             * @description enable image generation capabilities
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Model
+             * @description model ID referencing a Model ORM record with IMAGE type
+             */
+            model?: string | null;
+            /**
+             * Default Size
+             * @description default image size in WIDTHxHEIGHT format
+             * @default 1024x1024
+             */
+            default_size: string;
+            /**
+             * Default Steps
+             * @description default number of generation steps (if supported by the engine)
+             */
+            default_steps?: number | null;
+            /**
+             * Default N
+             * @description default number of images to generate per prompt
+             * @default 1
+             */
+            default_n: number;
+            /**
+             * Max N
+             * @description maximum number of images per request
+             * @default 4
+             */
+            max_n: number;
+        };
+        /** ImageGenerationSettingsPatch */
+        ImageGenerationSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable image generation capabilities
+             */
+            enabled?: boolean | null;
+            /**
+             * Model
+             * @description model identifier for image generation
+             */
+            model?: string | null;
+            /**
+             * Default Size
+             * @description default image size in WIDTHxHEIGHT format
+             */
+            default_size?: string | null;
+            /**
+             * Default Steps
+             * @description default number of generation steps
+             */
+            default_steps?: number | null;
+            /**
+             * Default N
+             * @description default number of images per prompt
+             */
+            default_n?: number | null;
+            /**
+             * Max N
+             * @description maximum number of images per request
+             */
+            max_n?: number | null;
+        };
+        /**
          * InputModality
          * @description Supported input modalities for models.
          * @enum {string}
@@ -3820,6 +4170,14 @@ export interface components {
              * @default data/uploads
              */
             root_path: string;
+        };
+        /** LocalStorageConfigPatch */
+        LocalStorageConfigPatch: {
+            /**
+             * Root Path
+             * @description root directory for local file storage
+             */
+            root_path?: string | null;
         };
         /**
          * MediaSettings
@@ -4021,7 +4379,7 @@ export interface components {
          *
          *     Content can be provided as:
          *     - A string (converted to [TextContent(text=...)])
-         *     - A list of content part dicts or ContentPart objects
+         *     - A list of ContentPart objects (validated via discriminated union)
          */
         MessageCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -4031,9 +4389,7 @@ export interface components {
              * Content
              * @default
              */
-            content: string | ({
-                [key: string]: unknown;
-            } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
+            content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
             /** Tool Call Id */
             tool_call_id?: string | null;
             /** Is Error */
@@ -4070,9 +4426,7 @@ export interface components {
         MessageUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Content */
-            content: string | ({
-                [key: string]: unknown;
-            } | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"]))[];
+            content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
         };
         /**
          * Model
@@ -4169,7 +4523,7 @@ export interface components {
          * @description Supported model categories.
          * @enum {string}
          */
-        ModelType: "chat_model" | "embedding" | "image_generation" | "audio" | "video";
+        ModelType: "chat_model" | "embedding" | "image" | "audio" | "video";
         /**
          * ModelUpdate
          * @description payload to update a model.
@@ -4512,6 +4866,92 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * PerplexitySettings
+         * @description perplexity-specific settings for web search.
+         */
+        PerplexitySettings: {
+            /**
+             * Api Key
+             * @description api key for perplexity web search
+             */
+            api_key?: string | null;
+            /**
+             * Model
+             * @description perplexity model to use for agentic search
+             * @default sonar
+             * @enum {string}
+             */
+            model: "sonar" | "sonar-pro" | "sonar-reasoning" | "sonar-reasoning-pro" | "sonar-deep-research";
+            /**
+             * Search Context Usage
+             * @description how much search context perplexity should use. low = faster/cheaper, high = more thorough
+             * @default medium
+             * @enum {string}
+             */
+            search_context_usage: "low" | "medium" | "high";
+            /**
+             * Temperature
+             * @description sampling temperature (lower = more factual)
+             * @default 0.2
+             */
+            temperature: number;
+            /**
+             * Search Recency Filter
+             * @description restrict search results to a time window. None = no filter (all results)
+             */
+            search_recency_filter?: ("month" | "week" | "day" | "hour") | null;
+            /**
+             * Return Images
+             * @description include image URLs in perplexity search results
+             * @default false
+             */
+            return_images: boolean;
+            /**
+             * Max Concurrent Requests
+             * @description max concurrent requests to perplexity (queue excess)
+             * @default 10
+             */
+            max_concurrent_requests: number;
+        };
+        /** PerplexitySettingsPatch */
+        PerplexitySettingsPatch: {
+            /**
+             * Api Key
+             * @description api key for perplexity web search
+             */
+            api_key?: string | null;
+            /**
+             * Model
+             * @description perplexity model to use for agentic search
+             */
+            model?: ("sonar" | "sonar-pro" | "sonar-reasoning" | "sonar-reasoning-pro" | "sonar-deep-research") | null;
+            /**
+             * Search Context Usage
+             * @description how much search context perplexity should use
+             */
+            search_context_usage?: ("low" | "medium" | "high") | null;
+            /**
+             * Temperature
+             * @description sampling temperature (lower = more factual)
+             */
+            temperature?: number | null;
+            /**
+             * Search Recency Filter
+             * @description restrict search results to a time window
+             */
+            search_recency_filter?: ("month" | "week" | "day" | "hour") | null;
+            /**
+             * Return Images
+             * @description include image URLs in perplexity search results
+             */
+            return_images?: boolean | null;
+            /**
+             * Max Concurrent Requests
+             * @description max concurrent requests to perplexity
+             */
+            max_concurrent_requests?: number | null;
         };
         /**
          * Plugin
@@ -5383,7 +5823,6 @@ export interface components {
          * @description structured input for an agent run.
          *
          *     supports plain text, file attachments via IDs, or both.
-         *     attachment_ids are resolved server-side to full content parts.
          */
         RunInput: {
             /**
@@ -5396,6 +5835,13 @@ export interface components {
              * @description file IDs to include as content parts in the message. each ID is resolved server-side to an image or file content part.
              */
             attachment_ids?: string[];
+            /**
+             * Attachment Actions
+             * @description one-off user attachment actions. keys are file_ids, values are 'reveal' (make active) or 'reference' (force decay). persisted as events and applied by the decay filter.
+             */
+            attachment_actions?: {
+                [key: string]: "reveal" | "reference";
+            } | null;
         };
         /**
          * RunRequest
@@ -5444,13 +5890,17 @@ export interface components {
         /**
          * S3StorageConfig
          * @description S3-compatible storage configuration.
+         *
+         *     defaults target the dev MinIO container from the compose stack.
+         *     for production, override via environment variables or DB settings.
          */
         S3StorageConfig: {
             /**
              * Endpoint Url
-             * @description S3-compatible endpoint (MinIO, R2, etc.)
+             * @description S3-compatible endpoint (MinIO, R2, etc.). set to None for AWS S3.
+             * @default http://localhost:9000
              */
-            endpoint_url?: string | null;
+            endpoint_url: string | null;
             /**
              * Bucket
              * @description S3 bucket name. must be globally unique per deployment.
@@ -5466,13 +5916,15 @@ export interface components {
             /**
              * Access Key Id
              * @description S3 access key id
+             * @default minioadmin
              */
-            access_key_id?: string | null;
+            access_key_id: string | null;
             /**
              * Secret Access Key
              * @description S3 secret access key
+             * @default minioadmin
              */
-            secret_access_key?: string | null;
+            secret_access_key: string | null;
             /**
              * Prefix
              * @description key prefix within the bucket
@@ -5510,6 +5962,68 @@ export interface components {
              * @enum {string}
              */
             retry_mode: "legacy" | "standard" | "adaptive";
+        };
+        /** S3StorageConfigPatch */
+        S3StorageConfigPatch: {
+            /**
+             * Endpoint Url
+             * @description S3-compatible endpoint url (None for AWS S3)
+             */
+            endpoint_url?: string | null;
+            /**
+             * Bucket
+             * @description S3 bucket name
+             */
+            bucket?: string | null;
+            /**
+             * Region
+             * @description AWS region
+             */
+            region?: string | null;
+            /**
+             * Access Key Id
+             * @description S3 access key id
+             */
+            access_key_id?: string | null;
+            /**
+             * Secret Access Key
+             * @description S3 secret access key
+             */
+            secret_access_key?: string | null;
+            /**
+             * Prefix
+             * @description key prefix within the bucket
+             */
+            prefix?: string | null;
+            /**
+             * Presigned Url Ttl
+             * @description presigned URL expiration in seconds
+             */
+            presigned_url_ttl?: number | null;
+        };
+        /**
+         * SearchEngineSettings
+         * @description search engine configuration for web search
+         */
+        SearchEngineSettings: {
+            /**
+             * Engine
+             * @description web search engine to use for web search tool
+             * @default searxng
+             * @enum {string}
+             */
+            engine: "google" | "searxng";
+            /** @description searxng-specific settings */
+            searxng?: components["schemas"]["SearxngSettings"];
+        };
+        /** SearchEngineSettingsPatch */
+        SearchEngineSettingsPatch: {
+            /**
+             * Engine
+             * @description web search engine to use
+             */
+            engine?: ("google" | "searxng") | null;
+            searxng?: components["schemas"]["SearxngSettingsPatch"] | null;
         };
         /**
          * SearchMode
@@ -5556,6 +6070,60 @@ export interface components {
          * @enum {string}
          */
         SearchResultType: "thread" | "reminder" | "note" | "memory";
+        /**
+         * SearxngSettings
+         * @description searxng-specific settings for web search.
+         */
+        SearxngSettings: {
+            /**
+             * Instance Url
+             * Format: uri
+             * @description base url for the searxng instance
+             * @default http://searxng:8080/
+             */
+            instance_url: string;
+            /**
+             * Max Results
+             * @description max results to return from searxng
+             * @default 20
+             */
+            max_results: number;
+            /**
+             * Max Concurrent Requests
+             * @description max concurrent requests to searxng (queue excess)
+             * @default 5
+             */
+            max_concurrent_requests: number;
+            /**
+             * Timeout Seconds
+             * @description timeout for searxng API calls in seconds
+             * @default 10
+             */
+            timeout_seconds: number;
+        };
+        /** SearxngSettingsPatch */
+        SearxngSettingsPatch: {
+            /**
+             * Instance Url
+             * @description base url for the searxng instance
+             */
+            instance_url?: string | null;
+            /**
+             * Max Results
+             * @description max results to return from searxng
+             */
+            max_results?: number | null;
+            /**
+             * Max Concurrent Requests
+             * @description max concurrent requests to searxng
+             */
+            max_concurrent_requests?: number | null;
+            /**
+             * Timeout Seconds
+             * @description timeout for searxng API calls in seconds
+             */
+            timeout_seconds?: number | null;
+        };
         /** SecuritySettings */
         SecuritySettings: {
             /**
@@ -5708,6 +6276,10 @@ export interface components {
             limits?: components["schemas"]["LimitsSettings"];
             security?: components["schemas"]["SecuritySettings"];
             soft_delete?: components["schemas"]["SoftDeleteSettings"];
+            /** @description web search provider settings */
+            web_search?: components["schemas"]["WebSearchSettings"];
+            /** @description code interpreter sandbox settings */
+            code_interpreter?: components["schemas"]["CodeInterpreterSettings"];
             default_permissions?: components["schemas"]["DefaultPermissionsSettings"];
         };
         /** SettingsPatch */
@@ -5720,6 +6292,8 @@ export interface components {
             limits?: components["schemas"]["LimitsSettingsPatch"] | null;
             security?: components["schemas"]["SecuritySettingsPatch"] | null;
             soft_delete?: components["schemas"]["SoftDeleteSettingsPatch"] | null;
+            web_search?: components["schemas"]["WebSearchSettingsPatch"] | null;
+            code_interpreter?: components["schemas"]["CodeInterpreterSettingsPatch"] | null;
             default_permissions?: components["schemas"]["DefaultPermissionsSettingsPatch"] | null;
         };
         /** SettingsResponse */
@@ -5774,6 +6348,16 @@ export interface components {
              * @default 0
              */
             soft_delete: number;
+            /**
+             * Web Search
+             * @default 0
+             */
+            web_search: number;
+            /**
+             * Code Interpreter
+             * @default 0
+             */
+            code_interpreter: number;
             /**
              * Default Permissions
              * @default 0
@@ -5844,6 +6428,16 @@ export interface components {
             backend: "local" | "s3";
             local?: components["schemas"]["LocalStorageConfig"];
             s3?: components["schemas"]["S3StorageConfig"];
+        };
+        /** StorageSettingsPatch */
+        StorageSettingsPatch: {
+            /**
+             * Backend
+             * @description active storage backend: 'local' or 's3'
+             */
+            backend?: ("local" | "s3") | null;
+            local?: components["schemas"]["LocalStorageConfigPatch"] | null;
+            s3?: components["schemas"]["S3StorageConfigPatch"] | null;
         };
         /**
          * Task
@@ -5947,6 +6541,48 @@ export interface components {
             result?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * TavilySettings
+         * @description tavily-specific settings for web loading.
+         */
+        TavilySettings: {
+            /**
+             * Extract Depth
+             * @description depth of content extraction for tavily web loader.
+             * @default advanced
+             * @enum {string}
+             */
+            extract_depth: "basic" | "advanced";
+            /**
+             * Api Key
+             * @description api key for tavily web loader
+             */
+            api_key?: string | null;
+            /**
+             * Max Concurrent Requests
+             * @description max concurrent requests to tavily (queue excess)
+             * @default 10
+             */
+            max_concurrent_requests: number;
+        };
+        /** TavilySettingsPatch */
+        TavilySettingsPatch: {
+            /**
+             * Extract Depth
+             * @description depth of content extraction for tavily web loader
+             */
+            extract_depth?: ("basic" | "advanced") | null;
+            /**
+             * Api Key
+             * @description api key for tavily web loader
+             */
+            api_key?: string | null;
+            /**
+             * Max Concurrent Requests
+             * @description max concurrent requests to tavily
+             */
+            max_concurrent_requests?: number | null;
         };
         /**
          * TextContent
@@ -6166,14 +6802,14 @@ export interface components {
              * @default darkveil
              * @enum {string}
              */
-            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none";
+            default_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none";
             /**
              * Auth Pages Background
              * @description background for auth pages (login, signup)
              * @default lightrays
              * @enum {string}
              */
-            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds2" | "static" | "none";
+            auth_pages_background: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none";
             /**
              * Sidebar Collapsed
              * @description collapse sidebar
@@ -6655,11 +7291,117 @@ export interface components {
             normalize_scores?: boolean | null;
         };
         /**
+         * VideoGenerationSettings
+         * @description video generation engine configuration (scaffold).
+         */
+        VideoGenerationSettings: {
+            /**
+             * Enabled
+             * @description enable video generation capabilities
+             * @default false
+             */
+            enabled: boolean;
+        };
+        /** VideoGenerationSettingsPatch */
+        VideoGenerationSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable video generation capabilities
+             */
+            enabled?: boolean | null;
+        };
+        /**
          * Visibility
          * @description who can see a given piece of user data.
          * @enum {string}
          */
         Visibility: "everyone" | "friends" | "private";
+        /**
+         * WebLoaderSettings
+         * @description web loader configuration for fetching and processing web content.
+         */
+        WebLoaderSettings: {
+            /**
+             * Engine
+             * @description web loader engine to use
+             * @default native
+             * @enum {string}
+             */
+            engine: "native" | "tavily" | "playwright";
+            /**
+             * Timeout Seconds
+             * @description timeout for web loader fetch operations in seconds
+             * @default 10
+             */
+            timeout_seconds: number;
+            /**
+             * User Agent
+             * @description user agent string for web loader requests
+             * @default Mozilla/5.0 (compatible; NokodoAI/1.0; +https://nokodo.ai)
+             */
+            user_agent: string;
+            /** @description tavily-specific settings for web loading */
+            tavily?: components["schemas"]["TavilySettings"];
+        };
+        /** WebLoaderSettingsPatch */
+        WebLoaderSettingsPatch: {
+            /**
+             * Engine
+             * @description web loader engine to use
+             */
+            engine?: ("native" | "tavily" | "playwright") | null;
+            /**
+             * Timeout Seconds
+             * @description timeout for web loader fetch operations
+             */
+            timeout_seconds?: number | null;
+            /**
+             * User Agent
+             * @description user agent string for web loader requests
+             */
+            user_agent?: string | null;
+            tavily?: components["schemas"]["TavilySettingsPatch"] | null;
+        };
+        /**
+         * WebSearchSettings
+         * @description web search provider configuration.
+         */
+        WebSearchSettings: {
+            /**
+             * Search Agent
+             * @description agent to use for agentic web search tool.
+             * @default native
+             * @enum {string}
+             */
+            search_agent: "native" | "perplexity";
+            /**
+             * Blacklisted Domains
+             * @description domains to exclude from web search results (e.g. 'twitter.com')
+             */
+            blacklisted_domains?: string[];
+            /** @description configuration for the supported web search engines */
+            search_engines?: components["schemas"]["SearchEngineSettings"];
+            /** @description configuration for fetching and processing web content */
+            web_loaders?: components["schemas"]["WebLoaderSettings"];
+            /** @description perplexity-specific settings for agentic web search */
+            perplexity?: components["schemas"]["PerplexitySettings"];
+        };
+        /** WebSearchSettingsPatch */
+        WebSearchSettingsPatch: {
+            /**
+             * Search Agent
+             * @description agent to use for agentic web search tool
+             */
+            search_agent?: ("native" | "perplexity") | null;
+            /**
+             * Blacklisted Domains
+             * @description domains to exclude from web search results
+             */
+            blacklisted_domains?: string[] | null;
+            search_engines?: components["schemas"]["SearchEngineSettingsPatch"] | null;
+            web_loaders?: components["schemas"]["WebLoaderSettingsPatch"] | null;
+            perplexity?: components["schemas"]["PerplexitySettingsPatch"] | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -10244,6 +10986,103 @@ export interface operations {
             };
         };
     };
+    cancel_run_threads__thread_id__runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_runs_runs_get: {
         parameters: {
             query?: never;
@@ -13025,6 +13864,100 @@ export interface operations {
             };
         };
     };
+    enhance_note_notes__note_id__enhance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Note"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     read_groups_groups_get: {
         parameters: {
             query?: {
@@ -15155,7 +16088,10 @@ export interface operations {
     };
     get_file_content_files__file_id__content_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description force browser download instead of inline display */
+                download?: boolean;
+            };
             header?: never;
             path: {
                 file_id: string;

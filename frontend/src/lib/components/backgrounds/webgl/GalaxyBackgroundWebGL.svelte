@@ -7,9 +7,33 @@
 	interface Props {
 		children?: Snippet
 		onReady?: () => void
+		// galaxy uniforms
+		focalX?: number
+		focalY?: number
+		rotationX?: number
+		rotationY?: number
+		starSpeed?: number
+		density?: number
+		speed?: number
+		glowIntensity?: number
+		twinkleIntensity?: number
+		rotationSpeed?: number
 	}
 
-	let { children, onReady }: Props = $props()
+	let {
+		children,
+		onReady,
+		focalX = 0.5,
+		focalY = 0.5,
+		rotationX = 1.0,
+		rotationY = 0.0,
+		starSpeed = 0.5,
+		density = 1.0,
+		speed = 1.0,
+		glowIntensity = 0.3,
+		twinkleIntensity = 0.3,
+		rotationSpeed = 0.1,
+	}: Props = $props()
 
 	const signalReady = createOnceCallback(() => onReady?.())
 
@@ -106,7 +130,7 @@ float Star(vec2 uv, float flare) {
 
 vec3 StarLayer(vec2 uv) {
 	vec3 col = vec3(0.0);
-	
+
 	vec2 gv = fract(uv) - 0.5;
 	vec2 id = floor(uv);
 
@@ -133,7 +157,7 @@ vec3 StarLayer(vec2 uv) {
 			float twinkle = trisn(u_time * u_speed + seed * 6.2831) * 0.5 + 1.0;
 			twinkle = mix(1.0, twinkle, u_twinkle_intensity);
 			star *= twinkle;
-			
+
 			col += star * size * starColor;
 		}
 	}
@@ -241,26 +265,16 @@ void main() {
 
 		const seconds = time * 0.001
 
-		// Configuration matching the inspiration
-		const focal = [0.5, 0.5]
-		const rotation = [1.0, 0.0]
-		const starSpeed = 0.5
-		const density = 1.0
-		const speed = 1.0
-		const glowIntensity = 0.3
-		const twinkleIntensity = 0.3
-		const rotationSpeed = 0.1
-
 		gl.uniform1f(gl.getUniformLocation(program, 'u_time'), seconds)
 		gl.uniform2f(
 			gl.getUniformLocation(program, 'u_resolution'),
 			canvasRef.width,
 			canvasRef.height
 		)
-		gl.uniform1f(gl.getUniformLocation(program, 'u_focal_x'), focal[0])
-		gl.uniform1f(gl.getUniformLocation(program, 'u_focal_y'), focal[1])
-		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_x'), rotation[0])
-		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_y'), rotation[1])
+		gl.uniform1f(gl.getUniformLocation(program, 'u_focal_x'), focalX)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_focal_y'), focalY)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_x'), rotationX)
+		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_y'), rotationY)
 		gl.uniform1f(gl.getUniformLocation(program, 'u_star_speed'), (seconds * starSpeed) / 10.0)
 		gl.uniform1f(gl.getUniformLocation(program, 'u_density'), density)
 		gl.uniform1f(gl.getUniformLocation(program, 'u_speed'), speed)

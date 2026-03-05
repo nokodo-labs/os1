@@ -14,6 +14,8 @@
 		scanlineFrequency?: number
 		warpAmount?: number
 		resolutionScale?: number
+		tintColor?: string
+		backgroundColor?: string
 	}
 
 	let {
@@ -26,12 +28,20 @@
 		scanlineFrequency = 0,
 		warpAmount = 0,
 		resolutionScale = 1,
+		tintColor = '#ffffff',
+		backgroundColor = '#000000',
 	}: Props = $props()
 
 	const signalReady = createOnceCallback(() => onReady?.())
 
 	let containerRef: HTMLDivElement
 	let canvasRef: HTMLCanvasElement
+
+	function hexToRgb(hex: string): [number, number, number] {
+		const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+		if (!m) return [1, 1, 1]
+		return [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255]
+	}
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
 	let animationId: number | null = null
@@ -71,6 +81,8 @@ uniform float uNoise;
 uniform float uScan;
 uniform float uScanFreq;
 uniform float uWarp;
+uniform vec3 uTintColor;
+uniform vec3 uBgColor;
 out vec4 fragColor;
 
 #define iTime uTime
@@ -125,9 +137,8 @@ void main(){
 	col.rgb=hueShiftRGB(col.rgb,uHueShift);
 	float scanline_val=sin(gl_FragCoord.y*uScanFreq)*0.5+0.5;
 	col.rgb*=1.-(scanline_val*scanline_val)*uScan;
-	col.rgb+=(rand(gl_FragCoord.xy+uTime)-0.5)*uNoise;
-	fragColor=vec4(clamp(col.rgb,0.0,1.0),1.0);
-}`
+	col.rgb+=(rand(gl_FragCoord.xy+uTime)-0.5)*uNoise;	col.rgb *= uTintColor;	col.rgb = clamp(uBgColor + col.rgb, 0.0, 1.0);	fragColor=vec4(col.rgb,1.0);}
+`
 
 	function createShader(
 		gl: WebGL2RenderingContext,
@@ -195,7 +206,8 @@ void main(){
 
 		const currentTime = (performance.now() - startTime) / 1000
 
-		gl.clearColor(0, 0, 0, 1)
+		const bc = hexToRgb(backgroundColor)
+		gl.clearColor(bc[0], bc[1], bc[2], 1)
 		gl.clear(gl.COLOR_BUFFER_BIT)
 
 		gl.useProgram(program)
@@ -208,6 +220,7 @@ void main(){
 		const uScan = gl.getUniformLocation(program, 'uScan')
 		const uScanFreq = gl.getUniformLocation(program, 'uScanFreq')
 		const uWarp = gl.getUniformLocation(program, 'uWarp')
+		const uTintColorLoc = gl.getUniformLocation(program, 'uTintColor')
 
 		gl.uniform1f(uTime, currentTime * speed)
 		gl.uniform2f(uResolution, canvasRef.width, canvasRef.height)
@@ -216,6 +229,11 @@ void main(){
 		gl.uniform1f(uScan, scanlineIntensity)
 		gl.uniform1f(uScanFreq, scanlineFrequency)
 		gl.uniform1f(uWarp, warpAmount)
+		const tc = hexToRgb(tintColor)
+		gl.uniform3f(uTintColorLoc, tc[0], tc[1], tc[2])
+		const bgLoc = gl.getUniformLocation(program, 'uBgColor')
+		const bg = hexToRgb(backgroundColor)
+		gl.uniform3f(bgLoc, bg[0], bg[1], bg[2])
 
 		gl.drawArrays(gl.TRIANGLES, 0, 6)
 
@@ -285,7 +303,10 @@ void main(){
 </script>
 
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-	<canvas class="pointer-events-none absolute inset-0 block h-full w-full" bind:this={canvasRef}
+	<canvas
+		class="pointer-events-none absolute inset-0 block h-full w-full"
+		style="background-color: {backgroundColor}"
+		bind:this={canvasRef}
 	></canvas>
 
 	<!-- Slotted content rendered on top of background -->

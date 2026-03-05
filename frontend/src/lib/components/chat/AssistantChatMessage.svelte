@@ -180,7 +180,7 @@
 <div
 	bind:this={messageRef}
 	class="flex w-full animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] items-start gap-3 self-start
-        {device.isMobile ? 'px-4' : ''}"
+        {device.isMobile ? 'px-2' : ''}"
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
 	ontouchstart={handleTouchStart}

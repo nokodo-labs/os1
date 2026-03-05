@@ -11,7 +11,9 @@
 	import ArchivedChatsModal from '$lib/components/modals/ArchivedChatsModal.svelte'
 	import ConfirmDeleteModal from '$lib/components/modals/ConfirmDeleteModal.svelte'
 	import CreateGroupModal from '$lib/components/modals/CreateGroupModal.svelte'
+	import FileDetailsModal from '$lib/components/modals/FileDetailsModal.svelte'
 	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
+	import ResourceAccessModal from '$lib/components/modals/ResourceAccessModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import BackendReconnect from '$lib/components/system/BackendReconnect.svelte'
@@ -460,7 +462,17 @@
 				onClose={modals.close}
 			/>
 			<CreateGroupModal open={modals.isOpen('create-group')} onClose={modals.close} />
+			<FileDetailsModal
+				open={modals.isOpen('file-details')}
+				payload={modals.fileDetailsPayload}
+				onClose={modals.close}
+			/>
 			<MemoriesModal open={modals.isOpen('memories')} onClose={modals.close} />
+			<ResourceAccessModal
+				open={modals.isOpen('resource-access')}
+				payload={modals.resourceAccessPayload}
+				onClose={modals.close}
+			/>
 			<ShareResourceModal
 				open={modals.isOpen('share-resource')}
 				payload={modals.shareResourcePayload}

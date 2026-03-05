@@ -233,23 +233,20 @@
 
 <form class="w-full" bind:this={formEl} onsubmit={handleFormSubmit}>
 	<div
-		class="liquid-glass chat-input relative w-full transition-all duration-300"
-		class:rounded-pill={!isMultiLine}
-		class:rounded-container={isMultiLine}
+		class="liquid-glass chat-input relative rounded-3xl w-full transition-all duration-300"
 		data-chat-input
 		style={viewTransitionName ? `view-transition-name: ${viewTransitionName};` : undefined}
 	>
 		<div class="relative z-10 px-1 py-1">
 			<div
-				class="flex gap-2 px-2.5 py-2.5"
+				class="flex px-1 py-1"
 				class:items-center={!isMultiLine}
 				class:items-end={isMultiLine}
 			>
 				<div
-					class="ml-1 flex shrink-0"
+					class="flex shrink-0"
 					class:items-center={!isMultiLine}
 					class:items-end={isMultiLine}
-					class:pb-1={isMultiLine}
 				>
 					<button
 						type="button"
@@ -270,7 +267,7 @@
 					</button>
 				</div>
 
-				<div class="flex flex-1 items-center px-1.5">
+				<div class="flex flex-1 px-1 items-center">
 					<textarea
 						bind:this={textarea}
 						bind:value
@@ -286,10 +283,9 @@
 				</div>
 
 				<div
-					class="mr-1 flex shrink-0 space-x-1"
+					class="flex shrink-0 space-x-1"
 					class:items-center={!isMultiLine}
 					class:items-end={isMultiLine}
-					class:pb-1={isMultiLine}
 				>
 					{#if isGenerating}
 						<button

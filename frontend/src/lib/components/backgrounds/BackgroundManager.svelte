@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte'
+	import { BACKGROUND_DEFAULTS } from './backgroundDefaults'
 	import StaticBackground from './StaticBackground.svelte'
 	import Clouds2Background from './webgl/Clouds2Background.svelte'
 	import CloudsBackground from './webgl/CloudsBackground.svelte'
 	import DarkVeilBackground from './webgl/DarkVeilBackground.svelte'
 	import FogBackground from './webgl/FogBackground.svelte'
 	import GalaxyBackgroundWebGL from './webgl/GalaxyBackgroundWebGL.svelte'
+	import GrainientBackground from './webgl/GrainientBackground.svelte'
+	import IridescenceBackground from './webgl/IridescenceBackground.svelte'
 	import LightBendsBackground from './webgl/LightBendsBackground.svelte'
 	import LightRaysBackground from './webgl/LightRaysBackground.svelte'
 	import SilkBackground from './webgl/SilkBackground.svelte'
@@ -18,7 +21,11 @@
 		| 'silk'
 		| 'fog'
 		| 'clouds'
+		| 'clouds-dark'
 		| 'clouds2'
+		| 'clouds2-dark'
+		| 'grainient'
+		| 'iridescence'
 		| 'static'
 		| 'none'
 
@@ -31,6 +38,13 @@
 		lightBendsColors?: string[]
 		lightBendsSpeed?: number
 		lightBendsWarp?: number
+		lightBendsRotation?: number
+		lightBendsAutoRotate?: number
+		lightBendsScale?: number
+		lightBendsFrequency?: number
+		lightBendsMouseInfluence?: number
+		lightBendsParallax?: number
+		lightBendsNoise?: number
 
 		// LightRays options
 		raysOrigin?:
@@ -43,11 +57,44 @@
 			| 'bottom-right'
 			| 'bottom-left'
 		raysColor?: string
+		raysBackgroundColor?: string
 		raysSpeed?: number
+		raysLightSpread?: number
+		raysRayLength?: number
+		raysPulsating?: boolean
+		raysFadeDistance?: number
+		raysSaturation?: number
+		raysFollowMouse?: boolean
+		raysMouseInfluence?: number
+		raysNoiseAmount?: number
+		raysDistortion?: number
 
 		// Silk options
 		silkColor?: string
 		silkSpeed?: number
+
+		// DarkVeil options
+		darkveilHueShift?: number
+		darkveilNoiseIntensity?: number
+		darkveilScanlineIntensity?: number
+		darkveilSpeed?: number
+		darkveilScanlineFrequency?: number
+		darkveilWarpAmount?: number
+		darkveilResolutionScale?: number
+		darkveilTintColor?: string
+		darkveilBackgroundColor?: string
+
+		// Galaxy options
+		galaxyFocalX?: number
+		galaxyFocalY?: number
+		galaxyRotationX?: number
+		galaxyRotationY?: number
+		galaxyStarSpeed?: number
+		galaxyDensity?: number
+		galaxySpeed?: number
+		galaxyGlowIntensity?: number
+		galaxyTwinkleIntensity?: number
+		galaxyRotationSpeed?: number
 
 		// Fog options
 		fogHighlightColor?: number
@@ -91,7 +138,35 @@
 		clouds2MinHeight?: number
 		clouds2MinWidth?: number
 
-		// Add more as needed...
+		// Grainient options
+		grainientTimeSpeed?: number
+		grainientColorBalance?: number
+		grainientWarpStrength?: number
+		grainientWarpFrequency?: number
+		grainientWarpSpeed?: number
+		grainientWarpAmplitude?: number
+		grainientBlendAngle?: number
+		grainientBlendSoftness?: number
+		grainientRotationAmount?: number
+		grainientNoiseScale?: number
+		grainientGrainAmount?: number
+		grainientGrainScale?: number
+		grainientGrainAnimated?: boolean
+		grainientContrast?: number
+		grainientGamma?: number
+		grainientSaturation?: number
+		grainientCenterX?: number
+		grainientCenterY?: number
+		grainientZoom?: number
+		grainientColor1?: string
+		grainientColor2?: string
+		grainientColor3?: string
+
+		// Iridescence options
+		iridescenceColor?: [number, number, number]
+		iridescenceSpeed?: number
+		iridescenceAmplitude?: number
+		iridescenceMouseReact?: boolean
 	}
 
 	interface Props {
@@ -115,6 +190,13 @@
 	currentBg = untrack(() => type)
 	let previousBg = $state<BackgroundType | null>(null)
 	let isTransitioning = $state(false)
+
+	// merge centralized defaults with the caller-supplied override so every
+	// prop always has a sensible value without inline || fallbacks in the template
+	const resolvedConfig = $derived<BackgroundConfig>({
+		...BACKGROUND_DEFAULTS[currentBg],
+		...config,
+	})
 
 	$effect(() => {
 		if (type !== currentBg && !isTransitioning) {
@@ -146,187 +228,350 @@
 	{#if previousBg && isTransitioning}
 		<div class="absolute inset-0" style="opacity: 1; transition: opacity 300ms ease-in-out;">
 			{#if previousBg === 'galaxy'}
-				<GalaxyBackgroundWebGL />
+				<GalaxyBackgroundWebGL
+					focalX={resolvedConfig.galaxyFocalX}
+					focalY={resolvedConfig.galaxyFocalY}
+					rotationX={resolvedConfig.galaxyRotationX}
+					rotationY={resolvedConfig.galaxyRotationY}
+					starSpeed={resolvedConfig.galaxyStarSpeed}
+					density={resolvedConfig.galaxyDensity}
+					speed={resolvedConfig.galaxySpeed}
+					glowIntensity={resolvedConfig.galaxyGlowIntensity}
+					twinkleIntensity={resolvedConfig.galaxyTwinkleIntensity}
+					rotationSpeed={resolvedConfig.galaxyRotationSpeed}
+				/>
 			{:else if previousBg === 'darkveil'}
-				<DarkVeilBackground />
+				<DarkVeilBackground
+					hueShift={resolvedConfig.darkveilHueShift}
+					noiseIntensity={resolvedConfig.darkveilNoiseIntensity}
+					scanlineIntensity={resolvedConfig.darkveilScanlineIntensity}
+					speed={resolvedConfig.darkveilSpeed}
+					scanlineFrequency={resolvedConfig.darkveilScanlineFrequency}
+					warpAmount={resolvedConfig.darkveilWarpAmount}
+					resolutionScale={resolvedConfig.darkveilResolutionScale}
+					tintColor={resolvedConfig.darkveilTintColor}
+					backgroundColor={resolvedConfig.darkveilBackgroundColor}
+				/>
 			{:else if previousBg === 'lightbends'}
 				<LightBendsBackground
-					colors={config.lightBendsColors || ['#ff0080', '#0080ff', '#00ff80']}
-					speed={config.lightBendsSpeed || 0.2}
-					warpStrength={config.lightBendsWarp || 1}
+					colors={resolvedConfig.lightBendsColors}
+					speed={resolvedConfig.lightBendsSpeed}
+					warpStrength={resolvedConfig.lightBendsWarp}
+					rotation={resolvedConfig.lightBendsRotation}
+					autoRotate={resolvedConfig.lightBendsAutoRotate}
+					scale={resolvedConfig.lightBendsScale}
+					frequency={resolvedConfig.lightBendsFrequency}
+					mouseInfluence={resolvedConfig.lightBendsMouseInfluence}
+					parallax={resolvedConfig.lightBendsParallax}
+					noise={resolvedConfig.lightBendsNoise}
 				/>
 			{:else if previousBg === 'lightrays'}
 				<LightRaysBackground
-					raysOrigin={config.raysOrigin || 'top-center'}
-					raysColor={config.raysColor || '#ffffff'}
-					raysSpeed={config.raysSpeed || 1}
+					raysOrigin={resolvedConfig.raysOrigin}
+					raysColor={resolvedConfig.raysColor}
+					backgroundColor={resolvedConfig.raysBackgroundColor}
+					raysSpeed={resolvedConfig.raysSpeed}
+					lightSpread={resolvedConfig.raysLightSpread}
+					rayLength={resolvedConfig.raysRayLength}
+					pulsating={resolvedConfig.raysPulsating}
+					fadeDistance={resolvedConfig.raysFadeDistance}
+					saturation={resolvedConfig.raysSaturation}
+					followMouse={resolvedConfig.raysFollowMouse}
+					mouseInfluence={resolvedConfig.raysMouseInfluence}
+					noiseAmount={resolvedConfig.raysNoiseAmount}
+					distortion={resolvedConfig.raysDistortion}
 				/>
 			{:else if previousBg === 'silk'}
-				<SilkBackground
-					color={config.silkColor || '#7B7481'}
-					speed={config.silkSpeed || 5}
-				/>
+				<SilkBackground color={resolvedConfig.silkColor} speed={resolvedConfig.silkSpeed} />
 			{:else if previousBg === 'fog'}
 				<FogBackground
-					mouseControls={config.fogMouseControls}
-					touchControls={config.fogTouchControls}
-					gyroControls={config.fogGyroControls}
-					minHeight={config.fogMinHeight}
-					minWidth={config.fogMinWidth}
-					highlightColor={config.fogHighlightColor}
-					midtoneColor={config.fogMidtoneColor}
-					lowlightColor={config.fogLowlightColor}
-					baseColor={config.fogBaseColor}
-					blurFactor={config.fogBlurFactor}
-					speed={config.fogSpeed}
-					zoom={config.fogZoom}
+					mouseControls={resolvedConfig.fogMouseControls}
+					touchControls={resolvedConfig.fogTouchControls}
+					gyroControls={resolvedConfig.fogGyroControls}
+					minHeight={resolvedConfig.fogMinHeight}
+					minWidth={resolvedConfig.fogMinWidth}
+					highlightColor={resolvedConfig.fogHighlightColor}
+					midtoneColor={resolvedConfig.fogMidtoneColor}
+					lowlightColor={resolvedConfig.fogLowlightColor}
+					baseColor={resolvedConfig.fogBaseColor}
+					blurFactor={resolvedConfig.fogBlurFactor}
+					speed={resolvedConfig.fogSpeed}
+					zoom={resolvedConfig.fogZoom}
 				/>
-			{:else if previousBg === 'clouds'}
+			{:else if previousBg === 'clouds' || previousBg === 'clouds-dark'}
 				<CloudsBackground
-					mouseControls={config.cloudsMouseControls}
-					touchControls={config.cloudsTouchControls}
-					gyroControls={config.cloudsGyroControls}
-					minHeight={config.cloudsMinHeight}
-					minWidth={config.cloudsMinWidth}
-					skyColor={config.cloudsSkyColor}
-					cloudColor={config.cloudsCloudColor}
-					cloudShadowColor={config.cloudsCloudShadowColor}
-					sunColor={config.cloudsSunColor}
-					sunGlareColor={config.cloudsSunGlareColor}
-					sunlightColor={config.cloudsSunlightColor}
-					speed={config.cloudsSpeed}
+					mouseControls={resolvedConfig.cloudsMouseControls}
+					touchControls={resolvedConfig.cloudsTouchControls}
+					gyroControls={resolvedConfig.cloudsGyroControls}
+					minHeight={resolvedConfig.cloudsMinHeight}
+					minWidth={resolvedConfig.cloudsMinWidth}
+					skyColor={resolvedConfig.cloudsSkyColor}
+					cloudColor={resolvedConfig.cloudsCloudColor}
+					cloudShadowColor={resolvedConfig.cloudsCloudShadowColor}
+					sunColor={resolvedConfig.cloudsSunColor}
+					sunGlareColor={resolvedConfig.cloudsSunGlareColor}
+					sunlightColor={resolvedConfig.cloudsSunlightColor}
+					speed={resolvedConfig.cloudsSpeed}
 				/>
-			{:else if previousBg === 'clouds2'}
+			{:else if previousBg === 'clouds2' || previousBg === 'clouds2-dark'}
 				<Clouds2Background
-					mouseControls={config.clouds2MouseControls}
-					touchControls={config.clouds2TouchControls}
-					gyroControls={config.clouds2GyroControls}
-					minHeight={config.clouds2MinHeight}
-					minWidth={config.clouds2MinWidth}
-					scale={config.clouds2Scale || 1}
-					speed={config.clouds2Speed}
-					texturePath={config.clouds2TexturePath}
-					skyColor={config.clouds2SkyColor}
-					cloudColor={config.clouds2CloudColor}
-					lightColor={config.clouds2LightColor}
-					backgroundColor={config.clouds2BackgroundColor}
+					mouseControls={resolvedConfig.clouds2MouseControls}
+					touchControls={resolvedConfig.clouds2TouchControls}
+					gyroControls={resolvedConfig.clouds2GyroControls}
+					minHeight={resolvedConfig.clouds2MinHeight}
+					minWidth={resolvedConfig.clouds2MinWidth}
+					scale={resolvedConfig.clouds2Scale}
+					speed={resolvedConfig.clouds2Speed}
+					texturePath={resolvedConfig.clouds2TexturePath}
+					skyColor={resolvedConfig.clouds2SkyColor}
+					cloudColor={resolvedConfig.clouds2CloudColor}
+					lightColor={resolvedConfig.clouds2LightColor}
+					backgroundColor={resolvedConfig.clouds2BackgroundColor}
+				/>
+			{:else if previousBg === 'grainient'}
+				<GrainientBackground
+					timeSpeed={resolvedConfig.grainientTimeSpeed}
+					colorBalance={resolvedConfig.grainientColorBalance}
+					warpStrength={resolvedConfig.grainientWarpStrength}
+					warpFrequency={resolvedConfig.grainientWarpFrequency}
+					warpSpeed={resolvedConfig.grainientWarpSpeed}
+					warpAmplitude={resolvedConfig.grainientWarpAmplitude}
+					blendAngle={resolvedConfig.grainientBlendAngle}
+					blendSoftness={resolvedConfig.grainientBlendSoftness}
+					rotationAmount={resolvedConfig.grainientRotationAmount}
+					noiseScale={resolvedConfig.grainientNoiseScale}
+					grainAmount={resolvedConfig.grainientGrainAmount}
+					grainScale={resolvedConfig.grainientGrainScale}
+					grainAnimated={resolvedConfig.grainientGrainAnimated}
+					contrast={resolvedConfig.grainientContrast}
+					gamma={resolvedConfig.grainientGamma}
+					saturation={resolvedConfig.grainientSaturation}
+					centerX={resolvedConfig.grainientCenterX}
+					centerY={resolvedConfig.grainientCenterY}
+					zoom={resolvedConfig.grainientZoom}
+					color1={resolvedConfig.grainientColor1}
+					color2={resolvedConfig.grainientColor2}
+					color3={resolvedConfig.grainientColor3}
+				/>
+			{:else if previousBg === 'iridescence'}
+				<IridescenceBackground
+					color={resolvedConfig.iridescenceColor}
+					speed={resolvedConfig.iridescenceSpeed}
+					amplitude={resolvedConfig.iridescenceAmplitude}
+					mouseReact={resolvedConfig.iridescenceMouseReact}
 				/>
 			{:else if previousBg === 'static'}
-				<StaticBackground color={config.color || '#000000'} image={config.image} />
+				<StaticBackground color={resolvedConfig.color} image={resolvedConfig.image} />
 			{/if}
 		</div>
 	{/if}
 
 	<div class="absolute inset-0" style="opacity: 1; transition: opacity 300ms ease-in-out;">
 		{#if currentBg === 'galaxy'}
-			<GalaxyBackgroundWebGL onReady={signalReady}>
-				{#if children}
-					{@render children()}
-				{/if}
+			<GalaxyBackgroundWebGL
+				focalX={resolvedConfig.galaxyFocalX}
+				focalY={resolvedConfig.galaxyFocalY}
+				rotationX={resolvedConfig.galaxyRotationX}
+				rotationY={resolvedConfig.galaxyRotationY}
+				starSpeed={resolvedConfig.galaxyStarSpeed}
+				density={resolvedConfig.galaxyDensity}
+				speed={resolvedConfig.galaxySpeed}
+				glowIntensity={resolvedConfig.galaxyGlowIntensity}
+				twinkleIntensity={resolvedConfig.galaxyTwinkleIntensity}
+				rotationSpeed={resolvedConfig.galaxyRotationSpeed}
+				onReady={signalReady}
+			>
+				{#if children}{@render children()}{/if}
 			</GalaxyBackgroundWebGL>
 		{:else if currentBg === 'darkveil'}
-			<DarkVeilBackground onReady={signalReady}>
-				{#if children}
-					{@render children()}
-				{/if}
+			<DarkVeilBackground
+				hueShift={resolvedConfig.darkveilHueShift}
+				noiseIntensity={resolvedConfig.darkveilNoiseIntensity}
+				scanlineIntensity={resolvedConfig.darkveilScanlineIntensity}
+				speed={resolvedConfig.darkveilSpeed}
+				scanlineFrequency={resolvedConfig.darkveilScanlineFrequency}
+				warpAmount={resolvedConfig.darkveilWarpAmount}
+				resolutionScale={resolvedConfig.darkveilResolutionScale}
+				tintColor={resolvedConfig.darkveilTintColor}
+				backgroundColor={resolvedConfig.darkveilBackgroundColor}
+				onReady={signalReady}
+			>
+				{#if children}{@render children()}{/if}
 			</DarkVeilBackground>
 		{:else if currentBg === 'lightbends'}
 			<LightBendsBackground
-				colors={config.lightBendsColors || ['#ff0080', '#0080ff', '#00ff80']}
-				speed={config.lightBendsSpeed || 0.2}
-				warpStrength={config.lightBendsWarp || 1}
+				colors={resolvedConfig.lightBendsColors}
+				speed={resolvedConfig.lightBendsSpeed}
+				warpStrength={resolvedConfig.lightBendsWarp}
+				rotation={resolvedConfig.lightBendsRotation}
+				autoRotate={resolvedConfig.lightBendsAutoRotate}
+				scale={resolvedConfig.lightBendsScale}
+				frequency={resolvedConfig.lightBendsFrequency}
+				mouseInfluence={resolvedConfig.lightBendsMouseInfluence}
+				parallax={resolvedConfig.lightBendsParallax}
+				noise={resolvedConfig.lightBendsNoise}
 				onReady={signalReady}
 			>
-				{#if children}
-					{@render children()}
-				{/if}
+				{#if children}{@render children()}{/if}
 			</LightBendsBackground>
 		{:else if currentBg === 'lightrays'}
 			<LightRaysBackground
-				raysOrigin={config.raysOrigin || 'top-center'}
-				raysColor={config.raysColor || '#ffffff'}
-				raysSpeed={config.raysSpeed || 1}
+				raysOrigin={resolvedConfig.raysOrigin}
+				raysColor={resolvedConfig.raysColor}
+				backgroundColor={resolvedConfig.raysBackgroundColor}
+				raysSpeed={resolvedConfig.raysSpeed}
+				lightSpread={resolvedConfig.raysLightSpread}
+				rayLength={resolvedConfig.raysRayLength}
+				pulsating={resolvedConfig.raysPulsating}
+				fadeDistance={resolvedConfig.raysFadeDistance}
+				saturation={resolvedConfig.raysSaturation}
+				followMouse={resolvedConfig.raysFollowMouse}
+				mouseInfluence={resolvedConfig.raysMouseInfluence}
+				noiseAmount={resolvedConfig.raysNoiseAmount}
+				distortion={resolvedConfig.raysDistortion}
 				onReady={signalReady}
 			>
-				{#if children}
-					{@render children()}
-				{/if}
+				{#if children}{@render children()}{/if}
 			</LightRaysBackground>
 		{:else if currentBg === 'silk'}
 			<SilkBackground
-				color={config.silkColor || '#7B7481'}
-				speed={config.silkSpeed || 5}
+				color={resolvedConfig.silkColor}
+				speed={resolvedConfig.silkSpeed}
 				onReady={signalReady}
 			>
-				{#if children}
-					{@render children()}
-				{/if}
+				{#if children}{@render children()}{/if}
 			</SilkBackground>
 		{:else if currentBg === 'fog'}
 			<FogBackground
-				mouseControls={config.fogMouseControls}
-				touchControls={config.fogTouchControls}
-				gyroControls={config.fogGyroControls}
-				minHeight={config.fogMinHeight}
-				minWidth={config.fogMinWidth}
-				highlightColor={config.fogHighlightColor}
-				midtoneColor={config.fogMidtoneColor}
-				lowlightColor={config.fogLowlightColor}
-				baseColor={config.fogBaseColor}
-				blurFactor={config.fogBlurFactor}
-				speed={config.fogSpeed}
-				zoom={config.fogZoom}
+				mouseControls={resolvedConfig.fogMouseControls}
+				touchControls={resolvedConfig.fogTouchControls}
+				gyroControls={resolvedConfig.fogGyroControls}
+				minHeight={resolvedConfig.fogMinHeight}
+				minWidth={resolvedConfig.fogMinWidth}
+				highlightColor={resolvedConfig.fogHighlightColor}
+				midtoneColor={resolvedConfig.fogMidtoneColor}
+				lowlightColor={resolvedConfig.fogLowlightColor}
+				baseColor={resolvedConfig.fogBaseColor}
+				blurFactor={resolvedConfig.fogBlurFactor}
+				speed={resolvedConfig.fogSpeed}
+				zoom={resolvedConfig.fogZoom}
 				onReady={signalReady}
 			>
-				{#if children}
-					{@render children()}
-				{/if}
+				{#if children}{@render children()}{/if}
 			</FogBackground>
 		{:else if currentBg === 'clouds'}
 			<CloudsBackground
-				mouseControls={config.cloudsMouseControls}
-				touchControls={config.cloudsTouchControls}
-				gyroControls={config.cloudsGyroControls}
-				minHeight={config.cloudsMinHeight}
-				minWidth={config.cloudsMinWidth}
-				skyColor={config.cloudsSkyColor}
-				cloudColor={config.cloudsCloudColor}
-				cloudShadowColor={config.cloudsCloudShadowColor}
-				sunColor={config.cloudsSunColor}
-				sunGlareColor={config.cloudsSunGlareColor}
-				sunlightColor={config.cloudsSunlightColor}
-				speed={config.cloudsSpeed}
+				mouseControls={resolvedConfig.cloudsMouseControls}
+				touchControls={resolvedConfig.cloudsTouchControls}
+				gyroControls={resolvedConfig.cloudsGyroControls}
+				minHeight={resolvedConfig.cloudsMinHeight}
+				minWidth={resolvedConfig.cloudsMinWidth}
+				skyColor={resolvedConfig.cloudsSkyColor}
+				cloudColor={resolvedConfig.cloudsCloudColor}
+				cloudShadowColor={resolvedConfig.cloudsCloudShadowColor}
+				sunColor={resolvedConfig.cloudsSunColor}
+				sunGlareColor={resolvedConfig.cloudsSunGlareColor}
+				sunlightColor={resolvedConfig.cloudsSunlightColor}
+				speed={resolvedConfig.cloudsSpeed}
 				onReady={signalReady}
 			>
-				{#if children}
-					{@render children()}
-				{/if}
+				{#if children}{@render children()}{/if}
+			</CloudsBackground>
+		{:else if currentBg === 'clouds-dark'}
+			<CloudsBackground
+				mouseControls={resolvedConfig.cloudsMouseControls}
+				touchControls={resolvedConfig.cloudsTouchControls}
+				gyroControls={resolvedConfig.cloudsGyroControls}
+				minHeight={resolvedConfig.cloudsMinHeight}
+				minWidth={resolvedConfig.cloudsMinWidth}
+				skyColor={resolvedConfig.cloudsSkyColor}
+				cloudColor={resolvedConfig.cloudsCloudColor}
+				cloudShadowColor={resolvedConfig.cloudsCloudShadowColor}
+				sunColor={resolvedConfig.cloudsSunColor}
+				sunGlareColor={resolvedConfig.cloudsSunGlareColor}
+				sunlightColor={resolvedConfig.cloudsSunlightColor}
+				speed={resolvedConfig.cloudsSpeed}
+				onReady={signalReady}
+			>
+				{#if children}{@render children()}{/if}
 			</CloudsBackground>
 		{:else if currentBg === 'clouds2'}
 			<Clouds2Background
-				mouseControls={config.clouds2MouseControls}
-				touchControls={config.clouds2TouchControls}
-				gyroControls={config.clouds2GyroControls}
-				minHeight={config.clouds2MinHeight}
-				minWidth={config.clouds2MinWidth}
-				scale={config.clouds2Scale || 1}
-				speed={config.clouds2Speed}
-				texturePath={config.clouds2TexturePath}
-				skyColor={config.clouds2SkyColor}
-				cloudColor={config.clouds2CloudColor}
-				lightColor={config.clouds2LightColor}
-				backgroundColor={config.clouds2BackgroundColor}
+				mouseControls={resolvedConfig.clouds2MouseControls}
+				touchControls={resolvedConfig.clouds2TouchControls}
+				gyroControls={resolvedConfig.clouds2GyroControls}
+				minHeight={resolvedConfig.clouds2MinHeight}
+				minWidth={resolvedConfig.clouds2MinWidth}
+				scale={resolvedConfig.clouds2Scale}
+				speed={resolvedConfig.clouds2Speed}
+				texturePath={resolvedConfig.clouds2TexturePath}
+				skyColor={resolvedConfig.clouds2SkyColor}
+				cloudColor={resolvedConfig.clouds2CloudColor}
+				lightColor={resolvedConfig.clouds2LightColor}
+				backgroundColor={resolvedConfig.clouds2BackgroundColor}
 				onReady={signalReady}
 			>
-				{#if children}
-					{@render children()}
-				{/if}
+				{#if children}{@render children()}{/if}
 			</Clouds2Background>
+		{:else if currentBg === 'clouds2-dark'}
+			<Clouds2Background
+				mouseControls={resolvedConfig.clouds2MouseControls}
+				touchControls={resolvedConfig.clouds2TouchControls}
+				gyroControls={resolvedConfig.clouds2GyroControls}
+				minHeight={resolvedConfig.clouds2MinHeight}
+				minWidth={resolvedConfig.clouds2MinWidth}
+				scale={resolvedConfig.clouds2Scale}
+				speed={resolvedConfig.clouds2Speed}
+				texturePath={resolvedConfig.clouds2TexturePath}
+				skyColor={resolvedConfig.clouds2SkyColor}
+				cloudColor={resolvedConfig.clouds2CloudColor}
+				lightColor={resolvedConfig.clouds2LightColor}
+				backgroundColor={resolvedConfig.clouds2BackgroundColor}
+				onReady={signalReady}
+			>
+				{#if children}{@render children()}{/if}
+			</Clouds2Background>
+		{:else if currentBg === 'grainient'}
+			<GrainientBackground
+				timeSpeed={resolvedConfig.grainientTimeSpeed}
+				colorBalance={resolvedConfig.grainientColorBalance}
+				warpStrength={resolvedConfig.grainientWarpStrength}
+				warpFrequency={resolvedConfig.grainientWarpFrequency}
+				warpSpeed={resolvedConfig.grainientWarpSpeed}
+				warpAmplitude={resolvedConfig.grainientWarpAmplitude}
+				blendAngle={resolvedConfig.grainientBlendAngle}
+				blendSoftness={resolvedConfig.grainientBlendSoftness}
+				rotationAmount={resolvedConfig.grainientRotationAmount}
+				noiseScale={resolvedConfig.grainientNoiseScale}
+				grainAmount={resolvedConfig.grainientGrainAmount}
+				grainScale={resolvedConfig.grainientGrainScale}
+				grainAnimated={resolvedConfig.grainientGrainAnimated}
+				contrast={resolvedConfig.grainientContrast}
+				gamma={resolvedConfig.grainientGamma}
+				saturation={resolvedConfig.grainientSaturation}
+				centerX={resolvedConfig.grainientCenterX}
+				centerY={resolvedConfig.grainientCenterY}
+				zoom={resolvedConfig.grainientZoom}
+				color1={resolvedConfig.grainientColor1}
+				color2={resolvedConfig.grainientColor2}
+				color3={resolvedConfig.grainientColor3}
+				onReady={signalReady}
+			>
+				{#if children}{@render children()}{/if}
+			</GrainientBackground>
+		{:else if currentBg === 'iridescence'}
+			<IridescenceBackground
+				color={resolvedConfig.iridescenceColor}
+				speed={resolvedConfig.iridescenceSpeed}
+				amplitude={resolvedConfig.iridescenceAmplitude}
+				mouseReact={resolvedConfig.iridescenceMouseReact}
+				onReady={signalReady}
+			>
+				{#if children}{@render children()}{/if}
+			</IridescenceBackground>
 		{:else if currentBg === 'static'}
-			<StaticBackground color={config.color || '#000000'} image={config.image}>
-				{#if children}
-					{@render children()}
-				{/if}
+			<StaticBackground color={resolvedConfig.color} image={resolvedConfig.image}>
+				{#if children}{@render children()}{/if}
 			</StaticBackground>
 		{:else if currentBg === 'none' && children}
 			<div class="relative z-1">

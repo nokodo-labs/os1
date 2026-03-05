@@ -29,6 +29,7 @@
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { getUserInitials } from '$lib/utils'
@@ -202,7 +203,11 @@
 
 	function handleShare(): void {
 		menuOpen = false
-		console.log('share note:', noteId)
+		modals.open('resource-access', {
+			resourceType: 'note',
+			resourceId: noteId,
+			title: note?.title ?? 'note',
+		})
 	}
 
 	function setRawMode(next: boolean): void {

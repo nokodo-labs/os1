@@ -13,9 +13,12 @@
  * - thumbnail blob URLs managed centrally (loaded on demand, revoked on clear)
  */
 
+import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
 import { getApiOrigin } from '$lib/api/origin'
+import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
+import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import type { AttachmentMediaCategory } from '$lib/chat/types'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
@@ -33,6 +36,7 @@ export interface FileResource {
 		file_size: number
 		mime_type: string
 		category: AttachmentMediaCategory
+		source: string
 	}
 }
 
@@ -107,10 +111,11 @@ export function apiFileToResource(file: ApiFile): FileResource {
 		updatedAt: Date.parse(file.updated_at),
 		createdAt: Date.parse(file.created_at),
 		meta: {
-			file_type: mime.split('/').pop() ?? 'file',
+			file_type: mime.split('/')[0] ?? 'file',
 			file_size: file.size_bytes ?? 0,
 			mime_type: mime,
 			category,
+			source: file.source,
 		},
 	}
 }
@@ -241,10 +246,99 @@ export const files = {
 		return true
 	},
 
+	/** upload a file via multipart form data. returns the new ApiFile on success. */
+	async upload(file: File): Promise<ApiFile> {
+		const form = new FormData()
+		form.append('file', file)
+		const { getAccessToken } = await import('$lib/auth/session.svelte')
+		const token = getAccessToken()
+		const response = await fetch(`${getApiOrigin()}/v1/files`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: token ? { Authorization: `Bearer ${token}` } : {},
+			body: form,
+		})
+		if (!response.ok) throw new Error(`upload failed: ${response.status}`)
+		const created = (await response.json()) as ApiFile
+		filesMap.set(created.id, created)
+		return created
+	},
+
 	/** clear all cached data */
 	clear(): void {
 		this.revokeThumbnails()
 		filesMap.clear()
 		fetchedAt = null
 	},
+}
+
+// --- event stream integration ---
+
+let filesUnsub: (() => void) | null = null
+
+async function fetchSingleFile(fileId: string): Promise<ApiFile | null> {
+	const { data, error } = await apiClient().GET('/v1/files/{file_id}', {
+		params: { path: { file_id: fileId } },
+	})
+	if (error || !data) return null
+	return data as ApiFile
+}
+
+function handleFileEvent(message: StreamMessage): void {
+	const data = message.data as Record<string, unknown> | undefined
+	if (!data) return
+
+	if (message.type === 'file.created') {
+		const fileId = data.file_id as string
+		if (!fileId) return
+		// fetch full file record from API and add to cache
+		fetchSingleFile(fileId).then((file) => {
+			if (file) filesMap.set(file.id, file)
+			if (fetchedAt === null) fetchedAt = Date.now()
+		})
+	} else if (message.type === 'file.updated') {
+		const fileId = data.file_id as string
+		if (!fileId) return
+		// refetch the full file record to get the latest state
+		fetchSingleFile(fileId).then((file) => {
+			if (file) {
+				filesMap.set(file.id, file)
+				// invalidate cached thumbnail so it can be reloaded
+				const thumbUrl = thumbnailUrls.get(file.id)
+				if (thumbUrl) {
+					URL.revokeObjectURL(thumbUrl)
+					thumbnailUrls.delete(file.id)
+				}
+			}
+		})
+	} else if (message.type === 'file.deleted') {
+		const fileId = data.file_id as string
+		if (!fileId) return
+		filesMap.delete(fileId)
+		// revoke thumbnail if exists
+		const thumbUrl = thumbnailUrls.get(fileId)
+		if (thumbUrl) {
+			URL.revokeObjectURL(thumbUrl)
+			thumbnailUrls.delete(fileId)
+		}
+	}
+}
+
+if (browser) {
+	onAccessTokenChanged((token) => {
+		if (token) {
+			if (!filesUnsub) {
+				filesUnsub = eventStreamClient.subscribe(handleFileEvent)
+			}
+		} else {
+			filesUnsub?.()
+			filesUnsub = null
+			files.clear()
+		}
+	})
+
+	// subscribe immediately if already authenticated
+	if (getAccessToken() && !filesUnsub) {
+		filesUnsub = eventStreamClient.subscribe(handleFileEvent)
+	}
 }

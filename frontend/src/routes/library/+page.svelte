@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
+	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import Clip from '$lib/components/icons/Clip.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
@@ -12,6 +13,7 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
 	import { files } from '$lib/stores/files.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 
 	const chrome = useSystemChrome()
@@ -21,6 +23,8 @@
 
 	let isSortMenuOpen = $state(false)
 	let sortButtonEl: HTMLButtonElement | null = $state(null)
+	let fileInputEl: HTMLInputElement | null = $state(null)
+	let isUploading = $state(false)
 
 	function closeSortMenu() {
 		isSortMenuOpen = false
@@ -28,6 +32,23 @@
 
 	function toggleSortMenu() {
 		isSortMenuOpen = !isSortMenuOpen
+	}
+
+	function triggerUpload() {
+		fileInputEl?.click()
+	}
+
+	async function handleFileSelected(e: Event) {
+		const input = e.target as HTMLInputElement
+		const file = input.files?.[0]
+		if (!file) return
+		isUploading = true
+		try {
+			await files.upload(file)
+		} finally {
+			isUploading = false
+			input.value = ''
+		}
 	}
 
 	const resourceItems = $derived.by((): ResourceItem[] => {
@@ -77,6 +98,15 @@
 {#snippet islandContextActions()}
 	<button
 		type="button"
+		class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-wait disabled:opacity-50"
+		onclick={triggerUpload}
+		disabled={isUploading}
+		aria-label="upload file"
+	>
+		<ArrowUpTray />
+	</button>
+	<button
+		type="button"
 		bind:this={sortButtonEl}
 		class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 		onclick={toggleSortMenu}
@@ -114,6 +144,14 @@
 		</p>
 	</div>
 
+	<input
+		bind:this={fileInputEl}
+		type="file"
+		class="hidden"
+		onchange={handleFileSelected}
+		aria-hidden="true"
+	/>
+
 	<ResourcesView
 		resources={resourceItems}
 		loading={files.loading}
@@ -122,5 +160,6 @@
 		{sort}
 		emptyMessage="no files yet - upload files to see them here"
 		pageSize={24}
+		onItemClick={(item) => modals.open('file-details', { fileId: item.id })}
 	/>
 </div>

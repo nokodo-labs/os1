@@ -16,6 +16,7 @@
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { notes, type NotesSortMode } from '$lib/stores/notes.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
@@ -86,10 +87,9 @@
 		void goto(resolve(`/notes/${noteId}`), { keepFocus: true, noScroll: true })
 	}
 
-	function handleShare(noteId: string): void {
+	function handleShare(noteId: string, title: string): void {
 		openMenuId = null
-		// TODO: implement share modal for notes
-		console.log('share note:', noteId)
+		modals.open('resource-access', { resourceType: 'note', resourceId: noteId, title })
 	}
 
 	function handleProperties(noteId: string): void {
@@ -247,7 +247,7 @@
 						}}
 						data-note-menu
 					>
-						<MenuItem onclick={() => handleShare(note.id)}>
+						<MenuItem onclick={() => handleShare(note.id, note.title ?? 'note')}>
 							{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
 							share
 						</MenuItem>

@@ -26,6 +26,7 @@
 		showPagination?: boolean
 		onItemEdit?: (item: ResourceItem) => void
 		onItemDelete?: (item: ResourceItem) => Promise<boolean> | boolean | void
+		onItemClick?: (item: ResourceItem) => void
 		class?: string
 	}
 
@@ -41,6 +42,7 @@
 		showPagination = true,
 		onItemEdit,
 		onItemDelete,
+		onItemClick,
 		class: className = '',
 	}: Props = $props()
 
@@ -168,7 +170,11 @@
 						onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
 					/>
 				{:else if resource.type === 'file'}
-					<FileWidget {resource} {layout} />
+					<FileWidget
+						{resource}
+						{layout}
+						onclick={onItemClick ? () => onItemClick(resource) : undefined}
+					/>
 				{/if}
 			{/each}
 		</div>
