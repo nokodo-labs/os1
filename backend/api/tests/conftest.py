@@ -859,6 +859,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 	from api.main import app
 	from api.v1.app import v1_app
 
+	# ensure a local storage backend is available even if the session-scoped
+	# fixture was torn down or cleared by another test
+	_needs_storage = "local" not in _BACKENDS
+	if _needs_storage:
+		register("local", LocalStorageBackend(root_path=str(Path(tempfile.mkdtemp()))))
+
 	async def override_get_db() -> AsyncGenerator[AsyncSession]:
 		yield db_session
 
