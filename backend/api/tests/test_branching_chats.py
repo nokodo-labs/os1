@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.message import Message, MessageType
+from api.models.message import MessageType
 from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.message import MessageCreate
@@ -211,7 +211,6 @@ async def test_chat_rejects_invalid_parent_id_and_cross_thread_switch(
 @pytest.mark.asyncio
 async def test_get_current_branch_handles_missing_current_message_gracefully(
 	db_session: AsyncSession,
-	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	user = User(
 		email="branch-miss@example.com",
@@ -247,14 +246,10 @@ async def test_get_current_branch_handles_missing_current_message_gracefully(
 	)
 	assert thread.current_message_id == msg.id
 
-	original_get = db_session.get
+	# clear current_message_id to simulate no head pointer
+	thread.current_message_id = None
+	await db_session.commit()
 
-	async def fake_get(entity: Any, ident: Any, **kwargs: Any) -> Any:
-		if entity is Message and ident == thread.current_message_id:
-			return None
-		return await original_get(entity, ident, **kwargs)
-
-	monkeypatch.setattr(db_session, "get", fake_get)
 	branch = await thread_service.get_current_branch(
 		thread_id,
 		db_session,

@@ -19,12 +19,14 @@ from api.models.model import Model
 from api.permissions import ResourceType
 from api.schemas.message import MessageCreate
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
+from api.settings import settings as app_settings
 from api.tasks import create_background_task
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_resource_access
+from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import ToolResultTruncationFilter, resolve_filters
+from api.v1.service.chat.filters.chat_context import ChatContextFilter
 from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.hooks import resolve_hooks
@@ -40,6 +42,7 @@ from api.v1.service.chat.run_helpers import (
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.chat.tools import resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
+from api.v1.service.embeddings import embed_text
 from api.v1.service.events import build_event_emitter
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
@@ -58,12 +61,27 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 logger = logging.getLogger(__name__)
 
 
-async def _load_agent(agent_id: TypeID, session: AsyncSession) -> AgentORM:
-	"""load an agent with its model + provider relationships."""
+async def _load_agent(
+	agent_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> AgentORM:
+	"""load an agent with auth check + model/provider relationships.
+
+	combines access verification and eager loading into a single query
+	using the resource access predicate.
+	"""
 	stmt = (
 		select(AgentORM)
 		.options(selectinload(AgentORM.model).selectinload(Model.provider))
-		.where(AgentORM.id == agent_id)
+		.where(
+			AgentORM.id == agent_id,
+			resource_access_predicate(
+				principal,
+				ResourceType.AGENT,
+				required_level=AccessLevel.READER,
+			),
+		)
 	)
 	result = await session.execute(stmt)
 	agent = result.scalars().one_or_none()
@@ -147,6 +165,7 @@ async def build_agent_from_orm(
 	)
 	filters = resolve_filters(agent_orm.plugin_ids)
 	filters.insert(0, ToolResultTruncationFilter())
+	filters.append(ChatContextFilter())
 	filters.append(FileResolveFilter())
 	filters.append(ContextWindowingFilter())
 	hooks = resolve_hooks(agent_orm.plugin_ids)
@@ -196,15 +215,6 @@ async def run_agent(
 	run_id_str = str(run_id)
 
 	async with AsyncSessionLocal() as session:
-		# authorize: principal must have READER+ on the agent
-		await require_resource_access(
-			str(agent_id),
-			session,
-			principal,
-			ResourceType.AGENT,
-			required_level=AccessLevel.READER,
-		)
-
 		initial_parent_id: TypeID | None = None
 
 		# resolve structured input to content parts
@@ -260,7 +270,7 @@ async def run_agent(
 				initial_parent_id = parent_id
 
 		try:
-			agent = await _load_agent(agent_id, session)
+			agent = await _load_agent(agent_id, session, principal)
 		except HTTPException:
 			raise
 		except Exception:
@@ -442,6 +452,17 @@ async def run_agent(
 			except Exception:
 				logger.exception("failed to inject system instructions")
 				thread = sdk_thread
+
+		# build retrieval context explicitly before the agent/filter loop.
+		# filters read from ctx.retrieval rather than computing their own.
+		# when retrieval_pre_build is False, each filter builds its own query.
+		if app_settings.ai.retrieval_pre_build:
+			_turns = thread.recent_turns(app_settings.ai.retrieval_turns)
+			if _turns:
+				ctx.retrieval.query_text = "\n".join(_turns)
+				ctx.retrieval.query_embedding = await embed_text(
+					text=ctx.retrieval.query_text, session=session
+				)
 
 		worker_task: asyncio.Task[object] | None = None
 		try:

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button'
+	import { copyToClipboard } from '$lib/utils/clipboard'
 	import { BookOpen, Check, Copy, Info } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
@@ -25,7 +26,13 @@
 			variables: [
 				{
 					name: 'user_memories',
-					description: 'injects saved user memories (requires memory_context filter)',
+					description:
+						'injects saved user memories (requires memory_context filter). wrap with <long_term_memory>{{ user_memories }}</long_term_memory>',
+				},
+				{
+					name: 'chat_context',
+					description:
+						'injects context from other conversations (requires chat_context filter). wrap with <chat_context>{{ chat_context }}</chat_context>',
 				},
 				{
 					name: 'referenced_attachments',
@@ -263,8 +270,8 @@
 		return `{% include '${command}' %}`
 	}
 
-	function copyText(text: string, key: string) {
-		navigator.clipboard.writeText(text)
+	async function copyText(text: string, key: string) {
+		await copyToClipboard(text)
 		copiedVar = key
 		clearTimeout(copyTimeout)
 		copyTimeout = setTimeout(() => {
@@ -346,7 +353,7 @@
 						<div
 							class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50"
 						>
-							{#each prompts as prompt, i}
+							{#each prompts as prompt, i (prompt.command)}
 								<button
 									type="button"
 									class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-800/60 {i >
@@ -377,14 +384,14 @@
 					</div>
 				{/if}
 
-				{#each categories as category}
+				{#each categories as category (category.label)}
 					<div>
 						<h3 class="text-sm font-semibold text-zinc-200">{category.label}</h3>
 						<p class="mb-2 text-xs text-zinc-500">{category.description}</p>
 						<div
 							class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50"
 						>
-							{#each category.variables as variable, i}
+							{#each category.variables as variable, i (variable.name)}
 								<button
 									type="button"
 									class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-800/60 {i >

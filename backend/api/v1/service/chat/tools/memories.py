@@ -73,6 +73,12 @@ class MemoryRecallTool(Tool[AppContext]):
 	) -> ToolMessage:
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
+		ai = __app_context__.principal.user.prefs.ai
+		if ai is not None and ai.memories_enabled is False:
+			return self.success(
+				"memory features are disabled by user preferences",
+				__agent_context__,
+			)
 		inp = MemorySearchInput.model_validate(kwargs)
 		try:
 			page = await memory_service.search_memories(
@@ -118,6 +124,12 @@ class MemoryCreateTool(Tool[AppContext]):
 	) -> ToolMessage:
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
+		ai = __app_context__.principal.user.prefs.ai
+		if ai is not None and ai.memories_enabled is False:
+			return self.success(
+				"memory features are disabled by user preferences",
+				__agent_context__,
+			)
 		inp = MemoryCreateInput.model_validate(kwargs)
 		try:
 			memory = await memory_service.create_memory(

@@ -107,6 +107,12 @@ class MemoryPostProcessingHook(Hook):
 		if app_context is None:
 			return
 
+		# gate on user preference - skip when memories disabled.
+		ai = app_context.principal.user.prefs.ai
+		if ai is not None and ai.memories_enabled is False:
+			logger.debug("memory post-processing skipped: disabled by user")
+			return
+
 		user_id = app_context.user_id
 		if user_id is None:
 			return

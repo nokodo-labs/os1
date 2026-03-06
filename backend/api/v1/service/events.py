@@ -346,7 +346,6 @@ async def publish_event(
 
 	session.add(event)
 	await session.commit()
-	await session.refresh(event)
 
 	event_data = _build_event_data(event, origin_session_id)
 

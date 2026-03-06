@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
+from api.models.access_rule import AccessLevel
 from api.schemas.runs import ActiveRunOut, RunRequest
 from api.v1.service import runs as runs_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import run_agent as chat_run_agent
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
@@ -101,6 +103,7 @@ async def list_runs(
 async def resume_run_stream(
 	run_id: str,
 	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
 	"""resume an active agent run's SSE stream.
 
@@ -108,6 +111,20 @@ async def resume_run_stream(
 	deltas until the run completes. returns 404 if the run doesn't exist
 	or has already finished.
 	"""
+	# runs are sub-resources of threads; access is gated on thread ACL
+	rs = await run_status_store.get_run(run_id)
+	if rs is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="run not found or already completed",
+		)
+	await require_thread_access(
+		rs.thread_id,
+		db,
+		principal,
+		required_level=AccessLevel.READER,
+	)
+
 	result = await run_status_store.subscribe(run_id)
 	if result is None:
 		raise HTTPException(

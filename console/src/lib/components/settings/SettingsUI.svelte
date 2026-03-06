@@ -57,7 +57,7 @@
 
 <Card class="border-zinc-800 bg-zinc-900">
 	<CardHeader>
-		<CardTitle>ui</CardTitle>
+		<CardTitle>UI</CardTitle>
 		<CardDescription>console UX defaults.</CardDescription>
 	</CardHeader>
 	<CardContent class="space-y-5">

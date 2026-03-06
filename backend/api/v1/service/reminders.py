@@ -782,22 +782,22 @@ async def _autocomplete_reminders(
 
 
 async def _hybrid_search_reminders(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> list[SearchResultItem]:
 	"""qdrant hybrid search for reminders (dense + BM25)."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_text = query if isinstance(query, str) else None
 	query_emb = (
-		query
-		if isinstance(query, list)
-		else (await embed_text(text=query, session=db) if need_dense else None)
+		query_embedding
+		if query_embedding is not None
+		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
 	# reminders inherit ACL from their parent list; fetch broad candidates and
@@ -851,19 +851,19 @@ async def _hybrid_search_reminders(
 
 
 async def search_reminders(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> CursorPage[SearchResultItem]:
 	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
 	params = search_params or SearchParams()
-	query_text = query if isinstance(query, str) else None
 	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
-	run_autocomplete = query_text is not None and params.mode in (
+	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
 	)
@@ -877,14 +877,15 @@ async def search_reminders(
 	if run_hybrid:
 		coros.append(
 			_hybrid_search_reminders(
-				query,
+				query_text,
 				db,
 				principal=principal,
 				limit=limit + 1,
 				search_params=params,
+				query_embedding=query_embedding,
 			)
 		)
-	if run_autocomplete and query_text is not None:
+	if run_autocomplete:
 		coros.append(
 			_autocomplete_reminders(
 				query_text, db, principal=principal, limit=limit + 1

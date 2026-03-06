@@ -101,13 +101,8 @@ async def load_sdk_thread(
 ) -> tuple[SDKThread, TypeID | None]:
 	"""load a thread's message branch and convert to an SDK thread.
 
-	this is the single entry point for determining which messages from
-	a thread are included in agent context. future windowing and
-	history-summarization logic should be applied here.
-
-	when parent_id is provided and differs from the thread's current
-	head, it temporarily overrides current_message_id so the branch
-	query walks from the correct leaf.
+	uses an optimized single-pass load (no redundant thread queries)
+	with a recursive CTE for branch walking.
 
 	each sdk message carries its orm id in metadata["message_id"]
 	so downstream filters can identify messages without needing a
@@ -116,47 +111,26 @@ async def load_sdk_thread(
 	returns (sdk_thread, current_message_id) so callers can derive
 	the parent id for new messages without a separate query.
 	"""
-	thread_orm = await thread_service.get_thread(
+	thread_orm, branch_orm = await thread_service.load_thread_with_branch(
 		thread_id,
 		session,
 		principal=principal,
+		parent_id=parent_id,
 	)
 	head_id = thread_orm.current_message_id
 
-	# determine effective head. if caller provides an explicit parent_id,
-	# temporarily point the ORM object there so get_current_branch follows
-	# the correct branch.
-	original_head = head_id
-	if parent_id and original_head != parent_id:
-		thread_orm.current_message_id = parent_id
+	sdk_messages = []
+	for m in branch_orm:
+		sdk = m.to_sdk()
+		enriched = {**(sdk.metadata or {}), "message_id": str(m.id)}
+		sdk_messages.append(sdk.model_copy(update={"metadata": enriched}))
 
-	try:
-		branch_orm = await thread_service.get_current_branch(
-			thread_id,
-			session,
-			principal=principal,
-			include_hidden=False,
-		)
-
-		# each sdk message carries its orm id in metadata so downstream
-		# code (filters, event queries) can identify messages without a
-		# separate metadata key on the thread.
-		sdk_messages = []
-		for m in branch_orm:
-			sdk = m.to_sdk()
-			enriched = {**(sdk.metadata or {}), "message_id": str(m.id)}
-			sdk_messages.append(sdk.model_copy(update={"metadata": enriched}))
-
-		sdk_thread = SDKThread(
-			created_at=thread_orm.created_at,
-			messages=sdk_messages,
-			metadata=thread_orm.metadata_ or {},
-		)
-		return sdk_thread, head_id
-	finally:
-		# restore original head so ORM state is untouched
-		if parent_id and original_head != parent_id:
-			thread_orm.current_message_id = original_head
+	sdk_thread = SDKThread(
+		created_at=thread_orm.created_at,
+		messages=sdk_messages,
+		metadata=thread_orm.metadata_ or {},
+	)
+	return sdk_thread, head_id
 
 
 async def inject_system_instructions(

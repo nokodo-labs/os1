@@ -358,16 +358,15 @@ class AIMemorySettingsPatch(BaseModel):
 		ge=1,
 		description="number of relevant memories to retrieve",
 	)
-	messages_to_consider: int | None = Field(
-		default=None,
-		ge=1,
-		description="number of recent messages to consider",
-	)
 
 
 class AIChatContextSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
+	enabled: bool | None = Field(
+		default=None,
+		description="enable cross-chat context enrichment",
+	)
 	mode: str | None = Field(
 		default=None,
 		description="how chats are selected for Agent context enrichment",
@@ -376,6 +375,12 @@ class AIChatContextSettingsPatch(BaseModel):
 		default=None,
 		ge=1,
 		description="number of chats to use for context enrichment",
+	)
+	similarity_threshold: float | None = Field(
+		default=None,
+		ge=0.0,
+		le=1.0,
+		description="similarity minimum threshold for chat context retrieval",
 	)
 
 
@@ -585,6 +590,15 @@ class AISettingsPatch(BaseModel):
 
 	default_agent_ids: list[str] | None = Field(
 		default=None, description="ordered list of default agent ids (tried in order)"
+	)
+	retrieval_turns: int | None = Field(
+		default=None,
+		ge=1,
+		description="number of recent conversation turns for retrieval queries",
+	)
+	retrieval_pre_build: bool | None = Field(
+		default=None,
+		description="pre-build retrieval query before filter loop",
 	)
 	memory: AIMemorySettingsPatch | None = None
 	chat_context: AIChatContextSettingsPatch | None = None

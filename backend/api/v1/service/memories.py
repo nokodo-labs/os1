@@ -333,22 +333,22 @@ async def _autocomplete_memories(
 
 
 async def _hybrid_search_memories(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> list[SearchResultItem]:
 	"""qdrant hybrid search for memories (dense + BM25)."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_text = query if isinstance(query, str) else None
 	query_emb = (
-		query
-		if isinstance(query, list)
-		else (await embed_text(text=query, session=db) if need_dense else None)
+		query_embedding
+		if query_embedding is not None
+		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
 	# memories are user-private (no sharing) - owner_id filter is efficient.
@@ -394,19 +394,19 @@ async def _hybrid_search_memories(
 
 
 async def search_memories(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> CursorPage[SearchResultItem]:
 	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
 	params = search_params or SearchParams()
-	query_text = query if isinstance(query, str) else None
 	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
-	run_autocomplete = query_text is not None and params.mode in (
+	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
 	)
@@ -420,14 +420,15 @@ async def search_memories(
 	if run_hybrid:
 		coros.append(
 			_hybrid_search_memories(
-				query,
+				query_text,
 				db,
 				principal=principal,
 				limit=limit + 1,
 				search_params=params,
+				query_embedding=query_embedding,
 			)
 		)
-	if run_autocomplete and query_text is not None:
+	if run_autocomplete:
 		coros.append(
 			_autocomplete_memories(query_text, db, principal=principal, limit=limit + 1)
 		)
@@ -445,12 +446,13 @@ async def search_memories(
 
 
 async def query_relevant_memories(
-	query: str,
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	score_threshold: float = 0.0,
+	query_embedding: list[float] | None = None,
 ) -> list[Memory]:
 	"""hybrid search returning full Memory objects in relevance order.
 
@@ -459,17 +461,19 @@ async def query_relevant_memories(
 	UI search endpoints.
 
 	args:
-		query: natural-language search text.
+		query_text: natural-language search text.
 		db: async database session.
 		principal: authenticated user.
 		limit: max memories to return.
 		score_threshold: minimum normalized score (0-1). results below
 			this threshold are dropped.
+		query_embedding: pre-computed embedding vector. when provided
+			the function skips the embed_text call and uses this directly.
 
 	returns:
 		full Memory objects ordered by relevance (best first).
 	"""
-	query_emb = await embed_text(text=query, session=db)
+	query_emb = query_embedding or await embed_text(text=query_text, session=db)
 	query_filter = vectorstore_service.resource_filter(
 		"memory",
 		owner_id=(str(principal.user.id) if not principal.is_admin else None),
@@ -477,7 +481,7 @@ async def query_relevant_memories(
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,
-		text_query=query,
+		text_query=query_text,
 		limit=limit,
 		query_filter=query_filter,
 		normalize=True,

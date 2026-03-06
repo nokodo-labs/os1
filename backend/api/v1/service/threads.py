@@ -1,4 +1,4 @@
-"""Service helpers for threads and messages."""
+"""service helpers for threads and messages."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import overload
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -333,7 +333,7 @@ async def create_thread(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
-	return await _load_thread(TypeID(thread.id), session, None, include_hidden=True)
+	return thread
 
 
 async def list_threads(
@@ -678,7 +678,7 @@ async def list_events_for_message_ids(
 	include_hidden: bool = False,
 	event_types: list[EventType] | None = None,
 ) -> list[Event]:
-	"""Return events associated with the given messages in this thread.
+	"""return events associated with the given messages in this thread.
 
 	authz is based on thread access (viewer+), not the global events permission.
 	when event_types is provided, only events of those types are returned.
@@ -714,7 +714,7 @@ async def list_message_tree(
 	principal: Principal,
 	include_hidden: bool = False,
 ) -> list[Message]:
-	"""Return all messages in a thread as a flat list."""
+	"""return all messages in a thread as a flat list."""
 	_ensure_admin_for_hidden(include_hidden, principal)
 	return await list_messages(
 		thread_id,
@@ -736,7 +736,7 @@ async def get_current_branch(
 	principal: Principal,
 	include_hidden: bool = False,
 ) -> list[Message]:
-	"""Return the root→leaf path ending at thread.current_message_id."""
+	"""return the root-leaf path ending at thread.current_message_id."""
 	_ensure_admin_for_hidden(include_hidden, principal)
 	thread = await _load_thread(
 		thread_id,
@@ -748,14 +748,77 @@ async def get_current_branch(
 	if not thread.current_message_id:
 		return []
 
-	branch: list[Message] = []
-	cur = await session.get(Message, thread.current_message_id)
-	while cur is not None:
-		branch.insert(0, cur)
-		if not cur.parent_id:
-			break
-		cur = await session.get(Message, cur.parent_id)
-	return branch
+	return await _walk_branch_cte(session, thread.current_message_id)
+
+
+async def _walk_branch_cte(
+	session: AsyncSession,
+	leaf_id: TypeID,
+) -> list[Message]:
+	"""walk from leaf to root using a recursive CTE, return root-first order."""
+	msg_t = Message.__table__
+
+	anchor = (
+		select(
+			msg_t.c.id.label("msg_id"),
+			msg_t.c.parent_id.label("msg_parent_id"),
+			literal(0).label("depth"),
+		)
+		.where(msg_t.c.id == str(leaf_id))
+		.cte(name="branch", recursive=True)
+	)
+
+	recursive = select(
+		msg_t.c.id.label("msg_id"),
+		msg_t.c.parent_id.label("msg_parent_id"),
+		(anchor.c.depth + 1).label("depth"),
+	).where(msg_t.c.id == anchor.c.msg_parent_id)
+
+	branch_cte = anchor.union_all(recursive)
+
+	stmt = (
+		select(Message)
+		.join(branch_cte, Message.id == branch_cte.c.msg_id)
+		.order_by(branch_cte.c.depth.desc())
+	)
+	result = await session.execute(stmt)
+	return list(result.scalars().all())
+
+
+async def load_thread_with_branch(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	parent_id: TypeID | None = None,
+) -> tuple[Thread, list[Message]]:
+	"""load a thread and its message branch in minimal queries.
+
+	optimized for the run path: skips selectinload(projects) since they
+	are not needed during agent execution, and uses a recursive CTE for
+	branch walking instead of per-message queries.
+
+	returns (thread, branch_messages) where branch is root-first.
+	"""
+	stmt = select(Thread).where(
+		Thread.id == thread_id,
+		thread_access_predicate(principal, required_level=AccessLevel.READER),
+	)
+	result = await session.execute(stmt)
+	thread = result.scalars().one_or_none()
+	if thread is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="thread not found",
+		)
+
+	# determine effective head for branch walk
+	head_id = parent_id if parent_id else thread.current_message_id
+	if not head_id:
+		return thread, []
+
+	branch = await _walk_branch_cte(session, head_id)
+	return thread, branch
 
 
 async def switch_branch(
@@ -766,7 +829,7 @@ async def switch_branch(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Thread:
-	"""Set current_message_id to the deepest leaf descending from message_id."""
+	"""set current_message_id to the deepest leaf descending from message_id."""
 	thread = await _load_thread(
 		thread_id,
 		session,
@@ -875,7 +938,6 @@ async def create_message(
 	await session.flush()
 	thread.current_message_id = message.id
 	await session.commit()
-	await session.refresh(message)
 
 	# emit message.created event with full message payload
 	message_data = MessageOut.model_validate(message).model_dump(
@@ -1247,22 +1309,22 @@ async def _autocomplete_threads(
 
 
 async def _hybrid_search_threads(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> list[SearchResultItem]:
 	"""qdrant hybrid search for threads (dense + BM25)."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_text = query if isinstance(query, str) else None
 	query_emb = (
-		query
-		if isinstance(query, list)
-		else (await embed_text(text=query, session=db) if need_dense else None)
+		query_embedding
+		if query_embedding is not None
+		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
 	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
@@ -1321,44 +1383,20 @@ async def _hybrid_search_threads(
 	return items
 
 
-@overload
 async def search_threads(
-	query: str,
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,
 	search_params: SearchParams | None = None,
-) -> CursorPage[SearchResultItem]: ...
-
-
-@overload
-async def search_threads(
-	query: list[float],
-	db: AsyncSession,
-	*,
-	principal: Principal,
-	limit: int = 10,
-	cursor: str | None = None,
-	search_params: SearchParams | None = None,
-) -> CursorPage[SearchResultItem]: ...
-
-
-async def search_threads(
-	query: str | list[float],
-	db: AsyncSession,
-	*,
-	principal: Principal,
-	limit: int = 10,
-	cursor: str | None = None,
-	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> CursorPage[SearchResultItem]:
 	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
 	params = search_params or SearchParams()
-	query_text = query if isinstance(query, str) else None
 	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
-	run_autocomplete = query_text is not None and params.mode in (
+	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
 	)
@@ -1372,14 +1410,15 @@ async def search_threads(
 	if run_hybrid:
 		coros.append(
 			_hybrid_search_threads(
-				query,
+				query_text,
 				db,
 				principal=principal,
 				limit=limit + 1,
 				search_params=params,
+				query_embedding=query_embedding,
 			)
 		)
-	if run_autocomplete and query_text is not None:
+	if run_autocomplete:
 		coros.append(
 			_autocomplete_threads(query_text, db, principal=principal, limit=limit + 1)
 		)

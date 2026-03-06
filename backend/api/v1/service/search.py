@@ -57,40 +57,40 @@ async def search_stream(
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	query_embedding = await embed_text(text=q, session=db) if need_dense else None
-	search_query: str | list[float] = (
-		query_embedding if query_embedding is not None else q
-	)
 
 	per_type = max(3, limit // len(types)) if types else limit
 	coros: list[Coroutine[None, None, CursorPage[SearchResultItem]]] = []
 	if SearchResultType.NOTE in types:
 		coros.append(
 			notes_service.search_notes(
-				search_query,
+				q,
 				db,
 				principal=principal,
 				limit=per_type,
 				search_params=search_params,
+				query_embedding=query_embedding,
 			)
 		)
 	if SearchResultType.THREAD in types:
 		coros.append(
 			threads_service.search_threads(
-				search_query,
+				q,
 				db,
 				principal=principal,
 				limit=per_type,
 				search_params=search_params,
+				query_embedding=query_embedding,
 			)
 		)
 	if SearchResultType.REMINDER in types:
 		coros.append(
 			reminders_service.search_reminders(
-				search_query,
+				q,
 				db,
 				principal=principal,
 				limit=per_type,
 				search_params=search_params,
+				query_embedding=query_embedding,
 			)
 		)
 

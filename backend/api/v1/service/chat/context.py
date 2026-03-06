@@ -7,7 +7,7 @@ it provides access to session, auth, and an event_emitter callback.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,19 @@ from nokodo_ai.utils.typeid import TypeID
 EventEmitter = Callable[[Event], Awaitable[None]]
 
 
+@dataclass
+class RetrievalContext:
+	"""shared retrieval state for a single agent run.
+
+	populated explicitly in agents.py before the filter loop using
+	thread.recent_turns(). filters read from this context rather than
+	computing their own queries or embeddings.
+	"""
+
+	query_text: str | None = None
+	query_embedding: list[float] | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class AppContext:
 	"""application context passed to SDK tools and filters.
@@ -28,6 +41,7 @@ class AppContext:
 	- principal: authenticated user
 	- event_emitter: function to broadcast events in real-time
 	- context_window: model context window in tokens (from Model ORM)
+	- retrieval: shared embedding cache for the current run
 
 	usage in a tool:
 		async def call(self, agent_ctx, app_ctx: AppContext | None, **kwargs):
@@ -44,6 +58,7 @@ class AppContext:
 	agent_id: TypeID | None = None
 	thread_id: TypeID | None = None
 	context_window: int | None = None
+	retrieval: RetrievalContext = field(default_factory=RetrievalContext)
 
 	@property
 	def user_id(self) -> TypeID:
@@ -58,7 +73,5 @@ class AppContext:
 			thread_id=self.thread_id,
 			event_emitter=emitter,
 			context_window=self.context_window,
+			retrieval=self.retrieval,
 		)
-
-
-__all__ = ["AppContext"]

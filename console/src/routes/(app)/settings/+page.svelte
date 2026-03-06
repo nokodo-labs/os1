@@ -83,10 +83,12 @@
 	let aiMemoryEnable = $state(false)
 	let aiMemorySimilarityThreshold = $state<string>('')
 	let aiMemoryTopK = $state<string>('')
-	let aiMemoryMessagesToConsider = $state<string>('')
 
+	let aiChatContextEnabled = $state(true)
 	let aiChatContextMode = $state<ChatContextMode>('recent')
 	let aiChatContextTopK = $state<string>('')
+	let aiChatContextSimilarityThreshold = $state<string>('')
+	let aiRetrievalPreBuild = $state(true)
 
 	let aiTaskDefaultModelId = $state<string>('')
 	let aiTaskThreadMetadataModelId = $state<string>('')
@@ -249,9 +251,11 @@
 		aiMemoryEnable: false,
 		aiMemorySimilarityThreshold: '',
 		aiMemoryTopK: '',
-		aiMemoryMessagesToConsider: '',
+		aiChatContextEnabled: true,
 		aiChatContextMode: 'recent' as ChatContextMode,
 		aiChatContextTopK: '',
+		aiChatContextSimilarityThreshold: '',
+		aiRetrievalPreBuild: true,
 		aiTaskDefaultModelId: '',
 		aiTaskThreadMetadataModelId: '',
 		aiTaskInputAutocompleteModelId: '',
@@ -389,9 +393,11 @@
 			aiMemoryEnable !== original.aiMemoryEnable ||
 			aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold ||
 			aiMemoryTopK !== original.aiMemoryTopK ||
-			aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider ||
+			aiChatContextEnabled !== original.aiChatContextEnabled ||
 			aiChatContextMode !== original.aiChatContextMode ||
 			aiChatContextTopK !== original.aiChatContextTopK ||
+			aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold ||
+			aiRetrievalPreBuild !== original.aiRetrievalPreBuild ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
@@ -576,11 +582,13 @@
 		aiMemoryEnable = memory?.enable_memory ?? false
 		aiMemorySimilarityThreshold = toStringOrEmpty(memory?.similarity_threshold)
 		aiMemoryTopK = toStringOrEmpty(memory?.top_k)
-		aiMemoryMessagesToConsider = toStringOrEmpty(memory?.messages_to_consider)
 
 		const chatContext = ai?.chat_context
+		aiChatContextEnabled = chatContext?.enabled ?? true
 		aiChatContextMode = (chatContext?.mode ?? 'recent') as ChatContextMode
 		aiChatContextTopK = toStringOrEmpty(chatContext?.top_k)
+		aiChatContextSimilarityThreshold = toStringOrEmpty(chatContext?.similarity_threshold)
+		aiRetrievalPreBuild = ai?.retrieval_pre_build ?? true
 
 		const tasks = ai?.tasks
 		aiTaskDefaultModelId = tasks?.default_model_id ?? ''
@@ -771,9 +779,11 @@
 			aiMemoryEnable,
 			aiMemorySimilarityThreshold,
 			aiMemoryTopK,
-			aiMemoryMessagesToConsider,
+			aiChatContextEnabled,
 			aiChatContextMode,
 			aiChatContextTopK,
+			aiChatContextSimilarityThreshold,
+			aiRetrievalPreBuild,
 			aiTaskDefaultModelId,
 			aiTaskThreadMetadataModelId,
 			aiTaskInputAutocompleteModelId,
@@ -946,9 +956,11 @@
 		aiMemoryEnable = original.aiMemoryEnable
 		aiMemorySimilarityThreshold = original.aiMemorySimilarityThreshold
 		aiMemoryTopK = original.aiMemoryTopK
-		aiMemoryMessagesToConsider = original.aiMemoryMessagesToConsider
+		aiChatContextEnabled = original.aiChatContextEnabled
 		aiChatContextMode = original.aiChatContextMode
 		aiChatContextTopK = original.aiChatContextTopK
+		aiChatContextSimilarityThreshold = original.aiChatContextSimilarityThreshold
+		aiRetrievalPreBuild = original.aiRetrievalPreBuild
 		aiTaskDefaultModelId = original.aiTaskDefaultModelId
 		aiTaskThreadMetadataModelId = original.aiTaskThreadMetadataModelId
 		aiTaskInputAutocompleteModelId = original.aiTaskInputAutocompleteModelId
@@ -1114,9 +1126,11 @@
 			aiMemoryEnable !== original.aiMemoryEnable ||
 			aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold ||
 			aiMemoryTopK !== original.aiMemoryTopK ||
-			aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider ||
+			aiChatContextEnabled !== original.aiChatContextEnabled ||
 			aiChatContextMode !== original.aiChatContextMode ||
 			aiChatContextTopK !== original.aiChatContextTopK ||
+			aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold ||
+			aiRetrievalPreBuild !== original.aiRetrievalPreBuild ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
@@ -1154,8 +1168,7 @@
 			if (
 				aiMemoryEnable !== original.aiMemoryEnable ||
 				aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold ||
-				aiMemoryTopK !== original.aiMemoryTopK ||
-				aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider
+				aiMemoryTopK !== original.aiMemoryTopK
 			) {
 				aiPatch.memory = {}
 				if (aiMemoryEnable !== original.aiMemoryEnable)
@@ -1166,20 +1179,28 @@
 					)
 				if (aiMemoryTopK !== original.aiMemoryTopK)
 					aiPatch.memory.top_k = asNumberOrNull(aiMemoryTopK)
-				if (aiMemoryMessagesToConsider !== original.aiMemoryMessagesToConsider)
-					aiPatch.memory.messages_to_consider = asNumberOrNull(aiMemoryMessagesToConsider)
 			}
 
 			if (
+				aiChatContextEnabled !== original.aiChatContextEnabled ||
 				aiChatContextMode !== original.aiChatContextMode ||
-				aiChatContextTopK !== original.aiChatContextTopK
+				aiChatContextTopK !== original.aiChatContextTopK ||
+				aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold
 			) {
 				aiPatch.chat_context = {}
+				if (aiChatContextEnabled !== original.aiChatContextEnabled)
+					aiPatch.chat_context.enabled = aiChatContextEnabled
 				if (aiChatContextMode !== original.aiChatContextMode)
 					aiPatch.chat_context.mode = aiChatContextMode
 				if (aiChatContextTopK !== original.aiChatContextTopK)
 					aiPatch.chat_context.top_k = asNumberOrNull(aiChatContextTopK)
+				if (aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold)
+					aiPatch.chat_context.similarity_threshold = asNumberOrNull(
+						aiChatContextSimilarityThreshold
+					)
 			}
+			if (aiRetrievalPreBuild !== original.aiRetrievalPreBuild)
+				aiPatch.retrieval_pre_build = aiRetrievalPreBuild
 
 			if (
 				aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
@@ -1985,9 +2006,11 @@
 						bind:memoryEnable={aiMemoryEnable}
 						bind:memorySimilarityThreshold={aiMemorySimilarityThreshold}
 						bind:memoryTopK={aiMemoryTopK}
-						bind:memoryMessagesToConsider={aiMemoryMessagesToConsider}
+						bind:chatContextEnabled={aiChatContextEnabled}
 						bind:chatContextMode={aiChatContextMode}
 						bind:chatContextTopK={aiChatContextTopK}
+						bind:chatContextSimilarityThreshold={aiChatContextSimilarityThreshold}
+						bind:retrievalPreBuild={aiRetrievalPreBuild}
 						bind:taskDefaultModelId={aiTaskDefaultModelId}
 						bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
 						bind:taskInputAutocompleteModelId={aiTaskInputAutocompleteModelId}

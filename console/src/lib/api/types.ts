@@ -2296,21 +2296,38 @@ export interface components {
         /** AIChatContextSettings */
         AIChatContextSettings: {
             /**
+             * Enabled
+             * @description enable cross-chat context enrichment
+             * @default true
+             */
+            enabled: boolean;
+            /**
              * Mode
-             * @description how chats are selected for Agent context enrichment
-             * @default recent
+             * @description how chats are selected for Agent context enrichment. recent: top K by last_activity_at. relevant: top K by semantic similarity to the current conversation.
+             * @default relevant
              * @enum {string}
              */
-            mode: "recent" | "relevant" | "pinned";
+            mode: "recent" | "relevant";
             /**
              * Top K
              * @description number of chats to use for context enrichment
              * @default 3
              */
             top_k: number;
+            /**
+             * Similarity Threshold
+             * @description similarity minimum threshold for chat context retrieval. how similar a chat must be to be considered relevant. 0.0 = all chats, 1.0 = exact match
+             * @default 0.65
+             */
+            similarity_threshold: number;
         };
         /** AIChatContextSettingsPatch */
         AIChatContextSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable cross-chat context enrichment
+             */
+            enabled?: boolean | null;
             /**
              * Mode
              * @description how chats are selected for Agent context enrichment
@@ -2321,6 +2338,11 @@ export interface components {
              * @description number of chats to use for context enrichment
              */
             top_k?: number | null;
+            /**
+             * Similarity Threshold
+             * @description similarity minimum threshold for chat context retrieval
+             */
+            similarity_threshold?: number | null;
         };
         /**
          * AIMediaSettings
@@ -2360,12 +2382,6 @@ export interface components {
              * @default 15
              */
             top_k: number;
-            /**
-             * Messages To Consider
-             * @description number of recent messages to consider when retrieving relevant memories for the agent and for consolidation work
-             * @default 4
-             */
-            messages_to_consider: number;
         };
         /** AIMemorySettingsPatch */
         AIMemorySettingsPatch: {
@@ -2384,11 +2400,6 @@ export interface components {
              * @description number of relevant memories to retrieve
              */
             top_k?: number | null;
-            /**
-             * Messages To Consider
-             * @description number of recent messages to consider
-             */
-            messages_to_consider?: number | null;
         };
         /**
          * AIPreferences
@@ -2438,6 +2449,18 @@ export interface components {
              * @description ordered list of default agent ids (tried in order)
              */
             default_agent_ids?: string[];
+            /**
+             * Retrieval Turns
+             * @description number of recent conversation turns to use when building retrieval queries for memory and chat context enrichment. a turn is a contiguous block of user or assistant messages.
+             * @default 3
+             */
+            retrieval_turns: number;
+            /**
+             * Retrieval Pre Build
+             * @description pre-build the retrieval query (text + embedding) in agents.py before the filter loop. when disabled each filter builds its own query, which avoids the upfront embed cost if no retrieval filter is active.
+             * @default true
+             */
+            retrieval_pre_build: boolean;
             /** @description AI memory settings */
             memory?: components["schemas"]["AIMemorySettings"];
             /** @description chat context settings */
@@ -2458,6 +2481,16 @@ export interface components {
              * @description ordered list of default agent ids (tried in order)
              */
             default_agent_ids?: string[] | null;
+            /**
+             * Retrieval Turns
+             * @description number of recent conversation turns for retrieval queries
+             */
+            retrieval_turns?: number | null;
+            /**
+             * Retrieval Pre Build
+             * @description pre-build retrieval query before filter loop
+             */
+            retrieval_pre_build?: boolean | null;
             memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
             chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
             tasks?: components["schemas"]["AITaskSettingsPatch"] | null;
@@ -7243,12 +7276,6 @@ export interface components {
              */
             sparse_vectors_enabled: boolean;
             /**
-             * Prefetch Limit
-             * @description how many candidates to prefetch before fusion/reranking
-             * @default 100
-             */
-            prefetch_limit: number;
-            /**
              * Fusion Algorithm
              * @description score fusion algorithm: rrf (reciprocal rank fusion) or dbsf (distribution-based score fusion)
              * @default rrf
@@ -7274,11 +7301,6 @@ export interface components {
              * @description enable sparse vectors
              */
             sparse_vectors_enabled?: boolean | null;
-            /**
-             * Prefetch Limit
-             * @description prefetch candidate limit
-             */
-            prefetch_limit?: number | null;
             /**
              * Fusion Algorithm
              * @description fusion algorithm

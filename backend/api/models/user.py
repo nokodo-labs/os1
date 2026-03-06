@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 	from api.models.task import Task
 	from api.models.thread import Thread
 	from api.models.thread_participant import ThreadParticipant
+	from api.schemas.preferences import UserPreferences
 
 
 class User(TypeIDPrimaryKeyMixin, Base):
@@ -58,6 +59,16 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	last_active_at: Mapped[datetime | None] = mapped_column(
 		DateTime(timezone=True), nullable=True, default=None
 	)
+
+	@property
+	def prefs(self) -> UserPreferences:
+		"""parsed preferences as a typed schema."""
+		from api.schemas.preferences import UserPreferences
+
+		try:
+			return UserPreferences.model_validate(self.preferences or {})
+		except Exception:
+			return UserPreferences()
 
 	roles: Mapped[list[Role]] = relationship(
 		"Role",

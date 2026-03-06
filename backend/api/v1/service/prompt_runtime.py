@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -22,11 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.prompt import Prompt
 from api.models.user import User
-from api.schemas.preferences import (
-	AccountPreferences,
-	AIPreferences,
-	UserPreferences,
-)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -40,6 +35,7 @@ if TYPE_CHECKING:
 # if the sentinel is absent from the rendered prompt, the filter is a no-op.
 SENTINEL_REFERENCED_ATTACHMENTS = "<<FILTER:referenced_attachments>>"
 SENTINEL_USER_MEMORIES = "<<FILTER:user_memories>>"
+SENTINEL_CHAT_CONTEXT = "<<FILTER:chat_context>>"
 SENTINEL_CHAT_WINDOW_INFO = "<<FILTER:chat_window_info>>"
 
 _PROMPT_REF_RE = re.compile(r"{{\s*PROMPTS\.([a-zA-Z0-9-_]+)\s*}}")
@@ -98,11 +94,19 @@ def _validate_graph(
 		raise PromptValidationError("; ".join(dict.fromkeys(errors)))
 
 
+def _finalize(value: object) -> object:
+	"""Jinja2 finalize hook: render None as empty string."""
+	if value is None:
+		return ""
+	return value
+
+
 def _build_env(prompt_map: dict[str, str]) -> Environment:
 	return Environment(
 		loader=DictLoader(prompt_map),
 		autoescape=False,
 		undefined=StrictUndefined,
+		finalize=_finalize,
 		keep_trailing_newline=True,
 	)
 
@@ -189,37 +193,30 @@ def http_error_from_validation(err: PromptValidationError) -> HTTPException:
 # runtime prompt variable building
 
 
-def _parse_preferences(user: User) -> UserPreferences:
-	"""safely parse user preferences json into the typed schema."""
-	raw = user.preferences or {}
-	try:
-		return UserPreferences.model_validate(raw)
-	except Exception:
-		return UserPreferences()
-
-
-def _resolve_bio(prefs: UserPreferences) -> str:
+def _resolve_bio(
+	ai_bio: str | None,
+	account_bio: str | None,
+	*,
+	use_account_bio: bool,
+) -> str | None:
 	"""resolve the effective bio respecting the useAccountBio toggle."""
-	ai = prefs.ai or AIPreferences()
-	account = prefs.account or AccountPreferences()
-	if ai.use_account_bio:
-		return account.bio or ""
-	return ai.bio or ""
+	if use_account_bio:
+		return account_bio or None
+	return ai_bio or None
 
 
-def _compute_age(birth_date_str: str | None, now: datetime) -> str:
-	"""compute age in years from an ISO date string, or empty string."""
+def _compute_age(birth_date_str: str | None, now: datetime) -> int | None:
+	"""compute age in years from an ISO date string, or None."""
 	if not birth_date_str:
-		return ""
+		return None
 	try:
-		parts = birth_date_str.split("-")
-		birth = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=UTC)
+		birth = date.fromisoformat(birth_date_str)
 		age = now.year - birth.year
 		if (now.month, now.day) < (birth.month, birth.day):
 			age -= 1
-		return str(max(0, age))
-	except (ValueError, IndexError):
-		return ""
+		return max(0, age)
+	except ValueError:
+		return None
 
 
 def _tz_label(dt: datetime) -> str:
@@ -263,11 +260,8 @@ def _build_date_set(dt: datetime, prefix: str) -> dict[str, object]:
 		)
 		+ tz_suffix,
 		f"{prefix}_datetime_short": dt.strftime("%Y-%m-%d %H:%M") + tz_suffix,
-		f"{prefix}_timezone": tz_label or _NA,
+		f"{prefix}_timezone": tz_label or None,
 	}
-
-
-_NA = "N/A"
 
 
 def _tz_display(dt: datetime) -> dict[str, object]:
@@ -275,10 +269,10 @@ def _tz_display(dt: datetime) -> dict[str, object]:
 	tz = dt.tzinfo
 	if tz is None:
 		return {
-			"user_timezone": _NA,
-			"user_timezone_abbr": _NA,
-			"user_utc_offset": _NA,
-			"user_timezone_name": _NA,
+			"user_timezone": None,
+			"user_timezone_abbr": None,
+			"user_utc_offset": None,
+			"user_timezone_name": None,
 		}
 	offset = dt.utcoffset()
 	if offset is not None:
@@ -288,10 +282,10 @@ def _tz_display(dt: datetime) -> dict[str, object]:
 		minutes = remainder // 60
 		utc_offset = f"UTC{sign}{hours:02d}:{minutes:02d}"
 	else:
-		utc_offset = _NA
+		utc_offset = None
 
 	tz_name = str(tz)
-	tz_abbr = dt.strftime("%Z") or _NA
+	tz_abbr = dt.strftime("%Z") or None
 
 	return {
 		"user_timezone": tz_name,
@@ -328,10 +322,10 @@ def _build_date_variables(
 		variables.update(_build_date_set(utc_now, "current"))
 		variables.update(
 			{
-				"user_timezone": _NA,
-				"user_timezone_abbr": _NA,
-				"user_utc_offset": _NA,
-				"user_timezone_name": _NA,
+				"user_timezone": None,
+				"user_timezone_abbr": None,
+				"user_utc_offset": None,
+				"user_timezone_name": None,
 			}
 		)
 
@@ -350,12 +344,12 @@ def _build_location_variables(
 		return {
 			"client_latitude": str(client_context.latitude),
 			"client_longitude": str(client_context.longitude),
-			"client_location": client_context.location_label or _NA,
+			"client_location": client_context.location_label or None,
 		}
 	return {
-		"client_latitude": _NA,
-		"client_longitude": _NA,
-		"client_location": _NA,
+		"client_latitude": None,
+		"client_longitude": None,
+		"client_location": None,
 	}
 
 
@@ -390,134 +384,49 @@ def build_prompt_variables(
 	now = _resolve_now(client_context)
 	variables: dict[str, object] = _build_date_variables(client_context)
 
-	gamepads: object = _NA
-	if client_context and client_context.gamepads:
-		gamepads = ", ".join(client_context.gamepads)
+	# helper: extract attribute from client context, defaulting to None.
+	def _ctx(attr: str) -> object:
+		if client_context is None:
+			return None
+		return getattr(client_context, attr, None)
+
+	gamepads = (
+		", ".join(client_context.gamepads)
+		if client_context and client_context.gamepads
+		else None
+	)
 
 	# client context variables
 	variables.update(
 		{
-			"client_timezone": (
-				client_context.timezone
-				if client_context and client_context.timezone
-				else _NA
-			),
-			"client_language": (
-				client_context.language
-				if client_context and client_context.language
-				else _NA
-			),
-			"client_os": (
-				client_context.os if client_context and client_context.os else _NA
-			),
-			"client_browser": (
-				client_context.browser
-				if client_context and client_context.browser
-				else _NA
-			),
-			"client_is_mobile": (
-				client_context.is_mobile
-				if client_context and client_context.is_mobile is not None
-				else _NA
-			),
-			"client_pwa_installed": (
-				client_context.pwa_installed
-				if client_context and client_context.pwa_installed is not None
-				else _NA
-			),
-			"client_user_agent": (
-				client_context.user_agent
-				if client_context and client_context.user_agent
-				else _NA
-			),
-			"client_offline": (
-				client_context.offline
-				if client_context and client_context.offline is not None
-				else _NA
-			),
-			"client_display_mode": (
-				client_context.display_mode
-				if client_context and client_context.display_mode
-				else _NA
-			),
-			"client_preferred_color_scheme": (
-				client_context.preferred_color_scheme
-				if client_context and client_context.preferred_color_scheme
-				else _NA
-			),
-			"client_prefers_reduced_motion": (
-				client_context.prefers_reduced_motion
-				if client_context and client_context.prefers_reduced_motion is not None
-				else _NA
-			),
-			"client_prefers_contrast": (
-				client_context.prefers_contrast
-				if client_context and client_context.prefers_contrast
-				else _NA
-			),
-			"client_idle_state": (
-				client_context.idle_state
-				if client_context and client_context.idle_state
-				else _NA
-			),
-			"client_gamepad_count": (
-				client_context.gamepad_count
-				if client_context and client_context.gamepad_count is not None
-				else _NA
-			),
+			"client_timezone": _ctx("timezone"),
+			"client_language": _ctx("language"),
+			"client_os": _ctx("os"),
+			"client_browser": _ctx("browser"),
+			"client_is_mobile": _ctx("is_mobile"),
+			"client_pwa_installed": _ctx("pwa_installed"),
+			"client_user_agent": _ctx("user_agent"),
+			"client_offline": _ctx("offline"),
+			"client_display_mode": _ctx("display_mode"),
+			"client_preferred_color_scheme": _ctx("preferred_color_scheme"),
+			"client_prefers_reduced_motion": _ctx("prefers_reduced_motion"),
+			"client_prefers_contrast": _ctx("prefers_contrast"),
+			"client_idle_state": _ctx("idle_state"),
+			"client_gamepad_count": _ctx("gamepad_count"),
 			"client_gamepads": gamepads,
-			"client_connection_type": (
-				client_context.connection_type
-				if client_context and client_context.connection_type
-				else _NA
+			"client_connection_type": _ctx("connection_type"),
+			"client_connection_effective_type": _ctx("connection_effective_type"),
+			"client_connection_downlink_mbps": _ctx("connection_downlink_mbps"),
+			"client_connection_rtt_ms": _ctx("connection_rtt_ms"),
+			"client_connection_save_data": _ctx("connection_save_data"),
+			"client_battery_supported": _ctx("battery_supported"),
+			"client_battery_charging": _ctx("battery_charging"),
+			"client_battery_level": _ctx("battery_level"),
+			"client_battery_charging_time_seconds": _ctx(
+				"battery_charging_time_seconds"
 			),
-			"client_connection_effective_type": (
-				client_context.connection_effective_type
-				if client_context and client_context.connection_effective_type
-				else _NA
-			),
-			"client_connection_downlink_mbps": (
-				client_context.connection_downlink_mbps
-				if client_context
-				and client_context.connection_downlink_mbps is not None
-				else _NA
-			),
-			"client_connection_rtt_ms": (
-				client_context.connection_rtt_ms
-				if client_context and client_context.connection_rtt_ms is not None
-				else _NA
-			),
-			"client_connection_save_data": (
-				client_context.connection_save_data
-				if client_context and client_context.connection_save_data is not None
-				else _NA
-			),
-			"client_battery_supported": (
-				client_context.battery_supported
-				if client_context and client_context.battery_supported is not None
-				else _NA
-			),
-			"client_battery_charging": (
-				client_context.battery_charging
-				if client_context and client_context.battery_charging is not None
-				else _NA
-			),
-			"client_battery_level": (
-				client_context.battery_level
-				if client_context and client_context.battery_level is not None
-				else _NA
-			),
-			"client_battery_charging_time_seconds": (
-				client_context.battery_charging_time_seconds
-				if client_context
-				and client_context.battery_charging_time_seconds is not None
-				else _NA
-			),
-			"client_battery_discharging_time_seconds": (
-				client_context.battery_discharging_time_seconds
-				if client_context
-				and client_context.battery_discharging_time_seconds is not None
-				else _NA
+			"client_battery_discharging_time_seconds": _ctx(
+				"battery_discharging_time_seconds"
 			),
 		}
 	)
@@ -528,41 +437,63 @@ def build_prompt_variables(
 	# filter injection sentinels - filters find-and-replace these at runtime.
 	# if the admin didn't include the variable in their prompt, the sentinel
 	# is absent and the filter skips all processing.
+	# user_memories and chat_context sentinels are set later, gated by prefs.
 	variables["referenced_attachments"] = SENTINEL_REFERENCED_ATTACHMENTS
-	variables["user_memories"] = SENTINEL_USER_MEMORIES
 	variables["chat_window_info"] = SENTINEL_CHAT_WINDOW_INFO
 
 	if user is None:
+		variables["user_memories"] = SENTINEL_USER_MEMORIES
+		variables["chat_context"] = SENTINEL_CHAT_CONTEXT
 		variables.update(
 			{
-				"user_name": _NA,
-				"user_email": _NA,
-				"user_bio": _NA,
-				"user_gender": _NA,
-				"user_birth_date": _NA,
-				"user_age": _NA,
-				"user_custom_instructions": _NA,
-				"ai_personality": _NA,
+				"user_name": None,
+				"user_email": None,
+				"user_bio": None,
+				"user_gender": None,
+				"user_birth_date": None,
+				"user_age": None,
+				"user_custom_instructions": None,
+				"ai_personality": None,
 			}
 		)
 		return variables
 
-	prefs = _parse_preferences(user)
-	account = prefs.account or AccountPreferences()
-	ai = prefs.ai or AIPreferences()
-	birth_date = account.birth_date or ""
+	prefs = user.prefs
+	ai = prefs.ai
+	account = prefs.account
+
+	# gate memories sentinel on user preference (default: enabled).
+	# when disabled, the sentinel is replaced with an empty string so the
+	# MemoryContextFilter sees nothing to inject into.
+	if ai and ai.memories_enabled is False:
+		variables["user_memories"] = ""
+	else:
+		variables["user_memories"] = SENTINEL_USER_MEMORIES
+
+	# gate chat context sentinel on user preference (default: enabled).
+	# chat_recall=False disables cross-chat context injection.
+	if ai and ai.chat_recall is False:
+		variables["chat_context"] = ""
+	else:
+		variables["chat_context"] = SENTINEL_CHAT_CONTEXT
+
+	birth_date = account.birth_date if account else None
 	age = _compute_age(birth_date, now)
 
 	variables.update(
 		{
 			"user_name": user.display_name or user.email.split("@")[0],
 			"user_email": user.email,
-			"user_bio": _resolve_bio(prefs) or _NA,
-			"user_gender": account.gender or _NA,
-			"user_birth_date": birth_date or _NA,
-			"user_age": age or _NA,
-			"user_custom_instructions": ai.custom_instructions or _NA,
-			"ai_personality": ai.personality or _NA,
+			"user_bio": _resolve_bio(
+				ai.bio if ai else None,
+				account.bio if account else None,
+				use_account_bio=bool(ai and ai.use_account_bio),
+			),
+			"user_gender": account.gender if account else None,
+			"user_birth_date": birth_date,
+			"user_age": age,
+			"user_custom_instructions": ai.custom_instructions if ai else None,
+			"ai_personality": ai.personality if ai else None,
 		}
 	)
 

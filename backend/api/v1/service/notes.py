@@ -361,22 +361,22 @@ async def _autocomplete_notes(
 
 
 async def _hybrid_search_notes(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> list[SearchResultItem]:
 	"""qdrant hybrid search for notes (dense + BM25, RRF fusion)."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_text = query if isinstance(query, str) else None
 	query_emb = (
-		query
-		if isinstance(query, list)
-		else (await embed_text(text=query, session=db) if need_dense else None)
+		query_embedding
+		if query_embedding is not None
+		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
 	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
@@ -429,19 +429,19 @@ async def _hybrid_search_notes(
 
 
 async def search_notes(
-	query: str | list[float],
+	query_text: str,
 	db: AsyncSession,
 	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,
 	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
 ) -> CursorPage[SearchResultItem]:
 	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
 	params = search_params or SearchParams()
-	query_text = query if isinstance(query, str) else None
 	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
-	run_autocomplete = query_text is not None and params.mode in (
+	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
 	)
@@ -457,15 +457,15 @@ async def search_notes(
 	async def _run_hybrid() -> list[SearchResultItem]:
 		async with session_scope(None) as s:
 			return await _hybrid_search_notes(
-				query,
+				query_text,
 				s,
 				principal=principal,
 				limit=limit + 1,
 				search_params=params,
+				query_embedding=query_embedding,
 			)
 
 	async def _run_autocomplete() -> list[SearchResultItem]:
-		assert query_text is not None
 		async with session_scope(None) as s:
 			return await _autocomplete_notes(
 				query_text,
@@ -477,7 +477,7 @@ async def search_notes(
 	# hybrid first - wins on deduplication (higher quality than autocomplete)
 	if run_hybrid:
 		coros.append(_run_hybrid())
-	if run_autocomplete and query_text is not None:
+	if run_autocomplete:
 		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
 	items = vectorstore_service.merge_deduplicate(

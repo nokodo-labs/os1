@@ -36,8 +36,12 @@
 		memoryTopK?: string
 		memoryMessagesToConsider?: string
 		// chat context
+		chatContextEnabled?: boolean
 		chatContextMode?: ChatContextMode
 		chatContextTopK?: string
+		chatContextSimilarityThreshold?: string
+		// retrieval
+		retrievalPreBuild?: boolean
 		// tasks
 		taskDefaultModelId?: string
 		taskThreadMetadataModelId?: string
@@ -86,8 +90,11 @@
 		memorySimilarityThreshold = $bindable(''),
 		memoryTopK = $bindable(''),
 		memoryMessagesToConsider = $bindable(''),
+		chatContextEnabled = $bindable(true),
 		chatContextMode = $bindable('recent'),
 		chatContextTopK = $bindable(''),
+		chatContextSimilarityThreshold = $bindable(''),
+		retrievalPreBuild = $bindable(true),
 		taskDefaultModelId = $bindable(''),
 		taskThreadMetadataModelId = $bindable(''),
 		taskInputAutocompleteModelId = $bindable(''),
@@ -134,7 +141,7 @@
 
 <Card class="border-zinc-800 bg-zinc-900">
 	<CardHeader>
-		<CardTitle>ai</CardTitle>
+		<CardTitle>AI</CardTitle>
 		<CardDescription>agent defaults and behavior.</CardDescription>
 	</CardHeader>
 	<CardContent class="space-y-6">
@@ -288,8 +295,13 @@
 
 		<!-- chat context -->
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-			<p class="mb-1 text-sm font-medium">chat context</p>
-			<p class="mb-4 text-xs text-zinc-500">how prior chats are added to context.</p>
+			<div class="mb-4 flex items-center justify-between">
+				<div>
+					<p class="text-sm font-medium">chat context</p>
+					<p class="text-xs text-zinc-500">how prior chats are added to context.</p>
+				</div>
+				<Switch bind:checked={chatContextEnabled} />
+			</div>
 			<div class="grid gap-4 md:grid-cols-2">
 				<div class="space-y-2">
 					<Label for="ai_chat_mode">mode</Label>
@@ -323,6 +335,35 @@
 						class="rounded-xl"
 					/>
 				</div>
+				<div class="space-y-2">
+					<Label for="ai_chat_threshold">similarity threshold</Label>
+					<p class="text-xs text-zinc-500">
+						minimum score for vector results (0.0–1.0). lower = more results.
+					</p>
+					<Input
+						id="ai_chat_threshold"
+						type="number"
+						min="0"
+						max="1"
+						step="0.05"
+						bind:value={chatContextSimilarityThreshold}
+						class="rounded-xl"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<!-- retrieval -->
+		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+			<div class="flex items-center justify-between">
+				<div>
+					<p class="text-sm font-medium">pre-build retrieval query</p>
+					<p class="text-xs text-zinc-500">
+						embed the retrieval query once before filters run. disable to let each
+						filter build its own query on demand.
+					</p>
+				</div>
+				<Switch bind:checked={retrievalPreBuild} />
 			</div>
 		</div>
 

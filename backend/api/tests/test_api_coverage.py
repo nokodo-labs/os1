@@ -66,6 +66,11 @@ class _FakePrincipal:
 			return True
 		return permission == "any"
 
+	def has_default_access(
+		self, resource_type: object, required_level: object = None
+	) -> bool:
+		return self.is_admin
+
 
 class _FakeResult:
 	def __init__(self, value: object) -> None:
@@ -875,8 +880,9 @@ async def test_chat_runner_load_agent_not_found(
 		async def execute(self, *_args: object, **_kwargs: object) -> FakeResult:
 			return FakeResult()
 
+	principal = _FakePrincipal()  # type: ignore[arg-type]
 	with pytest.raises(HTTPException) as exc_info:
-		await chat_runner._load_agent(new_typeid("agent"), FakeSession())  # type: ignore[arg-type]
+		await chat_runner._load_agent(new_typeid("agent"), FakeSession(), principal)  # type: ignore[arg-type]
 
 	assert exc_info.value.status_code == 404
 
@@ -901,8 +907,9 @@ async def test_chat_runner_load_agent_no_model(monkeypatch: pytest.MonkeyPatch) 
 		async def execute(self, *_args: object, **_kwargs: object) -> FakeResult:
 			return FakeResult()
 
+	principal = _FakePrincipal()  # type: ignore[arg-type]
 	with pytest.raises(HTTPException) as exc_info:
-		await chat_runner._load_agent(new_typeid("agent"), FakeSession())  # type: ignore[arg-type]
+		await chat_runner._load_agent(new_typeid("agent"), FakeSession(), principal)  # type: ignore[arg-type]
 
 	assert exc_info.value.status_code == 400
 	# type: ignore[arg-type]

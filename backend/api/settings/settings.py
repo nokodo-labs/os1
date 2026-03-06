@@ -112,23 +112,31 @@ class AIMemorySettings(BaseModel):
 		ge=1,
 		description="number of relevant memories to retrieve",
 	)
-	messages_to_consider: int = Field(
-		default=4,
-		ge=1,
-		description="number of recent messages to consider when retrieving "
-		"relevant memories for the agent and for consolidation work",
-	)
 
 
 class AIChatContextSettings(BaseModel):
-	mode: Literal["recent", "relevant", "pinned"] = Field(
-		default="recent",
-		description="how chats are selected for Agent context enrichment",
+	enabled: bool = Field(
+		default=True,
+		description="enable cross-chat context enrichment",
+	)
+	mode: Literal["recent", "relevant"] = Field(
+		default="relevant",
+		description="how chats are selected for Agent context enrichment. "
+		"recent: top K by last_activity_at. "
+		"relevant: top K by semantic similarity to the current conversation.",
 	)
 	top_k: int = Field(
 		default=3,
 		ge=1,
 		description="number of chats to use for context enrichment",
+	)
+	similarity_threshold: float = Field(
+		default=0.65,
+		ge=0.0,
+		le=1.0,
+		description="similarity minimum threshold for chat context retrieval. "
+		"how similar a chat must be to be considered relevant. "
+		"0.0 = all chats, 1.0 = exact match",
 	)
 
 
@@ -383,6 +391,19 @@ class AISettings(BaseModel):
 	default_agent_ids: list[str] = Field(
 		default_factory=list,
 		description="ordered list of default agent ids (tried in order)",
+	)
+	retrieval_turns: int = Field(
+		default=3,
+		ge=1,
+		description="number of recent conversation turns to use when building "
+		"retrieval queries for memory and chat context enrichment. "
+		"a turn is a contiguous block of user or assistant messages.",
+	)
+	retrieval_pre_build: bool = Field(
+		default=True,
+		description="pre-build the retrieval query (text + embedding) in agents.py "
+		"before the filter loop. when disabled each filter builds its own query, "
+		"which avoids the upfront embed cost if no retrieval filter is active.",
 	)
 	memory: AIMemorySettings = Field(
 		default_factory=AIMemorySettings, description="AI memory settings"
