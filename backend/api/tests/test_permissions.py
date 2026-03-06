@@ -841,7 +841,6 @@ class TestGetEffectiveAccessLevel:
 
 	@pytest.mark.asyncio
 	async def test_group_rule_grants_access(self, db_session: AsyncSession) -> None:
-
 		owner = User(
 			email="grp-owner@example.com", username="grp_owner", hashed_password="pw"
 		)
@@ -1069,7 +1068,6 @@ class TestRolesService:
 	async def test_create_role_with_typed_permissions(
 		self, db_session: AsyncSession
 	) -> None:
-
 		admin_user = User(
 			email="role-admin@example.com",
 			username="role_admin",
@@ -1109,7 +1107,6 @@ class TestRolesService:
 	async def test_update_role_default_permissions(
 		self, db_session: AsyncSession
 	) -> None:
-
 		admin = User(
 			email="update-admin@example.com",
 			username="update_admin",
@@ -1154,7 +1151,6 @@ class TestRolesService:
 
 	@pytest.mark.asyncio
 	async def test_list_and_delete_roles(self, db_session: AsyncSession) -> None:
-
 		admin = User(
 			email="list-admin@example.com",
 			username="list_admin",

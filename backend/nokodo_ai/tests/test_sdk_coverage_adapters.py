@@ -337,7 +337,6 @@ def test_openai_chat_helpers_cover_branches(
 	monkeypatch: pytest.MonkeyPatch,
 	caplog: pytest.LogCaptureFixture,
 ) -> None:
-
 	# make isinstance checks accept our dummy tool call class
 	monkeypatch.setattr(
 		cc,
@@ -957,7 +956,6 @@ def test_openai_responses_input_happy_paths() -> None:
 async def test_openai_responses_streaming_tools_and_empty_text_delta(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	class _TextDeltaEvent:
 		def __init__(self, delta: str):
 			self.delta = delta
@@ -1010,7 +1008,6 @@ async def test_openai_responses_streaming_tools_and_empty_text_delta(
 async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallback(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	class _FunctionToolCall:
 		def __init__(self, call_id: str, name: str, arguments: str):
 			self.call_id = call_id
@@ -1071,7 +1068,6 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 async def test_anthropic_adapter_generate_once_and_streaming(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	# patch type checks to accept dummy event/block classes
 	class _TextBlock:
 		def __init__(self, text: str):

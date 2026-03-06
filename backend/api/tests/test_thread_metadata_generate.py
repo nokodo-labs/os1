@@ -27,7 +27,6 @@ async def test_generate_thread_metadata_fills_missing(
 	) -> dict[str, object]:
 		return {"title": "🔧 fix login", "tags": ["auth", "bug"]}
 
-
 	monkeypatch.setattr(
 		thread_service,
 		"resolve_task_chat_model",
@@ -83,7 +82,6 @@ async def test_generate_thread_metadata_does_not_replace_when_fill_missing(
 		*_args: object, **_kwargs: object
 	) -> dict[str, object]:
 		return {"title": "🧠 new title", "tags": ["new"]}
-
 
 	monkeypatch.setattr(
 		thread_service,
@@ -147,7 +145,6 @@ async def test_generate_thread_metadata_replaces_when_replace_true(
 		*_args: object, **_kwargs: object
 	) -> dict[str, object]:
 		return {"title": "🧠 new title", "tags": ["new"]}
-
 
 	monkeypatch.setattr(
 		thread_service,

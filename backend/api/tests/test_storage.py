@@ -326,7 +326,6 @@ class TestStorageRegistry:
 
 	@pytest.fixture(autouse=True)
 	def _isolate(self) -> Generator[None]:
-
 		saved = dict(_BACKENDS)
 		_BACKENDS.clear()
 		try:

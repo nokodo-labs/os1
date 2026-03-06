@@ -123,7 +123,6 @@ async def test_update_agent(db_session: AsyncSession) -> None:
 		principal=principal,
 	)
 
-
 	update_in = AgentUpdate(description="Updated description")
 	updated = await agent_service.update_agent(
 		agent.id,
@@ -150,7 +149,6 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 	)
 
 	await agent_service.delete_agent(agent.id, db_session, principal=principal)
-
 
 	with pytest.raises(HTTPException) as exc:
 		await agent_service.get_agent(agent.id, db_session, principal=principal)

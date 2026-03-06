@@ -33,7 +33,6 @@ _admin = _FakePrincipal()
 def test_list_native_description_fallbacks(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	class DocFilter:
 		"""first line doc."""
 
@@ -89,7 +88,6 @@ def test_list_native_description_fallbacks(
 
 
 def test_list_native_type_filter(monkeypatch: pytest.MonkeyPatch) -> None:
-
 	monkeypatch.setattr(
 		plugin_service,
 		"TOOL_REGISTRY",
@@ -112,7 +110,6 @@ def test_list_native_type_filter(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_native_variants(monkeypatch: pytest.MonkeyPatch) -> None:
-
 	class DocFilter:
 		"""doc filter."""
 
@@ -204,7 +201,6 @@ def test_get_native_variants(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_is_native_name_collision(monkeypatch: pytest.MonkeyPatch) -> None:
-
 	monkeypatch.setattr(
 		plugin_service,
 		"get_tool_names",
@@ -221,7 +217,6 @@ def test_is_native_name_collision(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_list_plugins_with_native_filters_db_by_type(
 	db_session: AsyncSession,
 ) -> None:
-
 	await plugin_service.create_plugin(
 		PluginCreate(
 			name="db-tool",
@@ -263,7 +258,6 @@ async def test_list_plugins_with_native_merges_db_plugins(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	monkeypatch.setattr(plugin_service, "TOOL_REGISTRY", {})
 	monkeypatch.setattr(plugin_service, "FILTER_REGISTRY", {})
 	monkeypatch.setattr(plugin_service, "HOOK_REGISTRY", {})

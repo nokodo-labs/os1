@@ -125,7 +125,6 @@ def test_events_stream_ping(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_events_stream_loop_disconnect_and_finally(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	async def _ok(_websocket: WebSocket) -> SimpleNamespace:
 		return SimpleNamespace(id="user_1", is_active=True)
 
@@ -176,7 +175,6 @@ async def test_events_stream_origin_rejected(
 async def test_events_stream_unauthorized_closes_and_returns(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	async def _nope(_websocket: WebSocket) -> None:
 		return None
 
@@ -195,7 +193,6 @@ async def test_events_stream_unauthorized_closes_and_returns(
 async def test_events_stream_exception_path_still_disconnects(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	async def _ok(_websocket: WebSocket) -> SimpleNamespace:
 		return SimpleNamespace(id="user_1", is_active=True)
 
@@ -237,7 +234,6 @@ class _AsyncSessionFactory:
 
 @pytest.mark.asyncio
 async def test_authenticate_websocket_cookie_returns_none_without_cookie() -> None:
-
 	ws = _FakeWebSocket([], cookies={})
 	assert (
 		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
@@ -248,7 +244,6 @@ async def test_authenticate_websocket_cookie_returns_none_without_cookie() -> No
 async def test_authenticate_websocket_cookie_decode_error_returns_none(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _boom(*_args: object, **_kwargs: object) -> None:
 		raise JoseError("bad token")
 
@@ -263,7 +258,6 @@ async def test_authenticate_websocket_cookie_decode_error_returns_none(
 async def test_authenticate_websocket_cookie_wrong_type_returns_none(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"sub": "user_123", "typ": "access"}  # Not a refresh token
 
@@ -278,7 +272,6 @@ async def test_authenticate_websocket_cookie_wrong_type_returns_none(
 async def test_authenticate_websocket_cookie_missing_sub_returns_none(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"typ": "refresh", "no_sub": "x"}
 
@@ -294,7 +287,6 @@ async def test_authenticate_websocket_cookie_user_not_found_returns_none(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	monkeypatch.setattr(
 		auth_service, "AsyncSessionLocal", _AsyncSessionFactory(db_session)
 	)
@@ -314,7 +306,6 @@ async def test_authenticate_websocket_cookie_inactive_user_returns_none(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	inactive = User(
 		email="inactive@example.com",
 		username="inactive_ws",
@@ -346,7 +337,6 @@ async def test_authenticate_websocket_cookie_active_user_is_returned(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	monkeypatch.setattr(
 		auth_service, "AsyncSessionLocal", _AsyncSessionFactory(db_session)
 	)

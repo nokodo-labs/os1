@@ -94,9 +94,7 @@ class FileResolveFilter(Filter):
 					continue
 
 				try:
-					b64 = await resolve_file_data(
-						file_id, session, principal=principal
-					)
+					b64 = await resolve_file_data(file_id, session, principal=principal)
 					if b64:
 						new_parts[part_idx] = part.model_copy(update={"base64": b64})
 						msg_changed = True

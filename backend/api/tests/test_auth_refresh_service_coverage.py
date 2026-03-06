@@ -18,7 +18,6 @@ async def test_refresh_token_for_user_decode_error_raises_401(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _boom(*_args: object, **_kwargs: object) -> None:
 		raise JoseError("bad")
 
@@ -35,7 +34,6 @@ async def test_refresh_token_for_user_rejects_non_refresh_token(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"sub": new_typeid("user"), "typ": "access"}
 
@@ -51,7 +49,6 @@ async def test_refresh_token_for_user_rejects_missing_sub(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"typ": "refresh"}
 
@@ -67,7 +64,6 @@ async def test_refresh_token_for_user_rejects_bad_sub_prefix(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
 		return {"sub": "not-a-typeid", "typ": "refresh"}
 
@@ -82,7 +78,6 @@ async def test_refresh_token_for_user_rejects_bad_sub_prefix(
 async def test_refresh_token_for_user_signals_clear_cookie_for_missing_user(
 	db_session: AsyncSession,
 ) -> None:
-
 	missing_user_id = new_typeid("user")
 	refresh_token = create_jwt_token(
 		subject=missing_user_id,

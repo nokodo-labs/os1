@@ -429,8 +429,7 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 					parsed = json.loads(text)
 					if isinstance(parsed, dict):
 						non_text = [
-							p for p in msg.content
-							if not isinstance(p, TextContent)
+							p for p in msg.content if not isinstance(p, TextContent)
 						]
 						msg = msg.model_copy(
 							update={"content": [JsonContent(data=parsed)] + non_text}

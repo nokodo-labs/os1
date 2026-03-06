@@ -84,7 +84,6 @@ def test_types_compatible_branches() -> None:
 	assert types_compatible(list[int], dict[str, int]) is False
 	assert types_compatible(bool, int)
 
-
 	class _BoomMeta(ABCMeta):
 		def __subclasscheck__(cls: type, subclass: type) -> bool:
 			raise TypeError("boom")
