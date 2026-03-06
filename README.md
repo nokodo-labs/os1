@@ -5,10 +5,10 @@
 
 **the AI workspace you actually want to use**
 
-[![License](https://img.shields.io/github/license/nokodo-labs/nokodo-ai)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/nokodo-labs/nokodo-ai?style=social)](https://github.com/nokodo-labs/nokodo-ai/stargazers)
+[![License](https://img.shields.io/github/license/nokodo-labs/os1)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2)](DISCORD_INVITE_LINK_HERE)
-[![Issues](https://img.shields.io/github/issues/nokodo-labs/nokodo-ai)](https://github.com/nokodo-labs/nokodo-ai/issues)
+[![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
 
 </div>
 
