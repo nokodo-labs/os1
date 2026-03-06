@@ -33,9 +33,9 @@ engine = create_async_engine(
 	pool_pre_ping=True,
 )
 
-# Async session factory - accessed via AsyncSessionLocal() so that test
+# Async session factory - accessed via async_session_local() so that test
 # fixtures can swap it at runtime and all consumers (even those that did
-# ``from api.database import AsyncSessionLocal``) pick up the change.
+# ``from api.database import async_session_local``) pick up the change.
 _async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 	engine,
 	class_=AsyncSession,
@@ -45,7 +45,7 @@ _async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 )
 
 
-def AsyncSessionLocal() -> AsyncSession:
+def async_session_local() -> AsyncSession:
 	"""return a new async session from the current factory."""
 	return _async_session_factory()
 
@@ -62,7 +62,7 @@ async def session_scope(
 	if session is not None:
 		yield session
 	else:
-		async with AsyncSessionLocal() as new_session:
+		async with async_session_local() as new_session:
 			yield new_session
 
 
@@ -89,7 +89,7 @@ def _soft_delete_default_criteria(execute_state: Any) -> None:
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
 	"""Dependency for getting database sessions."""
-	async with AsyncSessionLocal() as session:
+	async with async_session_local() as session:
 		try:
 			yield session
 			await session.commit()

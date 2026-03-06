@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.constants import API_V1_MOUNT_PATH
-from api.database import AsyncSessionLocal, get_db
+from api.database import async_session_local, get_db
 from api.models.access_rule import AccessLevel
 from api.models.group import GroupMembership
 from api.models.user import User
@@ -90,7 +90,7 @@ async def authenticate_websocket_refresh_cookie(websocket: WebSocket) -> User | 
 	except (JoseError, ValueError):
 		return None
 
-	async with AsyncSessionLocal() as session:
+	async with async_session_local() as session:
 		result = await session.execute(
 			select(User).options(selectinload(User.roles)).where(User.id == user_id)
 		)

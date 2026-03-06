@@ -288,7 +288,7 @@ async def test_authenticate_websocket_cookie_user_not_found_returns_none(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	monkeypatch.setattr(
-		auth_service, "AsyncSessionLocal", _AsyncSessionFactory(db_session)
+		auth_service, "async_session_local", _AsyncSessionFactory(db_session)
 	)
 
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
@@ -318,7 +318,7 @@ async def test_authenticate_websocket_cookie_inactive_user_returns_none(
 	await db_session.refresh(inactive)
 
 	monkeypatch.setattr(
-		auth_service, "AsyncSessionLocal", _AsyncSessionFactory(db_session)
+		auth_service, "async_session_local", _AsyncSessionFactory(db_session)
 	)
 
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
@@ -338,7 +338,7 @@ async def test_authenticate_websocket_cookie_active_user_is_returned(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	monkeypatch.setattr(
-		auth_service, "AsyncSessionLocal", _AsyncSessionFactory(db_session)
+		auth_service, "async_session_local", _AsyncSessionFactory(db_session)
 	)
 
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:

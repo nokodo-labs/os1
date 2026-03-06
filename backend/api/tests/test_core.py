@@ -119,7 +119,7 @@ async def test_get_db_commits_and_closes(monkeypatch: pytest.MonkeyPatch) -> Non
 	session = _DummySession()
 	monkeypatch.setattr(
 		database_module,
-		"AsyncSessionLocal",
+		"async_session_local",
 		lambda: _DummySessionContext(session),
 	)
 
@@ -139,7 +139,7 @@ async def test_get_db_rolls_back_on_error(monkeypatch: pytest.MonkeyPatch) -> No
 	session = _DummySession()
 	monkeypatch.setattr(
 		database_module,
-		"AsyncSessionLocal",
+		"async_session_local",
 		lambda: _DummySessionContext(session),
 	)
 
@@ -279,7 +279,7 @@ async def test_get_db_rolls_back_on_commit_error(
 
 	monkeypatch.setattr(
 		database_module,
-		"AsyncSessionLocal",
+		"async_session_local",
 		lambda: _DummySessionContext(session),
 	)
 

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
 from api.models.event import Event
@@ -214,7 +214,7 @@ async def run_agent(
 	run_id = new_typeid("run")
 	run_id_str = str(run_id)
 
-	async with AsyncSessionLocal() as session:
+	async with async_session_local() as session:
 		initial_parent_id: TypeID | None = None
 
 		# resolve structured input to content parts
@@ -304,7 +304,7 @@ async def run_agent(
 					return
 				message_id_str, sdk_msg = item
 				try:
-					async with AsyncSessionLocal() as bg_session:
+					async with async_session_local() as bg_session:
 						create_in = MessageCreate.from_sdk_message(
 							sdk_msg,
 							sender_agent_id=agent_id,

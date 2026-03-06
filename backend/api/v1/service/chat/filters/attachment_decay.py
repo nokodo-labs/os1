@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import Field
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.agent import Agent
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -333,7 +333,7 @@ async def _fetch_model_input_modalities(
 		return None
 
 	try:
-		async with AsyncSessionLocal() as session:
+		async with async_session_local() as session:
 			agent = await session.get(Agent, str(agent_id))
 			if agent is None or agent.model_id is None:
 				return None

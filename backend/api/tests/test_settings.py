@@ -41,7 +41,7 @@ def test_settings_reload_updates_imported_singleton(
 	def _boom() -> Any:
 		raise RuntimeError("no db")
 
-	monkeypatch.setattr(settings_db, "AsyncSessionLocal", _boom)
+	monkeypatch.setattr(settings_db, "async_session_local", _boom)
 
 	try:
 		monkeypatch.setenv("NOKODO__BRANDING__SITE_NAME", "reload_test_1")
@@ -161,7 +161,7 @@ async def test_db_settings_source_loads_overrides_sync_and_excludes_write_locked
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	test_session_local = _make_test_session_local(db_session)
-	monkeypatch.setattr(settings_db, "AsyncSessionLocal", test_session_local)
+	monkeypatch.setattr(settings_db, "async_session_local", test_session_local)
 
 	db_session.add(
 		SettingsDocument(
@@ -190,7 +190,7 @@ async def test_db_settings_source_loads_overrides_inside_running_loop(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	test_session_local = _make_test_session_local(db_session)
-	monkeypatch.setattr(settings_db, "AsyncSessionLocal", test_session_local)
+	monkeypatch.setattr(settings_db, "async_session_local", test_session_local)
 
 	db_session.add(
 		SettingsDocument(
@@ -278,7 +278,7 @@ def test_db_overrides_filters_invalid_sections_and_non_models(
 	def fake_session_local() -> FakeSession:
 		return FakeSession()
 
-	monkeypatch.setattr(settings_db, "AsyncSessionLocal", fake_session_local)
+	monkeypatch.setattr(settings_db, "async_session_local", fake_session_local)
 	assert settings_db._load_db_overrides(DummySettings) == {
 		"branding": {"site_name": "ok"}
 	}
@@ -298,5 +298,5 @@ def test_db_settings_source_returns_empty_on_error(
 	def _boom() -> Any:
 		raise RuntimeError("db down")
 
-	monkeypatch.setattr(settings_db, "AsyncSessionLocal", _boom)
+	monkeypatch.setattr(settings_db, "async_session_local", _boom)
 	assert settings_db._load_db_overrides(Settings) == {}

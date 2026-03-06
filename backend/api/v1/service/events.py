@@ -21,7 +21,7 @@ from fastapi import Header, HTTPException, WebSocket, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
@@ -160,7 +160,7 @@ async def _resolve_recipient_ids(
 	if not routing:
 		return None
 	resource_type, resource_id = routing
-	async with AsyncSessionLocal() as session:
+	async with async_session_local() as session:
 		return await list_accessible_user_ids(resource_type, resource_id, session)
 
 
@@ -265,7 +265,7 @@ def build_event_emitter(
 			resource_type, resource_id = routing
 			cache_key = f"{resource_type.value}:{resource_id}"
 			if cache_key not in _recipient_cache:
-				async with AsyncSessionLocal() as read_session:
+				async with async_session_local() as read_session:
 					_recipient_cache[cache_key] = await list_accessible_user_ids(
 						resource_type,
 						resource_id,
@@ -320,7 +320,7 @@ def build_event_emitter(
 				project_id=event.project_id,
 				metadata_=event.metadata_,
 			)
-			async with AsyncSessionLocal() as bg_session:
+			async with async_session_local() as bg_session:
 				bg_session.add(copy)
 				await bg_session.commit()
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database import AsyncSessionLocal, get_db
+from api.database import async_session_local, get_db
 from api.logging import get_logger
 from api.models.event import Event, EventScope
 from api.models.user import User
@@ -122,7 +122,7 @@ async def events_stream(websocket: WebSocket) -> None:
 				if not thread_id:
 					continue
 				# delegate to threads service (participant-scoped broadcast)
-				async with AsyncSessionLocal() as db_session:
+				async with async_session_local() as db_session:
 					await thread_service.handle_typing_event(
 						session=db_session,
 						user_id=user_id,
@@ -188,7 +188,7 @@ async def events_stream(websocket: WebSocket) -> None:
 		# persist last_active_at to DB when user fully disconnects
 		if not await user_activity_store.is_active(user_id):
 			try:
-				async with AsyncSessionLocal() as db_session:
+				async with async_session_local() as db_session:
 					await db_session.execute(
 						update(User)
 						.where(User.id == user_id)

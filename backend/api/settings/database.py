@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from pydantic_settings import PydanticBaseSettingsSource
 from sqlalchemy import select
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.setting import SettingsDocument
 
 
@@ -34,7 +34,7 @@ def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any
 
 	async def fetch() -> dict[str, dict[str, Any]]:
 		try:
-			async with AsyncSessionLocal() as db:
+			async with async_session_local() as db:
 				result = await db.execute(select(SettingsDocument))
 				docs = result.scalars().all()
 		except Exception:

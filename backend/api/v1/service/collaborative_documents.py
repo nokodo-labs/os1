@@ -11,7 +11,7 @@ import base64
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.logging import get_logger
 from api.permissions import ResourceType
 from api.v1.service import events as event_service
@@ -83,7 +83,7 @@ async def handle_join(
 		return DocError(error="invalid document_id format")
 
 	resource_type, resource_id = parsed
-	async with AsyncSessionLocal() as db_session:
+	async with async_session_local() as db_session:
 		accessible = await list_accessible_user_ids(
 			resource_type,
 			resource_id,

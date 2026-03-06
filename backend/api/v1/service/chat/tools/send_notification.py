@@ -6,7 +6,7 @@ import logging
 
 from pydantic import Field
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
@@ -100,7 +100,7 @@ class SendNotificationTool(Tool[AppContext]):
 		# use an isolated session to avoid dirtying the shared request session.
 		# if any DB operation fails, only this session is affected.
 		try:
-			async with AsyncSessionLocal() as tool_session:
+			async with async_session_local() as tool_session:
 				if target_user_id:
 					target_user_ids = [str(target_user_id)]
 				elif ctx.thread_id is not None:

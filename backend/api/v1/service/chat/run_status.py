@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.permissions import ResourceType
 from api.v1.service.authorization import list_accessible_user_ids
 from nokodo_ai.utils.sse import sse_encode
@@ -375,7 +375,7 @@ async def get_active_runs_signal(user_id: str) -> dict[str, Any] | None:
 
 	# resolve which of those threads the user can access
 	accessible_threads: set[str] = set()
-	async with AsyncSessionLocal() as db_session:
+	async with async_session_local() as db_session:
 		for tid in unique_thread_ids:
 			user_ids = await list_accessible_user_ids(
 				ResourceType.THREAD, tid, db_session

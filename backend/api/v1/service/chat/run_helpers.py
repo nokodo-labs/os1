@@ -10,7 +10,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.agent import Agent as AgentORM
 from api.models.event_types import EventType
 from api.models.message import Message as MessageORM
@@ -83,7 +83,7 @@ async def broadcast_run_event(
 		},
 	}
 
-	async with AsyncSessionLocal() as db_session:
+	async with async_session_local() as db_session:
 		recipient_ids = await list_accessible_user_ids(
 			ResourceType.THREAD, thread_id, db_session
 		)

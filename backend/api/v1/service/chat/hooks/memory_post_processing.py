@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database import AsyncSessionLocal
+from api.database import async_session_local
 from api.models.memory import Memory
 from api.schemas.memory import MemoryUpdate
 from api.tasks import create_background_task
@@ -136,7 +136,7 @@ class MemoryPostProcessingHook(Hook):
 	) -> None:
 		"""background task: fetch memories and run LLM."""
 		try:
-			async with AsyncSessionLocal() as session:
+			async with async_session_local() as session:
 				memories = await self._fetch_recent_memories(user_id, session)
 				if not memories:
 					return

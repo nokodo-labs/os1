@@ -232,7 +232,7 @@ class TestSummarizeMessages:
 
 	@pytest.mark.asyncio()
 	async def test_creates_session_when_none(self) -> None:
-		"""when session is None, creates one via AsyncSessionLocal."""
+		"""when session is None, creates one via async_session_local."""
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
 		mock_response.text = "summary text"
@@ -388,7 +388,7 @@ class TestCondenseSummaries:
 
 	@pytest.mark.asyncio()
 	async def test_creates_session_when_none(self) -> None:
-		"""when session is None, creates one via AsyncSessionLocal."""
+		"""when session is None, creates one via async_session_local."""
 		existing = [
 			_mock_summary(id_="tsum_1", content="part a"),
 			_mock_summary(id_="tsum_2", content="part b"),
