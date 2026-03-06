@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
       - qdrant_data:/qdrant/storage
 
   backend:
-    image: ghcr.io/nokodo-labs/nokodo-ai-backend:latest
+    image: ghcr.io/nokodo-labs/os1-backend:latest
     container_name: nokodo-ai-prod-backend
     restart: unless-stopped
     ports:
@@ -50,7 +50,7 @@ services:
       - ../backend/data:/app/data
 
   frontend:
-    image: ghcr.io/nokodo-labs/nokodo-ai-frontend:latest
+    image: ghcr.io/nokodo-labs/os1-frontend:latest
     container_name: nokodo-ai-prod-frontend
     restart: unless-stopped
     ports:
@@ -60,7 +60,7 @@ services:
         condition: service_started
 
   console:
-    image: ghcr.io/nokodo-labs/nokodo-ai-console:latest
+    image: ghcr.io/nokodo-labs/os1-console:latest
     container_name: nokodo-ai-prod-console
     restart: unless-stopped
     ports:

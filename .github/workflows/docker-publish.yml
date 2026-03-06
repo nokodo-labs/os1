@@ -1,4 +1,4 @@
-name: build and publish Docker image
+name: build and publish Docker images
 
 on:
   workflow_call:
@@ -16,13 +16,13 @@ on:
         default: "test-release"
       python-version:
         type: string
-        description: "Python version to use for the workflow"
+        description: "Python version to use for the backend build"
         required: false
         default: ""
 
 jobs:
   build-and-push:
-    name: build and push container image
+    name: build and push container images
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -34,24 +34,14 @@ jobs:
       - name: set Python version
         id: set_python_version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            if [ -n "${{ github.event.inputs.python-version }}" ]; then
-              echo "PYTHON_VERSION=${{ github.event.inputs.python-version }}" >> $GITHUB_OUTPUT
-            elif [ -f backend/.python-version ]; then
-              ver=$(cat backend/.python-version | tr -d '\r' | head -n1)
-              echo "PYTHON_VERSION=$ver" >> $GITHUB_OUTPUT
-            else
-              echo "error: backend/.python-version not found and no input provided" >&2
-              exit 1
-            fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.python-version }}" ]; then
+            echo "PYTHON_VERSION=${{ github.event.inputs.python-version }}" >> $GITHUB_OUTPUT
+          elif [ -f backend/.python-version ]; then
+            ver=$(cat backend/.python-version | tr -d '\r' | head -n1)
+            echo "PYTHON_VERSION=$ver" >> $GITHUB_OUTPUT
           else
-            if [ -f backend/.python-version ]; then
-              ver=$(cat backend/.python-version | tr -d '\r' | head -n1)
-              echo "PYTHON_VERSION=$ver" >> $GITHUB_OUTPUT
-            else
-              echo "error: backend/.python-version not found" >&2
-              exit 1
-            fi
+            echo "error: backend/.python-version not found and no input provided" >&2
+            exit 1
           fi
 
       - name: set branch and commit info
@@ -61,14 +51,10 @@ jobs:
             echo "BRANCH_NAME=manual" >> $GITHUB_OUTPUT
             echo "COMMIT_SHA=manual" >> $GITHUB_OUTPUT
           else
-            # Use GitHub context directly
             echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
             short_sha="${{ github.sha }}"
             echo "COMMIT_SHA=${short_sha:0:7}" >> $GITHUB_OUTPUT
           fi
-
-      - name: build image
-        run: docker build backend --file .docker/Dockerfile.backend --tag ${{ github.event.repository.name }} --build-arg PYTHON_VERSION=${{ steps.set_python_version.outputs.PYTHON_VERSION }}
 
       - name: log in to GHCR
         uses: docker/login-action@v3
@@ -77,59 +63,95 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: set image name
-        id: set_image_name
+      - name: set base image registry
+        id: set_registry
         run: |
-          IMAGE_ID=ghcr.io/${{ github.repository }}
-          echo "IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')" >> $GITHUB_OUTPUT
+          BASE=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
+          echo "BASE=$BASE" >> $GITHUB_OUTPUT
 
-      - name: determine Docker tags
+      - name: determine tags suffix list
         id: determine_tags
         run: |
           BRANCH_NAME="${{ steps.set_branch_info.outputs.BRANCH_NAME }}"
           COMMIT_SHA="${{ steps.set_branch_info.outputs.COMMIT_SHA }}"
           RELEASE_VERSION="${{ inputs.release_version }}"
 
-          TAGS=""
+          # build a space-separated list of tag suffixes (applied to each service image)
+          SUFFIXES=""
 
-          # Always tag with commit SHA (except manual)
           if [ "$COMMIT_SHA" != "manual" ]; then
-            TAGS="$TAGS ${{ steps.set_image_name.outputs.IMAGE_ID }}:$COMMIT_SHA"
+            SUFFIXES="$SUFFIXES $COMMIT_SHA"
           fi
 
-          # Branch-specific tagging
           if [ "$BRANCH_NAME" = "production" ]; then
-            # Production branch: tag with 'latest'
-            TAGS="$TAGS ${{ steps.set_image_name.outputs.IMAGE_ID }}:latest"
+            SUFFIXES="$SUFFIXES latest"
           elif [ "$BRANCH_NAME" = "dev" ]; then
-            # Dev branch: tag with 'dev'
-            TAGS="$TAGS ${{ steps.set_image_name.outputs.IMAGE_ID }}:dev"
+            SUFFIXES="$SUFFIXES dev"
           fi
 
-          # If a release happened in this CI run (non-empty version), also tag with version
-          if [ -n "$RELEASE_VERSION" ] && [ "$RELEASE_VERSION" != "" ]; then
-            TAGS="$TAGS ${{ steps.set_image_name.outputs.IMAGE_ID }}:$RELEASE_VERSION"
-            echo "🎉 adding release tag: $RELEASE_VERSION"
+          if [ -n "$RELEASE_VERSION" ]; then
+            SUFFIXES="$SUFFIXES $RELEASE_VERSION"
+            echo "adding release tag: $RELEASE_VERSION"
           fi
 
-          # For manual dispatch, use the legacy tag
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAGS="$TAGS ${{ steps.set_image_name.outputs.IMAGE_ID }}:${{ github.event.inputs.release_tag }}"
+            SUFFIXES="$SUFFIXES ${{ github.event.inputs.release_tag }}"
           fi
 
-          echo "Docker tags to apply: $TAGS"
-          echo "TAGS=$TAGS" >> $GITHUB_OUTPUT
+          echo "tag suffixes: $SUFFIXES"
+          echo "SUFFIXES=$SUFFIXES" >> $GITHUB_OUTPUT
 
-      - name: tag the Docker image
+      # --- backend ---
+
+      - name: build backend
         run: |
-          for tag in ${{ steps.determine_tags.outputs.TAGS }}; do
-            echo "tagging with: $tag"
-            docker tag ${{ github.event.repository.name }} $tag
+          docker build backend \
+            --file .docker/Dockerfile.backend \
+            --tag os1-backend \
+            --build-arg PYTHON_VERSION=${{ steps.set_python_version.outputs.PYTHON_VERSION }}
+
+      - name: push backend
+        run: |
+          BASE="${{ steps.set_registry.outputs.BASE }}"
+          for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
+            tag="$BASE/os1-backend:$suffix"
+            echo "pushing $tag"
+            docker tag os1-backend "$tag"
+            docker push "$tag"
           done
 
-      - name: push the Docker image
+      # --- frontend ---
+
+      - name: build frontend
         run: |
-          for tag in ${{ steps.determine_tags.outputs.TAGS }}; do
-            echo "pushing: $tag"
-            docker push $tag
+          docker build frontend \
+            --file .docker/Dockerfile.frontend \
+            --tag os1-frontend
+
+      - name: push frontend
+        run: |
+          BASE="${{ steps.set_registry.outputs.BASE }}"
+          for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
+            tag="$BASE/os1-frontend:$suffix"
+            echo "pushing $tag"
+            docker tag os1-frontend "$tag"
+            docker push "$tag"
+          done
+
+      # --- console ---
+
+      - name: build console
+        run: |
+          docker build console \
+            --file .docker/Dockerfile.console \
+            --tag os1-console
+
+      - name: push console
+        run: |
+          BASE="${{ steps.set_registry.outputs.BASE }}"
+          for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
+            tag="$BASE/os1-console:$suffix"
+            echo "pushing $tag"
+            docker tag os1-console "$tag"
+            docker push "$tag"
           done

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from enum import StrEnum
 from functools import cache
@@ -10,6 +11,8 @@ from typing import Any, Final, Literal, Self, cast
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import (
 	BaseSettings,
+	DotEnvSettingsSource,
+	EnvSettingsSource,
 	PydanticBaseSettingsSource,
 	SettingsConfigDict,
 )
@@ -1076,6 +1079,39 @@ class DefaultPermissionsSettings(BaseModel):
 # root settings
 
 
+# fields that use comma-separated strings instead of JSON arrays
+_CSV_FIELDS: frozenset[str] = frozenset({"cors_origins", "allowed_hosts"})
+
+
+class _LenientEnvSettingsSource(EnvSettingsSource):
+	"""Fallback to raw string on JSON decode failure for known CSV list fields.
+
+	Only applies to fields in _CSV_FIELDS, which use comma-separated env vars
+	parsed by field validators. All other list fields still hard-fail on malformed
+	JSON to preserve startup-time config error visibility.
+	"""
+
+	def decode_complex_value(self, field_name: str, field_info: Any, value: Any) -> Any:
+		try:
+			return json.loads(value)
+		except (json.JSONDecodeError, ValueError):
+			if field_name not in _CSV_FIELDS:
+				raise
+			return value
+
+
+class _LenientDotEnvSettingsSource(DotEnvSettingsSource):
+	"""Same as _LenientEnvSettingsSource but for .env file values."""
+
+	def decode_complex_value(self, field_name: str, field_info: Any, value: Any) -> Any:
+		try:
+			return json.loads(value)
+		except (json.JSONDecodeError, ValueError):
+			if field_name not in _CSV_FIELDS:
+				raise
+			return value
+
+
 class Settings(BaseSettings):
 	model_config = SettingsConfigDict(
 		case_sensitive=False,
@@ -1160,8 +1196,8 @@ class Settings(BaseSettings):
 		return (
 			init_settings,
 			DbSettingsSource(settings_cls),
-			env_settings,
-			dotenv_settings,
+			_LenientEnvSettingsSource(settings_cls),
+			_LenientDotEnvSettingsSource(settings_cls),
 			file_secret_settings,
 		)
 
