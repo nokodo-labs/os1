@@ -107,9 +107,113 @@ export interface NativeToolDefinition<TArgs = Record<string, unknown>> {
 
 const nativeTools = new Map<string, NativeToolDefinition>([
 	[
+		'think',
+		{
+			displayName: 'thinking',
+			icon: 'brain',
+			inline: true,
+		},
+	],
+	[
+		'agentic_web_search',
+		{
+			displayName: 'web search',
+			icon: 'globe',
+			inline: true,
+		},
+	],
+	[
+		'fetch_url',
+		{
+			displayName: 'browse page',
+			icon: 'globe',
+			inline: true,
+		},
+	],
+	[
+		'memory_recall',
+		{
+			displayName: 'recall memories',
+			icon: 'brain',
+			inline: true,
+		},
+	],
+	[
+		'memory_create',
+		{
+			displayName: 'save memory',
+			icon: 'brain',
+			inline: true,
+		},
+	],
+	[
+		'note_get',
+		{
+			displayName: 'read note',
+			icon: 'note',
+			inline: true,
+		},
+	],
+	[
+		'note_write',
+		{
+			displayName: 'write note',
+			icon: 'note',
+			inline: true,
+		},
+	],
+	[
+		'reminder_get',
+		{
+			displayName: 'check reminders',
+			icon: 'bell',
+			inline: true,
+		},
+	],
+	[
+		'reminder_write',
+		{
+			displayName: 'set reminder',
+			icon: 'bell',
+			inline: true,
+		},
+	],
+	[
+		'file_get',
+		{
+			displayName: 'read file',
+			icon: 'document',
+			inline: true,
+		},
+	],
+	[
+		'file_edit',
+		{
+			displayName: 'edit file',
+			icon: 'pencil',
+			inline: true,
+		},
+	],
+	[
+		'generate_image',
+		{
+			displayName: 'create image',
+			icon: 'photo',
+			inline: true,
+		},
+	],
+	[
+		'code_interpreter',
+		{
+			displayName: 'run code',
+			icon: 'terminal',
+			inline: true,
+		},
+	],
+	[
 		'send_notification',
 		{
-			displayName: 'notification',
+			displayName: 'send notification',
 			icon: 'bell',
 			inline: true,
 			parseArgs: (args: Record<string, unknown>) => {
@@ -122,22 +226,13 @@ const nativeTools = new Map<string, NativeToolDefinition>([
 		},
 	],
 	[
-		'memory_recall',
+		'reveal_attachment',
 		{
-			displayName: 'recall memories',
-			icon: 'brain',
-			inline: false,
-		},
-	],
-	[
-		'think',
-		{
-			displayName: 'thinking',
-			icon: 'brain',
+			displayName: 'show attachment',
+			icon: 'eye',
 			inline: true,
 		},
 	],
-	// add more native tools here as they're implemented
 ])
 
 /** Check if a tool has native UI support */
@@ -371,51 +466,170 @@ export function getThinkElapsed(execution: ToolExecution): string | null {
 }
 
 export function getToolSummary(execution: ToolExecution): ToolSummary {
-	const isNative = isNativeTool(execution.toolCall.name)
+	const name = execution.toolCall.name
+	const args = execution.toolCall.arguments
+	const status = execution.status
+	const isActive = status === 'pending' || status === 'running'
+	const isFailed = status === 'error'
 
-	if (isNative && execution.toolCall.name === 'think') {
-		const elapsed = getThinkElapsed(execution)
-		if (execution.status === 'error') {
-			return { title: 'thinking failed' }
+	switch (name) {
+		case 'think': {
+			const elapsed = getThinkElapsed(execution)
+			if (isFailed) return { title: 'thinking failed' }
+			if (status === 'completed' && elapsed !== null) {
+				return { title: `thought for ${elapsed}s` }
+			}
+			return { title: 'thinking' }
 		}
-		if (execution.status === 'completed' && elapsed !== null) {
-			return { title: `thought for ${elapsed}s` }
+
+		case 'agentic_web_search': {
+			const query = typeof args.query === 'string' ? args.query : null
+			if (isFailed) return { title: 'web search failed' }
+			if (isActive) return { title: 'searching the web', subtitle: query ?? undefined }
+			// count sources from events or result
+			const sourceCount = countWebSearchSources(execution)
+			if (sourceCount !== null && sourceCount > 0) {
+				return { title: `searched ${sourceCount} sources`, subtitle: query ?? undefined }
+			}
+			return { title: 'searched the web', subtitle: query ?? undefined }
 		}
-		return { title: 'thinking' }
-	}
 
-	if (isNative && execution.toolCall.name === 'send_notification') {
-		const def = getNativeToolDefinition('send_notification')
-		const parsed = def?.parseArgs ? def.parseArgs(execution.toolCall.arguments) : null
-		const title =
-			parsed && typeof (parsed as Record<string, unknown>).title === 'string'
-				? ((parsed as Record<string, unknown>).title as string)
-				: null
-		const body =
-			parsed && typeof (parsed as Record<string, unknown>).body === 'string'
-				? ((parsed as Record<string, unknown>).body as string)
-				: null
-
-		const stateLabel =
-			execution.status === 'error'
-				? 'notification failed'
-				: execution.status === 'completed'
-					? 'notification sent'
-					: execution.status === 'running'
-						? 'sending notification'
-						: 'preparing notification'
-
-		if (title && body) {
-			return { title: stateLabel }
+		case 'fetch_url': {
+			const url = typeof args.url === 'string' ? args.url : null
+			const domain = url ? safeHostname(url) : null
+			if (isFailed)
+				return { title: domain ? `failed to open ${domain}` : 'failed to open page' }
+			if (isActive) return { title: domain ? `opening ${domain}` : 'opening page' }
+			return { title: domain ? `opened ${domain}` : 'opened page' }
 		}
-		if (execution.lastMessage) return { title: stateLabel, subtitle: execution.lastMessage }
-		return { title: stateLabel }
-	}
 
-	const displayName = getToolDisplayName(execution.toolCall.name)
-	if (execution.lastMessage) return { title: displayName, subtitle: execution.lastMessage }
-	if (execution.events.length > 0) {
-		return { title: displayName, subtitle: formatToolEventLine(execution.events.at(-1)!) }
+		case 'memory_recall': {
+			if (isFailed) return { title: 'could not recall memories' }
+			if (isActive) return { title: 'recalling memories' }
+			const count = parseResultItemCount(execution)
+			return { title: count !== null ? `recalled ${count} memories` : 'recalled memories' }
+		}
+
+		case 'memory_create': {
+			if (isFailed) return { title: 'could not save memory' }
+			if (isActive) return { title: 'saving to memory' }
+			return { title: 'saved to memory' }
+		}
+
+		case 'note_get': {
+			const title = typeof args.title === 'string' ? args.title : null
+			if (isFailed) return { title: 'could not read note' }
+			if (isActive) return { title: title ? `reading "${title}"` : 'reading note' }
+			return { title: title ? `read "${title}"` : 'read note' }
+		}
+
+		case 'note_write': {
+			const title = typeof args.title === 'string' ? args.title : null
+			if (isFailed) return { title: 'could not write note' }
+			if (isActive) return { title: title ? `writing "${title}"` : 'writing note' }
+			return { title: title ? `wrote "${title}"` : 'wrote note' }
+		}
+
+		case 'reminder_get': {
+			if (isFailed) return { title: 'could not check reminders' }
+			if (isActive) return { title: 'checking reminders' }
+			return { title: 'checked reminders' }
+		}
+
+		case 'reminder_write': {
+			if (isFailed) return { title: 'could not set reminder' }
+			if (isActive) return { title: 'setting reminder' }
+			return { title: 'set reminder' }
+		}
+
+		case 'file_get': {
+			const path = typeof args.path === 'string' ? args.path : null
+			const fileName = path ? path.split('/').pop() : null
+			if (isFailed)
+				return { title: fileName ? `could not read ${fileName}` : 'could not read file' }
+			if (isActive) return { title: fileName ? `reading ${fileName}` : 'reading file' }
+			return { title: fileName ? `read ${fileName}` : 'read file' }
+		}
+
+		case 'file_edit': {
+			const path = typeof args.path === 'string' ? args.path : null
+			const fileName = path ? path.split('/').pop() : null
+			if (isFailed)
+				return { title: fileName ? `could not edit ${fileName}` : 'could not edit file' }
+			if (isActive) return { title: fileName ? `editing ${fileName}` : 'editing file' }
+			return { title: fileName ? `edited ${fileName}` : 'edited file' }
+		}
+
+		case 'generate_image': {
+			if (isFailed) return { title: 'could not create image' }
+			if (isActive) return { title: 'creating image' }
+			return { title: 'created image' }
+		}
+
+		case 'code_interpreter': {
+			if (isFailed) return { title: 'code failed' }
+			if (isActive) return { title: 'running code' }
+			return { title: 'ran code' }
+		}
+
+		case 'send_notification': {
+			const title = typeof args.title === 'string' ? args.title : null
+			if (isFailed) return { title: 'could not send notification' }
+			if (isActive) return { title: 'sending notification' }
+			return { title: title ? `sent "${title}"` : 'sent notification' }
+		}
+
+		case 'reveal_attachment': {
+			if (isFailed) return { title: 'could not show attachment' }
+			if (isActive) return { title: 'showing attachment' }
+			return { title: 'showed attachment' }
+		}
+
+		default: {
+			const displayName = getToolDisplayName(name)
+			if (execution.lastMessage)
+				return { title: displayName, subtitle: execution.lastMessage }
+			if (execution.events.length > 0) {
+				return {
+					title: displayName,
+					subtitle: formatToolEventLine(execution.events.at(-1)!),
+				}
+			}
+			return { title: displayName }
+		}
 	}
-	return { title: displayName }
+}
+
+/** safely extract hostname from a URL */
+function safeHostname(url: string): string | null {
+	try {
+		return new URL(url).hostname.replace(/^www\./, '')
+	} catch {
+		return null
+	}
+}
+
+/** count web search sources from events payload */
+function countWebSearchSources(execution: ToolExecution): number | null {
+	for (const event of execution.events) {
+		const sources = event.data.payload?.sources
+		if (Array.isArray(sources)) return sources.length
+	}
+	return null
+}
+
+/** try to parse result JSON and count an array field */
+function parseResultItemCount(execution: ToolExecution): number | null {
+	if (!execution.result || execution.result.isError) return null
+	try {
+		const parsed = JSON.parse(execution.result.output)
+		if (Array.isArray(parsed)) return parsed.length
+		// look for first array field
+		for (const val of Object.values(parsed)) {
+			if (Array.isArray(val)) return val.length
+		}
+	} catch {
+		// not json
+	}
+	return null
 }

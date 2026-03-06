@@ -98,6 +98,7 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 enable_incomplete_feature = ["TypeForm"]
+mypy_path = "stubs"
 
 [dependency-groups]
 dev = [

@@ -17,7 +17,6 @@ from nokodo_ai.adapters.anthropic import messages as am
 from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
 from nokodo_ai.adapters.anthropic.messages import (
 	AnthropicMessagesAdapter,
-	_apply_response_model_to_system,
 	_messages_to_anthropic,
 	_tool_choice_to_anthropic,
 	_tools_to_anthropic,
@@ -174,13 +173,6 @@ async def test_ollama_embedding_adapter_raises_not_implemented() -> None:
 
 
 def test_anthropic_helpers_cover_branches() -> None:
-	assert _apply_response_model_to_system(None, None) is None
-	assert _apply_response_model_to_system("sys", None) == "sys"
-	instruction_only = _apply_response_model_to_system(None, {"type": "object"})
-	assert instruction_only and "json schema" in instruction_only
-	combined = _apply_response_model_to_system("sys", {"type": "object"})
-	assert combined and combined.startswith("sys")
-
 	assert _tool_choice_to_anthropic("auto")["type"] == "auto"
 	assert _tool_choice_to_anthropic("none")["type"] == "none"
 	assert _tool_choice_to_anthropic("required")["type"] == "any"

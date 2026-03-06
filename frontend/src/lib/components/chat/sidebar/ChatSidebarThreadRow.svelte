@@ -50,7 +50,7 @@
 	<SidebarListItem
 		{selected}
 		radiusClass="rounded-container"
-		paddingClass="px-5 py-2.5"
+		paddingClass="px-3 py-2"
 		className="gap-2 text-foreground"
 		onPrefetch={() => onPrefetch(thread.id)}
 		onSelect={async () => {
@@ -118,7 +118,7 @@
 					onToggleMenu(thread.id)
 				}}
 				aria-label={hasRun ? 'active run' : 'thread actions'}
-				title={hasRun ? 'Agent is running...' : 'Menu'}
+				title={hasRun ? 'agent is running...' : 'Menu'}
 			>
 				{#if hasRun}
 					<div class="relative flex h-2 w-2 shrink-0 items-center justify-center">

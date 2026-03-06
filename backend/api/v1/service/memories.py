@@ -366,7 +366,7 @@ async def _hybrid_search_memories(
 	)
 	if not results:
 		return []
-	resource_ids = [r.metadata["resource_id"] for r in results]
+	resource_ids: list[str] = [str(r.metadata["resource_id"]) for r in results]
 	stmt = select(Memory).where(Memory.id.in_(resource_ids))
 	if not principal.is_admin:
 		stmt = stmt.where(Memory.user_id == principal.user.id)
@@ -495,7 +495,7 @@ async def query_relevant_memories(
 		return []
 
 	# fetch full Memory objects.
-	resource_ids = [r.metadata["resource_id"] for r in results]
+	resource_ids: list[str] = [str(r.metadata["resource_id"]) for r in results]
 	stmt = select(Memory).where(Memory.id.in_(resource_ids))
 	if not principal.is_admin:
 		stmt = stmt.where(Memory.user_id == principal.user.id)

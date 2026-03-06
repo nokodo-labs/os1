@@ -10,7 +10,6 @@ import base64
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import cast
 
 from e2b_code_interpreter import AsyncSandbox
 
@@ -81,9 +80,8 @@ class E2BClient:
 		"""
 		if sandbox_id:
 			try:
-				self._sandbox = cast(
-					AsyncSandbox,
-					await AsyncSandbox.connect(sandbox_id, api_key=self._api_key),
+				self._sandbox = await AsyncSandbox.connect(
+					sandbox_id, api_key=self._api_key
 				)
 				logger.debug("reconnected to sandbox %s", sandbox_id)
 				return self._sandbox.sandbox_id

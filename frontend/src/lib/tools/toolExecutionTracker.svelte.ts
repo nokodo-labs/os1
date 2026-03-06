@@ -106,8 +106,8 @@ export class ToolExecutionTracker {
 			// merge arguments
 			const incomingArgs = toolCall.arguments
 			if (typeof incomingArgs === 'string') {
-				// streaming string fragment - append
-				existing.rawArguments += incomingArgs
+				// pre-accumulated string from upsertToolCalls - replace (not append)
+				existing.rawArguments = incomingArgs
 				existing.arguments = tryParseJson(existing.rawArguments)
 			} else if (Object.keys(incomingArgs).length > 0) {
 				// finalized object arguments (from persisted messages)
@@ -185,8 +185,12 @@ export class ToolExecutionTracker {
 
 	/** Register a tool result (tool message). */
 	registerResult(result: ToolResult): void {
-		const exec = this.executions.get(result.toolCallId)
-		if (!exec) return
+		let exec = this.executions.get(result.toolCallId)
+		if (!exec) {
+			// result arrived before the tool call was registered (race / parallel calls)
+			exec = new ReactiveToolExecution(result.toolCallId, '', {})
+			this.executions.set(result.toolCallId, exec)
+		}
 
 		// skip redundant re-registration to avoid spurious reactive updates
 		// that can restart timers in tool cards (e.g. ThinkToolCard)

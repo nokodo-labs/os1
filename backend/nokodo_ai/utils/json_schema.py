@@ -7,6 +7,7 @@ from typing import (
 	Any,
 	Literal,
 	Optional,
+	TypeIs,
 	Union,
 	get_args,
 	get_origin,
@@ -63,7 +64,8 @@ def schema_from_callable(
 		return {}
 
 	dynamic_model = create_model(f"{func.__name__}_params", **fields)
-	return dynamic_model.model_json_schema()
+	schema: JSONObject = {k: v for k, v in dynamic_model.model_json_schema().items()}
+	return schema
 
 
 # ----- pydantic introspection helpers -----
@@ -118,12 +120,12 @@ def search_type_recursively(type_obj: Any, class_name: str) -> type[BaseModel] |
 	return None
 
 
-def is_matching_model(obj: Any, class_name: str) -> bool:
+def is_matching_model(obj: object, class_name: str) -> TypeIs[type[BaseModel]]:
 	"""check if obj is a BaseModel subclass with the given name."""
 	return is_basemodel(obj) and obj.__name__ == class_name
 
 
-def is_basemodel(obj: Any) -> bool:
+def is_basemodel(obj: object) -> TypeIs[type[BaseModel]]:
 	"""check if obj is a BaseModel subclass (safe against TypeError)."""
 	try:
 		return isinstance(obj, type) and issubclass(obj, BaseModel)
@@ -427,7 +429,14 @@ def process_schema(
 				raise ValueError(
 					"model_class must be provided when processing enum fields."
 				)
-			if enum_description_strategy in ("enumDescriptions", "x-enum-descriptions"):
+			if enum_description_strategy == "enumDescriptions":
+				result = _process_enum_field_with_description_array(
+					field_schema=result,
+					model_class=model_class,
+					field_path=_current_path,
+					strategy=enum_description_strategy,
+				)
+			elif enum_description_strategy == "x-enum-descriptions":
 				result = _process_enum_field_with_description_array(
 					field_schema=result,
 					model_class=model_class,

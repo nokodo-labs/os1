@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, Field
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.settings import SearchAgent
 from api.v1.service.chat.context import AppContext
 from api.v1.service.web_search import WebSearchError, search_web
@@ -73,7 +75,28 @@ class AgenticWebSearchTool(Tool[AppContext]):
 	) -> ToolMessage:
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
+		ctx = __app_context__
+		tool_call_id = __agent_context__.tool_call_id
+		thread_id = str(ctx.thread_id) if ctx.thread_id else None
 		inp = AgenticWebSearchInput.model_validate(kwargs)
+
+		# emit searching event with query
+		await ctx.event_emitter(
+			Event(
+				scope=EventScope.THREAD if thread_id else EventScope.USER,
+				scope_id=thread_id or str(ctx.user_id),
+				type=EventType.TOOL_PROGRESS,
+				data={
+					"tool_call_id": tool_call_id,
+					"tool_name": self.name,
+					"message": "searching the web",
+					"payload": {"queries": [inp.query]},
+				},
+				user_id=str(ctx.user_id),
+				thread_id=thread_id,
+			)
+		)
+
 		try:
 			result = await search_web(
 				inp.query, limit=inp.limit, search_agent=inp.search_agent
@@ -84,6 +107,24 @@ class AgenticWebSearchTool(Tool[AppContext]):
 				"web search failed. please try again.",
 				__agent_context__,
 			)
+
+		# emit results event with sources
+		sources = [{"url": c.url, "title": c.title} for c in result.citations]
+		await ctx.event_emitter(
+			Event(
+				scope=EventScope.THREAD if thread_id else EventScope.USER,
+				scope_id=thread_id or str(ctx.user_id),
+				type=EventType.TOOL_PROGRESS,
+				data={
+					"tool_call_id": tool_call_id,
+					"tool_name": self.name,
+					"message": f"found {len(sources)} sources",
+					"payload": {"sources": sources},
+				},
+				user_id=str(ctx.user_id),
+				thread_id=thread_id,
+			)
+		)
 
 		parts = [result.summary]
 		if result.citations:

@@ -46,6 +46,7 @@
 	"python.analysis.typeCheckingMode": "basic",
 	"python.analysis.autoImportCompletions": true,
 	"python.analysis.extraPaths": ["${workspaceFolder}/backend"],
+	"python.analysis.stubPath": "${workspaceFolder}/backend/stubs",
 	"python.testing.pytestEnabled": true,
 	"python.testing.unittestEnabled": false,
 	"python.testing.cwd": "${workspaceFolder}/backend",

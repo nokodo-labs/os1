@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Awaitable
 from time import time
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, TypeIs, overload
 
 import anthropic
 
@@ -330,12 +330,19 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 				continue
 
 
-_ANTHROPIC_IMAGE_TYPES = (
+type _AnthropicMediaType = Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
+
+_ANTHROPIC_IMAGE_TYPES: tuple[_AnthropicMediaType, ...] = (
 	"image/jpeg",
 	"image/png",
 	"image/gif",
 	"image/webp",
 )
+
+
+def _is_anthropic_media_type(s: str) -> TypeIs[_AnthropicMediaType]:
+	"""narrow a media type string to the supported anthropic image types."""
+	return s in _ANTHROPIC_IMAGE_TYPES
 
 
 def _content_part_to_anthropic(
@@ -365,7 +372,7 @@ def _content_part_to_anthropic(
 			)
 		case ImageContent():
 			if part.base64 and part.media_type:
-				if part.media_type not in _ANTHROPIC_IMAGE_TYPES:
+				if not _is_anthropic_media_type(part.media_type):
 					return None
 				return AnthropicImageBlockParam(
 					type="image",

@@ -301,7 +301,8 @@ export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCa
 		const tc = item as Record<string, unknown>
 		const id = typeof tc.id === 'string' ? tc.id : null
 		const name = typeof tc.name === 'string' ? tc.name : null
-		if (!id || !name) continue
+		// skip only if both name is missing AND we haven't seen this ID before
+		if (!id || (!name && !out.has(id))) continue
 
 		const prev = out.get(id)
 		const rawArgs = tc.arguments
@@ -317,7 +318,8 @@ export function upsertToolCalls(existing: ToolCall[], incoming: unknown): ToolCa
 			args = prev?.arguments ?? {}
 		}
 
-		out.set(id, { id, name, arguments: args })
+		const resolvedName = name || prev?.name || ''
+		out.set(id, { id, name: resolvedName, arguments: args })
 	}
 	return Array.from(out.values())
 }
@@ -514,6 +516,46 @@ export function getBlockFirstAssistant(block: RunBlock): ApiMessage | null {
 
 export function blockHasStreamingAssistant(block: RunBlock): boolean {
 	return block.items.some((item) => item.kind === 'streaming_assistant')
+}
+
+// response item grouping
+
+type ResponseItem = ReturnType<typeof getBlockResponseItems>[number]
+
+export type ResponseSegment =
+	| { type: 'assistant'; item: { kind: 'assistant'; message: ApiMessage } }
+	| { type: 'streaming_assistant'; item: { kind: 'streaming_assistant' } }
+	| { type: 'tool_group'; toolCallIds: string[] }
+
+/**
+ * group consecutive tool/streaming_tool items into tool groups.
+ * non-tool items are passed through individually.
+ */
+export function groupResponseItems(items: ResponseItem[]): ResponseSegment[] {
+	const segments: ResponseSegment[] = []
+	let pendingToolIds: string[] = []
+
+	function flushTools() {
+		if (pendingToolIds.length > 0) {
+			segments.push({ type: 'tool_group', toolCallIds: [...pendingToolIds] })
+			pendingToolIds = []
+		}
+	}
+
+	for (const item of items) {
+		if (item.kind === 'tool' || item.kind === 'streaming_tool') {
+			pendingToolIds.push(item.toolCallId)
+		} else {
+			flushTools()
+			if (item.kind === 'assistant') {
+				segments.push({ type: 'assistant', item })
+			} else if (item.kind === 'streaming_assistant') {
+				segments.push({ type: 'streaming_assistant', item })
+			}
+		}
+	}
+	flushTools()
+	return segments
 }
 
 // agent lookups

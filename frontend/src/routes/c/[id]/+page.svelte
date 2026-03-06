@@ -10,6 +10,7 @@
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
+		groupResponseItems,
 		hasAttachmentParts,
 		type ApiMessage,
 	} from '$lib/chat'
@@ -23,7 +24,7 @@
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import RegenerateMenu from '$lib/components/chat/RegenerateMenu.svelte'
-	import ToolExecutionCard from '$lib/components/chat/ToolExecutionCard.svelte'
+	import { ToolGroup } from '$lib/components/chat/tools'
 	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
@@ -518,18 +519,19 @@
 										: null}
 								>
 									{#snippet lead()}
+										{@const segments = groupResponseItems(responseItems)}
 										<div class="relative">
-											{#each responseItems as item, idx (idx)}
-												{#if item.kind === 'assistant'}
-													{#if hasAttachmentParts(item.message.content)}
+											{#each segments as segment, idx (idx)}
+												{#if segment.type === 'assistant'}
+													{#if hasAttachmentParts(segment.item.message.content)}
 														<div class="mb-2">
 															<MediaAttachments
 																mediaParts={extractMediaParts(
-																	item.message.content,
+																	segment.item.message.content,
 																	getApiBaseUrl()
 																)}
 																fileParts={extractFileParts(
-																	item.message.content,
+																	segment.item.message.content,
 																	getApiBaseUrl()
 																)}
 															/>
@@ -540,26 +542,34 @@
 													>
 														<MarkdownRenderer
 															content={contentPartsToText(
-																item.message.content
+																segment.item.message.content
 															)}
 															isStreaming={false}
 														/>
 													</div>
-												{:else if item.kind === 'tool'}
-													{@const exec = chat.getToolExecution(
-														item.toolCallId
-													)}
-													{#if exec}
-														<ToolExecutionCard execution={exec} />
+												{:else if segment.type === 'tool_group'}
+													{@const toolExecs = segment.toolCallIds
+														.map((id) => chat.getToolExecution(id))
+														.filter(
+															(e): e is NonNullable<typeof e> =>
+																e != null
+														)}
+													{#if toolExecs.length > 0}
+														<ToolGroup executions={toolExecs} />
 													{/if}
-												{:else if item.kind === 'streaming_tool'}
-													{@const exec = chat.getToolExecution(
-														item.toolCallId
+												{:else if segment.type === 'streaming_assistant' && chat.streamingAssistant}
+													{@const hasActiveTools = segments.some(
+														(s) =>
+															s.type === 'tool_group' &&
+															s.toolCallIds.some((id) => {
+																const e = chat.getToolExecution(id)
+																return (
+																	e != null &&
+																	(e.status === 'pending' ||
+																		e.status === 'running')
+																)
+															})
 													)}
-													{#if exec}
-														<ToolExecutionCard execution={exec} />
-													{/if}
-												{:else if item.kind === 'streaming_assistant' && chat.streamingAssistant}
 													{#if chat.streamingAssistant.content.trim()}
 														<div
 															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
@@ -571,7 +581,7 @@
 																	.streamingAssistant.isError}
 															/>
 														</div>
-													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
+													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls && !hasActiveTools}
 														<div
 															class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
 														>

@@ -86,10 +86,18 @@ class ImageModel(AdapterEnabledBase[ImageAdapter]):
 		- stream=True = async iterator of progress events
 		"""
 		effective = self._resolve_params(params)
+		if stream:
+			return self.adapter.generate(
+				prompt,
+				self.model_name,
+				stream=True,
+				image=image,
+				mask=mask,
+				params=effective,
+			)
 		return self.adapter.generate(
 			prompt,
 			self.model_name,
-			stream=stream,
 			image=image,
 			mask=mask,
 			params=effective,
