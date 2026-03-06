@@ -286,6 +286,21 @@
 	function copyPromptInclude(command: string) {
 		copyText(includeSyntax(command), `prompt:${command}`)
 	}
+
+	const EXAMPLE_PROMPT = `you are a helpful AI assistant.
+
+today is {{ current_datetime_full }}.
+user: {{ user_name }}.
+
+{% if user_bio %}
+about the user: {{ user_bio }}
+{% endif %}
+
+<long_term_memory>{{ user_memories }}</long_term_memory>
+
+<chat_context>{{ chat_context }}</chat_context>
+
+{{ referenced_attachments }}`
 </script>
 
 <Dialog.Root bind:open>
@@ -341,6 +356,49 @@
 							are rejected
 						</li>
 					</ul>
+				</div>
+
+				<!-- example system prompt -->
+				<div class="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
+					<div class="mb-3 flex items-center justify-between">
+						<div>
+							<h3 class="text-sm font-semibold text-zinc-200">
+								example system prompt
+							</h3>
+							<p class="mt-0.5 text-xs text-zinc-500">
+								a starting point showing common patterns
+							</p>
+						</div>
+						<button
+							type="button"
+							class="flex items-center gap-1 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+							onclick={() => copyText(EXAMPLE_PROMPT, '__example__')}
+						>
+							{#if copiedVar === '__example__'}
+								<Check class="h-3.5 w-3.5 text-green-400" />
+								<span class="text-green-400">copied</span>
+							{:else}
+								<Copy class="h-3.5 w-3.5" />
+								copy
+							{/if}
+						</button>
+					</div>
+					<pre
+						class="overflow-x-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-400">you are a helpful AI assistant.
+
+today is <span class="text-sky-400">{'{{ current_datetime_full }}'}</span>.
+user: <span class="text-sky-400">{'{{ user_name }}'}</span>.
+
+<span class="text-amber-400">{'{% if user_bio %}'}</span>
+about the user: <span class="text-sky-400">{'{{ user_bio }}'}</span>
+<span class="text-amber-400">{'{% endif %}'}</span>
+
+&lt;long_term_memory&gt;<span class="text-sky-400">{'{{ user_memories }}'}</span
+						>&lt;/long_term_memory&gt;
+
+&lt;chat_context&gt;<span class="text-sky-400">{'{{ chat_context }}'}</span>&lt;/chat_context&gt;
+
+<span class="text-sky-400">{'{{ referenced_attachments }}'}</span></pre>
 				</div>
 
 				<!-- available prompts as include targets -->

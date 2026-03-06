@@ -32,7 +32,9 @@
 today is {{ current_datetime_full }}.
 user: {{ user_name }}.
 
-{{ user_memories }}
+<long_term_memory>{{ user_memories }}</long_term_memory>
+
+<chat_context>{{ chat_context }}</chat_context>
 
 {{ referenced_attachments }}`
 
@@ -478,18 +480,16 @@ user: {{ user_name }}.
 						<div class="flex items-center justify-between">
 							<Label for="system_prompt">system prompt (optional)</Label>
 							<div class="flex items-center gap-1">
-								{#if !formSystemPrompt.trim()}
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
-										onclick={() => (formSystemPrompt = TEMPLATE_SYSTEM_PROMPT)}
-									>
-										<FileText class="h-3.5 w-3.5" />
-										use template
-									</Button>
-								{/if}
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+									onclick={() => (formSystemPrompt = TEMPLATE_SYSTEM_PROMPT)}
+								>
+									<FileText class="h-3.5 w-3.5" />
+									use template
+								</Button>
 								<Button
 									type="button"
 									variant="ghost"
