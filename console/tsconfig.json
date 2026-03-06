@@ -1,0 +1,27 @@
+{
+	"extends": "./.svelte-kit/tsconfig.json",
+	"compilerOptions": {
+		"target": "ES2022",
+		"useDefineForClassFields": true,
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"noEmit": true
+	},
+	"include": [
+		".svelte-kit/ambient.d.ts",
+		".svelte-kit/non-ambient.d.ts",
+		".svelte-kit/generated",
+		".svelte-kit/types/**/*.d.ts",
+		"src/**/*.d.ts",
+		"src/**/*.ts",
+		"src/**/*.js",
+		"src/**/*.svelte"
+	],
+	"references": [{ "path": "./tsconfig.node.json" }]
+}

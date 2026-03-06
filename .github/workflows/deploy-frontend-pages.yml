@@ -1,4 +1,4 @@
-name: Deploy Frontend to GitHub Pages
+name: deploy frontend to GitHub Pages
 
 on:
   workflow_call:
@@ -9,7 +9,7 @@ on:
         type: string
         default: ""
       environment:
-        description: "Deployment environment name"
+        description: "deployment environment name"
         required: false
         type: string
         default: "github-pages"
@@ -33,27 +33,32 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: checkout
+        uses: actions/checkout@v6
 
-      - name: Setup Node
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: set up Node
         uses: actions/setup-node@v6
         with:
           node-version-file: frontend/.nvmrc
           check-latest: true
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install dependencies
-        run: npm ci
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Build
+      - name: build
         env:
           VITE_API_URL: ${{ inputs.vite_api_url || '' }}
           VITE_PAGES: "true"
-        run: npm run build
+        run: pnpm run build
 
-      - name: Upload artifact
+      - name: upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: frontend/dist
@@ -65,17 +70,17 @@ jobs:
       name: ${{ inputs.environment }}
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
+      - name: deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Comment PR with preview URL
+      - name: comment PR with preview URL
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/github-script@v8
         with:
           script: |
             const url = core.getInput('url') || (process.env.DEPLOY_URL || '${{ steps.deployment.outputs.page_url }}');
-            const body = `🚀 Preview deployed to: ${url}`;
+            const body = `🚀 preview deployed to: ${url}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

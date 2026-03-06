@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Backend dependencies
+  # backend dependencies
   - package-ecosystem: "pip"
     directory: "/backend"
     schedule:
@@ -10,7 +10,7 @@ updates:
       - "dependencies"
       - "backend"
 
-  # Frontend dependencies
+  # frontend dependencies
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
@@ -19,6 +19,16 @@ updates:
     labels:
       - "dependencies"
       - "frontend"
+
+  # console dependencies
+  - package-ecosystem: "npm"
+    directory: "/console"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 30
+    labels:
+      - "dependencies"
+      - "console"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

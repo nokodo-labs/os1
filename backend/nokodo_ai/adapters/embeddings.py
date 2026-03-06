@@ -1,0 +1,33 @@
+"""embedding adapter union - single entry point for all embedding adapters."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from pydantic import Field
+
+from .base.embeddings import BaseEmbeddingAdapter
+from .ollama.embeddings import OllamaEmbeddingsAdapter
+from .openai.embeddings import OpenAIEmbeddingsAdapter
+
+
+EmbeddingsAdapter = Annotated[
+	OpenAIEmbeddingsAdapter | OllamaEmbeddingsAdapter,
+	Field(discriminator="type"),
+]
+
+
+def resolve_embeddings_adapter(provider: str, adapter: str | None) -> str | None:
+	"""resolve the adapter type string from provider and api."""
+	if provider == "openai":
+		return "openai.embedding"
+	if provider == "ollama":
+		return "ollama.embedding"
+	return None
+
+
+__all__ = [
+	"BaseEmbeddingAdapter",
+	"EmbeddingsAdapter",
+	"resolve_embeddings_adapter",
+]

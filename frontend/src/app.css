@@ -1,23 +1,455 @@
 @import 'tailwindcss';
 
+@import 'tw-animate-css';
+
+@import './lib/styles/liquid-glass.css';
+@import './lib/styles/liquid-glass-action.css';
+@import './lib/styles/liquid-metal.css';
+
+/* ensure Streamdown's built-in Tailwind classes are included (Tailwind v4 @source). */
+@source '../node_modules/svelte-streamdown/**/*';
+
+/*
+ * streamdown CSS variable dependencies (baseTheme="shadcn")
+ * ─────────────────────────────────────────────────────────
+ * streamdown's shadcn theme uses these CSS variables for all rendered markdown
+ * elements. all are defined below in :root (light) and .dark (dark) sections.
+ *
+ * text:         --foreground         (headings, paragraphs, lists, math, strong)
+ * links:        --primary            (anchor color + focus rings)
+ * secondary:    --muted-foreground   (blockquote, del, code header, footnotes)
+ * backgrounds:  --muted              (code blocks, codespan, thead, tfoot, footnotes)
+ *               --card               (alert bg, mermaid chart bg)
+ *               --popover            (popover/tooltip bg)
+ * borders:      --border             (code blocks, tables, hr, mermaid, footnotes)
+ * alerts:       --destructive        (caution alert variant)
+ *
+ * additional overrides are applied via the theme prop in MarkdownRenderer.svelte
+ * to integrate code blocks, tables, and popovers with the liquid glass aesthetic
+ * (semi-transparent backgrounds with backdrop-blur).
+ */
+
+@custom-variant dark (&:is(.dark *));
+
 :root {
-    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
-    font-weight: 400;
-
-    color-scheme: light dark;
-    color: rgba(255, 255, 255, 0.87);
-    background-color: #242424;
-
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+	--radius-container-base: 2.5rem;
+	--radius-popup-base: 1.5rem;
+	/* dynamic app height: defaults to 100dvh (adapts to browser chrome).
+	   overridden to visualViewport.height by device store when virtual keyboard is open. */
+	--app-height: 100dvh;
+	/* Island chrome offset: container top padding + Island height + container bottom padding.
+	   used by pages that need content to clear the sticky Island (e.g., chat). */
+	--chrome-island-offset: calc(clamp(12px, 4vw, 32px) + 88px + 16px);
+	--chrome-island-height: 3.3rem;
+	/* standardized page horizontal padding (matches Island shell) */
+	--spacing-page-x: clamp(10px, 4vw, 32px);
+	/* space between header and content (e.g., reminders list header to rows) */
+	--spacing-header-content: 2rem;
+	/* space between Island and first content element (below Island padding) */
+	--spacing-island-content: 1rem;
+	/* mobile layout: minimal margins for full viewport utilization */
+	--spacing-mobile-inset: 8px;
+	/* safe area insets for notched/dynamic-island devices */
+	--safe-area-top: env(safe-area-inset-top, 0px);
+	--safe-area-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-area-left: env(safe-area-inset-left, 0px);
+	--safe-area-right: env(safe-area-inset-right, 0px);
+	--background: oklch(1 0 0);
+	--foreground: oklch(0% 0 0);
+	--text-color: var(--foreground);
+	--shimmer-wave-color: color-mix(in oklch, var(--foreground) 20%, transparent);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(13.441% 0.00002 271.152);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(17.764% 0.00002 271.152);
+	--primary: oklch(0% 0 0);
+	--primary-foreground: oklch(0.985 0.002 247.839);
+	--secondary: oklch(0.967 0.003 264.542);
+	--secondary-foreground: oklch(26.448% 0.00003 271.152);
+	--muted: oklch(0.967 0.003 264.542);
+	--muted-foreground: oklch(0.551 0.027 264.364);
+	--accent: oklch(0.967 0.003 264.542);
+	--accent-foreground: oklch(28.908% 0.00003 271.152);
+	--destructive: oklch(0.577 0.245 10);
+	--destructive-foreground: oklch(0.985 0.002 247.839);
+	--border: oklch(0.928 0.006 264.531);
+	--input: oklch(0.928 0.006 264.531);
+	--ring: oklch(0.707 0.022 261.325);
+	--chart-1: oklch(0.646 0.222 41.116);
+	--chart-2: oklch(0.6 0.118 184.704);
+	--chart-3: oklch(0.398 0.07 227.392);
+	--chart-4: oklch(0.828 0.189 84.429);
+	--chart-5: oklch(0.769 0.188 70.08);
+	--sidebar: oklch(0.985 0.002 247.839);
+	--sidebar-foreground: oklch(22.213% 0.00003 271.152);
+	--sidebar-primary: oklch(30.118% 0.00003 271.152);
+	--sidebar-primary-foreground: oklch(0.985 0.002 247.839);
+	--sidebar-accent: oklch(0.967 0.003 264.542);
+	--sidebar-accent-foreground: oklch(29.313% 0.00003 271.152);
+	--sidebar-border: oklch(0.928 0.006 264.531);
+	--sidebar-ring: oklch(0.707 0.022 261.325);
+	--interactive-hover: oklch(100% 0.00011 271.152 / 0.247);
 }
 
-@media (prefers-color-scheme: light) {
-    :root {
-        color: #213547;
-        background-color: #ffffff;
-    }
+.dark {
+	--background: oklch(0 0 0);
+	--foreground: oklch(0.985 0 0);
+	--text-color: var(--foreground);
+	--shimmer-wave-color: color-mix(in oklch, var(--foreground) 25%, transparent);
+	--card: oklch(0.21 0 0);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.21 0 0);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.928 0 0);
+	--primary-foreground: oklch(0.21 0 0);
+	--secondary: oklch(0.278 0 0);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.278 0 0);
+	--muted-foreground: oklch(0.707 0 0);
+	--accent: oklch(0.278 0 0);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.67 0.21 10);
+	--destructive-foreground: oklch(0.985 0 0);
+	--border: oklch(1 0 0 / 14%);
+	--input: oklch(1 0 0 / 18%);
+	--ring: oklch(0.551 0 0);
+	--chart-1: oklch(0.488 0.243 264.376);
+	--chart-2: oklch(0.696 0.17 162.48);
+	--chart-3: oklch(0.769 0.188 70.08);
+	--chart-4: oklch(0.627 0.265 303.9);
+	--chart-5: oklch(0.645 0.246 16.439);
+	--sidebar: oklch(0.21 0 0);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.488 0.243 264.376);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.278 0 0);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(1 0 0 / 14%);
+	--sidebar-ring: oklch(0.551 0 0);
+	--interactive-hover: oklch(25.197% 0.00003 271.152 / 0.301);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--radius-container: var(--radius-container-base);
+	--radius-popup: var(--radius-popup-base);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-interactive-hover: var(--interactive-hover);
+}
+
+@layer base {
+	html,
+	body {
+		overscroll-behavior: none;
+	}
+
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+		padding-top: var(--safe-area-top);
+		padding-bottom: var(--safe-area-bottom);
+		padding-left: var(--safe-area-left);
+		padding-right: var(--safe-area-right);
+	}
+}
+
+@layer components {
+	/* standardized border-radius utilities for consistent UI */
+
+	/* circular buttons (e.g., icon-only action buttons) */
+	.rounded-circle {
+		@apply rounded-full;
+	}
+
+	/* pill-shaped single-line items (e.g., list rows, tags, badges) */
+	.rounded-pill {
+		@apply rounded-full;
+	}
+
+	/* interactive element base: use on any clickable element for consistent UX */
+	.interactive {
+		@apply cursor-pointer transition-all duration-150;
+		@apply focus-visible:ring-foreground/40 focus-visible:ring-2 focus-visible:outline-none;
+		@apply active:scale-[0.97];
+		-webkit-tap-highlight-color: transparent;
+		user-select: none;
+	}
+
+	/* app viewport height: uses --app-height which adapts to
+	   browser chrome (100dvh) and virtual keyboard (visualViewport) */
+	.h-app {
+		height: var(--app-height, 100dvh);
+	}
+
+	/* subtle variant: lighter active state for small elements */
+	.interactive-subtle {
+		@apply cursor-pointer transition-all duration-150;
+		@apply focus-visible:ring-foreground/40 focus-visible:ring-2 focus-visible:outline-none;
+		@apply active:scale-[0.98];
+		-webkit-tap-highlight-color: transparent;
+		user-select: none;
+	}
+}
+
+/* custom scrollbar */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: color-mix(in oklch, var(--foreground) 10%, transparent);
+	border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in oklch, var(--foreground) 20%, transparent);
+}
+
+/* hide scrollbar for specific scroll areas (e.g., home apps grid). */
+.no-scrollbar {
+	-ms-overflow-style: none; /* IE and Edge */
+	scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+
+/* popup/dropdown animations - animate from different origin corners */
+@keyframes popup-appear {
+	from {
+		opacity: 0;
+		transform: scale(0.92) translateY(-0.5rem);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+@keyframes popup-appear-up {
+	from {
+		opacity: 0;
+		transform: scale(0.92) translateY(0.5rem);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+.animate-popup {
+	transform-origin: top left;
+}
+
+.animate-popup-right {
+	transform-origin: top right;
+}
+
+.animate-popup-up {
+	transform-origin: bottom left;
+}
+
+.animate-popup-up-right {
+	transform-origin: bottom right;
+}
+
+/* view Transitions (assume supported) */
+@keyframes vt-fade-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes vt-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes vt-slide-out-down {
+	from {
+		transform: translateY(0);
+	}
+	to {
+		transform: translateY(60vh);
+	}
+}
+
+@keyframes vt-slide-in-up {
+	from {
+		transform: translateY(60vh);
+	}
+	to {
+		transform: translateY(0);
+	}
+}
+
+@keyframes vt-slide-out-left {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-55vw);
+	}
+}
+
+@keyframes vt-slide-in-left {
+	from {
+		transform: translateX(-55vw);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+/* match home input choreography (duration-500 ease-in-out) when crossing routes. */
+::view-transition-group(chat-input) {
+	animation-duration: 500ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* landing greeting disappears when going to /c/[id] */
+::view-transition-old(landing-greeting) {
+	animation: 200ms ease both vt-fade-out;
+}
+
+/* landing greeting appears when returning home */
+::view-transition-new(landing-greeting) {
+	animation: 260ms ease 80ms both vt-fade-in;
+}
+
+/* thread body fades away when leaving /c/[id] */
+::view-transition-old(thread-body) {
+	animation: 220ms ease both vt-fade-out;
+}
+
+/* thread body fades in when entering /c/[id] (after input settles) */
+::view-transition-new(thread-body) {
+	animation: 240ms ease 220ms both vt-fade-in;
+}
+
+/* apps grid slides in/out from bottom when navigating to/from home */
+::view-transition-new(apps-grid) {
+	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-up;
+}
+
+::view-transition-old(apps-grid) {
+	animation: 500ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-down;
+}
+
+/* master/detail sidebar transitions (generic for all master/detail apps)
+	- persisted across pages (shared element): no forced slide; allow hero-move/morph.
+	- not persisted (exists only in old or only in new): slide out/in.
+*/
+::view-transition-new(master-sidebar):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-left;
+}
+
+::view-transition-old(master-sidebar):only-child {
+	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
+}
+
+/* chat sidebar transitions
+	- persisted across pages (shared element): no forced slide; allow hero-move/morph.
+	- not persisted (exists only in old or only in new): slide out/in.
+	`:only-child` matches when the snapshot has no counterpart.
+*/
+::view-transition-old(chat-sidebar):only-child {
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
+}
+
+::view-transition-new(chat-sidebar):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-left;
+}
+
+/* chat input transitions
+	same intent as sidebar: morph when shared, slide when not.
+*/
+::view-transition-old(chat-input):only-child {
+	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-down;
+}
+
+::view-transition-new(chat-input):only-child {
+	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-up;
+}
+
+/* Island transitions - smooth morph between routes, no forced animations */
+::view-transition-group(island) {
+	animation-duration: 300ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* during ViewTransitions, force remove backdrop-filters on sidebars.
+	otherwise, it will not transition with the element but will linger for the duration of the transition then pop out.
+	whitelisted: transitions between homepage and chat pages keep the filter intact.
+*/
+html[data-vt-active='1']:not([data-vt-keep-filter]) .chat-sidebar {
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   mobile layout adjustments
+   888px matches DEVICE_MOBILE_BREAKPOINT_PX from device.svelte.ts
+   in mobile mode, pages are full-width with minimal insets for space efficiency.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 888px) {
+	:root {
+		--spacing-page-x: var(--spacing-mobile-inset);
+	}
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PWA standalone mode
+   hides browser-only UI when running as an installed app.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (display-mode: standalone) {
+	/* hide elements marked as browser-only in standalone PWA mode */
+	.browser-only {
+		display: none;
+	}
 }

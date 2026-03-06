@@ -1,20 +1,20 @@
-# API Type Safety
+# API Types & Client
 
-Modern type-safe API architecture using OpenAPI TypeScript generation.
+Modern type-safe API architecture with OpenAPI-generated types and a typed client.
 
 ## Architecture
 
 ```
-FastAPI OpenAPI Schema → openapi-typescript → TypeScript Types → Type-safe API Calls
+FastAPI OpenAPI Schema → openapi-typescript → TypeScript Types → openapi-typescript-codegen → Typed Client
 ```
 
 ## Benefits
 
--   **Zero Dependencies**: Native fetch, no axios or HTTP libraries
--   **Full Type Safety**: Compile-time errors for invalid API calls
--   **Auto-sync**: Backend changes automatically reflected in frontend types
--   **Modern**: Built on web standards (fetch, async/await)
--   **Future-proof**: No external HTTP library to become outdated
+- **Zero Dependencies**: Native fetch, no axios or HTTP libraries
+- **Full Type Safety**: Compile-time errors for invalid API calls
+- **Auto-sync**: Backend changes automatically reflected in frontend types and client
+- **Modern**: Built on web standards (fetch, async/await)
+- **Future-proof**: No external HTTP library to become outdated
 
 ## Setup
 
@@ -25,16 +25,16 @@ cd backend
 uvicorn api.main:app --reload
 ```
 
-Backend serves OpenAPI schema at: `http://localhost:8000/v1/openapi.json`
+Backend serves OpenAPI schema at: `http://localhost:1383/v1/openapi.json`
 
-### 2. Generate Types
+### 2. Generate Types & Client
 
 ```bash
 cd frontend
-npm run generate:api-types
+npm run generate:api
 ```
 
-This generates `src/lib/api/types.ts` from the OpenAPI schema.
+This generates `src/lib/api/types.ts` and `src/lib/api/generated/` from the OpenAPI schema.
 
 ## Usage
 
@@ -128,10 +128,10 @@ async def get_items() -> list[Item]:
     return items
 ```
 
-2. **Regenerate types**:
+2. **Regenerate types + client**:
 
 ```bash
-npm run generate:api-types
+npm run generate:api
 ```
 
 3. **Add typed function** in `frontend/src/lib/api/index.ts`:
@@ -148,36 +148,12 @@ async getItems(): Promise<Item[]> {
 const items = await api.getItems(); // Fully typed!
 ```
 
-### Type Safety Benefits
-
-```typescript
-// ✅ Valid - compiles
-const user = await api.getUser(1);
-console.log(user.email); // TypeScript knows user.email exists
-
-// ❌ Invalid - won't compile
-const user = await api.getUser("invalid"); // Error: argument must be number
-console.log(user.invalidField); // Error: property doesn't exist
-
-// ✅ Create user with validation
-await api.createUser({
-	email: "test@example.com",
-	username: "test",
-	password: "pass123",
-}); // TypeScript enforces required fields
-
-// ❌ Missing field - won't compile
-await api.createUser({
-	email: "test@example.com",
-	// Error: username and password required
-});
-```
-
 ## Files
 
--   `src/lib/api/client.ts` - Base fetch client with error handling
--   `src/lib/api/types.ts` - **Auto-generated** (DO NOT EDIT MANUALLY)
--   `src/lib/api/index.ts` - Typed API functions for all endpoints
+- `src/lib/api/client.ts` - Base fetch client with error handling
+- `src/lib/api/types.ts` - **Auto-generated** (DO NOT EDIT MANUALLY)
+- `src/lib/api/generated/` - **Auto-generated client** (DO NOT EDIT MANUALLY)
+- `src/lib/api/index.ts` - Typed API functions for all endpoints
 
 ## Troubleshooting
 
@@ -189,29 +165,20 @@ Error: fetch failed
 
 Start backend: `cd backend && uvicorn api.main:app --reload`
 
-### Types out of sync
+### Types/client out of sync
 
 ```typescript
 // Type error after backend changes
 ```
 
-Regenerate: `npm run generate:api-types`
+Regenerate: `npm run generate:api`
 
 ### Type generation fails
 
 Check that:
 
--   Backend is running on `http://localhost:8000`
--   OpenAPI endpoint is accessible: `http://localhost:8000/v1/openapi.json`
--   `openapi-typescript` is installed: `npm install`
-
-## Why Not Axios?
-
--   **Native fetch** is the web standard (2025)
--   **Zero dependencies** = future-proof
--   **Better streaming** support with fetch
--   **Smaller bundle** size
--   **Type safety** via OpenAPI generation > manual typing
--   **Auto-sync** backend/frontend types
+- Backend is running on `http://localhost:1383`
+- OpenAPI endpoint is accessible: `http://localhost:1383/v1/openapi.json`
+- `openapi-typescript` is installed: `npm install`
 
 Modern approach: Let OpenAPI handle types, let fetch handle requests.

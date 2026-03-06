@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<base href="/" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<script>
+			;(function () {
+				try {
+					const mode = localStorage.getItem('theme-mode') || 'system'
+					const isDark =
+						mode === 'dark' ||
+						(mode === 'system' &&
+							window.matchMedia('(prefers-color-scheme: dark)').matches)
+					document.documentElement.classList.toggle('dark', isDark)
+				} catch {
+					// ignore
+				}
+			})()
+		</script>
+		<link rel="stylesheet" href="%sveltekit.assets%/splash.css" />
+		<link rel="stylesheet" href="%sveltekit.assets%/shimmer.css" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div id="nokodo-splash-screen" aria-label="loading" role="status">
+			<div id="nokodo-splash-container">
+				<div id="nokodo-splash-brand" class="nokodo-loader" data-expanded="0" data-font="0">
+					<span class="nokodo-loader__hidden">n</span
+					><span class="nokodo-loader__visible">ok</span
+					><span class="nokodo-loader__hidden">odo</span>
+				</div>
+			</div>
+		</div>
+		<script>
+			;(function () {
+				const brand = document.getElementById('nokodo-splash-brand')
+				if (!brand) return
+
+				const isReducedMotion = window.matchMedia(
+					'(prefers-reduced-motion: reduce)'
+				).matches
+
+				const timing = isReducedMotion
+					? { okHold: 100, expansion: 300, pause: 50 }
+					: { okHold: 500, expansion: 800, pause: 200 }
+
+				let shimmerResolve
+				const shimmerStarted = new Promise((resolve) => {
+					shimmerResolve = resolve
+				})
+				window.__nokodoSplash = { shimmerStarted }
+
+				function domReady() {
+					return new Promise((resolve) => {
+						if (document.readyState === 'loading') {
+							document.addEventListener('DOMContentLoaded', resolve, { once: true })
+						} else {
+							resolve()
+						}
+					})
+				}
+
+				function fontReady() {
+					if (document.fonts && document.fonts.load) {
+						return document.fonts
+							.load('600 48px nokodoFont')
+							.then(() => document.fonts.ready)
+					}
+					return Promise.resolve()
+				}
+
+				Promise.all([domReady(), fontReady()]).then(function () {
+					brand.dataset.font = '1'
+					setTimeout(function () {
+						brand.dataset.expanded = '1'
+						setTimeout(function () {
+							setTimeout(function () {
+								brand.classList.add('shimmer')
+								shimmerResolve()
+							}, timing.pause)
+						}, timing.expansion)
+					}, timing.okHold)
+				})
+			})()
+		</script>
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

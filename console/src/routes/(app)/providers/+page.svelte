@@ -1,0 +1,607 @@
+<script lang="ts">
+	import { api, unwrap, type Schemas } from '$lib/api'
+
+	type Provider = Schemas['Provider']
+	type ProviderCreate = Schemas['ProviderCreate']
+	type ProviderType = Schemas['ProviderType']
+	type ProviderUpdate = Schemas['ProviderUpdate']
+
+	import EmptyState from '$lib/components/EmptyState.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { Button } from '$lib/components/ui/button'
+	import {
+		Card,
+		CardContent,
+		CardDescription,
+		CardHeader,
+		CardTitle,
+	} from '$lib/components/ui/card'
+	import { Input } from '$lib/components/ui/input'
+	import { Label } from '$lib/components/ui/label'
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
+	import { Switch } from '$lib/components/ui/switch'
+	import { Bot, Cpu, Pencil, Plus, Settings2, Sparkles, Trash2, X } from '@lucide/svelte'
+	import { Dialog } from 'bits-ui'
+	import { onMount } from 'svelte'
+
+	let providers = $state<Provider[]>([])
+	let showModal = $state(false)
+	let modalMode = $state<'create' | 'edit'>('create')
+	let modalStep = $state<'select' | 'configure'>('select')
+	let isLoading = $state(false)
+	let isFetching = $state(true)
+	let editingId = $state<string | null>(null)
+	let error = $state<string | null>(null)
+	let submitError = $state<string | null>(null)
+
+	type ProviderFormState = {
+		name: string
+		adapter_type: string
+		provider_type: ProviderType
+		base_url: string
+		api_key: string
+		model_prefix: string
+		is_autofetch_enabled: boolean
+	}
+
+	// Form state (UI-friendly)
+	let formState = $state<ProviderFormState>({
+		name: '',
+		adapter_type: 'openai',
+		provider_type: 'external',
+		base_url: '',
+		api_key: '',
+		model_prefix: '',
+		is_autofetch_enabled: true,
+	})
+
+	// Temporary state for headers editing
+	let headerEntries = $state<Array<{ key: string; value: string }>>([])
+
+	const presets = [
+		{
+			id: 'openai',
+			name: 'OpenAI',
+			type: 'openai',
+			provider_type: 'external',
+			url: 'https://api.openai.com/v1',
+			prefix: 'openai',
+			icon: Sparkles,
+		},
+		{
+			id: 'google',
+			name: 'Google',
+			type: 'google',
+			provider_type: 'external',
+			url: '',
+			prefix: 'google',
+			icon: Sparkles,
+		},
+		{
+			id: 'anthropic',
+			name: 'Anthropic',
+			type: 'anthropic',
+			provider_type: 'external',
+			url: 'https://api.anthropic.com/v1',
+			prefix: 'anthropic',
+			icon: Bot,
+		},
+		{
+			id: 'ollama',
+			name: 'Ollama',
+			type: 'ollama',
+			provider_type: 'local',
+			url: 'http://localhost:11434/v1',
+			prefix: 'ollama',
+			icon: Cpu,
+		},
+		{
+			id: 'custom',
+			name: 'custom',
+			type: 'openai', // default to openai compatible
+			provider_type: 'external',
+			url: '',
+			prefix: '',
+			icon: Settings2,
+		},
+	]
+
+	onMount(async () => {
+		await loadProviders()
+	})
+
+	async function loadProviders() {
+		error = null
+		try {
+			providers = unwrap(await api.GET('/v1/providers'))
+		} catch (e) {
+			console.error('Failed to load providers', e)
+			error = 'Failed to load providers. Please check if the backend is running.'
+		} finally {
+			isFetching = false
+		}
+	}
+
+	function openCreateModal() {
+		modalMode = 'create'
+		modalStep = 'select'
+		showModal = true
+		editingId = null
+		submitError = null
+		resetForm()
+	}
+
+	function openEditModal(provider: Provider) {
+		modalMode = 'edit'
+		modalStep = 'configure'
+		editingId = provider.id
+		submitError = null
+		formState = {
+			name: provider.name,
+			adapter_type: provider.adapter_type,
+			provider_type: provider.provider_type || 'external',
+			base_url: provider.base_url || '',
+			model_prefix: provider.model_prefix || '',
+			is_autofetch_enabled: provider.is_autofetch_enabled ?? true,
+			api_key: '', // Don't show existing key
+		}
+		// Convert headers object to array for editing
+		headerEntries = Object.entries(provider.additional_headers || {}).map(([key, value]) => ({
+			key,
+			value,
+		}))
+		showModal = true
+	}
+
+	function selectPreset(preset: (typeof presets)[0]) {
+		formState.adapter_type = preset.type
+		formState.provider_type = preset.provider_type as ProviderType
+		formState.base_url = preset.url
+		formState.model_prefix = preset.prefix
+		if (preset.id !== 'custom') {
+			formState.name = preset.name
+		}
+		modalStep = 'configure'
+	}
+
+	function resetForm() {
+		formState = {
+			name: '',
+			adapter_type: 'openai',
+			provider_type: 'external',
+			base_url: '',
+			api_key: '',
+			model_prefix: '',
+			is_autofetch_enabled: true,
+		}
+		headerEntries = []
+	}
+
+	function addHeader() {
+		headerEntries = [...headerEntries, { key: '', value: '' }]
+	}
+
+	function removeHeader(index: number) {
+		headerEntries = headerEntries.filter((_, i) => i !== index)
+	}
+
+	async function handleSubmit(e: Event) {
+		e.preventDefault()
+		isLoading = true
+
+		// Convert headers array back to object
+		const headers = headerEntries.reduce(
+			(acc, { key, value }) => {
+				if (key.trim()) acc[key.trim()] = value.trim()
+				return acc
+			},
+			{} as Record<string, string>
+		)
+
+		submitError = null
+
+		try {
+			if (modalMode === 'create') {
+				const payload: ProviderCreate = {
+					name: formState.name,
+					adapter_type: formState.adapter_type,
+					provider_type: formState.provider_type,
+					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
+					model_prefix: formState.model_prefix.trim()
+						? formState.model_prefix.trim()
+						: null,
+					api_key: formState.api_key.trim() ? formState.api_key.trim() : null,
+					additional_headers: Object.keys(headers).length > 0 ? headers : null,
+					status: 'enabled',
+					is_autofetch_enabled: formState.is_autofetch_enabled,
+				}
+				unwrap(await api.POST('/v1/providers', { body: payload }))
+			} else if (editingId) {
+				const payload: ProviderUpdate = {
+					adapter_type: formState.adapter_type,
+					provider_type: formState.provider_type,
+					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
+					model_prefix: formState.model_prefix.trim()
+						? formState.model_prefix.trim()
+						: null,
+					additional_headers: Object.keys(headers).length > 0 ? headers : null,
+					is_autofetch_enabled: formState.is_autofetch_enabled,
+				}
+				if (formState.api_key.trim()) payload.api_key = formState.api_key.trim()
+				unwrap(
+					await api.PATCH('/v1/providers/{provider_id}', {
+						params: { path: { provider_id: editingId } },
+						body: payload,
+					})
+				)
+			}
+			await loadProviders()
+			showModal = false
+			resetForm()
+		} catch (e) {
+			console.error('Failed to save provider', e)
+			submitError =
+				'Failed to save provider. ' + (e instanceof Error ? e.message : 'Unknown error')
+		} finally {
+			isLoading = false
+		}
+	}
+
+	function handleTestConnection() {
+		// TODO: implement provider connection test
+	}
+</script>
+
+<div class="min-h-0 flex-1 overflow-y-auto">
+	<div class="space-y-6">
+		<div class="flex items-center justify-between">
+			<div>
+				<h2 class="text-2xl font-bold tracking-tight">providers</h2>
+				<p class="text-zinc-400">manage your AI model providers.</p>
+			</div>
+			<Button onclick={openCreateModal} class="gap-2 rounded-xl">
+				<Plus class="h-4 w-4" />
+				add provider
+			</Button>
+		</div>
+
+		{#if isFetching}
+			<div class="flex flex-col items-center justify-center gap-4 py-16">
+				<NokodoLoader expanded={true} />
+			</div>
+		{:else if error}
+			<div
+				class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
+			>
+				<p>{error}</p>
+				<Button variant="outline" class="mt-4" onclick={loadProviders}>Retry</Button>
+			</div>
+		{:else}
+			<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#each providers as provider (provider.id)}
+					<Card
+						class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+					>
+						<CardHeader>
+							<div class="flex items-start justify-between">
+								<div>
+									<CardTitle>{provider.name}</CardTitle>
+									<CardDescription>{provider.adapter_type}</CardDescription>
+								</div>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
+									onclick={() => openEditModal(provider)}
+								>
+									<Pencil class="h-4 w-4" />
+								</Button>
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div class="space-y-1 text-sm text-zinc-400">
+								<div class="flex justify-between">
+									<span>status:</span>
+									<span
+										class={provider.status === 'enabled'
+											? 'text-green-400'
+											: 'text-zinc-500'}>{provider.status}</span
+									>
+								</div>
+								<div class="flex justify-between">
+									<span>type:</span>
+									<span>{provider.provider_type}</span>
+								</div>
+								<div class="flex justify-between">
+									<span>autofetch:</span>
+									<span
+										class={provider.is_autofetch_enabled
+											? 'text-blue-400'
+											: 'text-zinc-500'}
+										>{provider.is_autofetch_enabled
+											? 'enabled'
+											: 'disabled'}</span
+									>
+								</div>
+								{#if provider.model_prefix}
+									<div class="flex justify-between">
+										<span>prefix:</span>
+										<span
+											class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs"
+											>{provider.model_prefix}</span
+										>
+									</div>
+								{/if}
+								{#if provider.base_url}
+									<div class="mt-2 border-t border-zinc-800 pt-2">
+										<p class="truncate font-mono text-xs opacity-70">
+											{provider.base_url}
+										</p>
+									</div>
+								{/if}
+							</div>
+						</CardContent>
+					</Card>
+				{/each}
+
+				{#if providers.length === 0}
+					<EmptyState message="no providers configured yet." />
+				{/if}
+			</div>
+		{/if}
+	</div>
+</div>
+
+<Dialog.Root
+	bind:open={showModal}
+	onOpenChange={(open) => {
+		if (!open) showModal = false
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
+		<Dialog.Content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+		>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div>
+					<Dialog.Title class="text-lg font-semibold">
+						{modalMode === 'create'
+							? modalStep === 'select'
+								? 'select provider'
+								: 'configure provider'
+							: 'edit provider'}
+					</Dialog.Title>
+					<p class="text-sm text-zinc-400">
+						{modalMode === 'create' && modalStep === 'select'
+							? 'choose a provider template or start from scratch.'
+							: 'enter connection details.'}
+					</p>
+				</div>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="h-8 w-8 rounded-lg"
+					onclick={() => (showModal = false)}
+				>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
+
+			{#if modalMode === 'create' && modalStep === 'select'}
+				<div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+					<div class="grid grid-cols-2 gap-4">
+						{#each presets as preset (preset.name)}
+							<button
+								class="flex flex-col items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
+								onclick={() => selectPreset(preset)}
+							>
+								<preset.icon class="h-8 w-8 text-zinc-400" />
+								<span class="font-medium">{preset.name}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+				<div class="flex shrink-0 justify-end border-t border-zinc-800 px-6 py-4">
+					<Button variant="outline" class="rounded-xl" onclick={() => (showModal = false)}
+						>cancel</Button
+					>
+				</div>
+			{:else}
+				<form onsubmit={handleSubmit} class="flex min-h-0 flex-1 flex-col">
+					<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+						<div class="space-y-2">
+							<Label for="name">name</Label>
+							<div class="space-y-2">
+								<Label for="api_type">API type</Label>
+								<Select
+									value={formState.adapter_type}
+									onValueChange={(v: string) => (formState.adapter_type = v)}
+								>
+									<SelectTrigger id="api_type" class="rounded-xl">
+										<span class="truncate text-left">
+											{formState.adapter_type === 'openai'
+												? 'OpenAI'
+												: formState.adapter_type === 'google'
+													? 'Google'
+													: formState.adapter_type === 'anthropic'
+														? 'Anthropic'
+														: formState.adapter_type === 'ollama'
+															? 'Ollama'
+															: formState.adapter_type}
+										</span>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="openai">OpenAI</SelectItem>
+										<SelectItem value="google">Google</SelectItem>
+										<SelectItem value="anthropic">Anthropic</SelectItem>
+										<SelectItem value="ollama">Ollama</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							<div class="space-y-2">
+								<Label for="provider_type">provider type</Label>
+								<Select
+									value={formState.provider_type}
+									onValueChange={(v: string) =>
+										(formState.provider_type = v as ProviderType)}
+								>
+									<SelectTrigger id="provider_type" class="rounded-xl">
+										<span class="truncate text-left"
+											>{formState.provider_type}</span
+										>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="external">external</SelectItem>
+										<SelectItem value="local">local</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+
+						<div class="space-y-2">
+							<Label for="prefix">model prefix</Label>
+							<Input
+								id="prefix"
+								bind:value={formState.model_prefix}
+								placeholder="e.g. openai"
+								class="rounded-xl"
+							/>
+							<p class="text-xs text-zinc-500">
+								used to namespace models from this provider.
+							</p>
+						</div>
+
+						<div class="flex items-center justify-between">
+							<div class="space-y-0.5">
+								<Label for="autofetch">model autofetch</Label>
+								<p class="text-xs text-zinc-500">
+									automatically sync available models from API.
+								</p>
+							</div>
+							<Switch
+								id="autofetch"
+								checked={formState.is_autofetch_enabled}
+								onCheckedChange={(v: boolean) =>
+									(formState.is_autofetch_enabled = v)}
+							/>
+						</div>
+
+						<div class="space-y-2">
+							<Label for="url">base URL (optional)</Label>
+							<Input
+								id="url"
+								bind:value={formState.base_url}
+								placeholder="https://api.openai.com/v1"
+								class="rounded-xl"
+							/>
+						</div>
+						<div class="space-y-2">
+							<Label for="key">API key</Label>
+							<Input
+								id="key"
+								type="password"
+								bind:value={formState.api_key}
+								placeholder={modalMode === 'edit' ? '(unchanged)' : 'sk-...'}
+								class="rounded-xl"
+							/>
+						</div>
+
+						<div class="space-y-2 border-t border-zinc-800 pt-2">
+							<div class="flex items-center justify-between">
+								<Label>additional headers</Label>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onclick={addHeader}
+									class="h-6 text-xs"
+								>
+									<Plus class="mr-1 h-3 w-3" /> add
+								</Button>
+							</div>
+
+							{#if headerEntries.length === 0}
+								<p class="text-xs text-zinc-500 italic">no additional headers.</p>
+							{:else}
+								<div class="space-y-2">
+									{#each headerEntries as entry, i (i)}
+										<div class="flex gap-2">
+											<Input
+												placeholder="Key"
+												bind:value={entry.key}
+												class="h-8 rounded-lg text-xs"
+											/>
+											<Input
+												placeholder="Value"
+												bind:value={entry.value}
+												class="h-8 rounded-lg text-xs"
+											/>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon"
+												class="h-8 w-8 shrink-0 text-zinc-500 hover:text-red-400"
+												onclick={() => removeHeader(i)}
+											>
+												<Trash2 class="h-3 w-3" />
+											</Button>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+
+						{#if submitError}
+							<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
+								{submitError}
+							</div>
+						{/if}
+					</div>
+					<div
+						class="flex shrink-0 justify-between gap-2 border-t border-zinc-800 px-6 py-4"
+					>
+						{#if modalMode === 'create'}
+							<Button
+								variant="ghost"
+								type="button"
+								class="rounded-xl"
+								onclick={() => (modalStep = 'select')}
+							>
+								back
+							</Button>
+						{:else}
+							<span></span>
+						{/if}
+						<div class="flex gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								class="rounded-xl"
+								disabled={isLoading}
+								onclick={handleTestConnection}
+							>
+								test
+							</Button>
+							<Button
+								variant="outline"
+								type="button"
+								class="rounded-xl"
+								onclick={() => (showModal = false)}>cancel</Button
+							>
+							<Button type="submit" disabled={isLoading} class="rounded-xl">
+								{isLoading
+									? 'saving...'
+									: modalMode === 'create'
+										? 'add provider'
+										: 'save changes'}
+							</Button>
+						</div>
+					</div>
+				</form>
+			{/if}
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

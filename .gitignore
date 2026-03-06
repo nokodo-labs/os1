@@ -98,3 +98,4 @@ coverage/
 *.bak
 *.tmp
 *.temp
+/temp

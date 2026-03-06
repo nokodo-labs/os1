@@ -28,10 +28,10 @@
 	],
 	"packages": {
 		".": {
-			"package-name": "project-slug",
-			"pull-request-title-pattern": "chore(release): release project-slug ${version}"
+			"release-type": "simple",
+			"pull-request-title-pattern": "chore(release): release${component} nokodo AI v${version}"
 		},
-		"backend/project-slug": {
+		"backend/nokodo_ai": {
 			"package-name": "library",
 			"release-type": "python",
 			"include-component-in-tag": true,
@@ -50,6 +50,13 @@
 			"release-type": "node",
 			"include-component-in-tag": true,
 			"extra-label": "bot,frontend,release",
+			"skip-changelog": true
+		},
+		"console": {
+			"package-name": "console",
+			"release-type": "node",
+			"include-component-in-tag": true,
+			"extra-label": "bot,console,release",
 			"skip-changelog": true
 		}
 	}

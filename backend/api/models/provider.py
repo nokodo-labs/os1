@@ -1,0 +1,86 @@
+"""Provider configuration model."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from api.models.base import Base, StringEnum
+from api.models.mixins import (
+	MetadataJSONMixin,
+	TimestampMixin,
+	TypeIDPrimaryKeyMixin,
+)
+from nokodo_ai.utils.security import decrypt_string
+
+
+if TYPE_CHECKING:
+	from api.models.model import Model
+
+
+class ProviderStatus(StrEnum):
+	"""Operational state of a provider."""
+
+	ENABLED = "enabled"
+	DISABLED = "disabled"
+
+
+class ProviderType(StrEnum):
+	"""Type of provider deployment."""
+
+	LOCAL = "local"
+	EXTERNAL = "external"
+
+
+class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+	"""Configuration for external model providers."""
+
+	__tablename__ = "providers"
+	__typeid_prefix__ = "prov"
+
+	name: Mapped[str] = mapped_column(String(100), unique=True)
+	adapter_type: Mapped[str] = mapped_column(String(100))
+	provider_type: Mapped[ProviderType] = mapped_column(
+		StringEnum(ProviderType),
+		default=ProviderType.EXTERNAL,
+	)
+	base_url: Mapped[str | None] = mapped_column(String(255))
+	encrypted_api_key: Mapped[str | None] = mapped_column(String(1024))
+	model_prefix: Mapped[str | None] = mapped_column(String(50))
+	additional_headers: Mapped[dict | None] = mapped_column(JSONB)
+	status: Mapped[ProviderStatus] = mapped_column(
+		StringEnum(ProviderStatus),
+		default=ProviderStatus.ENABLED,
+	)
+	is_autofetch_enabled: Mapped[bool] = mapped_column(default=True)
+	last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+	models: Mapped[list[Model]] = relationship(
+		"Model",
+		back_populates="provider",
+		cascade="all, delete-orphan",
+	)
+
+	@property
+	def manual_models(self) -> list[Model]:
+		"""Return models that were manually created."""
+		return [m for m in self.models if not m.is_autofetched]
+
+	@property
+	def autofetched_models(self) -> list[Model]:
+		"""Return models that were automatically fetched."""
+		return [m for m in self.models if m.is_autofetched]
+
+	@property
+	def api_key(self) -> str | None:
+		"""Return decrypted api key for this provider, if set."""
+		from api.settings import settings
+
+		if self.encrypted_api_key is None or self.encrypted_api_key.strip() == "":
+			return None
+		return decrypt_string(self.encrypted_api_key, settings.security.secret_key)

@@ -1,0 +1,117 @@
+name: console CI
+
+on:
+  workflow_call:
+    inputs:
+      run_tests:
+        description: "run tests"
+        type: boolean
+        required: false
+        default: true
+      run_lint:
+        description: "run linting"
+        type: boolean
+        required: false
+        default: true
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "run tests"
+        type: boolean
+        required: false
+        default: true
+      run_lint:
+        description: "run linting"
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  format:
+    name: check formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: console
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: console/.nvmrc
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: check formatting
+        run: pnpm run format
+
+  quality:
+    name: check quality on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    needs: format
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - file
+          - "25"
+    continue-on-error: ${{ matrix.node != 'file' }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: console
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: set up Node from .nvmrc
+        if: ${{ matrix.node == 'file' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: console/.nvmrc
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
+
+      - name: set up Node ${{ matrix.node }}
+        if: ${{ matrix.node != 'file' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: "${{ matrix.node }}"
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: lint
+        if: ${{ inputs.run_lint }}
+        run: pnpm run lint
+
+      - name: type check
+        run: pnpm run check
+
+      - name: run tests
+        if: ${{ inputs.run_tests }}
+        run: pnpm run test
+
+      - name: build
+        run: pnpm run build

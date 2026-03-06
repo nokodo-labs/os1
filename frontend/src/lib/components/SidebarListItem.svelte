@@ -1,0 +1,74 @@
+<script lang="ts">
+	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
+	import type { Snippet } from 'svelte'
+
+	type ActionsVisibility = 'always' | 'hover'
+
+	interface Props {
+		selected?: boolean
+		onSelect?: () => void | Promise<void>
+		onPrefetch?: () => void
+		actionsVisibility?: ActionsVisibility
+		showChevron?: boolean
+		radiusClass?: string
+		paddingClass?: string
+		className?: string
+		children?: Snippet
+		leading?: Snippet
+		actions?: Snippet
+	}
+
+	let {
+		selected = false,
+		onSelect,
+		onPrefetch,
+		actionsVisibility = 'hover',
+		showChevron = false,
+		radiusClass = 'rounded-pill',
+		paddingClass = 'px-3 py-2.5',
+		className = '',
+		children,
+		leading,
+		actions,
+	}: Props = $props()
+
+	function handleKeyDown(event: KeyboardEvent) {
+		if (event.key !== 'Enter' && event.key !== ' ') return
+		event.preventDefault()
+		void onSelect?.()
+	}
+</script>
+
+<div
+	role="button"
+	tabindex="0"
+	class={`group/sidebar-item ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-interactive-hover text-left transition-all duration-200 ${className}`}
+	style={selected
+		? 'background-color: rgb(var(--accent-rgb) / 0.3); border-color: rgb(var(--accent-rgb) / 0.55);'
+		: ''}
+	onmouseenter={() => onPrefetch?.()}
+	onclick={() => void onSelect?.()}
+	onkeydown={handleKeyDown}
+>
+	{#if leading}
+		{@render leading()}
+	{/if}
+
+	<div class="min-w-0 flex-1">
+		{@render children?.()}
+	</div>
+
+	{#if actions}
+		<div
+			class={`shrink-0 ${actionsVisibility === 'always' ? 'opacity-100' : 'opacity-0 group-hover/sidebar-item:opacity-100'} transition-opacity duration-150`}
+		>
+			{@render actions()}
+		</div>
+	{/if}
+
+	{#if showChevron}
+		<ChevronRight
+			class="text-foreground/50 group-hover/sidebar-item:text-foreground/70 h-5 w-5 shrink-0 transition-colors"
+		/>
+	{/if}
+</div>

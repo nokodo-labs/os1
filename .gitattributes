@@ -1,0 +1,21 @@
+# enforce consistent LF line endings across platforms.
+* text=auto eol=lf
+
+# treat common binary formats as binary (no EOL normalization).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.7z binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.wasm binary

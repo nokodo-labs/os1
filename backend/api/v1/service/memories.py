@@ -1,0 +1,506 @@
+"""service layer for memory operations."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Coroutine
+
+from fastapi import HTTPException, status
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.database import build_cursor_page, decode_cursor
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
+from api.models.memory import Memory
+from api.schemas.memory import MemoryCreate, MemoryUpdate
+from api.schemas.search import (
+	CursorPage,
+	SearchMode,
+	SearchParams,
+	SearchResultItem,
+	SearchResultType,
+)
+from api.v1.service import events as event_service
+from api.v1.service import vectorstores as vectorstore_service
+from api.v1.service.auth import Principal
+from api.v1.service.authorization import require_permission
+from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.vectorize import (
+	VectorSpec,
+	build_chunk,
+	remove_vectorized_resource,
+	vectorize_resource,
+)
+from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
+
+
+async def _get_memory(
+	memory_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> Memory:
+	stmt = select(Memory).where(Memory.id == memory_id)
+	if not principal.is_admin:
+		stmt = stmt.where(Memory.user_id == principal.user.id)
+	result = await session.execute(stmt)
+	memory = result.scalars().one_or_none()
+	if not memory:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="Memory not found",
+		)
+	return memory
+
+
+async def create_memory(
+	memory_in: MemoryCreate,
+	session: AsyncSession,
+	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
+) -> Memory:
+	require_permission(principal, "memories:create")
+	data = memory_in.model_dump(by_alias=True)
+	if not principal.is_admin:
+		data["user_id"] = principal.user.id
+	memory = Memory(**data)
+	session.add(memory)
+	await session.flush()
+	await session.refresh(memory)
+	memory_id = TypeID(memory.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_CREATED,
+		data={"memory_id": str(memory_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
+	await vectorize_resource(spec=MEMORY_SPEC, resource=memory, session=session)
+
+	return await _get_memory(memory_id, session, principal)
+
+
+async def list_memories(
+	session: AsyncSession,
+	principal: Principal,
+	user_id: TypeID,
+	skip: int = 0,
+	limit: int = 50,
+	sort_by: str = "updated_at",
+	sort_dir: SortDir = "desc",
+	search: str | None = None,
+) -> list[Memory]:
+	if not principal.is_admin:
+		user_id = TypeID(principal.user.id)
+
+	base = select(Memory).where(Memory.user_id == user_id)
+	if search:
+		base = base.where(Memory.content.ilike(f"%{search}%"))
+
+	stmt = (
+		apply_sort(
+			base,
+			sort_by=sort_by,
+			sort_dir=sort_dir,
+			columns={
+				"updated_at": Memory.updated_at,
+				"created_at": Memory.created_at,
+				"content_length": func.length(Memory.content),
+				"category": Memory.category,
+				"last_accessed_at": Memory.last_accessed_at,
+				"confidence": Memory.confidence,
+			},
+			tie_breaker=Memory.id,
+		)
+		.offset(skip)
+		.limit(limit)
+	)
+	result = await session.execute(stmt)
+	return list(result.scalars().all())
+
+
+async def get_memory(
+	memory_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> Memory:
+	return await _get_memory(memory_id, session, principal)
+
+
+async def update_memory(
+	memory_id: TypeID,
+	memory_in: MemoryUpdate,
+	session: AsyncSession,
+	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
+) -> Memory:
+	"""update a memory and sync with vectorstore if content changed."""
+	memory = await _get_memory(memory_id, session, principal)
+
+	if memory_in.content is not None:
+		memory.content = memory_in.content
+	if memory_in.confidence is not None:
+		memory.confidence = memory_in.confidence
+	if memory_in.category is not None:
+		memory.category = memory_in.category
+
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_UPDATED,
+		data={"memory_id": str(memory_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
+	if await MEMORY_SPEC.should_revectorize(memory, memory_in, session):
+		await vectorize_resource(spec=MEMORY_SPEC, resource=memory, session=session)
+	return await _get_memory(memory_id, session, principal)
+
+
+async def delete_memory(
+	memory_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
+) -> None:
+	"""delete a memory and remove from the search index."""
+	memory = await _get_memory(memory_id, session, principal)
+
+	await session.delete(memory)
+
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_DELETED,
+		data={"memory_id": str(memory_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
+	await remove_vectorized_resource(
+		spec=MEMORY_SPEC, resource_id=str(memory_id), session=session
+	)
+
+
+async def delete_all_memories(
+	session: AsyncSession,
+	principal: Principal,
+	*,
+	origin_session_id: str | None = None,
+) -> None:
+	"""delete all memories for the current user and remove from search index."""
+	user_id = TypeID(principal.user.id)
+
+	result = await session.execute(
+		select(func.count()).select_from(Memory).where(Memory.user_id == user_id)
+	)
+	count = result.scalar_one()
+	if count == 0:
+		return
+
+	await session.execute(delete(Memory).where(Memory.user_id == user_id))
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.MEMORY_DELETED,
+		data={"all": True, "user_id": str(user_id)},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+
+	await vectorstore_service.delete(
+		target=vectorstore_service.resource_filter("memory", owner_id=str(user_id)),
+		session=session,
+	)
+
+
+def _memory_dense_text(memory: Memory) -> str:
+	return (memory.content or "").strip()
+
+
+def _memory_metadata(memory: Memory) -> JSONObject:
+	return {
+		"resource_type": "memory",
+		"owner_id": str(memory.user_id),
+		"category": memory.category or "",
+	}
+
+
+async def _memory_should_revectorize(
+	memory: Memory,
+	memory_in: MemoryUpdate,
+	session: AsyncSession,
+) -> bool:
+	_fields = {"content", "category"}
+	update_data = memory_in.model_dump(exclude_unset=True, mode="python")
+	return bool(_fields & update_data.keys())
+
+
+MEMORY_SPEC: VectorSpec[Memory] = VectorSpec(
+	resource_type="memory",
+	resource_id=lambda m: str(m.id),
+	dense_text=_memory_dense_text,
+	bm25_text=_memory_dense_text,
+	metadata=_memory_metadata,
+	should_revectorize=_memory_should_revectorize,
+	sort_key="updated_at",
+)
+
+
+async def vectorize_all_memories(session: AsyncSession) -> int:
+	"""vectorize all memories in bulk. returns count."""
+	stmt = select(Memory)
+	result = await session.execute(stmt)
+	valid: list[tuple[Memory, str]] = []
+	for m in result.scalars().all():
+		text = _memory_dense_text(m)
+		if text.strip():
+			valid.append((m, text))
+	if not valid:
+		return 0
+	embeddings = await embed_texts([text for _, text in valid], session)
+	chunks = []
+	for (memory, _), emb in zip(valid, embeddings):
+		await remove_vectorized_resource(
+			spec=MEMORY_SPEC, resource_id=str(memory.id), session=session
+		)
+		chunks.append(build_chunk(MEMORY_SPEC, memory, emb))
+	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	return len(valid)
+
+
+async def _autocomplete_memories(
+	q: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 5,
+) -> list[SearchResultItem]:
+	"""pg_trgm autocomplete for memories on content."""
+	stmt = (
+		select(Memory)
+		.where(
+			or_(
+				func.similarity(Memory.content, q) > 0.1,
+				Memory.content.ilike(f"%{q}%"),
+			),
+		)
+		.order_by(func.similarity(Memory.content, q).desc())
+		.limit(limit)
+	)
+	if not principal.is_admin:
+		stmt = stmt.where(Memory.user_id == principal.user.id)
+	result = await db.execute(stmt)
+	return [
+		SearchResultItem(
+			type=SearchResultType.MEMORY,
+			id=TypeID(mem.id),
+			title=mem.content[:80] if mem.content else "",
+			subtitle=mem.category,
+			created_at=mem.created_at,
+			updated_at=mem.updated_at,
+		)
+		for mem in result.scalars().all()
+	]
+
+
+async def _hybrid_search_memories(
+	query_text: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
+) -> list[SearchResultItem]:
+	"""qdrant hybrid search for memories (dense + BM25)."""
+	params = search_params or SearchParams()
+	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
+	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
+	query_emb = (
+		query_embedding
+		if query_embedding is not None
+		else (await embed_text(text=query_text, session=db) if need_dense else None)
+	)
+	text_query = query_text if need_sparse else None
+	# memories are user-private (no sharing) - owner_id filter is efficient.
+	query_filter = vectorstore_service.resource_filter(
+		"memory",
+		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+	)
+	results = await vectorstore_service.search(
+		session=db,
+		query=query_emb,
+		text_query=text_query,
+		limit=limit,
+		query_filter=query_filter,
+		normalize=params.normalize,
+	)
+	if not results:
+		return []
+	resource_ids: list[str] = [str(r.metadata["resource_id"]) for r in results]
+	stmt = select(Memory).where(Memory.id.in_(resource_ids))
+	if not principal.is_admin:
+		stmt = stmt.where(Memory.user_id == principal.user.id)
+	db_result = await db.execute(stmt)
+	by_id = {str(m.id): m for m in db_result.scalars().all()}
+	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
+	items: list[SearchResultItem] = []
+	for r in results:
+		rid = str(r.metadata["resource_id"])
+		mem = by_id.get(rid)
+		if not mem:
+			continue
+		items.append(
+			SearchResultItem(
+				type=SearchResultType.MEMORY,
+				id=TypeID(mem.id),
+				title=mem.content[:80] if mem.content else "",
+				subtitle=mem.category,
+				score=score_by_rid.get(rid),
+				created_at=mem.created_at,
+				updated_at=mem.updated_at,
+			)
+		)
+	return items
+
+
+async def search_memories(
+	query_text: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
+) -> CursorPage[SearchResultItem]:
+	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	params = search_params or SearchParams()
+	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	run_autocomplete = params.mode in (
+		SearchMode.AUTOCOMPLETE,
+		SearchMode.FULL,
+	)
+	run_hybrid = params.mode in (
+		SearchMode.HYBRID,
+		SearchMode.DENSE,
+		SearchMode.SPARSE,
+		SearchMode.FULL,
+	)
+	# hybrid first - wins on deduplication (higher quality than autocomplete)
+	if run_hybrid:
+		coros.append(
+			_hybrid_search_memories(
+				query_text,
+				db,
+				principal=principal,
+				limit=limit + 1,
+				search_params=params,
+				query_embedding=query_embedding,
+			)
+		)
+	if run_autocomplete:
+		coros.append(
+			_autocomplete_memories(query_text, db, principal=principal, limit=limit + 1)
+		)
+	results = await asyncio.gather(*coros, return_exceptions=True)
+	items = vectorstore_service.merge_deduplicate(
+		results, limit + 1, resource_name="memories"
+	)
+	if cursor:
+		ts, cid = decode_cursor(cursor)
+		_sk = MEMORY_SPEC.sort_key
+		items = [i for i in items if (getattr(i, _sk), str(i.id)) < (ts, cid)]
+	_sk = MEMORY_SPEC.sort_key
+	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
+	return build_cursor_page(items, limit, sort_key=MEMORY_SPEC.sort_key)
+
+
+async def query_relevant_memories(
+	query_text: str,
+	db: AsyncSession,
+	*,
+	principal: Principal,
+	limit: int = 10,
+	score_threshold: float = 0.0,
+	query_embedding: list[float] | None = None,
+) -> list[Memory]:
+	"""hybrid search returning full Memory objects in relevance order.
+
+	intended for internal consumers (filters, tools) that need full
+	memory content rather than the truncated SearchResultItem used by
+	UI search endpoints.
+
+	args:
+		query_text: natural-language search text.
+		db: async database session.
+		principal: authenticated user.
+		limit: max memories to return.
+		score_threshold: minimum normalized score (0-1). results below
+			this threshold are dropped.
+		query_embedding: pre-computed embedding vector. when provided
+			the function skips the embed_text call and uses this directly.
+
+	returns:
+		full Memory objects ordered by relevance (best first).
+	"""
+	query_emb = query_embedding or await embed_text(text=query_text, session=db)
+	query_filter = vectorstore_service.resource_filter(
+		"memory",
+		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+	)
+	results = await vectorstore_service.search(
+		session=db,
+		query=query_emb,
+		text_query=query_text,
+		limit=limit,
+		query_filter=query_filter,
+		normalize=True,
+	)
+	if not results:
+		return []
+
+	# apply score threshold.
+	results = [r for r in results if r.score >= score_threshold]
+	if not results:
+		return []
+
+	# fetch full Memory objects.
+	resource_ids: list[str] = [str(r.metadata["resource_id"]) for r in results]
+	stmt = select(Memory).where(Memory.id.in_(resource_ids))
+	if not principal.is_admin:
+		stmt = stmt.where(Memory.user_id == principal.user.id)
+	db_result = await db.execute(stmt)
+	by_id = {str(m.id): m for m in db_result.scalars().all()}
+
+	# preserve relevance order from vector search.
+	return [by_id[rid] for rid in resource_ids if rid in by_id]

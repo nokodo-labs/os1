@@ -1,136 +1,223 @@
 <div align="center">
 
-<img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo logo" width="320" />
-<div style="height:32px"></div>
+<img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo" width=83% />
+<div style="height: 30px;"></div>
 
----
+**the AI workspace you actually want to use**
 
-<h1>Monorepo Template</h1>
-
-**Modern & production-ready full-stack template that saves you weeks of setup: FastAPI backend + Svelte 5 frontend with containerization, full CI/CD, VS Code support, and AI integrations.**
-
-[![License](https://img.shields.io/github/license/nokodo-labs/monorepo-template)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/nokodo-labs/monorepo-template?style=social)](https://github.com/nokodo-labs/monorepo-template/stargazers)
-[![Issues](https://img.shields.io/github/issues/nokodo-labs/monorepo-template)](https://github.com/nokodo-labs/monorepo-template/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/nokodo-labs/monorepo-template)](https://github.com/nokodo-labs/monorepo-template/pulls)
-[![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![Node](https://img.shields.io/badge/node-24+-green.svg)](https://nodejs.org/)
+[![License](https://img.shields.io/github/license/nokodo-labs/os1)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2)](DISCORD_INVITE_LINK_HERE)
+[![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
 
 </div>
 
-## 🛠️ Stack
+---
 
--   **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, Pydantic, PostgreSQL 17, Alembic
--   **Frontend**: Svelte 5, Vite 6, Tailwind 4, TypeScript, native fetch (zero HTTP deps)
--   **Type Safety**: OpenAPI TypeScript generator (auto-sync backend → frontend types)
--   **Dev**: VS Code (tasks, debugger, extensions), Ruff, pytest, AI instructions
--   **Deploy**: Docker Compose with production configs
+nokodo is an open-source AI platform built for teams and power users. it combines autonomous agents, deep research, real-time collaboration, and a flexible tool system - all in a beautiful, self-hostable workspace.
 
-## ✨ Features
+https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
--   🏗️ **Production infrastructure**: PostgreSQL 17, multi-stage Docker builds, Nginx configs
--   🔒 **End-to-end type safety**: Python type hints → OpenAPI → auto-generated TypeScript types
--   🤖 **Full CI/CD pipeline**: Automated testing, Docker builds, GHCR publishing, releases
--   🧪 **Complete test setup**: pytest (backend) + Vitest (frontend) with fixtures and full coverage
--   📐 **Modern code standards**: EditorConfig, Ruff, ESLint, Prettier pre-configured
--   💾 **Persistent data storage**: Volume-mounted data directory
--   🛠️ **VS Code integration**: Tasks, debugger configs, recommended extensions
--   🤖 **AI agents ready**: Premade instructions & prompts with extensible patterns
--   🎯 **Minimal boilerplate**: No business logic, just a working foundation
--   🔮 **Future-proof stack**: Latest stable versions of everything, zero tech debt from day one
+> [!WARNING]
+> 🚧 this project is in **prototype stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
 
-## 🚀 Quick Start
+**links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](DISCORD_INVITE_LINK_HERE)
 
-### 1️⃣ Create Your Repository
+---
 
--   Click **"Use this template"** on GitHub → Create your repo
--   Clone your new repository locally
+## ✨ features
 
-### 2️⃣ Customize Project
+### 🤖 autonomous AI agents
 
-Rename `backend/project_slug/` to your project name and update references. See [docs/setup.md](docs/setup.md#initial-customization-required) for detailed instructions.
+- **multi-turn agent sessions** - agents that plan, act, and iterate until the job is done
+- **agent delegation** - agents spawn sub-agents for specialized tasks, each in isolated context
+- **native tool use** - agents can search the web, execute code, manage files, generate media, and more
+- **intelligence router** - automatically picks the right model for each query, minimizing cost
 
-### 3️⃣ Start Development
+### 🔥 coding agent
+
+- **full sandbox environment** - terminal access, file editing, test execution via E2B
+- **end-to-end workflow** - reads code → makes changes → runs tests → refines until complete
+- **automatic PR creation** - pushes changes to GitHub and opens a pull request when done
+- **any model, fully customizable** - bring your own provider and tune every parameter
+
+### 🔍 deep research
+
+- **multi-iteration search** - AI plans and executes comprehensive research over several minutes
+- **document synthesis** - builds structured reports from multiple sources and searches
+- **runs in background** - async execution, notifies when done
+
+### 💬 collaborative chats
+
+- **real-time collaboration** - WebSocket-based live UX lets multiple users work in the same thread simultaneously, with instant updates for everyone
+- **mixed participants** - humans and AI models share the same conversation naturally
+- **thread branching** - fork any message to explore alternative paths without losing context
+- **real-time AI assistance** - summon AI to summarize, translate, or assist inline at any time
+
+### 🧠 persistent memory
+
+- **remembers what matters** - stores important context across sessions automatically
+- **smart retrieval** - surfaces relevant memories when they are most useful
+- **conversation recall** - pulls context from past threads into new ones seamlessly
+
+### ✍️ powerful prompting engine
+
+- **Jinja2-based rendering** - full template language with variables, conditionals, and loops
+- **composable prompts** - prompts can include other prompts for modular, reusable building blocks
+- **runtime context injection** - user preferences, conversation state, and tool results are injected automatically at render time
+- **validation** - circular reference detection, depth limiting, and strict undefined enforcement
+
+### 📊 native tracking _(coming soon)_
+
+- **token usage per message** - tracks input, output, and cache tokens at the message level
+- **cost accounting** - maps usage to model pricing for per-user and per-group spend visibility
+- **activity over time** - full audit trail of user activity, requests, and resource consumption
+- **admin dashboards** - monitor platform health, usage trends, and anomalies from the console
+
+### 📂 AI-generated artifacts
+
+- **canvas tool** - agents create, edit, and refine files directly in the conversation
+- **rich media** - images, videos, code, documents - any AI output becomes a managed artifact
+- **artifact library** - centralized storage for all AI-generated content
+
+### 📱 Progressive Web App
+
+- **installable** - add nokodo to your desktop or mobile home screen from any browser
+- **push notifications** - real-time alerts even when the app is in the background
+- **native iOS and Android apps** - coming soon
+
+### 🎨 liquid UI
+
+- **glassmorphism design** - Apple-inspired aesthetic with depth, blur, and transparency
+- **beautiful markdown** - enhanced streaming rendering powered by Vercel Streamdown
+- **persistent chrome** - Island header and Dock sidebar keep you oriented at all times
+
+### 🔐 enterprise-ready
+
+- **OIDC / SSO** - federated login with any identity provider
+- **role-based access** - granular permissions, invisible to end users
+- **user groups** - shared threads, files, and projects with group-level quotas
+- **rate limiting** - per-user and global limits, by time period, with clear user-facing messages
+- **audit logging** - full record of admin actions and system events
+
+### 🛠️ built-in tools
+
+- **resouce management** - native tools for managing notes, reminders, files, chats, and more
+- **memory system** - automatically stores and retrieves important context across sessions
+- **web search** - up-to-date information from the web, with source citations
+
+### 🖥️ admin console
+
+- **dedicated app** - separate Svelte-based console for platform administrators
+- **user management** - create, edit, suspend users and groups
+- **usage monitoring** - view logs, track activity, manage settings
+
+### 🌐 extensibility
+
+- **custom tools** - add new capabilities with minimal boilerplate
+- **filters and hooks** - modify context injection and post-response behavior
+- **plugin architecture** - extend with community-built additions
+
+### 🖌️ self-hostable, no restrictions
+
+- **fully open source** - BSD 3-Clause, use and modify freely
+- **rebrand-friendly** - swap logos and colors, make it yours
+- **complete data control** - all data stays in your infrastructure
+
+---
+
+## 🚀 quickstart
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+    db:
+        image: postgres:17-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: nokodo
+            POSTGRES_PASSWORD: nokodo
+            POSTGRES_DB: nokodo
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U nokodo"]
+            interval: 10s
+            retries: 5
+
+    qdrant:
+        image: qdrant/qdrant:v1.16.2
+        restart: unless-stopped
+        volumes:
+            - qdrant_data:/qdrant/storage
+
+    backend:
+        image: ghcr.io/nokodo-labs/nokodo-ai-backend:latest
+        restart: unless-stopped
+        ports:
+            - "1383:1383"
+        environment:
+            DATABASE_URL: postgresql+psycopg://nokodo:nokodo@db:5432/nokodo
+            NOKODO__SECURITY__SECRET_KEY: change-me
+            NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888"
+            NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
+        depends_on:
+            db:
+                condition: service_healthy
+        volumes:
+            - uploads:/app/data
+
+    frontend:
+        image: ghcr.io/nokodo-labs/nokodo-ai-frontend:latest
+        restart: unless-stopped
+        ports:
+            - "888:80"
+        depends_on:
+            - backend
+
+volumes:
+    postgres_data:
+    qdrant_data:
+    uploads:
+```
+
+Then:
 
 ```bash
-cd .docker
 docker compose up -d
 ```
 
-**Your services:**
+Open `http://localhost:888`.
 
--   Frontend: http://localhost
--   Backend API: http://localhost:8000
--   API Docs: http://localhost:8000/v1/docs
+> Change `NOKODO__SECURITY__SECRET_KEY` to a long random string. For a custom domain, update the two origin vars to your URL.
 
-> 💡 **VS Code users**: Open the workspace to get tasks, debugger configs, and recommended extensions automatically.
+For environment variable reference, building from source, and development setup see [docs/setup.md](docs/setup.md).
 
-### 4️⃣ Deploy to Production
+---
 
-CI/CD automatically builds and pushes Docker images to **GitHub Container Registry (GHCR)** on every commit. Images are tagged as:
+## 🗺️ roadmap
 
--   `ghcr.io/your-org/your-repo:latest` → production branch
--   `ghcr.io/your-org/your-repo:dev` → dev branch
--   `ghcr.io/your-org/your-repo:v1.2.3` → releases
+See [ROADMAP.md](ROADMAP.md) for planned features and release milestones.
 
-**Deploy with Docker:**
+## 🤝 contributing
 
-```bash
-# Pull pre-built images and deploy
-docker compose pull
-docker compose up -d
-```
+contributions are welcome! see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-> 💡 **Tip**: See [docs/setup.md](docs/setup.md#production-deployment) for full deployment instructions and environment configuration.
+## 📄 license
 
-## 📁 Structure
+BSD 3-Clause - see [LICENSE](LICENSE) for details.
 
-```
-backend/
-├── api/                   # FastAPI application
-│   ├── api/v1/endpoints/  # Route handlers
-│   ├── core/              # Config, database
-│   ├── models/            # SQLAlchemy ORM
-│   ├── schemas/           # Pydantic validation
-│   ├── tests/             # API & ORM tests
-│   └── alembic/           # Database migrations
-├── project_slug/          # SDK/service layer (rename me!)
-│   └── tests/             # SDK unit tests (optional)
-├── tests/                 # E2E integration tests
-└── data/                  # Data storage (volume mounted)
+---
 
-frontend/
-├── src/
-│   ├── lib/               # Components
-│   └── main.ts            # Entry point
-└── nginx.conf             # Production server
+<details>
+<summary>tech stack</summary>
 
-.docker/                   # Docker configs
-├── Dockerfile.backend     # Backend build
-├── Dockerfile.frontend    # Frontend build
-├── docker-compose.yml     # Production
-└── docker-compose.dev.yml # Development
+| layer        | technologies                                                   |
+| ------------ | -------------------------------------------------------------- |
+| **backend**  | FastAPI, Python 3.13+, SQLAlchemy 2.0+, PostgreSQL 17, Alembic |
+| **frontend** | Svelte 5, Vite, Vercel Streamdown, Tailwind 4, TypeScript      |
+| **console**  | Svelte 5, Vite, shadcn-svelte, Tailwind 4, TypeScript          |
+| **infra**    | Docker Compose, Nginx, GitHub Actions, Release Please          |
 
-.github/                   # CI/CD, Dependabot, CODEOWNERS
-.vscode/                   # Editor config, tasks, debugger
-tools/release_please/      # Release automation config
-```
-
-### 🏗️ Architecture
-
-**Backend:**
-
--   **`api/`**: FastAPI app, routes, ORM, database setup
--   **`project_slug/`**: Business logic SDK that can be packaged separately for pip distribution
--   **Testing**: 3 tiers (API tests in `api/tests/`, SDK tests in `project_slug/tests/`, E2E in `tests/`)
--   **URLs**: `/v1/users` (no `/api` prefix - deploy on `api.yourdomain.com`)
-
-**Frontend:**
-
--   **Native fetch** - Zero HTTP library dependencies, uses web standards
--   **OpenAPI types** - Auto-generated TypeScript types from FastAPI schema
--   **Type safety** - Backend changes = compile errors in frontend if incompatible
-
-## 📄 License
-
-BSD 3-Clause - See [LICENSE](LICENSE) for details.
+</details>

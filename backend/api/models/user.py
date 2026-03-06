@@ -1,27 +1,145 @@
-"""User model."""
+"""user model."""
+
+from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.core.database import Base
+from api.models.base import Base
+from api.models.many_to_many import user_role_association
+from api.models.mixins import TypeIDPrimaryKeyMixin
 
 
-class User(Base):
+if TYPE_CHECKING:
+	from api.models.access_rule import AccessRule
+	from api.models.file import File
+	from api.models.friendship import Friendship
+	from api.models.group import Group, GroupMembership
+	from api.models.memory import Memory
+	from api.models.note import Note
+	from api.models.notification import Notification
+	from api.models.project import Project
+	from api.models.reminder import Reminder, ReminderList
+	from api.models.role import Role
+	from api.models.task import Task
+	from api.models.thread import Thread
+	from api.models.thread_participant import ThreadParticipant
+	from api.schemas.preferences import UserPreferences
+
+
+class User(TypeIDPrimaryKeyMixin, Base):
 	"""User model."""
 
 	__tablename__ = "users"
+	__typeid_prefix__ = "user"
 
-	id: Mapped[int] = mapped_column(primary_key=True, index=True)
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-	username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+	username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+	display_name: Mapped[str | None] = mapped_column(String(150))
+	bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
+	avatar_url: Mapped[str | None] = mapped_column(String(512))
 	hashed_password: Mapped[str] = mapped_column(String(255))
 	is_active: Mapped[bool] = mapped_column(default=True)
 	is_superuser: Mapped[bool] = mapped_column(default=False)
+	find_by_email: Mapped[bool] = mapped_column(default=True, index=True)
+	privacy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+	preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+	integration_tokens: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+	usage_quotas: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now()
 	)
 	updated_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+	)
+	last_active_at: Mapped[datetime | None] = mapped_column(
+		DateTime(timezone=True), nullable=True, default=None
+	)
+
+	@property
+	def prefs(self) -> UserPreferences:
+		"""parsed preferences as a typed schema."""
+		from api.schemas.preferences import UserPreferences
+
+		try:
+			return UserPreferences.model_validate(self.preferences or {})
+		except Exception:
+			return UserPreferences()
+
+	roles: Mapped[list[Role]] = relationship(
+		"Role",
+		secondary=user_role_association,
+		back_populates="users",
+	)
+
+	access_rules: Mapped[list[AccessRule]] = relationship(
+		"AccessRule",
+		foreign_keys="AccessRule.subject_user_id",
+		cascade="all, delete-orphan",
+		overlaps="subject_user",
+	)
+	projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
+	owned_groups: Mapped[list[Group]] = relationship("Group", back_populates="owner")
+	group_memberships: Mapped[list[GroupMembership]] = relationship(
+		"GroupMembership",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	reminders: Mapped[list[Reminder]] = relationship("Reminder", back_populates="owner")
+	reminder_lists: Mapped[list[ReminderList]] = relationship(
+		"ReminderList",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+
+	threads: Mapped[list[Thread]] = relationship(
+		"Thread",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	tasks: Mapped[list[Task]] = relationship(
+		"Task",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	notifications: Mapped[list[Notification]] = relationship(
+		"Notification",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	memories: Mapped[list[Memory]] = relationship(
+		"Memory",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	notes: Mapped[list[Note]] = relationship(
+		"Note",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	files: Mapped[list[File]] = relationship(
+		"File",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	thread_participants: Mapped[list[ThreadParticipant]] = relationship(
+		"ThreadParticipant",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	sent_friend_requests: Mapped[list[Friendship]] = relationship(
+		"Friendship",
+		foreign_keys="Friendship.requester_id",
+		back_populates="requester",
+		cascade="all, delete-orphan",
+	)
+	received_friend_requests: Mapped[list[Friendship]] = relationship(
+		"Friendship",
+		foreign_keys="Friendship.addressee_id",
+		back_populates="addressee",
+		cascade="all, delete-orphan",
 	)

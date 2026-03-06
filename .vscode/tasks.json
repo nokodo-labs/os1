@@ -1,34 +1,34 @@
 {
 	"version": "2.0.0",
 	"tasks": [
+		// ═══════════════════════════════════════
+		// backend
+		// ═══════════════════════════════════════
 		{
-			"label": "Backend: Install Dependencies",
+			"label": "backend: install dependencies",
 			"type": "shell",
-			"command": "pip install -e .[api,dev]",
+			"command": "uv sync --all-extras",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
 			"group": "build",
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		},
 		{
-			"label": "Backend: Run Server",
+			"label": "backend: run server",
 			"type": "shell",
-			"command": "uvicorn api.main:app --reload --host 0.0.0.0 --port 8000",
+			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop api.runtime:selector_loop_factory",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
+			"dependsOn": "Docker: ensure dev deps",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
-					"regexp": "^.*$",
-					"file": 1,
-					"location": 2,
-					"message": 3
+					"regexp": "."
 				},
 				"background": {
 					"activeOnStart": true,
@@ -37,53 +37,72 @@
 				}
 			},
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
 				"panel": "dedicated"
 			}
 		},
 		{
-			"label": "Backend: Run Tests",
+			"label": "backend: run tests",
 			"type": "shell",
-			"command": "pytest -v",
+			"command": "uv run pytest -q --tb=short --cov-report=term-missing:skip-covered",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
-			"group": "test",
+			"dependsOn": "Docker: ensure dev deps",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
-			}
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
 		},
 		{
-			"label": "Frontend: Install Dependencies",
+			"label": "backend: check API alive",
+			"type": "process",
+			"command": "node",
+			"args": [
+				"-e",
+				"const url=process.env.API_HEALTH_URL||'http://localhost:1383/health';const timeoutMs=Number(process.env.API_HEALTH_TIMEOUT_MS||60000);const intervalMs=Number(process.env.API_HEALTH_INTERVAL_MS||1000);const start=Date.now();const urlObj=new URL(url);const http=require(urlObj.protocol==='https:'?'https':'http');async function isOk(){return await new Promise(resolve=>{const req=http.request(urlObj,{method:'GET',headers:{accept:'application/json'}},res=>{res.resume();resolve(Boolean(res.statusCode&&res.statusCode>=200&&res.statusCode<300));});req.on('error',()=>resolve(false));req.end();});}(async()=>{for(;;){if(await isOk()){console.log('API alive: '+url);process.exit(0);}if(Date.now()-start>timeoutMs){console.error('API not reachable after '+timeoutMs+'ms: '+url);process.exit(1);}await new Promise(r=>setTimeout(r,intervalMs));}})();"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+
+		// ═══════════════════════════════════════
+		// frontend
+		// ═══════════════════════════════════════
+		{
+			"label": "frontend: install dependencies",
 			"type": "shell",
-			"command": "npm install",
+			"command": "pnpm install",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
 			"group": "build",
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		},
 		{
-			"label": "Frontend: Dev Server",
+			"label": "frontend: dev server",
 			"type": "shell",
-			"command": "npm run dev",
+			"command": "pnpm run dev",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
-					"regexp": "^.*$",
-					"file": 1,
-					"location": 2,
-					"message": 3
+					"regexp": "."
 				},
 				"background": {
 					"activeOnStart": true,
@@ -92,27 +111,220 @@
 				}
 			},
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
 				"panel": "dedicated"
 			}
 		},
 		{
-			"label": "Frontend: Build",
+			"label": "frontend: build",
 			"type": "shell",
-			"command": "npm run build",
+			"command": "pnpm run build",
 			"options": {
 				"cwd": "${workspaceFolder}/frontend"
 			},
 			"group": "build",
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		},
 		{
-			"label": "Docker: Build All",
+			"label": "frontend: lint",
+			"type": "shell",
+			"command": "pnpm run lint",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "frontend: format",
+			"type": "shell",
+			"command": "pnpm run format",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "frontend: check",
+			"type": "shell",
+			"command": "pnpm run check",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "frontend: test",
+			"type": "shell",
+			"command": "pnpm run test",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "frontend: test coverage",
+			"type": "shell",
+			"command": "pnpm run test:coverage",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "frontend: generate API types",
+			"type": "shell",
+			"command": "pnpm run generate:api-types",
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"dependsOn": "backend: check API alive",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			}
+		},
+
+		// ═══════════════════════════════════════
+		// console
+		// ═══════════════════════════════════════
+		{
+			"label": "console: install dependencies",
+			"type": "shell",
+			"command": "pnpm install",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "console: dev server",
+			"type": "shell",
+			"command": "pnpm run dev -- --host --port 8383",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "."
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*",
+					"endsPattern": "ready in"
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "console: build",
+			"type": "shell",
+			"command": "pnpm run build",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "console: format",
+			"type": "shell",
+			"command": "pnpm run format",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "console: check",
+			"type": "shell",
+			"command": "pnpm run check",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "console: generate API types",
+			"type": "shell",
+			"command": "pnpm run generate:api-types",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"dependsOn": "backend: check API alive",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			}
+		},
+
+		// ═══════════════════════════════════════
+		// Docker
+		// ═══════════════════════════════════════
+		{
+			"label": "Docker: ensure dev deps",
+			"type": "shell",
+			"command": "docker compose --profile deps up -d",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "silent",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"close": true
+			}
+		},
+		{
+			"label": "Docker: build all",
 			"type": "shell",
 			"command": "docker compose build",
 			"options": {
@@ -120,50 +332,46 @@
 			},
 			"group": "build",
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		},
 		{
-			"label": "Docker: Up",
+			"label": "Docker: up",
 			"type": "shell",
-			"command": "docker compose up -d",
+			"command": "docker compose --profile local up -d",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
 			"group": "build",
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		},
 		{
-			"label": "Docker: Down",
+			"label": "Docker: down",
 			"type": "shell",
 			"command": "docker compose down",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		},
 		{
-			"label": "Docker: Dev Mode",
+			"label": "Docker: dev mode",
 			"type": "shell",
-			"command": "docker compose --profile dev up -d",
+			"command": "docker compose --profile local up -d --build",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
 			"group": "build",
 			"presentation": {
-				"echo": true,
 				"reveal": "always",
-				"panel": "new"
+				"panel": "shared"
 			}
 		}
 	]

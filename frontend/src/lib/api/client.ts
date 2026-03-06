@@ -1,101 +1,102 @@
-type FetchOptions = RequestInit & {
-	params?: Record<string, string | number>
+import {
+	authReady,
+	clearAccessToken,
+	getAccessToken,
+	setAccessToken,
+} from '$lib/auth/session.svelte'
+import createClient from 'openapi-fetch'
+import { apiOriginReady, getApiOrigin } from './origin'
+import { getSessionId } from './sessionId'
+import type { paths } from './types'
+
+type PrefixedPaths<P, Prefix extends string> = {
+	[K in keyof P as K extends string ? `${Prefix}${K}` : never]: P[K]
 }
 
-class APIError extends Error {
-	constructor(
-		message: string,
-		public status: number,
-		public response?: unknown,
-	) {
-		super(message)
-		this.name = 'APIError'
-	}
-}
+export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
 
-class APIClient {
-	private baseURL: string
+let refreshInFlight: Promise<string | null> | null = null
 
-	constructor(baseURL: string = import.meta.env.VITE_API_URL || '/v1') {
-		this.baseURL = baseURL
-	}
+export { getApiOrigin as getApiBaseUrl }
 
-	private async request<T>(
-		endpoint: string,
-		options: FetchOptions = {},
-	): Promise<T> {
-		const { params, ...fetchOptions } = options
-
-		let url = `${this.baseURL}${endpoint}`
-		
-		if (params) {
-			const searchParams = new URLSearchParams(
-				Object.entries(params).map(([key, value]) => [key, String(value)]),
-			)
-			url += `?${searchParams}`
-		}
-
-		const headers = new Headers(fetchOptions.headers)
-		if (!headers.has('Content-Type') && fetchOptions.body) {
-			headers.set('Content-Type', 'application/json')
-		}
-
-		const response = await fetch(url, {
-			...fetchOptions,
-			headers,
-		})
-
-		if (!response.ok) {
-			const errorData = await response.json().catch(() => null)
-			throw new APIError(
-				errorData?.detail || response.statusText,
-				response.status,
-				errorData,
-			)
-		}
-
-		const contentType = response.headers.get('Content-Type')
-		if (!contentType?.includes('application/json')) {
-			return null as T
-		}
-
-		return response.json()
-	}
-
-	async get<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, { ...options, method: 'GET' })
-	}
-
-	async post<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'POST',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
-
-	async put<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'PUT',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
-
-	async patch<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, {
-			...options,
-			method: 'PATCH',
-			body: data ? JSON.stringify(data) : undefined,
-		})
-	}
-
-	async delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-		return this.request<T>(endpoint, { ...options, method: 'DELETE' })
+/**
+ * thrown when the backend is unreachable (network error, not an auth failure).
+ * callers can use this to show a reconnect screen rather than redirecting to login.
+ */
+export class BackendUnreachableError extends Error {
+	constructor() {
+		super('backend unreachable')
+		this.name = 'BackendUnreachableError'
 	}
 }
 
-export const apiClient = new APIClient()
-export { APIError }
-export type { FetchOptions }
+async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	await apiOriginReady
+	const req = input instanceof Request ? input : new Request(input, init)
+	return fetch(new Request(req, { credentials: 'include' }))
+}
 
+async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	await apiOriginReady
+	// wait for auth flow to complete before making authenticated requests.
+	await authReady
+
+	const req = input instanceof Request ? input : new Request(input, init)
+	const retryReq = req.clone()
+
+	const token = getAccessToken()
+	const headers = new Headers(req.headers)
+	if (token && !headers.has('Authorization')) {
+		headers.set('Authorization', `Bearer ${token}`)
+	}
+	headers.set('X-Session-ID', getSessionId())
+
+	const res = await fetch(new Request(req, { headers, credentials: 'include' }))
+	if (res.status !== 401) return res
+
+	const refreshed = await refreshAccessToken()
+	if (!refreshed) return res
+
+	const retryHeaders = new Headers(retryReq.headers)
+	retryHeaders.set('Authorization', `Bearer ${refreshed}`)
+	return fetch(new Request(retryReq, { headers: retryHeaders, credentials: 'include' }))
+}
+
+function rawClient() {
+	return createClient<ApiPaths>({ baseUrl: getApiOrigin(), fetch: rawFetch })
+}
+
+export function apiClient() {
+	return createClient<ApiPaths>({ baseUrl: getApiOrigin(), fetch: authFetch })
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+	if (refreshInFlight) return refreshInFlight
+
+	refreshInFlight = (async () => {
+		try {
+			const { data, response } = await rawClient().POST('/v1/auth/refresh', {})
+			if (!response || !response.ok || !data?.access_token) {
+				// server responded but auth failed - session is genuinely invalid
+				clearAccessToken()
+				return null
+			}
+			setAccessToken(data.access_token)
+			return data.access_token
+		} catch {
+			// fetch threw - backend is unreachable, not an auth failure.
+			// do NOT clear the token; the session may still be valid once the backend is back.
+			throw new BackendUnreachableError()
+		} finally {
+			refreshInFlight = null
+		}
+	})()
+
+	return refreshInFlight
+}
+
+export async function logout(): Promise<void> {
+	await rawClient()
+		.POST('/v1/auth/logout', {})
+		.catch(() => {})
+}

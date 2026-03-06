@@ -2,17 +2,19 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Python: FastAPI",
+			"name": "backend: FastAPI Uvicorn server",
 			"type": "debugpy",
 			"request": "launch",
 			"module": "uvicorn",
+			"preLaunchTask": "Docker: ensure dev deps",
 			"args": [
 				"api.main:app",
-				"--reload",
 				"--host",
-				"127.0.0.1",
+				"0.0.0.0",
 				"--port",
-				"8000"
+				"1383",
+				"--loop",
+				"api.runtime:selector_loop_factory"
 			],
 			"jinja": true,
 			"justMyCode": true,
@@ -24,7 +26,7 @@
 			"purpose": ["debug-in-terminal"]
 		},
 		{
-			"name": "Python: Current File",
+			"name": "Python: current file",
 			"type": "debugpy",
 			"request": "launch",
 			"program": "${file}",
@@ -35,7 +37,7 @@
 			}
 		},
 		{
-			"name": "Python: Pytest",
+			"name": "backend: Pytest",
 			"type": "debugpy",
 			"request": "launch",
 			"module": "pytest",
@@ -47,7 +49,7 @@
 			}
 		},
 		{
-			"name": "Frontend: Vite Dev Server",
+			"name": "frontend: Vite dev server",
 			"type": "node",
 			"request": "launch",
 			"runtimeExecutable": "npm",
@@ -57,17 +59,45 @@
 			"skipFiles": ["<node_internals>/**"]
 		},
 		{
-			"name": "Frontend: Chrome",
+			"name": "frontend: Chrome",
 			"type": "chrome",
 			"request": "launch",
-			"url": "http://localhost:5173",
+			"url": "http://localhost:888",
 			"webRoot": "${workspaceFolder}/frontend/src",
 			"sourceMapPathOverrides": {
 				"webpack:///src/*": "${webRoot}/*"
 			}
 		},
 		{
-			"name": "Docker: Attach to Backend",
+			"name": "console: Vite dev server",
+			"type": "node",
+			"request": "launch",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": [
+				"run",
+				"dev",
+				"--",
+				"--host",
+				"0.0.0.0",
+				"--port",
+				"8383"
+			],
+			"cwd": "${workspaceFolder}/console",
+			"console": "integratedTerminal",
+			"skipFiles": ["<node_internals>/**"]
+		},
+		{
+			"name": "console: Chrome",
+			"type": "chrome",
+			"request": "launch",
+			"url": "http://localhost:8383",
+			"webRoot": "${workspaceFolder}/console/src",
+			"sourceMapPathOverrides": {
+				"webpack:///src/*": "${webRoot}/*"
+			}
+		},
+		{
+			"name": "Docker: attach to backend",
 			"type": "debugpy",
 			"request": "attach",
 			"connect": {
@@ -84,17 +114,47 @@
 	],
 	"compounds": [
 		{
-			"name": "Full Stack",
+			"name": "full stack",
 			"configurations": [
-				"Python: FastAPI",
-				"Frontend: Vite Dev Server",
-				"Frontend: Chrome"
+				"backend: FastAPI Uvicorn server",
+				"frontend: Vite dev server",
+				"frontend: Chrome",
+				"console: Vite dev server",
+				"console: Chrome"
 			],
 			"stopAll": true,
 			"presentation": {
 				"hidden": false,
 				"group": "fullstack",
 				"order": 1
+			}
+		},
+		{
+			"name": "API + frontend",
+			"configurations": [
+				"backend: FastAPI Uvicorn server",
+				"frontend: Vite dev server",
+				"frontend: Chrome"
+			],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "fullstack",
+				"order": 2
+			}
+		},
+		{
+			"name": "API + console",
+			"configurations": [
+				"backend: FastAPI Uvicorn server",
+				"console: Vite dev server",
+				"console: Chrome"
+			],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "fullstack",
+				"order": 2
 			}
 		}
 	]

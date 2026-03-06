@@ -1,0 +1,95 @@
+@font-face {
+	font-family: 'nokodoFont';
+	src: url('https://nokodo.net/static/fonts/researcher-regular.woff2') format('woff2');
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* page-wide splash overlay */
+#nokodo-splash-screen {
+	position: fixed;
+	z-index: 9999;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 1;
+	background: #fff;
+}
+
+html.dark #nokodo-splash-screen {
+	background: #000;
+}
+
+#nokodo-splash-container {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	text-align: center;
+}
+
+#nokodo-splash-brand {
+	visibility: hidden;
+}
+
+#nokodo-splash-brand[data-font='1'] {
+	visibility: visible;
+}
+
+/* shared loader (used by both pre-hydration HTML + Svelte component) */
+.nokodo-loader {
+	font-family:
+		'nokodoFont',
+		-apple-system,
+		BlinkMacSystemFont,
+		'Segoe UI',
+		Roboto,
+		'Helvetica Neue',
+		Arial,
+		sans-serif;
+	font-size: var(--nokodo-loader-font-size, clamp(2.25rem, 6vw, 3.25rem));
+	font-weight: 600;
+	line-height: 1.1;
+	color: rgb(255 255 255 / 0.92);
+	white-space: nowrap;
+	position: relative;
+	isolation: isolate;
+	user-select: none;
+
+	transform: translateX(calc(0.5em));
+	transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html:not(.dark) .nokodo-loader {
+	color: rgb(0 0 0 / 0.86);
+}
+
+.nokodo-loader[data-expanded='1'] {
+	transform: translateX(0);
+}
+
+.nokodo-loader__visible {
+	display: inline-block;
+	opacity: 1;
+}
+
+.nokodo-loader__hidden {
+	display: inline-block;
+	opacity: 0;
+	transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nokodo-loader[data-expanded='1'] .nokodo-loader__hidden {
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.nokodo-loader {
+		transition: transform 0.2s ease;
+	}
+	.nokodo-loader__hidden {
+		transition: opacity 0.2s ease;
+	}
+}

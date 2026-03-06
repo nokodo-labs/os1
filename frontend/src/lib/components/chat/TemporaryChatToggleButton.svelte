@@ -1,0 +1,65 @@
+<script lang="ts">
+	import { browser } from '$app/environment'
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
+	import { page } from '$app/state'
+	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte'
+	import ChatBubbleDottedChecked from '$lib/components/icons/ChatBubbleDottedChecked.svelte'
+	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
+	import { chat } from '$lib/stores/chat.svelte'
+
+	type SidebarContext = {
+		selectChat?: (id: string | null) => void
+	}
+
+	const sidebar = useSidebar() as SidebarContext | null
+
+	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
+
+	const isActive = $derived(chatParam === 'temp' || (chat.activeThread?.is_temporary ?? false))
+
+	function focusHomeInput() {
+		window.dispatchEvent(new CustomEvent('focus:chat-input'))
+	}
+
+	function goHome() {
+		sidebar?.selectChat?.(null)
+		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
+		if (isAlreadyHome) {
+			focusHomeInput()
+			return
+		}
+		void goto(resolve('/'), { keepFocus: true, noScroll: true })
+	}
+
+	function goTemp() {
+		sidebar?.selectChat?.(null)
+		const isAlreadyTemp = page.url.pathname === '/' && chatParam === 'temp'
+		if (isAlreadyTemp) {
+			focusHomeInput()
+			return
+		}
+		focusHomeInput()
+		void goto(resolve('/?chat=temp' as unknown as '/'), { keepFocus: true, noScroll: true })
+	}
+
+	function toggle() {
+		if (isActive) {
+			goHome()
+		} else {
+			goTemp()
+		}
+	}
+</script>
+
+<button
+	class="flex cursor-pointer items-center justify-center opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+	onclick={toggle}
+	aria-label="temporary chat"
+>
+	{#if isActive}
+		<ChatBubbleDottedChecked />
+	{:else}
+		<ChatBubbleDotted />
+	{/if}
+</button>

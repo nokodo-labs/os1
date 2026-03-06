@@ -25,14 +25,12 @@
 		"github.vscode-github-actions",
 		"eamodio.gitlens",
 
-		// AI Assistants
-		"github.copilot",
+		// AI assistants
 		"github.copilot-chat",
 		"ms-vscode.vscode-websearchforcopilot",
 		"anthropic.claude-code",
 
-		// Utilities
-		"visualstudioexptteam.vscodeintellicode",
+		// utilities
 		"gruntfuggly.todo-tree"
 	]
 }

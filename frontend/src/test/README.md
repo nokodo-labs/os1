@@ -48,9 +48,9 @@ src/
 import { describe, it, expect } from 'vitest'
 
 describe('MyFunction', () => {
-    it('does something', () => {
-        expect(myFunction(1, 2)).toBe(3)
-    })
+	it('does something', () => {
+		expect(myFunction(1, 2)).toBe(3)
+	})
 })
 ```
 
@@ -62,17 +62,17 @@ import { describe, it, expect } from 'vitest'
 import MyComponent from './MyComponent.svelte'
 
 describe('MyComponent', () => {
-    it('renders correctly', () => {
-        render(MyComponent)
-        expect(screen.getByRole('button')).toBeInTheDocument()
-    })
+	it('renders correctly', () => {
+		render(MyComponent)
+		expect(screen.getByRole('button')).toBeInTheDocument()
+	})
 
-    it('handles user interactions', async () => {
-        render(MyComponent)
-        const button = screen.getByRole('button')
-        await button.click()
-        // Add assertions
-    })
+	it('handles user interactions', async () => {
+		render(MyComponent)
+		const button = screen.getByRole('button')
+		await button.click()
+		// Add assertions
+	})
 })
 ```
 

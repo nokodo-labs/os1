@@ -1,0 +1,53 @@
+/*
+	shared shimmer animation
+	
+	vars:
+	- --text-color: base text color
+	- --shimmer-wave-color: shimmer wave center color
+*/
+
+:root {
+	--text-color: rgb(0 0 0 / 1);
+	--shimmer-wave-color: rgb(0 0 0 / 0.3);
+	--shimmer-duration: 1.8s;
+}
+
+.dark {
+	--text-color: rgb(255 255 255 / 1);
+	--shimmer-wave-color: rgb(255 255 255 / 0.3);
+}
+
+.shimmer {
+	display: inline-block;
+	background-size: 250% 100%;
+	background-repeat: no-repeat;
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	will-change: background-position;
+	animation: shimmer var(--shimmer-duration, 1.8s) linear infinite;
+	background-image: linear-gradient(
+		90deg,
+		var(--text-color) 40%,
+		var(--shimmer-wave-color) 50%,
+		var(--text-color) 60%
+	);
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 100% 0;
+	}
+	80% {
+		background-position: 0% 0;
+	}
+	100% {
+		background-position: 0% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shimmer {
+		animation: none;
+	}
+}

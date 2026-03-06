@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>nokodo splash preview</title>
+		<script>
+			;(function () {
+				try {
+					const mode = localStorage.getItem('nokodo-theme-mode') || 'system'
+					const isDark =
+						mode === 'dark' ||
+						(mode === 'system' &&
+							window.matchMedia('(prefers-color-scheme: dark)').matches)
+					document.documentElement.classList.toggle('dark', isDark)
+				} catch {
+					// ignore
+				}
+			})()
+		</script>
+		<link rel="stylesheet" href="/splash.css" />
+		<link rel="stylesheet" href="/shimmer.css" />
+		<style>
+			:root {
+				--panel-bg: rgba(10, 10, 10, 0.55);
+				--panel-border: rgba(255, 255, 255, 0.18);
+				--panel-text: rgba(255, 255, 255, 0.92);
+			}
+			html.dark {
+				--panel-bg: rgba(10, 10, 10, 0.55);
+				--panel-border: rgba(255, 255, 255, 0.18);
+				--panel-text: rgba(255, 255, 255, 0.92);
+			}
+			html:not(.dark) {
+				--panel-bg: rgba(255, 255, 255, 0.65);
+				--panel-border: rgba(0, 0, 0, 0.12);
+				--panel-text: rgba(0, 0, 0, 0.78);
+			}
+
+			#panel {
+				position: fixed;
+				top: 14px;
+				left: 14px;
+				z-index: 10000;
+				width: min(360px, calc(100vw - 28px));
+				padding: 12px;
+				border-radius: 14px;
+				background: var(--panel-bg);
+				border: 1px solid var(--panel-border);
+				backdrop-filter: blur(14px);
+				-webkit-backdrop-filter: blur(14px);
+				color: var(--panel-text);
+				font-family:
+					ui-sans-serif,
+					system-ui,
+					-apple-system,
+					Segoe UI,
+					Roboto,
+					Helvetica,
+					Arial,
+					Apple Color Emoji,
+					Segoe UI Emoji;
+				font-size: 13px;
+				line-height: 1.3;
+			}
+
+			#panel h1 {
+				font-size: 13px;
+				font-weight: 600;
+				margin: 0 0 10px;
+				letter-spacing: 0.01em;
+				text-transform: lowercase;
+			}
+
+			.row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 10px;
+				margin-top: 8px;
+			}
+
+			.row label {
+				flex: 1;
+			}
+
+			.row input[type='number'] {
+				width: 110px;
+				border-radius: 10px;
+				border: 1px solid var(--panel-border);
+				background: rgba(0, 0, 0, 0.12);
+				color: inherit;
+				padding: 6px 8px;
+				outline: none;
+			}
+			html:not(.dark) .row input[type='number'] {
+				background: rgba(255, 255, 255, 0.65);
+			}
+
+			.buttons {
+				display: flex;
+				gap: 8px;
+				margin-top: 10px;
+			}
+
+			button {
+				flex: 1;
+				border-radius: 12px;
+				border: 1px solid var(--panel-border);
+				background: rgba(0, 0, 0, 0.14);
+				color: inherit;
+				padding: 8px 10px;
+				cursor: pointer;
+			}
+			html:not(.dark) button {
+				background: rgba(255, 255, 255, 0.55);
+			}
+
+			button:active {
+				transform: translateY(1px);
+			}
+
+			.note {
+				margin-top: 8px;
+				opacity: 0.8;
+				font-size: 12px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="panel">
+			<h1>nokodo splash preview</h1>
+			<div class="row">
+				<label for="okHold">ok hold (ms)</label>
+				<input id="okHold" type="number" min="0" step="50" value="500" />
+			</div>
+			<div class="row">
+				<label for="expansion">expansion (ms)</label>
+				<input id="expansion" type="number" min="0" step="50" value="800" />
+			</div>
+			<div class="row">
+				<label for="pause">pause (ms)</label>
+				<input id="pause" type="number" min="0" step="50" value="200" />
+			</div>
+			<div class="row">
+				<label for="shimmerSeconds">shimmer duration (s)</label>
+				<input id="shimmerSeconds" type="number" min="0.2" step="0.2" value="1.8" />
+			</div>
+			<div class="buttons">
+				<button id="replay" type="button">replay</button>
+				<button id="toggleTheme" type="button">toggle theme</button>
+			</div>
+			<div class="note">replay runs the same sequence as the real splash.</div>
+		</div>
+
+		<div id="nokodo-splash-screen" aria-label="loading" role="status">
+			<div id="nokodo-splash-container">
+				<div id="nokodo-splash-brand" class="nokodo-loader" data-expanded="0">
+					<span class="nokodo-loader__hidden">n</span
+					><span class="nokodo-loader__visible">ok</span
+					><span class="nokodo-loader__hidden">odo</span>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			;(function () {
+				const brand = document.getElementById('nokodo-splash-brand')
+				if (!brand) return
+
+				const okHoldEl = document.getElementById('okHold')
+				const expansionEl = document.getElementById('expansion')
+				const pauseEl = document.getElementById('pause')
+				const shimmerSecondsEl = document.getElementById('shimmerSeconds')
+				const replayEl = document.getElementById('replay')
+				const toggleThemeEl = document.getElementById('toggleTheme')
+
+				/** @type {number[]} */
+				let timers = []
+
+				function clearTimers() {
+					for (const t of timers) clearTimeout(t)
+					timers = []
+				}
+
+				function num(el, fallback) {
+					if (!el) return fallback
+					const v = Number(el.value)
+					if (!Number.isFinite(v)) return fallback
+					return v
+				}
+
+				function applyShimmerDuration() {
+					const seconds = Math.max(0.2, num(shimmerSecondsEl, 4))
+					document.documentElement.style.setProperty('--shimmer-duration', `${seconds}s`)
+				}
+
+				function fontReady() {
+					if (document.fonts && document.fonts.load) {
+						return document.fonts
+							.load('600 48px nokodoFont')
+							.then(() => document.fonts.ready)
+					}
+					return Promise.resolve()
+				}
+
+				function replay() {
+					clearTimers()
+					applyShimmerDuration()
+
+					brand.dataset.font = '0'
+					brand.dataset.expanded = '0'
+					brand.classList.remove('shimmer')
+
+					const okHold = Math.max(0, num(okHoldEl, 500))
+					const expansion = Math.max(0, num(expansionEl, 800))
+					const pause = Math.max(0, num(pauseEl, 200))
+
+					fontReady().then(function () {
+						brand.dataset.font = '1'
+						timers.push(
+							setTimeout(function () {
+								brand.dataset.expanded = '1'
+								timers.push(
+									setTimeout(function () {
+										timers.push(
+											setTimeout(function () {
+												brand.classList.add('shimmer')
+											}, pause)
+										)
+									}, expansion)
+								)
+							}, okHold)
+						)
+					})
+				}
+
+				function toggleTheme() {
+					const root = document.documentElement
+					root.classList.toggle('dark')
+				}
+
+				replayEl?.addEventListener('click', replay)
+				toggleThemeEl?.addEventListener('click', toggleTheme)
+				okHoldEl?.addEventListener('change', replay)
+				expansionEl?.addEventListener('change', replay)
+				pauseEl?.addEventListener('change', replay)
+				shimmerSecondsEl?.addEventListener('change', function () {
+					applyShimmerDuration()
+				})
+
+				replay()
+			})()
+		</script>
+	</body>
+</html>

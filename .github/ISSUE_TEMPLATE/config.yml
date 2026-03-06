@@ -1,14 +1,14 @@
 blank_issues_enabled: true
 contact_links:
-  - name: 📧 Contact Maintainers
+  - name: 📧 contact maintainers
     url: https://nokodo.net/about
-    about: Get in touch with the nokodo team
-  - name: 💬 Discussions
+    about: get in touch with the nokodo team
+  - name: 💬 discussions
     url: https://github.com/nokodo-labs/monorepo-template/discussions
-    about: Ask questions and discuss ideas with the community
-  - name: 📚 Documentation
+    about: ask questions and discuss ideas with the community
+  - name: 📚 documentation
     url: https://github.com/nokodo-labs/monorepo-template/wiki
-    about: Access the project's documentation
-  - name: 🚀 Releases
+    about: access the project's documentation
+  - name: 🚀 releases
     url: https://github.com/nokodo-labs/monorepo-template/releases
-    about: View the project's releases
+    about: view the project's releases

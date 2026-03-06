@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#000000" />
+		<title>offline · nokodo</title>
+		<style>
+			*,
+			*::before,
+			*::after {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			html,
+			body {
+				height: 100%;
+				font-family:
+					-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+					sans-serif;
+				background: #000;
+				color: #e5e5e5;
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
+			}
+
+			.container {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				min-height: 100%;
+				padding: 1.5rem;
+			}
+
+			/* liquid-glass-inspired card - mirrors +error.svelte */
+			.card {
+				position: relative;
+				width: 100%;
+				max-width: 32rem;
+				overflow: hidden;
+				border-radius: 1.25rem;
+				border: 1px solid rgba(255, 255, 255, 0.08);
+				background: rgba(255, 255, 255, 0.04);
+				backdrop-filter: blur(24px) saturate(1.4);
+				-webkit-backdrop-filter: blur(24px) saturate(1.4);
+				box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+			}
+
+			.card-inner {
+				position: relative;
+				z-index: 1;
+				padding: 1.75rem;
+				text-align: center;
+			}
+
+			.status {
+				font-size: 4.75rem;
+				line-height: 1;
+				font-weight: 600;
+				letter-spacing: -0.025em;
+				color: rgba(255, 255, 255, 0.9);
+			}
+
+			.title {
+				margin-top: 0.75rem;
+				font-size: 1.25rem;
+				font-weight: 600;
+				color: rgba(255, 255, 255, 0.85);
+			}
+
+			.message {
+				margin-top: 0.5rem;
+				font-size: 0.875rem;
+				color: rgba(255, 255, 255, 0.6);
+				line-height: 1.5;
+			}
+
+			.actions {
+				margin-top: 1.5rem;
+				display: flex;
+				justify-content: center;
+			}
+
+			.retry-btn {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				appearance: none;
+				border: 1px solid rgba(255, 255, 255, 0.1);
+				background: rgba(255, 255, 255, 0.08);
+				color: rgba(255, 255, 255, 0.85);
+				font-size: 0.875rem;
+				font-weight: 500;
+				padding: 0.625rem 1rem;
+				border-radius: 9999px;
+				cursor: pointer;
+				transition: all 0.15s ease;
+				-webkit-tap-highlight-color: transparent;
+			}
+
+			.retry-btn:hover {
+				background: rgba(255, 255, 255, 0.12);
+				color: #fff;
+			}
+
+			.retry-btn:active {
+				transform: scale(0.99);
+			}
+
+			.retry-btn svg {
+				width: 1rem;
+				height: 1rem;
+				color: rgba(255, 255, 255, 0.7);
+			}
+
+			.retry-btn:hover svg {
+				color: rgba(255, 255, 255, 0.85);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="card">
+				<div class="card-inner">
+					<div class="status">
+						<svg
+							width="64"
+							height="64"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							style="display: inline-block; opacity: 0.4"
+						>
+							<path d="M2 2l20 20" />
+							<path d="M8.5 16.5a5 5 0 0 1 7 0" />
+							<path d="M2 8.82a15 15 0 0 1 4.17-2.65" />
+							<path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76" />
+							<path d="M16.85 11.25a10 10 0 0 1 2.22 1.68" />
+							<path d="M5 12.86a10 10 0 0 1 5.17-2.89" />
+							<path d="M12 20h.01" />
+						</svg>
+					</div>
+					<h1 class="title">you're offline</h1>
+					<p class="message">check your internet connection and try again</p>
+					<div class="actions">
+						<button class="retry-btn" onclick="window.location.reload()">
+							<svg
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M21 12a9 9 0 1 1-6.22-8.56" />
+								<polyline points="21 3 21 9 15 9" />
+							</svg>
+							retry
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
