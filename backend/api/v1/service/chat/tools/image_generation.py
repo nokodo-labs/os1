@@ -74,10 +74,10 @@ def _build_attachments(results: Sequence[ImageResult]) -> list[ToolAttachment]:
 	"""build ImageContent attachments from generation results."""
 	attachments: list[ToolAttachment] = []
 	for img in results:
-		if img.file_id:
+		if img.b64_data and img.file_id:
 			attachments.append(
 				ImageContent(
-					url=f"/v1/files/{img.file_id}/content",
+					base64=img.b64_data,
 					media_type=img.mime_type,
 					metadata={"file_id": img.file_id},
 				)

@@ -33,14 +33,21 @@ engine = create_async_engine(
 	pool_pre_ping=True,
 )
 
-# Create async session factory
-AsyncSessionLocal = async_sessionmaker(
+# Async session factory - accessed via AsyncSessionLocal() so that test
+# fixtures can swap it at runtime and all consumers (even those that did
+# ``from api.database import AsyncSessionLocal``) pick up the change.
+_async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 	engine,
 	class_=AsyncSession,
 	expire_on_commit=False,
 	autocommit=False,
 	autoflush=False,
 )
+
+
+def AsyncSessionLocal() -> AsyncSession:
+	"""return a new async session from the current factory."""
+	return _async_session_factory()
 
 
 @contextlib.asynccontextmanager

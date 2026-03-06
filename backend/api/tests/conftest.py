@@ -837,13 +837,13 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 
 		# patch the module-level session factory so internal code
 		# (e.g. event fan-out) uses the test database, not the main one
-		original_session_local = _db_module.AsyncSessionLocal
-		_db_module.AsyncSessionLocal = test_session_local
+		original_session_factory = _db_module._async_session_factory
+		_db_module._async_session_factory = test_session_local
 
 		async with test_session_local() as session:
 			yield session
 	finally:
-		_db_module.AsyncSessionLocal = original_session_local
+		_db_module._async_session_factory = original_session_factory
 		await engine.dispose()
 		_drop_database(test_db_url)
 

@@ -382,7 +382,7 @@ def _content_part_to_anthropic(
 						data=part.base64,
 					),
 				)
-			if part.url:
+			if part.url and part.url.startswith("https://"):
 				return AnthropicImageBlockParam(
 					type="image",
 					source=AnthropicURLImageSourceParam(
@@ -429,15 +429,10 @@ def _content_parts_to_anthropic(
 	return result
 
 
-def _tool_message_to_anthropic(
+def _tool_message_to_result_block(
 	message: ToolMessage,
-) -> AnthropicMessageParam:
-	"""convert a ToolMessage to an anthropic tool_result message.
-
-	anthropic supports multimodal tool results (text + image blocks),
-	so attachments are converted to native content blocks rather than
-	text placeholders.
-	"""
+) -> AnthropicToolResultBlockParam:
+	"""build a single tool_result block from a ToolMessage."""
 	tool_use_id = (
 		get_provider_tool_call_id(
 			metadata=message.metadata,
@@ -468,17 +463,12 @@ def _tool_message_to_anthropic(
 	else:
 		tool_result = tool_blocks if tool_blocks else message.tool_output
 
-	return {
-		"role": "user",
-		"content": [
-			AnthropicToolResultBlockParam(
-				type="tool_result",
-				tool_use_id=tool_use_id,
-				content=tool_result,
-				is_error=message.is_error,
-			)
-		],
-	}
+	return AnthropicToolResultBlockParam(
+		type="tool_result",
+		tool_use_id=tool_use_id,
+		content=tool_result,
+		is_error=message.is_error,
+	)
 
 
 def _messages_to_anthropic(
@@ -486,16 +476,20 @@ def _messages_to_anthropic(
 ) -> tuple[str | None, list[AnthropicMessageParam]]:
 	system_parts: list[str] = []
 	result: list[AnthropicMessageParam] = []
-	for message in messages:
+	i = 0
+	while i < len(messages):
+		message = messages[i]
 		match message:
 			case SystemMessage():
 				if message.text:
 					system_parts.append(message.text)
+				i += 1
 			case UserMessage():
 				content = _content_parts_to_anthropic(
 					list(message.content),
 				)
 				result.append({"role": "user", "content": content})
+				i += 1
 			case AssistantMessage():
 				blocks: list[AnthropicTextBlockParam | AnthropicToolUseBlockParam] = []
 				assistant_text = message.text
@@ -550,8 +544,16 @@ def _messages_to_anthropic(
 					)
 				else:
 					result.append({"role": "assistant", "content": blocks})
+				i += 1
 			case ToolMessage():
-				result.append(_tool_message_to_anthropic(message))
+				# anthropic requires all tool_result blocks that correspond to
+				# one assistant turn to be combined in a single user message.
+				# consume all consecutive ToolMessages at once.
+				result_blocks: list[AnthropicToolResultBlockParam] = []
+				while i < len(messages) and isinstance(messages[i], ToolMessage):
+					result_blocks.append(_tool_message_to_result_block(messages[i]))
+					i += 1
+				result.append({"role": "user", "content": result_blocks})
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
 
