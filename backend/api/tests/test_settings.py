@@ -19,7 +19,12 @@ from api.settings import (
 	settings,
 )
 from api.settings import database as settings_db
-from api.settings.settings import get_field_flags, settings_field
+from api.settings.settings import (
+	_LenientDotEnvSettingsSource,
+	_LenientEnvSettingsSource,
+	get_field_flags,
+	settings_field,
+)
 from api.v1.schemas.settings import SettingsPatch
 from api.v1.service import settings as settings_svc
 
@@ -230,7 +235,9 @@ def test_settings_customise_sources_includes_db_source() -> None:
 	assert sources[0] is init_settings
 	assert isinstance(sources[1], DbSettingsSource)
 	assert sources[1].settings_cls is Settings
-	assert sources[2:] == (env_settings, dotenv_settings, file_secret_settings)
+	assert isinstance(sources[2], _LenientEnvSettingsSource)
+	assert isinstance(sources[3], _LenientDotEnvSettingsSource)
+	assert sources[4] is file_secret_settings
 
 
 def test_db_overrides_filters_invalid_sections_and_non_models(

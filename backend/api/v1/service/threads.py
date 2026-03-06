@@ -159,7 +159,7 @@ async def generate_thread_metadata(
 		)
 		if not first_assistant:
 			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="cannot generate metadata: no assistant message in thread",
 			)
 

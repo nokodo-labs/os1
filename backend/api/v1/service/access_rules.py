@@ -173,7 +173,7 @@ async def _set_rules_impl(
 		rule_key = _rule_key(rule)
 		if rule_key in desired_keys:
 			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="duplicate subject in access rules",
 			)
 		desired_keys.add(rule_key)
@@ -206,7 +206,7 @@ async def _set_rules_impl(
 	except IntegrityError:
 		await session.rollback()
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="invalid subject reference - user, group, or role not found",
 		)
 

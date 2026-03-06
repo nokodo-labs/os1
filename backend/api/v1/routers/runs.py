@@ -62,7 +62,7 @@ async def create_run(
 	# ephemeral run - no thread, no persistence
 	if not req.input or (not req.input.text and not req.input.attachment_ids):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="input is required for ephemeral runs",
 		)
 

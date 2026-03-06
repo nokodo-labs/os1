@@ -454,7 +454,7 @@ class TestContextWindowingFilter:
 			),
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			mock_bg.return_value = MagicMock()
+			mock_bg.side_effect = lambda coro, **kw: coro.close()
 
 			await f.process(thread, ctx)
 
@@ -500,7 +500,7 @@ class TestContextWindowingFilter:
 		):
 			mock_settings.ai.windowing.max_summaries_before_condense = threshold_val
 			mock_svc.count_active_summaries = AsyncMock(return_value=threshold_val)
-			mock_bg.return_value = MagicMock()
+			mock_bg.side_effect = lambda coro, **kw: coro.close()
 
 			await f.process(thread, ctx)
 
