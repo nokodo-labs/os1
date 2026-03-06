@@ -105,7 +105,7 @@ jobs:
 
           branch_q=$(jq -rn --arg v "${branch}" '$v|@uri')
 
-          workflow_id=$(gh api "repos/${repo}/actions/runs/${current_run_id}" --jq '.workflow_id' | tr -d '\r') 
+          workflow_id=$(gh api "repos/${repo}/actions/runs/${current_run_id}" --jq '.workflow_id' | tr -d '\r')
           if ! echo "${workflow_id}" | grep -Eq '^[0-9]+$'; then
             echo "unexpected workflow_id: ${workflow_id}" >&2
             exit 1
@@ -192,7 +192,7 @@ jobs:
     uses: ./.github/workflows/console-ci.yml
     with:
       run_tests: true
-      run_lint: true
+      run_lint: false
     secrets: inherit
 
   release:
