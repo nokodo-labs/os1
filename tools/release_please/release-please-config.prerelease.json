@@ -28,7 +28,8 @@
 	],
 	"packages": {
 		".": {
-			"pull-request-title-pattern": "chore${scope}: prerelease${component} nokodo AI v${version}"
+			"release-type": "simple",
+			"pull-request-title-pattern": "chore(release): prerelease${component} nokodo AI v${version}"
 		},
 		"backend/nokodo_ai": {
 			"package-name": "library",

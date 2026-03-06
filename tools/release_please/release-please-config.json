@@ -28,6 +28,7 @@
 	],
 	"packages": {
 		".": {
+			"release-type": "simple",
 			"pull-request-title-pattern": "chore(release): release${component} nokodo AI v${version}"
 		},
 		"backend/nokodo_ai": {
