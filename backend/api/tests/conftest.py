@@ -814,6 +814,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop]:
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession]:
 	# Import models/Base at runtime so coverage sees them.
+	import api.database.main as _db_module
 	import api.models as _models
 	from api.models.base import Base
 
@@ -834,9 +835,15 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 			autoflush=False,
 		)
 
+		# patch the module-level session factory so internal code
+		# (e.g. event fan-out) uses the test database, not the main one
+		original_session_local = _db_module.AsyncSessionLocal
+		_db_module.AsyncSessionLocal = test_session_local
+
 		async with test_session_local() as session:
 			yield session
 	finally:
+		_db_module.AsyncSessionLocal = original_session_local
 		await engine.dispose()
 		_drop_database(test_db_url)
 
