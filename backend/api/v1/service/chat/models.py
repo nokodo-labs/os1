@@ -14,18 +14,18 @@ from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from api.settings import settings
+from nokodo_ai.adapters.audio import resolve_audio_adapter
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.adapters.images import resolve_image_adapter
 from nokodo_ai.adapters.videos import resolve_video_adapter
-from nokodo_ai.adapters.audio import resolve_audio_adapter
 from nokodo_ai.audio_models import AudioModel
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.image_models import ImageModel
-from nokodo_ai.video_models import VideoModel
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.video_models import VideoModel
 
 
 logger = logging.getLogger(__name__)
