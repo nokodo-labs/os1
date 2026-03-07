@@ -17,9 +17,13 @@ from api.settings import settings
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.adapters.images import resolve_image_adapter
+from nokodo_ai.adapters.videos import resolve_video_adapter
+from nokodo_ai.adapters.audio import resolve_audio_adapter
+from nokodo_ai.audio_models import AudioModel
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.image_models import ImageModel
+from nokodo_ai.video_models import VideoModel
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -332,3 +336,69 @@ async def resolve_image_model(
 	if model is None:
 		raise HTTPException(status_code=404, detail="image model not found")
 	return build_image_model(model)
+
+
+def build_video_model(model: Model) -> VideoModel:
+	"""create an sdk VideoModel with fully explicit adapter configuration."""
+	if model.model_type != ModelType.VIDEO:
+		raise ValueError(f"model {model.id} is not a video model")
+
+	provider_key = model.provider.adapter_type
+	if not provider_key:
+		raise ValueError("provider adapter_type is empty")
+
+	variant = model.adapter
+	adapter_type = resolve_video_adapter(provider_key, variant)
+	if adapter_type is None:
+		raise ValueError(f"unknown video provider: {provider_key}")
+
+	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
+	return VideoModel.create(model.name, adapter=adapter_config)
+
+
+async def resolve_video_model(
+	session: AsyncSession,
+	model_id: TypeID,
+) -> VideoModel:
+	"""resolve and build an sdk VideoModel from a model id."""
+	stmt = (
+		select(Model).options(selectinload(Model.provider)).where(Model.id == model_id)
+	)
+	result = await session.execute(stmt)
+	model = result.scalars().one_or_none()
+	if model is None:
+		raise HTTPException(status_code=404, detail="video model not found")
+	return build_video_model(model)
+
+
+def build_audio_model(model: Model) -> AudioModel:
+	"""create an sdk AudioModel with fully explicit adapter configuration."""
+	if model.model_type != ModelType.AUDIO:
+		raise ValueError(f"model {model.id} is not an audio model")
+
+	provider_key = model.provider.adapter_type
+	if not provider_key:
+		raise ValueError("provider adapter_type is empty")
+
+	variant = model.adapter
+	adapter_type = resolve_audio_adapter(provider_key, variant)
+	if adapter_type is None:
+		raise ValueError(f"unknown audio provider: {provider_key}")
+
+	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
+	return AudioModel.create(model.name, adapter=adapter_config)
+
+
+async def resolve_audio_model(
+	session: AsyncSession,
+	model_id: TypeID,
+) -> AudioModel:
+	"""resolve and build an sdk AudioModel from a model id."""
+	stmt = (
+		select(Model).options(selectinload(Model.provider)).where(Model.id == model_id)
+	)
+	result = await session.execute(stmt)
+	model = result.scalars().one_or_none()
+	if model is None:
+		raise HTTPException(status_code=404, detail="audio model not found")
+	return build_audio_model(model)

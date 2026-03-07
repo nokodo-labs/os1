@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from api.v1.service.chat.tools.audio_generation import GenerateAudioTool
 from api.v1.service.chat.tools.code_interpreter import CodeInterpreterTool
 from api.v1.service.chat.tools.files import FileEditTool, FileGetTool
 from api.v1.service.chat.tools.image_generation import GenerateImageTool
@@ -22,6 +23,7 @@ from api.v1.service.chat.tools.send_notification import (
 	SendNotificationTool,
 )
 from api.v1.service.chat.tools.think import ThinkingTool
+from api.v1.service.chat.tools.video_generation import GenerateVideoTool
 from api.v1.service.chat.tools.web_search import (
 	AgenticWebSearchTool,
 	FetchUrlTool,
@@ -48,6 +50,8 @@ _TOOLS: list[Tool[AppContext]] = [
 	AgenticWebSearchTool(),
 	FetchUrlTool(),
 	GenerateImageTool(),
+	# GenerateVideoTool(), WIP
+	# GenerateAudioTool(), WIP
 	CodeInterpreterTool(),
 	RevealAttachmentTool(),
 	SendNotificationTool(),
@@ -84,7 +88,9 @@ __all__ = [
 	"FetchUrlTool",
 	"FileEditTool",
 	"FileGetTool",
+	"GenerateAudioTool",
 	"GenerateImageTool",
+	"GenerateVideoTool",
 	"MemoryCreateTool",
 	"MemoryRecallTool",
 	"NoteGetTool",

@@ -223,13 +223,11 @@
 <div
 	bind:this={messageRef}
 	class="flex animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2"
-	class:max-w-\[80\%\]={!isEditing}
 	class:ml-auto={align === 'right'}
 	class:items-end={align === 'right'}
-	class:self-end={align === 'right'}
 	class:items-start={align === 'left'}
-	class:self-start={align === 'left'}
 	class:w-full={isEditing}
+	style:max-width={!isEditing ? '80%' : undefined}
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
 	ontouchstart={handleTouchStart}

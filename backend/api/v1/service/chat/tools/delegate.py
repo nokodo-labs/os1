@@ -6,7 +6,7 @@ import json
 from time import time
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -37,6 +37,8 @@ class DelegateTarget(BaseModel):
 
 class DelegateRequest(BaseModel):
 	"""request body for delegating a task to a sub-agent."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	target: DelegateTarget = Field(
 		default_factory=DelegateTarget,

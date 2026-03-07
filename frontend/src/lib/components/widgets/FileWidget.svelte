@@ -1,9 +1,6 @@
 <script lang="ts">
 	import { getApiOrigin } from '$lib/api/origin'
-	import Document from '$lib/components/icons/Document.svelte'
-	import Film from '$lib/components/icons/Film.svelte'
-	import Photo from '$lib/components/icons/Photo.svelte'
-	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
+	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { fetchAuthenticatedBlob } from '$lib/stores/files.svelte'
 	import type { ResourceItem } from './types'
@@ -45,15 +42,7 @@
 </script>
 
 {#snippet fileIcon()}
-	{#if category === 'image'}
-		<Photo class="size-5" />
-	{:else if category === 'video'}
-		<Film class="size-5" />
-	{:else if category === 'audio'}
-		<SoundHigh class="size-5" />
-	{:else}
-		<Document class="size-5" />
-	{/if}
+	<MimeIcon {mimeType} class="size-5" />
 {/snippet}
 
 {#snippet content()}

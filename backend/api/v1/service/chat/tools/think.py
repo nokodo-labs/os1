@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from time import time
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -38,6 +38,8 @@ class Thought(BaseModel):
 
 class ChainOfThoughts(BaseModel):
 	"""structured reasoning output from the agent's thought process."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	thoughts: list[Thought] = Field(
 		min_length=1,

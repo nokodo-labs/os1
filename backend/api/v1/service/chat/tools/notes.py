@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.note import NoteCreate, NoteUpdate
 from api.v1.service import notes as note_service
@@ -25,6 +26,8 @@ class NoteGetInput(BaseModel):
 
 	provide note_id to fetch a specific note, or query to search.
 	"""
+
+	model_config = ConfigDict(extra="forbid")
 
 	note_id: str | None = Field(
 		default=None,
@@ -50,6 +53,8 @@ class NoteWriteInput(BaseModel):
 
 	provide note_id to update an existing note, or omit to create a new one.
 	"""
+
+	model_config = ConfigDict(extra="forbid")
 
 	note_id: str | None = Field(
 		default=None,
@@ -104,13 +109,16 @@ class NoteGetTool(Tool[AppContext]):
 				)
 			except HTTPException as exc:
 				return self.error(str(exc.detail), __agent_context__)
-			parts = [f"title: {note.title}"]
+			result: dict[str, object] = {
+				"status": "success",
+				"message": "note retrieved",
+				"id": str(note.id),
+				"title": note.title,
+				"content": note.content,
+			}
 			if note.labels:
-				parts.append(
-					f"labels: {', '.join(str(label) for label in note.labels)}"
-				)
-			parts.append(f"\n{note.content}")
-			return self.success("\n".join(parts), __agent_context__)
+				result["labels"] = [str(label) for label in note.labels]
+			return self.success(json.dumps(result), __agent_context__)
 
 		if not inp.query:
 			return self.error(
@@ -130,13 +138,22 @@ class NoteGetTool(Tool[AppContext]):
 			return self.error(str(exc.detail), __agent_context__)
 
 		if not page.items:
-			return self.success("no notes found matching the query", __agent_context__)
+			out = {
+				"status": "success",
+				"message": "no notes found",
+				"count": 0,
+				"results": [],
+			}
+			return self.success(json.dumps(out), __agent_context__)
 
-		lines = []
-		for item in page.items:
-			subtitle = f" - {item.subtitle}" if item.subtitle else ""
-			lines.append(f"- [{item.id}] {item.title}{subtitle}")
-		return self.success("\n".join(lines), __agent_context__)
+		results = [
+			{"id": str(item.id), "title": item.title, "subtitle": item.subtitle or ""}
+			for item in page.items
+		]
+		n = len(results)
+		msg = f"found {n} {'note' if n == 1 else 'notes'}"
+		out = {"status": "success", "message": msg, "count": n, "results": results}
+		return self.success(json.dumps(out), __agent_context__)
 
 
 class NoteWriteTool(Tool[AppContext]):
@@ -178,9 +195,8 @@ class NoteWriteTool(Tool[AppContext]):
 				)
 			except HTTPException as exc:
 				return self.error(str(exc.detail), __agent_context__)
-			return self.success(
-				f"note updated: [{note.id}] {note.title}", __agent_context__
-			)
+			out = {"status": "success", "message": "note updated", "id": str(note.id)}
+			return self.success(json.dumps(out), __agent_context__)
 
 		# create new note
 		if not inp.title:
@@ -199,6 +215,5 @@ class NoteWriteTool(Tool[AppContext]):
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)
-		return self.success(
-			f"note created: [{note.id}] {note.title}", __agent_context__
-		)
+		out = {"status": "success", "message": "note created", "id": str(note.id)}
+		return self.success(json.dumps(out), __agent_context__)

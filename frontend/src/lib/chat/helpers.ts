@@ -70,10 +70,11 @@ export function extractMediaParts(
 		if (!part) continue
 		if (part.type === 'image') {
 			const fileId = part.metadata?.file_id as string | undefined
+			const mediaType = part.media_type ?? 'image/png'
 			const url =
+				(fileId && apiBaseUrl ? `${apiBaseUrl}/v1/files/${fileId}/content` : undefined) ??
 				part.url ??
-				part.base64 ??
-				(fileId && apiBaseUrl ? `${apiBaseUrl}/v1/files/${fileId}/content` : undefined)
+				(part.base64 ? `data:${mediaType};base64,${part.base64}` : undefined)
 			if (url) {
 				results.push({
 					type: 'image',
@@ -202,7 +203,6 @@ export function computeThreadAttachments(
 
 	for (let i = 0; i < messages.length; i++) {
 		const msg = messages[i]
-		if (msg.type !== 'user') continue
 		if (!msg.content) continue
 
 		for (const part of msg.content) {

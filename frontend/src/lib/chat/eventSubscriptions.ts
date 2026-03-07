@@ -4,12 +4,12 @@
  */
 
 import { isOwnEvent } from '$lib/api/sessionId'
+import { resumeRunStream } from '$lib/api/streaming/chatStream'
 import {
 	eventStreamClient,
-	resumeRunStream,
 	type StreamEvent,
 	type StreamMessage,
-} from '$lib/api/streaming'
+} from '$lib/api/streaming/eventStream.svelte'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap } from 'svelte/reactivity'
 import { buildMessageChildren, type ApiMessage } from './helpers'

@@ -32,6 +32,27 @@
 	let saveError = $state<string | null>(null)
 	let saveSuccess = $state<string | null>(null)
 
+	let scrollContainer = $state<HTMLElement | null>(null)
+	let showScrollTop = $state(false)
+
+	const sections = [
+		{ id: 'section-ui', label: 'ui' },
+		{ id: 'section-ai', label: 'ai' },
+		{ id: 'section-branding', label: 'branding' },
+		{ id: 'section-media', label: 'media' },
+		{ id: 'section-assets', label: 'assets' },
+		{ id: 'section-limits', label: 'limits' },
+		{ id: 'section-soft-delete', label: 'soft delete' },
+		{ id: 'section-web-search', label: 'web search' },
+		{ id: 'section-code-interpreter', label: 'code interpreter' },
+		{ id: 'section-security', label: 'security' },
+		{ id: 'section-permissions', label: 'permissions' },
+	]
+
+	function scrollToSection(id: string) {
+		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+	}
+
 	let response = $state<SettingsResponse | null>(null)
 
 	let isFetchingAgents = $state(false)
@@ -88,6 +109,7 @@
 	let aiChatContextMode = $state<ChatContextMode>('recent')
 	let aiChatContextTopK = $state<string>('')
 	let aiChatContextSimilarityThreshold = $state<string>('')
+	let aiRetrievalTurns = $state<string>('')
 	let aiRetrievalPreBuild = $state(true)
 
 	let aiTaskDefaultModelId = $state<string>('')
@@ -182,6 +204,10 @@
 	let assetsStorageS3SecretAccessKey = $state('')
 	let assetsStorageS3Prefix = $state('')
 	let assetsStorageS3PresignedUrlTtl = $state<string>('')
+	let assetsStorageS3MultipartThreshold = $state<string>('')
+	let assetsStorageS3MultipartChunkSize = $state<string>('')
+	let assetsStorageS3MaxRetries = $state<string>('')
+	let assetsStorageS3RetryMode = $state<'legacy' | 'standard' | 'adaptive'>('adaptive')
 
 	// branding extras
 	let brandingPublicConsoleOrigin = $state('')
@@ -227,6 +253,7 @@
 	let codeInterpreterEngine = $state<CodeInterpreterEngine>('e2b')
 	let codeInterpreterE2bApiKey = $state<string>('')
 	let codeInterpreterE2bTemplate = $state<string>('')
+	let codeInterpreterE2bAvailablePackages = $state<string>('')
 	let codeInterpreterTimeout = $state<string>('')
 
 	let defaultPermissions = $state<DefaultPermissionsSettings>({
@@ -255,6 +282,7 @@
 		aiChatContextMode: 'recent' as ChatContextMode,
 		aiChatContextTopK: '',
 		aiChatContextSimilarityThreshold: '',
+		aiRetrievalTurns: '',
 		aiRetrievalPreBuild: true,
 		aiTaskDefaultModelId: '',
 		aiTaskThreadMetadataModelId: '',
@@ -336,6 +364,10 @@
 		assetsStorageS3SecretAccessKey: '',
 		assetsStorageS3Prefix: '',
 		assetsStorageS3PresignedUrlTtl: '',
+		assetsStorageS3MultipartThreshold: '',
+		assetsStorageS3MultipartChunkSize: '',
+		assetsStorageS3MaxRetries: '',
+		assetsStorageS3RetryMode: 'adaptive' as 'legacy' | 'standard' | 'adaptive',
 		brandingSupportEmail: '',
 		brandingAdminEmail: '',
 		mediaBaseUrl: '',
@@ -370,6 +402,7 @@
 		codeInterpreterEngine: 'e2b' as CodeInterpreterEngine,
 		codeInterpreterE2bApiKey: '',
 		codeInterpreterE2bTemplate: '',
+		codeInterpreterE2bAvailablePackages: '',
 		codeInterpreterTimeout: '',
 		defaultPermissions: {
 			resource_access: {
@@ -475,6 +508,10 @@
 			assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey ||
 			assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
 			assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl ||
+			assetsStorageS3MultipartThreshold !== original.assetsStorageS3MultipartThreshold ||
+			assetsStorageS3MultipartChunkSize !== original.assetsStorageS3MultipartChunkSize ||
+			assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
+			assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode ||
 			mediaBaseUrl !== original.mediaBaseUrl ||
 			mediaFaviconUrl !== original.mediaFaviconUrl ||
 			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl ||
@@ -520,6 +557,7 @@
 			codeInterpreterEngine !== original.codeInterpreterEngine ||
 			codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey ||
 			codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
+			codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages ||
 			codeInterpreterTimeout !== original.codeInterpreterTimeout ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
@@ -588,6 +626,7 @@
 		aiChatContextMode = (chatContext?.mode ?? 'recent') as ChatContextMode
 		aiChatContextTopK = toStringOrEmpty(chatContext?.top_k)
 		aiChatContextSimilarityThreshold = toStringOrEmpty(chatContext?.similarity_threshold)
+		aiRetrievalTurns = toStringOrEmpty(ai?.retrieval_turns)
 		aiRetrievalPreBuild = ai?.retrieval_pre_build ?? true
 
 		const tasks = ai?.tasks
@@ -697,6 +736,7 @@
 		codeInterpreterEngine = (ci?.engine ?? 'e2b') as CodeInterpreterEngine
 		codeInterpreterE2bApiKey = ci?.e2b?.api_key ?? ''
 		codeInterpreterE2bTemplate = ci?.e2b?.template ?? ''
+		codeInterpreterE2bAvailablePackages = (ci?.e2b?.available_packages ?? []).join(', ')
 		codeInterpreterTimeout = toStringOrEmpty(ci?.timeout)
 
 		const limits = r.data.limits
@@ -764,6 +804,13 @@
 		assetsStorageS3SecretAccessKey = storage?.s3?.secret_access_key ?? ''
 		assetsStorageS3Prefix = storage?.s3?.prefix ?? ''
 		assetsStorageS3PresignedUrlTtl = toStringOrEmpty(storage?.s3?.presigned_url_ttl)
+		assetsStorageS3MultipartThreshold = toStringOrEmpty(storage?.s3?.multipart_threshold)
+		assetsStorageS3MultipartChunkSize = toStringOrEmpty(storage?.s3?.multipart_chunk_size)
+		assetsStorageS3MaxRetries = toStringOrEmpty(storage?.s3?.max_retries)
+		assetsStorageS3RetryMode = (storage?.s3?.retry_mode ?? 'adaptive') as
+			| 'legacy'
+			| 'standard'
+			| 'adaptive'
 
 		const defaults = r.data.default_permissions
 		defaultPermissions = normalizeDefaultPermissions(
@@ -783,6 +830,7 @@
 			aiChatContextMode,
 			aiChatContextTopK,
 			aiChatContextSimilarityThreshold,
+			aiRetrievalTurns,
 			aiRetrievalPreBuild,
 			aiTaskDefaultModelId,
 			aiTaskThreadMetadataModelId,
@@ -858,6 +906,10 @@
 			assetsStorageS3SecretAccessKey,
 			assetsStorageS3Prefix,
 			assetsStorageS3PresignedUrlTtl,
+			assetsStorageS3MultipartThreshold,
+			assetsStorageS3MultipartChunkSize,
+			assetsStorageS3MaxRetries,
+			assetsStorageS3RetryMode,
 			mediaBaseUrl,
 			mediaFaviconUrl,
 			mediaAppleTouchIconUrl,
@@ -898,6 +950,7 @@
 			codeInterpreterEngine,
 			codeInterpreterE2bApiKey,
 			codeInterpreterE2bTemplate,
+			codeInterpreterE2bAvailablePackages,
 			codeInterpreterTimeout,
 			defaultPermissions,
 			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
@@ -960,6 +1013,7 @@
 		aiChatContextMode = original.aiChatContextMode
 		aiChatContextTopK = original.aiChatContextTopK
 		aiChatContextSimilarityThreshold = original.aiChatContextSimilarityThreshold
+		aiRetrievalTurns = original.aiRetrievalTurns
 		aiRetrievalPreBuild = original.aiRetrievalPreBuild
 		aiTaskDefaultModelId = original.aiTaskDefaultModelId
 		aiTaskThreadMetadataModelId = original.aiTaskThreadMetadataModelId
@@ -1043,6 +1097,10 @@
 		assetsStorageS3SecretAccessKey = original.assetsStorageS3SecretAccessKey
 		assetsStorageS3Prefix = original.assetsStorageS3Prefix
 		assetsStorageS3PresignedUrlTtl = original.assetsStorageS3PresignedUrlTtl
+		assetsStorageS3MultipartThreshold = original.assetsStorageS3MultipartThreshold
+		assetsStorageS3MultipartChunkSize = original.assetsStorageS3MultipartChunkSize
+		assetsStorageS3MaxRetries = original.assetsStorageS3MaxRetries
+		assetsStorageS3RetryMode = original.assetsStorageS3RetryMode
 		mediaBaseUrl = original.mediaBaseUrl
 		mediaFaviconUrl = original.mediaFaviconUrl
 		mediaAppleTouchIconUrl = original.mediaAppleTouchIconUrl
@@ -1075,6 +1133,7 @@
 		codeInterpreterEngine = original.codeInterpreterEngine
 		codeInterpreterE2bApiKey = original.codeInterpreterE2bApiKey
 		codeInterpreterE2bTemplate = original.codeInterpreterE2bTemplate
+		codeInterpreterE2bAvailablePackages = original.codeInterpreterE2bAvailablePackages
 		codeInterpreterTimeout = original.codeInterpreterTimeout
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
@@ -1199,6 +1258,8 @@
 						aiChatContextSimilarityThreshold
 					)
 			}
+			if (aiRetrievalTurns !== original.aiRetrievalTurns)
+				aiPatch.retrieval_turns = asNumberOrNull(aiRetrievalTurns)
 			if (aiRetrievalPreBuild !== original.aiRetrievalPreBuild)
 				aiPatch.retrieval_pre_build = aiRetrievalPreBuild
 
@@ -1509,7 +1570,11 @@
 			assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId ||
 			assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey ||
 			assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
-			assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl
+			assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl ||
+			assetsStorageS3MultipartThreshold !== original.assetsStorageS3MultipartThreshold ||
+			assetsStorageS3MultipartChunkSize !== original.assetsStorageS3MultipartChunkSize ||
+			assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
+			assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode
 		) {
 			const assetsPatch: Record<string, unknown> = {}
 			if (assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId)
@@ -1635,7 +1700,11 @@
 				assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId ||
 				assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey ||
 				assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
-				assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl
+				assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl ||
+				assetsStorageS3MultipartThreshold !== original.assetsStorageS3MultipartThreshold ||
+				assetsStorageS3MultipartChunkSize !== original.assetsStorageS3MultipartChunkSize ||
+				assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
+				assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode
 			) {
 				const storagePatch: Record<string, unknown> = {}
 				if (assetsStorageBackend !== original.assetsStorageBackend)
@@ -1655,7 +1724,13 @@
 							original.assetsStorageS3SecretAccessKey ||
 						assetsStorageS3Prefix !== original.assetsStorageS3Prefix ||
 						assetsStorageS3PresignedUrlTtl !==
-							original.assetsStorageS3PresignedUrlTtl) &&
+							original.assetsStorageS3PresignedUrlTtl ||
+						assetsStorageS3MultipartThreshold !==
+							original.assetsStorageS3MultipartThreshold ||
+						assetsStorageS3MultipartChunkSize !==
+							original.assetsStorageS3MultipartChunkSize ||
+						assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
+						assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode) &&
 					assetsStorageBackend === 's3'
 				) {
 					const s3Patch: Record<string, unknown> = {}
@@ -1673,6 +1748,24 @@
 						s3Patch.prefix = assetsStorageS3Prefix || null
 					if (assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl)
 						s3Patch.presigned_url_ttl = asNumberOrNull(assetsStorageS3PresignedUrlTtl)
+					if (
+						assetsStorageS3MultipartThreshold !==
+						original.assetsStorageS3MultipartThreshold
+					)
+						s3Patch.multipart_threshold = asNumberOrNull(
+							assetsStorageS3MultipartThreshold
+						)
+					if (
+						assetsStorageS3MultipartChunkSize !==
+						original.assetsStorageS3MultipartChunkSize
+					)
+						s3Patch.multipart_chunk_size = asNumberOrNull(
+							assetsStorageS3MultipartChunkSize
+						)
+					if (assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries)
+						s3Patch.max_retries = asNumberOrNull(assetsStorageS3MaxRetries)
+					if (assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode)
+						s3Patch.retry_mode = assetsStorageS3RetryMode
 					storagePatch.s3 = s3Patch
 				}
 				assetsPatch.storage = storagePatch
@@ -1875,6 +1968,7 @@
 			codeInterpreterEngine !== original.codeInterpreterEngine ||
 			codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey ||
 			codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
+			codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages ||
 			codeInterpreterTimeout !== original.codeInterpreterTimeout
 		) {
 			const ciPatch: Record<string, unknown> = {}
@@ -1884,13 +1978,21 @@
 				ciPatch.engine = codeInterpreterEngine
 			if (
 				codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey ||
-				codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate
+				codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
+				codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages
 			) {
 				const e2bPatch: Record<string, unknown> = {}
 				if (codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey)
 					e2bPatch.api_key = codeInterpreterE2bApiKey || null
 				if (codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate)
 					e2bPatch.template = codeInterpreterE2bTemplate || null
+				if (
+					codeInterpreterE2bAvailablePackages !==
+					original.codeInterpreterE2bAvailablePackages
+				)
+					e2bPatch.available_packages = parseCommaList(
+						codeInterpreterE2bAvailablePackages
+					)
 				ciPatch.e2b = e2bPatch
 			}
 			if (codeInterpreterTimeout !== original.codeInterpreterTimeout)
@@ -1964,7 +2066,11 @@
 		</div>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-y-auto">
+	<div
+		bind:this={scrollContainer}
+		class="min-h-0 flex-1 overflow-y-auto"
+		onscroll={() => (showScrollTop = (scrollContainer?.scrollTop ?? 0) > 200)}
+	>
 		<div class="flex min-h-0 flex-1 flex-col gap-6">
 			{#if error}
 				<div
@@ -1994,186 +2100,237 @@
 				</div>
 			{:else if response}
 				<div class="space-y-6">
-					<SettingsUI
-						bind:defaultTheme={uiDefaultTheme}
-						bind:defaultBackground={uiDefaultBackground}
-						bind:authPagesBackground={uiAuthPagesBackground}
-						bind:sidebarCollapsed={uiSidebarCollapsed}
-					/>
+					<!-- nav legend -->
+					<nav
+						class="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-950/90 px-3 py-2 backdrop-blur"
+					>
+						{#each sections as s (s.id)}
+							<button
+								type="button"
+								onclick={() => scrollToSection(s.id)}
+								class="rounded-lg px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+							>
+								{s.label}
+							</button>
+						{/each}
+					</nav>
 
-					<SettingsAI
-						bind:defaultAgentIds={aiDefaultAgentIds}
-						bind:memoryEnable={aiMemoryEnable}
-						bind:memorySimilarityThreshold={aiMemorySimilarityThreshold}
-						bind:memoryTopK={aiMemoryTopK}
-						bind:chatContextEnabled={aiChatContextEnabled}
-						bind:chatContextMode={aiChatContextMode}
-						bind:chatContextTopK={aiChatContextTopK}
-						bind:chatContextSimilarityThreshold={aiChatContextSimilarityThreshold}
-						bind:retrievalPreBuild={aiRetrievalPreBuild}
-						bind:taskDefaultModelId={aiTaskDefaultModelId}
-						bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
-						bind:taskInputAutocompleteModelId={aiTaskInputAutocompleteModelId}
-						bind:taskSummarizationModelId={aiTaskSummarizationModelId}
-						bind:taskMemoryPostProcessingModelId={aiTaskMemoryPostProcessingModelId}
-						bind:mediaImagesEnabled={aiMediaImagesEnabled}
-						bind:mediaImagesModel={aiMediaImagesModel}
-						bind:mediaImagesDefaultSize={aiMediaImagesDefaultSize}
-						bind:mediaImagesDefaultSteps={aiMediaImagesDefaultSteps}
-						bind:mediaImagesDefaultN={aiMediaImagesDefaultN}
-						bind:mediaImagesMaxN={aiMediaImagesMaxN}
-						bind:mediaVideosEnabled={aiMediaVideosEnabled}
-						bind:mediaAudioEnabled={aiMediaAudioEnabled}
-						bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
-						bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
-						bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
-						bind:attachmentRevealDecayTurns={aiAttachmentRevealDecayTurns}
-						bind:windowingEnabled={aiWindowingEnabled}
-						bind:windowingMaxMessages={aiWindowingMaxMessages}
-						bind:windowingTriggerRatio={aiWindowingTriggerRatio}
-						bind:windowingHardRatio={aiWindowingHardRatio}
-						bind:windowingSummaryBatchSize={aiWindowingSummaryBatchSize}
-						bind:windowingMaxSummariesBeforeCondense={
-							aiWindowingMaxSummariesBeforeCondense
-						}
-						bind:windowingToolResultMaxShare={aiWindowingToolResultMaxShare}
-						bind:windowingToolResultHardCap={aiWindowingToolResultHardCap}
-						bind:windowingToolResultsCombinedMaxShare={
-							aiWindowingToolResultsCombinedMaxShare
-						}
-						bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
-						{agents}
-						{models}
-						{isFetchingAgents}
-						{isFetchingModels}
-						{agentsError}
-						{modelsError}
-					/>
+					<section id="section-ui">
+						<SettingsUI
+							bind:defaultTheme={uiDefaultTheme}
+							bind:defaultBackground={uiDefaultBackground}
+							bind:authPagesBackground={uiAuthPagesBackground}
+							bind:sidebarCollapsed={uiSidebarCollapsed}
+						/>
+					</section>
 
-					<SettingsBranding
-						bind:siteName={brandingSiteName}
-						bind:logoUrl={brandingLogoUrl}
-						bind:faviconUrl={brandingFaviconUrl}
-						bind:primaryColor={brandingPrimaryColor}
-						bind:supportEmail={brandingSupportEmail}
-						bind:adminEmail={brandingAdminEmail}
-						bind:publicFrontendOrigin={brandingPublicFrontendOrigin}
-						bind:publicCdnOrigin={brandingPublicCdnOrigin}
-						bind:publicConsoleOrigin={brandingPublicConsoleOrigin}
-						bind:pwaManifestUrl={brandingPwaManifestUrl}
-						appVersion={brandingAppVersion}
-						analyticsKeyConfigured={brandingAnalyticsKeyConfigured}
-					/>
+					<section id="section-ai">
+						<SettingsAI
+							bind:defaultAgentIds={aiDefaultAgentIds}
+							bind:memoryEnable={aiMemoryEnable}
+							bind:memorySimilarityThreshold={aiMemorySimilarityThreshold}
+							bind:memoryTopK={aiMemoryTopK}
+							bind:chatContextEnabled={aiChatContextEnabled}
+							bind:chatContextMode={aiChatContextMode}
+							bind:chatContextTopK={aiChatContextTopK}
+							bind:chatContextSimilarityThreshold={aiChatContextSimilarityThreshold}
+							bind:retrievalPreBuild={aiRetrievalPreBuild}
+							bind:retrievalTurns={aiRetrievalTurns}
+							bind:taskDefaultModelId={aiTaskDefaultModelId}
+							bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
+							bind:taskInputAutocompleteModelId={aiTaskInputAutocompleteModelId}
+							bind:taskSummarizationModelId={aiTaskSummarizationModelId}
+							bind:taskMemoryPostProcessingModelId={aiTaskMemoryPostProcessingModelId}
+							bind:mediaImagesEnabled={aiMediaImagesEnabled}
+							bind:mediaImagesModel={aiMediaImagesModel}
+							bind:mediaImagesDefaultSize={aiMediaImagesDefaultSize}
+							bind:mediaImagesDefaultSteps={aiMediaImagesDefaultSteps}
+							bind:mediaImagesDefaultN={aiMediaImagesDefaultN}
+							bind:mediaImagesMaxN={aiMediaImagesMaxN}
+							bind:mediaVideosEnabled={aiMediaVideosEnabled}
+							bind:mediaAudioEnabled={aiMediaAudioEnabled}
+							bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
+							bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
+							bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
+							bind:attachmentRevealDecayTurns={aiAttachmentRevealDecayTurns}
+							bind:windowingEnabled={aiWindowingEnabled}
+							bind:windowingMaxMessages={aiWindowingMaxMessages}
+							bind:windowingTriggerRatio={aiWindowingTriggerRatio}
+							bind:windowingHardRatio={aiWindowingHardRatio}
+							bind:windowingSummaryBatchSize={aiWindowingSummaryBatchSize}
+							bind:windowingMaxSummariesBeforeCondense={
+								aiWindowingMaxSummariesBeforeCondense
+							}
+							bind:windowingToolResultMaxShare={aiWindowingToolResultMaxShare}
+							bind:windowingToolResultHardCap={aiWindowingToolResultHardCap}
+							bind:windowingToolResultsCombinedMaxShare={
+								aiWindowingToolResultsCombinedMaxShare
+							}
+							bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
+							{agents}
+							{models}
+							{isFetchingAgents}
+							{isFetchingModels}
+							{agentsError}
+							{modelsError}
+						/>
+					</section>
 
-					<SettingsMedia
-						bind:baseUrl={mediaBaseUrl}
-						bind:faviconUrl={mediaFaviconUrl}
-						bind:appleTouchIconUrl={mediaAppleTouchIconUrl}
-						bind:sidebarLogoUrl={mediaSidebarLogoUrl}
-						bind:splashLogoUrl={mediaSplashLogoUrl}
-					/>
+					<section id="section-branding">
+						<SettingsBranding
+							bind:siteName={brandingSiteName}
+							bind:logoUrl={brandingLogoUrl}
+							bind:faviconUrl={brandingFaviconUrl}
+							bind:primaryColor={brandingPrimaryColor}
+							bind:supportEmail={brandingSupportEmail}
+							bind:adminEmail={brandingAdminEmail}
+							bind:publicFrontendOrigin={brandingPublicFrontendOrigin}
+							bind:publicCdnOrigin={brandingPublicCdnOrigin}
+							bind:publicConsoleOrigin={brandingPublicConsoleOrigin}
+							bind:pwaManifestUrl={brandingPwaManifestUrl}
+							appVersion={brandingAppVersion}
+							analyticsKeyConfigured={brandingAnalyticsKeyConfigured}
+						/>
+					</section>
 
-					<SettingsAssets
-						bind:defaultEmbeddingModelId={assetsDefaultEmbeddingModelId}
-						bind:vectorDatabaseProvider={assetsVectorDatabaseProvider}
-						bind:vectorDatabaseUrl={assetsVectorDatabaseUrl}
-						bind:vectorDatabaseQdrantApiKey={assetsVectorDatabaseQdrantApiKey}
-						bind:vectorDatabasePineconeApiKey={assetsVectorDatabasePineconeApiKey}
-						bind:vectorDatabaseWeaviateApiKey={assetsVectorDatabaseWeaviateApiKey}
-						bind:vectorDatabaseMilvusToken={assetsVectorDatabaseMilvusToken}
-						bind:vectorDatabaseRedisPassword={assetsVectorDatabaseRedisPassword}
-						bind:vectorDatabaseOpensearchApiKey={assetsVectorDatabaseOpensearchApiKey}
-						bind:vectorCollectionTemplate={assetsVectorCollectionTemplate}
-						bind:vectorSparseEnabled={assetsVectorSparseEnabled}
-						bind:vectorFusionAlgorithm={assetsVectorFusionAlgorithm}
-						bind:vectorNormalizeScores={assetsVectorNormalizeScores}
-						bind:embeddingsVectorSize={assetsEmbeddingsVectorSize}
-						bind:embeddingsBatchSize={assetsEmbeddingsBatchSize}
-						bind:rerankDefaultStrategy={assetsRerankDefaultStrategy}
-						bind:rerankTopK={assetsRerankTopK}
-						bind:storageBackend={assetsStorageBackend}
-						bind:storageLocalRootPath={assetsStorageLocalRootPath}
-						bind:storageS3EndpointUrl={assetsStorageS3EndpointUrl}
-						bind:storageS3Bucket={assetsStorageS3Bucket}
-						bind:storageS3Region={assetsStorageS3Region}
-						bind:storageS3AccessKeyId={assetsStorageS3AccessKeyId}
-						bind:storageS3SecretAccessKey={assetsStorageS3SecretAccessKey}
-						bind:storageS3Prefix={assetsStorageS3Prefix}
-						bind:storageS3PresignedUrlTtl={assetsStorageS3PresignedUrlTtl}
-						{models}
-						{isFetchingModels}
-						{modelsError}
-					/>
+					<section id="section-media">
+						<SettingsMedia
+							bind:baseUrl={mediaBaseUrl}
+							bind:faviconUrl={mediaFaviconUrl}
+							bind:appleTouchIconUrl={mediaAppleTouchIconUrl}
+							bind:sidebarLogoUrl={mediaSidebarLogoUrl}
+							bind:splashLogoUrl={mediaSplashLogoUrl}
+						/>
+					</section>
 
-					<SettingsLimits
-						bind:maxThreadsPerUser={limitsMaxThreadsPerUser}
-						bind:maxMessagesPerThread={limitsMaxMessagesPerThread}
-						bind:maxFileSizeMb={limitsMaxFileSizeMb}
-						bind:rateLimitRequestsPerMinute={limitsRateLimitRequestsPerMinute}
-					/>
+					<section id="section-assets">
+						<SettingsAssets
+							bind:defaultEmbeddingModelId={assetsDefaultEmbeddingModelId}
+							bind:vectorDatabaseProvider={assetsVectorDatabaseProvider}
+							bind:vectorDatabaseUrl={assetsVectorDatabaseUrl}
+							bind:vectorDatabaseQdrantApiKey={assetsVectorDatabaseQdrantApiKey}
+							bind:vectorDatabasePineconeApiKey={assetsVectorDatabasePineconeApiKey}
+							bind:vectorDatabaseWeaviateApiKey={assetsVectorDatabaseWeaviateApiKey}
+							bind:vectorDatabaseMilvusToken={assetsVectorDatabaseMilvusToken}
+							bind:vectorDatabaseRedisPassword={assetsVectorDatabaseRedisPassword}
+							bind:vectorDatabaseOpensearchApiKey={
+								assetsVectorDatabaseOpensearchApiKey
+							}
+							bind:vectorCollectionTemplate={assetsVectorCollectionTemplate}
+							bind:vectorSparseEnabled={assetsVectorSparseEnabled}
+							bind:vectorFusionAlgorithm={assetsVectorFusionAlgorithm}
+							bind:vectorNormalizeScores={assetsVectorNormalizeScores}
+							bind:embeddingsVectorSize={assetsEmbeddingsVectorSize}
+							bind:embeddingsBatchSize={assetsEmbeddingsBatchSize}
+							bind:rerankDefaultStrategy={assetsRerankDefaultStrategy}
+							bind:rerankTopK={assetsRerankTopK}
+							bind:storageBackend={assetsStorageBackend}
+							bind:storageLocalRootPath={assetsStorageLocalRootPath}
+							bind:storageS3EndpointUrl={assetsStorageS3EndpointUrl}
+							bind:storageS3Bucket={assetsStorageS3Bucket}
+							bind:storageS3Region={assetsStorageS3Region}
+							bind:storageS3AccessKeyId={assetsStorageS3AccessKeyId}
+							bind:storageS3SecretAccessKey={assetsStorageS3SecretAccessKey}
+							bind:storageS3Prefix={assetsStorageS3Prefix}
+							bind:storageS3PresignedUrlTtl={assetsStorageS3PresignedUrlTtl}
+							bind:storageS3MultipartThreshold={assetsStorageS3MultipartThreshold}
+							bind:storageS3MultipartChunkSize={assetsStorageS3MultipartChunkSize}
+							bind:storageS3MaxRetries={assetsStorageS3MaxRetries}
+							bind:storageS3RetryMode={assetsStorageS3RetryMode}
+							{models}
+							{isFetchingModels}
+							{modelsError}
+						/>
+					</section>
 
-					<SettingsSoftDelete
-						bind:threads={softDeleteThreads}
-						bind:notes={softDeleteNotes}
-						bind:files={softDeleteFiles}
-					/>
+					<section id="section-limits">
+						<SettingsLimits
+							bind:maxThreadsPerUser={limitsMaxThreadsPerUser}
+							bind:maxMessagesPerThread={limitsMaxMessagesPerThread}
+							bind:maxFileSizeMb={limitsMaxFileSizeMb}
+							bind:rateLimitRequestsPerMinute={limitsRateLimitRequestsPerMinute}
+						/>
+					</section>
 
-					<SettingsWebSearch
-						bind:searchAgent={webSearchSearchAgent}
-						bind:blacklistedDomains={webSearchBlacklistedDomains}
-						bind:engineEngine={webSearchEngineEngine}
-						bind:searxngInstanceUrl={webSearchSearxngInstanceUrl}
-						bind:searxngMaxResults={webSearchSearxngMaxResults}
-						bind:searxngMaxConcurrentRequests={webSearchSearxngMaxConcurrentRequests}
-						bind:searxngTimeoutSeconds={webSearchSearxngTimeoutSeconds}
-						bind:webLoaderEngine={webSearchWebLoaderEngine}
-						bind:webLoaderTimeoutSeconds={webSearchWebLoaderTimeoutSeconds}
-						bind:webLoaderUserAgent={webSearchWebLoaderUserAgent}
-						bind:tavilyExtractDepth={webSearchTavilyExtractDepth}
-						bind:tavilyApiKey={webSearchTavilyApiKey}
-						bind:tavilyMaxConcurrentRequests={webSearchTavilyMaxConcurrentRequests}
-						bind:perplexityApiKey={webSearchPerplexityApiKey}
-						bind:perplexityModel={webSearchPerplexityModel}
-						bind:perplexitySearchContextUsage={webSearchPerplexitySearchContextUsage}
-						bind:perplexityTemperature={webSearchPerplexityTemperature}
-						bind:perplexityReturnImages={webSearchPerplexityReturnImages}
-						bind:perplexitySearchRecencyFilter={webSearchPerplexitySearchRecencyFilter}
-						bind:perplexityMaxConcurrentRequests={
-							webSearchPerplexityMaxConcurrentRequests
-						}
-					/>
+					<section id="section-soft-delete">
+						<SettingsSoftDelete
+							bind:threads={softDeleteThreads}
+							bind:notes={softDeleteNotes}
+							bind:files={softDeleteFiles}
+						/>
+					</section>
 
-					<SettingsCodeInterpreter
-						bind:enabled={codeInterpreterEnabled}
-						bind:engine={codeInterpreterEngine}
-						bind:e2bApiKey={codeInterpreterE2bApiKey}
-						bind:e2bTemplate={codeInterpreterE2bTemplate}
-						bind:timeout={codeInterpreterTimeout}
-					/>
+					<section id="section-web-search">
+						<SettingsWebSearch
+							bind:searchAgent={webSearchSearchAgent}
+							bind:blacklistedDomains={webSearchBlacklistedDomains}
+							bind:engineEngine={webSearchEngineEngine}
+							bind:searxngInstanceUrl={webSearchSearxngInstanceUrl}
+							bind:searxngMaxResults={webSearchSearxngMaxResults}
+							bind:searxngMaxConcurrentRequests={
+								webSearchSearxngMaxConcurrentRequests
+							}
+							bind:searxngTimeoutSeconds={webSearchSearxngTimeoutSeconds}
+							bind:webLoaderEngine={webSearchWebLoaderEngine}
+							bind:webLoaderTimeoutSeconds={webSearchWebLoaderTimeoutSeconds}
+							bind:webLoaderUserAgent={webSearchWebLoaderUserAgent}
+							bind:tavilyExtractDepth={webSearchTavilyExtractDepth}
+							bind:tavilyApiKey={webSearchTavilyApiKey}
+							bind:tavilyMaxConcurrentRequests={webSearchTavilyMaxConcurrentRequests}
+							bind:perplexityApiKey={webSearchPerplexityApiKey}
+							bind:perplexityModel={webSearchPerplexityModel}
+							bind:perplexitySearchContextUsage={
+								webSearchPerplexitySearchContextUsage
+							}
+							bind:perplexityTemperature={webSearchPerplexityTemperature}
+							bind:perplexityReturnImages={webSearchPerplexityReturnImages}
+							bind:perplexitySearchRecencyFilter={
+								webSearchPerplexitySearchRecencyFilter
+							}
+							bind:perplexityMaxConcurrentRequests={
+								webSearchPerplexityMaxConcurrentRequests
+							}
+						/>
+					</section>
 
-					<SettingsSecurity
-						bind:accessTokenExpireMinutes={securityAccessTokenExpireMinutes}
-						bind:refreshTokenExpireDays={securityRefreshTokenExpireDays}
-						bind:authCookieSecure={securityAuthCookieSecure}
-						bind:sessionTimeoutMinutes={securitySessionTimeoutMinutes}
-						bind:requireEmailVerification={securityRequireEmailVerification}
-						bind:allowedEmailDomains={securityAllowedEmailDomains}
-						bind:allowSignups={securityAllowSignups}
-						bind:autoSignupRoleIds={securityAutoSignupRoleIds}
-						bind:oidcEnabled={securityOidcEnabled}
-						bind:oidcIssuerUrl={securityOidcIssuerUrl}
-						bind:oidcClientId={securityOidcClientId}
-						bind:oidcClientSecret={securityOidcClientSecret}
-						bind:oidcRedirectUri={securityOidcRedirectUri}
-						bind:oidcScopes={securityOidcScopes}
-						bind:oidcOnly={securityOidcOnly}
-						secretKeyConfigured={securitySecretKeyConfigured}
-						jwtAlgorithm={securityJwtAlgorithm}
-						enableOauth={securityEnableOauth}
-						corsOrigins={securityCorsOrigins}
-					/>
+					<section id="section-code-interpreter">
+						<SettingsCodeInterpreter
+							bind:enabled={codeInterpreterEnabled}
+							bind:engine={codeInterpreterEngine}
+							bind:e2bApiKey={codeInterpreterE2bApiKey}
+							bind:e2bTemplate={codeInterpreterE2bTemplate}
+							bind:e2bAvailablePackages={codeInterpreterE2bAvailablePackages}
+							bind:timeout={codeInterpreterTimeout}
+						/>
+					</section>
 
-					<SettingsDefaultPermissions bind:value={defaultPermissions} />
+					<section id="section-security">
+						<SettingsSecurity
+							bind:accessTokenExpireMinutes={securityAccessTokenExpireMinutes}
+							bind:refreshTokenExpireDays={securityRefreshTokenExpireDays}
+							bind:authCookieSecure={securityAuthCookieSecure}
+							bind:sessionTimeoutMinutes={securitySessionTimeoutMinutes}
+							bind:requireEmailVerification={securityRequireEmailVerification}
+							bind:allowedEmailDomains={securityAllowedEmailDomains}
+							bind:allowSignups={securityAllowSignups}
+							bind:autoSignupRoleIds={securityAutoSignupRoleIds}
+							bind:oidcEnabled={securityOidcEnabled}
+							bind:oidcIssuerUrl={securityOidcIssuerUrl}
+							bind:oidcClientId={securityOidcClientId}
+							bind:oidcClientSecret={securityOidcClientSecret}
+							bind:oidcRedirectUri={securityOidcRedirectUri}
+							bind:oidcScopes={securityOidcScopes}
+							bind:oidcOnly={securityOidcOnly}
+							secretKeyConfigured={securitySecretKeyConfigured}
+							jwtAlgorithm={securityJwtAlgorithm}
+							enableOauth={securityEnableOauth}
+							corsOrigins={securityCorsOrigins}
+						/>
+					</section>
+
+					<section id="section-permissions">
+						<SettingsDefaultPermissions bind:value={defaultPermissions} />
+					</section>
 				</div>
 			{:else}
 				<div class="rounded-lg border border-zinc-800 p-8 text-zinc-400">
@@ -2182,4 +2339,27 @@
 			{/if}
 		</div>
 	</div>
+
+	{#if showScrollTop}
+		<button
+			type="button"
+			onclick={() => scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })}
+			class="fixed right-6 bottom-6 z-50 flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300 shadow-lg transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+			aria-label="scroll to top"
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="m18 15-6-6-6 6" />
+			</svg>
+		</button>
+	{/if}
 </div>

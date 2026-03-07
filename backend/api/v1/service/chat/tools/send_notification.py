@@ -50,6 +50,7 @@ _TOOL_PARAMETERS: JSONObject = {
 		},
 	},
 	"required": ["title", "body"],
+	"additionalProperties": False,
 }
 
 

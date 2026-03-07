@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.file import FileUpdate
 from api.v1.service import files as file_service
@@ -26,6 +27,8 @@ class FileGetInput(BaseModel):
 
 	provide file_id to fetch a specific file, or omit to list recent files.
 	"""
+
+	model_config = ConfigDict(extra="forbid")
 
 	file_id: str | None = Field(
 		default=None,
@@ -51,6 +54,8 @@ class FileGetInput(BaseModel):
 
 class FileEditInput(BaseModel):
 	"""input schema for editing file metadata."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	file_id: str = Field(..., description="ID of the file to rename")
 	filename: str | None = Field(
@@ -95,15 +100,20 @@ class FileGetTool(Tool[AppContext]):
 				)
 			except HTTPException as exc:
 				return self.error(str(exc.detail), __agent_context__)
-			parts = [f"filename: {f.filename or '(unnamed)'}"]
+			result: dict[str, object] = {
+				"status": "success",
+				"message": "file retrieved",
+				"id": str(f.id),
+				"filename": f.filename or "(unnamed)",
+				"file_status": f.status.value,
+				"source": f.source.value,
+				"created_at": f.created_at.isoformat(),
+			}
 			if f.mime_type:
-				parts.append(f"mime type: {f.mime_type}")
+				result["mime_type"] = f.mime_type
 			if f.size_bytes is not None:
-				parts.append(f"size: {f.size_bytes} bytes")
-			parts.append(f"status: {f.status.value}")
-			parts.append(f"source: {f.source.value}")
-			parts.append(f"created: {f.created_at.isoformat()}")
-			return self.success("\n".join(parts), __agent_context__)
+				result["size_bytes"] = f.size_bytes
+			return self.success(json.dumps(result), __agent_context__)
 
 		# list recent files
 		try:
@@ -118,14 +128,27 @@ class FileGetTool(Tool[AppContext]):
 			return self.error(str(exc.detail), __agent_context__)
 
 		if not files:
-			return self.success("no files found", __agent_context__)
+			out = {
+				"status": "success",
+				"message": "no files found",
+				"count": 0,
+				"results": [],
+			}
+			return self.success(json.dumps(out), __agent_context__)
 
-		lines = []
-		for f in files:
-			size = f" ({f.size_bytes} bytes)" if f.size_bytes else ""
-			mime = f" [{f.mime_type}]" if f.mime_type else ""
-			lines.append(f"- [{f.id}] {f.filename or '(unnamed)'}{mime}{size}")
-		return self.success("\n".join(lines), __agent_context__)
+		results = [
+			{
+				"id": str(f.id),
+				"filename": f.filename or "(unnamed)",
+				"mime_type": f.mime_type or "",
+				"size_bytes": f.size_bytes,
+			}
+			for f in files
+		]
+		n = len(results)
+		msg = f"found {n} {'file' if n == 1 else 'files'}"
+		out = {"status": "success", "message": msg, "count": n, "results": results}
+		return self.success(json.dumps(out), __agent_context__)
 
 
 class FileEditTool(Tool[AppContext]):
@@ -156,7 +179,5 @@ class FileEditTool(Tool[AppContext]):
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)
 
-		return self.success(
-			f"file updated: [{f.id}] {f.filename or '(unnamed)'}",
-			__agent_context__,
-		)
+		out = {"status": "success", "message": "file updated", "id": str(f.id)}
+		return self.success(json.dumps(out), __agent_context__)

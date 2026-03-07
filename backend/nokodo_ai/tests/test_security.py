@@ -4,11 +4,13 @@ from datetime import timedelta
 
 import pytest
 from authlib.jose import JoseError
+from cryptography.fernet import InvalidToken
 
 from nokodo_ai.utils.security import (
 	create_jwt_token,
 	decode_jwt_token,
 	decrypt_string,
+	decrypt_string_with_fallback,
 	encrypt_string,
 	get_fernet_key,
 	hash_password,
@@ -77,3 +79,57 @@ def test_get_fernet_key_is_stable_and_valid_length() -> None:
 	allowed = set(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=")
 	assert set(key1) <= allowed
 	assert key1.endswith(b"=")
+
+
+def test_decrypt_with_fallback_current_key() -> None:
+	"""fallback decrypt should use the current key when it matches."""
+	plain = "my-api-key"
+	current = "current-secret"
+	cipher = encrypt_string(plain, current)
+	result, needs_reencrypt = decrypt_string_with_fallback(cipher, current)
+	assert result == plain
+	assert needs_reencrypt is False
+
+
+def test_decrypt_with_fallback_old_key() -> None:
+	"""fallback decrypt should find the value via a previous key."""
+	plain = "my-api-key"
+	old_key = "old-secret"
+	new_key = "new-secret"
+	cipher = encrypt_string(plain, old_key)
+	result, needs_reencrypt = decrypt_string_with_fallback(
+		cipher, new_key, previous_keys=[old_key]
+	)
+	assert result == plain
+	assert needs_reencrypt is True
+
+
+def test_decrypt_with_fallback_no_matching_key() -> None:
+	"""fallback decrypt should raise InvalidToken when no key works."""
+	cipher = encrypt_string("secret", "original-key")
+	with pytest.raises(InvalidToken):
+		decrypt_string_with_fallback(cipher, "wrong-key", ["also-wrong"])
+
+
+def test_decrypt_with_fallback_multiple_old_keys() -> None:
+	"""fallback should try old keys in order."""
+	plain = "rotated-value"
+	oldest = "key-v1"
+	middle = "key-v2"
+	current = "key-v3"
+	cipher = encrypt_string(plain, oldest)
+	result, needs_reencrypt = decrypt_string_with_fallback(
+		cipher, current, [middle, oldest]
+	)
+	assert result == plain
+	assert needs_reencrypt is True
+
+
+def test_decrypt_with_fallback_strict_ignores_previous_keys() -> None:
+	"""strict=True should not try previous keys even if they would succeed."""
+	plain = "sensitive"
+	old_key = "old-secret"
+	new_key = "new-secret"
+	cipher = encrypt_string(plain, old_key)
+	with pytest.raises(InvalidToken):
+		decrypt_string_with_fallback(cipher, new_key, [old_key], strict=True)

@@ -6,7 +6,7 @@ requires-python = ">=3.13"
 dependencies = [ # library-only dependencies
     "anthropic>=0.75.0",
     "google-genai>=0.8.0",
-    "openai>=2.14.0",
+    "openai>=2.26.0",
     "pycrdt>=0.12.46",
     "pydantic[email]>=2.9.0",
     "qdrant-client>=1.12.0",

@@ -11,7 +11,7 @@ from api.schemas.provider import ProviderCreate, ProviderUpdate
 from api.settings import settings
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
-from nokodo_ai.utils.security import encrypt_string
+from nokodo_ai.utils.security import decrypt_string_with_fallback, encrypt_string
 
 
 async def _get_provider(
@@ -86,6 +86,17 @@ async def update_provider(
 			provider_in.api_key,
 			settings.security.secret_key,
 		)
+	elif provider.encrypted_api_key:
+		# transparent re-encryption on write if stored under a previous key
+		plaintext, needs_reencrypt = decrypt_string_with_fallback(
+			provider.encrypted_api_key,
+			settings.security.secret_key,
+			settings.security.previous_secret_keys,
+		)
+		if needs_reencrypt:
+			updates["encrypted_api_key"] = encrypt_string(
+				plaintext, settings.security.secret_key
+			)
 
 	for field, value in updates.items():
 		setattr(provider, field, value)

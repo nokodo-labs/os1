@@ -17,8 +17,14 @@ from pydantic import Field
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.files import resolve_file_data
 from nokodo_ai.messages import (
+	AssistantMessage as SDKAssistantMessage,
+)
+from nokodo_ai.messages import (
 	FileContent,
 	ImageContent,
+)
+from nokodo_ai.messages import (
+	ToolMessage as SDKToolMessage,
 )
 from nokodo_ai.messages import (
 	UserMessage as SDKUserMessage,
@@ -27,6 +33,9 @@ from nokodo_ai.threads import Thread as SDKThread
 
 
 if TYPE_CHECKING:
+	from sqlalchemy.ext.asyncio import AsyncSession
+
+	from api.v1.service.auth import Principal
 	from api.v1.service.chat.context import AppContext
 
 log = logging.getLogger(__name__)
@@ -67,7 +76,7 @@ class FileResolveFilter(Filter):
 		thread: SDKThread,
 		app_context: AppContext | None,
 	) -> SDKThread:
-		"""scan user messages for unresolved file parts and populate data."""
+		"""scan messages for unresolved file parts and populate data."""
 		if app_context is None:
 			raise ValueError("AppContext is required for FileResolveFilter")
 
@@ -77,37 +86,62 @@ class FileResolveFilter(Filter):
 		changed = False
 
 		for msg_idx, msg in enumerate(new_messages):
-			if not isinstance(msg, SDKUserMessage):
-				continue
+			if isinstance(msg, (SDKUserMessage, SDKAssistantMessage)):
+				new_parts = list(msg.content)
+				msg_changed = False
 
-			new_parts = list(msg.content)
-			msg_changed = False
-
-			for part_idx, part in enumerate(new_parts):
-				if not isinstance(part, (ImageContent, FileContent)):
-					continue
-				if not _needs_resolution(part):
-					continue
-
-				file_id = _extract_file_id(part)
-				if not file_id:
-					continue
-
-				try:
-					b64 = await resolve_file_data(file_id, session, principal=principal)
-					if b64:
-						new_parts[part_idx] = part.model_copy(update={"base64": b64})
+				for part_idx, part in enumerate(new_parts):
+					resolved = await self._resolve_part(part, session, principal)
+					if resolved is not None:
+						new_parts[part_idx] = resolved
 						msg_changed = True
-					else:
-						log.warning("file_resolve: no data for file %s", file_id)
-				except Exception:
-					log.exception("file_resolve: failed to resolve file %s", file_id)
 
-			if msg_changed:
-				new_messages[msg_idx] = msg.model_copy(update={"content": new_parts})
-				changed = True
+				if msg_changed:
+					new_messages[msg_idx] = msg.model_copy(
+						update={"content": new_parts}
+					)
+					changed = True
+
+			elif isinstance(msg, SDKToolMessage):
+				new_atts = list(msg.attachments)
+				msg_changed = False
+
+				for att_idx, att in enumerate(new_atts):
+					resolved = await self._resolve_part(att, session, principal)
+					if resolved is not None:
+						new_atts[att_idx] = resolved
+						msg_changed = True
+
+				if msg_changed:
+					new_messages[msg_idx] = msg.model_copy(
+						update={"attachments": new_atts}
+					)
+					changed = True
 
 		if not changed:
 			return thread
 
 		return thread.model_copy(update={"messages": new_messages})
+
+	async def _resolve_part(
+		self,
+		part: object,
+		session: AsyncSession,
+		principal: Principal,
+	) -> ImageContent | FileContent | None:
+		"""resolve a single content part. returns updated part or None if unchanged."""
+		if not isinstance(part, (ImageContent, FileContent)):
+			return None
+		if not _needs_resolution(part):
+			return None
+		file_id = _extract_file_id(part)
+		if not file_id:
+			return None
+		try:
+			b64 = await resolve_file_data(file_id, session, principal=principal)
+			if b64:
+				return part.model_copy(update={"base64": b64})
+			log.warning("file_resolve: no data for file %s", file_id)
+		except Exception:
+			log.exception("file_resolve: failed to resolve file %s", file_id)
+		return None

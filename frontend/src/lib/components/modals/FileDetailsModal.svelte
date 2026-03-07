@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { getApiOrigin } from '$lib/api/origin'
 	import ImageLightbox from '$lib/components/chat/ImageLightbox.svelte'
 	import ArrowsPointingOut from '$lib/components/icons/ArrowsPointingOut.svelte'
+	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
@@ -20,6 +23,13 @@
 
 	const file = $derived(payload ? files.get(payload.fileId) : null)
 
+	// fetch the file into cache if not already present (e.g. after page refresh)
+	$effect(() => {
+		if (open && payload?.fileId && !file) {
+			void files.ensure(payload.fileId)
+		}
+	})
+
 	let previewBlobUrl = $state<string | null>(null)
 	let previewOpen = $state(false)
 	let isDeleting = $state(false)
@@ -33,6 +43,18 @@
 	const isVideo = $derived(primaryType === 'video')
 	const isAudio = $derived(primaryType === 'audio')
 	const hasPreview = $derived(isImage || isVideo || isAudio)
+
+	const threadId = $derived(
+		(file?.metadata_ as Record<string, unknown> | undefined)?.thread_id as string | undefined
+	)
+
+	const genPrompt = $derived(
+		(file?.metadata_ as Record<string, unknown> | undefined)?.prompt as string | undefined
+	)
+	const genAgentId = $derived(
+		(file?.metadata_ as Record<string, unknown> | undefined)?.agent_id as string | undefined
+	)
+	const isGenerated = $derived(file?.source === 'generated')
 
 	function formatBytes(n: number | null | undefined): string {
 		if (!n) return '—'
@@ -170,7 +192,7 @@
 			<div class="flex items-center gap-2">
 				{#if hasPreview && isImage}
 					<button
-						class="liquid-glass flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+						class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
 						onclick={() => (previewOpen = true)}
 					>
 						<ArrowsPointingOut class="size-4" />
@@ -178,7 +200,7 @@
 					</button>
 				{/if}
 				<button
-					class="liquid-glass flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+					class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
 					onclick={handleDownload}
 					disabled={isDownloading}
 				>
@@ -186,14 +208,26 @@
 					{isDownloading ? 'downloading...' : 'download'}
 				</button>
 				<button
-					class="liquid-glass flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+					class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
 					onclick={handleShare}
 				>
 					<Share class="size-4" />
 					share
 				</button>
+				{#if threadId}
+					<button
+						class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+						onclick={() => {
+							handleClose()
+							void goto(resolve(`/c/${threadId}`))
+						}}
+					>
+						<ChatBubble class="size-4" />
+						view thread
+					</button>
+				{/if}
 				<button
-					class="liquid-glass ml-auto flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+					class="liquid-glass ml-auto flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
 					onclick={handleDelete}
 					disabled={isDeleting}
 				>
@@ -251,6 +285,24 @@
 							</dt>
 							<dd class="text-foreground/60 mt-0.5 font-mono text-xs break-all">
 								{file.checksum_sha256}
+							</dd>
+						</div>
+					{/if}
+					{#if isGenerated && genPrompt}
+						<div class="col-span-2">
+							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
+								prompt
+							</dt>
+							<dd class="text-foreground/80 mt-0.5">{genPrompt}</dd>
+						</div>
+					{/if}
+					{#if isGenerated && genAgentId}
+						<div class="col-span-2">
+							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
+								agent
+							</dt>
+							<dd class="text-foreground/60 mt-0.5 font-mono text-xs">
+								{genAgentId}
 							</dd>
 						</div>
 					{/if}

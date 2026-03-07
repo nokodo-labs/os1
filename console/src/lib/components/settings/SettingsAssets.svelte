@@ -62,6 +62,10 @@
 		storageS3SecretAccessKey?: string
 		storageS3Prefix?: string
 		storageS3PresignedUrlTtl?: string
+		storageS3MultipartThreshold?: string
+		storageS3MultipartChunkSize?: string
+		storageS3MaxRetries?: string
+		storageS3RetryMode?: 'legacy' | 'standard' | 'adaptive'
 		// auxiliary
 		models?: Model[]
 		isFetchingModels?: boolean
@@ -95,6 +99,10 @@
 		storageS3SecretAccessKey = $bindable(''),
 		storageS3Prefix = $bindable(''),
 		storageS3PresignedUrlTtl = $bindable(''),
+		storageS3MultipartThreshold = $bindable(''),
+		storageS3MultipartChunkSize = $bindable(''),
+		storageS3MaxRetries = $bindable(''),
+		storageS3RetryMode = $bindable<'legacy' | 'standard' | 'adaptive'>('adaptive'),
 		models = [],
 		isFetchingModels = false,
 		modelsError = null,
@@ -490,6 +498,61 @@
 						placeholder="3600"
 						class="rounded-xl"
 					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="s3_multipart_threshold">multipart threshold (bytes)</Label>
+					<p class="text-xs text-zinc-500">
+						file size above which multipart upload is used.
+					</p>
+					<Input
+						id="s3_multipart_threshold"
+						type="number"
+						bind:value={storageS3MultipartThreshold}
+						placeholder="8388608"
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="s3_multipart_chunk">multipart chunk size (bytes)</Label>
+					<p class="text-xs text-zinc-500">size of each part in a multipart upload.</p>
+					<Input
+						id="s3_multipart_chunk"
+						type="number"
+						bind:value={storageS3MultipartChunkSize}
+						placeholder="8388608"
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="s3_max_retries">max retries</Label>
+					<p class="text-xs text-zinc-500">
+						maximum number of retry attempts on failed requests.
+					</p>
+					<Input
+						id="s3_max_retries"
+						type="number"
+						bind:value={storageS3MaxRetries}
+						placeholder="3"
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="s3_retry_mode">retry mode</Label>
+					<p class="text-xs text-zinc-500">botocore retry strategy.</p>
+					<Select
+						value={storageS3RetryMode}
+						onValueChange={(v: string) =>
+							(storageS3RetryMode = v as 'legacy' | 'standard' | 'adaptive')}
+					>
+						<SelectTrigger id="s3_retry_mode" class="rounded-xl">
+							<span class="truncate text-left">{storageS3RetryMode}</span>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="legacy">legacy</SelectItem>
+							<SelectItem value="standard">standard</SelectItem>
+							<SelectItem value="adaptive">adaptive</SelectItem>
+						</SelectContent>
+					</Select>
 				</div>
 			</div>
 		{/if}

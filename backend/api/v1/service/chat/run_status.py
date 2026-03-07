@@ -164,11 +164,13 @@ class RunStatusStore:
 			rs = self._runs.get(run_id)
 			if rs is not None:
 				rs.sse_log.append(frame)
-			for q in self._subscribers.get(run_id, set()):
-				try:
-					q.put_nowait(frame)
-				except asyncio.QueueFull:
-					logger.debug("subscriber queue full for run %s, skipping", run_id)
+			queues = list(self._subscribers.get(run_id, ()))
+		# push outside the lock to minimize contention
+		for q in queues:
+			try:
+				q.put_nowait(frame)
+			except asyncio.QueueFull:
+				logger.debug("subscriber queue full for run %s, skipping", run_id)
 
 	async def subscribe(
 		self, run_id: str

@@ -25,8 +25,10 @@ from ...messages import (
 	UserMessage,
 )
 from ...tool import ToolDefinition
+from ...types.json import JSONValue
 from ...utils.provider_meta import (
 	get_provider_tool_call_id,
+	get_provider_value,
 	provider_tool_call_metadata,
 )
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
@@ -34,6 +36,7 @@ from .base import BaseGoogleAdapter
 from .types import (
 	GoogleBlob,
 	GoogleContent,
+	GoogleFunctionCall,
 	GoogleFunctionCallingConfig,
 	GoogleFunctionDeclaration,
 	GoogleGenerateContentConfig,
@@ -232,9 +235,38 @@ def _messages_to_google(
 						if isinstance(parsed, dict):
 							args_dict = dict[str, object](parsed)
 
-					parts.append(
-						GooglePart.from_function_call(name=tc.name, args=args_dict)
+					# reconstruct Part with thought_signature if present
+					thought_sig_b64 = get_provider_value(
+						metadata=tc.metadata,
+						provider=PROVIDER_NAME,
+						key="thought_signature",
 					)
+					thought_val = get_provider_value(
+						metadata=tc.metadata,
+						provider=PROVIDER_NAME,
+						key="thought",
+					)
+					if isinstance(thought_sig_b64, str):
+						fc = GoogleFunctionCall(
+							name=tc.name, args=args_dict
+						)
+						parts.append(
+							GooglePart(
+								function_call=fc,
+								thought_signature=base64.b64decode(
+									thought_sig_b64
+								),
+								thought=thought_val
+								if isinstance(thought_val, bool)
+								else None,
+							)
+						)
+					else:
+						parts.append(
+							GooglePart.from_function_call(
+								name=tc.name, args=args_dict
+							)
+						)
 
 				if parts:
 					contents.append(GoogleContent(role="model", parts=parts))
@@ -309,12 +341,23 @@ def _response_to_assistant_message(
 
 			# create unique provider id for this tool call
 			provider_id = f"c{candidate_index}_p{part_index}"
+			extra: dict[str, JSONValue] = {}
+			sig = getattr(part, "thought_signature", None)
+			if isinstance(sig, bytes):
+				extra["thought_signature"] = base64.b64encode(
+					sig
+				).decode("ascii")
+			thought = getattr(part, "thought", None)
+			if isinstance(thought, bool):
+				extra["thought"] = thought
 			tool_calls.append(
 				ToolCall(
 					name=name,
 					arguments=raw_args,
 					metadata=provider_tool_call_metadata(
-						provider=PROVIDER_NAME, tool_call_id=provider_id
+						provider=PROVIDER_NAME,
+						tool_call_id=provider_id,
+						**extra,
 					),
 				)
 			)
@@ -529,9 +572,19 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 						raw_args = "{}"
 
 					provider_id = f"c{candidate_index}_p{part_index}"
+					extra_s: dict[str, JSONValue] = {}
+					sig_s = getattr(part, "thought_signature", None)
+					if isinstance(sig_s, bytes):
+						extra_s["thought_signature"] = (
+							base64.b64encode(sig_s).decode("ascii")
+						)
+					thought_s = getattr(part, "thought", None)
+					if isinstance(thought_s, bool):
+						extra_s["thought"] = thought_s
 					metadata = provider_tool_call_metadata(
 						provider=PROVIDER_NAME,
 						tool_call_id=provider_id,
+						**extra_s,
 					)
 
 					if provider_id not in tc_sdk_ids:

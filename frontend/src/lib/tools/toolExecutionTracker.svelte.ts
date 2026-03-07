@@ -19,6 +19,7 @@ import type { ToolCall, ToolEvent, ToolExecution, ToolResult, ToolStatus } from 
 /**
  * Reactive wrapper around ToolExecution.
  * All mutable fields are $state so Svelte tracks reads/writes automatically.
+ * Implements ToolExecution directly - returned from get() without a wrapper.
  */
 class ReactiveToolExecution {
 	// tool call identity + arguments
@@ -50,6 +51,11 @@ class ReactiveToolExecution {
 		this.startedAt = new SvelteDate()
 	}
 
+	/** ToolExecution-compatible toolCall accessor (reads reactive $state fields). */
+	get toolCall(): { id: string; name: string; arguments: Record<string, unknown> } {
+		return { id: this.id, name: this.name, arguments: this.arguments }
+	}
+
 	/** Snapshot into the plain ToolExecution interface for external consumers. */
 	get snapshot(): ToolExecution {
 		return {
@@ -66,6 +72,7 @@ class ReactiveToolExecution {
 			lastMessage: this.lastMessage,
 			error: this.error,
 			result: this.result,
+			rawArguments: this.rawArguments,
 		}
 	}
 }
@@ -220,40 +227,9 @@ export class ToolExecutionTracker {
 	get(toolCallId: string): ToolExecution | undefined {
 		const exec = this.executions.get(toolCallId)
 		if (!exec) return undefined
-		// return the reactive object directly - components read $state fields
-		return {
-			get toolCall() {
-				return {
-					id: exec.id,
-					name: exec.name,
-					arguments: exec.arguments,
-				}
-			},
-			get status() {
-				return exec.status
-			},
-			get events() {
-				return exec.events
-			},
-			get startedAt() {
-				return exec.startedAt
-			},
-			get completedAt() {
-				return exec.completedAt
-			},
-			get progress() {
-				return exec.progress
-			},
-			get lastMessage() {
-				return exec.lastMessage
-			},
-			get error() {
-				return exec.error
-			},
-			get result() {
-				return exec.result
-			},
-		}
+		// return the reactive instance directly - its $state fields drive
+		// fine-grained reactivity in any Svelte component that reads them
+		return exec
 	}
 
 	/**
@@ -322,17 +298,15 @@ function tryParseJson(raw: string): Record<string, unknown> {
 }
 
 /**
- * Extract fully-formed key-value pairs from a partial JSON string.
+ * Extract key-value pairs from a partial JSON string, including incomplete
+ * string values that are still streaming (no closing quote yet).
  * Example: `{"thought": "let me think", "next` → { thought: "let me think" }
- *
- * This allows tool cards to start rendering individual fields as soon as
- * their values are complete, even while the overall JSON is still streaming.
+ * Example: `{"code": "import pandas` → { code: "import pandas" } (partial!)
  */
 function extractPartialJsonFields(raw: string): Record<string, unknown> {
 	const result: Record<string, unknown> = {}
 
-	// match complete "key": value pairs
-	// supports string, number, boolean, null values
+	// match complete "key": value pairs (string, number, boolean, null)
 	const pairRegex =
 		/"([^"\\]*(?:\\.[^"\\]*)*)"\s*:\s*(?:("(?:[^"\\]*(?:\\.[^"\\]*)*)")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|true|false|null)/g
 
@@ -358,6 +332,29 @@ function extractPartialJsonFields(raw: string): Record<string, unknown> {
 			result[key] = false
 		} else if (valueStr === 'null') {
 			result[key] = null
+		}
+	}
+
+	// second pass: extract incomplete string values that are still streaming
+	// matches "key": "...partial (no closing quote) at end of the string
+	// allow optional trailing backslash - streaming often splits mid-escape
+	const partialStringRegex = new RegExp(
+		'"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)\\\\?$',
+		'g'
+	)
+	while ((match = partialStringRegex.exec(raw)) !== null) {
+		const key = match[1]
+		if (key in result) continue // already captured a complete value
+		const partial = match[2]
+		try {
+			result[key] = JSON.parse('"' + partial + '"')
+		} catch {
+			result[key] = partial
+				.replace(/\\n/g, '\n')
+				.replace(/\\t/g, '\t')
+				.replace(/\\r/g, '\r')
+				.replace(/\\"/g, '"')
+				.replace(/\\\\/g, '\\')
 		}
 	}
 

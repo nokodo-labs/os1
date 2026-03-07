@@ -13,6 +13,9 @@ from google.genai.types import (
 	Content as GoogleContent,
 )
 from google.genai.types import (
+	FunctionCall as GoogleFunctionCall,
+)
+from google.genai.types import (
 	FunctionCallingConfig as GoogleFunctionCallingConfig,
 )
 from google.genai.types import (
@@ -44,6 +47,7 @@ from google.genai.types import (
 __all__ = [
 	"GoogleBlob",
 	"GoogleContent",
+	"GoogleFunctionCall",
 	"GoogleFunctionCallingConfig",
 	"GoogleFunctionDeclaration",
 	"GoogleFunctionResponse",

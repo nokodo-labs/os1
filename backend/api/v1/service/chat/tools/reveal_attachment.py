@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -25,6 +25,8 @@ from nokodo_ai.types.json import JSONObject
 
 class RevealAttachmentInput(BaseModel):
 	"""input schema for the reveal_attachment tool."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	file_ids: list[str] = Field(
 		...,

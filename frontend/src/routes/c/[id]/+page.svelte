@@ -286,6 +286,8 @@
 		void optimisticContent
 		void blocksCount
 		void chat.inputOverlayHeight
+		// track tool call argument changes so scroll sticks during tool streaming
+		void chat.streamingAssistant?.toolCalls
 
 		if (!chat.initialScrollDone) {
 			chat.initialScrollDone = true

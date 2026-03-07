@@ -27,6 +27,9 @@
 		onItemEdit?: (item: ResourceItem) => void
 		onItemDelete?: (item: ResourceItem) => Promise<boolean> | boolean | void
 		onItemClick?: (item: ResourceItem) => void
+		onLoadMore?: () => void
+		hasMore?: boolean
+		loadingMore?: boolean
 		class?: string
 	}
 
@@ -43,8 +46,13 @@
 		onItemEdit,
 		onItemDelete,
 		onItemClick,
+		onLoadMore,
+		hasMore = false,
+		loadingMore = false,
 		class: className = '',
 	}: Props = $props()
+
+	let sentinelEl: HTMLDivElement | null = $state(null)
 
 	let currentPage = $state(0)
 
@@ -79,14 +87,32 @@
 		return items
 	})
 
-	// paginate
+	// paginate (only used when onLoadMore is NOT provided - client-side mode)
+	const useInfiniteScroll = $derived(!!onLoadMore)
 	const totalPages = $derived(Math.max(1, Math.ceil(sorted.length / pageSize)))
-	const paginated = $derived(sorted.slice(currentPage * pageSize, (currentPage + 1) * pageSize))
+	const paginated = $derived(
+		useInfiniteScroll
+			? sorted
+			: sorted.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+	)
 
 	// reset page when filter/sort changes
 	$effect(() => {
 		const key = `${filter}:${sort}`
 		if (key) currentPage = 0
+	})
+
+	// infinite scroll observer
+	$effect(() => {
+		if (!useInfiniteScroll || !sentinelEl || !hasMore || loadingMore) return
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting) onLoadMore?.()
+			},
+			{ rootMargin: '200px' }
+		)
+		observer.observe(sentinelEl)
+		return () => observer.disconnect()
 	})
 
 	function prevPage() {
@@ -180,7 +206,19 @@
 		</div>
 	{/if}
 
-	{#if showPagination && totalPages > 1}
+	<!-- infinite scroll sentinel + loading indicator -->
+	{#if useInfiniteScroll}
+		{#if loadingMore}
+			<div class="flex items-center justify-center py-6">
+				<div class="bg-foreground/20 h-5 w-5 animate-pulse rounded-full"></div>
+			</div>
+		{/if}
+		{#if hasMore}
+			<div bind:this={sentinelEl} class="h-1"></div>
+		{/if}
+	{/if}
+
+	{#if !useInfiniteScroll && showPagination && totalPages > 1}
 		<div class="flex items-center justify-center gap-3 pt-2">
 			<button
 				type="button"

@@ -607,6 +607,8 @@ async def run_agent(
 						if hasattr(delta.tool, "tool_output"):
 							output = delta.tool.tool_output or ""
 							tool_content = [{"type": "text", "text": output}]
+						for att in delta.tool.attachments:
+							tool_content.append(att.model_dump(mode="json"))
 						await run_status_store.add_message(
 							run_id_str,
 							message_id=tool_message_id,

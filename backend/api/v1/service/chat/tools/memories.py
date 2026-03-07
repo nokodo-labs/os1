@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.memory import MemoryCreate
 from api.v1.service import memories as memory_service
@@ -13,7 +14,7 @@ from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONArray, JSONObject
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 class MemorySearchInput(BaseModel):
 	"""input schema for memory_search tool."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	query: str = Field(
 		...,
@@ -39,6 +42,8 @@ class MemorySearchInput(BaseModel):
 
 class MemoryCreateInput(BaseModel):
 	"""input schema for memory_create tool."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	content: str = Field(
 		...,
@@ -75,10 +80,11 @@ class MemoryRecallTool(Tool[AppContext]):
 			return self.error("app context is required", __agent_context__)
 		ai = __app_context__.principal.user.prefs.ai
 		if ai is not None and ai.memories_enabled is False:
-			return self.success(
-				"memory features are disabled by user preferences",
-				__agent_context__,
-			)
+			out: JSONObject = {
+				"status": "success",
+				"message": "memory features are disabled by user preferences",
+			}
+			return self.success(json.dumps(out), __agent_context__)
 		inp = MemorySearchInput.model_validate(kwargs)
 		try:
 			page = await memory_service.search_memories(
@@ -91,15 +97,22 @@ class MemoryRecallTool(Tool[AppContext]):
 			return self.error(str(exc.detail), __agent_context__)
 
 		if not page.items:
-			return self.success("no relevant memories found", __agent_context__)
+			out = {
+				"status": "success",
+				"message": "no memories found",
+				"count": 0,
+				"results": [],
+			}
+			return self.success(json.dumps(out), __agent_context__)
 
-		lines = []
-		for item in page.items:
-			subtitle = f" - {item.subtitle}" if item.subtitle else ""
-			lines.append(f"- [{item.id}] {item.title}{subtitle}")
-		return self.success(
-			"recalled memories:\n" + "\n".join(lines), __agent_context__
-		)
+		results: JSONArray = [
+			{"id": str(item.id), "title": item.title, "subtitle": item.subtitle or ""}
+			for item in page.items
+		]
+		n = len(results)
+		msg = f"recalled {n} {'memory' if n == 1 else 'memories'}"
+		out = {"status": "success", "message": msg, "count": n, "results": results}
+		return self.success(json.dumps(out), __agent_context__)
 
 
 class MemoryCreateTool(Tool[AppContext]):
@@ -126,10 +139,11 @@ class MemoryCreateTool(Tool[AppContext]):
 			return self.error("app context is required", __agent_context__)
 		ai = __app_context__.principal.user.prefs.ai
 		if ai is not None and ai.memories_enabled is False:
-			return self.success(
-				"memory features are disabled by user preferences",
-				__agent_context__,
-			)
+			out = {
+				"status": "success",
+				"message": "memory features are disabled by user preferences",
+			}
+			return self.success(json.dumps(out), __agent_context__)
 		inp = MemoryCreateInput.model_validate(kwargs)
 		try:
 			memory = await memory_service.create_memory(
@@ -144,8 +158,5 @@ class MemoryCreateTool(Tool[AppContext]):
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)
 
-		category = f" [{memory.category}]" if memory.category else ""
-		return self.success(
-			f"memory stored: [{memory.id}]{category} {memory.content[:80]}",
-			__agent_context__,
-		)
+		out = {"status": "success", "message": "memory saved", "id": str(memory.id)}
+		return self.success(json.dumps(out), __agent_context__)

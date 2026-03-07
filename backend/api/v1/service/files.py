@@ -142,7 +142,7 @@ async def store_file(
 	session: AsyncSession,
 	*,
 	data: bytes | AsyncIterator[bytes],
-	owner_id: str,
+	owner_id: TypeID,
 	filename: str | None = None,
 	content_type: MimeType = "application/octet-stream",
 	source: FileSource = FileSource.GENERATED,
@@ -374,7 +374,7 @@ async def upload_file(
 	return await store_file(
 		session,
 		data=file_data,
-		owner_id=principal.user_id,
+		owner_id=TypeID(principal.user_id),
 		filename=upload.filename,
 		content_type=content_type,
 		source=source,

@@ -1,6 +1,12 @@
 """minimal type stubs for e2b-code-interpreter."""
 
+from enum import Enum
 from typing import Any
+from datetime import datetime
+
+class FileType(Enum):
+	FILE = "file"
+	DIR = "dir"
 
 class AsyncSandbox:
 	sandbox_id: str
@@ -23,6 +29,9 @@ class _FileManager:
 
 class _FileEntry:
 	name: str
+	type: FileType | None
+	path: str
+	size: int
 
 class _ExecutionResult:
 	logs: _ExecutionLogs
