@@ -263,9 +263,7 @@ class E2BClient:
 						mime_type=mime,
 					)
 				)
-				logger.debug(
-					"captured sandbox file %s (%d bytes)", path, len(content)
-				)
+				logger.debug("captured sandbox file %s (%d bytes)", path, len(content))
 			return files
 		except Exception:
 			logger.debug("failed to detect new files", exc_info=True)

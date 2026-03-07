@@ -214,7 +214,7 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 			case MessageType.TOOL:
 				output = ""
 				att: list[SDKToolAttachment] = []
-				for raw in (self.content or []):
+				for raw in self.content or []:
 					p = SDKContentPartAdapter.validate_python(raw)
 					if isinstance(p, SDKTextContent):
 						if not output:
@@ -271,7 +271,7 @@ class ToolMessage(Message):
 	def to_sdk(self) -> SDKToolMessage:
 		output = ""
 		attachments: list[SDKToolAttachment] = []
-		for raw in (self.content or []):
+		for raw in self.content or []:
 			part = SDKContentPartAdapter.validate_python(raw)
 			if isinstance(part, SDKTextContent):
 				if not output:

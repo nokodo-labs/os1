@@ -247,15 +247,11 @@ def _messages_to_google(
 						key="thought",
 					)
 					if isinstance(thought_sig_b64, str):
-						fc = GoogleFunctionCall(
-							name=tc.name, args=args_dict
-						)
+						fc = GoogleFunctionCall(name=tc.name, args=args_dict)
 						parts.append(
 							GooglePart(
 								function_call=fc,
-								thought_signature=base64.b64decode(
-									thought_sig_b64
-								),
+								thought_signature=base64.b64decode(thought_sig_b64),
 								thought=thought_val
 								if isinstance(thought_val, bool)
 								else None,
@@ -263,9 +259,7 @@ def _messages_to_google(
 						)
 					else:
 						parts.append(
-							GooglePart.from_function_call(
-								name=tc.name, args=args_dict
-							)
+							GooglePart.from_function_call(name=tc.name, args=args_dict)
 						)
 
 				if parts:
@@ -344,9 +338,7 @@ def _response_to_assistant_message(
 			extra: dict[str, JSONValue] = {}
 			sig = getattr(part, "thought_signature", None)
 			if isinstance(sig, bytes):
-				extra["thought_signature"] = base64.b64encode(
-					sig
-				).decode("ascii")
+				extra["thought_signature"] = base64.b64encode(sig).decode("ascii")
 			thought = getattr(part, "thought", None)
 			if isinstance(thought, bool):
 				extra["thought"] = thought
@@ -575,8 +567,8 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 					extra_s: dict[str, JSONValue] = {}
 					sig_s = getattr(part, "thought_signature", None)
 					if isinstance(sig_s, bytes):
-						extra_s["thought_signature"] = (
-							base64.b64encode(sig_s).decode("ascii")
+						extra_s["thought_signature"] = base64.b64encode(sig_s).decode(
+							"ascii"
 						)
 					thought_s = getattr(part, "thought", None)
 					if isinstance(thought_s, bool):

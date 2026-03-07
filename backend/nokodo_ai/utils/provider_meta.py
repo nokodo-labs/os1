@@ -66,9 +66,7 @@ def get_provider_tool_call_id(
 	is missing because the conversation was started on a different model,
 	the sdk ID is used as a consistent substitute.
 	"""
-	val = get_provider_value(
-		metadata=metadata, provider=provider, key="tool_call_id"
-	)
+	val = get_provider_value(metadata=metadata, provider=provider, key="tool_call_id")
 	if isinstance(val, str) and val != "":
 		return val
 	return fallback_id

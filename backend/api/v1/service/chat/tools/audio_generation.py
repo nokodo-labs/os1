@@ -112,12 +112,14 @@ class GenerateAudioTool(Tool[AppContext]):
 		label = "clip" if count == 1 else "clips"
 		return ToolMessage(
 			tool_call_id=__agent_context__.tool_call_id,
-			tool_output=json.dumps({
-				"status": "success",
-				"message": f"generated {count} audio {label}",
-				"count": count,
-				"file_ids": [r.file_id for r in results if r.file_id],
-			}),
+			tool_output=json.dumps(
+				{
+					"status": "success",
+					"message": f"generated {count} audio {label}",
+					"count": count,
+					"file_ids": [r.file_id for r in results if r.file_id],
+				}
+			),
 			metadata=__agent_context__.metadata,
 			is_error=False,
 			attachments=attachments,

@@ -303,15 +303,9 @@ class CodeInterpreterTool(Tool[AppContext]):
 				__app_context__.thread_id, __app_context__.session
 			)
 
-		agent_id = (
-			str(__app_context__.agent_id)
-			if __app_context__.agent_id
-			else None
-		)
+		agent_id = str(__app_context__.agent_id) if __app_context__.agent_id else None
 		thread_id = (
-			str(__app_context__.thread_id)
-			if __app_context__.thread_id
-			else None
+			str(__app_context__.thread_id) if __app_context__.thread_id else None
 		)
 
 		attachments = await _store_output_files(

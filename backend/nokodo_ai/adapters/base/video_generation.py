@@ -146,4 +146,6 @@ class BaseVideoAdapter(BaseAdapter, Base, ABC):
 		"""
 		result = await self._create(prompt, model, image=image, params=params)
 		video = result.videos[0] if result.videos else None
-		yield VideoProgressEvent(step=1, total_steps=1, progress=1.0, partial_video=video)
+		yield VideoProgressEvent(
+			step=1, total_steps=1, progress=1.0, partial_video=video
+		)
