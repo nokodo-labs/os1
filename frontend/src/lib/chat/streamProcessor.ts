@@ -7,7 +7,7 @@ import {
 	type ChatStreamDelta,
 	type RunInput,
 	type UnknownSseEvent,
-} from '$lib/api/streaming'
+} from '$lib/api/streaming/chatStream'
 import type { ToolChoiceValue } from '$lib/chat/types'
 import { notifications } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
@@ -59,8 +59,26 @@ export function processDelta(
 				const toolCallId = typeof tool.tool_call_id === 'string' ? tool.tool_call_id : null
 				const output = typeof tool.tool_output === 'string' ? tool.tool_output : ''
 				const isError = tool.is_error === true
+
+				// extract attachment content parts (images, files) from tool message
+				const attachments = Array.isArray(tool.attachments) ? tool.attachments : []
+				type ContentPart = NonNullable<ApiMessage['content']>[number]
+				const contentParts: ContentPart[] = []
+				if (output) contentParts.push({ type: 'text', text: output })
+				for (const att of attachments) {
+					if (att && typeof att === 'object' && 'type' in att) {
+						contentParts.push(att as ContentPart)
+					}
+				}
+				const attachmentParts = contentParts.filter((p) => p.type !== 'text')
+
 				if (toolCallId) {
-					ctx.toolTracker.registerResult({ toolCallId, output, isError })
+					ctx.toolTracker.registerResult({
+						toolCallId,
+						output,
+						isError,
+						contentParts: attachmentParts.length > 0 ? attachmentParts : undefined,
+					})
 				}
 
 				// add a tool message entry to the tree so the parent chain
@@ -74,8 +92,9 @@ export function processDelta(
 						thread_id: sctx.threadId,
 						parent_id: resolvedParent,
 						type: 'tool',
-						content: output ? [{ type: 'text', text: output }] : [],
+						content: contentParts.length > 0 ? contentParts : [],
 						tool_calls: [],
+						tool_call_id: toolCallId,
 						metadata_: toolCallId ? { tool_call_id: toolCallId } : undefined,
 						sender_agent_id: null,
 						sender_user_id: null,

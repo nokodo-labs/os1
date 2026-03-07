@@ -50,7 +50,7 @@ async def generate_image(
 	session: AsyncSession,
 	prompt: str,
 	*,
-	owner_id: str,
+	owner_id: TypeID,
 	image: bytes | None = None,
 	mask: bytes | None = None,
 	negative_prompt: str | None = None,
@@ -62,6 +62,7 @@ async def generate_image(
 	project_id: str | None = None,
 	message_id: str | None = None,
 	origin_session_id: str | None = None,
+	agent_id: TypeID | None = None,
 ) -> list[ImageResult]:
 	"""generate or edit images and persist them as File records.
 
@@ -83,6 +84,7 @@ async def generate_image(
 		project_id: optional project to associate files with.
 		message_id: optional message to associate files with.
 		origin_session_id: SSE origin session for event dedup.
+		agent_id: agent that triggered the generation (stored in file metadata).
 
 	returns:
 		list of ImageResult with file_id for each generated image.
@@ -150,6 +152,13 @@ async def generate_image(
 				message_id=message_id,
 				origin_session_id=origin_session_id,
 			)
+			# store generation metadata on the file record
+			gen_meta: dict[str, str] = {"prompt": prompt}
+			if agent_id:
+				gen_meta["agent_id"] = str(agent_id)
+			file.metadata_ = {**file.metadata_, **gen_meta}
+			await session.flush()
+
 			file_id = str(file.id)
 		else:
 			file_id = ""

@@ -16,6 +16,7 @@
 	import Switch from '$lib/components/primitives/ResolverSwitch.svelte'
 	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { device } from '$lib/stores/device.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { cubicOut } from 'svelte/easing'
 	import { fly } from 'svelte/transition'
 
@@ -207,50 +208,60 @@
 										<div
 											class="flex items-center gap-2.5 rounded-xl px-2 py-1.5"
 										>
-											<!-- status dot -->
-											<span class="relative flex h-2.5 w-2.5 shrink-0">
-												{#if attachment.status === 'active'}
-													<span
-														class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"
-													></span>
-													<span
-														class="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500"
-													></span>
-												{:else}
-													<span
-														class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400"
-													></span>
-												{/if}
-											</span>
-
-											<!-- thumbnail or type icon -->
-											{#if attachment.previewUrl && (attachment.type === 'image' || attachment.type === 'video')}
-												<img
-													src={attachment.previewUrl}
-													alt={attachment.filename}
-													class="h-8 w-8 shrink-0 rounded-md object-cover"
-													draggable="false"
-												/>
-											{:else}
-												<span class="text-foreground/50 shrink-0">
-													{#if attachment.type === 'image'}
-														<Photo class="h-3.5 w-3.5" />
-													{:else if attachment.type === 'audio'}
-														<SoundHigh class="h-3.5 w-3.5" />
-													{:else if attachment.type === 'video'}
-														<Film class="h-3.5 w-3.5" />
+											<!-- clickable area: dot + thumbnail + filename -->
+											<button
+												type="button"
+												class="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+												onclick={() =>
+													modals.open('file-details', {
+														fileId: attachment.id,
+													})}
+											>
+												<!-- status dot -->
+												<span class="relative flex h-2.5 w-2.5 shrink-0">
+													{#if attachment.status === 'active'}
+														<span
+															class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"
+														></span>
+														<span
+															class="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500"
+														></span>
 													{:else}
-														<Document class="h-3.5 w-3.5" />
+														<span
+															class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400"
+														></span>
 													{/if}
 												</span>
-											{/if}
 
-											<!-- filename -->
-											<span
-												class="text-foreground/80 min-w-0 flex-1 truncate text-xs font-medium"
-											>
-												{attachment.filename}
-											</span>
+												<!-- thumbnail or type icon -->
+												{#if attachment.previewUrl && (attachment.type === 'image' || attachment.type === 'video')}
+													<img
+														src={attachment.previewUrl}
+														alt={attachment.filename}
+														class="h-8 w-8 shrink-0 rounded-md object-cover"
+														draggable="false"
+													/>
+												{:else}
+													<span class="text-foreground/50 shrink-0">
+														{#if attachment.type === 'image'}
+															<Photo class="h-3.5 w-3.5" />
+														{:else if attachment.type === 'audio'}
+															<SoundHigh class="h-3.5 w-3.5" />
+														{:else if attachment.type === 'video'}
+															<Film class="h-3.5 w-3.5" />
+														{:else}
+															<Document class="h-3.5 w-3.5" />
+														{/if}
+													</span>
+												{/if}
+
+												<!-- filename -->
+												<span
+													class="text-foreground/80 min-w-0 flex-1 truncate text-left text-xs font-medium"
+												>
+													{attachment.filename}
+												</span>
+											</button>
 
 											<!-- native attachment toggle -->
 											<Switch

@@ -35,7 +35,6 @@
 	background: var(--lg-bg);
 	border: none;
 	backdrop-filter: blur(var(--lg-blur));
-	-webkit-backdrop-filter: blur(var(--lg-blur));
 	box-shadow:
 		var(--lg-box-shadow-1), var(--lg-box-shadow-2), var(--lg-box-shadow-inset-top),
 		var(--lg-box-shadow-inset-bottom);
@@ -62,10 +61,6 @@
 		linear-gradient(#fff 0 0) content-box,
 		linear-gradient(#fff 0 0);
 	mask-composite: exclude;
-	-webkit-mask:
-		linear-gradient(#fff 0 0) content-box,
-		linear-gradient(#fff 0 0);
-	-webkit-mask-composite: xor;
 	pointer-events: none;
 }
 
@@ -82,10 +77,6 @@
 		linear-gradient(#fff 0 0) content-box,
 		linear-gradient(#fff 0 0);
 	mask-composite: exclude;
-	-webkit-mask:
-		linear-gradient(#fff 0 0) content-box,
-		linear-gradient(#fff 0 0);
-	-webkit-mask-composite: xor;
 	pointer-events: none;
 }
 
@@ -119,7 +110,6 @@
 	border: 1px solid var(--lg-border);
 	padding: 0;
 	mask: none;
-	-webkit-mask: none;
 }
 
 .liquid-glass--frosted::after {

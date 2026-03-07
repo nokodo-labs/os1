@@ -19,10 +19,13 @@ from api.models.mixins import (
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import ContentPart as SDKContentPart
 from nokodo_ai.messages import ContentPartAdapter as SDKContentPartAdapter
+from nokodo_ai.messages import FileContent as SDKFileContent
+from nokodo_ai.messages import ImageContent as SDKImageContent
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemContentPart as SDKSystemContentPart
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import TextContent as SDKTextContent
+from nokodo_ai.messages import ToolAttachment as SDKToolAttachment
 from nokodo_ai.messages import ToolCall as SDKToolCall
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.messages import Usage as SDKUsage
@@ -210,14 +213,20 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 				)
 			case MessageType.TOOL:
 				output = ""
-				if self.content:
-					part = SDKTextContent.model_validate(self.content[0])
-					output = part.text
+				att: list[SDKToolAttachment] = []
+				for raw in self.content or []:
+					p = SDKContentPartAdapter.validate_python(raw)
+					if isinstance(p, SDKTextContent):
+						if not output:
+							output = p.text
+					elif isinstance(p, (SDKImageContent, SDKFileContent)):
+						att.append(p)
 				return SDKToolMessage(
 					tool_call_id=self.tool_call_id or "",
 					tool_output=output,
 					is_error=self.is_error or False,
 					metadata=self.metadata_,
+					attachments=att,
 				)
 			case _:
 				return SDKUserMessage(
@@ -261,14 +270,20 @@ class ToolMessage(Message):
 
 	def to_sdk(self) -> SDKToolMessage:
 		output = ""
-		if self.content:
-			part = SDKTextContent.model_validate(self.content[0])
-			output = part.text
+		attachments: list[SDKToolAttachment] = []
+		for raw in self.content or []:
+			part = SDKContentPartAdapter.validate_python(raw)
+			if isinstance(part, SDKTextContent):
+				if not output:
+					output = part.text
+			elif isinstance(part, (SDKImageContent, SDKFileContent)):
+				attachments.append(part)
 		return SDKToolMessage(
 			tool_call_id=self.tool_call_id or "",
 			tool_output=output,
 			is_error=self.is_error or False,
 			metadata=self.metadata_,
+			attachments=attachments,
 		)
 
 

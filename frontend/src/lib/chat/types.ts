@@ -4,7 +4,7 @@
  * modules like helpers.ts or attachments.ts.
  */
 
-import type { ChatStreamDelta } from '$lib/api/streaming'
+import type { ChatStreamDelta } from '$lib/api/streaming/chatStream'
 import type { components } from '$lib/api/types'
 import type { Thread } from '$lib/stores/chat.svelte'
 import type { ToolCall, ToolExecution, ToolExecutionTracker } from '$lib/tools'

@@ -16,7 +16,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
-from nokodo_ai.utils.security import decrypt_string
+from nokodo_ai.utils.security import decrypt_string_with_fallback
 
 
 if TYPE_CHECKING:
@@ -83,4 +83,9 @@ class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 		if self.encrypted_api_key is None or self.encrypted_api_key.strip() == "":
 			return None
-		return decrypt_string(self.encrypted_api_key, settings.security.secret_key)
+		plaintext, _ = decrypt_string_with_fallback(
+			self.encrypted_api_key,
+			settings.security.secret_key,
+			settings.security.previous_secret_keys,
+		)
+		return plaintext

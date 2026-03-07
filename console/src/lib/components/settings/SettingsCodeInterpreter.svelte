@@ -19,6 +19,7 @@
 		engine?: CodeInterpreterEngine
 		e2bApiKey?: string
 		e2bTemplate?: string
+		e2bAvailablePackages?: string
 		timeout?: string
 	}
 
@@ -27,6 +28,7 @@
 		engine = $bindable<CodeInterpreterEngine>('e2b'),
 		e2bApiKey = $bindable(''),
 		e2bTemplate = $bindable(''),
+		e2bAvailablePackages = $bindable(''),
 		timeout = $bindable(''),
 	}: Props = $props()
 </script>
@@ -113,6 +115,18 @@
 								class="rounded-xl"
 							/>
 						</div>
+					</div>
+					<div class="space-y-2">
+						<Label for="ci_e2b_packages">pre-installed packages</Label>
+						<p class="text-xs text-zinc-500">
+							comma-separated Python packages available in the sandbox.
+						</p>
+						<Input
+							id="ci_e2b_packages"
+							placeholder="numpy, pandas, matplotlib"
+							bind:value={e2bAvailablePackages}
+							class="rounded-xl"
+						/>
 					</div>
 				</div>
 			{/if}

@@ -12,10 +12,11 @@ the agent sees all attached image file_ids from the conversation context.
 from __future__ import annotations
 
 import base64
+import json
 import logging
 from collections.abc import Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.service.auth import Principal
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 class GenerateImageInput(BaseModel):
 	"""input schema for generate_image tool."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	prompt: str = Field(
 		...,
@@ -139,11 +142,12 @@ class GenerateImageTool(Tool[AppContext]):
 			results = await generate_image(
 				__app_context__.session,
 				inp.prompt,
-				owner_id=str(__app_context__.user_id),
+				owner_id=__app_context__.user_id,
 				image=image_bytes,
 				negative_prompt=inp.negative_prompt,
 				n=inp.n,
 				size=inp.size,
+				agent_id=__app_context__.agent_id,
 			)
 		except MediaError:
 			logger.exception("image generation failed")
@@ -155,14 +159,17 @@ class GenerateImageTool(Tool[AppContext]):
 		attachments = _build_attachments(results)
 		count = len(results)
 		action = "edited" if inp.file_id else "generated"
-		summary = (
-			f"{action} {count} image{'s' if count != 1 else ''}. "
-			"images are attached above this message."
-		)
-
+		label = "image" if count == 1 else "images"
 		return ToolMessage(
 			tool_call_id=__agent_context__.tool_call_id,
-			tool_output=summary,
+			tool_output=json.dumps(
+				{
+					"status": "success",
+					"message": f"{action} {count} {label}",
+					"count": count,
+					"file_ids": [r.file_id for r in results if r.file_id],
+				}
+			),
 			metadata=__agent_context__.metadata,
 			is_error=False,
 			attachments=attachments,

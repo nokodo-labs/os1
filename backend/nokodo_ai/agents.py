@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from functools import cached_property
 from typing import Literal, overload
 
-from pydantic import Field, SkipValidation
+from pydantic import Field, SkipValidation, ValidationError
 
 from .base import Base
 from .chat_models import ChatModel
@@ -304,6 +304,16 @@ class Agent[AppContextT = None](Base):
 		app_context: AppContextT | None,
 	) -> ToolMessage:
 		"""execute a single tool call and return the result."""
+		# look up tool first so error messages can include expected schema
+		tool = self.tools_map.get(tool_call.name)
+		if tool is None:
+			return ToolMessage(
+				tool_call_id=tool_call.id,
+				tool_output=f"error: unknown tool '{tool_call.name}'",
+				is_error=True,
+				metadata=tool_call.metadata,
+			)
+
 		# parse arguments
 		raw_args = tool_call.arguments
 		args: JSONObject
@@ -314,9 +324,13 @@ class Agent[AppContextT = None](Base):
 			try:
 				parsed = json.loads(raw_args)
 			except json.JSONDecodeError as e:
+				hint = json.dumps(tool.parameters, indent=2)
 				return ToolMessage(
 					tool_call_id=tool_call.id,
-					tool_output=f"could not parse arguments. invalid json: {e}",
+					tool_output=(
+						f"could not parse arguments. invalid json: {e}\n\n"
+						f"expected parameters:\n{hint}"
+					),
 					is_error=True,
 					metadata=tool_call.metadata,
 				)
@@ -338,16 +352,6 @@ class Agent[AppContextT = None](Base):
 				metadata=tool_call.metadata,
 			)
 
-		# check tool exists
-		tool = self.tools_map.get(tool_call.name)
-		if tool is None:
-			return ToolMessage(
-				tool_call_id=tool_call.id,
-				tool_output=f"error: unknown tool '{tool_call.name}'",
-				is_error=True,
-				metadata=tool_call.metadata,
-			)
-
 		# create tool-specific context
 		tool_ctx = AgentContext(
 			thread=agent_context.thread,
@@ -362,6 +366,18 @@ class Agent[AppContextT = None](Base):
 		# execute
 		try:
 			tool_message = await tool.call(tool_ctx, app_context, **args)
+		except (ValidationError, TypeError) as e:
+			logger.warning("invalid arguments for tool %s: %s", tool.name, e)
+			hint = json.dumps(tool.parameters, indent=2)
+			return ToolMessage(
+				tool_call_id=tool_call.id,
+				tool_output=(
+					f"invalid arguments for tool '{tool.name}': {e}\n\n"
+					f"expected parameters:\n{hint}"
+				),
+				is_error=True,
+				metadata=tool_call.metadata,
+			)
 		except Exception:
 			logger.exception("unhandled error executing tool %s", tool.name)
 			return ToolMessage(

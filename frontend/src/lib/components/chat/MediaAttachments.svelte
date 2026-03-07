@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { getApiBaseUrl } from '$lib/api/client'
 	import type { FileContentPart, MediaContentPart } from '$lib/chat/types'
 	import ImageLightbox from '$lib/components/chat/ImageLightbox.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
 	import Film from '$lib/components/icons/Film.svelte'
 	import Headphone from '$lib/components/icons/Headphone.svelte'
+	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import { fetchAuthenticatedBlob } from '$lib/stores/files.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { onDestroy } from 'svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 
@@ -154,33 +154,25 @@
 {#if fileParts.length > 0}
 	<div class="flex flex-wrap gap-1.5">
 		{#each fileParts as file, idx (idx)}
-			{@const downloadUrl =
-				file.url ??
-				(file.fileId ? `${getApiBaseUrl()}/v1/files/${file.fileId}/content` : null)}
-			<div
-				class="border-foreground/12 bg-foreground/6 flex items-center gap-2 rounded-xl border px-3 py-1.5"
+			<button
+				type="button"
+				class="border-foreground/12 bg-foreground/6 hover:bg-foreground/10 flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 transition-colors"
+				onclick={() => {
+					if (file.fileId) {
+						modals.open('file-details', { fileId: file.fileId })
+					}
+				}}
 			>
-				<Document class="text-foreground/40 h-4 w-4 shrink-0" />
-				{#if downloadUrl}
-					<a
-						href={downloadUrl}
-						target="_blank"
-						rel="external noopener noreferrer"
-						class="text-foreground/70 hover:text-foreground max-w-36 truncate text-xs font-medium transition-colors"
-					>
-						{file.filename ?? 'file'}
-					</a>
-				{:else}
-					<span class="text-foreground/70 max-w-36 truncate text-xs font-medium">
-						{file.filename ?? 'file'}
-					</span>
-				{/if}
+				<MimeIcon mimeType={file.mediaType} class="text-foreground/40 h-4 w-4 shrink-0" />
+				<span class="text-foreground/70 max-w-36 truncate text-xs font-medium">
+					{file.filename ?? 'file'}
+				</span>
 				{#if file.mediaType}
 					<span class="text-foreground/35 text-[10px]">
 						{file.mediaType.split('/').pop()}
 					</span>
 				{/if}
-			</div>
+			</button>
 		{/each}
 	</div>
 {/if}

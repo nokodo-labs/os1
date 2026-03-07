@@ -85,10 +85,13 @@ export async function downloadFile(fileId: string, filename?: string): Promise<v
 // --- cache state ---
 
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+const PAGE_SIZE = 50
 
 const filesMap = new SvelteMap<string, ApiFile>()
 let fetchedAt = $state<number | null>(null)
 let isLoading = $state(false)
+let isLoadingMore = $state(false)
+let hasMore = $state(true)
 let inFlight: Promise<ApiFile[]> | null = null
 
 /** blob URLs for file thumbnails - revoked on clear */
@@ -127,6 +130,12 @@ export const files = {
 	get loading() {
 		return isLoading
 	},
+	get loadingMore() {
+		return isLoadingMore
+	},
+	get hasMore() {
+		return hasMore
+	},
 
 	/** all cached files */
 	get all(): ApiFile[] {
@@ -146,6 +155,21 @@ export const files = {
 	/** check if a thumbnail is available */
 	hasThumbnail(fileId: string): boolean {
 		return thumbnailUrls.has(fileId)
+	},
+
+	/**
+	 * ensure a single file is in the cache. fetches from API if missing.
+	 * returns the cached record, or null if the file doesn't exist.
+	 */
+	async ensure(fileId: string): Promise<ApiFile | null> {
+		const cached = filesMap.get(fileId)
+		if (cached) return cached
+		const file = await fetchSingleFile(fileId)
+		if (file) {
+			filesMap.set(file.id, file)
+			if (fetchedAt === null) fetchedAt = Date.now()
+		}
+		return file
 	},
 
 	/**
@@ -196,14 +220,18 @@ export const files = {
 		isLoading = true
 		inFlight = (async () => {
 			const { data, error } = await apiClient().GET('/v1/files', {
-				params: { query: { limit: 100, sort_by: 'created_at', sort_dir: 'desc' } },
+				params: {
+					query: { limit: PAGE_SIZE, skip: 0, sort_by: 'created_at', sort_dir: 'desc' },
+				},
 			})
 			if (error || !data) return this.all
 
 			filesMap.clear()
-			for (const file of data as ApiFile[]) {
+			const items = data as ApiFile[]
+			for (const file of items) {
 				filesMap.set(file.id, file)
 			}
+			hasMore = items.length >= PAGE_SIZE
 			fetchedAt = Date.now()
 			return this.all
 		})()
@@ -213,6 +241,35 @@ export const files = {
 		} finally {
 			inFlight = null
 			isLoading = false
+		}
+	},
+
+	/** load the next page of files (for infinite scroll) */
+	async loadMore(): Promise<void> {
+		if (isLoadingMore || !hasMore) return
+
+		isLoadingMore = true
+		try {
+			const skip = filesMap.size
+			const { data, error } = await apiClient().GET('/v1/files', {
+				params: {
+					query: {
+						limit: PAGE_SIZE,
+						skip,
+						sort_by: 'created_at',
+						sort_dir: 'desc',
+					},
+				},
+			})
+			if (error || !data) return
+
+			const items = data as ApiFile[]
+			for (const file of items) {
+				filesMap.set(file.id, file)
+			}
+			hasMore = items.length >= PAGE_SIZE
+		} finally {
+			isLoadingMore = false
 		}
 	},
 

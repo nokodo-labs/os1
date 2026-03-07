@@ -551,7 +551,9 @@ def _messages_to_anthropic(
 				# consume all consecutive ToolMessages at once.
 				result_blocks: list[AnthropicToolResultBlockParam] = []
 				while i < len(messages) and isinstance(messages[i], ToolMessage):
-					result_blocks.append(_tool_message_to_result_block(messages[i]))
+					tm = messages[i]
+					assert isinstance(tm, ToolMessage)
+					result_blocks.append(_tool_message_to_result_block(tm))
 					i += 1
 				result.append({"role": "user", "content": result_blocks})
 			case _:

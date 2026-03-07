@@ -190,6 +190,25 @@ class S3StorageConfigPatch(BaseModel):
 	presigned_url_ttl: int | None = Field(
 		default=None, ge=1, description="presigned URL expiration in seconds"
 	)
+	multipart_threshold: int | None = Field(
+		default=None,
+		ge=1,
+		description="bytes above which multipart upload kicks in",
+	)
+	multipart_chunk_size: int | None = Field(
+		default=None,
+		ge=1,
+		description="multipart upload chunk size in bytes",
+	)
+	max_retries: int | None = Field(
+		default=None,
+		ge=0,
+		description="max retry attempts",
+	)
+	retry_mode: Literal["legacy", "standard", "adaptive"] | None = Field(
+		default=None,
+		description="botocore retry mode",
+	)
 
 
 class StorageSettingsPatch(BaseModel):
@@ -562,6 +581,10 @@ class E2bSettingsPatch(BaseModel):
 	template: str | None = Field(
 		default=None,
 		description="E2B sandbox template",
+	)
+	available_packages: list[str] | None = Field(
+		default=None,
+		description="pre-installed Python packages available in the sandbox",
 	)
 
 

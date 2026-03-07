@@ -41,6 +41,7 @@
 		chatContextTopK?: string
 		chatContextSimilarityThreshold?: string
 		// retrieval
+		retrievalTurns?: string
 		retrievalPreBuild?: boolean
 		// tasks
 		taskDefaultModelId?: string
@@ -94,6 +95,7 @@
 		chatContextMode = $bindable('recent'),
 		chatContextTopK = $bindable(''),
 		chatContextSimilarityThreshold = $bindable(''),
+		retrievalTurns = $bindable(''),
 		retrievalPreBuild = $bindable(true),
 		taskDefaultModelId = $bindable(''),
 		taskThreadMetadataModelId = $bindable(''),
@@ -355,15 +357,33 @@
 
 		<!-- retrieval -->
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-medium">pre-build retrieval query</p>
+			<p class="mb-4 text-sm font-medium">retrieval</p>
+			<div class="grid gap-4 md:grid-cols-2">
+				<div class="space-y-2">
+					<Label for="retrieval_turns">retrieval turns</Label>
 					<p class="text-xs text-zinc-500">
-						embed the retrieval query once before filters run. disable to let each
-						filter build its own query on demand.
+						recent turns to use when building memory and chat context queries.
 					</p>
+					<Input
+						id="retrieval_turns"
+						type="number"
+						min="1"
+						bind:value={retrievalTurns}
+						placeholder="3"
+						class="rounded-xl"
+					/>
 				</div>
-				<Switch bind:checked={retrievalPreBuild} />
+				<div
+					class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3"
+				>
+					<div>
+						<p class="text-sm font-medium">pre-build retrieval query</p>
+						<p class="text-xs text-zinc-500">
+							embed the retrieval query once before filters run.
+						</p>
+					</div>
+					<Switch bind:checked={retrievalPreBuild} />
+				</div>
 			</div>
 		</div>
 

@@ -75,9 +75,19 @@
 			type: att.category,
 			status: att.status,
 			isPending: false,
+			previewUrl: files.getThumbnailUrl(att.fileId),
 		}))
 	)
 	const activeAttachments = $derived([...pendingAsNative, ...threadAsNative])
+
+	// ensure thread attachment files are cached and thumbnails loaded
+	$effect(() => {
+		for (const att of threadAttachments) {
+			void files.ensure(att.fileId).then((f) => {
+				if (f) void files.loadThumbnail(att.fileId)
+			})
+		}
+	})
 
 	// track whether context is active for the badge indicator
 	const hasContextActive = $derived(
@@ -172,7 +182,7 @@
 		// on desktop, bare enter sends the message.
 		if (event.key === 'Enter' && !event.shiftKey && !isComposing && !device.isTouch) {
 			event.preventDefault()
-			handleSubmit()
+			if (!isGenerating) handleSubmit()
 		}
 	}
 
@@ -233,7 +243,7 @@
 
 <form class="w-full" bind:this={formEl} onsubmit={handleFormSubmit}>
 	<div
-		class="liquid-glass chat-input relative rounded-3xl w-full transition-all duration-300"
+		class="liquid-glass chat-input relative w-full rounded-3xl transition-all duration-300"
 		data-chat-input
 		style={viewTransitionName ? `view-transition-name: ${viewTransitionName};` : undefined}
 	>
@@ -267,7 +277,7 @@
 					</button>
 				</div>
 
-				<div class="flex flex-1 px-1 items-center">
+				<div class="flex flex-1 items-center px-1">
 					<textarea
 						bind:this={textarea}
 						bind:value

@@ -11,7 +11,7 @@ from typing import Any
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerifyMismatchError
 from authlib.jose import JoseError, jwt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 
 _PASSWORD_HASHER = PasswordHasher(
@@ -91,3 +91,30 @@ def decrypt_string(cipher_text: str, secret_key: str) -> str:
 	"""Decrypt a string."""
 	f = Fernet(get_fernet_key(secret_key))
 	return f.decrypt(cipher_text.encode()).decode()
+
+
+def decrypt_string_with_fallback(
+	cipher_text: str,
+	secret_key: str,
+	previous_keys: Sequence[str] = (),
+	*,
+	strict: bool = False,
+) -> tuple[str, bool]:
+	"""Decrypt trying the current key first, then previous keys.
+
+	Returns (plaintext, needs_reencrypt) where needs_reencrypt is True
+	when an old key was used and the caller should re-encrypt with the current key.
+
+	Pass strict=True to ignore previous_keys entirely and require the current key.
+	"""
+	try:
+		return decrypt_string(cipher_text, secret_key), False
+	except InvalidToken:
+		pass
+	if not strict:
+		for old_key in previous_keys:
+			try:
+				return decrypt_string(cipher_text, old_key), True
+			except InvalidToken:
+				continue
+	raise InvalidToken()

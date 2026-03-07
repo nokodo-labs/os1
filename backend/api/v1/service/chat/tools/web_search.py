@@ -6,7 +6,7 @@ import logging
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 class AgenticWebSearchInput(BaseModel):
 	"""input schema for agentic_web_search tool."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	query: str = Field(
 		...,

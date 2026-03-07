@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 
-def pytest_configure(config) -> None:
+def pytest_configure(config: object) -> None:
 	_ = config
 	if sys.platform == "win32":
 		asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

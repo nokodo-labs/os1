@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.reminder import ReminderStatus
 from api.schemas.reminder import ReminderCreate, ReminderUpdate
@@ -28,6 +29,8 @@ class ReminderGetInput(BaseModel):
 
 	provide reminder_id to fetch a specific reminder, or query to search.
 	"""
+
+	model_config = ConfigDict(extra="forbid")
 
 	reminder_id: str | None = Field(
 		default=None,
@@ -55,6 +58,8 @@ class ReminderWriteInput(BaseModel):
 
 	provide reminder_id to update an existing reminder, or omit to create a new one.
 	"""
+
+	model_config = ConfigDict(extra="forbid")
 
 	reminder_id: str | None = Field(
 		default=None,
@@ -117,17 +122,22 @@ class ReminderGetTool(Tool[AppContext]):
 				)
 			except HTTPException as exc:
 				return self.error(str(exc.detail), __agent_context__)
-			parts = [f"title: {reminder.title}"]
+			result: dict[str, object] = {
+				"status": "success",
+				"message": "reminder retrieved",
+				"id": str(reminder.id),
+				"title": reminder.title,
+				"reminder_status": reminder.status.value,
+			}
 			if reminder.description:
-				parts.append(f"description: {reminder.description}")
-			parts.append(f"status: {reminder.status.value}")
+				result["description"] = reminder.description
 			if reminder.due_at:
-				parts.append(f"due: {reminder.due_at.isoformat()}")
+				result["due_at"] = reminder.due_at.isoformat()
 			if reminder.remind_at:
-				parts.append(f"remind at: {reminder.remind_at.isoformat()}")
+				result["remind_at"] = reminder.remind_at.isoformat()
 			if reminder.completed_at:
-				parts.append(f"completed: {reminder.completed_at.isoformat()}")
-			return self.success("\n".join(parts), __agent_context__)
+				result["completed_at"] = reminder.completed_at.isoformat()
+			return self.success(json.dumps(result), __agent_context__)
 
 		if not inp.query:
 			return self.error(
@@ -147,15 +157,22 @@ class ReminderGetTool(Tool[AppContext]):
 			return self.error(str(exc.detail), __agent_context__)
 
 		if not page.items:
-			return self.success(
-				"no reminders found matching the query", __agent_context__
-			)
+			out = {
+				"status": "success",
+				"message": "no reminders found",
+				"count": 0,
+				"results": [],
+			}
+			return self.success(json.dumps(out), __agent_context__)
 
-		lines = []
-		for item in page.items:
-			subtitle = f" - {item.subtitle}" if item.subtitle else ""
-			lines.append(f"- [{item.id}] {item.title}{subtitle}")
-		return self.success("\n".join(lines), __agent_context__)
+		results = [
+			{"id": str(item.id), "title": item.title, "subtitle": item.subtitle or ""}
+			for item in page.items
+		]
+		n = len(results)
+		msg = f"found {n} {'reminder' if n == 1 else 'reminders'}"
+		out = {"status": "success", "message": msg, "count": n, "results": results}
+		return self.success(json.dumps(out), __agent_context__)
 
 
 class ReminderWriteTool(Tool[AppContext]):
@@ -185,26 +202,52 @@ class ReminderWriteTool(Tool[AppContext]):
 
 		if inp.reminder_id:
 			# update existing reminder
-			status = ReminderStatus(inp.status) if inp.status else None
+			rid = TypeID(inp.reminder_id)
+			# use the dedicated complete endpoint when only completing
+			if inp.status == "completed" and not any(
+				[inp.title, inp.description, inp.due_at, inp.remind_at]
+			):
+				try:
+					reminder = await reminder_service.complete_reminder(
+						rid,
+						__app_context__.session,
+						principal=__app_context__.principal,
+					)
+				except HTTPException as exc:
+					return self.error(str(exc.detail), __agent_context__)
+				out = {
+					"status": "success",
+					"message": "reminder completed",
+					"id": str(reminder.id),
+				}
+				return self.success(json.dumps(out), __agent_context__)
+			# general update - only include fields the agent actually provided
+			update_kwargs: dict = {}
+			if inp.title is not None:
+				update_kwargs["title"] = inp.title
+			if inp.description is not None:
+				update_kwargs["description"] = inp.description
+			if inp.due_at is not None:
+				update_kwargs["due_at"] = inp.due_at
+			if inp.remind_at is not None:
+				update_kwargs["remind_at"] = inp.remind_at
+			if inp.status is not None and inp.status != "completed":
+				update_kwargs["status"] = ReminderStatus(inp.status)
 			try:
 				reminder = await reminder_service.update_reminder(
-					TypeID(inp.reminder_id),
-					ReminderUpdate(
-						title=inp.title,
-						description=inp.description,
-						due_at=inp.due_at,
-						remind_at=inp.remind_at,
-						status=status,
-					),
+					rid,
+					ReminderUpdate(**update_kwargs),
 					__app_context__.session,
 					principal=__app_context__.principal,
 				)
 			except HTTPException as exc:
 				return self.error(str(exc.detail), __agent_context__)
-			return self.success(
-				f"reminder updated: [{reminder.id}] {reminder.title}",
-				__agent_context__,
-			)
+			out = {
+				"status": "success",
+				"message": "reminder updated",
+				"id": str(reminder.id),
+			}
+			return self.success(json.dumps(out), __agent_context__)
 
 		# create new reminder
 		if not inp.title:
@@ -224,8 +267,9 @@ class ReminderWriteTool(Tool[AppContext]):
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)
-		due = f" (due: {reminder.due_at.isoformat()})" if reminder.due_at else ""
-		return self.success(
-			f"reminder created: [{reminder.id}] {reminder.title}{due}",
-			__agent_context__,
-		)
+		out = {
+			"status": "success",
+			"message": "reminder created",
+			"id": str(reminder.id),
+		}
+		return self.success(json.dumps(out), __agent_context__)

@@ -8,16 +8,21 @@ from __future__ import annotations
 
 import base64
 import logging
+import mimetypes
 import uuid
 from dataclasses import dataclass, field
 
-from e2b_code_interpreter import AsyncSandbox
+from e2b_code_interpreter import AsyncSandbox, FileType
 
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TEMPLATE = "code-interpreter-v1"
 _DEFAULT_TIMEOUT = 60
+_MAX_FILE_DOWNLOAD_BYTES = 10 * 1024 * 1024  # 10 MB cap per file
+
+# directories to watch for new/modified files after code execution
+_WATCH_DIRS = ("/tmp", "/home", "/root", "/code", "/output", ".")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +124,9 @@ class E2BClient:
 		if self._sandbox is None:
 			raise RuntimeError("not connected to a sandbox")
 
+		# snapshot filesystem before execution
+		pre_files = await self._snapshot_working_dir()
+
 		execution = await self._sandbox.run_code(code, timeout=timeout)
 
 		stdout = ""
@@ -138,6 +146,10 @@ class E2BClient:
 
 		# extract images from results + save to sandbox FS
 		image_files = await self._extract_images(execution.results)
+		image_filenames = {f.filename for f in image_files}
+
+		# detect new files created during execution
+		new_files = await self._detect_new_files(pre_files, exclude=image_filenames)
 
 		error: dict[str, str] | None = None
 		if execution.error:
@@ -152,7 +164,7 @@ class E2BClient:
 			stderr=stderr,
 			results=results,
 			error=error,
-			files=image_files,
+			files=image_files + new_files,
 			sandbox_id=self._sandbox.sandbox_id,
 		)
 
@@ -194,6 +206,69 @@ class E2BClient:
 			await self._sandbox.beta_pause(api_key=self._api_key)
 			logger.debug("paused sandbox %s", self._sandbox.sandbox_id)
 
+	async def _snapshot_working_dir(self) -> dict[str, int]:
+		"""snapshot file names and sizes across watched directories."""
+		if self._sandbox is None:
+			return {}
+		snapshot: dict[str, int] = {}
+		for d in _WATCH_DIRS:
+			try:
+				entries = await self._sandbox.files.list(d)
+				prefix = "" if d == "." else d.rstrip("/") + "/"
+				for e in entries:
+					if e.type == FileType.FILE:
+						snapshot[prefix + e.name] = e.size
+			except Exception:
+				pass
+		return snapshot
+
+	async def _detect_new_files(
+		self,
+		pre_snapshot: dict[str, int],
+		*,
+		exclude: set[str],
+	) -> list[FileEntry]:
+		"""detect and download files created or modified during execution."""
+		if self._sandbox is None:
+			return []
+		try:
+			post_snapshot: dict[str, int] = {}
+			for d in _WATCH_DIRS:
+				try:
+					entries = await self._sandbox.files.list(d)
+					prefix = "" if d == "." else d.rstrip("/") + "/"
+					for e in entries:
+						if e.type == FileType.FILE:
+							post_snapshot[prefix + e.name] = e.size
+				except Exception:
+					pass
+
+			files: list[FileEntry] = []
+			for path, size in post_snapshot.items():
+				basename = path.rsplit("/", 1)[-1] if "/" in path else path
+				if basename in exclude:
+					continue
+				if path in pre_snapshot and size == pre_snapshot[path]:
+					continue
+				if size > _MAX_FILE_DOWNLOAD_BYTES:
+					continue
+				content = await self.download_file(path)
+				if content is None:
+					continue
+				mime = _guess_mime_type(basename)
+				files.append(
+					FileEntry(
+						filename=basename,
+						content=content,
+						mime_type=mime,
+					)
+				)
+				logger.debug("captured sandbox file %s (%d bytes)", path, len(content))
+			return files
+		except Exception:
+			logger.debug("failed to detect new files", exc_info=True)
+			return []
+
 	async def _extract_images(
 		self,
 		results: object,
@@ -227,6 +302,12 @@ class E2BClient:
 					pass
 
 		return images
+
+
+def _guess_mime_type(filename: str) -> str:
+	"""guess MIME type from filename, defaulting to application/octet-stream."""
+	mime, _ = mimetypes.guess_type(filename)
+	return mime or "application/octet-stream"
 
 
 __all__ = [

@@ -11,7 +11,21 @@ import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
 import { computeIsAtBottom, contentPartsToText } from './helpers'
 import { runThreadStream } from './streamProcessor'
+import { getLatestLeaf } from './treeNavigation'
 import type { ChatContext } from './types'
+
+function resolveLeafAfterDelete(startParentId: string | null, ctx: ChatContext): string | null {
+	if (startParentId && ctx.messageTree.has(startParentId)) {
+		return getLatestLeaf(startParentId, ctx)
+	}
+
+	const roots = ctx.messageChildren.get(null)
+	if (roots && roots.length > 0) {
+		return getLatestLeaf(roots[roots.length - 1], ctx)
+	}
+
+	return null
+}
 
 /** send a new user message and stream the agent response */
 export async function handleSendMessage(
@@ -315,7 +329,7 @@ export async function deleteUserMessage(messageId: string, ctx: ChatContext): Pr
 		}
 
 		for (const id of idsToDelete) ctx.messageTree.delete(id)
-		ctx.currentLeafId = start.parent_id ?? null
+		ctx.currentLeafId = resolveLeafAfterDelete(start.parent_id ?? null, ctx)
 		ctx.rebuildRunBlocks()
 		return true
 	}
@@ -342,7 +356,7 @@ export async function deleteUserMessage(messageId: string, ctx: ChatContext): Pr
 
 	// optimistic removal
 	for (const id of idsToDelete) ctx.messageTree.delete(id)
-	ctx.currentLeafId = start.parent_id ?? null
+	ctx.currentLeafId = resolveLeafAfterDelete(start.parent_id ?? null, ctx)
 	ctx.optimisticUserMessage = null
 	ctx.streamingAssistant = null
 	ctx.rebuildRunBlocks()

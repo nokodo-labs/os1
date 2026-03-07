@@ -159,7 +159,10 @@
 		filter="files"
 		{sort}
 		emptyMessage="no files yet - upload files to see them here"
-		pageSize={24}
+		pageSize={50}
+		onLoadMore={() => files.loadMore()}
+		hasMore={files.hasMore}
+		loadingMore={files.loadingMore}
 		onItemClick={(item) => modals.open('file-details', { fileId: item.id })}
 	/>
 </div>

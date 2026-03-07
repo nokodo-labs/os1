@@ -1,4 +1,4 @@
-# nokodo roadmap
+# OS1 roadmap
 
 this document outlines planned features, improvements, and milestones. it is a living document and will change as priorities evolve.
 

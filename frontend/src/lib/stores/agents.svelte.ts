@@ -6,6 +6,7 @@ export type Agent = components['schemas']['Agent']
 class AgentsStore {
 	list = $state<Agent[]>([])
 	byId = $state<Record<string, Agent>>({})
+	error = $state<string | null>(null)
 
 	#loading = false
 	#pending: string[] = []
@@ -15,11 +16,17 @@ class AgentsStore {
 	load = async (): Promise<void> => {
 		if (this.#loading) return
 		this.#loading = true
+		this.error = null
 		try {
 			const { data, error } = await apiClient().GET('/v1/agents')
-			if (error || !data) return
+			if (error || !data) {
+				this.error = 'failed to load agents'
+				return
+			}
 			this.list = data
 			this.byId = Object.fromEntries(data.map((a) => [a.id, a]))
+		} catch {
+			this.error = 'failed to load agents'
 		} finally {
 			this.#loading = false
 		}

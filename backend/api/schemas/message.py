@@ -119,39 +119,55 @@ class MessageCreate(MetadataModel):
 	) -> MessageCreate:
 		"""convert an sdk message to an orm MessageCreate for persistence."""
 
-		def _to_api_parts(
+		def _to_storage_parts(
 			parts: Sequence[SDKContentPart],
 		) -> list[ContentPart]:
-			return [ContentPartAdapter.validate_python(p.model_dump()) for p in parts]
+			"""convert content parts for DB storage.
+
+			strips inline data (base64/url) from parts that carry a
+			file_id in metadata. file data lives in File storage; only
+			the reference is persisted for re-resolution later.
+			"""
+			result: list[ContentPart] = []
+			for p in parts:
+				d = p.model_dump()
+				if isinstance(d, dict) and (d.get("metadata") or {}).get("file_id"):
+					d.pop("base64", None)
+					d.pop("url", None)
+				result.append(ContentPartAdapter.validate_python(d))
+			return result
 
 		match sdk_msg.role:
 			case "user":
 				assert isinstance(sdk_msg, SDKUserMessage)
 				return cls(
 					type=MessageType.USER,
-					content=_to_api_parts(sdk_msg.content),
+					content=_to_storage_parts(sdk_msg.content),
 					sender_user_id=sender_user_id,
 				)
 			case "system":
 				assert isinstance(sdk_msg, SDKSystemMessage)
 				return cls(
 					type=MessageType.SYSTEM,
-					content=_to_api_parts(sdk_msg.content),
+					content=_to_storage_parts(sdk_msg.content),
 				)
 			case "assistant":
 				assert isinstance(sdk_msg, SDKAssistantMessage)
 				return cls(
 					type=MessageType.ASSISTANT,
-					content=_to_api_parts(sdk_msg.content),
+					content=_to_storage_parts(sdk_msg.content),
 					tool_calls=[tc.model_dump() for tc in sdk_msg.tool_calls],
 					usage=sdk_msg.usage.model_dump() if sdk_msg.usage else None,
 					sender_agent_id=sender_agent_id,
 				)
 			case "tool":
 				assert isinstance(sdk_msg, SDKToolMessage)
+				parts: list[ContentPart] = [TextContent(text=sdk_msg.tool_output)]
+				if sdk_msg.attachments:
+					parts.extend(_to_storage_parts(sdk_msg.attachments))
 				return cls(
 					type=MessageType.TOOL,
-					content=[TextContent(text=sdk_msg.tool_output)],
+					content=parts,
 					tool_call_id=sdk_msg.tool_call_id,
 					is_error=sdk_msg.is_error,
 					metadata_=dict(sdk_msg.metadata or {}),

@@ -89,9 +89,14 @@
 	>
 		<span
 			class="min-w-0 truncate bg-clip-text text-xl font-semibold whitespace-nowrap text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
-			style="background-image: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
+			style="background-image: linear-gradient(to bottom right, {agents.error
+				? 'var(--color-error, #ef4444)'
+				: 'var(--accent-primary)'}, {agents.error
+				? 'var(--color-error, #ef4444)'
+				: 'var(--accent-primary)'});"
+			title={agents.error ?? ''}
 		>
-			{currentAgent?.name ?? 'assistant'}
+			{agents.error ? 'error' : (currentAgent?.name ?? 'select agent')}
 		</span>
 		<span style="color: var(--accent-primary);">
 			<ChevronDown

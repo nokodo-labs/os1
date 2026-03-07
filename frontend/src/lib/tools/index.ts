@@ -15,13 +15,13 @@
  */
 
 import type { components } from '$lib/api/types'
+import { files } from '$lib/stores/files.svelte'
+import { notes } from '$lib/stores/notes.svelte'
 
 // re-export the reactive tracker
 export { ToolExecutionTracker } from './toolExecutionTracker.svelte'
 
-// ============================================================================
 // Core Types
-// ============================================================================
 
 /** Tool call from an assistant message */
 export interface ToolCall {
@@ -70,6 +70,8 @@ export interface ToolExecution {
 	lastMessage?: string
 	error?: string
 	result?: ToolResult
+	/** raw accumulated JSON string from streaming - use for partial field extraction */
+	rawArguments?: string
 }
 
 /** Tool result from ToolMessage */
@@ -77,16 +79,22 @@ export interface ToolResult {
 	toolCallId: string
 	output: string
 	isError: boolean
+	/** Non-text content parts (images, files) from tool message attachments. */
+	contentParts?: ApiMessage['content']
+	/** Structured metadata from backend (flows via message.metadata_). */
+	metadata?: Record<string, unknown>
 }
 
 export type ToolSummary = {
 	title: string
 	subtitle?: string
+	/** resource ID extracted from tool result (for widget rendering) */
+	resourceId?: string
+	/** type hint for the resource (note, reminder, file) */
+	resourceType?: 'note' | 'reminder' | 'file'
 }
 
-// ============================================================================
 // Native Tool Registry
-// ============================================================================
 
 /**
  * Registry of native tools that have dedicated UI components.
@@ -203,6 +211,22 @@ const nativeTools = new Map<string, NativeToolDefinition>([
 		},
 	],
 	[
+		'generate_video',
+		{
+			displayName: 'create video',
+			icon: 'film',
+			inline: true,
+		},
+	],
+	[
+		'generate_audio',
+		{
+			displayName: 'create audio',
+			icon: 'headphone',
+			inline: true,
+		},
+	],
+	[
 		'code_interpreter',
 		{
 			displayName: 'run code',
@@ -245,9 +269,7 @@ export function getNativeToolDefinition(toolName: string): NativeToolDefinition 
 	return nativeTools.get(toolName) ?? null
 }
 
-// ============================================================================
 // Parsing Functions
-// ============================================================================
 
 type ApiMessage = components['schemas']['Message']
 
@@ -296,10 +318,15 @@ export function parseToolResult(message: ApiMessage): ToolResult | null {
 	const textPart = content.find((p) => p?.type === 'text')
 	const output = textPart && 'text' in textPart ? (textPart.text ?? '') : ''
 
+	// extract non-text content parts (images, files) for attachment rendering
+	const attachmentParts = content.filter((p) => p && p.type !== 'text')
+
 	return {
 		toolCallId: (message.tool_call_id as string | undefined) ?? '',
 		output,
 		isError: (message.is_error as boolean | undefined) ?? false,
+		contentParts: attachmentParts.length > 0 ? attachmentParts : undefined,
+		metadata: (message.metadata_ ?? undefined) as Record<string, unknown> | undefined,
 	}
 }
 
@@ -369,9 +396,7 @@ export function parseToolEvent(event: {
 	}
 }
 
-// ============================================================================
 // Display Helpers
-// ============================================================================
 
 /** Get a human-readable display name for a tool */
 export function getToolDisplayName(toolName: string): string {
@@ -469,8 +494,10 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 	const name = execution.toolCall.name
 	const args = execution.toolCall.arguments
 	const status = execution.status
-	const isActive = status === 'pending' || status === 'running'
-	const isFailed = status === 'error'
+	// if a result exists, the tool is definitively done regardless of status
+	const hasResult = execution.result != null
+	const isActive = !hasResult && (status === 'pending' || status === 'running')
+	const isFailed = status === 'error' || (hasResult && execution.result!.isError)
 
 	switch (name) {
 		case 'think': {
@@ -506,70 +533,195 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 		case 'memory_recall': {
 			if (isFailed) return { title: 'could not recall memories' }
 			if (isActive) return { title: 'recalling memories' }
-			const count = parseResultItemCount(execution)
-			return { title: count !== null ? `recalled ${count} memories` : 'recalled memories' }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : null
+			if (count !== null) {
+				if (count === 0) return { title: 'no memories found' }
+				return { title: `recalled ${count} ${count === 1 ? 'memory' : 'memories'}` }
+			}
+			return { title: 'recalled memories' }
 		}
 
 		case 'memory_create': {
 			if (isFailed) return { title: 'could not save memory' }
 			if (isActive) return { title: 'saving to memory' }
-			return { title: 'saved to memory' }
+			return { title: 'saved a memory' }
 		}
 
 		case 'note_get': {
-			const title = typeof args.title === 'string' ? args.title : null
+			const noteId = typeof args.note_id === 'string' ? args.note_id : null
 			if (isFailed) return { title: 'could not read note' }
-			if (isActive) return { title: title ? `reading "${title}"` : 'reading note' }
-			return { title: title ? `read "${title}"` : 'read note' }
+			if (noteId) {
+				const cached = notes.get(noteId)
+				const label = cached?.title
+				if (isActive) return { title: label ? `reading "${label}"` : 'reading note' }
+				const output = parseToolOutput(execution)
+				const title = (output?.title as string) ?? label
+				return {
+					title: title ? `read "${title}"` : 'read note',
+					resourceId: noteId,
+					resourceType: 'note',
+				}
+			}
+			const query = typeof args.query === 'string' ? args.query : null
+			if (isActive) return { title: 'searching notes', subtitle: query ?? undefined }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : null
+			if (count !== null) {
+				if (count === 0) return { title: 'no notes found', subtitle: query ?? undefined }
+				return {
+					title: `found ${count} ${count === 1 ? 'note' : 'notes'}`,
+					subtitle: query ?? undefined,
+				}
+			}
+			return { title: 'searched notes', subtitle: query ?? undefined }
 		}
 
 		case 'note_write': {
-			const title = typeof args.title === 'string' ? args.title : null
+			const noteTitle = typeof args.title === 'string' ? args.title : null
 			if (isFailed) return { title: 'could not write note' }
-			if (isActive) return { title: title ? `writing "${title}"` : 'writing note' }
-			return { title: title ? `wrote "${title}"` : 'wrote note' }
+			const isUpdate = typeof args.note_id === 'string'
+			const verb = isUpdate ? 'updating' : 'creating'
+			const doneVerb = isUpdate ? 'updated' : 'created'
+			const label =
+				noteTitle ?? (isUpdate ? (notes.get(args.note_id as string)?.title ?? null) : null)
+			if (isActive) return { title: label ? `${verb} "${label}"` : `${verb} note` }
+			const output = parseToolOutput(execution)
+			const resultId = output?.id as string | undefined
+			return {
+				title: label ? `${doneVerb} "${label}"` : `${doneVerb} note`,
+				resourceId:
+					resultId ?? (typeof args.note_id === 'string' ? args.note_id : undefined),
+				resourceType: 'note',
+			}
 		}
 
 		case 'reminder_get': {
+			const remId = typeof args.reminder_id === 'string' ? args.reminder_id : null
 			if (isFailed) return { title: 'could not check reminders' }
-			if (isActive) return { title: 'checking reminders' }
-			return { title: 'checked reminders' }
+			if (remId) {
+				if (isActive) return { title: 'checking reminder' }
+				const output = parseToolOutput(execution)
+				const title = output?.title as string | undefined
+				return {
+					title: title ? `checked "${title}"` : 'checked reminder',
+					resourceId: remId,
+					resourceType: 'reminder',
+				}
+			}
+			const query = typeof args.query === 'string' ? args.query : null
+			if (isActive) return { title: 'searching reminders', subtitle: query ?? undefined }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : null
+			if (count !== null) {
+				if (count === 0)
+					return { title: 'no reminders found', subtitle: query ?? undefined }
+				return {
+					title: `found ${count} ${count === 1 ? 'reminder' : 'reminders'}`,
+					subtitle: query ?? undefined,
+				}
+			}
+			return { title: 'searched reminders', subtitle: query ?? undefined }
 		}
 
 		case 'reminder_write': {
+			const remTitle = typeof args.title === 'string' ? args.title : null
 			if (isFailed) return { title: 'could not set reminder' }
-			if (isActive) return { title: 'setting reminder' }
-			return { title: 'set reminder' }
+			const isUpdate = typeof args.reminder_id === 'string'
+			const verb = isUpdate ? 'updating' : 'creating'
+			const doneVerb = isUpdate ? 'updated' : 'created'
+			if (isActive) return { title: remTitle ? `${verb} "${remTitle}"` : `${verb} reminder` }
+			const output = parseToolOutput(execution)
+			const resultId = output?.id as string | undefined
+			return {
+				title: remTitle ? `${doneVerb} "${remTitle}"` : `${doneVerb} reminder`,
+				resourceId:
+					resultId ??
+					(typeof args.reminder_id === 'string' ? args.reminder_id : undefined),
+				resourceType: 'reminder',
+			}
 		}
 
 		case 'file_get': {
-			const path = typeof args.path === 'string' ? args.path : null
-			const fileName = path ? path.split('/').pop() : null
-			if (isFailed)
-				return { title: fileName ? `could not read ${fileName}` : 'could not read file' }
-			if (isActive) return { title: fileName ? `reading ${fileName}` : 'reading file' }
-			return { title: fileName ? `read ${fileName}` : 'read file' }
+			const fileId = typeof args.file_id === 'string' ? args.file_id : null
+			if (isFailed) return { title: 'could not read file' }
+			if (fileId) {
+				const cached = files.get(fileId)
+				const label = cached?.filename
+				if (isActive) return { title: label ? `reading "${label}"` : 'reading file' }
+				const output = parseToolOutput(execution)
+				const filename = (output?.filename as string) ?? label
+				return {
+					title: filename ? `read "${filename}"` : 'read file',
+					resourceId: fileId,
+					resourceType: 'file',
+				}
+			}
+			if (isActive) return { title: 'listing files' }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : null
+			if (count !== null) {
+				if (count === 0) return { title: 'no files found' }
+				return { title: `found ${count} ${count === 1 ? 'file' : 'files'}` }
+			}
+			return { title: 'listed files' }
 		}
 
 		case 'file_edit': {
-			const path = typeof args.path === 'string' ? args.path : null
-			const fileName = path ? path.split('/').pop() : null
+			const fileId = typeof args.file_id === 'string' ? args.file_id : null
+			const fileName = typeof args.filename === 'string' ? args.filename : null
+			const cached = fileId ? files.get(fileId) : null
+			const label = fileName ?? cached?.filename
 			if (isFailed)
-				return { title: fileName ? `could not edit ${fileName}` : 'could not edit file' }
-			if (isActive) return { title: fileName ? `editing ${fileName}` : 'editing file' }
-			return { title: fileName ? `edited ${fileName}` : 'edited file' }
+				return { title: label ? `could not edit "${label}"` : 'could not edit file' }
+			if (isActive) return { title: label ? `editing "${label}"` : 'editing file' }
+			return {
+				title: label ? `edited "${label}"` : 'edited file',
+				resourceId: fileId ?? undefined,
+				resourceType: 'file',
+			}
 		}
 
 		case 'generate_image': {
 			if (isFailed) return { title: 'could not create image' }
 			if (isActive) return { title: 'creating image' }
-			return { title: 'created image' }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : 1
+			const action = typeof args.file_id === 'string' ? 'edited' : 'created'
+			return { title: `${action} ${count} ${count === 1 ? 'image' : 'images'}` }
+		}
+
+		case 'generate_video': {
+			if (isFailed) return { title: 'could not create video' }
+			if (isActive) return { title: 'creating video' }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : 1
+			return { title: `created ${count} ${count === 1 ? 'video' : 'videos'}` }
+		}
+
+		case 'generate_audio': {
+			if (isFailed) return { title: 'could not create audio' }
+			if (isActive) return { title: 'creating audio' }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : 1
+			return { title: `created ${count} audio ${count === 1 ? 'clip' : 'clips'}` }
 		}
 
 		case 'code_interpreter': {
-			if (isFailed) return { title: 'code failed' }
-			if (isActive) return { title: 'running code' }
-			return { title: 'ran code' }
+			const actionName = typeof args.action_name === 'string' ? args.action_name : null
+			if (isFailed) return { title: actionName ? `${actionName} failed` : 'code failed' }
+			if (isActive) return { title: actionName ?? 'running code' }
+			// count file attachments in result
+			const fileParts = execution.result?.contentParts?.filter(
+				(p) => p.type === 'file' || p.type === 'image'
+			)
+			const fileCount = fileParts?.length ?? 0
+			const baseTitle = actionName ?? 'ran code'
+			if (fileCount > 0) {
+				const label = fileCount === 1 ? '1 file' : `${fileCount} files`
+				return { title: baseTitle, subtitle: `created ${label}` }
+			}
+			return { title: baseTitle }
 		}
 
 		case 'send_notification': {
@@ -618,16 +770,12 @@ function countWebSearchSources(execution: ToolExecution): number | null {
 	return null
 }
 
-/** try to parse result JSON and count an array field */
-function parseResultItemCount(execution: ToolExecution): number | null {
+/** parse the JSON output from a completed tool result */
+function parseToolOutput(execution: ToolExecution): Record<string, unknown> | null {
 	if (!execution.result || execution.result.isError) return null
 	try {
 		const parsed = JSON.parse(execution.result.output)
-		if (Array.isArray(parsed)) return parsed.length
-		// look for first array field
-		for (const val of Object.values(parsed)) {
-			if (Array.isArray(val)) return val.length
-		}
+		if (typeof parsed === 'object' && parsed !== null) return parsed
 	} catch {
 		// not json
 	}

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { getApiBaseUrl } from '$lib/api/client'
+	import { extractFileParts, extractMediaParts, hasAttachmentParts } from '$lib/chat/helpers'
+	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Bell from '$lib/components/icons/Bell.svelte'
 	import Brain from '$lib/components/icons/Brain.svelte'
@@ -7,7 +10,9 @@
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
+	import Film from '$lib/components/icons/Film.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
+	import Headphone from '$lib/components/icons/Headphone.svelte'
 	import Note from '$lib/components/icons/Note.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import Photo from '$lib/components/icons/Photo.svelte'
@@ -15,7 +20,10 @@
 	import { getThinkElapsed, getToolSummary, type ToolExecution } from '$lib/tools'
 	import { onDestroy } from 'svelte'
 	import { fade } from 'svelte/transition'
+	import CodeInterpreterBody from './steps/CodeInterpreterBody.svelte'
+	import FetchUrlBody from './steps/FetchUrlBody.svelte'
 	import MemoryRecallBody from './steps/MemoryRecallBody.svelte'
+	import ResourceBody from './steps/ResourceBody.svelte'
 	import WebSearchBody from './steps/WebSearchBody.svelte'
 
 	interface Props {
@@ -65,9 +73,19 @@
 
 	// collapsible body
 	let hasBody = $derived(
-		name === 'agentic_web_search' || name === 'memory_recall' || name === 'code_interpreter'
+		name === 'agentic_web_search' ||
+			name === 'memory_recall' ||
+			name === 'code_interpreter' ||
+			name === 'fetch_url' ||
+			(isDone && summary.resourceId != null)
 	)
-	let isExpanded = $state(true)
+	let isExpanded = $state(false)
+
+	// tool result attachments (images/files from tool message)
+	let resultAttachments = $derived(execution.result?.contentParts)
+	let hasResultAttachments = $derived(
+		resultAttachments != null && hasAttachmentParts(resultAttachments)
+	)
 
 	function toggleExpand() {
 		if (hasBody) isExpanded = !isExpanded
@@ -78,29 +96,35 @@
 	<!-- icon column - vertically centered with title row -->
 	<div class="relative mt-px flex h-5 w-6 shrink-0 items-center justify-center">
 		{#if name === 'think'}
-			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'agentic_web_search' || name === 'fetch_url'}
-			<GlobeAlt class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<GlobeAlt class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'memory_recall' || name === 'memory_create'}
-			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'note_get' || name === 'note_write'}
-			<Note class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Note class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'reminder_get' || name === 'reminder_write'}
-			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'file_get'}
-			<Document class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Document class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'file_edit'}
-			<Pencil class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Pencil class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'generate_image'}
-			<Photo class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Photo class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
+		{:else if name === 'generate_video'}
+			<Film class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
+		{:else if name === 'generate_audio'}
+			<Headphone class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'code_interpreter'}
-			<CommandLine class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<CommandLine
+				class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}"
+			/>
 		{:else if name === 'send_notification'}
-			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'reveal_attachment'}
-			<Eye class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Eye class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else}
-			<Sparkles class="h-4.5 w-4.5 {isFailed ? 'text-red-400' : 'text-foreground/80'}" />
+			<Sparkles class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{/if}
 
 		<!-- completion badge -->
@@ -133,7 +157,7 @@
 						>"{summary.subtitle}"</span
 					>
 				{/if}
-				{#if name === 'think' && thinkDisplay}
+				{#if name === 'think' && thinkDisplay && !isDone}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
 				{/if}
 				<ChevronRight
@@ -154,7 +178,7 @@
 						>"{summary.subtitle}"</span
 					>
 				{/if}
-				{#if name === 'think' && thinkDisplay}
+				{#if name === 'think' && thinkDisplay && !isDone}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
 				{/if}
 			</div>
@@ -165,18 +189,29 @@
 			<div class="mt-1.5 mb-1" in:fade={{ duration: 100 }}>
 				{#if name === 'agentic_web_search'}
 					<WebSearchBody {execution} />
+				{:else if name === 'fetch_url'}
+					<FetchUrlBody {execution} />
 				{:else if name === 'memory_recall'}
 					<MemoryRecallBody {execution} />
 				{:else if name === 'code_interpreter'}
-					<!-- code output -->
-					{#if execution.result}
-						<pre
-							class="bg-foreground/5 text-foreground/60 max-h-32 overflow-auto rounded-lg p-2.5 text-xs {execution
-								.result.isError
-								? 'text-red-300'
-								: ''}">{execution.result.output}</pre>
-					{/if}
+					<CodeInterpreterBody {execution} />
+				{:else if summary.resourceId && summary.resourceType}
+					<ResourceBody
+						{execution}
+						resourceType={summary.resourceType}
+						resourceId={summary.resourceId}
+					/>
 				{/if}
+			</div>
+		{/if}
+
+		<!-- tool result attachments (images, files) -->
+		{#if hasResultAttachments && resultAttachments}
+			<div class="mt-2">
+				<MediaAttachments
+					mediaParts={extractMediaParts(resultAttachments, getApiBaseUrl())}
+					fileParts={extractFileParts(resultAttachments, getApiBaseUrl())}
+				/>
 			</div>
 		{/if}
 	</div>

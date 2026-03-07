@@ -294,6 +294,10 @@ class E2bSettings(BaseModel):
 		default="code-interpreter-v1",
 		description="E2B sandbox template to use for code execution",
 	)
+	available_packages: list[str] = Field(
+		default_factory=list,
+		description="pre-installed Python packages available in the sandbox",
+	)
 
 
 CodeInterpreterEngine = Literal["native", "e2b"]
@@ -362,6 +366,10 @@ class VideoGenerationSettings(BaseModel):
 		default=False,
 		description="enable video generation capabilities",
 	)
+	model: str | None = Field(
+		default=None,
+		description="model ID referencing a Model ORM record with VIDEO type",
+	)
 
 
 class AudioGenerationSettings(BaseModel):
@@ -370,6 +378,10 @@ class AudioGenerationSettings(BaseModel):
 	enabled: bool = Field(
 		default=False,
 		description="enable audio generation capabilities",
+	)
+	model: str | None = Field(
+		default=None,
+		description="model ID referencing a Model ORM record with AUDIO type",
 	)
 
 
@@ -793,6 +805,16 @@ class SecuritySettings(BaseModel):
 		write_locked=True,
 		description="application secret key (env-only)",
 	)
+	previous_secret_keys: list[str] = settings_field(
+		[],
+		private=True,
+		write_locked=True,
+		description=(
+			"previous secret keys for decryption fallback "
+			"during key rotation (env-only). "
+			"set as comma-separated string or JSON array."
+		),
+	)
 	allow_signups: bool = Field(
 		default=True,
 		description="allow new user signups",
@@ -865,7 +887,12 @@ class SecuritySettings(BaseModel):
 		),
 	)
 
-	@field_validator("cors_origins", "allowed_hosts", mode="before")
+	@field_validator(
+		"cors_origins",
+		"allowed_hosts",
+		"previous_secret_keys",
+		mode="before",
+	)
 	@classmethod
 	def parse_comma_separated_strings(cls, v: str | list[str]) -> list[str]:
 		if isinstance(v, str):
@@ -1080,7 +1107,9 @@ class DefaultPermissionsSettings(BaseModel):
 
 
 # fields that use comma-separated strings instead of JSON arrays
-_CSV_FIELDS: frozenset[str] = frozenset({"cors_origins", "allowed_hosts"})
+_CSV_FIELDS: frozenset[str] = frozenset(
+	{"cors_origins", "allowed_hosts", "previous_secret_keys"}
+)
 
 
 class _LenientEnvSettingsSource(EnvSettingsSource):

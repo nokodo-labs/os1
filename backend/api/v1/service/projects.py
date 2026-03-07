@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
+from api.models.many_to_many import thread_project_association
 from api.models.project import Project
 from api.permissions import ResourceType
 from api.schemas.project import ProjectCreate, ProjectUpdate
@@ -38,6 +39,21 @@ async def _get_project(project_id: TypeID, session: AsyncSession) -> Project:
 			detail="project not found",
 		)
 	return project
+
+
+async def resolve_thread_project_id(
+	thread_id: TypeID,
+	session: AsyncSession,
+) -> str | None:
+	"""resolve the project_id associated with a thread, if any."""
+	row = (
+		await session.execute(
+			select(thread_project_association.c.project_id)
+			.where(thread_project_association.c.thread_id == str(thread_id))
+			.limit(1)
+		)
+	).first()
+	return row[0] if row else None
 
 
 async def load_projects(
