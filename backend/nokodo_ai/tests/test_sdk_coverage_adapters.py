@@ -227,10 +227,18 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	assert msgs[1]["role"] == "assistant"
 
 	# tool message should fall back to tool_call_id when provider data missing
-	system_text2, msgs2 = _messages_to_anthropic(
-		[user, ToolMessage(tool_call_id="x", tool_output="out", metadata={})]
+	assistant2 = AssistantMessage(
+		content=[],
+		tool_calls=[ToolCall(id="x", name="tool", arguments="{}", metadata={})],
 	)
-	assert msgs2[1]["content"][0]["tool_use_id"] == "x"  # type: ignore[index]
+	system_text2, msgs2 = _messages_to_anthropic(
+		[
+			user,
+			assistant2,
+			ToolMessage(tool_call_id="x", tool_output="out", metadata={}),
+		]
+	)
+	assert msgs2[2]["content"][0]["tool_use_id"] == "x"  # type: ignore[index]
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_anthropic([object()])  # type: ignore[list-item]

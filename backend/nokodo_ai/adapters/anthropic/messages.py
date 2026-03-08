@@ -607,13 +607,8 @@ def _messages_to_anthropic(
 					)
 					i += 1
 			case ToolMessage():
-				# truly orphaned tool result (no preceding assistant turn consumed it)
-				result.append(
-					{
-						"role": "user",
-						"content": [_tool_message_to_result_block(message)],
-					}
-				)
+				# skip orphaned tool results. anthropic requires tool_result
+				# blocks to immediately follow the assistant tool_use turn.
 				i += 1
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
