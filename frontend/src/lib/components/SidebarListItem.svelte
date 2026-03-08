@@ -42,7 +42,7 @@
 <div
 	role="button"
 	tabindex="0"
-	class={`group/sidebar-item ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-interactive-hover text-left transition-all duration-200 ${className}`}
+	class={`group/sidebar-item relative overflow-hidden ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-interactive-hover text-left transition-all duration-200 ${className}`}
 	style={selected
 		? 'background-color: rgb(var(--accent-rgb) / 0.3); border-color: rgb(var(--accent-rgb) / 0.55);'
 		: ''}
@@ -59,11 +59,18 @@
 	</div>
 
 	{#if actions}
-		<div
-			class={`shrink-0 ${actionsVisibility === 'always' ? 'opacity-100' : 'opacity-0 group-hover/sidebar-item:opacity-100'} transition-opacity duration-150`}
-		>
-			{@render actions()}
-		</div>
+		{#if actionsVisibility === 'always'}
+			<div class="shrink-0">
+				{@render actions()}
+			</div>
+		{:else}
+			<!-- overlay: no layout space taken; appears on top with gradient backdrop -->
+			<div
+				class="from-sidebar/90 pointer-events-none absolute inset-y-0 right-0 flex items-center bg-linear-to-l to-transparent pr-0.5 pl-4 opacity-0 transition-opacity duration-150 group-hover/sidebar-item:pointer-events-auto group-hover/sidebar-item:opacity-100"
+			>
+				{@render actions()}
+			</div>
+		{/if}
 	{/if}
 
 	{#if showChevron}
