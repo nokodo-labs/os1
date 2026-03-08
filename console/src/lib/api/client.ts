@@ -54,7 +54,9 @@ async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 		headers: req.headers,
 		body: req.body,
 		credentials: 'include',
-	})
+		// required by browsers when body is a ReadableStream
+		...(req.body ? { duplex: 'half' } : {}),
+	} as RequestInit)
 }
 
 /** authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
@@ -77,7 +79,8 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
 		headers,
 		body: req.body,
 		credentials: 'include',
-	})
+		...(req.body ? { duplex: 'half' } : {}),
+	} as RequestInit)
 	if (res.status !== 401) return res
 
 	// 401 - try refreshing once
@@ -91,7 +94,8 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
 		headers: retryHeaders,
 		body: reqClone.body,
 		credentials: 'include',
-	})
+		...(reqClone.body ? { duplex: 'half' } : {}),
+	} as RequestInit)
 }
 
 // ── clients ──────────────────────────────────────────────────────────
