@@ -20,8 +20,9 @@ class Thought(BaseModel):
 	text: str = Field(
 		...,
 		description=(
-			"the content of this thought. should be a concise statement or observation "
-			"that contributes to the agent's overall reasoning process."
+			"the content of this thought. should be a statement or observation "
+			"that contributes to your reasoning process. "
+			"escape characters properly to avoid failed JSON parsing."
 		),
 	)
 	summary: str = Field(
@@ -29,9 +30,7 @@ class Thought(BaseModel):
 		max_length=50,
 		description=(
 			"a very brief summary of this thought, ideally 3-5 words. "
-			"used for display purposes in the UI to give users a quick "
-			"overview of the agent's reasoning process. should capture "
-			"the essence of the thought in a few words."
+			"used to display to users an overview of your thought process."
 		),
 	)
 
@@ -44,7 +43,7 @@ class ChainOfThoughts(BaseModel):
 	thoughts: list[Thought] = Field(
 		min_length=1,
 		description=(
-			"list of individual thoughts that make up the agent's reasoning process."
+			"list of individual thoughts that make up your reasoning process."
 		),
 	)
 
@@ -55,15 +54,9 @@ class ThinkingTool(Tool[AppContext]):
 	name: str = Field(default="think")
 	description: str = Field(
 		default=(
-			"think, reason, and articulate your thought process in a "
-			"structured way. use this as your internal, private "
-			"scratchpad to work through complex problems. "
-			"use this tool every time you need to stop and reason "
-			"through something.\n\n"
-			"NEVER use this tool before saying anything to the user. "
-			"always prioritize feedback, by saying something like "
-			"'let me think about that' before using this tool for the "
-			"first time in your turn."
+			"think, reason, and articulate your thought process. "
+			"use this as your internal, private "
+			"scratchpad to work through complex problems."
 		)
 	)
 	parameters: JSONObject = Field(

@@ -962,22 +962,41 @@ async def create_message(
 	thread.current_message_id = message.id
 	await session.commit()
 
+	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
+
 	# emit message.created event with full message payload
 	message_data = MessageOut.model_validate(message).model_dump(
 		mode="json",
 	)
-	event = Event(
-		scope=EventScope.USER,
-		scope_id=principal.user_id,
-		type=EventType.MESSAGE_CREATED,
-		data=message_data,
-		user_id=principal.user_id,
-		thread_id=str(thread_id),
-		message_id=str(message.id),
-	)
 	await event_service.publish_event(
 		session,
-		event=event,
+		event=Event(
+			scope=EventScope.THREAD,
+			scope_id=str(thread_id),
+			type=EventType.MESSAGE_CREATED,
+			data=message_data,
+			user_id=principal.user_id,
+			thread_id=str(thread_id),
+			message_id=str(message.id),
+		),
+		origin_session_id=origin_session_id,
+	)
+
+	# emit thread.updated so all sessions reorder the sidebar by last_activity_at
+	await event_service.publish_event(
+		session,
+		event=Event(
+			scope=EventScope.THREAD,
+			scope_id=str(thread_id),
+			type=EventType.THREAD_UPDATED,
+			data={
+				"id": str(thread_id),
+				"last_activity_at": thread.last_activity_at.isoformat(),
+				"updated_at": thread.updated_at.isoformat(),
+			},
+			user_id=str(thread.owner_id),
+			thread_id=str(thread_id),
+		),
 		origin_session_id=origin_session_id,
 	)
 
@@ -1023,20 +1042,40 @@ async def update_user_message(
 	await session.refresh(message)
 
 	message_data = MessageOut.model_validate(message).model_dump(mode="json")
-	event = Event(
-		scope=EventScope.USER,
-		scope_id=principal.user_id,
-		type=EventType.MESSAGE_UPDATED,
-		data=message_data,
-		user_id=principal.user_id,
-		thread_id=str(thread_id),
-		message_id=str(message.id),
-	)
 	await event_service.publish_event(
 		session,
-		event=event,
+		event=Event(
+			scope=EventScope.THREAD,
+			scope_id=str(thread_id),
+			type=EventType.MESSAGE_UPDATED,
+			data=message_data,
+			user_id=principal.user_id,
+			thread_id=str(thread_id),
+			message_id=str(message.id),
+		),
 		origin_session_id=origin_session_id,
 	)
+
+	# emit thread.updated so all sessions reorder the sidebar
+	thread = await session.get(Thread, thread_id)
+	if thread:
+		await event_service.publish_event(
+			session,
+			event=Event(
+				scope=EventScope.THREAD,
+				scope_id=str(thread_id),
+				type=EventType.THREAD_UPDATED,
+				data={
+					"id": str(thread_id),
+					"last_activity_at": thread.last_activity_at.isoformat(),
+					"updated_at": thread.updated_at.isoformat(),
+				},
+				user_id=str(thread.owner_id),
+				thread_id=str(thread_id),
+			),
+			origin_session_id=origin_session_id,
+		)
+
 	return message
 
 
@@ -1140,26 +1179,43 @@ async def delete_user_message_turn(
 	await session.execute(sa_delete(Message).where(Message.id.in_(deleted_ids)))
 
 	# emit message.deleted event
-	event = Event(
-		scope=EventScope.USER,
-		scope_id=principal.user_id,
-		type=EventType.MESSAGE_DELETED,
-		data={
-			"thread_id": str(thread_id),
-			"message_id": str(message_id),
-			"parent_id": parent_id,
-			"deleted_ids": deleted_ids,
-		},
-		user_id=principal.user_id,
-		thread_id=str(thread_id),
-	)
 	await event_service.publish_event(
 		session,
-		event=event,
+		event=Event(
+			scope=EventScope.THREAD,
+			scope_id=str(thread_id),
+			type=EventType.MESSAGE_DELETED,
+			data={
+				"thread_id": str(thread_id),
+				"message_id": str(message_id),
+				"parent_id": parent_id,
+				"deleted_ids": deleted_ids,
+			},
+			user_id=principal.user_id,
+			thread_id=str(thread_id),
+		),
 		origin_session_id=origin_session_id,
 	)
 
-	await session.commit()
+	# emit thread.updated so all sessions reorder the sidebar
+	deleted_thread = await session.get(Thread, thread_id)
+	if deleted_thread:
+		await event_service.publish_event(
+			session,
+			event=Event(
+				scope=EventScope.THREAD,
+				scope_id=str(thread_id),
+				type=EventType.THREAD_UPDATED,
+				data={
+					"id": str(thread_id),
+					"last_activity_at": deleted_thread.last_activity_at.isoformat(),
+					"updated_at": deleted_thread.updated_at.isoformat(),
+				},
+				user_id=str(deleted_thread.owner_id),
+				thread_id=str(thread_id),
+			),
+			origin_session_id=origin_session_id,
+		)
 
 
 async def handle_typing_event(
