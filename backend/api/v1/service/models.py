@@ -497,9 +497,7 @@ async def _fetch_models_for_provider(
 			},
 			additional=provider.additional_headers,
 		)
-		return await _fetch_anthropic_models(
-			client, base_url=base_url, headers=headers
-		)
+		return await _fetch_anthropic_models(client, base_url=base_url, headers=headers)
 
 	if provider.adapter_type == "google":
 		api_key = provider.api_key
