@@ -7,6 +7,33 @@ All backend configuration is driven by two settings classes:
 
 ---
 
+## Frontend and Console env vars (Vite)
+
+Both the Svelte frontend (`frontend/`) and admin console (`console/`) read the API origin using the same three-level priority chain.
+
+### Shared resolution order
+
+1. `VITE_API_ORIGIN` - build-time override (baked into the bundle at `docker build` time)
+2. `/config.json` → `api_origin` - runtime override (written by the container entrypoint at startup)
+3. Browser fallback: `${window.location.protocol}//${window.location.hostname}:${VITE_API_PORT|1383}`
+
+### Build-time variables
+
+| Variable          | App  | Default | Description                                                                                           |
+| ----------------- | ---- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `VITE_API_ORIGIN` | both | `null`  | API origin baked in at build time (e.g. `https://api.example.com`). Takes highest priority.           |
+| `VITE_API_PORT`   | both | `1383`  | Fallback port used by the browser when neither `VITE_API_ORIGIN` nor `config.json` provide an origin. |
+
+### Runtime variable (Docker containers)
+
+| Variable     | Default                        | Description                                                                                                                                                                                           |
+| ------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_ORIGIN` | `""` (unset = use nginx proxy) | Passed to the container at start. The entrypoint writes it to `/usr/share/nginx/html/config.json`, which the app fetches at browser load time. Leave unset when nginx proxies `/v1` on the same host. |
+
+Both frontend and console containers include a `docker-entrypoint.sh` that generates `config.json` from this variable before starting nginx.
+
+---
+
 ## Boot settings (no prefix)
 
 These are read once at startup. No prefix required.

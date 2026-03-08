@@ -245,8 +245,14 @@ class ThreadCreateAndRunRequest(_RunBase):
 
 	``input`` is required (a new thread needs at least one user message).
 	the SSE stream emits a ``thread_created`` event before normal run events.
+
+	``thread_id`` is an optional client-generated TypeID. if provided, the
+	backend will attempt to use it. on conflict, a server-generated ID is
+	used instead - the client must read the ``thread_created`` event to
+	get the canonical ID.
 	"""
 
+	thread_id: TypeID | None = None
 	is_temporary: bool = False
 	tags: list[str] = Field(default_factory=list)
 	project_ids: list[TypeID] = Field(default_factory=list)

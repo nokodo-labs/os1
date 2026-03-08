@@ -374,7 +374,7 @@ async def upload_file(
 	return await store_file(
 		session,
 		data=file_data,
-		owner_id=TypeID(principal.user_id),
+		owner_id=principal.user_id,
 		filename=upload.filename,
 		content_type=content_type,
 		source=source,

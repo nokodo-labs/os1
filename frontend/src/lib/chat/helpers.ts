@@ -10,6 +10,8 @@ import type {
 	AttachmentStatus,
 	FileContentPart,
 	MediaContentPart,
+	OptimisticUserMessage,
+	PendingAttachment,
 	RunBlock,
 	RunItem,
 	StreamingAssistantState,
@@ -357,7 +359,7 @@ export interface BuildRunBlocksInput {
 	messages: ApiMessage[]
 	userId: string | null
 	streamingAssistant: StreamingAssistantState | null
-	optimisticUserMessage: { content: string; timestamp: Date } | null
+	optimisticUserMessage: OptimisticUserMessage | null
 	viewingStreamingBranch: boolean
 }
 
@@ -453,7 +455,8 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		if (optimisticUserMessage) {
 			block.items.push({
 				kind: 'optimistic_user',
-				content: optimisticUserMessage.content,
+				text: optimisticUserMessage.text,
+				attachments: optimisticUserMessage.attachments,
 				timestamp: optimisticUserMessage.timestamp,
 			})
 		}
@@ -480,7 +483,8 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		const block = ensureBlock(runId, optimisticUserMessage.timestamp, 'pending')
 		block.items.push({
 			kind: 'optimistic_user',
-			content: optimisticUserMessage.content,
+			text: optimisticUserMessage.text,
+			attachments: optimisticUserMessage.attachments,
 			timestamp: optimisticUserMessage.timestamp,
 		})
 	}
@@ -504,7 +508,12 @@ export function getBlockResponseItems(
 		): item is Exclude<
 			RunItem,
 			| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-			| { kind: 'optimistic_user'; content: string; timestamp: Date }
+			| {
+					kind: 'optimistic_user'
+					text: string
+					attachments: PendingAttachment[]
+					timestamp: Date
+			  }
 		> => item.kind !== 'user' && item.kind !== 'optimistic_user'
 	)
 }
@@ -516,6 +525,40 @@ export function getBlockFirstAssistant(block: RunBlock): ApiMessage | null {
 
 export function blockHasStreamingAssistant(block: RunBlock): boolean {
 	return block.items.some((item) => item.kind === 'streaming_assistant')
+}
+
+/** convert pending attachments to media parts for optimistic rendering before the real message arrives */
+export function pendingAttachmentsToMediaParts(
+	attachments: PendingAttachment[]
+): MediaContentPart[] {
+	return attachments
+		.filter(
+			(
+				a
+			): a is PendingAttachment & {
+				category: 'image' | 'audio' | 'video'
+				previewUrl: string
+			} => a.category !== 'file' && typeof a.previewUrl === 'string'
+		)
+		.map((a) => ({
+			type: a.category,
+			url: a.previewUrl,
+			filename: a.filename,
+			mediaType: a.mediaType,
+			fileId: a.fileId,
+		}))
+}
+
+/** convert pending attachments to file parts for optimistic rendering before the real message arrives */
+export function pendingAttachmentsToFileParts(attachments: PendingAttachment[]): FileContentPart[] {
+	return attachments
+		.filter((a) => a.category === 'file')
+		.map((a) => ({
+			type: 'file' as const,
+			filename: a.filename,
+			mediaType: a.mediaType,
+			fileId: a.fileId,
+		}))
 }
 
 // response item grouping

@@ -1,4 +1,4 @@
-export { api, authFetch, DEFAULT_API_BASE, rawApi, refreshAccessToken, unwrap } from './client'
+export { api, authFetch, getApiBaseUrl, rawApi, refreshAccessToken, unwrap } from './client'
 export type { ApiPaths } from './client'
 export { SystemService } from './system'
 export type { components, operations, paths } from './types'

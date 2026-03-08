@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { getApiBaseUrl } from '$lib/api/client'
-	import { extractFileParts, extractMediaParts } from '$lib/chat/helpers'
+	import {
+		extractFileParts,
+		extractMediaParts,
+		type FileContentPart,
+		type MediaContentPart,
+	} from '$lib/chat/helpers'
 	import type { ApiMessage } from '$lib/chat/types'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
@@ -16,6 +21,8 @@
 	interface Props {
 		content: string
 		contentParts?: ApiMessage['content']
+		optimisticMediaParts?: MediaContentPart[]
+		optimisticFileParts?: FileContentPart[]
 		timestamp?: Date
 		align?: 'left' | 'right'
 		actions?: Snippet
@@ -32,6 +39,8 @@
 	let {
 		content,
 		contentParts,
+		optimisticMediaParts,
+		optimisticFileParts,
 		timestamp,
 		align = 'right',
 		actions,
@@ -46,8 +55,12 @@
 	}: Props = $props()
 
 	const apiBase = getApiBaseUrl()
-	const mediaParts = $derived(contentParts ? extractMediaParts(contentParts, apiBase) : [])
-	const fileParts = $derived(contentParts ? extractFileParts(contentParts, apiBase) : [])
+	const mediaParts = $derived(
+		contentParts ? extractMediaParts(contentParts, apiBase) : (optimisticMediaParts ?? [])
+	)
+	const fileParts = $derived(
+		contentParts ? extractFileParts(contentParts, apiBase) : (optimisticFileParts ?? [])
+	)
 	const hasMedia = $derived(mediaParts.length > 0 || fileParts.length > 0)
 
 	let showActions = $state(false)

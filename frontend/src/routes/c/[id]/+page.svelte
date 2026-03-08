@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { getApiBaseUrl } from '$lib/api/client'
 	import {
@@ -12,6 +14,8 @@
 		getMessageCreatedAt,
 		groupResponseItems,
 		hasAttachmentParts,
+		pendingAttachmentsToFileParts,
+		pendingAttachmentsToMediaParts,
 		type ApiMessage,
 	} from '$lib/chat'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
@@ -43,6 +47,7 @@
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { untrack } from 'svelte'
+	import { SvelteDate } from 'svelte/reactivity'
 	import { fade } from 'svelte/transition'
 
 	// initialize chat state
@@ -115,6 +120,30 @@
 				return
 			}
 
+			// if a pending create-and-run targets this thread, skip the API fetch:
+			// the thread doesn't exist on the backend yet. use the optimistic stub
+			// from the cache and let the pending-stream handoff effect handle the rest.
+			const pending = chatStore.pendingCreateAndRun
+			if (pending && pending.threadId === threadId) {
+				const cached = chatStore.threadCache.get(threadId)
+				if (cached) {
+					chat.setThread(cached)
+					chatStore.activeThread = cached
+				}
+				chat.optimisticUserMessage = {
+					text: pending.text,
+					attachments: pending.attachments,
+					timestamp: new SvelteDate(),
+				}
+				chat.viewingStreamingBranch = true
+				chat.rebuildRunBlocks()
+				chat.isThreadLoading = false
+				chat.hasLoadedBranch = true
+				return () => {
+					chat.clearThread()
+				}
+			}
+
 			let cancelled = false
 			chat.isThreadLoading = true
 			chat.hasLoadedBranch = false
@@ -155,7 +184,13 @@
 		if (!pending || pending.threadId !== chat.thread.id) return
 		const stream = chatStore.consumePendingCreateAndRun(chat.thread.id)
 		if (!stream) return
-		chat.resumeCreateAndRun(stream, chat.thread.id)
+		const tid = chat.thread.id
+		chat.resumeCreateAndRun(stream, tid).then((result) => {
+			if (result?.resolvedThreadId && result.resolvedThreadId !== tid) {
+				// backend assigned a different thread ID (client ID conflict) - redirect
+				void goto(resolve(`/c/${result.resolvedThreadId}`), { replaceState: true })
+			}
+		})
 	})
 
 	// effects: pending chat start (for non-streaming handoffs)
@@ -279,7 +314,7 @@
 
 		// dependency reads to track changes
 		const streamingContent = chat.streamingAssistant?.content ?? ''
-		const optimisticContent = chat.optimisticUserMessage?.content ?? ''
+		const optimisticContent = chat.optimisticUserMessage?.text ?? ''
 		const blocksCount = chat.runBlocks.length
 		const keyboardOpen = device.virtualKeyboardOpen
 		void streamingContent
@@ -449,14 +484,22 @@
 										{/snippet}
 									</UserChatMessage>
 								{:else if item.kind === 'optimistic_user'}
+									{@const oMedia = pendingAttachmentsToMediaParts(
+										item.attachments
+									)}
+									{@const oFiles = pendingAttachmentsToFileParts(
+										item.attachments
+									)}
 									<UserChatMessage
-										content={item.content}
+										content={item.text}
+										optimisticMediaParts={oMedia}
+										optimisticFileParts={oFiles}
 										timestamp={item.timestamp}
 										tailStyle={bubbleTailStyle}
 										{showTail}
 									>
 										{#snippet actions()}
-											<CopyButton content={item.content} />
+											<CopyButton content={item.text} />
 										{/snippet}
 									</UserChatMessage>
 								{/if}

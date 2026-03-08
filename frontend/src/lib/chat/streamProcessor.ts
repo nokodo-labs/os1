@@ -5,10 +5,12 @@
 import {
 	runChatStream,
 	type ChatStreamDelta,
+	type CreateAndRunStreamDelta,
 	type RunInput,
 	type UnknownSseEvent,
 } from '$lib/api/streaming/chatStream'
 import type { ToolChoiceValue } from '$lib/chat/types'
+import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { notifications } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
@@ -329,16 +331,40 @@ export async function runThreadStream(
 
 /**
  * resume a create_and_run stream that was started on another page.
- * the generator has already yielded `thread_created` - this consumes
- * the remaining run deltas (message_created, delta, done, etc).
+ * consumes the leading `thread_created` event, then processes the
+ * remaining run deltas (message_created, delta, done, etc).
+ *
+ * if the backend resolved a different thread ID (e.g. client ID
+ * conflict), returns it so the caller can redirect.
  */
 export async function resumeCreateAndRun(
-	stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
-	threadId: string,
+	stream: AsyncGenerator<CreateAndRunStreamDelta, void, unknown>,
+	expectedThreadId: string,
 	ctx: ChatContext
-): Promise<void> {
+): Promise<{ resolvedThreadId: string } | void> {
 	ctx.runAbortController?.abort()
 	ctx.runAbortController = new AbortController()
+
+	// consume the thread_created event
+	const first = await stream.next()
+	if (first.done || !first.value) {
+		throw new Error('create_and_run stream ended unexpectedly')
+	}
+	if (first.value.event !== 'thread_created') {
+		throw new Error(`expected thread_created, got ${first.value.event}`)
+	}
+
+	const threadData = first.value.data
+	const resolvedId = threadData.id
+
+	// if the backend gave us a different ID (conflict), signal the caller
+	const idConflict = resolvedId !== expectedThreadId
+
+	// replace the optimistic thread stub with real data from the backend
+	const realThread = threadData as unknown as Thread
+	ctx.thread = realThread
+	chatStore.threadCache.set(realThread)
+	chatStore.activeThread = realThread
 
 	const runId = ctx.incrementActiveRun()
 	ctx.isGenerating = true
@@ -357,7 +383,13 @@ export async function resumeCreateAndRun(
 	ctx.rebuildRunBlocks()
 
 	try {
-		await consumeStream(stream, { runId, threadId, parentId: ctx.currentLeafId }, ctx)
+		// remaining events are ChatStreamDelta (thread_created consumed above)
+		const chatStream = stream as unknown as AsyncGenerator<ChatStreamDelta, void, unknown>
+		await consumeStream(
+			chatStream,
+			{ runId, threadId: resolvedId, parentId: ctx.currentLeafId },
+			ctx
+		)
 		if (runId !== ctx.activeRun) return
 		ctx.optimisticUserMessage = null
 		ctx.streamingAssistant = null
@@ -376,4 +408,6 @@ export async function resumeCreateAndRun(
 	} finally {
 		if (runId === ctx.activeRun) ctx.isGenerating = false
 	}
+
+	if (idConflict) return { resolvedThreadId: resolvedId }
 }

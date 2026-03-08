@@ -1,12 +1,13 @@
+import { apiOriginReady, getApiOrigin } from './origin'
+
 export type SystemStatusResponse = {
 	initialized: boolean
 }
 
-const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:1383'
-
 export class SystemService {
 	static async getSystemStatus(): Promise<SystemStatusResponse> {
-		const response = await fetch(`${DEFAULT_API_BASE}/system/status`, {
+		await apiOriginReady
+		const response = await fetch(`${getApiOrigin()}/system/status`, {
 			method: 'GET',
 			headers: { Accept: 'application/json' },
 			credentials: 'include',

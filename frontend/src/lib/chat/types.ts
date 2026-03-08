@@ -4,7 +4,7 @@
  * modules like helpers.ts or attachments.ts.
  */
 
-import type { ChatStreamDelta } from '$lib/api/streaming/chatStream'
+import type { CreateAndRunStreamDelta } from '$lib/api/streaming/chatStream'
 import type { components } from '$lib/api/types'
 import type { Thread } from '$lib/stores/chat.svelte'
 import type { ToolCall, ToolExecution, ToolExecutionTracker } from '$lib/tools'
@@ -72,6 +72,13 @@ export interface RunModifiers {
 	attachments: PendingAttachment[]
 }
 
+/** structured optimistic user message - mirrors what was sent to the API */
+export interface OptimisticUserMessage {
+	text: string
+	attachments: PendingAttachment[]
+	timestamp: Date
+}
+
 /** allowed tool_choice values that can be forced by the user */
 export type ToolChoiceValue = 'web_search' | 'think' | 'generate_image'
 
@@ -79,7 +86,7 @@ export type ToolChoiceValue = 'web_search' | 'think' | 'generate_image'
 
 export type RunItem =
 	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-	| { kind: 'optimistic_user'; content: string; timestamp: Date }
+	| { kind: 'optimistic_user'; text: string; attachments: PendingAttachment[]; timestamp: Date }
 	| { kind: 'assistant'; message: ApiMessage }
 	| { kind: 'tool'; toolCallId: string }
 	| { kind: 'streaming_assistant' }
@@ -128,7 +135,7 @@ export interface ChatContext {
 	streamingAssistantParentId: string | null
 	streamingLeafId: string | null
 	viewingStreamingBranch: boolean
-	optimisticUserMessage: { content: string; timestamp: Date } | null
+	optimisticUserMessage: OptimisticUserMessage | null
 	lastRunInput: string
 	inputValue: string
 	runAbortController: AbortController | null
@@ -219,9 +226,9 @@ export interface ChatState extends ChatContext {
 	handleSaveEditMessage(messageId: string, newContent: string): Promise<void>
 	handleSaveAsCopyMessage(messageId: string, newContent: string): Promise<void>
 	resumeCreateAndRun(
-		stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
+		stream: AsyncGenerator<CreateAndRunStreamDelta, void, unknown>,
 		threadId: string
-	): Promise<void>
+	): Promise<{ resolvedThreadId: string } | void>
 	requestDeleteUserMessage(messageId: string): void
 	deleteUserMessage(messageId: string): Promise<boolean>
 	switchBranch(messageId: string, direction: 'prev' | 'next'): Promise<void>

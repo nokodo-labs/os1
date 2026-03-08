@@ -55,6 +55,8 @@ services:
     restart: unless-stopped
     ports:
       - "888:80"
+    environment:
+      API_ORIGIN: ${API_ORIGIN:-}
     depends_on:
       backend:
         condition: service_started
@@ -65,6 +67,8 @@ services:
     restart: unless-stopped
     ports:
       - "8383:80"
+    environment:
+      API_ORIGIN: ${API_ORIGIN:-}
     depends_on:
       backend:
         condition: service_started

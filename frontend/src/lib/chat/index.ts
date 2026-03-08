@@ -8,6 +8,7 @@ export type {
 	AttachmentStatus,
 	ChatContext,
 	ChatState,
+	OptimisticUserMessage,
 	StreamDeltaContext,
 	ThreadAttachment,
 } from './types'
@@ -30,6 +31,8 @@ export {
 	getRunId,
 	groupResponseItems,
 	hasAttachmentParts,
+	pendingAttachmentsToFileParts,
+	pendingAttachmentsToMediaParts,
 	sdkPartsToText,
 	upsertToolCalls,
 	type ApiMessage,

@@ -62,7 +62,7 @@ class AppContext:
 
 	@property
 	def user_id(self) -> TypeID:
-		return TypeID(str(self.principal.user.id))
+		return self.principal.user_id
 
 	def with_emitter(self, emitter: EventEmitter) -> AppContext:
 		"""create a new context with a specific emitter."""

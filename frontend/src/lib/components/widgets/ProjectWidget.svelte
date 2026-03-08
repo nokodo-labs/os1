@@ -5,7 +5,8 @@
 	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { PopupMenu } from '$lib/components/primitives'
+	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { ResourceItem } from './types'
 

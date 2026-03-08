@@ -6,14 +6,27 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.models.many_to_many import user_role_association
 from api.models.role import Role
 from api.models.user import User
 from api.permissions import DefaultPermissions
 from api.schemas.role import RoleCreate, RoleUpdate
+from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 from api.v1.service.sorting import SortDir, apply_sort
+
+
+async def _role_member_ids(role_id: str, session: AsyncSession) -> list[str]:
+	"""return all user IDs assigned to a role."""
+	result = await session.execute(
+		select(user_role_association.c.user_id).where(
+			user_role_association.c.role_id == role_id,
+		)
+	)
+	return [str(uid) for uid in result.scalars().all()]
 
 
 async def list_roles(
@@ -144,8 +157,21 @@ async def delete_role(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="role not found",
 		)
+	# resolve affected users before deletion
+	member_ids = await _role_member_ids(role_id, session)
 	await session.delete(role)
 	await session.commit()
+
+	# notify affected users so frontends refresh permissions
+	if member_ids:
+		event = Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.ROLE_DELETED,
+			data={"role_id": role_id},
+			user_id=principal.user_id,
+		)
+		event_data = event_service._build_event_data(event)
+		await event_service.event_connections.send_to_users(member_ids, event_data)
 
 
 # role members
@@ -197,6 +223,8 @@ async def set_role_members(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="role not found",
 		)
+	# capture old members before clearing
+	old_member_ids = await _role_member_ids(role_id, session)
 	# clear existing members
 	await session.execute(
 		delete(user_role_association).where(
@@ -210,6 +238,21 @@ async def set_role_members(
 			[{"role_id": role_id, "user_id": uid} for uid in user_ids],
 		)
 	await session.commit()
+
+	# notify all affected users (old + new members) so frontends refresh
+	all_affected = set(old_member_ids) | set(user_ids)
+	if all_affected:
+		event = Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.ROLE_UPDATED,
+			data={"role_id": role_id},
+			user_id=principal.user_id,
+		)
+		event_data = event_service._build_event_data(event)
+		await event_service.event_connections.send_to_users(
+			list(all_affected), event_data
+		)
+
 	# return updated member list
 	return await list_role_members(
 		role_id, session, principal=principal, skip=0, limit=200

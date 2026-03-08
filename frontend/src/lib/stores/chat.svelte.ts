@@ -1,10 +1,11 @@
 import { browser, dev } from '$app/environment'
 import { apiClient } from '$lib/api/client'
-import type { ChatStreamDelta } from '$lib/api/streaming'
+import type { CreateAndRunStreamDelta } from '$lib/api/streaming'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import type { PendingAttachment } from '$lib/chat/types'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
@@ -12,7 +13,9 @@ export type Thread = components['schemas']['Thread']
 export type PendingChatStart = { threadId: string; content: string }
 export type PendingCreateAndRun = {
 	threadId: string
-	stream: AsyncGenerator<ChatStreamDelta, void, unknown>
+	text: string
+	attachments: PendingAttachment[]
+	stream: AsyncGenerator<CreateAndRunStreamDelta, void, unknown>
 }
 type ApiMessage = components['schemas']['Message']
 
@@ -309,7 +312,7 @@ class ChatStore {
 
 	consumePendingCreateAndRun = (
 		threadId: string
-	): AsyncGenerator<ChatStreamDelta, void, unknown> | null => {
+	): AsyncGenerator<CreateAndRunStreamDelta, void, unknown> | null => {
 		const value = this.pendingCreateAndRun
 		if (!value || value.threadId !== threadId) return null
 		this.pendingCreateAndRun = null

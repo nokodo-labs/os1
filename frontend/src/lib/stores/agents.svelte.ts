@@ -1,7 +1,12 @@
+import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
+import { onAccessTokenChanged } from '$lib/auth/session.svelte'
 
 export type Agent = components['schemas']['Agent']
+
+const AGENT_EVENT_TYPES = ['agent.created', 'agent.updated', 'agent.deleted']
 
 class AgentsStore {
 	list = $state<Agent[]>([])
@@ -10,6 +15,7 @@ class AgentsStore {
 
 	#loading = false
 	#pending: string[] = []
+	#unsubscribe: (() => void) | null = null
 
 	get = (agentId: string): Agent | null => this.byId[agentId] ?? null
 
@@ -62,6 +68,57 @@ class AgentsStore {
 		}
 		await Promise.all(unique.map((id) => this.ensure(id)))
 	}
+
+	#handleEvent = (message: StreamMessage): void => {
+		const eventType = message.type
+		if (!AGENT_EVENT_TYPES.includes(eventType)) return
+
+		const data = (message.data ?? message) as Record<string, unknown>
+		const agentId = data.id as string | undefined
+		if (!agentId) return
+
+		if (eventType === 'agent.deleted') {
+			this.list = this.list.filter((a) => a.id !== agentId)
+			const updated = { ...this.byId }
+			delete updated[agentId]
+			this.byId = updated
+			return
+		}
+
+		// agent.created or agent.updated - data contains full agent payload
+		const agent = data as unknown as Agent
+		if (eventType === 'agent.created') {
+			if (!this.byId[agentId]) {
+				this.list = [agent, ...this.list]
+			}
+		} else {
+			this.list = this.list.map((a) => (a.id === agentId ? agent : a))
+		}
+		this.byId = { ...this.byId, [agentId]: agent }
+	}
+
+	subscribe = (): void => {
+		if (!this.#unsubscribe) {
+			this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
+		}
+	}
+
+	unsubscribe = (): void => {
+		this.#unsubscribe?.()
+		this.#unsubscribe = null
+	}
 }
 
 export const agents = new AgentsStore()
+
+if (browser) {
+	onAccessTokenChanged((token) => {
+		if (token) {
+			agents.subscribe()
+		} else {
+			agents.unsubscribe()
+			agents.list = []
+			agents.byId = {}
+		}
+	})
+}

@@ -294,6 +294,7 @@ async def create_thread(
 	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
+	override_id: TypeID | None = None,
 ) -> Thread:
 	require_permission(principal, "threads:create")
 	owner_id = thread_in.owner_id
@@ -312,6 +313,8 @@ async def create_thread(
 	)
 	thread_data = thread_in.model_dump(by_alias=True, exclude={"project_ids"})
 	thread_data["owner_id"] = owner_id
+	if override_id is not None:
+		thread_data["id"] = override_id
 	thread = Thread(**thread_data)
 	thread.projects = projects
 	session.add(thread)
