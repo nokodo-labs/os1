@@ -145,7 +145,7 @@ def _infer_openai_modalities(model_id: str, model_type: ModelType) -> list[str]:
 	vision_tags = ("gpt-4o", "gpt-4-turbo", "gpt-4.1", "o1", "o3", "o4")
 	if any(tag in lid for tag in vision_tags):
 		return [InputModality.TEXT, InputModality.IMAGES]
-	return [InputModality.TEXT]
+	return _default_input_modalities(model_type.value)
 
 
 # -- openai parser -------------------------------------------------------------

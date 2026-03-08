@@ -2,6 +2,7 @@
 	import type { Schemas } from '$lib/api'
 
 	type Model = Schemas['Model']
+	type Provider = Schemas['Provider']
 
 	import {
 		Card,
@@ -28,7 +29,17 @@
 	type StorageBackend = 'local' | 's3'
 
 	function modelLabel(m: Model): string {
-		return m.display_name || m.name || m.id
+		const name = m.display_name || m.name || m.id
+		const provider = providers.find((p) => p.id === m.provider_id)
+		const providerName = provider?.name || m.provider_id
+		const adapterType = provider?.adapter_type
+		const modelAdapter = m.adapter
+		const adapterPart = adapterType
+			? modelAdapter && modelAdapter !== adapterType
+				? `${adapterType}/${modelAdapter}`
+				: adapterType
+			: (modelAdapter ?? null)
+		return [name, providerName, adapterPart].filter(Boolean).join(' · ')
 	}
 
 	type Props = {
@@ -71,6 +82,7 @@
 		storageS3RetryMode?: 'legacy' | 'standard' | 'adaptive'
 		// auxiliary
 		models?: Model[]
+		providers?: Provider[]
 		isFetchingModels?: boolean
 		modelsError?: string | null
 	}
@@ -109,6 +121,7 @@
 		storageS3MaxRetries = $bindable(''),
 		storageS3RetryMode = $bindable<'legacy' | 'standard' | 'adaptive'>('adaptive'),
 		models = [],
+		providers = [],
 		isFetchingModels = false,
 		modelsError = null,
 	}: Props = $props()
@@ -118,6 +131,8 @@
 		const m = models.find((x) => x.id === modelId)
 		return m ? modelLabel(m) : modelId
 	}
+
+	const embeddingModels = $derived(models.filter((m) => m.model_type === 'embedding'))
 </script>
 
 <Card class="border-zinc-800 bg-zinc-900">
@@ -150,7 +165,7 @@
 					</SelectTrigger>
 					<SelectContent>
 						<SelectItem value="">none</SelectItem>
-						{#each models as m (m.id)}
+						{#each embeddingModels as m (m.id)}
 							<SelectItem value={m.id}>{modelLabel(m)}</SelectItem>
 						{/each}
 					</SelectContent>

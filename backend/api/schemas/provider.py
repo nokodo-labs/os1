@@ -31,6 +31,7 @@ class ProviderCreate(ProviderBase):
 class ProviderUpdate(MetadataUpdateModel):
 	"""Partial provider update payload."""
 
+	name: str | None = None
 	adapter_type: str | None = None
 	provider_type: ProviderType | None = None
 	base_url: str | None = None

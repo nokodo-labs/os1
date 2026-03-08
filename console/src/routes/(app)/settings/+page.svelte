@@ -5,6 +5,7 @@
 	type DefaultPermissionsSettings = Schemas['DefaultPermissionsSettings']
 	type DefaultPermissionsSettingsPatch = Schemas['DefaultPermissionsSettingsPatch']
 	type Model = Schemas['Model']
+	type Provider = Schemas['Provider']
 	type SettingsResponse = Schemas['SettingsResponse']
 	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
 
@@ -62,6 +63,8 @@
 	let isFetchingModels = $state(false)
 	let modelsError = $state<string | null>(null)
 	let models = $state<Model[]>([])
+
+	let providers = $state<Provider[]>([])
 
 	// Read-only (env-only/write-locked) display values
 	let brandingAppVersion = $state<string>('')
@@ -1031,6 +1034,14 @@
 			modelsError = 'failed to load models'
 		} finally {
 			isFetchingModels = false
+		}
+	}
+
+	async function fetchProviders() {
+		try {
+			providers = unwrap(await api.GET('/v1/providers'))
+		} catch (e) {
+			console.error('Failed to fetch providers', e)
 		}
 	}
 
@@ -2163,7 +2174,7 @@
 	}
 
 	onMount(() => {
-		Promise.all([fetchSettings(), fetchAgents(), fetchModels()])
+		Promise.all([fetchSettings(), fetchAgents(), fetchModels(), fetchProviders()])
 	})
 </script>
 
@@ -2291,6 +2302,7 @@
 							bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
 							{agents}
 							{models}
+							{providers}
 							{isFetchingAgents}
 							{isFetchingModels}
 							{agentsError}
@@ -2362,6 +2374,7 @@
 							bind:storageS3MaxRetries={assetsStorageS3MaxRetries}
 							bind:storageS3RetryMode={assetsStorageS3RetryMode}
 							{models}
+							{providers}
 							{isFetchingModels}
 							{modelsError}
 						/>

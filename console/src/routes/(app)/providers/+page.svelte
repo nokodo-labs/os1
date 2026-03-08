@@ -205,6 +205,7 @@
 				unwrap(await api.POST('/v1/providers', { body: payload }))
 			} else if (editingId) {
 				const payload: ProviderUpdate = {
+					name: formState.name.trim() || undefined,
 					adapter_type: formState.adapter_type,
 					provider_type: formState.provider_type,
 					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
@@ -389,51 +390,58 @@
 					<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 						<div class="space-y-2">
 							<Label for="name">name</Label>
-							<div class="space-y-2">
-								<Label for="api_type">API type</Label>
-								<Select
-									value={formState.adapter_type}
-									onValueChange={(v: string) => (formState.adapter_type = v)}
-								>
-									<SelectTrigger id="api_type" class="rounded-xl">
-										<span class="truncate text-left">
-											{formState.adapter_type === 'openai'
-												? 'OpenAI'
-												: formState.adapter_type === 'google'
-													? 'Google'
-													: formState.adapter_type === 'anthropic'
-														? 'Anthropic'
-														: formState.adapter_type === 'ollama'
-															? 'Ollama'
-															: formState.adapter_type}
-										</span>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="openai">OpenAI</SelectItem>
-										<SelectItem value="google">Google</SelectItem>
-										<SelectItem value="anthropic">Anthropic</SelectItem>
-										<SelectItem value="ollama">Ollama</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
-							<div class="space-y-2">
-								<Label for="provider_type">provider type</Label>
-								<Select
-									value={formState.provider_type}
-									onValueChange={(v: string) =>
-										(formState.provider_type = v as ProviderType)}
-								>
-									<SelectTrigger id="provider_type" class="rounded-xl">
-										<span class="truncate text-left"
-											>{formState.provider_type}</span
-										>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="external">external</SelectItem>
-										<SelectItem value="local">local</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
+							<Input
+								id="name"
+								bind:value={formState.name}
+								placeholder="e.g. my openai provider"
+								class="rounded-xl"
+							/>
+						</div>
+
+						<div class="space-y-2">
+							<Label for="api_type">API type</Label>
+							<Select
+								value={formState.adapter_type}
+								onValueChange={(v: string) => (formState.adapter_type = v)}
+							>
+								<SelectTrigger id="api_type" class="rounded-xl">
+									<span class="truncate text-left">
+										{formState.adapter_type === 'openai'
+											? 'OpenAI'
+											: formState.adapter_type === 'google'
+												? 'Google'
+												: formState.adapter_type === 'anthropic'
+													? 'Anthropic'
+													: formState.adapter_type === 'ollama'
+														? 'Ollama'
+														: formState.adapter_type}
+									</span>
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="openai">OpenAI</SelectItem>
+									<SelectItem value="google">Google</SelectItem>
+									<SelectItem value="anthropic">Anthropic</SelectItem>
+									<SelectItem value="ollama">Ollama</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+
+						<div class="space-y-2">
+							<Label for="provider_type">provider type</Label>
+							<Select
+								value={formState.provider_type}
+								onValueChange={(v: string) =>
+									(formState.provider_type = v as ProviderType)}
+							>
+								<SelectTrigger id="provider_type" class="rounded-xl">
+									<span class="truncate text-left">{formState.provider_type}</span
+									>
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="external">external</SelectItem>
+									<SelectItem value="local">local</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
 
 						<div class="flex items-center justify-between">

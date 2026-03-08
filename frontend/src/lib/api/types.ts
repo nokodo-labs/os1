@@ -5543,6 +5543,8 @@ export interface components {
          */
         ProviderUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Name */
+            name?: string | null;
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -5552,8 +5554,6 @@ export interface components {
             api_key?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
-            /** Model Prefix */
-            model_prefix?: string | null;
             /** Additional Headers */
             additional_headers?: {
                 [key: string]: string;
