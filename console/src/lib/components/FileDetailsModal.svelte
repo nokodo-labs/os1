@@ -149,17 +149,6 @@
 				return 'text-zinc-400'
 		}
 	}
-
-	function mimeIcon(mime: string | null | undefined): string {
-		if (!mime) return 'file'
-		if (mime.startsWith('image/')) return 'image'
-		if (mime.startsWith('video/')) return 'video'
-		if (mime.startsWith('audio/')) return 'audio'
-		if (mime.includes('pdf')) return 'pdf'
-		if (mime.includes('zip') || mime.includes('archive')) return 'archive'
-		if (mime.includes('text') || mime.includes('json') || mime.includes('xml')) return 'text'
-		return 'file'
-	}
 </script>
 
 <Dialog.Root

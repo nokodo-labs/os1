@@ -48,7 +48,6 @@
 	let isAddingUser = $state(false)
 	let addUserError = $state<string | null>(null)
 	let allUsers = $state<User[]>([])
-	let isUsersLoading = $state(false)
 
 	function normalizePermissions(
 		input: DefaultPermissions_Input | DefaultPermissions_Output
@@ -101,13 +100,10 @@
 	}
 
 	async function fetchAllUsers() {
-		isUsersLoading = true
 		try {
 			allUsers = unwrap(await api.GET('/v1/users', { params: { query: { limit: 200 } } }))
 		} catch {
 			allUsers = []
-		} finally {
-			isUsersLoading = false
 		}
 	}
 

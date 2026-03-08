@@ -217,16 +217,25 @@ Well-known filenames appended to `base_url`: `favicon.ico`, `apple-touch-icon.pn
 
 #### Vector database (`NOKODO__ASSETS__VECTOR_DATABASE__*`)
 
-| Variable                                                        | Type   | Default                 | Description                                                                                        |
-| --------------------------------------------------------------- | ------ | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------- |
-| `NOKODO__ASSETS__VECTOR_DATABASE__PROVIDER`                     | string | `qdrant`                | Vector DB provider: `qdrant`, `pinecone`, `weaviate`, `milvus`, `pgvector`, `redis`, `opensearch`. |
-| `NOKODO__ASSETS__VECTOR_DATABASE__URL`                          | string | `http://localhost:6333` | Vector database endpoint URL.                                                                      |
-| `NOKODO__ASSETS__VECTOR_DATABASE__API_KEYS__QDRANT_API_KEY`     | string | `null`                  | private                                                                                            | Qdrant API key.     |
-| `NOKODO__ASSETS__VECTOR_DATABASE__API_KEYS__PINECONE_API_KEY`   | string | `null`                  | private                                                                                            | Pinecone API key.   |
-| `NOKODO__ASSETS__VECTOR_DATABASE__API_KEYS__WEAVIATE_API_KEY`   | string | `null`                  | private                                                                                            | Weaviate API key.   |
-| `NOKODO__ASSETS__VECTOR_DATABASE__API_KEYS__MILVUS_TOKEN`       | string | `null`                  | private                                                                                            | Milvus token.       |
-| `NOKODO__ASSETS__VECTOR_DATABASE__API_KEYS__REDIS_PASSWORD`     | string | `null`                  | private                                                                                            | Redis password.     |
-| `NOKODO__ASSETS__VECTOR_DATABASE__API_KEYS__OPENSEARCH_API_KEY` | string | `null`                  | private                                                                                            | OpenSearch API key. |
+| Variable                                               | Type   | Default       | Flags   | Description                                                                                                      |
+| ------------------------------------------------------ | ------ | ------------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `NOKODO__ASSETS__VECTOR_DATABASE__PROVIDER`            | string | `qdrant`      |         | Vector DB provider: `qdrant`, `chroma`, `pinecone`, `weaviate`, `milvus`, `pgvector`, `redis`, `opensearch`.     |
+| `NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL`         | string | `qdrant:6334` |         | Qdrant endpoint. Scheme-less `host:port` targets the gRPC port when `USE_GRPC=true`.                             |
+| `NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__USE_GRPC`    | bool   | `true`        |         | Prefer Qdrant gRPC transport. When enabled, the REST port stays on the client default unless you use a full URL. |
+| `NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__API_KEY`     | string | `null`        | private | Qdrant API key.                                                                                                  |
+| `NOKODO__ASSETS__VECTOR_DATABASE__CHROMA__URL`         | string | `null`        |         | Chroma endpoint URL stub.                                                                                        |
+| `NOKODO__ASSETS__VECTOR_DATABASE__CHROMA__API_KEY`     | string | `null`        | private | Chroma API key stub.                                                                                             |
+| `NOKODO__ASSETS__VECTOR_DATABASE__PINECONE__URL`       | string | `null`        |         | Pinecone endpoint URL stub.                                                                                      |
+| `NOKODO__ASSETS__VECTOR_DATABASE__PINECONE__API_KEY`   | string | `null`        | private | Pinecone API key.                                                                                                |
+| `NOKODO__ASSETS__VECTOR_DATABASE__WEAVIATE__URL`       | string | `null`        |         | Weaviate endpoint URL stub.                                                                                      |
+| `NOKODO__ASSETS__VECTOR_DATABASE__WEAVIATE__API_KEY`   | string | `null`        | private | Weaviate API key.                                                                                                |
+| `NOKODO__ASSETS__VECTOR_DATABASE__MILVUS__URL`         | string | `null`        |         | Milvus endpoint URL stub.                                                                                        |
+| `NOKODO__ASSETS__VECTOR_DATABASE__MILVUS__TOKEN`       | string | `null`        | private | Milvus token.                                                                                                    |
+| `NOKODO__ASSETS__VECTOR_DATABASE__PGVECTOR__URL`       | string | `null`        |         | Pgvector connection URL stub.                                                                                    |
+| `NOKODO__ASSETS__VECTOR_DATABASE__REDIS__URL`          | string | `null`        |         | Redis endpoint URL stub.                                                                                         |
+| `NOKODO__ASSETS__VECTOR_DATABASE__REDIS__PASSWORD`     | string | `null`        | private | Redis password.                                                                                                  |
+| `NOKODO__ASSETS__VECTOR_DATABASE__OPENSEARCH__URL`     | string | `null`        |         | OpenSearch endpoint URL stub.                                                                                    |
+| `NOKODO__ASSETS__VECTOR_DATABASE__OPENSEARCH__API_KEY` | string | `null`        | private | OpenSearch API key.                                                                                              |
 
 #### Vector search tuning (`NOKODO__ASSETS__VECTOR__*`)
 

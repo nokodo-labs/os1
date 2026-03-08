@@ -12,6 +12,7 @@ import re
 from collections.abc import Sequence
 from functools import lru_cache
 from typing import overload
+from urllib.parse import urlparse
 
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,18 +56,58 @@ fast filtered search by resource type and owner without full scans.
 # adapter and store setup
 
 
+def _is_local_qdrant_location(value: str) -> bool:
+	return (
+		value == ":memory:"
+		or value.startswith(("./", "../", "/", "\\"))
+		or bool(re.match(r"^[a-zA-Z]:[\\/]", value))
+	)
+
+
+def _parse_qdrant_endpoint(value: str) -> tuple[str, int | None, bool | None]:
+	if "://" in value:
+		parsed = urlparse(value)
+		if parsed.hostname is None:
+			raise RuntimeError(f"invalid qdrant url: {value}")
+		https = parsed.scheme == "https" if parsed.scheme else None
+		return parsed.hostname, parsed.port, https
+
+	host, separator, port_text = value.rpartition(":")
+	if separator and host and port_text.isdigit():
+		return host, int(port_text), None
+	return value, None, None
+
+
 def _vectorstore_adapter_config() -> dict[str, object]:
 	provider = settings.assets.vector_database.provider
-	value = settings.assets.vector_database.url
 
 	if provider == "qdrant":
+		qdrant = settings.assets.vector_database.qdrant
+		value = qdrant.url
 		config: dict[str, object]
-		if value == ":memory:" or "://" not in value:
+		if _is_local_qdrant_location(value):
 			config = {"type": "qdrant.vectorstore", "location": value}
 		else:
-			config = {"type": "qdrant.vectorstore", "base_url": value}
+			host, endpoint_port, https = _parse_qdrant_endpoint(value)
+			config = {
+				"type": "qdrant.vectorstore",
+				"host": host,
+				"use_grpc": qdrant.use_grpc,
+			}
+			if https is not None:
+				config["https"] = https
+			if qdrant.use_grpc:
+				if "://" in value:
+					if endpoint_port is not None:
+						config["port"] = endpoint_port
+				else:
+					config["port"] = 6333
+					if endpoint_port is not None:
+						config["grpc_port"] = endpoint_port
+			elif endpoint_port is not None:
+				config["port"] = endpoint_port
 
-		api_key = settings.assets.vector_database.api_keys.qdrant_api_key
+		api_key = qdrant.api_key
 		if api_key:
 			config["api_key"] = api_key
 		return config
@@ -87,6 +128,16 @@ def _vectorstore_adapter() -> VectorstoreAdapter:
 		"_adapter_init",
 		adapter=_vectorstore_adapter_config(),
 	).adapter
+
+
+async def reset_runtime_state() -> None:
+	"""clear cached vectorstore clients and collection state after settings changes."""
+	global _cached_collection_name
+	if _vectorstore_adapter.cache_info().currsize > 0:
+		await _vectorstore_adapter().close()
+	_vectorstore_adapter.cache_clear()
+	_cached_collection_name = None
+	_ensured_collections.clear()
 
 
 def get_vectorstore(*, collection: str) -> Vectorstore:

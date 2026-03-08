@@ -17,6 +17,7 @@
 
 	type VectorDatabaseProvider =
 		| 'qdrant'
+		| 'chroma'
 		| 'pinecone'
 		| 'weaviate'
 		| 'milvus'
@@ -35,7 +36,9 @@
 		// vector db
 		vectorDatabaseProvider?: VectorDatabaseProvider
 		vectorDatabaseUrl?: string
+		vectorDatabaseQdrantUseGrpc?: boolean
 		vectorDatabaseQdrantApiKey?: string
+		vectorDatabaseChromaApiKey?: string
 		vectorDatabasePineconeApiKey?: string
 		vectorDatabaseWeaviateApiKey?: string
 		vectorDatabaseMilvusToken?: string
@@ -76,7 +79,9 @@
 		defaultEmbeddingModelId = $bindable(''),
 		vectorDatabaseProvider = $bindable('qdrant'),
 		vectorDatabaseUrl = $bindable(''),
+		vectorDatabaseQdrantUseGrpc = $bindable(true),
 		vectorDatabaseQdrantApiKey = $bindable(''),
+		vectorDatabaseChromaApiKey = $bindable(''),
 		vectorDatabasePineconeApiKey = $bindable(''),
 		vectorDatabaseWeaviateApiKey = $bindable(''),
 		vectorDatabaseMilvusToken = $bindable(''),
@@ -168,6 +173,7 @@
 					</SelectTrigger>
 					<SelectContent>
 						<SelectItem value="qdrant">qdrant</SelectItem>
+						<SelectItem value="chroma">chroma</SelectItem>
 						<SelectItem value="pinecone">pinecone</SelectItem>
 						<SelectItem value="weaviate">weaviate</SelectItem>
 						<SelectItem value="milvus">milvus</SelectItem>
@@ -187,10 +193,25 @@
 			<Input
 				id="assets_vector_db_url"
 				bind:value={vectorDatabaseUrl}
-				placeholder="http://localhost:6333"
+				placeholder={vectorDatabaseProvider === 'qdrant' ? 'qdrant:6334' : ''}
 				class="rounded-xl"
 			/>
 		</div>
+
+		{#if vectorDatabaseProvider === 'qdrant'}
+			<div
+				class="flex items-center justify-between rounded-xl border border-zinc-800 px-4 py-3"
+			>
+				<div class="space-y-1">
+					<Label for="assets_qdrant_use_grpc">use qdrant gRPC</Label>
+					<p class="text-xs text-zinc-500">
+						when enabled, a scheme-less host:port like qdrant:6334 is treated as the
+						gRPC endpoint.
+					</p>
+				</div>
+				<Switch id="assets_qdrant_use_grpc" bind:checked={vectorDatabaseQdrantUseGrpc} />
+			</div>
+		{/if}
 
 		{#if vectorDatabaseProvider !== 'pgvector'}
 			<h4 class="pt-2 text-sm font-medium text-zinc-400">vector database API key</h4>
@@ -201,6 +222,16 @@
 						<Input
 							id="assets_qdrant_api_key"
 							bind:value={vectorDatabaseQdrantApiKey}
+							type="password"
+							class="rounded-xl"
+						/>
+					</div>
+				{:else if vectorDatabaseProvider === 'chroma'}
+					<div class="space-y-2">
+						<Label for="assets_chroma_api_key">chroma api key</Label>
+						<Input
+							id="assets_chroma_api_key"
+							bind:value={vectorDatabaseChromaApiKey}
 							type="password"
 							class="rounded-xl"
 						/>

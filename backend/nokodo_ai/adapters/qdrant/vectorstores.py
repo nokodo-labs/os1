@@ -47,12 +47,12 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	operations through unified add() and search() methods.
 
 	usage:
-		# local instance
-		adapter = QdrantVectorstoreAdapter(url="http://localhost:6333")
+		# local instance over gRPC
+		adapter = QdrantVectorstoreAdapter(host="qdrant", grpc_port=6334)
 
 		# Qdrant Cloud
 		adapter = QdrantVectorstoreAdapter(
-			url="https://xyz.qdrant.io",
+			base_url="https://xyz.qdrant.io",
 			api_key="your-api-key",
 		)
 

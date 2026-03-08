@@ -19,7 +19,7 @@ function resolvedUrl(req: Request): string {
 	return origin + url.pathname + url.search + url.hash
 }
 
-// ── deduped refresh ──────────────────────────────────────────────────
+// deduped refresh
 let refreshInFlight: Promise<string | null> | null = null
 
 export async function refreshAccessToken(): Promise<string | null> {
@@ -42,7 +42,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 	return refreshInFlight
 }
 
-// ── fetch wrappers ───────────────────────────────────────────────────
+// fetch wrappers
 
 /** raw fetch: cookies included, no Authorization header, no auth gate. */
 async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -98,7 +98,7 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
 	} as RequestInit)
 }
 
-// ── clients ──────────────────────────────────────────────────────────
+// clients
 
 /** unauthenticated client - for login, register, refresh, logout, etc. */
 export const rawApi = createClient<ApiPaths>({

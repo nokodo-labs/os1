@@ -594,6 +594,7 @@ class VectorDatabaseProvider(StrEnum):
 	"""supported vector database providers."""
 
 	QDRANT = "qdrant"
+	CHROMA = "chroma"
 	PINECONE = "pinecone"
 	WEAVIATE = "weaviate"
 	MILVUS = "milvus"
@@ -602,35 +603,90 @@ class VectorDatabaseProvider(StrEnum):
 	OPENSEARCH = "opensearch"
 
 
-class VectorDatabaseApiKeys(BaseModel):
-	"""provider-specific credentials for vector databases."""
+class QdrantVectorDatabaseSettings(BaseModel):
+	"""qdrant provider settings."""
 
-	qdrant_api_key: str | None = settings_field(
+	url: str = Field(
+		default="qdrant:6334",
+		description="qdrant endpoint. host:port targets gRPC when use_grpc is enabled",
+	)
+	use_grpc: bool = Field(
+		default=True,
+		description="use qdrant gRPC transport when available",
+	)
+	api_key: str | None = settings_field(
 		default=None,
 		private=True,
 		description="api key for qdrant",
 	)
-	pinecone_api_key: str | None = settings_field(
+
+
+class ChromaVectorDatabaseSettings(BaseModel):
+	"""chroma provider settings stub."""
+
+	url: str | None = Field(default=None, description="chroma endpoint url")
+	api_key: str | None = settings_field(
+		default=None,
+		private=True,
+		description="api key for chroma",
+	)
+
+
+class PineconeVectorDatabaseSettings(BaseModel):
+	"""pinecone provider settings stub."""
+
+	url: str | None = Field(default=None, description="pinecone endpoint url")
+	api_key: str | None = settings_field(
 		default=None,
 		private=True,
 		description="api key for pinecone",
 	)
-	weaviate_api_key: str | None = settings_field(
+
+
+class WeaviateVectorDatabaseSettings(BaseModel):
+	"""weaviate provider settings stub."""
+
+	url: str | None = Field(default=None, description="weaviate endpoint url")
+	api_key: str | None = settings_field(
 		default=None,
 		private=True,
 		description="api key for weaviate",
 	)
-	milvus_token: str | None = settings_field(
+
+
+class MilvusVectorDatabaseSettings(BaseModel):
+	"""milvus provider settings stub."""
+
+	url: str | None = Field(default=None, description="milvus endpoint url")
+	token: str | None = settings_field(
 		default=None,
 		private=True,
 		description="token for milvus",
 	)
-	redis_password: str | None = settings_field(
+
+
+class PgvectorVectorDatabaseSettings(BaseModel):
+	"""pgvector provider settings stub."""
+
+	url: str | None = Field(default=None, description="pgvector connection url")
+
+
+class RedisVectorDatabaseSettings(BaseModel):
+	"""redis provider settings stub."""
+
+	url: str | None = Field(default=None, description="redis endpoint url")
+	password: str | None = settings_field(
 		default=None,
 		private=True,
 		description="password for redis",
 	)
-	opensearch_api_key: str | None = settings_field(
+
+
+class OpensearchVectorDatabaseSettings(BaseModel):
+	"""opensearch provider settings stub."""
+
+	url: str | None = Field(default=None, description="opensearch endpoint url")
+	api_key: str | None = settings_field(
 		default=None,
 		private=True,
 		description="api key for opensearch",
@@ -644,13 +700,37 @@ class VectorDatabaseSettings(BaseModel):
 		default=VectorDatabaseProvider.QDRANT,
 		description="vector database provider",
 	)
-	url: str = Field(
-		default="http://localhost:6333",
-		description="vector database endpoint url or local mode location",
+	qdrant: QdrantVectorDatabaseSettings = Field(
+		default_factory=QdrantVectorDatabaseSettings,
+		description="qdrant provider settings",
 	)
-	api_keys: VectorDatabaseApiKeys = Field(
-		default_factory=VectorDatabaseApiKeys,
-		description="provider-specific api key and token settings",
+	chroma: ChromaVectorDatabaseSettings = Field(
+		default_factory=ChromaVectorDatabaseSettings,
+		description="chroma provider settings stub",
+	)
+	pinecone: PineconeVectorDatabaseSettings = Field(
+		default_factory=PineconeVectorDatabaseSettings,
+		description="pinecone provider settings stub",
+	)
+	weaviate: WeaviateVectorDatabaseSettings = Field(
+		default_factory=WeaviateVectorDatabaseSettings,
+		description="weaviate provider settings stub",
+	)
+	milvus: MilvusVectorDatabaseSettings = Field(
+		default_factory=MilvusVectorDatabaseSettings,
+		description="milvus provider settings stub",
+	)
+	pgvector: PgvectorVectorDatabaseSettings = Field(
+		default_factory=PgvectorVectorDatabaseSettings,
+		description="pgvector provider settings stub",
+	)
+	redis: RedisVectorDatabaseSettings = Field(
+		default_factory=RedisVectorDatabaseSettings,
+		description="redis provider settings stub",
+	)
+	opensearch: OpensearchVectorDatabaseSettings = Field(
+		default_factory=OpensearchVectorDatabaseSettings,
+		description="opensearch provider settings stub",
 	)
 
 

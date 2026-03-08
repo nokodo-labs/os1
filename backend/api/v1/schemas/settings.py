@@ -70,21 +70,72 @@ class MediaSettingsPatch(BaseModel):
 	)
 
 
-class VectorDatabaseApiKeysPatch(BaseModel):
+class QdrantVectorDatabaseSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	qdrant_api_key: str | None = Field(default=None, description="api key for qdrant")
-	pinecone_api_key: str | None = Field(
+	url: str | None = Field(default=None, description="qdrant endpoint url")
+	use_grpc: bool | None = Field(
+		default=None,
+		description="use qdrant gRPC transport when available",
+	)
+	api_key: str | None = Field(default=None, description="api key for qdrant")
+
+
+class ChromaVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="chroma endpoint url")
+	api_key: str | None = Field(
+		default=None,
+		description="api key for chroma",
+	)
+
+
+class PineconeVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="pinecone endpoint url")
+	api_key: str | None = Field(
 		default=None,
 		description="api key for pinecone",
 	)
-	weaviate_api_key: str | None = Field(
+
+
+class WeaviateVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="weaviate endpoint url")
+	api_key: str | None = Field(
 		default=None,
 		description="api key for weaviate",
 	)
-	milvus_token: str | None = Field(default=None, description="token for milvus")
-	redis_password: str | None = Field(default=None, description="password for redis")
-	opensearch_api_key: str | None = Field(
+
+
+class MilvusVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="milvus endpoint url")
+	token: str | None = Field(default=None, description="token for milvus")
+
+
+class PgvectorVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="pgvector connection url")
+
+
+class RedisVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="redis endpoint url")
+	password: str | None = Field(default=None, description="password for redis")
+
+
+class OpensearchVectorDatabaseSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	url: str | None = Field(default=None, description="opensearch endpoint url")
+	api_key: str | None = Field(
 		default=None,
 		description="api key for opensearch",
 	)
@@ -96,6 +147,7 @@ class VectorDatabaseSettingsPatch(BaseModel):
 	provider: (
 		Literal[
 			"qdrant",
+			"chroma",
 			"pinecone",
 			"weaviate",
 			"milvus",
@@ -108,8 +160,14 @@ class VectorDatabaseSettingsPatch(BaseModel):
 		default=None,
 		description="vector database provider",
 	)
-	url: str | None = Field(default=None, description="vector database endpoint url")
-	api_keys: VectorDatabaseApiKeysPatch | None = None
+	qdrant: QdrantVectorDatabaseSettingsPatch | None = None
+	chroma: ChromaVectorDatabaseSettingsPatch | None = None
+	pinecone: PineconeVectorDatabaseSettingsPatch | None = None
+	weaviate: WeaviateVectorDatabaseSettingsPatch | None = None
+	milvus: MilvusVectorDatabaseSettingsPatch | None = None
+	pgvector: PgvectorVectorDatabaseSettingsPatch | None = None
+	redis: RedisVectorDatabaseSettingsPatch | None = None
+	opensearch: OpensearchVectorDatabaseSettingsPatch | None = None
 
 
 class VectorSettingsPatch(BaseModel):

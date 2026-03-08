@@ -5,6 +5,8 @@ all tests are pure unit tests - no db, no qdrant connection required.
 
 from __future__ import annotations
 
+from api.settings import settings
+from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.vectorstores import acl_filter, resource_filter
 from nokodo_ai.adapters.base.vectorstores import ChunkFilter, FieldMatch, FieldMatchAny
 
@@ -152,3 +154,36 @@ def test_acl_filter_tuple_and_list_group_ids_equivalent() -> None:
 	list_entries = match_any_entries(f_list.any_of)
 	tuple_entries = match_any_entries(f_tuple.any_of)
 	assert list_entries[0].values == tuple_entries[0].values
+
+
+def test_vectorstore_adapter_config_uses_qdrant_grpc_settings() -> None:
+	original_url = settings.assets.vector_database.qdrant.url
+	original_use_grpc = settings.assets.vector_database.qdrant.use_grpc
+	original_api_key = settings.assets.vector_database.qdrant.api_key
+	try:
+		settings.assets.vector_database.qdrant.url = "qdrant:6334"
+		settings.assets.vector_database.qdrant.use_grpc = True
+		settings.assets.vector_database.qdrant.api_key = "secret"
+
+		config = vectorstores_service._vectorstore_adapter_config()
+
+		assert config["type"] == "qdrant.vectorstore"
+		assert config["host"] == "qdrant"
+		assert config["port"] == 6333
+		assert config["grpc_port"] == 6334
+		assert config["use_grpc"] is True
+		assert config["api_key"] == "secret"
+	finally:
+		settings.assets.vector_database.qdrant.url = original_url
+		settings.assets.vector_database.qdrant.use_grpc = original_use_grpc
+		settings.assets.vector_database.qdrant.api_key = original_api_key
+
+
+def test_vectorstore_adapter_config_supports_memory_mode() -> None:
+	original_url = settings.assets.vector_database.qdrant.url
+	try:
+		settings.assets.vector_database.qdrant.url = ":memory:"
+		config = vectorstores_service._vectorstore_adapter_config()
+		assert config == {"type": "qdrant.vectorstore", "location": ":memory:"}
+	finally:
+		settings.assets.vector_database.qdrant.url = original_url

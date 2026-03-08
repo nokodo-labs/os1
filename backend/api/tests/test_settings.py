@@ -14,6 +14,7 @@ from api.models.setting import SettingsDocument
 from api.settings import (
 	BrandingSettings,
 	DbSettingsSource,
+	QdrantVectorDatabaseSettings,
 	SecuritySettings,
 	Settings,
 	settings,
@@ -79,10 +80,12 @@ def test_settings_field_flags_and_private_dump() -> None:
 	full = settings.custom_dump(exclude_private=False)
 	assert "secret_key" in full["security"]
 	assert "analytics_key" in full["branding"]
+	assert "api_key" in full["assets"]["vector_database"]["qdrant"]
 
 	public = settings.custom_dump(exclude_private=True)
 	assert "secret_key" not in public["security"]
 	assert "analytics_key" not in public["branding"]
+	assert "api_key" not in public["assets"]["vector_database"]["qdrant"]
 
 	# exercise both branches of the cors_origins validator
 	security_from_list = SecuritySettings.model_validate({"cors_origins": ["http://x"]})
@@ -123,6 +126,12 @@ def test_settings_field_helper_sets_flags() -> None:
 		"private": True,
 		"write_locked": True,
 	}
+
+
+def test_qdrant_vector_database_defaults() -> None:
+	config = QdrantVectorDatabaseSettings()
+	assert config.url == "qdrant:6334"
+	assert config.use_grpc is True
 
 
 @pytest.mark.asyncio
