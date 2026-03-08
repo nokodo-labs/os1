@@ -109,6 +109,8 @@ services:
     restart: unless-stopped
     ports:
       - "8383:80"
+    environment:
+      API_ORIGIN: ${API_ORIGIN:-http://localhost:1383}
     depends_on:
       backend:
         condition: service_started

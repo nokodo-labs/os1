@@ -100,6 +100,10 @@ class EventType(StrEnum):
 	# --- user events ---
 	USER_PREFERENCES_UPDATED = "user.preferences_updated"
 
+	# --- role events ---
+	ROLE_UPDATED = "role.updated"
+	ROLE_DELETED = "role.deleted"
+
 	# --- attachment lifecycle events ---
 	ATTACHMENT_DECAYED = "attachment.decayed"
 	ATTACHMENT_REVEALED = "attachment.revealed"

@@ -128,8 +128,8 @@ class Principal:
 	global_action_permissions: frozenset[str] = field(default_factory=frozenset)
 
 	@property
-	def user_id(self) -> str:
-		return str(self.user.id)
+	def user_id(self) -> TypeID:
+		return self.user.id
 
 	def has_default_access(
 		self,

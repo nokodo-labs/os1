@@ -1,7 +1,11 @@
+import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
+import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import { getJwtUserId } from '$lib/auth/jwt'
-import { getAccessToken } from '$lib/auth/session.svelte'
+import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { session } from '$lib/stores/session.svelte'
+
+const ROLE_EVENT_TYPES = ['role.updated', 'role.deleted']
 
 class PermissionsStore {
 	list = $state<string[] | null>(null)
@@ -9,6 +13,8 @@ class PermissionsStore {
 	error = $state<string | null>(null)
 
 	readonly isSuperuser = $derived(Boolean(session.currentUser?.is_superuser))
+
+	#unsubscribe: (() => void) | null = null
 
 	hasPermission = (permission: string): boolean => {
 		if (this.isSuperuser) return true
@@ -49,6 +55,35 @@ class PermissionsStore {
 		this.error = null
 		this.isLoading = false
 	}
+
+	#handleEvent = (message: StreamMessage): void => {
+		if (!ROLE_EVENT_TYPES.includes(message.type)) return
+		// role changed - refresh permissions (and user data for role changes)
+		void this.refresh()
+		void session.refreshUser()
+	}
+
+	subscribe = (): void => {
+		if (!this.#unsubscribe) {
+			this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
+		}
+	}
+
+	unsubscribe = (): void => {
+		this.#unsubscribe?.()
+		this.#unsubscribe = null
+	}
 }
 
 export const permissions = new PermissionsStore()
+
+if (browser) {
+	onAccessTokenChanged((token) => {
+		if (token) {
+			permissions.subscribe()
+		} else {
+			permissions.unsubscribe()
+			permissions.clear()
+		}
+	})
+}

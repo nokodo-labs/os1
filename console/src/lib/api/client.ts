@@ -1,6 +1,6 @@
-import { browser } from '$app/environment'
 import { authReady, clearAccessToken, getAccessToken, setAccessToken } from '$lib/auth.svelte'
 import createClient from 'openapi-fetch'
+import { apiOriginReady, getApiOrigin } from './origin'
 import type { paths } from './types'
 
 type PrefixedPaths<P, Prefix extends string> = {
@@ -9,16 +9,15 @@ type PrefixedPaths<P, Prefix extends string> = {
 
 export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
 
-function getApiBase(): string {
-	if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
-	if (!browser) return 'http://localhost:1383'
-	const portFromEnv = Number.parseInt(import.meta.env.VITE_API_PORT || '', 10)
-	const apiPort = Number.isFinite(portFromEnv) ? portFromEnv : 1383
-	return `${window.location.protocol}//${window.location.hostname}:${apiPort}`
-}
+export { getApiOrigin as getApiBaseUrl }
 
-const DEFAULT_API_BASE = getApiBase()
-export { DEFAULT_API_BASE }
+// rewrite the URL's origin to the resolved API origin
+function resolvedUrl(req: Request): string {
+	const origin = getApiOrigin()
+	if (!origin) return req.url
+	const url = new URL(req.url)
+	return origin + url.pathname + url.search + url.hash
+}
 
 // ── deduped refresh ──────────────────────────────────────────────────
 let refreshInFlight: Promise<string | null> | null = null
@@ -47,16 +46,27 @@ export async function refreshAccessToken(): Promise<string | null> {
 
 /** raw fetch: cookies included, no Authorization header, no auth gate. */
 async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	await apiOriginReady
 	const req = input instanceof Request ? input : new Request(input, init)
-	return fetch(new Request(req, { credentials: 'include' }))
+	const url = resolvedUrl(req)
+	return fetch(url, {
+		method: req.method,
+		headers: req.headers,
+		body: req.body,
+		credentials: 'include',
+		// required by browsers when body is a ReadableStream
+		...(req.body ? { duplex: 'half' } : {}),
+	} as RequestInit)
 }
 
 /** authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
 export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	await apiOriginReady
 	await authReady
 
 	const req = input instanceof Request ? input : new Request(input, init)
-	const retryReq = req.clone()
+	const reqClone = req.clone()
+	const url = resolvedUrl(req)
 
 	const token = getAccessToken()
 	const headers = new Headers(req.headers)
@@ -64,29 +74,41 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
 		headers.set('Authorization', `Bearer ${token}`)
 	}
 
-	const res = await fetch(new Request(req, { headers, credentials: 'include' }))
+	const res = await fetch(url, {
+		method: req.method,
+		headers,
+		body: req.body,
+		credentials: 'include',
+		...(req.body ? { duplex: 'half' } : {}),
+	} as RequestInit)
 	if (res.status !== 401) return res
 
 	// 401 - try refreshing once
 	const refreshed = await refreshAccessToken()
 	if (!refreshed) return res
 
-	const retryHeaders = new Headers(retryReq.headers)
+	const retryHeaders = new Headers(reqClone.headers)
 	retryHeaders.set('Authorization', `Bearer ${refreshed}`)
-	return fetch(new Request(retryReq, { headers: retryHeaders, credentials: 'include' }))
+	return fetch(url, {
+		method: reqClone.method,
+		headers: retryHeaders,
+		body: reqClone.body,
+		credentials: 'include',
+		...(reqClone.body ? { duplex: 'half' } : {}),
+	} as RequestInit)
 }
 
 // ── clients ──────────────────────────────────────────────────────────
 
 /** unauthenticated client - for login, register, refresh, logout, etc. */
 export const rawApi = createClient<ApiPaths>({
-	baseUrl: DEFAULT_API_BASE,
+	baseUrl: '',
 	fetch: rawFetch,
 })
 
 /** authenticated client - waits for auth, injects Bearer, auto-retries on 401. */
 export const api = createClient<ApiPaths>({
-	baseUrl: DEFAULT_API_BASE,
+	baseUrl: '',
 	fetch: authFetch,
 })
 

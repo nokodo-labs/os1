@@ -98,6 +98,7 @@ async def create_and_run(
 		principal=principal,
 		agent_id=req.agent_id,
 		input=req.input,
+		thread_id=req.thread_id,
 		is_temporary=req.is_temporary,
 		tags=req.tags,
 		project_ids=req.project_ids,

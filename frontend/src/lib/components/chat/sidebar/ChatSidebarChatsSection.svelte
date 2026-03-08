@@ -33,13 +33,13 @@
 			class="via-foreground/18 h-px w-full bg-linear-to-r from-transparent to-transparent"
 		></div>
 	</div>
-	<div class="flex min-h-0 w-full flex-1 flex-col gap-1.5 overflow-hidden">
-		<div class="mt-2 mb-1 flex items-center gap-2 px-5">
-			<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
-			<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
-		</div>
+	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div class="flex min-h-full flex-col space-y-0.5 px-3">
+				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
+					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
+					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
+				</div>
 				{#if !isLoggedIn}
 					<div class="flex flex-1 flex-col items-center justify-center">
 						<div

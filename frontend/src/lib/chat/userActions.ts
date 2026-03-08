@@ -52,7 +52,11 @@ export async function handleSendMessage(
 
 	if (!selectedAgent) {
 		ctx.lastRunInput = displayText
-		ctx.optimisticUserMessage = { content: displayText, timestamp: new SvelteDate() }
+		ctx.optimisticUserMessage = {
+			text: trimmed,
+			attachments: modifiers?.attachments ?? [],
+			timestamp: new SvelteDate(),
+		}
 		ctx.viewingStreamingBranch = true
 		ctx.streamingAssistant = {
 			runId: null,
@@ -69,7 +73,11 @@ export async function handleSendMessage(
 	}
 	ctx.lastRunInput = displayText
 	ctx.inputValue = ''
-	ctx.optimisticUserMessage = { content: displayText, timestamp: new SvelteDate() }
+	ctx.optimisticUserMessage = {
+		text: trimmed,
+		attachments: modifiers?.attachments ?? [],
+		timestamp: new SvelteDate(),
+	}
 	const shouldAutoScroll = ctx.scrollContainer ? computeIsAtBottom(ctx.scrollContainer) : true
 	ctx.isGenerating = true
 	ctx.streamingAssistant = null

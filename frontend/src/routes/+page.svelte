@@ -7,12 +7,9 @@
 	import { getAccessToken } from '$lib/auth/session.svelte'
 	import { deriveToolChoice, type RunModifiers } from '$lib/chat/attachments'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
-	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
-	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
 	import TemporaryChatToggleButton from '$lib/components/chat/TemporaryChatToggleButton.svelte'
-	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import AppsGrid from '$lib/components/home/AppsGrid.svelte'
 	import HomeSuggestions, {
 		type SuggestionAction,
@@ -22,23 +19,21 @@
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
-	import { agents } from '$lib/stores/agents.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
-	import { preferences } from '$lib/stores/preferences.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { session } from '$lib/stores/session.svelte'
+	import { newTypeid } from '$lib/utils/typeid'
 	import { fade } from 'svelte/transition'
 
 	let inputValue = $state(chat.getDraft('home'))
-	let isGenerating = $state(false)
 	let focusToken = $state(0)
 
-	// optimistic chat state shown while create_and_run is streaming
-	let optimisticContent = $state<string | null>(null)
+	// abort controller for in-flight create_and_run
 	let createAndRunAbort = $state<AbortController | null>(null)
+	let isGenerating = $state(false)
 
 	// keyboard handler exposed by HomeSuggestions
 	let suggestionsKeyHandler = $state<((event: KeyboardEvent) => boolean) | undefined>(undefined)
@@ -94,9 +89,6 @@
 	// the root layout intentionally skips same-path navigations.
 	// home uses query params for in-place mode switches (e.g. /?chat=new), so we
 	// enable VT only for same-path navigations.
-	// we track the transition's finished promise so cross-page navigation can
-	// wait for the in-page animation to complete (avoids stacking two VTs).
-	let inPageTransitionDone: Promise<void> | null = null
 
 	onNavigate((navigation) => {
 		const start = document.startViewTransition
@@ -114,12 +106,8 @@
 				await navigation.complete
 			}) as { finished?: Promise<unknown> } | void
 
-			if (vt?.finished) {
-				inPageTransitionDone = vt.finished.then(
-					() => {},
-					() => {}
-				)
-			}
+			// swallow rejections so unfinished transitions don't cause unhandled errors
+			if (vt?.finished) vt.finished.catch(() => {})
 		})
 	})
 
@@ -164,7 +152,6 @@
 				createAndRunAbort.abort()
 				createAndRunAbort = null
 				isGenerating = false
-				optimisticContent = null
 			}
 		}
 		return () => {
@@ -184,19 +171,6 @@
 	})
 
 	// ============ NAVIGATION HELPERS ============
-	async function setHomeChatMode(mode: Exclude<ChatMode, null>, opts?: { replace?: boolean }) {
-		chatStartError = null
-		const navOpts = {
-			keepFocus: true,
-			noScroll: true,
-			replaceState: opts?.replace ?? false,
-		}
-		if (mode === 'temp') {
-			await goto(resolve('/?chat=temp' as unknown as '/'), navOpts)
-		} else {
-			await goto(resolve('/?chat=new' as unknown as '/'), navOpts)
-		}
-	}
 
 	async function createThreadAndNavigate(
 		content: string,
@@ -215,10 +189,12 @@
 			return
 		}
 
-		// show optimistic UI immediately
-		optimisticContent = content
 		isGenerating = true
 		inputValue = ''
+
+		// generate a client-side thread ID so we can navigate immediately
+		const threadId = newTypeid('thread')
+		const now = new Date().toISOString()
 
 		// build RunInput shape
 		const runInput: RunInput = { text: content || null }
@@ -232,50 +208,47 @@
 		createAndRunAbort = controller
 
 		try {
+			// cache an optimistic thread stub so the chat page can render immediately
+			const optimisticThread: import('$lib/stores/chat.svelte').Thread = {
+				id: threadId,
+				owner_id: '',
+				title: null,
+				tags: [],
+				is_archived: false,
+				is_temporary: isTemporaryChatMode,
+				project_ids: [],
+				created_at: now,
+				updated_at: now,
+				last_activity_at: now,
+			}
+			chat.threadCache.set(optimisticThread)
+			chat.activeThread = optimisticThread
+
 			const generator = runCreateAndRunStream({
 				agentId: selectedAgent.id,
 				input: runInput,
+				threadId,
 				isTemporary: isTemporaryChatMode,
 				toolChoice,
 				signal: controller.signal,
 			})
 
-			const first = await generator.next()
-			if (first.done || !first.value || first.value.event !== 'thread_created') {
-				throw new Error('could not start chat')
+			// hand off the full generator (including thread_created) to the chat page
+			chat.pendingCreateAndRun = {
+				threadId,
+				text: content.trim(),
+				attachments: modifiers?.attachments ?? [],
+				stream: generator,
 			}
 
-			const thread = first.value.data as unknown as import('$lib/stores/chat.svelte').Thread
-			chat.threadCache.set(thread)
-			chat.activeThread = thread
 			createAndRunAbort = null
 
-			// hand off the live generator so the chat page continues consuming
-			// the same stream - no abort, no duplicate run request.
-			// thread_created was already consumed; remaining events are ChatStreamDelta.
-			chat.pendingCreateAndRun = {
-				threadId: thread.id,
-				stream: generator as AsyncGenerator<
-					import('$lib/api/streaming').ChatStreamDelta,
-					void,
-					unknown
-				>,
-			}
-
-			// wait for any in-page view transition (home -> chat layout) to finish
-			// before starting cross-page navigation so the two VTs don't conflict
-			if (inPageTransitionDone) {
-				await inPageTransitionDone
-				inPageTransitionDone = null
-			}
-
-			// navigate seamlessly - replaceState so back goes to home, not /?chat=new
-			await goto(resolve(`/c/${thread.id}`), {
+			// navigate immediately - replaceState so back goes to home, not /?chat=new
+			await goto(resolve(`/c/${threadId}`), {
 				keepFocus: true,
 				noScroll: true,
 				replaceState: true,
 			})
-			return
 		} catch (e) {
 			if (!controller.signal.aborted) {
 				chatStartError = e instanceof Error ? e.message : 'could not start chat. try again.'
@@ -287,18 +260,12 @@
 
 	function handleSendMessage(content: string, modifiers?: RunModifiers) {
 		chatStartError = null
-		void (async () => {
-			if (!isChatMode) {
-				await setHomeChatMode('new', { replace: true })
-			}
-			await createThreadAndNavigate(content, modifiers)
-		})()
+		void createThreadAndNavigate(content, modifiers)
 	}
 
 	function handleStopGeneration() {
 		createAndRunAbort?.abort()
 		isGenerating = false
-		optimisticContent = null
 		chatStartError = null
 	}
 
@@ -341,62 +308,22 @@
 				class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: 96px;"
 			>
-				{#if optimisticContent}
-					<!-- optimistic chat: user message + assistant (loading / error) -->
-					<div class="flex flex-1 flex-col gap-6 py-4">
-						<div class="space-y-3">
-							<UserChatMessage
-								content={optimisticContent}
-								timestamp={new Date()}
-								tailStyle={preferences.data.appearance.bubbleTailStyle ?? 'none'}
-								showTail={preferences.data.appearance.bubbleTailStyle !== 'none'}
-							/>
-							<AssistantChatMessage
-								content={chatStartError ?? ''}
-								tone={chatStartError ? 'error' : 'default'}
-								isLastMessage={true}
-								isRunActive={!chatStartError && isGenerating}
-								isStreaming={!chatStartError && isGenerating}
-								showStreamingPlaceholder={false}
-								modelName={agents.list.find((a) => a.id === selectedAgent.id)
-									?.name ?? 'assistant'}
-								avatarUrl={agents.list.find((a) => a.id === selectedAgent.id)
-									?.profile_image_url ?? null}
+				{#if chatStartError}
+					<!-- error state: show error message with dismiss -->
+					<div class="flex flex-1 items-center justify-center py-16">
+						<div class="max-w-md text-center">
+							<p class="text-error text-sm">{chatStartError}</p>
+							<button
+								type="button"
+								class="text-foreground/70 hover:text-foreground/95 mt-3 rounded-xl bg-transparent px-3 py-1.5 text-sm transition-colors"
+								onclick={() => (chatStartError = null)}
 							>
-								{#snippet lead()}
-									{#if !chatStartError}
-										<div
-											class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
-										>
-											<div class="my-3">
-												<ChatGptLoadingIndicator />
-											</div>
-										</div>
-									{/if}
-								{/snippet}
-								{#snippet actions()}
-									{#if chatStartError}
-										<button
-											type="button"
-											class="text-foreground/70 hover:text-foreground/95 rounded-xl bg-transparent px-3 py-1.5 text-sm transition-colors"
-											onclick={() => {
-												chatStartError = null
-												optimisticContent = null
-											}}
-										>
-											dismiss
-										</button>
-									{/if}
-								{/snippet}
-							</AssistantChatMessage>
+								dismiss
+							</button>
 						</div>
 					</div>
 				{:else if showChatBanner}
-					<div
-						class="flex flex-1 items-center justify-center py-16"
-						in:fade={{ duration: 220 }}
-						out:fade={{ duration: 120 }}
-					>
+					<div class="flex flex-1 items-center justify-center py-16">
 						<div class="max-w-md text-center">
 							<div
 								class="bg-foreground/5 text-foreground/85 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"

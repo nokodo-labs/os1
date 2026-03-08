@@ -27,7 +27,7 @@ import {
 } from './helpers'
 import { resumeCreateAndRun } from './streamProcessor'
 import { findRunUserMessage, switchBranch } from './treeNavigation'
-import type { ChatState } from './types'
+import type { ChatState, OptimisticUserMessage } from './types'
 import {
 	deleteUserMessage,
 	handleRegenerateMessage,
@@ -47,7 +47,7 @@ export function createChatState(): ChatState {
 	let inputValue = $state('')
 	let isGenerating = $state(false)
 	let activeRun = 0
-	let optimisticUserMessage = $state<{ content: string; timestamp: Date } | null>(null)
+	let optimisticUserMessage = $state<OptimisticUserMessage | null>(null)
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
 	let viewingStreamingBranch = $state(true)

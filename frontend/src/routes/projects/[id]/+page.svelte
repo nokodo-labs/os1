@@ -15,7 +15,8 @@
 	import EditProjectModal from '$lib/components/modals/EditProjectModal.svelte'
 	import ResourcePickerModal from '$lib/components/modals/ResourcePickerModal.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { PopupMenu } from '$lib/components/primitives'
+	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type {
 		ResourceFilterMode,
@@ -304,10 +305,10 @@
 >
 	{#if !project && !loading}
 		<div class="flex flex-1 flex-col items-center justify-center py-20 text-center">
-			<p class="text-sm text-foreground/50">project not found</p>
+			<p class="text-foreground/50 text-sm">project not found</p>
 			<button
 				type="button"
-				class="rounded-pill mt-4 cursor-pointer border border-foreground/10 bg-foreground/5 px-4 py-2 text-sm text-foreground/70 transition-colors hover:bg-foreground/10"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/70 hover:bg-foreground/10 mt-4 cursor-pointer border px-4 py-2 text-sm transition-colors"
 				onclick={() => goto(resolve('/projects'))}
 			>
 				back to projects
@@ -318,14 +319,14 @@
 			<div class="flex-1">
 				<PageTitle icon={FinderFolder} label={project?.name ?? 'loading...'} />
 				{#if project?.description}
-					<p class="mt-2 text-sm text-foreground/60">{project.description}</p>
+					<p class="text-foreground/60 mt-2 text-sm">{project.description}</p>
 				{/if}
 			</div>
 			<div class="relative flex shrink-0 gap-1 pt-1">
 				<button
 					type="button"
 					bind:this={moreButtonEl}
-					class="flex size-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-foreground/60 transition-colors hover:text-foreground/90"
+					class="text-foreground/60 hover:text-foreground/90 flex size-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors"
 					onclick={() => (moreMenuOpen = !moreMenuOpen)}
 					aria-label="project options"
 					aria-haspopup="menu"
@@ -358,7 +359,7 @@
 					</MenuItem>
 					<button
 						type="button"
-						class="group/del rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+						class="group/del rounded-pill text-foreground/80 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
 						onclick={() => {
 							moreMenuOpen = false
 							showDeleteConfirm = true

@@ -344,6 +344,7 @@ export type CreateAndRunStreamDelta =
 export interface CreateAndRunStreamOptions {
 	agentId: string
 	input: RunInput
+	threadId?: string
 	isTemporary?: boolean
 	tags?: string[]
 	projectIds?: string[]
@@ -377,6 +378,7 @@ export async function* runCreateAndRunStream(
 		project_ids: opts.projectIds ?? [],
 		stream: true,
 	}
+	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.toolChoice) body.tool_choice = opts.toolChoice
 	if (clientContext) body.clientContext = clientContext
 
