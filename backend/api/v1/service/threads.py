@@ -153,27 +153,47 @@ async def generate_thread_metadata(
 			return thread
 
 		messages = sorted(thread.messages or [], key=lambda m: m.created_at)
-		first_user = next((m for m in messages if m.type == MessageType.USER), None)
-		first_assistant = next(
-			(m for m in messages if m.type == MessageType.ASSISTANT), None
-		)
-		if not first_assistant:
+
+		# build turns: each (user_msg | None, assistant_msg) pair
+		turns: list[tuple[Message | None, Message]] = []
+		pending_user: Message | None = None
+		for m in messages:
+			if m.type == MessageType.USER:
+				pending_user = m
+			elif m.type == MessageType.ASSISTANT:
+				turns.append((pending_user, m))
+				pending_user = None
+
+		if not turns:
 			raise HTTPException(
 				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="cannot generate metadata: no assistant message in thread",
 			)
 
-		payload = {
-			"user": first_user.text_content[:500] if first_user else "",
-			"assistant": first_assistant.text_content[:500],
-		}
+		# first 2 turns + latest 4 turns when thread has > 2, else use all
+		if len(turns) > 2:
+			indices = sorted(
+				set(range(min(2, len(turns))))
+				| set(range(max(0, len(turns) - 4), len(turns)))
+			)
+			selected_turns = [turns[i] for i in indices]
+		else:
+			selected_turns = turns
+
+		turn_data = [
+			{
+				"user": t[0].text_content[:500] if t[0] else "",
+				"assistant": t[1].text_content[:500],
+			}
+			for t in selected_turns
+		]
 
 		sdk_thread = SDKThread(
 			messages=[
 				SDKSystemMessage.from_text(
-					"given the following chat history, generate thread metadata. "
+					"given the following chat history turns, generate thread metadata."
 				),
-				SDKUserMessage.from_text(json.dumps(payload)),
+				SDKUserMessage.from_text(json.dumps(turn_data)),
 			]
 		)
 

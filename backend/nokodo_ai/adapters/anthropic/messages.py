@@ -589,15 +589,29 @@ def _messages_to_anthropic(
 					i = j
 					continue
 
-				_append_anthropic_assistant_message(
-					result,
-					assistant_text=assistant_text,
-					tool_blocks=[],
-				)
-				i += 1
+				if j > i + 1:
+					# ToolMessages followed but none matched - strip tool_use blocks
+					# and skip past those lookahead messages
+					_append_anthropic_assistant_message(
+						result,
+						assistant_text=assistant_text,
+						tool_blocks=[],
+					)
+					i = j
+				else:
+					# no ToolMessages followed - keep tool_use blocks as-is
+					_append_anthropic_assistant_message(
+						result,
+						assistant_text=assistant_text,
+						tool_blocks=tool_blocks,
+					)
+					i += 1
 			case ToolMessage():
-				# skip orphaned tool results. anthropic requires tool_result
-				# blocks to immediately follow the assistant tool_use turn.
+				# truly orphaned tool result (no preceding assistant turn consumed it)
+				result.append({
+					"role": "user",
+					"content": [_tool_message_to_result_block(message)],
+				})
 				i += 1
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
