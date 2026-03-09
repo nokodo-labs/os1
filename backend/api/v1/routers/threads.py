@@ -35,6 +35,12 @@ from api.schemas.thread import (
 	ThreadSwitchResponse,
 	ThreadUpdate,
 )
+from api.schemas.thread_participant import (
+	ThreadParticipant as ThreadParticipantSchema,
+)
+from api.schemas.thread_participant import (
+	ThreadUnreadCount,
+)
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
@@ -164,6 +170,22 @@ async def revectorize_threads(
 	require_admin(principal)
 	count = await thread_service.vectorize_all_threads(db)
 	return {"vectorized": count}
+
+
+@router.get("/unread-counts", response_model=list[ThreadUnreadCount])
+async def get_unread_counts(
+	thread_ids: list[TypeID] | None = Query(None, alias="thread_id"),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[ThreadUnreadCount]:
+	"""return unread message counts for the current user's threads."""
+	counts = await thread_service.get_unread_counts(
+		db, principal=principal, thread_ids=thread_ids
+	)
+	return [
+		ThreadUnreadCount(thread_id=tid, unread_count=count)
+		for tid, count in counts.items()
+	]
 
 
 @router.get("/{thread_id}", response_model=ThreadSchema)
@@ -452,3 +474,19 @@ async def cancel_run(
 		)
 	await run_status_store.fail_run(run_id)
 	return {"status": "cancelled"}
+
+
+@router.post(
+	"/{thread_id}/read",
+	response_model=ThreadParticipantSchema,
+)
+async def mark_thread_read(
+	thread_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> ThreadParticipantSchema:
+	"""mark all messages in a thread as read for the current user."""
+	participant = await thread_service.mark_thread_read(
+		thread_id, db, principal=principal
+	)
+	return ThreadParticipantSchema.model_validate(participant)

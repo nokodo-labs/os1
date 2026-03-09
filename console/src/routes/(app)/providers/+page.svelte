@@ -190,10 +190,16 @@
 
 		submitError = null
 
+		if (!formState.name.trim()) {
+			submitError = 'provider name is required'
+			isLoading = false
+			return
+		}
+
 		try {
 			if (modalMode === 'create') {
 				const payload: ProviderCreate = {
-					name: formState.name,
+					name: formState.name.trim(),
 					adapter_type: formState.adapter_type,
 					provider_type: formState.provider_type,
 					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
@@ -225,8 +231,7 @@
 			resetForm()
 		} catch (e) {
 			console.error('Failed to save provider', e)
-			submitError =
-				'Failed to save provider. ' + (e instanceof Error ? e.message : 'Unknown error')
+			submitError = e instanceof Error ? e.message : 'failed to save provider'
 		} finally {
 			isLoading = false
 		}

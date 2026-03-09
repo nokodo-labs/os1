@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
+
+from pydantic import StringConstraints
 
 from api.models.provider import ProviderStatus, ProviderType
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
@@ -11,7 +14,7 @@ from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedMo
 class ProviderBase(MetadataModel):
 	"""Shared provider attributes."""
 
-	name: str
+	name: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 	adapter_type: str
 	provider_type: ProviderType = ProviderType.EXTERNAL
 	base_url: str | None = None

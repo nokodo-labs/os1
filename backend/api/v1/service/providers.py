@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.provider import Provider
@@ -45,7 +46,17 @@ async def create_provider(
 
 	provider = Provider(**data)
 	session.add(provider)
-	await session.commit()
+	try:
+		await session.commit()
+	except IntegrityError as exc:
+		await session.rollback()
+		msg = str(exc.orig).lower()
+		if "name" in msg and "unique" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_409_CONFLICT,
+				detail="a provider with this name already exists",
+			) from None
+		raise
 	await session.refresh(provider)
 	return provider
 
@@ -102,6 +113,16 @@ async def update_provider(
 		setattr(provider, field, value)
 
 	session.add(provider)
-	await session.commit()
+	try:
+		await session.commit()
+	except IntegrityError as exc:
+		await session.rollback()
+		msg = str(exc.orig).lower()
+		if "name" in msg and "unique" in msg:
+			raise HTTPException(
+				status_code=status.HTTP_409_CONFLICT,
+				detail="a provider with this name already exists",
+			) from None
+		raise
 	await session.refresh(provider)
 	return provider

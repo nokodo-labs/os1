@@ -26,6 +26,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.message import Message, MessageType
 from api.models.thread import Thread
+from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 from api.permissions import ResourceType
 from api.schemas.message import Message as MessageOut
@@ -339,6 +340,10 @@ async def create_thread(
 	thread.projects = projects
 	session.add(thread)
 	await session.flush()
+
+	# owner is automatically a participant
+	await ensure_participant(thread.id, owner_id, session)
+
 	await session.refresh(
 		thread, attribute_names=["created_at", "updated_at", "last_activity_at"]
 	)
@@ -960,6 +965,10 @@ async def create_message(
 	session.add(message)
 	await session.flush()
 	thread.current_message_id = message.id
+
+	# ensure sender is tracked as a participant
+	await ensure_participant(thread_id, principal.user.id, session)
+
 	await session.commit()
 
 	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
@@ -1059,6 +1068,9 @@ async def update_user_message(
 	# emit thread.updated so all sessions reorder the sidebar
 	thread = await session.get(Thread, thread_id)
 	if thread:
+		await session.refresh(
+			thread, attribute_names=["last_activity_at", "updated_at"]
+		)
 		await event_service.publish_event(
 			session,
 			event=Event(
@@ -1197,25 +1209,26 @@ async def delete_user_message_turn(
 		origin_session_id=origin_session_id,
 	)
 
+	# publish_event commits; refresh thread to get server-side updated_at
+	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
+
 	# emit thread.updated so all sessions reorder the sidebar
-	deleted_thread = await session.get(Thread, thread_id)
-	if deleted_thread:
-		await event_service.publish_event(
-			session,
-			event=Event(
-				scope=EventScope.THREAD,
-				scope_id=str(thread_id),
-				type=EventType.THREAD_UPDATED,
-				data={
-					"id": str(thread_id),
-					"last_activity_at": deleted_thread.last_activity_at.isoformat(),
-					"updated_at": deleted_thread.updated_at.isoformat(),
-				},
-				user_id=str(deleted_thread.owner_id),
-				thread_id=str(thread_id),
-			),
-			origin_session_id=origin_session_id,
-		)
+	await event_service.publish_event(
+		session,
+		event=Event(
+			scope=EventScope.THREAD,
+			scope_id=str(thread_id),
+			type=EventType.THREAD_UPDATED,
+			data={
+				"id": str(thread_id),
+				"last_activity_at": thread.last_activity_at.isoformat(),
+				"updated_at": thread.updated_at.isoformat(),
+			},
+			user_id=str(thread.owner_id),
+			thread_id=str(thread_id),
+		),
+		origin_session_id=origin_session_id,
+	)
 
 
 async def handle_typing_event(
@@ -1254,6 +1267,139 @@ async def handle_typing_event(
 		payload,
 		exclude_user_id=user_id,
 	)
+
+
+# --- thread participant helpers ---
+
+
+async def ensure_participant(
+	thread_id: TypeID,
+	user_id: TypeID,
+	session: AsyncSession,
+) -> ThreadParticipant:
+	"""get or create a participant row for a user in a thread."""
+	stmt = select(ThreadParticipant).where(
+		ThreadParticipant.thread_id == thread_id,
+		ThreadParticipant.user_id == user_id,
+		ThreadParticipant.left_at.is_(None),
+	)
+	result = await session.execute(stmt)
+	existing = result.scalars().first()
+	if existing:
+		return existing
+
+	participant = ThreadParticipant(
+		thread_id=thread_id,
+		user_id=user_id,
+	)
+	session.add(participant)
+	await session.flush()
+	return participant
+
+
+async def mark_thread_read(
+	thread_id: TypeID,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> ThreadParticipant:
+	"""mark all messages in a thread as read for the current user.
+
+	sets last_read_message_id to the latest message in the thread.
+	"""
+	await require_thread_access(
+		thread_id,
+		session,
+		principal,
+		required_level=AccessLevel.READER,
+	)
+
+	participant = await ensure_participant(thread_id, principal.user.id, session)
+
+	# find the latest message in the thread
+	latest_stmt = (
+		select(Message.id)
+		.where(Message.thread_id == thread_id)
+		.order_by(Message.created_at.desc())
+		.limit(1)
+	)
+	result = await session.execute(latest_stmt)
+	latest_id = result.scalar_one_or_none()
+
+	if latest_id:
+		participant.last_read_message_id = latest_id
+
+	await session.flush()
+	return participant
+
+
+async def get_unread_counts(
+	session: AsyncSession,
+	*,
+	principal: Principal,
+	thread_ids: list[TypeID] | None = None,
+) -> dict[TypeID, int]:
+	"""return unread message counts per thread for the current user.
+
+	for threads with no participant row, all messages are considered unread.
+	for threads with a participant row but no last_read_message_id, all
+	messages are also considered unread.
+	"""
+	user_id = principal.user.id
+
+	accessible_q = (
+		select(Thread.id)
+		.where(
+			thread_access_predicate(
+				principal,
+				required_level=AccessLevel.READER,
+			)
+		)
+		.where(Thread.is_temporary.is_(False))
+	)
+	if thread_ids:
+		accessible_q = accessible_q.where(Thread.id.in_(thread_ids))
+	accessible_subq = accessible_q.scalar_subquery()
+
+	# left join participants to get last_read_message's created_at.
+	# count messages after that timestamp (or all if no read state).
+	last_read_ts = (
+		select(Message.created_at)
+		.where(Message.id == ThreadParticipant.last_read_message_id)
+		.correlate(ThreadParticipant)
+		.scalar_subquery()
+	)
+
+	part_alias = (
+		select(
+			ThreadParticipant.thread_id,
+			last_read_ts.label("read_at"),
+		)
+		.where(
+			ThreadParticipant.user_id == user_id,
+			ThreadParticipant.left_at.is_(None),
+		)
+		.subquery("part")
+	)
+
+	stmt = (
+		select(
+			Message.thread_id,
+			func.count(Message.id).label("cnt"),
+		)
+		.where(Message.thread_id.in_(accessible_subq))
+		.outerjoin(part_alias, Message.thread_id == part_alias.c.thread_id)
+		.where(
+			or_(
+				part_alias.c.read_at.is_(None),
+				Message.created_at > part_alias.c.read_at,
+			)
+		)
+		.group_by(Message.thread_id)
+	)
+
+	result = await session.execute(stmt)
+	return {TypeID(row.thread_id): row.cnt for row in result if row.cnt > 0}
 
 
 def _thread_dense_text(thread: Thread) -> str:
