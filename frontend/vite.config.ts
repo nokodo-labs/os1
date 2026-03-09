@@ -14,6 +14,8 @@ export default defineConfig({
 		host: true,
 		allowedHosts: true,
 		proxy: {
+			// proxy /health so the VS Code task "check API alive" can hit the
+			// front-end origin and still reach the backend health endpoint.
 			'/health': {
 				target: 'http://localhost:1383',
 				changeOrigin: true,

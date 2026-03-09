@@ -13,7 +13,6 @@
 
 <script lang="ts" generics="T, SortKey extends string = string">
 	import { browser } from '$app/environment'
-	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -79,7 +78,7 @@
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		replaceState(target, {})
+		history.replaceState(history.state, '', target)
 	}
 
 	function updateQueryParams(updates: Record<string, string | null>) {

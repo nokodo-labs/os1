@@ -5,6 +5,7 @@
 	type DefaultPermissionsSettings = Schemas['DefaultPermissionsSettings']
 	type DefaultPermissionsSettingsPatch = Schemas['DefaultPermissionsSettingsPatch']
 	type Model = Schemas['Model']
+	type Provider = Schemas['Provider']
 	type SettingsResponse = Schemas['SettingsResponse']
 	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
 
@@ -63,6 +64,8 @@
 	let modelsError = $state<string | null>(null)
 	let models = $state<Model[]>([])
 
+	let providers = $state<Provider[]>([])
+
 	// Read-only (env-only/write-locked) display values
 	let brandingAppVersion = $state<string>('')
 	let brandingAnalyticsKeyConfigured = $state<boolean>(false)
@@ -80,6 +83,7 @@
 	type ChatContextMode = 'recent' | 'relevant' | 'pinned'
 	type VectorDatabaseProvider =
 		| 'qdrant'
+		| 'chroma'
 		| 'pinecone'
 		| 'weaviate'
 		| 'milvus'
@@ -179,7 +183,9 @@
 	let assetsDefaultEmbeddingModelId = $state('')
 	let assetsVectorDatabaseProvider = $state<VectorDatabaseProvider>('qdrant')
 	let assetsVectorDatabaseUrl = $state('')
+	let assetsVectorDatabaseQdrantUseGrpc = $state(true)
 	let assetsVectorDatabaseQdrantApiKey = $state('')
+	let assetsVectorDatabaseChromaApiKey = $state('')
 	let assetsVectorDatabasePineconeApiKey = $state('')
 	let assetsVectorDatabaseWeaviateApiKey = $state('')
 	let assetsVectorDatabaseMilvusToken = $state('')
@@ -341,7 +347,9 @@
 		assetsDefaultEmbeddingModelId: '',
 		assetsVectorDatabaseProvider: 'qdrant' as VectorDatabaseProvider,
 		assetsVectorDatabaseUrl: '',
+		assetsVectorDatabaseQdrantUseGrpc: true,
 		assetsVectorDatabaseQdrantApiKey: '',
+		assetsVectorDatabaseChromaApiKey: '',
 		assetsVectorDatabasePineconeApiKey: '',
 		assetsVectorDatabaseWeaviateApiKey: '',
 		assetsVectorDatabaseMilvusToken: '',
@@ -484,7 +492,9 @@
 			assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId ||
 			assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider ||
 			assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+			assetsVectorDatabaseQdrantUseGrpc !== original.assetsVectorDatabaseQdrantUseGrpc ||
 			assetsVectorDatabaseQdrantApiKey !== original.assetsVectorDatabaseQdrantApiKey ||
+			assetsVectorDatabaseChromaApiKey !== original.assetsVectorDatabaseChromaApiKey ||
 			assetsVectorDatabasePineconeApiKey !== original.assetsVectorDatabasePineconeApiKey ||
 			assetsVectorDatabaseWeaviateApiKey !== original.assetsVectorDatabaseWeaviateApiKey ||
 			assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken ||
@@ -774,14 +784,39 @@
 		const vectorDatabase = assets?.vector_database
 		assetsVectorDatabaseProvider =
 			(vectorDatabase?.provider as VectorDatabaseProvider) ?? 'qdrant'
-		assetsVectorDatabaseUrl = vectorDatabase?.url ?? ''
-		const vectorDatabaseApiKeys = vectorDatabase?.api_keys
-		assetsVectorDatabaseQdrantApiKey = vectorDatabaseApiKeys?.qdrant_api_key ?? ''
-		assetsVectorDatabasePineconeApiKey = vectorDatabaseApiKeys?.pinecone_api_key ?? ''
-		assetsVectorDatabaseWeaviateApiKey = vectorDatabaseApiKeys?.weaviate_api_key ?? ''
-		assetsVectorDatabaseMilvusToken = vectorDatabaseApiKeys?.milvus_token ?? ''
-		assetsVectorDatabaseRedisPassword = vectorDatabaseApiKeys?.redis_password ?? ''
-		assetsVectorDatabaseOpensearchApiKey = vectorDatabaseApiKeys?.opensearch_api_key ?? ''
+		const qdrantVectorDatabase = vectorDatabase?.qdrant
+		const chromaVectorDatabase = vectorDatabase?.chroma
+		const pineconeVectorDatabase = vectorDatabase?.pinecone
+		const weaviateVectorDatabase = vectorDatabase?.weaviate
+		const milvusVectorDatabase = vectorDatabase?.milvus
+		const pgvectorVectorDatabase = vectorDatabase?.pgvector
+		const redisVectorDatabase = vectorDatabase?.redis
+		const opensearchVectorDatabase = vectorDatabase?.opensearch
+		const activeVectorDatabase =
+			assetsVectorDatabaseProvider === 'qdrant'
+				? qdrantVectorDatabase
+				: assetsVectorDatabaseProvider === 'chroma'
+					? chromaVectorDatabase
+					: assetsVectorDatabaseProvider === 'pinecone'
+						? pineconeVectorDatabase
+						: assetsVectorDatabaseProvider === 'weaviate'
+							? weaviateVectorDatabase
+							: assetsVectorDatabaseProvider === 'milvus'
+								? milvusVectorDatabase
+								: assetsVectorDatabaseProvider === 'pgvector'
+									? pgvectorVectorDatabase
+									: assetsVectorDatabaseProvider === 'redis'
+										? redisVectorDatabase
+										: opensearchVectorDatabase
+		assetsVectorDatabaseUrl = activeVectorDatabase?.url ?? ''
+		assetsVectorDatabaseQdrantUseGrpc = qdrantVectorDatabase?.use_grpc ?? true
+		assetsVectorDatabaseQdrantApiKey = qdrantVectorDatabase?.api_key ?? ''
+		assetsVectorDatabaseChromaApiKey = chromaVectorDatabase?.api_key ?? ''
+		assetsVectorDatabasePineconeApiKey = pineconeVectorDatabase?.api_key ?? ''
+		assetsVectorDatabaseWeaviateApiKey = weaviateVectorDatabase?.api_key ?? ''
+		assetsVectorDatabaseMilvusToken = milvusVectorDatabase?.token ?? ''
+		assetsVectorDatabaseRedisPassword = redisVectorDatabase?.password ?? ''
+		assetsVectorDatabaseOpensearchApiKey = opensearchVectorDatabase?.api_key ?? ''
 		const vector = assets?.vector
 		assetsVectorCollectionTemplate = vector?.collection_template ?? ''
 		assetsVectorSparseEnabled = vector?.sparse_vectors_enabled ?? true
@@ -883,7 +918,9 @@
 			assetsDefaultEmbeddingModelId,
 			assetsVectorDatabaseProvider,
 			assetsVectorDatabaseUrl,
+			assetsVectorDatabaseQdrantUseGrpc,
 			assetsVectorDatabaseQdrantApiKey,
+			assetsVectorDatabaseChromaApiKey,
 			assetsVectorDatabasePineconeApiKey,
 			assetsVectorDatabaseWeaviateApiKey,
 			assetsVectorDatabaseMilvusToken,
@@ -1000,6 +1037,14 @@
 		}
 	}
 
+	async function fetchProviders() {
+		try {
+			providers = unwrap(await api.GET('/v1/providers'))
+		} catch (e) {
+			console.error('Failed to fetch providers', e)
+		}
+	}
+
 	function resetDraft() {
 		uiDefaultTheme = original.uiDefaultTheme
 		uiDefaultBackground = original.uiDefaultBackground
@@ -1074,7 +1119,9 @@
 		assetsDefaultEmbeddingModelId = original.assetsDefaultEmbeddingModelId
 		assetsVectorDatabaseProvider = original.assetsVectorDatabaseProvider
 		assetsVectorDatabaseUrl = original.assetsVectorDatabaseUrl
+		assetsVectorDatabaseQdrantUseGrpc = original.assetsVectorDatabaseQdrantUseGrpc
 		assetsVectorDatabaseQdrantApiKey = original.assetsVectorDatabaseQdrantApiKey
+		assetsVectorDatabaseChromaApiKey = original.assetsVectorDatabaseChromaApiKey
 		assetsVectorDatabasePineconeApiKey = original.assetsVectorDatabasePineconeApiKey
 		assetsVectorDatabaseWeaviateApiKey = original.assetsVectorDatabaseWeaviateApiKey
 		assetsVectorDatabaseMilvusToken = original.assetsVectorDatabaseMilvusToken
@@ -1583,7 +1630,9 @@
 			if (
 				assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider ||
 				assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+				assetsVectorDatabaseQdrantUseGrpc !== original.assetsVectorDatabaseQdrantUseGrpc ||
 				assetsVectorDatabaseQdrantApiKey !== original.assetsVectorDatabaseQdrantApiKey ||
+				assetsVectorDatabaseChromaApiKey !== original.assetsVectorDatabaseChromaApiKey ||
 				assetsVectorDatabasePineconeApiKey !==
 					original.assetsVectorDatabasePineconeApiKey ||
 				assetsVectorDatabaseWeaviateApiKey !==
@@ -1596,54 +1645,138 @@
 				const vectorDatabasePatch: Record<string, unknown> = {}
 				if (assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider)
 					vectorDatabasePatch.provider = assetsVectorDatabaseProvider
-				if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
-					vectorDatabasePatch.url = assetsVectorDatabaseUrl || null
-
 				if (
-					assetsVectorDatabaseQdrantApiKey !==
-						original.assetsVectorDatabaseQdrantApiKey ||
-					assetsVectorDatabasePineconeApiKey !==
-						original.assetsVectorDatabasePineconeApiKey ||
-					assetsVectorDatabaseWeaviateApiKey !==
-						original.assetsVectorDatabaseWeaviateApiKey ||
-					assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken ||
-					assetsVectorDatabaseRedisPassword !==
-						original.assetsVectorDatabaseRedisPassword ||
-					assetsVectorDatabaseOpensearchApiKey !==
-						original.assetsVectorDatabaseOpensearchApiKey
+					assetsVectorDatabaseProvider === 'qdrant' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabaseQdrantUseGrpc !==
+							original.assetsVectorDatabaseQdrantUseGrpc ||
+						assetsVectorDatabaseQdrantApiKey !==
+							original.assetsVectorDatabaseQdrantApiKey)
 				) {
-					const apiKeysPatch: Record<string, unknown> = {}
+					const qdrantPatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						qdrantPatch.url = assetsVectorDatabaseUrl || null
+					if (
+						assetsVectorDatabaseQdrantUseGrpc !==
+						original.assetsVectorDatabaseQdrantUseGrpc
+					)
+						qdrantPatch.use_grpc = assetsVectorDatabaseQdrantUseGrpc
 					if (
 						assetsVectorDatabaseQdrantApiKey !==
 						original.assetsVectorDatabaseQdrantApiKey
 					)
-						apiKeysPatch.qdrant_api_key = assetsVectorDatabaseQdrantApiKey || null
+						qdrantPatch.api_key = assetsVectorDatabaseQdrantApiKey || null
+					vectorDatabasePatch.qdrant = qdrantPatch
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'chroma' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabaseChromaApiKey !==
+							original.assetsVectorDatabaseChromaApiKey)
+				) {
+					const chromaPatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						chromaPatch.url = assetsVectorDatabaseUrl || null
+					if (
+						assetsVectorDatabaseChromaApiKey !==
+						original.assetsVectorDatabaseChromaApiKey
+					)
+						chromaPatch.api_key = assetsVectorDatabaseChromaApiKey || null
+					vectorDatabasePatch.chroma = chromaPatch
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'pinecone' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabasePineconeApiKey !==
+							original.assetsVectorDatabasePineconeApiKey)
+				) {
+					const pineconePatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						pineconePatch.url = assetsVectorDatabaseUrl || null
 					if (
 						assetsVectorDatabasePineconeApiKey !==
 						original.assetsVectorDatabasePineconeApiKey
 					)
-						apiKeysPatch.pinecone_api_key = assetsVectorDatabasePineconeApiKey || null
+						pineconePatch.api_key = assetsVectorDatabasePineconeApiKey || null
+					vectorDatabasePatch.pinecone = pineconePatch
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'weaviate' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabaseWeaviateApiKey !==
+							original.assetsVectorDatabaseWeaviateApiKey)
+				) {
+					const weaviatePatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						weaviatePatch.url = assetsVectorDatabaseUrl || null
 					if (
 						assetsVectorDatabaseWeaviateApiKey !==
 						original.assetsVectorDatabaseWeaviateApiKey
 					)
-						apiKeysPatch.weaviate_api_key = assetsVectorDatabaseWeaviateApiKey || null
+						weaviatePatch.api_key = assetsVectorDatabaseWeaviateApiKey || null
+					vectorDatabasePatch.weaviate = weaviatePatch
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'milvus' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabaseMilvusToken !==
+							original.assetsVectorDatabaseMilvusToken)
+				) {
+					const milvusPatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						milvusPatch.url = assetsVectorDatabaseUrl || null
 					if (
 						assetsVectorDatabaseMilvusToken !== original.assetsVectorDatabaseMilvusToken
 					)
-						apiKeysPatch.milvus_token = assetsVectorDatabaseMilvusToken || null
+						milvusPatch.token = assetsVectorDatabaseMilvusToken || null
+					vectorDatabasePatch.milvus = milvusPatch
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'pgvector' &&
+					assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl
+				) {
+					vectorDatabasePatch.pgvector = {
+						url: assetsVectorDatabaseUrl || null,
+					}
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'redis' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabaseRedisPassword !==
+							original.assetsVectorDatabaseRedisPassword)
+				) {
+					const redisPatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						redisPatch.url = assetsVectorDatabaseUrl || null
 					if (
 						assetsVectorDatabaseRedisPassword !==
 						original.assetsVectorDatabaseRedisPassword
 					)
-						apiKeysPatch.redis_password = assetsVectorDatabaseRedisPassword || null
+						redisPatch.password = assetsVectorDatabaseRedisPassword || null
+					vectorDatabasePatch.redis = redisPatch
+				}
+
+				if (
+					assetsVectorDatabaseProvider === 'opensearch' &&
+					(assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl ||
+						assetsVectorDatabaseOpensearchApiKey !==
+							original.assetsVectorDatabaseOpensearchApiKey)
+				) {
+					const opensearchPatch: Record<string, unknown> = {}
+					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
+						opensearchPatch.url = assetsVectorDatabaseUrl || null
 					if (
 						assetsVectorDatabaseOpensearchApiKey !==
 						original.assetsVectorDatabaseOpensearchApiKey
 					)
-						apiKeysPatch.opensearch_api_key =
-							assetsVectorDatabaseOpensearchApiKey || null
-					vectorDatabasePatch.api_keys = apiKeysPatch
+						opensearchPatch.api_key = assetsVectorDatabaseOpensearchApiKey || null
+					vectorDatabasePatch.opensearch = opensearchPatch
 				}
 
 				assetsPatch.vector_database = vectorDatabasePatch
@@ -2041,7 +2174,7 @@
 	}
 
 	onMount(() => {
-		Promise.all([fetchSettings(), fetchAgents(), fetchModels()])
+		Promise.all([fetchSettings(), fetchAgents(), fetchModels(), fetchProviders()])
 	})
 </script>
 
@@ -2169,6 +2302,7 @@
 							bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
 							{agents}
 							{models}
+							{providers}
 							{isFetchingAgents}
 							{isFetchingModels}
 							{agentsError}
@@ -2208,7 +2342,9 @@
 							bind:defaultEmbeddingModelId={assetsDefaultEmbeddingModelId}
 							bind:vectorDatabaseProvider={assetsVectorDatabaseProvider}
 							bind:vectorDatabaseUrl={assetsVectorDatabaseUrl}
+							bind:vectorDatabaseQdrantUseGrpc={assetsVectorDatabaseQdrantUseGrpc}
 							bind:vectorDatabaseQdrantApiKey={assetsVectorDatabaseQdrantApiKey}
+							bind:vectorDatabaseChromaApiKey={assetsVectorDatabaseChromaApiKey}
 							bind:vectorDatabasePineconeApiKey={assetsVectorDatabasePineconeApiKey}
 							bind:vectorDatabaseWeaviateApiKey={assetsVectorDatabaseWeaviateApiKey}
 							bind:vectorDatabaseMilvusToken={assetsVectorDatabaseMilvusToken}
@@ -2238,6 +2374,7 @@
 							bind:storageS3MaxRetries={assetsStorageS3MaxRetries}
 							bind:storageS3RetryMode={assetsStorageS3RetryMode}
 							{models}
+							{providers}
 							{isFetchingModels}
 							{modelsError}
 						/>

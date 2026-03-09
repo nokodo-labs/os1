@@ -11,6 +11,11 @@ from ..base import BaseClientAdapter
 class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 	"""shared infrastructure for all qdrant adapters."""
 
+	host: str | None = Field(default=None, description="qdrant host for remote mode")
+	port: int | None = Field(default=None, description="qdrant REST port")
+	grpc_port: int | None = Field(default=None, description="qdrant gRPC port")
+	https: bool | None = Field(default=None, description="use HTTPS for remote mode")
+	use_grpc: bool = Field(default=True, description="prefer qdrant gRPC transport")
 	location: str | None = Field(
 		default=None,
 		description="path or :memory: for local/in-memory mode",
@@ -27,18 +32,31 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 				timeout=timeout,
 			)
 
-		# remote mode - base_url required, api_key optional (self-hosted)
+		# structured remote mode
+		if self.host is not None:
+			return AsyncQdrantClient(
+				host=self.host,
+				port=self.port or 6333,
+				grpc_port=self.grpc_port or 6334,
+				prefer_grpc=self.use_grpc,
+				https=self.https or False,
+				api_key=self.api_key,
+				timeout=timeout,
+			)
+
+		# URL-based remote mode
 		if self.base_url is None:
 			raise ValueError(
 				"must provide either 'location' for local mode, "
-				"or 'base_url' for remote mode"
+				"'host' for structured remote mode, or 'base_url' for remote mode"
 			)
 
 		return AsyncQdrantClient(
 			url=self.base_url,
 			api_key=self.api_key,
 			timeout=timeout,
-			prefer_grpc=True,
+			prefer_grpc=self.use_grpc,
+			grpc_port=self.grpc_port or 6334,
 		)
 
 	async def close(self) -> None:

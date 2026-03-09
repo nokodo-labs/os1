@@ -11,6 +11,7 @@
 	import Share from '$lib/components/icons/Share.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
 	import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
+	import { chat } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 
@@ -39,6 +40,7 @@
 	}: Props = $props()
 
 	const hasRun = $derived(activeRunsStore.hasActiveRuns(thread.id))
+	const hasUnread = $derived((chat.unreadCounts.get(thread.id) ?? 0) > 0)
 	const isGeneratingTitle = $derived(hasRun && !thread.title)
 	const displayTitle = $derived(thread.title || 'new chat')
 	const hasTags = $derived(thread.tags && thread.tags.length > 0)
@@ -56,7 +58,7 @@
 		onSelect={async () => {
 			await onOpenThread(thread.id)
 		}}
-		actionsVisibility={hasRun || device.isTouch ? 'always' : 'hover'}
+		actionsVisibility={hasRun || hasUnread || device.isTouch ? 'always' : 'hover'}
 	>
 		<div class="min-w-0 flex-1 overflow-hidden">
 			<!-- primary row: title + timestamp -->
@@ -117,8 +119,12 @@
 					}
 					onToggleMenu(thread.id)
 				}}
-				aria-label={hasRun ? 'active run' : 'thread actions'}
-				title={hasRun ? 'agent is running...' : 'Menu'}
+				aria-label={hasRun
+					? 'active run'
+					: hasUnread
+						? 'unread messages'
+						: 'thread actions'}
+				title={hasRun ? 'agent is running...' : hasUnread ? 'unread messages' : 'Menu'}
 			>
 				{#if hasRun}
 					<div class="relative flex h-2 w-2 shrink-0 items-center justify-center">
@@ -126,6 +132,14 @@
 							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-yellow-400 opacity-75"
 						></span>
 						<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-yellow-400"
+						></span>
+					</div>
+				{:else if hasUnread}
+					<div class="relative flex h-2 w-2 shrink-0 items-center justify-center">
+						<span
+							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"
+						></span>
+						<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-400"
 						></span>
 					</div>
 				{:else}

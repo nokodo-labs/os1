@@ -51,12 +51,12 @@
 
 	// per-resource revectorize state
 	type ResourceKey = 'notes' | 'threads' | 'reminders' | 'memories'
-	const RESOURCE_ENDPOINTS: Record<ResourceKey, string> = {
+	const RESOURCE_ENDPOINTS = {
 		notes: '/v1/notes/revectorize',
 		threads: '/v1/threads/revectorize',
 		reminders: '/v1/reminders/revectorize',
 		memories: '/v1/memories/revectorize',
-	}
+	} as const
 	let isRevectorizingResource = $state<Record<ResourceKey, boolean>>({
 		notes: false,
 		threads: false,
@@ -97,9 +97,7 @@
 		isFetching = true
 		error = null
 		try {
-			const data = unwrap(
-				await api.GET('/v1/vectorstores/collections' as '/v1/vectorstores/collections', {})
-			)
+			const data = unwrap(await api.GET('/v1/vectorstores/collections' as const, {}))
 			collections = data as unknown as CollectionInfo[]
 		} catch (e) {
 			console.error('failed to fetch collections', e)
@@ -114,12 +112,9 @@
 		showDetailModal = true
 		try {
 			const data = unwrap(
-				await api.GET(
-					'/v1/vectorstores/collections/{name}' as '/v1/vectorstores/collections/{name}',
-					{
-						params: { path: { name } },
-					}
-				)
+				await api.GET('/v1/vectorstores/collections/{name}' as const, {
+					params: { path: { name } },
+				})
 			)
 			detailCollection = data as Record<string, unknown>
 		} catch (e) {
@@ -145,7 +140,7 @@
 				collection: searchCollection ?? undefined,
 			}
 			const data = unwrap(
-				await api.POST('/v1/vectorstores/search' as '/v1/vectorstores/search', {
+				await api.POST('/v1/vectorstores/search' as const, {
 					params: { query: params },
 				})
 			)
@@ -164,9 +159,7 @@
 		isReindexing = true
 		revectorizeResult = null
 		try {
-			const data = unwrap(
-				await api.POST('/v1/vectorstores/revectorize' as '/v1/vectorstores/revectorize', {})
-			)
+			const data = unwrap(await api.POST('/v1/vectorstores/revectorize' as const, {}))
 			revectorizeResult = data as unknown as RevectorizeResult
 			await fetchCollections()
 		} catch (e) {
@@ -183,10 +176,7 @@
 		revectorizeResourceError[resource] = null
 		try {
 			const endpoint = RESOURCE_ENDPOINTS[resource]
-			const data = unwrap(
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				await api.POST(endpoint as any, {})
-			)
+			const data = unwrap(await api.POST(endpoint, {}))
 			revectorizeResourceResult[resource] = data as unknown as RevectorizeResult
 			await fetchCollections()
 		} catch (e) {
@@ -204,12 +194,9 @@
 		if (!deleteTarget) return
 		isDeleting = true
 		try {
-			await api.DELETE(
-				'/v1/vectorstores/collections/{name}' as '/v1/vectorstores/collections/{name}',
-				{
-					params: { path: { name: deleteTarget } },
-				}
-			)
+			await api.DELETE('/v1/vectorstores/collections/{name}' as const, {
+				params: { path: { name: deleteTarget } },
+			})
 			showDeleteConfirm = false
 			deleteTarget = null
 			await fetchCollections()
@@ -224,7 +211,7 @@
 	async function wipeAllCollections() {
 		isWiping = true
 		try {
-			await api.DELETE('/v1/vectorstores/collections' as '/v1/vectorstores/collections', {})
+			await api.DELETE('/v1/vectorstores/collections' as const, {})
 			showWipeConfirm = false
 			await fetchCollections()
 		} catch (e) {
@@ -368,7 +355,7 @@
 		/>
 	{:else}
 		<div class="grid gap-3">
-			{#each collections as col}
+			{#each collections as col (col.name)}
 				<Card
 					class="cursor-pointer transition-colors hover:border-zinc-600"
 					onclick={() => fetchCollectionDetail(col.name)}
@@ -440,7 +427,7 @@
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="default">default (auto)</SelectItem>
-								{#each collections as col}
+								{#each collections as col (col.name)}
 									<SelectItem value={col.name}>{col.name}</SelectItem>
 								{/each}
 							</SelectContent>
@@ -482,7 +469,7 @@
 
 				{#if searchResults.length > 0}
 					<div class="max-h-80 space-y-2 overflow-y-auto">
-						{#each searchResults as result, i}
+						{#each searchResults as result, i (result.id)}
 							<Card>
 								<CardContent class="py-3">
 									<div class="flex items-start justify-between">
@@ -528,7 +515,7 @@
 				<NokodoLoader />
 			{:else if detailCollection}
 				<div class="space-y-3">
-					{#each Object.entries(detailCollection) as [key, value]}
+					{#each Object.entries(detailCollection) as [key, value] (key)}
 						<div>
 							<p class="text-xs font-medium text-zinc-400">{key}</p>
 							<p class="text-sm">

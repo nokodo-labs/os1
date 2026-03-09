@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { apiClient } from '$lib/api/client'
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { getUserInitials } from '$lib/utils'
 
 	interface AddFriendsModalProps {
@@ -18,7 +20,6 @@
 	let isSearching = $state(false)
 	let hasSearched = $state(false)
 
-	// TODO: replace with real API call when friend endpoints exist
 	type SearchResult = {
 		id: string
 		display_name: string
@@ -33,16 +34,48 @@
 		if (!q) return
 		isSearching = true
 		hasSearched = true
-		// placeholder: will call friend search API when backend is ready
-		// await apiClient().GET('/v1/users/search', { params: { query: { q } } })
-		results = []
-		isSearching = false
+		try {
+			const { data, error } = await apiClient().GET('/v1/users/search', {
+				params: { query: { q, limit: 20 } },
+			})
+			if (error || !data) {
+				results = []
+				return
+			}
+			results = data.map((u) => ({
+				id: u.id,
+				display_name: u.display_name ?? u.email.split('@')[0],
+				email: u.email,
+				avatar_url: u.avatar_url,
+				requestSent: false,
+			}))
+		} catch {
+			results = []
+		} finally {
+			isSearching = false
+		}
 	}
 
-	function handleSendRequest(user: SearchResult) {
-		// TODO: call friend request API when backend is ready
+	async function handleSendRequest(user: SearchResult) {
+		const userId = session.currentUser?.id
+		if (!userId) return
+
 		user.requestSent = true
 		results = [...results]
+
+		try {
+			const { error } = await apiClient().POST('/v1/users/{user_id}/friends/requests', {
+				params: { path: { user_id: userId } },
+				body: { addressee_id: user.id },
+			})
+			if (error) {
+				user.requestSent = false
+				results = [...results]
+			}
+		} catch {
+			user.requestSent = false
+			results = [...results]
+		}
 	}
 
 	function handleViewProfile(user: SearchResult) {

@@ -471,6 +471,31 @@ def _tool_message_to_result_block(
 	)
 
 
+def _append_anthropic_assistant_message(
+	result: list[AnthropicMessageParam],
+	*,
+	assistant_text: str,
+	tool_blocks: list[AnthropicToolUseBlockParam],
+) -> None:
+	"""append an assistant message while preserving anthropic's content shape."""
+	blocks: list[AnthropicTextBlockParam | AnthropicToolUseBlockParam] = []
+	if assistant_text:
+		blocks.append({"type": "text", "text": assistant_text})
+	blocks.extend(tool_blocks)
+
+	if not blocks:
+		return
+	if len(blocks) == 1 and blocks[0]["type"] == "text":
+		result.append(
+			{
+				"role": "assistant",
+				"content": blocks[0]["text"],
+			}
+		)
+		return
+	result.append({"role": "assistant", "content": blocks})
+
+
 def _messages_to_anthropic(
 	messages: list[Message],
 ) -> tuple[str | None, list[AnthropicMessageParam]]:
@@ -491,71 +516,100 @@ def _messages_to_anthropic(
 				result.append({"role": "user", "content": content})
 				i += 1
 			case AssistantMessage():
-				blocks: list[AnthropicTextBlockParam | AnthropicToolUseBlockParam] = []
 				assistant_text = message.text
 				if not assistant_text and message.json_content is not None:
 					assistant_text = json.dumps(message.json_content)
-				if assistant_text:
-					blocks.append({"type": "text", "text": assistant_text})
-				if message.tool_calls:
-					for call in message.tool_calls:
-						tool_use_id = (
-							get_provider_tool_call_id(
-								metadata=call.metadata,
-								provider="anthropic.messages",
-								fallback_id=call.id,
-							)
-							or call.id
+				tool_blocks: list[AnthropicToolUseBlockParam] = []
+				tool_use_by_id: dict[str, AnthropicToolUseBlockParam] = {}
+				for call in message.tool_calls:
+					tool_use_id = (
+						get_provider_tool_call_id(
+							metadata=call.metadata,
+							provider="anthropic.messages",
+							fallback_id=call.id,
 						)
-						input_map: dict[str, object] = {}
-						if isinstance(call.arguments, dict):
-							input_map = dict[str, object](
-								call.arguments,
-							)
-						elif isinstance(call.arguments, str):
-							try:
-								parsed = (
-									json.loads(call.arguments)
-									if call.arguments.strip()
-									else {}
-								)
-							except json.JSONDecodeError:
-								parsed = {}
-							if isinstance(parsed, dict):
-								input_map = dict[str, object](
-									parsed,
-								)
-						blocks.append(
-							{
-								"type": "tool_use",
-								"id": tool_use_id,
-								"name": call.name,
-								"input": input_map,
-							}
-						)
-				if not blocks:
-					result.append({"role": "assistant", "content": ""})
-				elif len(blocks) == 1 and blocks[0]["type"] == "text":
-					result.append(
-						{
-							"role": "assistant",
-							"content": blocks[0]["text"],
-						}
+						or call.id
 					)
-				else:
-					result.append({"role": "assistant", "content": blocks})
-				i += 1
-			case ToolMessage():
-				# anthropic requires all tool_result blocks that correspond to
-				# one assistant turn to be combined in a single user message.
-				# consume all consecutive ToolMessages at once.
-				result_blocks: list[AnthropicToolResultBlockParam] = []
-				while i < len(messages) and isinstance(messages[i], ToolMessage):
-					tm = messages[i]
-					assert isinstance(tm, ToolMessage)
-					result_blocks.append(_tool_message_to_result_block(tm))
+					input_map: dict[str, object] = {}
+					if isinstance(call.arguments, dict):
+						input_map = dict[str, object](call.arguments)
+					elif isinstance(call.arguments, str):
+						try:
+							parsed = (
+								json.loads(call.arguments)
+								if call.arguments.strip()
+								else {}
+							)
+						except json.JSONDecodeError:
+							parsed = {}
+						if isinstance(parsed, dict):
+							input_map = dict[str, object](parsed)
+					tool_block: AnthropicToolUseBlockParam = {
+						"type": "tool_use",
+						"id": tool_use_id,
+						"name": call.name,
+						"input": input_map,
+					}
+					tool_blocks.append(tool_block)
+					tool_use_by_id[tool_use_id] = tool_block
+
+				if not tool_blocks:
+					_append_anthropic_assistant_message(
+						result,
+						assistant_text=assistant_text,
+						tool_blocks=[],
+					)
 					i += 1
-				result.append({"role": "user", "content": result_blocks})
+					continue
+
+				result_blocks: list[AnthropicToolResultBlockParam] = []
+				matched_tool_ids: list[str] = []
+				j = i + 1
+				while j < len(messages) and isinstance(messages[j], ToolMessage):
+					tm = messages[j]
+					assert isinstance(tm, ToolMessage)
+					result_block = _tool_message_to_result_block(tm)
+					tool_use_id = result_block["tool_use_id"]
+					if tool_use_id in tool_use_by_id:
+						result_blocks.append(result_block)
+						if tool_use_id not in matched_tool_ids:
+							matched_tool_ids.append(tool_use_id)
+					j += 1
+
+				if matched_tool_ids:
+					matched_tool_blocks = [
+						tool_use_by_id[tool_id] for tool_id in matched_tool_ids
+					]
+					_append_anthropic_assistant_message(
+						result,
+						assistant_text=assistant_text,
+						tool_blocks=matched_tool_blocks,
+					)
+					result.append({"role": "user", "content": result_blocks})
+					i = j
+					continue
+
+				if j > i + 1:
+					# ToolMessages followed but none matched - strip tool_use blocks
+					# and skip past those lookahead messages
+					_append_anthropic_assistant_message(
+						result,
+						assistant_text=assistant_text,
+						tool_blocks=[],
+					)
+					i = j
+				else:
+					# no ToolMessages followed - keep tool_use blocks as-is
+					_append_anthropic_assistant_message(
+						result,
+						assistant_text=assistant_text,
+						tool_blocks=tool_blocks,
+					)
+					i += 1
+			case ToolMessage():
+				# skip orphaned tool results. anthropic requires tool_result
+				# blocks to immediately follow the assistant tool_use turn.
+				i += 1
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")
 

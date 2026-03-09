@@ -191,6 +191,9 @@ class ChatStore {
 	pendingCreateAndRun = $state<PendingCreateAndRun | null>(null)
 	isLoadingThreads = $state(false)
 
+	/** unread message counts per thread id (only threads with unread > 0) */
+	readonly unreadCounts = new SvelteMap<string, number>()
+
 	/** in-memory drafts keyed by context id (thread id or 'home') */
 	readonly drafts = new SvelteMap<string, string>()
 
@@ -264,6 +267,10 @@ class ChatStore {
 			} else {
 				this.threadCache.invalidateMessages(threadId)
 			}
+			// bump unread count for threads the user is not currently viewing
+			if (this.activeThread?.id !== threadId) {
+				this.unreadCounts.set(threadId, (this.unreadCounts.get(threadId) ?? 0) + 1)
+			}
 		} else if (message.type === 'message.updated') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			const msgId = (data.id as string) ?? (message.message_id as string)
@@ -301,6 +308,7 @@ class ChatStore {
 		this.pendingCreateAndRun = null
 		this.isLoadingThreads = false
 		this.drafts.clear()
+		this.unreadCounts.clear()
 	}
 
 	consumePendingChatStart = (threadId: string): string | null => {
@@ -335,6 +343,35 @@ class ChatStore {
 		this.recentThreads = [updated, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
 	}
 
+	fetchUnreadCounts = async (): Promise<void> => {
+		try {
+			const { data } = await apiClient().GET('/v1/threads/unread-counts')
+			this.unreadCounts.clear()
+			if (data) {
+				for (const item of data) {
+					if (item.unread_count > 0) {
+						this.unreadCounts.set(item.thread_id, item.unread_count)
+					}
+				}
+			}
+		} catch {
+			// silently ignore
+		}
+	}
+
+	markThreadRead = async (threadId: string): Promise<void> => {
+		if (!threadId) return
+		// optimistically clear the count
+		this.unreadCounts.delete(threadId)
+		try {
+			await apiClient().POST('/v1/threads/{thread_id}/read', {
+				params: { path: { thread_id: threadId } },
+			})
+		} catch {
+			// silently ignore
+		}
+	}
+
 	refreshThreads = async (options?: { limit?: number }): Promise<void> => {
 		const token = getAccessToken()
 		if (!token) {
@@ -360,6 +397,8 @@ class ChatStore {
 			})
 
 			this.recentThreads = data ?? []
+			// fetch unread counts alongside thread list
+			void this.fetchUnreadCounts()
 		} finally {
 			this.isLoadingThreads = false
 		}

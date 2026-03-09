@@ -1,9 +1,9 @@
-name: nokodo-ai
+name: os1
 
 services:
   db:
     image: postgres:17-alpine
-    container_name: nokodo-ai-db
+    container_name: os1-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: nokodo-ai-admin
@@ -22,7 +22,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.16.2
-    container_name: nokodo-ai-qdrant
+    container_name: os1-qdrant
     restart: unless-stopped
     ports:
       - "6333:6333"
@@ -33,7 +33,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: nokodo-ai-minio
+    container_name: os1-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -55,7 +55,7 @@ services:
     build:
       context: ../backend
       dockerfile: ../.docker/Dockerfile.backend
-    container_name: nokodo-ai-backend
+    container_name: os1-backend
     restart: unless-stopped
     ports:
       - "1383:1383"
@@ -71,7 +71,6 @@ services:
       NOKODO__ASSETS__STORAGE__S3__ENDPOINT_URL: http://minio:9000
       NOKODO__ASSETS__STORAGE__S3__ACCESS_KEY_ID: minioadmin
       NOKODO__ASSETS__STORAGE__S3__SECRET_ACCESS_KEY: minioadmin
-      NOKODO__ASSETS__VECTOR_DATABASE__URL: http://nokodo-ai-qdrant:6333
     depends_on:
       db:
         condition: service_healthy
@@ -90,7 +89,7 @@ services:
     build:
       context: ../frontend
       dockerfile: ../.docker/Dockerfile.frontend
-    container_name: nokodo-ai-frontend
+    container_name: os1-frontend
     restart: unless-stopped
     ports:
       - "888:80"
@@ -105,7 +104,7 @@ services:
     build:
       context: ../console
       dockerfile: ../.docker/Dockerfile.console
-    container_name: nokodo-ai-console
+    container_name: os1-console
     restart: unless-stopped
     ports:
       - "8383:80"
@@ -126,4 +125,4 @@ volumes:
 
 networks:
   default:
-    name: nokodo-network
+    name: os1-network

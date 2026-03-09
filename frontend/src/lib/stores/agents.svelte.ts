@@ -2,7 +2,7 @@ import { browser } from '$app/environment'
 import { apiClient } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
-import { onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 
 export type Agent = components['schemas']['Agent']
 
@@ -20,6 +20,12 @@ class AgentsStore {
 	get = (agentId: string): Agent | null => this.byId[agentId] ?? null
 
 	load = async (): Promise<void> => {
+		if (!getAccessToken()) {
+			this.error = null
+			this.list = []
+			this.byId = {}
+			return
+		}
 		if (this.#loading) return
 		this.#loading = true
 		this.error = null
@@ -40,6 +46,7 @@ class AgentsStore {
 
 	ensure = async (agentId: string): Promise<Agent | null> => {
 		if (!agentId) return null
+		if (!getAccessToken()) return null
 		const existing = this.get(agentId)
 		if (existing) return existing
 		if (this.#pending.includes(agentId)) return null
@@ -119,6 +126,7 @@ if (browser) {
 			agents.unsubscribe()
 			agents.list = []
 			agents.byId = {}
+			agents.error = null
 		}
 	})
 }

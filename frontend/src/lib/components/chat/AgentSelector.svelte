@@ -6,6 +6,7 @@
 	import { agents } from '$lib/stores/agents.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { selectedAgent as selectedAgentStore } from '$lib/stores/selectedAgent.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	interface Props {
 		selectedAgent: string
@@ -39,6 +40,10 @@
 	})
 
 	$effect(() => {
+		if (!session.isLoggedIn) {
+			didLoadAgents = false
+			return
+		}
 		if (didLoadAgents) return
 		didLoadAgents = true
 		void agents.load()

@@ -2,7 +2,7 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type File = Schemas['File']
-	type SortDir = Schemas['SortDir']
+	type SortDir = 'asc' | 'desc'
 
 	import FileDetailsModal from '$lib/components/FileDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'

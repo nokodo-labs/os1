@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { replaceState } from '$app/navigation'
 	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
@@ -108,7 +107,7 @@
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		replaceState(target, {})
+		history.replaceState(history.state, '', target)
 	}
 
 	function updateQueryParams(updates: Record<string, string | null>) {

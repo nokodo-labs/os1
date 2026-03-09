@@ -16,7 +16,7 @@ async def test_async_agentic_flow(
 ) -> None:
 	"""Exercise the primary architecture entities in a single flow."""
 
-	monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__URL", ":memory:")
+	monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL", ":memory:")
 	monkeypatch.setenv("OPENAI_API_KEY", "test")
 	vectorstores_service._vectorstore_adapter.cache_clear()
 

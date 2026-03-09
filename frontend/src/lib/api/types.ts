@@ -421,6 +421,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/threads/unread-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unread Counts
+         * @description return unread message counts for the current user's threads.
+         */
+        get: operations["get_unread_counts_threads_unread_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/threads/{thread_id}": {
         parameters: {
             query?: never;
@@ -641,6 +661,26 @@ export interface paths {
          * @description cancel an active agent run on a thread.
          */
         post: operations["cancel_run_threads__thread_id__runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/{thread_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Thread Read
+         * @description mark all messages in a thread as read for the current user.
+         */
+        post: operations["mark_thread_read_threads__thread_id__read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3025,6 +3065,11 @@ export interface components {
              * @default false
              */
             enabled: boolean;
+            /**
+             * Model
+             * @description model ID referencing a Model ORM record with AUDIO type
+             */
+            model?: string | null;
         };
         /** AudioGenerationSettingsPatch */
         AudioGenerationSettingsPatch: {
@@ -3060,10 +3105,7 @@ export interface components {
         };
         /** Body_upload_file_files_upload_post */
         Body_upload_file_files_upload_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
             /** Project Id */
             project_id?: string | null;
@@ -3188,6 +3230,35 @@ export interface components {
              * @description external pwa manifest.json url
              */
             pwa_manifest_url?: string | null;
+        };
+        /**
+         * ChromaVectorDatabaseSettings
+         * @description chroma provider settings stub.
+         */
+        ChromaVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description chroma endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for chroma
+             */
+            api_key?: string | null;
+        };
+        /** ChromaVectorDatabaseSettingsPatch */
+        ChromaVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description chroma endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for chroma
+             */
+            api_key?: string | null;
         };
         /**
          * ClientContext
@@ -3508,6 +3579,11 @@ export interface components {
              * @default code-interpreter-v1
              */
             template: string;
+            /**
+             * Available Packages
+             * @description pre-installed Python packages available in the sandbox
+             */
+            available_packages?: string[];
         };
         /** E2bSettingsPatch */
         E2bSettingsPatch: {
@@ -3521,6 +3597,11 @@ export interface components {
              * @description E2B sandbox template
              */
             template?: string | null;
+            /**
+             * Available Packages
+             * @description pre-installed Python packages available in the sandbox
+             */
+            available_packages?: string[] | null;
         };
         /**
          * EmbeddingsSettings
@@ -4462,6 +4543,35 @@ export interface components {
             content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
         };
         /**
+         * MilvusVectorDatabaseSettings
+         * @description milvus provider settings stub.
+         */
+        MilvusVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description milvus endpoint url
+             */
+            url?: string | null;
+            /**
+             * Token
+             * @description token for milvus
+             */
+            token?: string | null;
+        };
+        /** MilvusVectorDatabaseSettingsPatch */
+        MilvusVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description milvus endpoint url
+             */
+            url?: string | null;
+            /**
+             * Token
+             * @description token for milvus
+             */
+            token?: string | null;
+        };
+        /**
          * Model
          * @description response schema.
          */
@@ -4891,6 +5001,35 @@ export interface components {
             content: string;
         };
         /**
+         * OpensearchVectorDatabaseSettings
+         * @description opensearch provider settings stub.
+         */
+        OpensearchVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description opensearch endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for opensearch
+             */
+            api_key?: string | null;
+        };
+        /** OpensearchVectorDatabaseSettingsPatch */
+        OpensearchVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description opensearch endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for opensearch
+             */
+            api_key?: string | null;
+        };
+        /**
          * PasswordChange
          * @description payload for self-service password change.
          */
@@ -4985,6 +5124,54 @@ export interface components {
              * @description max concurrent requests to perplexity
              */
             max_concurrent_requests?: number | null;
+        };
+        /**
+         * PgvectorVectorDatabaseSettings
+         * @description pgvector provider settings stub.
+         */
+        PgvectorVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description pgvector connection url
+             */
+            url?: string | null;
+        };
+        /** PgvectorVectorDatabaseSettingsPatch */
+        PgvectorVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description pgvector connection url
+             */
+            url?: string | null;
+        };
+        /**
+         * PineconeVectorDatabaseSettings
+         * @description pinecone provider settings stub.
+         */
+        PineconeVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description pinecone endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for pinecone
+             */
+            api_key?: string | null;
+        };
+        /** PineconeVectorDatabaseSettingsPatch */
+        PineconeVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description pinecone endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for pinecone
+             */
+            api_key?: string | null;
         };
         /**
          * Plugin
@@ -5326,8 +5513,6 @@ export interface components {
             base_url?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
-            /** Model Prefix */
-            model_prefix?: string | null;
             /** Additional Headers */
             additional_headers?: {
                 [key: string]: string;
@@ -5360,8 +5545,6 @@ export interface components {
             base_url?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
-            /** Model Prefix */
-            model_prefix?: string | null;
             /** Additional Headers */
             additional_headers?: {
                 [key: string]: string;
@@ -5396,6 +5579,8 @@ export interface components {
          */
         ProviderUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Name */
+            name?: string | null;
             /** Adapter Type */
             adapter_type?: string | null;
             provider_type?: components["schemas"]["ProviderType"] | null;
@@ -5405,8 +5590,6 @@ export interface components {
             api_key?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
-            /** Model Prefix */
-            model_prefix?: string | null;
             /** Additional Headers */
             additional_headers?: {
                 [key: string]: string;
@@ -5416,6 +5599,76 @@ export interface components {
             is_autofetch_enabled?: boolean | null;
             /** Last Synced At */
             last_synced_at?: string | null;
+        };
+        /**
+         * QdrantVectorDatabaseSettings
+         * @description qdrant provider settings.
+         */
+        QdrantVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description qdrant endpoint. host:port targets gRPC when use_grpc is enabled
+             * @default qdrant:6334
+             */
+            url: string;
+            /**
+             * Use Grpc
+             * @description use qdrant gRPC transport when available
+             * @default true
+             */
+            use_grpc: boolean;
+            /**
+             * Api Key
+             * @description api key for qdrant
+             */
+            api_key?: string | null;
+        };
+        /** QdrantVectorDatabaseSettingsPatch */
+        QdrantVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description qdrant endpoint url
+             */
+            url?: string | null;
+            /**
+             * Use Grpc
+             * @description use qdrant gRPC transport when available
+             */
+            use_grpc?: boolean | null;
+            /**
+             * Api Key
+             * @description api key for qdrant
+             */
+            api_key?: string | null;
+        };
+        /**
+         * RedisVectorDatabaseSettings
+         * @description redis provider settings stub.
+         */
+        RedisVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description redis endpoint url
+             */
+            url?: string | null;
+            /**
+             * Password
+             * @description password for redis
+             */
+            password?: string | null;
+        };
+        /** RedisVectorDatabaseSettingsPatch */
+        RedisVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description redis endpoint url
+             */
+            url?: string | null;
+            /**
+             * Password
+             * @description password for redis
+             */
+            password?: string | null;
         };
         /**
          * RefusalContent
@@ -6033,6 +6286,26 @@ export interface components {
              * @description presigned URL expiration in seconds
              */
             presigned_url_ttl?: number | null;
+            /**
+             * Multipart Threshold
+             * @description bytes above which multipart upload kicks in
+             */
+            multipart_threshold?: number | null;
+            /**
+             * Multipart Chunk Size
+             * @description multipart upload chunk size in bytes
+             */
+            multipart_chunk_size?: number | null;
+            /**
+             * Max Retries
+             * @description max retry attempts
+             */
+            max_retries?: number | null;
+            /**
+             * Retry Mode
+             * @description botocore retry mode
+             */
+            retry_mode?: ("legacy" | "standard" | "adaptive") | null;
         };
         /**
          * SearchEngineSettings
@@ -6165,6 +6438,12 @@ export interface components {
              * @default changeme
              */
             secret_key: string;
+            /**
+             * Previous Secret Keys
+             * @description previous secret keys for decryption fallback during key rotation (env-only). set as comma-separated string or JSON array.
+             * @default []
+             */
+            previous_secret_keys: string[];
             /**
              * Allow Signups
              * @description allow new user signups
@@ -6442,8 +6721,6 @@ export interface components {
              */
             files?: boolean | null;
         };
-        /** @enum {string} */
-        SortDir: "asc" | "desc";
         /**
          * StorageSettings
          * @description file storage backend configuration.
@@ -6725,6 +7002,11 @@ export interface components {
          *
          *     ``input`` is required (a new thread needs at least one user message).
          *     the SSE stream emits a ``thread_created`` event before normal run events.
+         *
+         *     ``thread_id`` is an optional client-generated TypeID. if provided, the
+         *     backend will attempt to use it. on conflict, a server-generated ID is
+         *     used instead - the client must read the ``thread_created`` event to
+         *     get the canonical ID.
          */
         ThreadCreateAndRunRequest: {
             /**
@@ -6747,6 +7029,8 @@ export interface components {
             stream: boolean;
             /** @description optional device/environment context from the client */
             clientContext?: components["schemas"]["ClientContext"] | null;
+            /** Thread Id */
+            thread_id?: string | null;
             /**
              * Is Temporary
              * @default false
@@ -6771,6 +7055,37 @@ export interface components {
             model_id?: string | null;
         };
         /**
+         * ThreadParticipant
+         * @description response schema for a thread participant.
+         */
+        ThreadParticipant: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Membership Role */
+            membership_role?: string | null;
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /** Left At */
+            left_at?: string | null;
+            /** Last Read Message Id */
+            last_read_message_id?: string | null;
+        };
+        /**
          * ThreadSwitchRequest
          * @description Payload to switch a thread's active branch.
          */
@@ -6790,6 +7105,19 @@ export interface components {
             ok: boolean;
             /** Current Message Id */
             current_message_id?: string | null;
+        };
+        /**
+         * ThreadUnreadCount
+         * @description unread count for a single thread.
+         */
+        ThreadUnreadCount: {
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /** Unread Count */
+            unread_count: number;
         };
         /**
          * ThreadUpdate
@@ -7151,80 +7479,11 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * VectorDatabaseApiKeys
-         * @description provider-specific credentials for vector databases.
-         */
-        VectorDatabaseApiKeys: {
-            /**
-             * Qdrant Api Key
-             * @description api key for qdrant
-             */
-            qdrant_api_key?: string | null;
-            /**
-             * Pinecone Api Key
-             * @description api key for pinecone
-             */
-            pinecone_api_key?: string | null;
-            /**
-             * Weaviate Api Key
-             * @description api key for weaviate
-             */
-            weaviate_api_key?: string | null;
-            /**
-             * Milvus Token
-             * @description token for milvus
-             */
-            milvus_token?: string | null;
-            /**
-             * Redis Password
-             * @description password for redis
-             */
-            redis_password?: string | null;
-            /**
-             * Opensearch Api Key
-             * @description api key for opensearch
-             */
-            opensearch_api_key?: string | null;
-        };
-        /** VectorDatabaseApiKeysPatch */
-        VectorDatabaseApiKeysPatch: {
-            /**
-             * Qdrant Api Key
-             * @description api key for qdrant
-             */
-            qdrant_api_key?: string | null;
-            /**
-             * Pinecone Api Key
-             * @description api key for pinecone
-             */
-            pinecone_api_key?: string | null;
-            /**
-             * Weaviate Api Key
-             * @description api key for weaviate
-             */
-            weaviate_api_key?: string | null;
-            /**
-             * Milvus Token
-             * @description token for milvus
-             */
-            milvus_token?: string | null;
-            /**
-             * Redis Password
-             * @description password for redis
-             */
-            redis_password?: string | null;
-            /**
-             * Opensearch Api Key
-             * @description api key for opensearch
-             */
-            opensearch_api_key?: string | null;
-        };
-        /**
          * VectorDatabaseProvider
          * @description supported vector database providers.
          * @enum {string}
          */
-        VectorDatabaseProvider: "qdrant" | "pinecone" | "weaviate" | "milvus" | "pgvector" | "redis" | "opensearch";
+        VectorDatabaseProvider: "qdrant" | "chroma" | "pinecone" | "weaviate" | "milvus" | "pgvector" | "redis" | "opensearch";
         /**
          * VectorDatabaseSettings
          * @description vector database connection settings.
@@ -7235,14 +7494,22 @@ export interface components {
              * @default qdrant
              */
             provider: components["schemas"]["VectorDatabaseProvider"];
-            /**
-             * Url
-             * @description vector database endpoint url or local mode location
-             * @default http://localhost:6333
-             */
-            url: string;
-            /** @description provider-specific api key and token settings */
-            api_keys?: components["schemas"]["VectorDatabaseApiKeys"];
+            /** @description qdrant provider settings */
+            qdrant?: components["schemas"]["QdrantVectorDatabaseSettings"];
+            /** @description chroma provider settings stub */
+            chroma?: components["schemas"]["ChromaVectorDatabaseSettings"];
+            /** @description pinecone provider settings stub */
+            pinecone?: components["schemas"]["PineconeVectorDatabaseSettings"];
+            /** @description weaviate provider settings stub */
+            weaviate?: components["schemas"]["WeaviateVectorDatabaseSettings"];
+            /** @description milvus provider settings stub */
+            milvus?: components["schemas"]["MilvusVectorDatabaseSettings"];
+            /** @description pgvector provider settings stub */
+            pgvector?: components["schemas"]["PgvectorVectorDatabaseSettings"];
+            /** @description redis provider settings stub */
+            redis?: components["schemas"]["RedisVectorDatabaseSettings"];
+            /** @description opensearch provider settings stub */
+            opensearch?: components["schemas"]["OpensearchVectorDatabaseSettings"];
         };
         /** VectorDatabaseSettingsPatch */
         VectorDatabaseSettingsPatch: {
@@ -7250,13 +7517,15 @@ export interface components {
              * Provider
              * @description vector database provider
              */
-            provider?: ("qdrant" | "pinecone" | "weaviate" | "milvus" | "pgvector" | "redis" | "opensearch") | null;
-            /**
-             * Url
-             * @description vector database endpoint url
-             */
-            url?: string | null;
-            api_keys?: components["schemas"]["VectorDatabaseApiKeysPatch"] | null;
+            provider?: ("qdrant" | "chroma" | "pinecone" | "weaviate" | "milvus" | "pgvector" | "redis" | "opensearch") | null;
+            qdrant?: components["schemas"]["QdrantVectorDatabaseSettingsPatch"] | null;
+            chroma?: components["schemas"]["ChromaVectorDatabaseSettingsPatch"] | null;
+            pinecone?: components["schemas"]["PineconeVectorDatabaseSettingsPatch"] | null;
+            weaviate?: components["schemas"]["WeaviateVectorDatabaseSettingsPatch"] | null;
+            milvus?: components["schemas"]["MilvusVectorDatabaseSettingsPatch"] | null;
+            pgvector?: components["schemas"]["PgvectorVectorDatabaseSettingsPatch"] | null;
+            redis?: components["schemas"]["RedisVectorDatabaseSettingsPatch"] | null;
+            opensearch?: components["schemas"]["OpensearchVectorDatabaseSettingsPatch"] | null;
         };
         /**
          * VectorSettings
@@ -7323,6 +7592,11 @@ export interface components {
              * @default false
              */
             enabled: boolean;
+            /**
+             * Model
+             * @description model ID referencing a Model ORM record with VIDEO type
+             */
+            model?: string | null;
         };
         /** VideoGenerationSettingsPatch */
         VideoGenerationSettingsPatch: {
@@ -7338,6 +7612,35 @@ export interface components {
          * @enum {string}
          */
         Visibility: "everyone" | "friends" | "private";
+        /**
+         * WeaviateVectorDatabaseSettings
+         * @description weaviate provider settings stub.
+         */
+        WeaviateVectorDatabaseSettings: {
+            /**
+             * Url
+             * @description weaviate endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for weaviate
+             */
+            api_key?: string | null;
+        };
+        /** WeaviateVectorDatabaseSettingsPatch */
+        WeaviateVectorDatabaseSettingsPatch: {
+            /**
+             * Url
+             * @description weaviate endpoint url
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description api key for weaviate
+             */
+            api_key?: string | null;
+        };
         /**
          * WebLoaderSettings
          * @description web loader configuration for fetching and processing web content.
@@ -8488,7 +8791,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("email" | "display_name" | "is_active" | "is_superuser");
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -9157,7 +9460,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("last_activity_at" | "title");
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
                 include_hidden?: boolean;
                 is_archived?: boolean | null;
             };
@@ -9637,6 +9940,100 @@ export interface operations {
             };
         };
     };
+    get_unread_counts_threads_unread_counts_get: {
+        parameters: {
+            query?: {
+                thread_id?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadUnreadCount"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_thread_threads__thread_id__get: {
         parameters: {
             query?: {
@@ -10032,8 +10429,8 @@ export interface operations {
             query?: {
                 skip?: number;
                 limit?: number;
-                sort_by?: components["schemas"]["CommonSortBy"];
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_by?: "created_at" | "updated_at";
+                sort_dir?: "asc" | "desc";
                 group_task_runs?: boolean;
                 include_hidden?: boolean;
             };
@@ -11105,6 +11502,100 @@ export interface operations {
             };
         };
     };
+    mark_thread_read_threads__thread_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadParticipant"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_runs_runs_get: {
         parameters: {
             query?: never;
@@ -11397,7 +11888,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("status" | "task_type" | "stage" | "last_event_at");
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -12546,7 +13037,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("category" | "content_length" | "last_accessed_at" | "confidence");
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
                 search?: string | null;
             };
             header?: never;
@@ -13218,7 +13709,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | "title";
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -13986,7 +14477,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: string;
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
                 user_id?: string | null;
             };
             header?: never;
@@ -14857,7 +15348,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: string;
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -15533,7 +16024,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: string;
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -16502,7 +16993,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: "position" | "name" | "created_at" | "updated_at";
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -17084,7 +17575,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: "position" | "due_at" | "created_at" | "updated_at" | "title";
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -19767,7 +20258,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: string;
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
                 user_id?: string | null;
             };
             header?: never;
@@ -20440,7 +20931,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | "command";
-                sort_dir?: components["schemas"]["SortDir"];
+                sort_dir?: "asc" | "desc";
             };
             header?: never;
             path?: never;

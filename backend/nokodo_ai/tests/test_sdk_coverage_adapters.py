@@ -47,6 +47,8 @@ from nokodo_ai.adapters.openai.responses import (
 	_tool_choice_to_openai_responses,
 	_tools_to_openai_responses,
 )
+from nokodo_ai.adapters.qdrant import base as qdrant_base
+from nokodo_ai.adapters.qdrant.base import BaseQdrantAdapter
 from nokodo_ai.messages import (
 	AssistantMessage,
 	JsonContent,
@@ -123,6 +125,35 @@ def test_openai_and_anthropic_base_get_client_includes_optional_fields(
 	assert created2[-1]["base_url"] == "https://api.anthropic.com"
 
 
+def test_qdrant_base_get_client_supports_structured_remote_fields(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	created: list[dict[str, object]] = []
+
+	class _DummyQdrantClient:
+		def __init__(self, **kwargs: object):
+			created.append(dict(kwargs))
+
+		async def close(self) -> None:
+			return None
+
+	monkeypatch.setattr(qdrant_base, "AsyncQdrantClient", _DummyQdrantClient)
+	BaseQdrantAdapter(
+		host="qdrant",
+		port=6333,
+		grpc_port=6334,
+		use_grpc=True,
+		api_key="k",
+		timeout=5.0,
+	)
+	assert created
+	assert created[-1]["host"] == "qdrant"
+	assert created[-1]["port"] == 6333
+	assert created[-1]["grpc_port"] == 6334
+	assert created[-1]["prefer_grpc"] is True
+	assert created[-1]["api_key"] == "k"
+
+
 def test_base_chat_adapter_generate_not_implemented_is_covered() -> None:
 	class _CallsSuperChat(BaseChatAdapter):
 		def generate(  # type: ignore[override]
@@ -196,10 +227,18 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	assert msgs[1]["role"] == "assistant"
 
 	# tool message should fall back to tool_call_id when provider data missing
-	system_text2, msgs2 = _messages_to_anthropic(
-		[user, ToolMessage(tool_call_id="x", tool_output="out", metadata={})]
+	assistant2 = AssistantMessage(
+		content=[],
+		tool_calls=[ToolCall(id="x", name="tool", arguments="{}", metadata={})],
 	)
-	assert msgs2[1]["content"][0]["tool_use_id"] == "x"  # type: ignore[index]
+	system_text2, msgs2 = _messages_to_anthropic(
+		[
+			user,
+			assistant2,
+			ToolMessage(tool_call_id="x", tool_output="out", metadata={}),
+		]
+	)
+	assert msgs2[2]["content"][0]["tool_use_id"] == "x"  # type: ignore[index]
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_anthropic([object()])  # type: ignore[list-item]
@@ -1381,3 +1420,108 @@ def test_anthropic_messages_to_anthropic_json_and_tool_result_blocks() -> None:
 	assert system_text == "a"
 	assert any(m["role"] == "assistant" for m in msgs)
 	assert any(m["role"] == "user" for m in msgs)
+
+
+def test_anthropic_messages_drop_orphaned_tool_result_blocks() -> None:
+	user = UserMessage.from_text("u")
+	tool_msg = ToolMessage(
+		tool_call_id="sdk_call",
+		tool_output="ok",
+		metadata={
+			"_provider_data": {
+				"anthropic.messages": {
+					"tool_call_id": "toolu_orphan",
+				}
+			}
+		},
+	)
+
+	_, msgs = _messages_to_anthropic([user, tool_msg])
+
+	assert msgs == [{"role": "user", "content": "u"}]
+
+
+def test_anthropic_messages_strip_unmatched_tool_use_blocks() -> None:
+	assistant = AssistantMessage.from_text("thinking")
+	assistant.tool_calls = [
+		ToolCall(
+			id="sdk_call",
+			name="tool",
+			arguments={"x": 1},
+			metadata={
+				"_provider_data": {
+					"anthropic.messages": {
+						"tool_call_id": "toolu_expected",
+					}
+				}
+			},
+		)
+	]
+	tool_msg = ToolMessage(
+		tool_call_id="sdk_call",
+		tool_output="ok",
+		metadata={
+			"_provider_data": {
+				"anthropic.messages": {
+					"tool_call_id": "toolu_other",
+				}
+			}
+		},
+	)
+
+	_, msgs = _messages_to_anthropic(
+		[assistant, tool_msg, UserMessage.from_text("next")]
+	)
+
+	assert msgs[0] == {"role": "assistant", "content": "thinking"}
+	assert msgs[1] == {"role": "user", "content": "next"}
+
+
+def test_anthropic_messages_keep_only_matched_tool_turns() -> None:
+	assistant = AssistantMessage.from_text("working")
+	assistant.tool_calls = [
+		ToolCall(
+			id="sdk_1",
+			name="tool_1",
+			arguments={"x": 1},
+			metadata={
+				"_provider_data": {
+					"anthropic.messages": {
+						"tool_call_id": "toolu_1",
+					}
+				}
+			},
+		),
+		ToolCall(
+			id="sdk_2",
+			name="tool_2",
+			arguments={"y": 2},
+			metadata={
+				"_provider_data": {
+					"anthropic.messages": {
+						"tool_call_id": "toolu_2",
+					}
+				}
+			},
+		),
+	]
+	matched_tool_msg = ToolMessage(
+		tool_call_id="sdk_2",
+		tool_output="ok",
+		metadata={
+			"_provider_data": {
+				"anthropic.messages": {
+					"tool_call_id": "toolu_2",
+				}
+			}
+		},
+	)
+
+	_, msgs = _messages_to_anthropic([assistant, matched_tool_msg])
+
+	assert msgs[0]["role"] == "assistant"
+	assert msgs[0]["content"][0]["type"] == "text"  # type: ignore[index]
+	assert msgs[0]["content"][1]["id"] == "toolu_2"  # type: ignore[index]
+	assert len(msgs[0]["content"]) == 2  # type: ignore[arg-type]
+	assert msgs[1]["role"] == "user"
+	assert msgs[1]["content"][0]["tool_use_id"] == "toolu_2"  # type: ignore[index]

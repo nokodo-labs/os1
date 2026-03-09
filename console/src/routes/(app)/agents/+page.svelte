@@ -7,9 +7,11 @@
 	type Model = Schemas['Model']
 	type PluginInfo = Schemas['PluginInfo']
 	type Prompt = Schemas['Prompt']
+	type Provider = Schemas['Provider']
 
 	import AclModal from '$lib/components/AclModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
+	import ModelParamsEditor from '$lib/components/ModelParamsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PromptVariablesLegend from '$lib/components/PromptVariablesLegend.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -40,6 +42,7 @@ user: {{ user_name }}.
 
 	let agents = $state<Agent[]>([])
 	let models = $state<Model[]>([])
+	let providers = $state<Provider[]>([])
 	let availableToolPlugins = $state<PluginInfo[]>([])
 	let availableFilterPlugins = $state<PluginInfo[]>([])
 	let legendPrompts = $state<Prompt[]>([])
@@ -63,31 +66,54 @@ user: {{ user_name }}.
 	let formPluginIds = $state<string[]>([])
 	let formProfileImageUrl = $state('')
 	let formProfileImageFileId = $state('')
+	let configParams = $state<Record<string, unknown>>({})
+
+	let selectedModelType = $derived.by(() => {
+		if (!formModelId) return null
+		const m = models.find((m) => m.id === formModelId)
+		return (m?.model_type ?? null) as
+			| 'chat_model'
+			| 'embedding'
+			| 'image'
+			| 'audio'
+			| 'video'
+			| null
+	})
+
+	const chatModels = $derived(models.filter((m) => m.model_type === 'chat_model'))
 
 	async function fetchData() {
 		isFetching = true
 		error = null
 		try {
-			const [agentsData, modelsData, toolPluginsData, filterPluginsData, promptsData] =
-				await Promise.all([
-					api.GET('/v1/agents').then((r) => unwrap(r)),
-					api.GET('/v1/models').then((r) => unwrap(r)),
-					api
-						.GET('/v1/plugins/available', {
-							params: { query: { plugin_type: 'tool' } },
-						})
-						.then((r) => unwrap(r)),
-					api
-						.GET('/v1/plugins/available', {
-							params: { query: { plugin_type: 'filter' } },
-						})
-						.then((r) => unwrap(r)),
-					api
-						.GET('/v1/prompts', { params: { query: { limit: 200 } } })
-						.then((r) => unwrap(r)),
-				])
+			const [
+				agentsData,
+				modelsData,
+				providersData,
+				toolPluginsData,
+				filterPluginsData,
+				promptsData,
+			] = await Promise.all([
+				api.GET('/v1/agents').then((r) => unwrap(r)),
+				api.GET('/v1/models').then((r) => unwrap(r)),
+				api.GET('/v1/providers').then((r) => unwrap(r)),
+				api
+					.GET('/v1/plugins/available', {
+						params: { query: { plugin_type: 'tool' } },
+					})
+					.then((r) => unwrap(r)),
+				api
+					.GET('/v1/plugins/available', {
+						params: { query: { plugin_type: 'filter' } },
+					})
+					.then((r) => unwrap(r)),
+				api
+					.GET('/v1/prompts', { params: { query: { limit: 200 } } })
+					.then((r) => unwrap(r)),
+			])
 			agents = agentsData
 			models = modelsData
+			providers = providersData
 			availableToolPlugins = toolPluginsData
 			availableFilterPlugins = filterPluginsData
 			legendPrompts = promptsData
@@ -113,6 +139,7 @@ user: {{ user_name }}.
 		formPluginIds = []
 		formProfileImageUrl = ''
 		formProfileImageFileId = ''
+		configParams = {}
 		submitError = null
 		showModal = true
 	}
@@ -127,6 +154,10 @@ user: {{ user_name }}.
 		formPluginIds = agent.plugin_ids ?? []
 		formProfileImageUrl = agent.profile_image_url ?? ''
 		formProfileImageFileId = agent.profile_image_file_id ?? ''
+		const agentConfig = (agent.config ?? {}) as Record<string, Record<string, unknown>>
+		const agentModel = models.find((m) => m.id === agent.model_id)
+		const mt = agentModel?.model_type ?? 'chat_model'
+		configParams = agentConfig[mt] ?? {}
 		submitError = null
 		showModal = true
 	}
@@ -156,10 +187,24 @@ user: {{ user_name }}.
 		reader.readAsDataURL(file)
 	}
 
+	function modelFullLabel(m: Model): string {
+		const name = m.display_name || m.name || m.id
+		const provider = providers.find((p) => p.id === m.provider_id)
+		const providerName = provider?.name || m.provider_id
+		const adapterType = provider?.adapter_type
+		const modelAdapter = m.adapter
+		const adapterPart = adapterType
+			? modelAdapter && modelAdapter !== adapterType
+				? `${adapterType}/${modelAdapter}`
+				: adapterType
+			: (modelAdapter ?? null)
+		return [name, providerName, adapterPart].filter(Boolean).join(' · ')
+	}
+
 	function getModelLabel(modelId: string | null | undefined) {
 		if (!modelId) return 'none'
 		const m = models.find((m) => m.id === modelId)
-		return m ? m.display_name || m.name : modelId
+		return m ? modelFullLabel(m) : modelId
 	}
 
 	function togglePlugin(pluginId: string) {
@@ -217,23 +262,33 @@ user: {{ user_name }}.
 					: null
 
 			if (modalMode === 'create') {
+				const config =
+					selectedModelType && Object.keys(configParams).length > 0
+						? { [selectedModelType]: configParams }
+						: {}
 				const payload: AgentCreate = {
 					name: formName.trim(),
 					description: formDescription.trim() ? formDescription.trim() : null,
 					system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
 					model_id: formModelId ? formModelId : null,
 					plugin_ids: formPluginIds,
+					config,
 					profile_image_file_id,
 					profile_image_url,
 				}
 				unwrap(await api.POST('/v1/agents', { body: payload }))
 			} else if (editingId) {
+				const config =
+					selectedModelType && Object.keys(configParams).length > 0
+						? { [selectedModelType]: configParams }
+						: {}
 				const payload: AgentUpdate = {
 					name: formName.trim(),
 					description: formDescription.trim() ? formDescription.trim() : null,
 					system_prompt: formSystemPrompt.trim() ? formSystemPrompt.trim() : null,
 					model_id: formModelId ? formModelId : null,
 					plugin_ids: formPluginIds,
+					config,
 					profile_image_file_id,
 					profile_image_url,
 				}
@@ -456,14 +511,22 @@ user: {{ user_name }}.
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="">none</SelectItem>
-								{#each models as model (model.id)}
-									<SelectItem value={model.id}
-										>{model.display_name || model.name}</SelectItem
+								{#each chatModels as model (model.id)}
+									<SelectItem value={model.id}>{modelFullLabel(model)}</SelectItem
 									>
 								{/each}
 							</SelectContent>
 						</Select>
 					</div>
+
+					{#if selectedModelType}
+						<div class="border-t border-zinc-800 pt-4">
+							<ModelParamsEditor
+								modelType={selectedModelType}
+								bind:params={configParams}
+							/>
+						</div>
+					{/if}
 
 					<div class="space-y-2">
 						<Label for="description">description (optional)</Label>

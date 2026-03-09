@@ -3,6 +3,7 @@
 
 	type Agent = Schemas['Agent']
 	type Model = Schemas['Model']
+	type Provider = Schemas['Provider']
 
 	import {
 		Card,
@@ -24,7 +25,17 @@
 	}
 
 	function modelLabel(m: Model): string {
-		return m.display_name || m.name || m.id
+		const name = m.display_name || m.name || m.id
+		const provider = providers.find((p) => p.id === m.provider_id)
+		const providerName = provider?.name || m.provider_id
+		const adapterType = provider?.adapter_type
+		const modelAdapter = m.adapter
+		const adapterPart = adapterType
+			? modelAdapter && modelAdapter !== adapterType
+				? `${adapterType}/${modelAdapter}`
+				: adapterType
+			: (modelAdapter ?? null)
+		return [name, providerName, adapterPart].filter(Boolean).join(' · ')
 	}
 
 	type Props = {
@@ -79,6 +90,7 @@
 		// auxiliary (read-only)
 		agents?: Agent[]
 		models?: Model[]
+		providers?: Provider[]
 		isFetchingAgents?: boolean
 		isFetchingModels?: boolean
 		agentsError?: string | null
@@ -126,6 +138,7 @@
 		windowingResponseHeadroom = $bindable(''),
 		agents = [],
 		models = [],
+		providers = [],
 		isFetchingAgents = false,
 		isFetchingModels = false,
 		agentsError = null,
@@ -133,6 +146,9 @@
 	}: Props = $props()
 
 	const availableAgentsToAdd = $derived(agents.filter((a) => !defaultAgentIds.includes(a.id)))
+
+	const chatModels = $derived(models.filter((m) => m.model_type === 'chat_model'))
+	const imageModels = $derived(models.filter((m) => m.model_type === 'image'))
 
 	function getModelLabel(modelId: string): string {
 		if (!modelId) return 'none'
@@ -415,7 +431,7 @@
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">none</SelectItem>
-							{#each models as model (model.id)}
+							{#each chatModels as model (model.id)}
 								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
 							{/each}
 						</SelectContent>
@@ -437,7 +453,7 @@
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">none</SelectItem>
-							{#each models as model (model.id)}
+							{#each chatModels as model (model.id)}
 								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
 							{/each}
 						</SelectContent>
@@ -459,7 +475,7 @@
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">none</SelectItem>
-							{#each models as model (model.id)}
+							{#each chatModels as model (model.id)}
 								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
 							{/each}
 						</SelectContent>
@@ -481,7 +497,7 @@
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">none</SelectItem>
-							{#each models as model (model.id)}
+							{#each chatModels as model (model.id)}
 								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
 							{/each}
 						</SelectContent>
@@ -503,7 +519,7 @@
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">none</SelectItem>
-							{#each models as model (model.id)}
+							{#each chatModels as model (model.id)}
 								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
 							{/each}
 						</SelectContent>
@@ -744,22 +760,13 @@
 							>
 								<SelectTrigger id="ai_img_model" class="rounded-xl">
 									<span class="truncate text-left">
-										{mediaImagesModel
-											? (models.find((m) => m.id === mediaImagesModel)
-													?.display_name ??
-												models.find((m) => m.id === mediaImagesModel)
-													?.name ??
-												mediaImagesModel)
-											: 'none'}
+										{getModelLabel(mediaImagesModel)}
 									</span>
 								</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="">none</SelectItem>
-									{#each models as model (model.id)}
-										<SelectItem value={model.id}
-											>{model.display_name ||
-												model.name ||
-												model.id}</SelectItem
+									{#each imageModels as model (model.id)}
+										<SelectItem value={model.id}>{modelLabel(model)}</SelectItem
 										>
 									{/each}
 								</SelectContent>

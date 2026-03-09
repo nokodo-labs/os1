@@ -46,6 +46,7 @@
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { untrack } from 'svelte'
 	import { SvelteDate } from 'svelte/reactivity'
 	import { fade } from 'svelte/transition'
@@ -100,6 +101,10 @@
 	})
 
 	$effect(() => {
+		if (!session.isLoggedIn) {
+			didLoadAgents = false
+			return
+		}
 		if (didLoadAgents) return
 		didLoadAgents = true
 		void agents.load()

@@ -13,6 +13,7 @@ from api.v1.schemas.settings import (
 	SettingsUpdateRequest,
 )
 from api.v1.service import settings as svc
+from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.auth import Principal, get_current_principal, get_optional_user
 from api.v1.service.authorization import require_permission
 from api.v1.service.events import SessionId
@@ -59,6 +60,7 @@ async def update_settings(
 		)
 		await db.commit()
 		settings.reload()
+		await vectorstores_service.reset_runtime_state()
 	except svc.VersionConflictError as e:
 		raise HTTPException(
 			status.HTTP_409_CONFLICT,

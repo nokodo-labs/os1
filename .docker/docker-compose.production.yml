@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:17-alpine
-    container_name: nokodo-ai-prod-db
+    container_name: os1-prod-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: nokodo-ai-admin
@@ -19,7 +19,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.16.2
-    container_name: nokodo-ai-prod-qdrant
+    container_name: os1-prod-qdrant
     restart: unless-stopped
     ports:
       - "6333:6333"
@@ -29,7 +29,7 @@ services:
 
   backend:
     image: ghcr.io/nokodo-labs/os1-backend:latest
-    container_name: nokodo-ai-prod-backend
+    container_name: os1-prod-backend
     restart: unless-stopped
     ports:
       - "1383:1383"
@@ -51,7 +51,7 @@ services:
 
   frontend:
     image: ghcr.io/nokodo-labs/os1-frontend:latest
-    container_name: nokodo-ai-prod-frontend
+    container_name: os1-prod-frontend
     restart: unless-stopped
     ports:
       - "888:80"
@@ -63,7 +63,7 @@ services:
 
   console:
     image: ghcr.io/nokodo-labs/os1-console:latest
-    container_name: nokodo-ai-prod-console
+    container_name: os1-prod-console
     restart: unless-stopped
     ports:
       - "8383:80"
@@ -81,4 +81,4 @@ volumes:
 
 networks:
   default:
-    name: nokodo-network
+    name: os1-network

@@ -2,6 +2,7 @@
 	import type { Schemas } from '$lib/api'
 
 	type Model = Schemas['Model']
+	type Provider = Schemas['Provider']
 
 	import {
 		Card,
@@ -17,6 +18,7 @@
 
 	type VectorDatabaseProvider =
 		| 'qdrant'
+		| 'chroma'
 		| 'pinecone'
 		| 'weaviate'
 		| 'milvus'
@@ -27,7 +29,17 @@
 	type StorageBackend = 'local' | 's3'
 
 	function modelLabel(m: Model): string {
-		return m.display_name || m.name || m.id
+		const name = m.display_name || m.name || m.id
+		const provider = providers.find((p) => p.id === m.provider_id)
+		const providerName = provider?.name || m.provider_id
+		const adapterType = provider?.adapter_type
+		const modelAdapter = m.adapter
+		const adapterPart = adapterType
+			? modelAdapter && modelAdapter !== adapterType
+				? `${adapterType}/${modelAdapter}`
+				: adapterType
+			: (modelAdapter ?? null)
+		return [name, providerName, adapterPart].filter(Boolean).join(' · ')
 	}
 
 	type Props = {
@@ -35,7 +47,9 @@
 		// vector db
 		vectorDatabaseProvider?: VectorDatabaseProvider
 		vectorDatabaseUrl?: string
+		vectorDatabaseQdrantUseGrpc?: boolean
 		vectorDatabaseQdrantApiKey?: string
+		vectorDatabaseChromaApiKey?: string
 		vectorDatabasePineconeApiKey?: string
 		vectorDatabaseWeaviateApiKey?: string
 		vectorDatabaseMilvusToken?: string
@@ -68,6 +82,7 @@
 		storageS3RetryMode?: 'legacy' | 'standard' | 'adaptive'
 		// auxiliary
 		models?: Model[]
+		providers?: Provider[]
 		isFetchingModels?: boolean
 		modelsError?: string | null
 	}
@@ -76,7 +91,9 @@
 		defaultEmbeddingModelId = $bindable(''),
 		vectorDatabaseProvider = $bindable('qdrant'),
 		vectorDatabaseUrl = $bindable(''),
+		vectorDatabaseQdrantUseGrpc = $bindable(true),
 		vectorDatabaseQdrantApiKey = $bindable(''),
+		vectorDatabaseChromaApiKey = $bindable(''),
 		vectorDatabasePineconeApiKey = $bindable(''),
 		vectorDatabaseWeaviateApiKey = $bindable(''),
 		vectorDatabaseMilvusToken = $bindable(''),
@@ -104,6 +121,7 @@
 		storageS3MaxRetries = $bindable(''),
 		storageS3RetryMode = $bindable<'legacy' | 'standard' | 'adaptive'>('adaptive'),
 		models = [],
+		providers = [],
 		isFetchingModels = false,
 		modelsError = null,
 	}: Props = $props()
@@ -113,6 +131,8 @@
 		const m = models.find((x) => x.id === modelId)
 		return m ? modelLabel(m) : modelId
 	}
+
+	const embeddingModels = $derived(models.filter((m) => m.model_type === 'embedding'))
 </script>
 
 <Card class="border-zinc-800 bg-zinc-900">
@@ -145,7 +165,7 @@
 					</SelectTrigger>
 					<SelectContent>
 						<SelectItem value="">none</SelectItem>
-						{#each models as m (m.id)}
+						{#each embeddingModels as m (m.id)}
 							<SelectItem value={m.id}>{modelLabel(m)}</SelectItem>
 						{/each}
 					</SelectContent>
@@ -168,6 +188,7 @@
 					</SelectTrigger>
 					<SelectContent>
 						<SelectItem value="qdrant">qdrant</SelectItem>
+						<SelectItem value="chroma">chroma</SelectItem>
 						<SelectItem value="pinecone">pinecone</SelectItem>
 						<SelectItem value="weaviate">weaviate</SelectItem>
 						<SelectItem value="milvus">milvus</SelectItem>
@@ -187,10 +208,25 @@
 			<Input
 				id="assets_vector_db_url"
 				bind:value={vectorDatabaseUrl}
-				placeholder="http://localhost:6333"
+				placeholder={vectorDatabaseProvider === 'qdrant' ? 'qdrant:6334' : ''}
 				class="rounded-xl"
 			/>
 		</div>
+
+		{#if vectorDatabaseProvider === 'qdrant'}
+			<div
+				class="flex items-center justify-between rounded-xl border border-zinc-800 px-4 py-3"
+			>
+				<div class="space-y-1">
+					<Label for="assets_qdrant_use_grpc">use qdrant gRPC</Label>
+					<p class="text-xs text-zinc-500">
+						when enabled, a scheme-less host:port like qdrant:6334 is treated as the
+						gRPC endpoint.
+					</p>
+				</div>
+				<Switch id="assets_qdrant_use_grpc" bind:checked={vectorDatabaseQdrantUseGrpc} />
+			</div>
+		{/if}
 
 		{#if vectorDatabaseProvider !== 'pgvector'}
 			<h4 class="pt-2 text-sm font-medium text-zinc-400">vector database API key</h4>
@@ -201,6 +237,16 @@
 						<Input
 							id="assets_qdrant_api_key"
 							bind:value={vectorDatabaseQdrantApiKey}
+							type="password"
+							class="rounded-xl"
+						/>
+					</div>
+				{:else if vectorDatabaseProvider === 'chroma'}
+					<div class="space-y-2">
+						<Label for="assets_chroma_api_key">chroma api key</Label>
+						<Input
+							id="assets_chroma_api_key"
+							bind:value={vectorDatabaseChromaApiKey}
 							type="password"
 							class="rounded-xl"
 						/>

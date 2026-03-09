@@ -683,10 +683,21 @@ async def run_agent(
 
 	if persist:
 		assert thread_id is not None  # persist=True requires a thread_id
-		create_background_task(
-			thread_service.generate_thread_metadata(
+
+		async def _metadata_after_persist() -> None:
+			if worker_task is not None:
+				try:
+					await asyncio.wait_for(asyncio.shield(worker_task), timeout=30)
+				except (TimeoutError, Exception):
+					logger.warning(
+						"persist worker did not finish cleanly before metadata gen"
+					)
+			await thread_service.generate_thread_metadata(
 				thread_id=thread_id,
 				principal=principal,
-			),
+			)
+
+		create_background_task(
+			_metadata_after_persist(),
 			name="generate_thread_metadata",
 		)

@@ -40,7 +40,6 @@
 		provider_type: ProviderType
 		base_url: string
 		api_key: string
-		model_prefix: string
 		is_autofetch_enabled: boolean
 	}
 
@@ -51,7 +50,6 @@
 		provider_type: 'external',
 		base_url: '',
 		api_key: '',
-		model_prefix: '',
 		is_autofetch_enabled: true,
 	})
 
@@ -65,7 +63,6 @@
 			type: 'openai',
 			provider_type: 'external',
 			url: 'https://api.openai.com/v1',
-			prefix: 'openai',
 			icon: Sparkles,
 		},
 		{
@@ -74,7 +71,6 @@
 			type: 'google',
 			provider_type: 'external',
 			url: '',
-			prefix: 'google',
 			icon: Sparkles,
 		},
 		{
@@ -83,7 +79,6 @@
 			type: 'anthropic',
 			provider_type: 'external',
 			url: 'https://api.anthropic.com/v1',
-			prefix: 'anthropic',
 			icon: Bot,
 		},
 		{
@@ -92,7 +87,6 @@
 			type: 'ollama',
 			provider_type: 'local',
 			url: 'http://localhost:11434/v1',
-			prefix: 'ollama',
 			icon: Cpu,
 		},
 		{
@@ -101,7 +95,6 @@
 			type: 'openai', // default to openai compatible
 			provider_type: 'external',
 			url: '',
-			prefix: '',
 			icon: Settings2,
 		},
 	]
@@ -141,7 +134,6 @@
 			adapter_type: provider.adapter_type,
 			provider_type: provider.provider_type || 'external',
 			base_url: provider.base_url || '',
-			model_prefix: provider.model_prefix || '',
 			is_autofetch_enabled: provider.is_autofetch_enabled ?? true,
 			api_key: '', // Don't show existing key
 		}
@@ -157,7 +149,6 @@
 		formState.adapter_type = preset.type
 		formState.provider_type = preset.provider_type as ProviderType
 		formState.base_url = preset.url
-		formState.model_prefix = preset.prefix
 		if (preset.id !== 'custom') {
 			formState.name = preset.name
 		}
@@ -171,7 +162,6 @@
 			provider_type: 'external',
 			base_url: '',
 			api_key: '',
-			model_prefix: '',
 			is_autofetch_enabled: true,
 		}
 		headerEntries = []
@@ -200,16 +190,19 @@
 
 		submitError = null
 
+		if (!formState.name.trim()) {
+			submitError = 'provider name is required'
+			isLoading = false
+			return
+		}
+
 		try {
 			if (modalMode === 'create') {
 				const payload: ProviderCreate = {
-					name: formState.name,
+					name: formState.name.trim(),
 					adapter_type: formState.adapter_type,
 					provider_type: formState.provider_type,
 					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
-					model_prefix: formState.model_prefix.trim()
-						? formState.model_prefix.trim()
-						: null,
 					api_key: formState.api_key.trim() ? formState.api_key.trim() : null,
 					additional_headers: Object.keys(headers).length > 0 ? headers : null,
 					status: 'enabled',
@@ -218,12 +211,10 @@
 				unwrap(await api.POST('/v1/providers', { body: payload }))
 			} else if (editingId) {
 				const payload: ProviderUpdate = {
+					name: formState.name.trim() || undefined,
 					adapter_type: formState.adapter_type,
 					provider_type: formState.provider_type,
 					base_url: formState.base_url.trim() ? formState.base_url.trim() : null,
-					model_prefix: formState.model_prefix.trim()
-						? formState.model_prefix.trim()
-						: null,
 					additional_headers: Object.keys(headers).length > 0 ? headers : null,
 					is_autofetch_enabled: formState.is_autofetch_enabled,
 				}
@@ -240,8 +231,7 @@
 			resetForm()
 		} catch (e) {
 			console.error('Failed to save provider', e)
-			submitError =
-				'Failed to save provider. ' + (e instanceof Error ? e.message : 'Unknown error')
+			submitError = e instanceof Error ? e.message : 'failed to save provider'
 		} finally {
 			isLoading = false
 		}
@@ -323,15 +313,6 @@
 											: 'disabled'}</span
 									>
 								</div>
-								{#if provider.model_prefix}
-									<div class="flex justify-between">
-										<span>prefix:</span>
-										<span
-											class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs"
-											>{provider.model_prefix}</span
-										>
-									</div>
-								{/if}
 								{#if provider.base_url}
 									<div class="mt-2 border-t border-zinc-800 pt-2">
 										<p class="truncate font-mono text-xs opacity-70">
@@ -414,64 +395,58 @@
 					<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 						<div class="space-y-2">
 							<Label for="name">name</Label>
-							<div class="space-y-2">
-								<Label for="api_type">API type</Label>
-								<Select
-									value={formState.adapter_type}
-									onValueChange={(v: string) => (formState.adapter_type = v)}
-								>
-									<SelectTrigger id="api_type" class="rounded-xl">
-										<span class="truncate text-left">
-											{formState.adapter_type === 'openai'
-												? 'OpenAI'
-												: formState.adapter_type === 'google'
-													? 'Google'
-													: formState.adapter_type === 'anthropic'
-														? 'Anthropic'
-														: formState.adapter_type === 'ollama'
-															? 'Ollama'
-															: formState.adapter_type}
-										</span>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="openai">OpenAI</SelectItem>
-										<SelectItem value="google">Google</SelectItem>
-										<SelectItem value="anthropic">Anthropic</SelectItem>
-										<SelectItem value="ollama">Ollama</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
-							<div class="space-y-2">
-								<Label for="provider_type">provider type</Label>
-								<Select
-									value={formState.provider_type}
-									onValueChange={(v: string) =>
-										(formState.provider_type = v as ProviderType)}
-								>
-									<SelectTrigger id="provider_type" class="rounded-xl">
-										<span class="truncate text-left"
-											>{formState.provider_type}</span
-										>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="external">external</SelectItem>
-										<SelectItem value="local">local</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
+							<Input
+								id="name"
+								bind:value={formState.name}
+								placeholder="e.g. my openai provider"
+								class="rounded-xl"
+							/>
 						</div>
 
 						<div class="space-y-2">
-							<Label for="prefix">model prefix</Label>
-							<Input
-								id="prefix"
-								bind:value={formState.model_prefix}
-								placeholder="e.g. openai"
-								class="rounded-xl"
-							/>
-							<p class="text-xs text-zinc-500">
-								used to namespace models from this provider.
-							</p>
+							<Label for="api_type">API type</Label>
+							<Select
+								value={formState.adapter_type}
+								onValueChange={(v: string) => (formState.adapter_type = v)}
+							>
+								<SelectTrigger id="api_type" class="rounded-xl">
+									<span class="truncate text-left">
+										{formState.adapter_type === 'openai'
+											? 'OpenAI'
+											: formState.adapter_type === 'google'
+												? 'Google'
+												: formState.adapter_type === 'anthropic'
+													? 'Anthropic'
+													: formState.adapter_type === 'ollama'
+														? 'Ollama'
+														: formState.adapter_type}
+									</span>
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="openai">OpenAI</SelectItem>
+									<SelectItem value="google">Google</SelectItem>
+									<SelectItem value="anthropic">Anthropic</SelectItem>
+									<SelectItem value="ollama">Ollama</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+
+						<div class="space-y-2">
+							<Label for="provider_type">provider type</Label>
+							<Select
+								value={formState.provider_type}
+								onValueChange={(v: string) =>
+									(formState.provider_type = v as ProviderType)}
+							>
+								<SelectTrigger id="provider_type" class="rounded-xl">
+									<span class="truncate text-left">{formState.provider_type}</span
+									>
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="external">external</SelectItem>
+									<SelectItem value="local">local</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
 
 						<div class="flex items-center justify-between">

@@ -51,7 +51,6 @@ class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	base_url: Mapped[str | None] = mapped_column(String(255))
 	encrypted_api_key: Mapped[str | None] = mapped_column(String(1024))
-	model_prefix: Mapped[str | None] = mapped_column(String(50))
 	additional_headers: Mapped[dict | None] = mapped_column(JSONB)
 	status: Mapped[ProviderStatus] = mapped_column(
 		StringEnum(ProviderStatus),

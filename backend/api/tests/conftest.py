@@ -66,8 +66,8 @@ def _api_test_env_defaults() -> Generator[None]:
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
-	if not os.getenv("NOKODO__ASSETS__VECTOR_DATABASE__URL"):
-		monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__URL", ":memory:")
+	if not os.getenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL"):
+		monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL", ":memory:")
 	monkeypatch.setenv("NOKODO__SECURITY__AUTO_SIGNUP_ROLE_IDS", "[]")
 
 	settings.reload()
