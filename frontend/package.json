@@ -48,7 +48,7 @@
 		"vitest": "^4.0.15"
 	},
 	"dependencies": {
-		"@floating-ui/dom": "^1.7.4",
+		"@floating-ui/dom": "^1.7.6",
 		"@internationalized/date": "^3.10.1",
 		"@tiptap/core": "^3.18.0",
 		"@tiptap/extension-placeholder": "^3.18.0",
