@@ -59,7 +59,7 @@
 		"@types/turndown": "^5.0.5",
 		"clsx": "^2.1.1",
 		"marked": "^17.0.1",
-		"mermaid": "^11.11.0",
+		"mermaid": "^11.13.0",
 		"ogl": "^1.0.11",
 		"openapi-fetch": "^0.15.0",
 		"prosemirror-keymap": "^1.2.3",
