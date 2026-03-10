@@ -7,21 +7,22 @@
 
 [![License](https://img.shields.io/github/license/nokodo-labs/os1)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
-[![Discord](https://img.shields.io/badge/discord-join-5865F2)](DISCORD_INVITE_LINK_HERE)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/VsYwyTqzDM)
 [![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
 
 </div>
 
 ---
 
-nokodo is an open-source AI platform built for teams and power users. it combines autonomous agents, deep research, real-time collaboration, and a flexible tool system - all in a beautiful, self-hostable workspace.
+nokodo is an intuitive, accessible and powerful open-source AI platform.
+it combines autonomous agents, deep research, real-time collaboration, and a flexible tool system - all in a beautiful, self-hostable workspace.
 
 https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 > [!WARNING]
-> 🚧 this project is in **prototype stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
+> 🚧 this project is in **alpha stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
 
-**links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](DISCORD_INVITE_LINK_HERE)
+**links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](https://discord.gg/VsYwyTqzDM)
 
 ---
 
