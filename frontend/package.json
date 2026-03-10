@@ -64,7 +64,7 @@
 		"openapi-fetch": "^0.17.0",
 		"prosemirror-keymap": "^1.2.3",
 		"svelte-streamdown": "^3.0.0",
-		"tailwind-merge": "^3.4.0",
+		"tailwind-merge": "^3.5.0",
 		"tailwind-variants": "^3.2.2",
 		"tailwindcss": "^4.2.1",
 		"three": "^0.183.2",
