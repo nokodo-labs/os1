@@ -34,7 +34,7 @@
 		"globals": "^17.3.0",
 		"happy-dom": "^20.4.0",
 		"openapi-typescript": "^7.10.1",
-		"postcss": "^8.4.47",
+		"postcss": "^8.5.8",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.4.0",
 		"prettier-plugin-tailwindcss": "^0.7.2",
