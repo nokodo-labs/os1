@@ -58,7 +58,7 @@
 		"@tiptap/starter-kit": "^3.18.0",
 		"@types/turndown": "^5.0.5",
 		"clsx": "^2.1.1",
-		"marked": "^17.0.1",
+		"marked": "^17.0.4",
 		"mermaid": "^11.13.0",
 		"ogl": "^1.0.11",
 		"openapi-fetch": "^0.15.0",
