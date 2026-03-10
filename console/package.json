@@ -30,7 +30,7 @@
 		"@vitest/coverage-v8": "^4.0.18",
 		"eslint": "^9.39.1",
 		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-svelte": "^3.13.1",
+		"eslint-plugin-svelte": "^3.15.2",
 		"globals": "^17.4.0",
 		"happy-dom": "^20.4.0",
 		"openapi-typescript": "^7.10.1",
