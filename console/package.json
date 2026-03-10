@@ -54,7 +54,7 @@
 	},
 	"dependencies": {
 		"@xyflow/svelte": "^1.5.1",
-		"bits-ui": "^2.15.5",
+		"bits-ui": "^2.16.3",
 		"clsx": "^2.1.1",
 		"openapi-fetch": "^0.15.0",
 		"tailwind-merge": "^3.4.0",
