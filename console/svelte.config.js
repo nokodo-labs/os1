@@ -6,10 +6,16 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter: adapter({
-			fallback: 'index.html', // SPA mode
+			fallback: '200.html',
 		}),
+		paths: {
+			relative: false,
+		},
 		alias: {
 			$lib: 'src/lib',
+		},
+		prerender: {
+			handleHttpError: 'warn',
 		},
 	},
 	compilerOptions: {
