@@ -1187,6 +1187,9 @@ async def delete_user_message_turn(
 
 	thread.last_activity_at = datetime.now(tz=UTC)
 
+	# capture before publish_event commits (expiring all ORM attributes)
+	owner_id = str(thread.owner_id)
+
 	# bulk-delete subtree; DB CASCADE on event FKs handles cleanup
 	await session.execute(sa_delete(Message).where(Message.id.in_(deleted_ids)))
 
@@ -1224,7 +1227,7 @@ async def delete_user_message_turn(
 				"last_activity_at": thread.last_activity_at.isoformat(),
 				"updated_at": thread.updated_at.isoformat(),
 			},
-			user_id=str(thread.owner_id),
+			user_id=owner_id,
 			thread_id=str(thread_id),
 		),
 		origin_session_id=origin_session_id,

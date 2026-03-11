@@ -1,18 +1,18 @@
-"""Provider schemas."""
+"""provider schemas."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import StringConstraints
+from pydantic import StringConstraints, field_validator
 
 from api.models.provider import ProviderStatus, ProviderType
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 
 
 class ProviderBase(MetadataModel):
-	"""Shared provider attributes."""
+	"""shared provider attributes."""
 
 	name: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 	adapter_type: str
@@ -26,13 +26,13 @@ class ProviderBase(MetadataModel):
 
 
 class ProviderCreate(ProviderBase):
-	"""Payload to create a provider."""
+	"""payload to create a provider."""
 
 	api_key: str | None = None
 
 
 class ProviderUpdate(MetadataUpdateModel):
-	"""Partial provider update payload."""
+	"""partial provider update payload."""
 
 	name: str | None = None
 	adapter_type: str | None = None
@@ -47,6 +47,14 @@ class ProviderUpdate(MetadataUpdateModel):
 
 
 class Provider(ProviderBase, TimestampedModel):
-	"""Response schema."""
+	"""response schema."""
 
 	id: str
+
+	@field_validator("name", mode="before")
+	@classmethod
+	def _coerce_empty_name(cls, v: str) -> str:
+		"""legacy rows may have empty name; provide a fallback for the response."""
+		if isinstance(v, str) and not v.strip():
+			return "(unnamed provider)"
+		return v

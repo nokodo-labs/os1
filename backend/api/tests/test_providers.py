@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.model import Model
 from api.models.provider import Provider, ProviderStatus, ProviderType
 from api.models.user import User
+from api.schemas.provider import Provider as ProviderSchema
 from api.schemas.provider import ProviderCreate, ProviderUpdate
 from api.settings import settings
 from api.v1.service import providers as provider_service
@@ -250,3 +251,17 @@ async def test_provider_model_properties(db_session: AsyncSession) -> None:
 
 	assert len(provider.autofetched_models) == 1
 	assert provider.autofetched_models[0].name == "model-auto"
+
+
+def test_response_schema_coerces_empty_name() -> None:
+	"""Legacy providers with empty name should serialize without error."""
+	schema = ProviderSchema.model_validate(
+		{
+			"id": "prov_test123",
+			"name": "",
+			"adapter_type": "openai",
+			"created_at": "2026-01-01T00:00:00Z",
+			"updated_at": "2026-01-01T00:00:00Z",
+		},
+	)
+	assert schema.name == "(unnamed provider)"
