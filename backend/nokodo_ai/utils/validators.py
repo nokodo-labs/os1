@@ -4,6 +4,7 @@ validation utilities.
 these are intentionally small, runtime-safe helpers that also improve typing.
 """
 
+import logging
 import types
 from collections.abc import Callable
 from inspect import Parameter, signature
@@ -23,6 +24,9 @@ from pydantic import TypeAdapter
 from typing_extensions import TypeForm
 
 
+log = logging.getLogger(__name__)
+
+
 def validate_literal[T](value: object, literal_type: TypeForm[T]) -> T:
 	"""validate that a value is one of the values in a Literal[...] type."""
 	origin = get_origin(literal_type)
@@ -39,6 +43,18 @@ def validate_literal[T](value: object, literal_type: TypeForm[T]) -> T:
 		raise ValueError(f"invalid value: {value!r}. allowed: {list(allowed)!r}")
 
 	return cast(T, value)
+
+
+def warn_known_model(value: str, known_type: object) -> str:
+	"""return value as-is, logging a warning if it is not in the known Literal set."""
+	allowed = get_args(known_type)
+	if allowed and value not in allowed:
+		log.warning(
+			"model %r not in known set for %s - passing through",
+			value,
+			known_type,
+		)
+	return value
 
 
 def validate[T](
