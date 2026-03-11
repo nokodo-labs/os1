@@ -203,8 +203,6 @@ export function createChatState(): ChatState {
 	function setThread(t: Thread | null) {
 		thread = t
 		chatStore.activeThread = t
-		// mark thread as read when user opens it
-		if (t?.id) void chatStore.markThreadRead(t.id)
 	}
 
 	function clearThread() {
