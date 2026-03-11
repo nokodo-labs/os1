@@ -484,9 +484,10 @@ async def mark_thread_read(
 	thread_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
 ) -> ThreadParticipantSchema:
 	"""mark all messages in a thread as read for the current user."""
 	participant = await thread_service.mark_thread_read(
-		thread_id, db, principal=principal
+		thread_id, db, principal=principal, origin_session_id=x_session_id
 	)
 	return ThreadParticipantSchema.model_validate(participant)

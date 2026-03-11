@@ -1187,6 +1187,9 @@ async def delete_user_message_turn(
 
 	thread.last_activity_at = datetime.now(tz=UTC)
 
+	# capture before publish_event commits (expiring all ORM attributes)
+	owner_id = str(thread.owner_id)
+
 	# bulk-delete subtree; DB CASCADE on event FKs handles cleanup
 	await session.execute(sa_delete(Message).where(Message.id.in_(deleted_ids)))
 
@@ -1224,7 +1227,7 @@ async def delete_user_message_turn(
 				"last_activity_at": thread.last_activity_at.isoformat(),
 				"updated_at": thread.updated_at.isoformat(),
 			},
-			user_id=str(thread.owner_id),
+			user_id=owner_id,
 			thread_id=str(thread_id),
 		),
 		origin_session_id=origin_session_id,
@@ -1302,6 +1305,7 @@ async def mark_thread_read(
 	session: AsyncSession,
 	*,
 	principal: Principal,
+	origin_session_id: str | None = None,
 ) -> ThreadParticipant:
 	"""mark all messages in a thread as read for the current user.
 
@@ -1330,6 +1334,25 @@ async def mark_thread_read(
 		participant.last_read_message_id = latest_id
 
 	await session.flush()
+
+	# notify all thread participants (read receipts)
+	await event_service.publish_event(
+		session,
+		event=Event(
+			scope=EventScope.THREAD,
+			scope_id=str(thread_id),
+			type=EventType.THREAD_READ,
+			data={
+				"thread_id": str(thread_id),
+				"user_id": principal.user_id,
+				"last_read_message_id": str(latest_id) if latest_id else None,
+			},
+			user_id=principal.user_id,
+			thread_id=str(thread_id),
+		),
+		origin_session_id=origin_session_id,
+	)
+
 	return participant
 
 

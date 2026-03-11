@@ -258,6 +258,10 @@ class ChatStore {
 
 			this.threadCache.invalidateAll(threadId)
 			this.removeRecentThread(threadId)
+		} else if (message.type === 'thread.read') {
+			// another session/tab marked a thread as read - sync unread state
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
+			if (threadId) this.unreadCounts.delete(threadId)
 		} else if (message.type === 'message.created') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (!threadId) return
@@ -361,14 +365,12 @@ class ChatStore {
 
 	markThreadRead = async (threadId: string): Promise<void> => {
 		if (!threadId) return
-		// optimistically clear the count
-		this.unreadCounts.delete(threadId)
 		try {
 			await apiClient().POST('/v1/threads/{thread_id}/read', {
 				params: { path: { thread_id: threadId } },
 			})
 		} catch {
-			// silently ignore
+			// silently ignore - WS event will sync state
 		}
 	}
 

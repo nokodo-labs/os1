@@ -8,7 +8,7 @@ from typing import Literal, cast
 import openai
 from openai import AsyncOpenAI
 
-from ...utils.validators import validate
+from ...utils.validators import warn_known_model
 from ..base.image_generation import (
 	BaseImageAdapter,
 	GeneratedImage,
@@ -144,7 +144,7 @@ class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 
 		response = await client.images.generate(
 			prompt=prompt,
-			model=validate(model, OpenAIImageModel),
+			model=warn_known_model(model, OpenAIImageModel),
 			n=params.n,
 			size=size if size else openai.omit,
 			quality=quality if quality else openai.omit,
@@ -173,7 +173,7 @@ class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 		response = await client.images.edit(
 			prompt=prompt,
 			image=image,
-			model=validate(model, OpenAIImageModel),
+			model=warn_known_model(model, OpenAIImageModel),
 			n=params.n,
 			mask=mask if mask is not None else openai.omit,
 			size=(cast(OpenAIImageEditSize, size) if size else openai.omit),

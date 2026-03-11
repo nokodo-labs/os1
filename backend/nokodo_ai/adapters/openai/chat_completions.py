@@ -31,7 +31,7 @@ from ...utils.provider_meta import (
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
-from ...utils.validators import validate
+from ...utils.validators import warn_known_model
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
 from .types import (
@@ -120,7 +120,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		"""generate a completion using /v1/chat/completions."""
 
 		response = await self._client.chat.completions.create(
-			model=validate(model, OpenAIChatModel),
+			model=warn_known_model(model, OpenAIChatModel),
 			messages=_messages_to_openai_chatcompletions(messages),
 			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,
 			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
@@ -167,7 +167,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		params = params or ChatGenerationParams()
 
 		stream = await self._client.chat.completions.create(
-			model=validate(model, OpenAIChatModel),
+			model=warn_known_model(model, OpenAIChatModel),
 			messages=_messages_to_openai_chatcompletions(messages),
 			stream=True,
 			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,

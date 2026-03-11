@@ -29,7 +29,7 @@ from ...utils.provider_meta import (
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
-from ...utils.validators import validate
+from ...utils.validators import warn_known_model
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
 from .types import (
@@ -115,7 +115,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		"""generate a completion using /v1/responses."""
 
 		response = await self._client.responses.create(
-			model=validate(model, OpenAIResponsesModel),
+			model=warn_known_model(model, OpenAIResponsesModel),
 			input=_messages_to_openai_responses_input(messages),
 			max_output_tokens=params.max_tokens
 			if params.max_tokens is not None
@@ -193,7 +193,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 				)
 
 		stream = await self._client.responses.create(
-			model=validate(model, OpenAIResponsesModel),
+			model=warn_known_model(model, OpenAIResponsesModel),
 			input=_messages_to_openai_responses_input(messages),
 			stream=True,
 			max_output_tokens=params.max_tokens

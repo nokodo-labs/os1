@@ -56,6 +56,7 @@ _EVENT_ROUTING: dict[str, tuple[ResourceType, str]] = {
 	EventType.THREAD_CREATED: (ResourceType.THREAD, "id"),
 	EventType.THREAD_UPDATED: (ResourceType.THREAD, "id"),
 	EventType.THREAD_DELETED: (ResourceType.THREAD, "id"),
+	EventType.THREAD_READ: (ResourceType.THREAD, "thread_id"),
 	# message events (route via parent thread)
 	EventType.MESSAGE_CREATED: (ResourceType.THREAD, "thread_id"),
 	EventType.MESSAGE_UPDATED: (ResourceType.THREAD, "thread_id"),

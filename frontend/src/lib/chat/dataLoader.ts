@@ -191,6 +191,9 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	ctx.thread = threadData
 	chatStore.activeThread = threadData
 
+	// mark thread as read when the user opens it
+	void chatStore.markThreadRead(threadId)
+
 	ctx.messageTree.clear()
 	ctx.messageSkip = messagesPage.length
 	// more messages exist if we got a full page (limit is 120)

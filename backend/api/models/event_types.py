@@ -21,6 +21,7 @@ class EventType(StrEnum):
 	THREAD_CREATED = "thread.created"
 	THREAD_UPDATED = "thread.updated"
 	THREAD_DELETED = "thread.deleted"
+	THREAD_READ = "thread.read"
 
 	# --- message events ---
 	MESSAGE_CREATED = "message.created"
@@ -119,6 +120,7 @@ THREAD_EVENTS = {
 	EventType.THREAD_CREATED,
 	EventType.THREAD_UPDATED,
 	EventType.THREAD_DELETED,
+	EventType.THREAD_READ,
 }
 
 MESSAGE_EVENTS = {

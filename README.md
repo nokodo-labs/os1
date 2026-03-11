@@ -7,21 +7,22 @@
 
 [![License](https://img.shields.io/github/license/nokodo-labs/os1)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
-[![Discord](https://img.shields.io/badge/discord-join-5865F2)](DISCORD_INVITE_LINK_HERE)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/VsYwyTqzDM)
 [![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
 
 </div>
 
 ---
 
-nokodo is an open-source AI platform built for teams and power users. it combines autonomous agents, deep research, real-time collaboration, and a flexible tool system - all in a beautiful, self-hostable workspace.
+nokodo is an intuitive, accessible and powerful open-source AI platform.
+it combines autonomous agents, deep research, real-time collaboration, and a flexible tool system - all in a beautiful, self-hostable workspace.
 
 https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 > [!WARNING]
-> 🚧 this project is in **prototype stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
+> 🚧 this project is in **alpha stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
 
-**links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](DISCORD_INVITE_LINK_HERE)
+**links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](https://discord.gg/VsYwyTqzDM)
 
 ---
 
@@ -128,7 +129,7 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 ## 🚀 quickstart
 
-Create a `docker-compose.yml`:
+create a `docker-compose.yml`:
 
 ```yaml
 services:
@@ -153,15 +154,16 @@ services:
             - qdrant_data:/qdrant/storage
 
     backend:
-        image: ghcr.io/nokodo-labs/nokodo-ai-backend:latest
+        image: ghcr.io/nokodo-labs/os1-backend:latest
         restart: unless-stopped
         ports:
             - "1383:1383"
         environment:
             DATABASE_URL: postgresql+psycopg://nokodo:nokodo@db:5432/nokodo
             NOKODO__SECURITY__SECRET_KEY: change-me
-            NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888"
+            NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888,http://localhost:8383"
             NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
+            NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN: "http://localhost:8383"
         depends_on:
             db:
                 condition: service_healthy
@@ -169,10 +171,22 @@ services:
             - uploads:/app/data
 
     frontend:
-        image: ghcr.io/nokodo-labs/nokodo-ai-frontend:latest
+        image: ghcr.io/nokodo-labs/os1-frontend:latest
         restart: unless-stopped
         ports:
             - "888:80"
+        environment:
+            API_ORIGIN: http://localhost:1383
+        depends_on:
+            - backend
+
+    console:
+        image: ghcr.io/nokodo-labs/os1-console:latest
+        restart: unless-stopped
+        ports:
+            - "8383:80"
+        environment:
+            API_ORIGIN: http://localhost:1383
         depends_on:
             - backend
 
@@ -182,23 +196,23 @@ volumes:
     uploads:
 ```
 
-Then:
+then:
 
 ```bash
 docker compose up -d
 ```
 
-Open `http://localhost:888`.
+open `http://localhost:888` for the main app or `http://localhost:8383` for the admin console.
 
-> Change `NOKODO__SECURITY__SECRET_KEY` to a long random string. For a custom domain, update the two origin vars to your URL.
+> change `NOKODO__SECURITY__SECRET_KEY` to a long random string. for a custom domain, update the CORS setting plus the frontend and console origin vars to your URLs.
 
-For environment variable reference, building from source, and development setup see [docs/setup.md](docs/setup.md).
+for environment variable reference, building from source, and development setup see [docs/setup.md](docs/setup.md).
 
 ---
 
 ## 🗺️ roadmap
 
-See [ROADMAP.md](ROADMAP.md) for planned features and release milestones.
+see [ROADMAP.md](ROADMAP.md) for planned features and release milestones.
 
 ## 🤝 contributing
 
