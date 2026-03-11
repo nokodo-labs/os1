@@ -2,12 +2,16 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { apiClient } from '$lib/api/client'
+	import type { components } from '$lib/api/types'
+	import Check from '$lib/components/icons/Check.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import { session } from '$lib/stores/session.svelte'
+	import { friends } from '$lib/stores/friends.svelte'
 	import { getUserInitials } from '$lib/utils'
+
+	type UserSearchResult = components['schemas']['UserSearchResult']
 
 	interface AddFriendsModalProps {
 		open: boolean
@@ -19,15 +23,8 @@
 	let query = $state('')
 	let isSearching = $state(false)
 	let hasSearched = $state(false)
-
-	type SearchResult = {
-		id: string
-		display_name: string
-		email: string
-		avatar_url?: string | null
-		requestSent?: boolean
-	}
-	let results = $state<SearchResult[]>([])
+	let results = $state<UserSearchResult[]>([])
+	let pendingIds = $state<Set<string>>(new Set())
 
 	async function handleSearch() {
 		const q = query.trim()
@@ -35,20 +32,12 @@
 		isSearching = true
 		hasSearched = true
 		try {
+			// ensure store is fresh before cross-referencing
+			await friends.load()
 			const { data, error } = await apiClient().GET('/v1/users/search', {
 				params: { query: { q, limit: 20 } },
 			})
-			if (error || !data) {
-				results = []
-				return
-			}
-			results = data.map((u) => ({
-				id: u.id,
-				display_name: u.display_name ?? u.email.split('@')[0],
-				email: u.email,
-				avatar_url: u.avatar_url,
-				requestSent: false,
-			}))
+			results = error || !data ? [] : data
 		} catch {
 			results = []
 		} finally {
@@ -56,29 +45,25 @@
 		}
 	}
 
-	async function handleSendRequest(user: SearchResult) {
-		const userId = session.currentUser?.id
-		if (!userId) return
-
-		user.requestSent = true
-		results = [...results]
-
+	async function handleSendRequest(userId: string) {
+		pendingIds = new Set([...pendingIds, userId])
 		try {
-			const { error } = await apiClient().POST('/v1/users/{user_id}/friends/requests', {
-				params: { path: { user_id: userId } },
-				body: { addressee_id: user.id },
-			})
-			if (error) {
-				user.requestSent = false
-				results = [...results]
-			}
-		} catch {
-			user.requestSent = false
-			results = [...results]
+			await friends.sendRequest(userId)
+		} finally {
+			pendingIds = new Set([...pendingIds].filter((id) => id !== userId))
 		}
 	}
 
-	function handleViewProfile(user: SearchResult) {
+	async function handleAcceptRequest(friendshipId: string, userId: string) {
+		pendingIds = new Set([...pendingIds, userId])
+		try {
+			await friends.acceptRequest(friendshipId)
+		} finally {
+			pendingIds = new Set([...pendingIds].filter((id) => id !== userId))
+		}
+	}
+
+	function handleViewProfile(user: UserSearchResult) {
 		onClose()
 		void goto(resolve(`/social/users/${user.id}`))
 	}
@@ -86,7 +71,7 @@
 	function handleKeyDown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			e.preventDefault()
-			handleSearch()
+			void handleSearch()
 		}
 	}
 
@@ -97,6 +82,7 @@
 			results = []
 			hasSearched = false
 			isSearching = false
+			pendingIds = new Set()
 		}
 	})
 </script>
@@ -130,6 +116,8 @@
 			</div>
 		{:else if results.length > 0}
 			{#each results as user (user.id)}
+				{@const displayName = user.display_name ?? user.email.split('@')[0]}
+				{@const relationship = friends.getRelationship(user.id)}
 				<div
 					class="hover:bg-foreground/5 flex items-center gap-3 rounded-xl p-3 transition-all"
 				>
@@ -138,14 +126,14 @@
 						{#if user.avatar_url}
 							<img
 								src={user.avatar_url}
-								alt={user.display_name}
+								alt={displayName}
 								class="h-10 w-10 rounded-full object-cover"
 							/>
 						{:else}
 							<div
 								class="flex h-10 w-10 items-center justify-center rounded-full bg-(--accent-primary)/15 text-xs font-semibold text-(--accent-primary)"
 							>
-								{getUserInitials(user.display_name)}
+								{getUserInitials(displayName)}
 							</div>
 						{/if}
 					</button>
@@ -156,18 +144,36 @@
 						onclick={() => handleViewProfile(user)}
 					>
 						<span class="text-foreground truncate text-sm font-medium">
-							{user.display_name}
+							{displayName}
 						</span>
 						<span class="text-foreground/50 truncate text-xs">{user.email}</span>
 					</button>
 
-					<!-- add button -->
-					{#if user.requestSent}
-						<span class="text-foreground/40 shrink-0 text-xs font-medium">sent</span>
+					<!-- action button -->
+					{#if pendingIds.has(user.id)}
+						<span class="text-foreground/40 shrink-0 text-xs font-medium">...</span>
+					{:else if relationship?.kind === 'accepted'}
+						<span
+							class="flex shrink-0 items-center gap-1 text-xs font-medium text-green-500/70"
+						>
+							<Check class="h-3.5 w-3.5" />
+							friends
+						</span>
+					{:else if relationship?.kind === 'pending_outgoing'}
+						<span class="text-foreground/40 shrink-0 text-xs font-medium">
+							pending
+						</span>
+					{:else if relationship?.kind === 'pending_incoming'}
+						<button
+							class="shrink-0 rounded-lg bg-green-500/20 px-3 py-1.5 text-xs font-medium text-green-600 transition-all hover:bg-green-500/30 active:scale-[0.97] dark:text-green-400"
+							onclick={() => handleAcceptRequest(relationship.friendshipId, user.id)}
+						>
+							accept
+						</button>
 					{:else}
 						<button
 							class="flex shrink-0 items-center gap-1.5 rounded-lg bg-(--accent-primary)/20 px-3 py-1.5 text-xs font-medium text-(--accent-primary) transition-all hover:bg-(--accent-primary)/30 active:scale-[0.97]"
-							onclick={() => handleSendRequest(user)}
+							onclick={() => handleSendRequest(user.id)}
 						>
 							<UserPlus class="h-3.5 w-3.5" />
 							<span>add</span>
