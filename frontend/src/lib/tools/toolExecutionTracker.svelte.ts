@@ -1,12 +1,12 @@
 /**
- * Reactive tool execution tracker using Svelte 5 runes.
+ * reactive tool execution tracker using Svelte 5 runes.
  *
- * Each ToolExecution is a deeply reactive object ($state). Components that
+ * each ToolExecution is a deeply reactive object ($state). components that
  * read `execution.status`, `execution.toolCall.arguments`, etc. will
  * automatically re-render when those values change - no manual tick counter
  * or {#key} block destruction needed.
  *
- * String argument fragments from streaming are accumulated in `rawArguments`
+ * string argument fragments from streaming are accumulated in `rawArguments`
  * and parsed into `toolCall.arguments` on every chunk, so tool cards can
  * read partial JSON as it streams in.
  */
@@ -17,9 +17,9 @@ import type { ToolCall, ToolEvent, ToolExecution, ToolResult, ToolStatus } from 
 // ── internal reactive execution state ────────────────────────────────────
 
 /**
- * Reactive wrapper around ToolExecution.
- * All mutable fields are $state so Svelte tracks reads/writes automatically.
- * Implements ToolExecution directly - returned from get() without a wrapper.
+ * reactive wrapper around ToolExecution.
+ * all mutable fields are $state so Svelte tracks reads/writes automatically.
+ * implements ToolExecution directly - returned from get() without a wrapper.
  */
 class ReactiveToolExecution {
 	// tool call identity + arguments
@@ -56,7 +56,7 @@ class ReactiveToolExecution {
 		return { id: this.id, name: this.name, arguments: this.arguments }
 	}
 
-	/** Snapshot into the plain ToolExecution interface for external consumers. */
+	/** snapshot into the plain ToolExecution interface for external consumers. */
 	get snapshot(): ToolExecution {
 		return {
 			toolCall: {
@@ -80,9 +80,9 @@ class ReactiveToolExecution {
 // ── public tracker ───────────────────────────────────────────────────────
 
 /**
- * Manages tool execution state across multiple tool calls using Svelte 5 runes.
+ * manages tool execution state across multiple tool calls using Svelte 5 runes.
  *
- * Usage:
+ * usage:
  * ```ts
  * const tracker = new ToolExecutionTracker()
  * // in template - reads are automatically tracked:
@@ -91,17 +91,17 @@ class ReactiveToolExecution {
  * ```
  */
 export class ToolExecutionTracker {
-	/** Reactive map - Svelte tracks .get(), .has(), iteration, etc. */
+	/** reactive map - Svelte tracks .get(), .has(), iteration, etc. */
 	private readonly executions = new SvelteMap<string, ReactiveToolExecution>()
 
 	// ── registration ─────────────────────────────────────────────────────
 
 	/**
-	 * Register or update a tool call from the assistant message stream.
+	 * register or update a tool call from the assistant message stream.
 	 *
-	 * Handles both:
-	 * - Object arguments (from finalized messages / API responses)
-	 * - String arguments (from streaming chunks - accumulated incrementally)
+	 * handles both:
+	 * - object arguments (from finalized messages / API responses)
+	 * - string arguments (from streaming chunks - accumulated incrementally)
 	 */
 	registerToolCall(toolCall: ToolCall): void {
 		const existing = this.executions.get(toolCall.id)
@@ -130,8 +130,8 @@ export class ToolExecutionTracker {
 	}
 
 	/**
-	 * Register a tool call with raw string arguments from streaming.
-	 * This is the preferred path for streaming chunks where arguments
+	 * register a tool call with raw string arguments from streaming.
+	 * this is the preferred path for streaming chunks where arguments
 	 * arrive as partial JSON string fragments.
 	 */
 	registerStreamingToolCall(id: string, name: string, rawArgs: string): void {
@@ -152,7 +152,7 @@ export class ToolExecutionTracker {
 
 	// ── events ───────────────────────────────────────────────────────────
 
-	/** Process a real-time tool event (progress, custom, notification). */
+	/** process a real-time tool event (progress, custom, notification). */
 	processEvent(event: ToolEvent): void {
 		let exec = this.executions.get(event.toolCallId)
 
@@ -190,7 +190,7 @@ export class ToolExecutionTracker {
 
 	// ── results ──────────────────────────────────────────────────────────
 
-	/** Register a tool result (tool message). */
+	/** register a tool result (tool message). */
 	registerResult(result: ToolResult): void {
 		let exec = this.executions.get(result.toolCallId)
 		if (!exec) {
@@ -217,11 +217,11 @@ export class ToolExecutionTracker {
 	// ── queries ──────────────────────────────────────────────────────────
 
 	/**
-	 * Get a reactive execution for a tool call.
-	 * The returned object is deeply reactive - reading any property in a
+	 * get a reactive execution for a tool call.
+	 * the returned object is deeply reactive - reading any property in a
 	 * Svelte template will create a fine-grained subscription.
 	 *
-	 * Returns `ToolExecution`-shaped object (the ReactiveToolExecution class
+	 * returns `ToolExecution`-shaped object (the ReactiveToolExecution class
 	 * satisfies the interface via its public $state fields).
 	 */
 	get(toolCallId: string): ToolExecution | undefined {
@@ -233,30 +233,25 @@ export class ToolExecutionTracker {
 	}
 
 	/**
-	 * Get the raw arguments string for a tool call (for streaming display).
-	 * This is the accumulated raw JSON string before parsing.
+	 * get the raw arguments string for a tool call (for streaming display).
+	 * this is the accumulated raw JSON string before parsing.
 	 */
 	getRawArguments(toolCallId: string): string {
 		return this.executions.get(toolCallId)?.rawArguments ?? ''
 	}
 
-	/** @deprecated Use get() instead. Kept for migration compatibility. */
-	getExecution(toolCallId: string): ToolExecution | undefined {
-		return this.get(toolCallId)
-	}
-
-	/** Get all executions as plain snapshots. */
+	/** get all executions as plain snapshots. */
 	getAllExecutions(): ToolExecution[] {
 		return Array.from(this.executions.values()).map((e) => e.snapshot)
 	}
 
-	/** Check if a tool call exists and is in a running/pending state. */
+	/** check if a tool call exists and is in a running/pending state. */
 	isActive(toolCallId: string): boolean {
 		const exec = this.executions.get(toolCallId)
 		return exec !== undefined && (exec.status === 'pending' || exec.status === 'running')
 	}
 
-	/** Check if any tool call is active. */
+	/** check if any tool call is active. */
 	get hasActive(): boolean {
 		for (const exec of this.executions.values()) {
 			if (exec.status === 'pending' || exec.status === 'running') return true
@@ -264,12 +259,23 @@ export class ToolExecutionTracker {
 		return false
 	}
 
-	/** Number of tracked executions. */
+	/** mark all pending/running tool calls as error (e.g. when a run ends). */
+	closeAllActive(): void {
+		for (const exec of this.executions.values()) {
+			if (exec.status === 'pending' || exec.status === 'running') {
+				exec.status = 'error'
+				exec.error = 'tool execution was interrupted'
+				exec.completedAt = new SvelteDate()
+			}
+		}
+	}
+
+	/** number of tracked executions. */
 	get size(): number {
 		return this.executions.size
 	}
 
-	/** Clear all tracked executions. */
+	/** clear all tracked executions. */
 	clear(): void {
 		this.executions.clear()
 	}
@@ -278,9 +284,9 @@ export class ToolExecutionTracker {
 // ── helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Try to parse a (possibly incomplete) JSON string into an object.
- * Returns empty object if the string is unparseable.
- * Streaming chunks often produce partial JSON like `{"tho` - this
+ * try to parse a (possibly incomplete) JSON string into an object.
+ * returns empty object if the string is unparseable.
+ * streaming chunks often produce partial JSON like `{"tho` - this
  * gracefully handles that case.
  */
 function tryParseJson(raw: string): Record<string, unknown> {

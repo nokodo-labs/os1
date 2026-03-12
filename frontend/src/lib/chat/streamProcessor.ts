@@ -406,7 +406,10 @@ export async function resumeCreateAndRun(
 		}
 		ctx.rebuildRunBlocks()
 	} finally {
-		if (runId === ctx.activeRun) ctx.isGenerating = false
+		if (runId === ctx.activeRun) {
+			ctx.toolTracker.closeAllActive()
+			ctx.isGenerating = false
+		}
 	}
 
 	if (idConflict) return { resolvedThreadId: resolvedId }

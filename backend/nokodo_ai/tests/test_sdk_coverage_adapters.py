@@ -219,12 +219,17 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	assistant = AssistantMessage(content=[], tool_calls=[tool_call])
 	system = SystemMessage.from_text("sys")
 	user = UserMessage.from_text("hi")
-	# tool call should fall back to ToolCall.id when provider data missing
+	# tool call should fall back to ToolCall.id when provider data missing.
+	# orphaned tool_use blocks (no ToolMessages following) get synthetic
+	# error results so anthropic always sees a valid tool_use/tool_result pair.
 	system_text, msgs = _messages_to_anthropic([system, user, assistant])
 	assert system_text == "sys"
-	assert len(msgs) == 2
+	assert len(msgs) == 3
 	assert msgs[0]["role"] == "user"
 	assert msgs[1]["role"] == "assistant"
+	assert msgs[2]["role"] == "user"
+	assert msgs[2]["content"][0]["tool_use_id"] == "tc1"  # type: ignore[index]
+	assert msgs[2]["content"][0]["is_error"] is True  # type: ignore[index]
 
 	# tool message should fall back to tool_call_id when provider data missing
 	assistant2 = AssistantMessage(
@@ -1521,7 +1526,65 @@ def test_anthropic_messages_keep_only_matched_tool_turns() -> None:
 
 	assert msgs[0]["role"] == "assistant"
 	assert msgs[0]["content"][0]["type"] == "text"  # type: ignore[index]
-	assert msgs[0]["content"][1]["id"] == "toolu_2"  # type: ignore[index]
-	assert len(msgs[0]["content"]) == 2  # type: ignore[arg-type]
+	# both tool_use blocks are included; unmatched toolu_1 gets a synthetic error
+	assert msgs[0]["content"][1]["id"] == "toolu_1"  # type: ignore[index]
+	assert msgs[0]["content"][2]["id"] == "toolu_2"  # type: ignore[index]
+	assert len(msgs[0]["content"]) == 3  # type: ignore[arg-type]
 	assert msgs[1]["role"] == "user"
-	assert msgs[1]["content"][0]["tool_use_id"] == "toolu_2"  # type: ignore[index]
+	# real result for toolu_2, then synthetic error for toolu_1
+	raw_content = msgs[1]["content"]
+	assert isinstance(raw_content, list)
+	result_ids = [
+		block["tool_use_id"]
+		for block in raw_content
+		if isinstance(block, dict) and "tool_use_id" in block
+	]
+	assert "toolu_2" in result_ids
+	assert "toolu_1" in result_ids
+	assert len(result_ids) == 2
+
+
+def test_anthropic_messages_orphaned_tool_use_gets_synthetic_result() -> None:
+	"""interrupted run: tool_use blocks exist but no tool_result follows.
+
+	anthropic requires every tool_use to have a matching tool_result.
+	the adapter should inject synthetic error results so the conversation
+	can continue without a 400 error.
+	"""
+	assistant = AssistantMessage.from_text("let me look that up")
+	assistant.tool_calls = [
+		ToolCall(
+			id="sdk_call",
+			name="web_search",
+			arguments={"query": "hello"},
+			metadata={
+				"_provider_data": {
+					"anthropic.messages": {
+						"tool_call_id": "toolu_abc123",
+					}
+				}
+			},
+		)
+	]
+	user_followup = UserMessage.from_text("try again")
+
+	_, msgs = _messages_to_anthropic([assistant, user_followup])
+
+	# assistant should keep its tool_use block
+	assert msgs[0]["role"] == "assistant"
+	content = msgs[0]["content"]
+	assert isinstance(content, list)
+	assert any(b["type"] == "tool_use" for b in content)  # type: ignore[union-attr]
+
+	# synthetic error tool_result should follow
+	assert msgs[1]["role"] == "user"
+	result_content = msgs[1]["content"]
+	assert isinstance(result_content, list) and len(result_content) == 1
+	result_block = result_content[0]
+	assert isinstance(result_block, dict)
+	assert result_block.get("tool_use_id") == "toolu_abc123"
+	assert result_block.get("is_error") is True
+
+	# original user follow-up comes last
+	assert msgs[2]["role"] == "user"
+	assert msgs[2]["content"] == "try again"

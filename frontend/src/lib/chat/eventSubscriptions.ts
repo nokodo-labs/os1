@@ -182,6 +182,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			.finally(() => {
 				resumeAborts.delete(runId)
 				if (ctx.activeRun === runGen) {
+					ctx.toolTracker.closeAllActive()
 					ctx.isGenerating = false
 				}
 			})
@@ -225,6 +226,8 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			if (data.thread_id !== threadId) return
 			if (!data.run_id) return
 			ctx.activeAgentRuns.delete(data.run_id)
+			// close any tool calls still pending/running - the run is over
+			ctx.toolTracker.closeAllActive()
 			// abort any active resume for this run (if SSE hasn't ended yet)
 			const runAc = resumeAborts.get(data.run_id)
 			if (runAc) {
