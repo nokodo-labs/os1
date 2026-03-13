@@ -355,7 +355,7 @@
 					</div>
 				{:else}
 					<div
-						class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap"
+						class="text-foreground leading-relaxed wrap-break-word break-all whitespace-pre-wrap"
 					>
 						{content}
 					</div>
@@ -425,6 +425,7 @@
 
 	.bubble-wrapper {
 		position: relative;
+		max-width: 100%;
 	}
 
 	/* ════════════════════════════════════════════════════════════

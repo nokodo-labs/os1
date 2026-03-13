@@ -135,7 +135,7 @@ frontend/
 │   │   ├── liquid-glass/ (a/, b/)
 │   │   ├── liquid-mercury/ (b/)
 │   │   ├── liquid-metal/ (svg/)
-│   │   ├── stores/
+│   │   ├── stores/           # see stores/README.md for architecture + lifecycle contract
 │   │   ├── styles/
 │   │   ├── tools/
 │   │   ├── utils/

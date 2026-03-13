@@ -327,6 +327,11 @@ export const files = {
 		filesMap.clear()
 		fetchedAt = null
 	},
+
+	/** mark cache stale so next access triggers a refetch (keeps thumbnails). */
+	invalidate(): void {
+		fetchedAt = null
+	},
 }
 
 // --- event stream integration ---

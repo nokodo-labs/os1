@@ -13,6 +13,7 @@ import { apiClient } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { showError } from '$lib/stores/notifications.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 export type Project = components['schemas']['Project']
@@ -58,11 +59,34 @@ class ProjectsCache {
 
 	/**
 	 * handle incoming stream events for projects.
-	 * WS is the canonical source of truth - refetch on any project mutation.
+	 * WS is the canonical source of truth - apply event data directly.
 	 */
 	#handleStreamEvent = (message: StreamMessage): void => {
-		if (PROJECT_EVENT_TYPES.includes(message.type)) {
-			void this.load({ force: true })
+		if (!PROJECT_EVENT_TYPES.includes(message.type)) return
+		const data = message.data as Record<string, unknown> | undefined
+		if (!data) return
+
+		switch (message.type) {
+			case 'project.created': {
+				const project = data as unknown as Project
+				if (!project?.id || !this.#cache) return
+				this.#cache.data.set(project.id, project)
+				break
+			}
+			case 'project.updated': {
+				const project = data as unknown as Project
+				if (!project?.id || !this.#cache) return
+				const existing = this.#cache.data.get(project.id)
+				if (existing) {
+					this.#cache.data.set(project.id, { ...existing, ...project })
+				}
+				break
+			}
+			case 'project.deleted': {
+				const id = data.id as string
+				if (id) this.#cache?.data.delete(id)
+				break
+			}
 		}
 	}
 
@@ -110,26 +134,102 @@ class ProjectsCache {
 
 	// mutations - return optimistic data for caller; WS delivers truth
 
-	async create(params: ProjectCreate): Promise<Project | null> {
-		const { data, error } = await apiClient().POST('/v1/projects', { body: params })
-		if (error || !data) return null
-		return data
+	async create(params: ProjectCreate, options?: { rollback?: boolean }): Promise<Project | null> {
+		const doRollback = options?.rollback ?? true
+		// optimistic: add placeholder project immediately
+		const tempId = `temp-${Date.now()}`
+		const placeholder: Project = {
+			id: tempId,
+			name: params.name,
+			description: params.description ?? '',
+			owner_id: '',
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+		} as Project
+		this.#cache?.data.set(tempId, placeholder)
+
+		try {
+			const { data, error } = await apiClient().POST('/v1/projects', { body: params })
+
+			if (error || !data) {
+				if (doRollback) this.#cache?.data.delete(tempId)
+				showError('could not create project')
+				return null
+			}
+
+			// replace placeholder with real project
+			this.#cache?.data.delete(tempId)
+			this.#cache?.data.set(data.id, data)
+			return data
+		} catch {
+			if (doRollback) this.#cache?.data.delete(tempId)
+			showError('could not create project')
+			return null
+		}
 	}
 
-	async update(id: string, params: ProjectUpdate): Promise<Project | null> {
-		const { data, error } = await apiClient().PATCH('/v1/projects/{project_id}', {
-			params: { path: { project_id: id } },
-			body: params,
-		})
-		if (error || !data) return null
-		return data
+	async update(
+		id: string,
+		params: ProjectUpdate,
+		options?: { rollback?: boolean }
+	): Promise<Project | null> {
+		const doRollback = options?.rollback ?? true
+		const existing = this.#cache?.data.get(id) ?? null
+
+		// optimistic: apply update immediately
+		if (existing) {
+			this.#cache?.data.set(id, {
+				...existing,
+				...params,
+				updated_at: new Date().toISOString(),
+			} as Project)
+		}
+
+		try {
+			const { data, error } = await apiClient().PATCH('/v1/projects/{project_id}', {
+				params: { path: { project_id: id } },
+				body: params,
+			})
+
+			if (error || !data) {
+				if (doRollback && existing) this.#cache?.data.set(id, existing)
+				showError('could not update project')
+				return null
+			}
+
+			this.#cache?.data.set(id, data)
+			return data
+		} catch {
+			if (doRollback && existing) this.#cache?.data.set(id, existing)
+			showError('could not update project')
+			return null
+		}
 	}
 
-	async remove(id: string): Promise<boolean> {
-		const { error } = await apiClient().DELETE('/v1/projects/{project_id}', {
-			params: { path: { project_id: id } },
-		})
-		return !error
+	async remove(id: string, options?: { rollback?: boolean }): Promise<boolean> {
+		const doRollback = options?.rollback ?? true
+		const existing = this.#cache?.data.get(id) ?? null
+
+		// optimistic: remove immediately
+		this.#cache?.data.delete(id)
+
+		try {
+			const { error } = await apiClient().DELETE('/v1/projects/{project_id}', {
+				params: { path: { project_id: id } },
+			})
+
+			if (error) {
+				if (doRollback && existing) this.#cache?.data.set(id, existing)
+				showError('could not delete project')
+				return false
+			}
+
+			return true
+		} catch {
+			if (doRollback && existing) this.#cache?.data.set(id, existing)
+			showError('could not delete project')
+			return false
+		}
 	}
 
 	// lifecycle

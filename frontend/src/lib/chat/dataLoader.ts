@@ -12,6 +12,34 @@ import type { ChatContext } from './types'
 
 type ApiEvent = components['schemas']['Event']
 
+/** replay parsed events into the chat context (tool tracker + attachment states) */
+function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
+	for (const ev of events) {
+		const toolEv = parseToolEvent({
+			id: ev.id,
+			type: ev.type,
+			data: (ev.data ?? {}) as Record<string, unknown>,
+			created_at: ev.created_at ?? undefined,
+			message_id: ev.message_id ?? undefined,
+		})
+		if (toolEv) {
+			ctx.toolTracker.processEvent(toolEv)
+			continue
+		}
+
+		if (ev.type.startsWith('attachment.')) {
+			const evData = (ev.data ?? {}) as Record<string, unknown>
+			const fileId = evData.file_id as string | undefined
+			if (!fileId) continue
+			if (ev.type === 'attachment.decayed') {
+				ctx.attachmentStates.set(fileId, 'reference')
+			} else if (ev.type === 'attachment.revealed') {
+				ctx.attachmentStates.set(fileId, 'active')
+			}
+		}
+	}
+}
+
 /** fetch and process events (tool + attachment) for a batch of message ids */
 export async function fetchEventsForThread(
 	threadId: string,
@@ -19,6 +47,18 @@ export async function fetchEventsForThread(
 	ctx: ChatContext
 ): Promise<void> {
 	if (msgIds.length === 0) return
+
+	// check if the events cache covers all requested message IDs
+	const cached = chatStore.threadCache.getCachedEvents(threadId)
+	if (cached) {
+		const allCovered = msgIds.every((id) => cached.messageIds.has(id))
+		if (allCovered) {
+			// replay from cache - skip the API entirely
+			replayEvents(cached.events, ctx)
+			for (const id of msgIds) ctx.fetchedToolEventMessageIds.add(id)
+			return
+		}
+	}
 
 	// queue IDs that haven't been fetched yet
 	for (const id of msgIds) {
@@ -45,31 +85,14 @@ export async function fetchEventsForThread(
 				}
 			)
 			if (!error && data) {
-				for (const ev of data as ApiEvent[]) {
-					// tool events
-					const toolEv = parseToolEvent({
-						id: ev.id,
-						type: ev.type,
-						data: (ev.data ?? {}) as Record<string, unknown>,
-						created_at: ev.created_at ?? undefined,
-						message_id: ev.message_id ?? undefined,
-					})
-					if (toolEv) {
-						ctx.toolTracker.processEvent(toolEv)
-						continue
-					}
-
-					// attachment state events
-					if (ev.type.startsWith('attachment.')) {
-						const evData = (ev.data ?? {}) as Record<string, unknown>
-						const fileId = evData.file_id as string | undefined
-						if (!fileId) continue
-						if (ev.type === 'attachment.decayed') {
-							ctx.attachmentStates.set(fileId, 'reference')
-						} else if (ev.type === 'attachment.revealed') {
-							ctx.attachmentStates.set(fileId, 'active')
-						}
-					}
+				const events = data as ApiEvent[]
+				replayEvents(events, ctx)
+				// re-read cache state each iteration to avoid stale closure
+				const current = chatStore.threadCache.getCachedEvents(threadId)
+				if (current) {
+					chatStore.threadCache.appendEvents(threadId, events, batch)
+				} else {
+					chatStore.threadCache.setEvents(threadId, events, batch)
 				}
 			}
 			for (const id of batch) ctx.fetchedToolEventMessageIds.add(id)
@@ -111,6 +134,8 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 			},
 		})
 		if (error) return
+		// guard against stale responses arriving after the user navigated away
+		if (threadId !== ctx.thread?.id) return
 		const page = (data ?? []) as ApiMessage[]
 		if (page.length === 0) {
 			ctx.hasMoreMessages = false
@@ -126,6 +151,8 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 		)
 
 		await tick()
+		// guard again: component may have unmounted during awaits
+		if (!ctx.scrollContainer || threadId !== ctx.thread?.id) return
 		const newScrollHeight = ctx.scrollContainer.scrollHeight
 		ctx.scrollContainer.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight)
 	} finally {
@@ -179,6 +206,8 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		if (msgError) {
 			console.error('failed to load messages', msgError)
 			ctx.currentLeafId = null
+			ctx.messageSkip = 0
+			ctx.hasMoreMessages = true
 			return false
 		}
 		messagesPage = (msgData ?? []) as ApiMessage[]
@@ -240,4 +269,11 @@ export function syncCacheAfterRun(ctx: ChatContext): void {
 	// write all in-memory messages back to cache
 	const allMessages = Array.from(ctx.messageTree.values())
 	chatStore.threadCache.setMessages(ctx.thread.id, allMessages, !ctx.hasMoreMessages)
+	// register new message IDs as covered so events cache stays valid.
+	// events from the run arrived via SSE (already processed by toolTracker),
+	// so we just mark the message IDs as covered without invalidating.
+	chatStore.threadCache.addCoveredMessageIds(
+		ctx.thread.id,
+		allMessages.map((m) => m.id)
+	)
 }

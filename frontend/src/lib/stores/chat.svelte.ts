@@ -33,9 +33,21 @@ interface MessageCacheEntry {
 	complete: boolean
 }
 
+type ApiEvent = components['schemas']['Event']
+
+interface EventCacheEntry {
+	events: ApiEvent[]
+	/** event IDs for O(1) deduplication */
+	eventIds: Set<string>
+	fetchedAt: number
+	/** message IDs whose events are included in this cache entry */
+	messageIds: Set<string>
+}
+
 class ThreadCache {
 	readonly #threadCache = new SvelteMap<string, ThreadCacheEntry>()
 	readonly #messageCache = new SvelteMap<string, MessageCacheEntry>()
+	readonly #eventCache = new SvelteMap<string, EventCacheEntry>()
 	readonly #prefetchInFlight = new SvelteSet<string>()
 
 	#isFresh(fetchedAt: number): boolean {
@@ -73,6 +85,68 @@ class ThreadCache {
 	invalidateAll(threadId: string): void {
 		this.#threadCache.delete(threadId)
 		this.#messageCache.delete(threadId)
+		this.#eventCache.delete(threadId)
+	}
+
+	// -- events cache --
+
+	getCachedEvents(
+		threadId: string
+	): { events: ApiEvent[]; messageIds: ReadonlySet<string> } | null {
+		const entry = this.#eventCache.get(threadId)
+		if (!entry || !this.#isFresh(entry.fetchedAt)) return null
+		return { events: entry.events, messageIds: entry.messageIds }
+	}
+
+	setEvents(threadId: string, events: ApiEvent[], messageIds: string[]): void {
+		this.#eventCache.set(threadId, {
+			events,
+			eventIds: new Set(events.map((e) => e.id)),
+			fetchedAt: Date.now(),
+			messageIds: new Set(messageIds),
+		})
+	}
+
+	appendEvents(threadId: string, newEvents: ApiEvent[], newMessageIds: string[]): void {
+		const entry = this.#eventCache.get(threadId)
+		if (!entry || !this.#isFresh(entry.fetchedAt)) return
+		const deduped = newEvents.filter((e) => !entry.eventIds.has(e.id))
+		for (const id of newMessageIds) entry.messageIds.add(id)
+		if (deduped.length === 0) return
+		for (const ev of deduped) entry.eventIds.add(ev.id)
+		this.#eventCache.set(threadId, {
+			...entry,
+			events: [...entry.events, ...deduped],
+			fetchedAt: Date.now(),
+		})
+	}
+
+	/** register message IDs as covered without adding events (e.g. after a run) */
+	addCoveredMessageIds(threadId: string, messageIds: string[]): void {
+		const entry = this.#eventCache.get(threadId)
+		if (!entry || !this.#isFresh(entry.fetchedAt)) return
+		for (const id of messageIds) entry.messageIds.add(id)
+	}
+
+	/** remove events belonging to specific messages (e.g. after message deletion) */
+	removeEventsByMessageIds(threadId: string, messageIds: string[]): void {
+		const entry = this.#eventCache.get(threadId)
+		if (!entry) return
+		const idSet = new Set(messageIds)
+		const filtered = entry.events.filter((e) => !idSet.has(e.message_id ?? ''))
+		if (filtered.length === entry.events.length) {
+			// no events removed, just drop message IDs
+			for (const id of messageIds) entry.messageIds.delete(id)
+			return
+		}
+		const removedEventIds = entry.events.filter((e) => idSet.has(e.message_id ?? ''))
+		for (const ev of removedEventIds) entry.eventIds.delete(ev.id)
+		for (const id of messageIds) entry.messageIds.delete(id)
+		this.#eventCache.set(threadId, { ...entry, events: filtered })
+	}
+
+	invalidateEvents(threadId: string): void {
+		this.#eventCache.delete(threadId)
 	}
 
 	/** append a message to the cached array (if thread is cached). */
@@ -111,6 +185,7 @@ class ThreadCache {
 	clear(): void {
 		this.#threadCache.clear()
 		this.#messageCache.clear()
+		this.#eventCache.clear()
 		this.#prefetchInFlight.clear()
 	}
 
@@ -287,19 +362,21 @@ class ChatStore {
 			const msgId = (data.message_id as string) ?? (message.message_id as string)
 			if (deletedIds) {
 				this.threadCache.removeMessages(threadId, deletedIds)
+				this.threadCache.removeEventsByMessageIds(threadId, deletedIds)
 			} else if (msgId) {
 				this.threadCache.removeMessages(threadId, [msgId])
+				this.threadCache.removeEventsByMessageIds(threadId, [msgId])
 			}
 		}
 	}
 
-	initEvents = (): void => {
+	init = (): void => {
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
 		}
 	}
 
-	cleanupEvents = (): void => {
+	cleanup = (): void => {
 		this.#unsubscribe?.()
 		this.#unsubscribe = null
 	}
@@ -412,10 +489,10 @@ export const chat = new ChatStore()
 if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
-			chat.initEvents()
+			chat.init()
 			activeRunsStore.init()
 		} else {
-			chat.cleanupEvents()
+			chat.cleanup()
 			activeRunsStore.cleanup()
 			chat.clear()
 		}

@@ -3,8 +3,8 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { apiClient } from '$lib/api/client'
 	import type { StreamMessage } from '$lib/api/streaming'
+	import { deleteThread, handleThreadStreamEvent, updateThread } from '$lib/chat/threadActions'
 	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
@@ -107,52 +107,9 @@
 	})
 
 	function handleThreadEvent(event: StreamMessage): void {
-		const eventType = event.type
-		const data = event.data as Record<string, unknown> | undefined
-		const threadId = (data?.thread_id as string) || (event.thread_id as string) || ''
-
-		const patch = (data?.patch ?? null) as {
-			title?: unknown
-			tags?: unknown
-		} | null
-
-		if (eventType === 'thread.deleted' && threadId) {
-			// invalidate cache
-			chat.threadCache.invalidateAll(threadId)
-
-			// remove from list
-			chat.removeRecentThread(threadId)
-
-			// if we're viewing this thread, navigate away
-			if (page.url.pathname === `/c/${threadId}`) {
-				void goto(resolve('/'), { replaceState: true })
-			}
-		} else if (eventType === 'thread.updated' && threadId) {
-			// invalidate cache on updates
-			chat.threadCache.invalidateAll(threadId)
-
-			// move thread to top and update title if available
-			const rawTitle =
-				(typeof patch?.title === 'string' ? patch.title : null) ??
-				(typeof data?.title === 'string' ? data.title : null)
-			const rawTags =
-				(Array.isArray(patch?.tags) ? patch.tags : null) ??
-				(Array.isArray(data?.tags) ? data.tags : null)
-			chat.updateRecentThread(threadId, (thread) => {
-				const nextTags = rawTags
-					? rawTags.filter((t): t is string => typeof t === 'string')
-					: null
-				return {
-					...thread,
-					title: rawTitle ?? thread.title,
-					tags: nextTags ?? thread.tags,
-					last_activity_at: new Date().toISOString(),
-				}
-			})
-		} else if (eventType === 'thread.created') {
-			// refresh to get the new thread (or we could add it directly)
-			void chat.refreshThreads({ limit: 25 })
-		}
+		handleThreadStreamEvent(event, page.url.pathname, (path) => {
+			void goto(resolve(path), { replaceState: true })
+		})
 	}
 
 	$effect(() => {
@@ -269,21 +226,25 @@
 	}
 
 	function saveEditModal(): void {
+		if (isSavingEdit) return
 		void (async () => {
+			if (!editThread) return
 			isSavingEdit = true
 			editError = null
-			try {
-				console.log('edit chat save', {
-					threadId: editThread?.id,
-					title: editTitle,
-					tagsCsv: editTagsCsv,
-				})
-				editThread = null
-			} catch {
-				editError = 'could not save changes'
-			} finally {
-				isSavingEdit = false
-			}
+
+			const threadId = editThread.id
+			const newTitle = editTitle.trim()
+			const newTags = editTagsCsv
+				.split(',')
+				.map((t) => t.trim())
+				.filter(Boolean)
+
+			editThread = null
+
+			const ok = await updateThread(threadId, newTitle, newTags)
+			if (!ok) editError = 'could not save changes'
+
+			isSavingEdit = false
 		})()
 	}
 
@@ -319,13 +280,6 @@
 		}
 		node.addEventListener('click', handler)
 		return { destroy: () => node.removeEventListener('click', handler) }
-	}
-
-	async function deleteThread(threadId: string): Promise<number | null> {
-		const { response } = await apiClient().DELETE('/v1/threads/{thread_id}', {
-			params: { path: { thread_id: threadId } },
-		})
-		return response.status
 	}
 </script>
 

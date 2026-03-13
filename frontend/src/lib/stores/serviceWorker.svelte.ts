@@ -10,7 +10,7 @@
 
 import { browser } from '$app/environment'
 
-const UPDATE_CHECK_INTERVAL = 30 * 60 * 1000 // 30 minutes
+const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
 export const swUpdate = $state({
 	updateAvailable: false,
@@ -21,6 +21,20 @@ let didInit = false
 let reloading = false
 let updateTimer: ReturnType<typeof setInterval> | null = null
 let cleanup: (() => void) | null = null
+
+/** check if a SW is already waiting, accounting for race conditions */
+function checkInstalling(sw: ServiceWorker): void {
+	// if it already reached 'installed', we might have missed the statechange event
+	if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+		swUpdate.updateAvailable = true
+		return
+	}
+	sw.addEventListener('statechange', () => {
+		if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+			swUpdate.updateAvailable = true
+		}
+	})
+}
 
 export function initServiceWorker(): void {
 	if (!browser || didInit) return
@@ -48,12 +62,7 @@ export function initServiceWorker(): void {
 			reg.addEventListener('updatefound', () => {
 				const installing = reg.installing
 				if (!installing) return
-
-				installing.addEventListener('statechange', () => {
-					if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-						swUpdate.updateAvailable = true
-					}
-				})
+				checkInstalling(installing)
 			})
 
 			// periodic update check for long-lived tabs
@@ -65,10 +74,19 @@ export function initServiceWorker(): void {
 			console.warn('service worker ready failed:', err)
 		})
 
+	// check for updates when tab regains focus (user returns from another tab/app)
+	const onVisibilityChange = () => {
+		if (document.visibilityState === 'visible' && registration) {
+			registration.update().catch(() => {})
+		}
+	}
+	document.addEventListener('visibilitychange', onVisibilityChange)
+
 	navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
 
 	cleanup = () => {
 		navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+		document.removeEventListener('visibilitychange', onVisibilityChange)
 		if (updateTimer) {
 			clearInterval(updateTimer)
 			updateTimer = null

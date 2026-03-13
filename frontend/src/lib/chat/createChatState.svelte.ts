@@ -212,6 +212,10 @@ export function createChatState(): ChatState {
 		currentLeafId = null
 		isThreadLoading = false
 		hasLoadedBranch = false
+		// reset pagination state so in-flight requests from the previous thread
+		// cannot corrupt the next thread's skip counter
+		messageSkip = 0
+		hasMoreMessages = true
 		// clear run state to prevent leaking to other chats
 		optimisticUserMessage = null
 		streamingAssistant = null

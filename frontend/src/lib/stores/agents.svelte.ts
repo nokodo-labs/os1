@@ -104,15 +104,28 @@ class AgentsStore {
 		this.byId = { ...this.byId, [agentId]: agent }
 	}
 
-	subscribe = (): void => {
+	init = (): void => {
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
 		}
 	}
 
-	unsubscribe = (): void => {
+	cleanup = (): void => {
 		this.#unsubscribe?.()
 		this.#unsubscribe = null
+	}
+
+	invalidate = (): void => {
+		this.#loading = false
+		this.list = []
+		this.byId = {}
+	}
+
+	clear = (): void => {
+		this.list = []
+		this.byId = {}
+		this.error = null
+		this.#loading = false
 	}
 }
 
@@ -121,12 +134,10 @@ export const agents = new AgentsStore()
 if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
-			agents.subscribe()
+			agents.init()
 		} else {
-			agents.unsubscribe()
-			agents.list = []
-			agents.byId = {}
-			agents.error = null
+			agents.cleanup()
+			agents.clear()
 		}
 	})
 }

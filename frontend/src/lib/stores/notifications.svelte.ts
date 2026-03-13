@@ -13,8 +13,16 @@ import { SvelteDate, SvelteSet } from 'svelte/reactivity'
 export type Notification = components['schemas']['Notification']
 export type Event = components['schemas']['Event']
 
+export type EphemeralVariant = 'error' | 'success' | 'info' | 'warning'
+
 export interface ToastItem {
+	/** unique UI handle for this toast */
 	id: string
+	type: 'notification' | 'ephemeral'
+	/** only set when type === 'ephemeral' */
+	variant?: EphemeralVariant
+	/** only set when type === 'notification' - the backing event_id */
+	eventId?: string
 	title: string
 	body: string
 	iconUrl?: string | null
@@ -79,28 +87,70 @@ class NotificationsStore {
 		const body = (data?.body as string) || ''
 		const iconUrl = (data?.icon_url as string) || null
 		const imageUrl = (data?.image_url as string) || null
-		const id = typeof message.id === 'string' ? message.id : null
-		if (!id) return
+		const eventId = typeof message.id === 'string' ? message.id : null
+		if (!eventId) return
 
-		this.toasts = [...this.toasts, { id, title, body, iconUrl, imageUrl, addedAt: Date.now() }]
+		const id = crypto.randomUUID()
+		this.toasts = [
+			...this.toasts,
+			{
+				id,
+				type: 'notification',
+				eventId,
+				title,
+				body,
+				iconUrl,
+				imageUrl,
+				addedAt: Date.now(),
+			},
+		]
 	}
 
 	#pushFriendToast = (message: StreamMessage) => {
-		const id = typeof message.id === 'string' ? message.id : null
-		if (!id) return
+		const eventId = typeof message.id === 'string' ? message.id : null
+		if (!eventId) return
 		const labels: Record<string, string> = {
 			'friend.request_sent': 'new friend request',
 			'friend.request_accepted': 'friend request accepted',
 		}
 		const title = labels[message.type] ?? 'friend update'
+		const id = crypto.randomUUID()
 		this.toasts = [
 			...this.toasts,
-			{ id, title, body: '', iconUrl: null, imageUrl: null, addedAt: Date.now() },
+			{
+				id,
+				type: 'notification',
+				eventId,
+				title,
+				body: '',
+				iconUrl: null,
+				imageUrl: null,
+				addedAt: Date.now(),
+			},
 		]
 	}
 
 	dismissToast = (id: string) => {
 		this.toasts = this.toasts.filter((t) => t.id !== id)
+	}
+
+	/** push an ephemeral (non-notification-backed) toast. */
+	pushEphemeralToast = (variant: EphemeralVariant, message: string): string => {
+		const id = `ephemeral-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+		this.toasts = [
+			...this.toasts,
+			{
+				id,
+				type: 'ephemeral',
+				variant,
+				title: message,
+				body: '',
+				iconUrl: null,
+				imageUrl: null,
+				addedAt: Date.now(),
+			},
+		]
+		return id
 	}
 
 	#handleStreamEvent = (message: StreamMessage) => {
@@ -250,7 +300,7 @@ class NotificationsStore {
 
 		try {
 			await Promise.all(
-				unread.slice(0, 10).map((n) =>
+				unread.map((n) =>
 					apiClient().POST('/v1/notifications/{notification_id}/read', {
 						params: { path: { notification_id: n.id } },
 					})
@@ -279,7 +329,7 @@ class NotificationsStore {
 
 		try {
 			await Promise.all(
-				ids.slice(0, 20).map((id) =>
+				ids.map((id) =>
 					apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
 						params: { path: { notification_id: id } },
 					})
@@ -310,4 +360,9 @@ export function onMessageEvent(handler: MessageEventHandler): () => void {
 export function onNotificationEvent(handler: NotificationEventHandler): () => void {
 	notificationEventHandlers.add(handler)
 	return () => notificationEventHandlers.delete(handler)
+}
+
+/** display a transient ephemeral error toast. */
+export function showError(message: string): string {
+	return notifications.pushEphemeralToast('error', message)
 }

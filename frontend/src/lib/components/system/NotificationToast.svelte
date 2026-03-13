@@ -4,9 +4,12 @@
 
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
+	import CheckCircle from '$lib/components/icons/CheckCircle.svelte'
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { device } from '$lib/stores/device.svelte'
-	import type { ToastItem } from '$lib/stores/notifications.svelte'
+	import type { EphemeralVariant, ToastItem } from '$lib/stores/notifications.svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 
 	interface Props {
@@ -20,6 +23,7 @@
 
 	// auto-dismiss (component-managed so exit animation plays)
 	const AUTO_DISMISS_MS = 12000
+	const ERROR_DISMISS_MS = 5000
 	let dismissTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
 
 	$effect(() => {
@@ -28,12 +32,13 @@
 		// schedule auto-dismiss for new toasts
 		for (const toast of toasts) {
 			if (!dismissTimers.has(toast.id)) {
+				const ms = toast.type === 'ephemeral' ? ERROR_DISMISS_MS : AUTO_DISMISS_MS
 				dismissTimers.set(
 					toast.id,
 					setTimeout(() => {
 						dismissTimers.delete(toast.id)
 						startDismiss(toast.id)
-					}, AUTO_DISMISS_MS)
+					}, ms)
 				)
 			}
 		}
@@ -112,12 +117,14 @@
 
 	function resumeAutoDismiss(id: string) {
 		if (dismissTimers.has(id) || dismissing[id]) return
+		const toast = toasts.find((t) => t.id === id)
+		const ms = toast?.type === 'ephemeral' ? ERROR_DISMISS_MS : AUTO_DISMISS_MS
 		dismissTimers.set(
 			id,
 			setTimeout(() => {
 				dismissTimers.delete(id)
 				startDismiss(id)
-			}, AUTO_DISMISS_MS)
+			}, ms)
 		)
 	}
 
@@ -183,6 +190,19 @@
 
 		return ''
 	}
+	type EphemeralMeta = { tint: string; iconColor: string }
+	function ephemeralMeta(variant: EphemeralVariant | undefined): EphemeralMeta {
+		switch (variant) {
+			case 'success':
+				return { tint: 'rgba(22,163,74,0.18)', iconColor: 'text-green-500' }
+			case 'info':
+				return { tint: 'rgba(37,99,235,0.18)', iconColor: 'text-blue-400' }
+			case 'warning':
+				return { tint: 'rgba(217,119,6,0.22)', iconColor: 'text-amber-400' }
+			default:
+				return { tint: 'rgba(220,38,38,0.18)', iconColor: 'text-red-500' }
+		}
+	}
 </script>
 
 {#if toasts.length > 0}
@@ -190,65 +210,9 @@
 		<!-- mobile: full-width banners at top -->
 		<div class="fixed inset-x-0 top-0 z-60 flex flex-col gap-2 px-3 pt-3">
 			{#each toasts as toast (toast.id)}
-				<LiquidGlass
-					class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left select-none"
-					style={toastStyle(toast.id)}
-					role="button"
-					tabindex="0"
-					onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
-					onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
-					onpointerup={() => onPointerUp(toast.id)}
-					onpointercancel={() => onPointerCancel(toast.id)}
-					onkeydown={(e: KeyboardEvent) => {
-						if (e.key === 'Enter') {
-							onClick?.(toast.id)
-							startDismiss(toast.id)
-						}
-					}}
-				>
-					<div
-						class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/10"
-					>
-						{#if toast.iconUrl}
-							<img
-								src={toast.iconUrl}
-								alt=""
-								class="h-5 w-5 rounded-full object-cover"
-							/>
-						{:else}
-							<AppNotification class="h-4 w-4 text-foreground/80" />
-						{/if}
-					</div>
-					<div class="min-w-0 flex-1">
-						<div class="truncate text-sm font-semibold text-foreground/90">
-							{toast.title}
-						</div>
-						{#if toast.body}
-							<div class="line-clamp-2 text-sm text-foreground/60">{toast.body}</div>
-						{/if}
-						{#if toast.imageUrl}
-							<img
-								src={toast.imageUrl}
-								alt=""
-								class="mt-2 max-h-32 w-full rounded-lg object-cover"
-							/>
-						{/if}
-					</div>
-					<XMark
-						class="mt-0.5 size-5 shrink-0 cursor-pointer text-foreground/45 transition-all duration-150 hover:scale-[1.05] hover:text-foreground/80 active:scale-[0.97]"
-						onpointerdown={(e) => e.stopPropagation()}
-						onclick={() => handleButtonDismiss(toast.id)}
-					/>
-				</LiquidGlass>
-			{/each}
-		</div>
-	{:else}
-		<!-- desktop: top-right stack like macOS -->
-		<div class="fixed top-6 right-6 z-60 flex w-80 flex-col gap-2">
-			{#each toasts as toast (toast.id)}
-				<div in:fly={{ x: 200, duration: 300, easing: cubicOut }}>
+				{#if toast.type === 'notification'}
 					<LiquidGlass
-						class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20 select-none"
+						class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left select-none"
 						style={toastStyle(toast.id)}
 						role="button"
 						tabindex="0"
@@ -264,7 +228,7 @@
 						}}
 					>
 						<div
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/10"
+							class="bg-foreground/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
 						>
 							{#if toast.iconUrl}
 								<img
@@ -273,15 +237,17 @@
 									class="h-5 w-5 rounded-full object-cover"
 								/>
 							{:else}
-								<AppNotification class="h-4 w-4 text-foreground/80" />
+								<AppNotification class="text-foreground/80 h-4 w-4" />
 							{/if}
 						</div>
 						<div class="min-w-0 flex-1">
-							<div class="truncate text-sm font-semibold text-foreground/90">
+							<div class="text-foreground/90 truncate text-sm font-semibold">
 								{toast.title}
 							</div>
 							{#if toast.body}
-								<div class="line-clamp-2 text-sm text-foreground/60">{toast.body}</div>
+								<div class="text-foreground/60 line-clamp-2 text-sm">
+									{toast.body}
+								</div>
 							{/if}
 							{#if toast.imageUrl}
 								<img
@@ -292,11 +258,153 @@
 							{/if}
 						</div>
 						<XMark
-							class="mt-0.5 size-5 shrink-0 cursor-pointer text-foreground/45 transition-all duration-150 hover:scale-[1.05] hover:text-foreground/80 active:scale-[0.97]"
+							class="text-foreground/45 hover:text-foreground/80 mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 							onpointerdown={(e) => e.stopPropagation()}
 							onclick={() => handleButtonDismiss(toast.id)}
 						/>
 					</LiquidGlass>
+				{:else}
+					{@const meta = ephemeralMeta(toast.variant)}
+					<LiquidGlass
+						class="notification-toast relative flex w-full touch-none items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 text-left select-none"
+						style={toastStyle(toast.id)}
+						role="alert"
+						onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
+						onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
+						onpointerup={() => onPointerUp(toast.id)}
+						onpointercancel={() => onPointerCancel(toast.id)}
+					>
+						<!-- color tint overlay -->
+						<div
+							class="absolute inset-0 rounded-2xl"
+							style="background:{meta.tint}"
+						></div>
+						<div
+							class="bg-foreground/10 relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+						>
+							{#if toast.variant === 'success'}
+								<CheckCircle class="h-4 w-4 {meta.iconColor}" />
+							{:else if toast.variant === 'warning'}
+								<ExclamationTriangle class="h-4 w-4 {meta.iconColor}" />
+							{:else if toast.variant === 'info'}
+								<InfoCircle class="h-4 w-4 {meta.iconColor}" />
+							{:else}
+								<XMark class="h-4 w-4 {meta.iconColor}" />
+							{/if}
+						</div>
+						<div class="relative min-w-0 flex-1">
+							<div class="text-foreground/90 truncate text-sm font-semibold">
+								{toast.title}
+							</div>
+						</div>
+						<XMark
+							class="text-foreground/45 hover:text-foreground/80 relative mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
+							onpointerdown={(e) => e.stopPropagation()}
+							onclick={() => handleButtonDismiss(toast.id)}
+						/>
+					</LiquidGlass>
+				{/if}
+			{/each}
+		</div>
+	{:else}
+		<!-- desktop: top-right stack like macOS -->
+		<div class="fixed top-6 right-6 z-60 flex w-80 flex-col gap-2">
+			{#each toasts as toast (toast.id)}
+				<div in:fly={{ x: 200, duration: 300, easing: cubicOut }}>
+					{#if toast.type === 'notification'}
+						<LiquidGlass
+							class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20 select-none"
+							style={toastStyle(toast.id)}
+							role="button"
+							tabindex="0"
+							onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
+							onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
+							onpointerup={() => onPointerUp(toast.id)}
+							onpointercancel={() => onPointerCancel(toast.id)}
+							onkeydown={(e: KeyboardEvent) => {
+								if (e.key === 'Enter') {
+									onClick?.(toast.id)
+									startDismiss(toast.id)
+								}
+							}}
+						>
+							<div
+								class="bg-foreground/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+							>
+								{#if toast.iconUrl}
+									<img
+										src={toast.iconUrl}
+										alt=""
+										class="h-5 w-5 rounded-full object-cover"
+									/>
+								{:else}
+									<AppNotification class="text-foreground/80 h-4 w-4" />
+								{/if}
+							</div>
+							<div class="min-w-0 flex-1">
+								<div class="text-foreground/90 truncate text-sm font-semibold">
+									{toast.title}
+								</div>
+								{#if toast.body}
+									<div class="text-foreground/60 line-clamp-2 text-sm">
+										{toast.body}
+									</div>
+								{/if}
+								{#if toast.imageUrl}
+									<img
+										src={toast.imageUrl}
+										alt=""
+										class="mt-2 max-h-32 w-full rounded-lg object-cover"
+									/>
+								{/if}
+							</div>
+							<XMark
+								class="text-foreground/45 hover:text-foreground/80 mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
+								onpointerdown={(e) => e.stopPropagation()}
+								onclick={() => handleButtonDismiss(toast.id)}
+							/>
+						</LiquidGlass>
+					{:else}
+						{@const meta = ephemeralMeta(toast.variant)}
+						<LiquidGlass
+							class="notification-toast relative flex w-full touch-none items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20 select-none"
+							style={toastStyle(toast.id)}
+							role="alert"
+							onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
+							onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
+							onpointerup={() => onPointerUp(toast.id)}
+							onpointercancel={() => onPointerCancel(toast.id)}
+						>
+							<!-- color tint overlay -->
+							<div
+								class="absolute inset-0 rounded-2xl"
+								style="background:{meta.tint}"
+							></div>
+							<div
+								class="bg-foreground/10 relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+							>
+								{#if toast.variant === 'success'}
+									<CheckCircle class="h-4 w-4 {meta.iconColor}" />
+								{:else if toast.variant === 'warning'}
+									<ExclamationTriangle class="h-4 w-4 {meta.iconColor}" />
+								{:else if toast.variant === 'info'}
+									<InfoCircle class="h-4 w-4 {meta.iconColor}" />
+								{:else}
+									<XMark class="h-4 w-4 {meta.iconColor}" />
+								{/if}
+							</div>
+							<div class="relative min-w-0 flex-1">
+								<div class="text-foreground/90 truncate text-sm font-semibold">
+									{toast.title}
+								</div>
+							</div>
+							<XMark
+								class="text-foreground/45 hover:text-foreground/80 relative mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
+								onpointerdown={(e) => e.stopPropagation()}
+								onclick={() => handleButtonDismiss(toast.id)}
+							/>
+						</LiquidGlass>
+					{/if}
 				</div>
 			{/each}
 		</div>

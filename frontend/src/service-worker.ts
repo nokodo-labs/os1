@@ -9,7 +9,7 @@
  * caching strategies:
  * - precache: app shell (HTML, CSS, JS, fonts) - versioned by build hash
  * - cache-first: static assets (images, fonts from /static)
- * - stale-while-revalidate: API data calls (/v1/ except auth), capped at 128 entries
+ * - network-first: API data calls (/v1/ except auth) - app manages its own TTL caching
  * - network-only: auth/sensitive routes (/v1/auth/*)
  * - offline fallback: serves /offline.html when network is unavailable
  */
@@ -82,9 +82,11 @@ self.addEventListener('fetch', (event) => {
 	// network-only for auth/sensitive routes
 	if (NETWORK_ONLY_PATTERNS.some((re) => re.test(url.pathname))) return
 
-	// API calls: stale-while-revalidate
+	// API calls: network-first with cache fallback for offline.
+	// the app has its own TTL-based caching layer (ThreadCache, stores, etc.)
+	// so the SW should not serve stale data - only provide offline resilience.
 	if (url.pathname.startsWith('/v1/')) {
-		event.respondWith(staleWhileRevalidate(request))
+		event.respondWith(networkFirst(request))
 		return
 	}
 
@@ -126,27 +128,22 @@ async function cacheFirst(request: Request, cacheName: string): Promise<Response
 	}
 }
 
-/** stale-while-revalidate: return cached immediately, update cache in background. */
-async function staleWhileRevalidate(request: Request): Promise<Response> {
+/** network-first: try network, cache the response, fall back to cache if offline. */
+async function networkFirst(request: Request): Promise<Response> {
 	const cache = await caches.open(RUNTIME)
-	const cached = await cache.match(request)
 
-	const networkPromise = fetch(request)
-		.then(async (response) => {
-			if (response.ok) {
-				await cache.put(request, response.clone())
-				await evictOldEntries(cache)
-			}
-			return response
-		})
-		.catch(() => null)
-
-	if (cached) return cached
-
-	const networkResponse = await networkPromise
-	if (networkResponse) return networkResponse
-
-	return offlineFallback()
+	try {
+		const response = await fetch(request)
+		if (response.ok) {
+			cache.put(request, response.clone())
+			evictOldEntries(cache)
+		}
+		return response
+	} catch {
+		const cached = await cache.match(request)
+		if (cached) return cached
+		return offlineFallback()
+	}
 }
 
 /** navigation handler: network-first with offline fallback. */

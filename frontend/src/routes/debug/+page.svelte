@@ -11,39 +11,45 @@
 	<div class="mt-6 grid gap-3 sm:grid-cols-2">
 		<a
 			href={resolve('/debug/shimmer')}
-			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
 		>
 			shimmer playground
 		</a>
 		<a
 			href={resolve('/debug/liquid-glass')}
-			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
 		>
 			liquid glass lab
 		</a>
 		<a
 			href={resolve('/debug/liquid-metal')}
-			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
 		>
 			liquid metal svg lab
 		</a>
 		<a
 			href={resolve('/debug/pwa')}
-			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
 		>
 			pwa debug
 		</a>
 		<a
 			href={resolve('/debug/runs')}
-			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
 		>
 			runs & caches
 		</a>
 		<a
 			href={resolve('/debug/backgrounds')}
-			class="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80 transition hover:border-foreground/20 hover:bg-foreground/8"
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
 		>
 			backgrounds debug
+		</a>
+		<a
+			href={resolve('/debug/toasts')}
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
+		>
+			toast playground
 		</a>
 	</div>
 </div>

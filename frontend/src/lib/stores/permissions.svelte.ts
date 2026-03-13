@@ -23,7 +23,7 @@ class PermissionsStore {
 		return list.includes(permission)
 	}
 
-	refresh = async (): Promise<void> => {
+	load = async (): Promise<void> => {
 		const token = getAccessToken()
 		const userId = token ? getJwtUserId(token) : null
 		if (!token || !userId) {
@@ -56,20 +56,24 @@ class PermissionsStore {
 		this.isLoading = false
 	}
 
+	invalidate = (): void => {
+		this.list = null
+	}
+
 	#handleEvent = (message: StreamMessage): void => {
 		if (!ROLE_EVENT_TYPES.includes(message.type)) return
 		// role changed - refresh permissions (and user data for role changes)
-		void this.refresh()
+		void this.load()
 		void session.refreshUser()
 	}
 
-	subscribe = (): void => {
+	init = (): void => {
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
 		}
 	}
 
-	unsubscribe = (): void => {
+	cleanup = (): void => {
 		this.#unsubscribe?.()
 		this.#unsubscribe = null
 	}
@@ -80,9 +84,9 @@ export const permissions = new PermissionsStore()
 if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
-			permissions.subscribe()
+			permissions.init()
 		} else {
-			permissions.unsubscribe()
+			permissions.cleanup()
 			permissions.clear()
 		}
 	})
