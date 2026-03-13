@@ -10,6 +10,8 @@
  *   favicon.ico, apple-touch-icon.png, sidebar-logo.svg, splash-logo.svg
  */
 
+import { browser } from '$app/environment'
+import { getApiBaseUrl } from '$lib/api/client'
 import { settingsState } from '$lib/stores/settings.svelte'
 
 /** well-known asset filenames appended to media.base_url. */
@@ -53,7 +55,9 @@ export function getMediaUrls(): {
 		appleTouchIcon: resolve('appleTouchIcon', media?.apple_touch_icon_url, baseUrl),
 		manifest: settingsState.data?.branding?.pwa_manifest_url
 			? String(settingsState.data.branding.pwa_manifest_url)
-			: null,
+			: browser
+				? `${getApiBaseUrl()}/system/manifest.json`
+				: null,
 		sidebarLogo: resolve('sidebarLogo', media?.sidebar_logo_url, baseUrl),
 		splashLogo: resolve('splashLogo', media?.splash_logo_url, baseUrl),
 	}
