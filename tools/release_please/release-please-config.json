@@ -29,7 +29,7 @@
 	"packages": {
 		".": {
 			"release-type": "simple",
-			"pull-request-title-pattern": "chore(release): release${component} nokodo AI v${version}"
+			"pull-request-title-pattern": "chore(release): release${component} OS1 v${version}"
 		},
 		"backend/nokodo_ai": {
 			"package-name": "library",
