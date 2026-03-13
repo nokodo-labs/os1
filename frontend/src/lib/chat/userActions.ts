@@ -132,7 +132,10 @@ export async function handleSendMessage(
 		}
 		ctx.rebuildRunBlocks()
 	} finally {
-		if (runId === ctx.activeRun) ctx.isGenerating = false
+		if (runId === ctx.activeRun) {
+			ctx.toolTracker.closeAllActive()
+			ctx.isGenerating = false
+		}
 	}
 }
 
@@ -208,7 +211,10 @@ export async function handleRegenerateMessage(
 		}
 		ctx.rebuildRunBlocks()
 	} finally {
-		if (runId === ctx.activeRun) ctx.isGenerating = false
+		if (runId === ctx.activeRun) {
+			ctx.toolTracker.closeAllActive()
+			ctx.isGenerating = false
+		}
 	}
 }
 

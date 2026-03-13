@@ -576,22 +576,37 @@ def _messages_to_anthropic(
 							matched_tool_ids.append(tool_use_id)
 					j += 1
 
+				had_tool_messages = j > i + 1
+
 				if matched_tool_ids:
-					matched_tool_blocks = [
-						tool_use_by_id[tool_id] for tool_id in matched_tool_ids
+					# some tool results matched - include matched tool_use
+					# blocks plus synthetic error results for any unmatched
+					unmatched_ids = [
+						tid for tid in tool_use_by_id if tid not in matched_tool_ids
 					]
+					for uid in unmatched_ids:
+						result_blocks.append(
+							AnthropicToolResultBlockParam(
+								type="tool_result",
+								tool_use_id=uid,
+								content=(
+									"tool execution was interrupted or never completed"
+								),
+								is_error=True,
+							)
+						)
 					_append_anthropic_assistant_message(
 						result,
 						assistant_text=assistant_text,
-						tool_blocks=matched_tool_blocks,
+						tool_blocks=tool_blocks,
 					)
 					result.append({"role": "user", "content": result_blocks})
 					i = j
 					continue
 
-				if j > i + 1:
-					# ToolMessages followed but none matched - strip tool_use blocks
-					# and skip past those lookahead messages
+				if had_tool_messages:
+					# tool messages followed but none matched (corrupt data) -
+					# strip tool_use blocks and skip past the lookahead
 					_append_anthropic_assistant_message(
 						result,
 						assistant_text=assistant_text,
@@ -599,12 +614,26 @@ def _messages_to_anthropic(
 					)
 					i = j
 				else:
-					# no ToolMessages followed - keep tool_use blocks as-is
+					# no tool messages followed at all (interrupted run) -
+					# keep tool_use blocks with synthetic error results so
+					# anthropic receives a valid tool_use / tool_result pair
+					for tid in tool_use_by_id:
+						result_blocks.append(
+							AnthropicToolResultBlockParam(
+								type="tool_result",
+								tool_use_id=tid,
+								content=(
+									"tool execution was interrupted or never completed"
+								),
+								is_error=True,
+							)
+						)
 					_append_anthropic_assistant_message(
 						result,
 						assistant_text=assistant_text,
 						tool_blocks=tool_blocks,
 					)
+					result.append({"role": "user", "content": result_blocks})
 					i += 1
 			case ToolMessage():
 				# skip orphaned tool results. anthropic requires tool_result

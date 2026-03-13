@@ -203,12 +203,12 @@ async def list_friends(
 	session: AsyncSession,
 	*,
 	principal: Principal,
-) -> list[User]:
+) -> list[tuple[User, str]]:
 	"""list all accepted friends of the current user.
 
-	uses an OR-query across requester_id / addressee_id. see the module
-	docstring for the dual-row upgrade path that would simplify this to a
-	single equality condition.
+	returns (friend_user, friendship_id) tuples. uses an OR-query across
+	requester_id / addressee_id. see the module docstring for the dual-row
+	upgrade path that would simplify this to a single equality condition.
 	"""
 	user_id = principal.user_id
 	stmt = (
@@ -227,9 +227,10 @@ async def list_friends(
 	)
 	result = await session.execute(stmt)
 	friendships = result.scalars().all()
-	friends: list[User] = []
+	friends: list[tuple[User, str]] = []
 	for f in friendships:
-		friends.append(f.addressee if f.requester_id == user_id else f.requester)
+		friend = f.addressee if f.requester_id == user_id else f.requester
+		friends.append((friend, str(f.id)))
 	return friends
 
 

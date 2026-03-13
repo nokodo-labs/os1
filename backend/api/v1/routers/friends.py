@@ -39,16 +39,17 @@ async def list_friends(
 ) -> list[dict]:
 	"""list all accepted friends."""
 	_check_self(str(user_id), principal)
-	users = await friends_service.list_friends(db, principal=principal)
+	pairs = await friends_service.list_friends(db, principal=principal)
 	return [
 		{
 			"id": u.id,
-			"friendship_id": u.id,
+			"friendship_id": fid,
+			"username": u.username,
 			"display_name": u.display_name,
 			"email": u.email,
 			"avatar_url": u.avatar_url,
 		}
-		for u in users
+		for u, fid in pairs
 	]
 
 

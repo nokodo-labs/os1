@@ -27,6 +27,14 @@ const THREAD_EVENT_TYPES = ['thread.created', 'thread.updated', 'thread.deleted'
 const MESSAGE_EVENT_TYPES = ['message.created', 'message.updated', 'message.deleted']
 const TYPING_EVENT_TYPES = ['typing.user.start', 'typing.user.stop']
 const RUN_EVENT_TYPES = ['run.started', 'run.completed', 'runs.active']
+const FRIEND_EVENT_TYPES = [
+	'friend.request_sent',
+	'friend.request_accepted',
+	'friend.request_declined',
+	'friend.removed',
+]
+
+const FRIEND_TOAST_TYPES = ['friend.request_sent', 'friend.request_accepted']
 
 export interface TypingIndicator {
 	threadId: string
@@ -77,6 +85,20 @@ class NotificationsStore {
 		this.toasts = [...this.toasts, { id, title, body, iconUrl, imageUrl, addedAt: Date.now() }]
 	}
 
+	#pushFriendToast = (message: StreamMessage) => {
+		const id = typeof message.id === 'string' ? message.id : null
+		if (!id) return
+		const labels: Record<string, string> = {
+			'friend.request_sent': 'new friend request',
+			'friend.request_accepted': 'friend request accepted',
+		}
+		const title = labels[message.type] ?? 'friend update'
+		this.toasts = [
+			...this.toasts,
+			{ id, title, body: '', iconUrl: null, imageUrl: null, addedAt: Date.now() },
+		]
+	}
+
 	dismissToast = (id: string) => {
 		this.toasts = this.toasts.filter((t) => t.id !== id)
 	}
@@ -88,6 +110,12 @@ class NotificationsStore {
 			this.#scheduleRefresh()
 			this.#pushToast(message)
 			for (const handler of notificationEventHandlers) handler(message)
+		}
+
+		if (FRIEND_EVENT_TYPES.includes(eventType)) {
+			if (FRIEND_TOAST_TYPES.includes(eventType)) {
+				this.#pushFriendToast(message)
+			}
 		}
 
 		if (THREAD_EVENT_TYPES.includes(eventType)) {

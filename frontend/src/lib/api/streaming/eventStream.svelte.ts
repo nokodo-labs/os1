@@ -55,9 +55,10 @@ export interface StreamEvent extends StreamMessage {
 type EventHandler = (message: StreamMessage) => void
 
 /** how often to send a heartbeat ping (ms) */
-const PING_INTERVAL_MS = 15_000
+// 4s keeps the connection alive under aggressive NAT/proxy idle timeouts (e.g. Docker virtual switch on Windows ~5s)
+const PING_INTERVAL_MS = 4_000
 /** how long to wait for pong before considering connection dead (ms) */
-const PONG_TIMEOUT_MS = 10_000
+const PONG_TIMEOUT_MS = 8_000
 /** minimum reconnect delay (ms) */
 const RECONNECT_BASE_MS = 500
 /** maximum reconnect delay (ms) */
@@ -253,7 +254,11 @@ export class EventStreamClient {
 	}
 
 	private startPongTimeout(): void {
-		this.clearPongTimeout()
+		// don't reset the deadline if we're already waiting for a pong.
+		// this ensures the timeout fires PONG_TIMEOUT_MS after the FIRST
+		// unanswered ping, not after the last one (repeated pings would
+		// otherwise keep pushing the deadline and never detect a dead server).
+		if (this.pongTimeoutId) return
 		this.pongTimeoutId = setTimeout(() => {
 			if (this.awaitingPong) {
 				// server didn't respond - consider connection dead
