@@ -134,9 +134,9 @@ async def health_check() -> dict[str, str]:
 	return {"status": "healthy"}
 
 
-# Non-versioned routes
+# non-versioned routes
 app.include_router(system_router.router)
 
 
-# Mount API v1
+# mount API v1
 app.mount(API_V1_MOUNT_PATH, v1_app)
