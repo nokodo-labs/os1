@@ -557,6 +557,32 @@ class RemindersCache {
 	}
 
 	/**
+	 * delete a reminder list.
+	 * optimistic removal; WS confirms via reminder_list.deleted event.
+	 */
+	async deleteList(listId: string): Promise<boolean> {
+		const snapshot = this.#listsCache?.data.get(listId)
+		this.#listsCache?.data.delete(listId)
+		this.#remindersCache.delete(listId)
+
+		try {
+			const { error } = await api.DELETE('/v1/reminders/lists/{list_id}', {
+				params: { path: { list_id: listId } },
+			})
+			if (error) {
+				if (snapshot && this.#listsCache) this.#listsCache.data.set(listId, snapshot)
+				showError('could not delete list')
+				return false
+			}
+			return true
+		} catch {
+			if (snapshot && this.#listsCache) this.#listsCache.data.set(listId, snapshot)
+			showError('could not delete list')
+			return false
+		}
+	}
+
+	/**
 	 * create a new reminder.
 	 * returns the created reminder for the caller; WS delivers authoritative cache update.
 	 */

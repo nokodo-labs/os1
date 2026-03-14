@@ -80,6 +80,13 @@
 			(isDone && summary.resourceId != null)
 	)
 	let isExpanded = $state(false)
+	let userToggled = $state(false)
+
+	// auto-expand web search while running, auto-collapse when done
+	$effect(() => {
+		if (name !== 'agentic_web_search' || userToggled) return
+		isExpanded = isActive
+	})
 
 	// tool result attachments (images/files from tool message)
 	let resultAttachments = $derived(execution.result?.contentParts)
@@ -88,7 +95,10 @@
 	)
 
 	function toggleExpand() {
-		if (hasBody) isExpanded = !isExpanded
+		if (hasBody) {
+			userToggled = true
+			isExpanded = !isExpanded
+		}
 	}
 </script>
 

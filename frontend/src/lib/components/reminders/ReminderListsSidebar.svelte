@@ -1,8 +1,7 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { api } from '$lib/api/client'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
@@ -109,13 +108,6 @@
 	function closeListMenu() {
 		openListMenuId = null
 		listMenuButtonEl = null
-	}
-
-	async function deleteList(listId: string): Promise<number | null> {
-		const { response } = await api.DELETE('/v1/reminders/lists/{list_id}', {
-			params: { path: { list_id: listId } },
-		})
-		return response.status
 	}
 
 	$effect(() => {
@@ -252,10 +244,8 @@
 										description: list.name,
 									}}
 									onDelete={async () => {
-										const status = await deleteList(list.id)
-										if (status !== 204) return false
-
-										await reminders.loadLists({ force: true })
+										const ok = await reminders.deleteList(list.id)
+										if (!ok) return false
 										if (selectedListId === list.id) {
 											selectList(null)
 										}

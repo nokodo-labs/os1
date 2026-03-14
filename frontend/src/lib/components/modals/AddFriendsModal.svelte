@@ -1,17 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { api } from '$lib/api/client'
-	import type { components } from '$lib/api/types'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import { friends } from '$lib/stores/friends.svelte'
+	import { friends, type UserSearchResult } from '$lib/stores/friends.svelte'
 	import { getUserInitials } from '$lib/utils'
-
-	type UserSearchResult = components['schemas']['UserSearchResult']
 
 	interface AddFriendsModalProps {
 		open: boolean
@@ -32,14 +28,7 @@
 		isSearching = true
 		hasSearched = true
 		try {
-			// ensure store is fresh before cross-referencing
-			await friends.load()
-			const { data, error } = await api.GET('/v1/users/search', {
-				params: { query: { q, limit: 20 } },
-			})
-			results = error || !data ? [] : data
-		} catch {
-			results = []
+			results = await friends.searchUsers(q)
 		} finally {
 			isSearching = false
 		}

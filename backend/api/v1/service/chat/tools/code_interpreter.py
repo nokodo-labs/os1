@@ -85,10 +85,8 @@ def _truncate_field(text: str, *, max_lines: int = _TRUNCATION_LINES) -> str:
 	return "\n".join(head + [f"... ({omitted} lines omitted) ..."] + tail)
 
 
-_IMAGE_EXTENSIONS = frozenset({"png", "jpeg", "jpg", "svg", "gif", "webp"})
-
-
 async def _store_output_files(
+	inline_images: list[FileEntry],
 	files: list[FileEntry],
 	*,
 	session: AsyncSession,
@@ -97,9 +95,18 @@ async def _store_output_files(
 	agent_id: str | None = None,
 	thread_id: str | None = None,
 ) -> list[ImageContent | FileContent]:
-	"""persist E2B output files and return tool attachments."""
+	"""persist E2B output files and return tool attachments.
+
+	inline_images (from execution results, e.g. matplotlib) become
+	ImageContent so the frontend renders them as image previews.
+	all other files (including image files from disk) become
+	FileContent so the frontend renders them as file widgets.
+	"""
 	attachments: list[ImageContent | FileContent] = []
-	for entry in files:
+
+	async def _store(
+		entry: FileEntry, *, as_image: bool
+	) -> ImageContent | FileContent | None:
 		try:
 			stored = await store_file(
 				session,
@@ -110,7 +117,6 @@ async def _store_output_files(
 				source=FileSource.GENERATED,
 				project_id=project_id,
 			)
-			# store agent_id and thread_id in file metadata
 			file_meta: JSONObject = {}
 			if agent_id:
 				file_meta["agent_id"] = agent_id
@@ -120,33 +126,33 @@ async def _store_output_files(
 				stored.metadata_ = {**(stored.metadata_ or {}), **file_meta}
 				await session.flush()
 			file_url = f"/v1/files/{stored.id}/content"
-			ext = (
-				entry.filename.rsplit(".", 1)[-1].lower()
-				if "." in entry.filename
-				else ""
+			if as_image:
+				return ImageContent(
+					url=file_url,
+					filename=entry.filename,
+					media_type=entry.mime_type,
+					metadata={"file_id": str(stored.id)},
+				)
+			return FileContent(
+				url=file_url,
+				filename=entry.filename,
+				media_type=entry.mime_type,
+				metadata={"file_id": str(stored.id)},
 			)
-			if ext in _IMAGE_EXTENSIONS:
-				attachments.append(
-					ImageContent(
-						url=file_url,
-						filename=entry.filename,
-						media_type=entry.mime_type,
-						metadata={"file_id": str(stored.id)},
-					)
-				)
-			else:
-				attachments.append(
-					FileContent(
-						url=file_url,
-						filename=entry.filename,
-						media_type=entry.mime_type,
-						metadata={"file_id": str(stored.id)},
-					)
-				)
 		except Exception:
 			logger.warning(
 				"failed to store output file %s", entry.filename, exc_info=True
 			)
+			return None
+
+	for entry in inline_images:
+		result = await _store(entry, as_image=True)
+		if result:
+			attachments.append(result)
+	for entry in files:
+		result = await _store(entry, as_image=False)
+		if result:
+			attachments.append(result)
 	return attachments
 
 
@@ -309,6 +315,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 		)
 
 		attachments = await _store_output_files(
+			result.inline_images,
 			result.files,
 			session=__app_context__.session,
 			owner_id=__app_context__.user_id,

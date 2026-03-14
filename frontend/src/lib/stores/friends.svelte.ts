@@ -18,6 +18,7 @@ import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 export type FriendResponse = components['schemas']['FriendResponse']
 export type FriendshipDetail = components['schemas']['FriendshipDetail']
 export type FriendshipResponse = components['schemas']['FriendshipResponse']
+export type UserSearchResult = components['schemas']['UserSearchResult']
 
 type RelationshipKind = 'accepted' | 'pending_outgoing' | 'pending_incoming'
 
@@ -205,6 +206,18 @@ class FriendsStore {
 		})
 		if (error) return false
 		return true
+	}
+
+	async searchUsers(q: string, limit = 20): Promise<UserSearchResult[]> {
+		await this.load()
+		try {
+			const { data, error } = await api.GET('/v1/users/search', {
+				params: { query: { q, limit } },
+			})
+			return error || !data ? [] : data
+		} catch {
+			return []
+		}
 	}
 
 	// lifecycle

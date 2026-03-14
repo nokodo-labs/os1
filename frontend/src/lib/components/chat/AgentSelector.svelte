@@ -44,7 +44,8 @@
 			didLoadAgents = false
 			return
 		}
-		if (didLoadAgents) return
+		// reload when agents list was emptied by invalidation
+		if (agents.list.length > 0 && didLoadAgents) return
 		didLoadAgents = true
 		void agents.load()
 	})

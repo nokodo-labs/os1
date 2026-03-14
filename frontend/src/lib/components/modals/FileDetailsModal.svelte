@@ -32,6 +32,7 @@
 
 	let previewBlobUrl = $state<string | null>(null)
 	let previewOpen = $state(false)
+	let imageDimensions = $state<{ w: number; h: number } | null>(null)
 	let isDeleting = $state(false)
 	let deleteError = $state<string | null>(null)
 	let downloadError = $state<string | null>(null)
@@ -44,9 +45,10 @@
 	const isAudio = $derived(primaryType === 'audio')
 	const hasPreview = $derived(isImage || isVideo || isAudio)
 
-	const threadId = $derived(
-		(file?.metadata_ as Record<string, unknown> | undefined)?.thread_id as string | undefined
-	)
+	const threadId = $derived.by(() => {
+		const v = (file?.metadata_ as Record<string, unknown> | undefined)?.thread_id
+		return typeof v === 'string' && v.startsWith('thread_') ? v : undefined
+	})
 
 	const genPrompt = $derived(
 		(file?.metadata_ as Record<string, unknown> | undefined)?.prompt as string | undefined
@@ -78,12 +80,19 @@
 				URL.revokeObjectURL(previewBlobUrl)
 				previewBlobUrl = null
 			}
+			imageDimensions = null
 			return
 		}
 		let cancelled = false
 		const url = `${getApiOrigin()}/v1/files/${file.id}/content`
 		void fetchAuthenticatedBlob(url).then((blobUrl) => {
-			if (!cancelled) previewBlobUrl = blobUrl
+			if (cancelled) return
+			previewBlobUrl = blobUrl
+			const img = new Image()
+			img.onload = () => {
+				if (!cancelled) imageDimensions = { w: img.naturalWidth, h: img.naturalHeight }
+			}
+			img.src = blobUrl
 		})
 		return () => {
 			cancelled = true
@@ -154,11 +163,12 @@
 		onClose={handleClose}
 		widthClassName="max-w-2xl"
 	>
-		<div class="flex flex-col gap-5">
+		<div class="flex flex-col gap-5 overflow-hidden">
 			<!-- preview area -->
 			{#if isImage && previewBlobUrl}
 				<button
-					class="group relative -mx-6 -mt-1 h-64 w-[calc(100%+3rem)] cursor-zoom-in overflow-hidden rounded-xl bg-black/20"
+					class="group relative -mx-6 -mt-1 h-64 cursor-zoom-in overflow-hidden rounded-xl bg-black/20"
+					style="width: calc(100% + 3rem);"
 					onclick={() => (previewOpen = true)}
 					aria-label="open full preview"
 				>
@@ -179,7 +189,8 @@
 			{:else if isVideo && file}
 				<!-- svelte-ignore a11y_media_has_caption -->
 				<video
-					class="-mx-6 -mt-1 max-h-64 w-[calc(100%+3rem)] rounded-xl bg-black/20 object-contain"
+					class="-mx-6 -mt-1 max-h-64 rounded-xl bg-black/20 object-contain"
+					style="width: calc(100% + 3rem);"
 					controls
 					src="{getApiOrigin()}/v1/files/{file.id}/content"
 				></video>
@@ -189,7 +200,7 @@
 			{/if}
 
 			<!-- action buttons -->
-			<div class="flex items-center gap-2">
+			<div class="flex flex-wrap items-center gap-2">
 				{#if hasPreview && isImage}
 					<button
 						class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
@@ -294,6 +305,16 @@
 								prompt
 							</dt>
 							<dd class="text-foreground/80 mt-0.5">{genPrompt}</dd>
+						</div>
+					{/if}
+					{#if imageDimensions}
+						<div>
+							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
+								dimensions
+							</dt>
+							<dd class="text-foreground/80 mt-0.5">
+								{imageDimensions.w} x {imageDimensions.h}
+							</dd>
 						</div>
 					{/if}
 					{#if isGenerated && genAgentId}

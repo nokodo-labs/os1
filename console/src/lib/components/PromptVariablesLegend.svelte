@@ -45,7 +45,9 @@
 			label: 'user profile',
 			description: 'information about the authenticated user',
 			variables: [
-				{ name: 'user_name', description: 'display name or email prefix' },
+				{ name: 'user_name', description: 'display name or username' },
+				{ name: 'user_real_name', description: 'display name (raw, may be null)' },
+				{ name: 'user_username', description: 'username (unique handle)' },
 				{ name: 'user_email', description: 'email address' },
 				{ name: 'user_bio', description: 'bio (from AI or account prefs)' },
 				{ name: 'user_gender', description: 'gender identity' },

@@ -148,6 +148,9 @@ class GenerateImageTool(Tool[AppContext]):
 				n=inp.n,
 				size=inp.size,
 				agent_id=__app_context__.agent_id,
+				thread_id=str(__app_context__.thread_id)
+				if __app_context__.thread_id
+				else None,
 			)
 		except MediaError:
 			logger.exception("image generation failed")

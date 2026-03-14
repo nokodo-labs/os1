@@ -63,6 +63,7 @@ async def generate_image(
 	message_id: str | None = None,
 	origin_session_id: str | None = None,
 	agent_id: TypeID | None = None,
+	thread_id: str | None = None,
 ) -> list[ImageResult]:
 	"""generate or edit images and persist them as File records.
 
@@ -156,6 +157,8 @@ async def generate_image(
 			gen_meta: dict[str, str] = {"prompt": prompt}
 			if agent_id:
 				gen_meta["agent_id"] = str(agent_id)
+			if thread_id:
+				gen_meta["thread_id"] = thread_id
 			file.metadata_ = {**file.metadata_, **gen_meta}
 			await session.flush()
 

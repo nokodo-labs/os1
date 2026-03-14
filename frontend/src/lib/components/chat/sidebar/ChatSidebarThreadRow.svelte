@@ -12,7 +12,6 @@
 	import { PopupMenu } from '$lib/components/primitives'
 	import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
-	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 
 	type Props = {
@@ -58,11 +57,11 @@
 		onSelect={async () => {
 			await onOpenThread(thread.id)
 		}}
-		actionsVisibility={hasRun || hasUnread || device.isTouch ? 'always' : 'hover'}
+		actionsVisibility={hasRun || hasUnread ? 'always' : 'hover'}
 	>
 		<div class="min-w-0 flex-1 overflow-hidden">
-			<!-- primary row: title + timestamp -->
-			<div class="flex items-center gap-2">
+			<!-- primary row: title -->
+			<div class="flex items-center">
 				{#if isGeneratingTitle}
 					<ShimmerText
 						className="min-w-0 flex-1 overflow-hidden text-sm font-medium leading-normal text-ellipsis whitespace-nowrap"
@@ -78,18 +77,17 @@
 						{displayTitle}
 					</span>
 				{/if}
+			</div>
 
+			<!-- second row: timestamp + tags -->
+			<div class="mt-0.5 flex items-center gap-1.5 overflow-hidden">
 				<Timestamp
 					timestamp={new Date(thread.last_activity_at ?? '')}
 					mode="relative"
 					minUnit="hour"
-					className="ml-auto shrink-0 text-[11px] text-foreground/35"
+					className="shrink-0 text-[11px] text-foreground/35"
 				/>
-			</div>
-
-			<!-- tags row: only when tags exist -->
-			{#if hasTags}
-				<div class="mt-1 flex items-center gap-1 overflow-hidden">
+				{#if hasTags}
 					{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
 						<span
 							class="bg-foreground/8 text-foreground/50 inline-flex max-w-20 shrink-0 items-center truncate rounded-full px-1.5 py-px text-[10px] leading-tight"
@@ -103,8 +101,8 @@
 							+{(thread.tags ?? []).length - 3}
 						</span>
 					{/if}
-				</div>
-			{/if}
+				{/if}
+			</div>
 		</div>
 
 		{#snippet actions()}
