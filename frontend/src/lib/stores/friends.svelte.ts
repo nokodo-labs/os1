@@ -9,7 +9,7 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
@@ -128,13 +128,13 @@ class FriendsStore {
 		this.#inFlight = (async () => {
 			try {
 				const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
-					apiClient().GET('/v1/users/{user_id}/friends', {
+					api.GET('/v1/users/{user_id}/friends', {
 						params: { path: { user_id: userId } },
 					}),
-					apiClient().GET('/v1/users/{user_id}/friends/requests/incoming', {
+					api.GET('/v1/users/{user_id}/friends/requests/incoming', {
 						params: { path: { user_id: userId } },
 					}),
-					apiClient().GET('/v1/users/{user_id}/friends/requests/outgoing', {
+					api.GET('/v1/users/{user_id}/friends/requests/outgoing', {
 						params: { path: { user_id: userId } },
 					}),
 				])
@@ -160,7 +160,7 @@ class FriendsStore {
 		const userId = getUserId()
 		if (!userId) return null
 
-		const { data, error } = await apiClient().POST('/v1/users/{user_id}/friends/requests', {
+		const { data, error } = await api.POST('/v1/users/{user_id}/friends/requests', {
 			params: { path: { user_id: userId } },
 			body: { addressee_id: addresseeId },
 		})
@@ -172,7 +172,7 @@ class FriendsStore {
 		const userId = getUserId()
 		if (!userId) return null
 
-		const { data, error } = await apiClient().POST(
+		const { data, error } = await api.POST(
 			'/v1/users/{user_id}/friends/requests/{friendship_id}/accept',
 			{
 				params: { path: { user_id: userId, friendship_id: friendshipId } },
@@ -186,7 +186,7 @@ class FriendsStore {
 		const userId = getUserId()
 		if (!userId) return null
 
-		const { data, error } = await apiClient().POST(
+		const { data, error } = await api.POST(
 			'/v1/users/{user_id}/friends/requests/{friendship_id}/decline',
 			{
 				params: { path: { user_id: userId, friendship_id: friendshipId } },
@@ -200,7 +200,7 @@ class FriendsStore {
 		const userId = getUserId()
 		if (!userId) return false
 
-		const { error } = await apiClient().DELETE('/v1/users/{user_id}/friends/{friend_user_id}', {
+		const { error } = await api.DELETE('/v1/users/{user_id}/friends/{friend_user_id}', {
 			params: { path: { user_id: userId, friend_user_id: friendUserId } },
 		})
 		if (error) return false

@@ -11,15 +11,21 @@ export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
 
 export { getApiOrigin as getApiBaseUrl }
 
-// rewrite the URL's origin to the resolved API origin
-function resolvedUrl(req: Request): string {
+function resolveUrlStr(input: RequestInfo | URL): string {
 	const origin = getApiOrigin()
-	if (!origin) return req.url
-	const url = new URL(req.url)
-	return origin + url.pathname + url.search + url.hash
+	let raw = ''
+	if (typeof input === 'string') raw = input
+	else if (input instanceof URL) raw = input.toString()
+	else raw = input.url
+
+	if (!origin) return raw
+	if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+
+	const base = origin.endsWith('/') ? origin.slice(0, -1) : origin
+	const path = raw.startsWith('/') ? raw : `/${raw}`
+	return base + path
 }
 
-// deduped refresh
 let refreshInFlight: Promise<string | null> | null = null
 
 export async function refreshAccessToken(): Promise<string | null> {
@@ -28,7 +34,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 	refreshInFlight = (async () => {
 		try {
 			const { data, response } = await rawApi.POST('/v1/auth/refresh', {})
-			if (!response.ok || !data?.access_token) {
+			if (!response || !response.ok || !data?.access_token) {
 				clearAccessToken()
 				return null
 			}
@@ -42,81 +48,95 @@ export async function refreshAccessToken(): Promise<string | null> {
 	return refreshInFlight
 }
 
-// fetch wrappers
+function resolveFetchInit(
+	input: RequestInfo | URL,
+	init?: RequestInit
+): { url: string; fetchInit: RequestInit } {
+	const url = resolveUrlStr(input)
 
-/** raw fetch: cookies included, no Authorization header, no auth gate. */
-async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	await apiOriginReady
-	const req = input instanceof Request ? input : new Request(input, init)
-	const url = resolvedUrl(req)
-	return fetch(url, {
-		method: req.method,
-		headers: req.headers,
-		body: req.body,
-		credentials: 'include',
-		// required by browsers when body is a ReadableStream
-		...(req.body ? { duplex: 'half' } : {}),
-	} as RequestInit)
+	if (input instanceof Request) {
+		const isStream = input.body instanceof ReadableStream
+		return {
+			url,
+			fetchInit: {
+				method: input.method,
+				headers: new Headers(input.headers),
+				body: input.body,
+				credentials: 'include',
+				...(isStream ? { duplex: 'half' } : {}),
+				...init,
+			} as RequestInit,
+		}
+	}
+
+	const isStream = init?.body instanceof ReadableStream
+	return {
+		url,
+		fetchInit: {
+			credentials: 'include',
+			...(isStream ? { duplex: 'half' } : {}),
+			...init,
+		} as RequestInit,
+	}
 }
 
-/** authenticated fetch: waits for authReady, injects Bearer, retries once on 401. */
+async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	await apiOriginReady
+	const { url, fetchInit } = resolveFetchInit(input, init)
+	return fetch(url, fetchInit)
+}
+
 export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	await apiOriginReady
 	await authReady
 
-	const req = input instanceof Request ? input : new Request(input, init)
-	const reqClone = req.clone()
-	const url = resolvedUrl(req)
+	const { url, fetchInit } = resolveFetchInit(input, init)
+	const headers = new Headers(fetchInit.headers)
 
 	const token = getAccessToken()
-	const headers = new Headers(req.headers)
 	if (token && !headers.has('Authorization')) {
 		headers.set('Authorization', `Bearer ${token}`)
 	}
 
-	const res = await fetch(url, {
-		method: req.method,
-		headers,
-		body: req.body,
-		credentials: 'include',
-		...(req.body ? { duplex: 'half' } : {}),
-	} as RequestInit)
+	const attemptInit = { ...fetchInit, headers }
+
+	const requestToFetch = new Request(url, attemptInit)
+
+	let retryRequest: Request | null = null
+	if (!attemptInit.body || typeof attemptInit.body === 'string') {
+		retryRequest = requestToFetch.clone()
+	}
+
+	const res = await fetch(requestToFetch)
 	if (res.status !== 401) return res
 
-	// 401 - try refreshing once
 	const refreshed = await refreshAccessToken()
 	if (!refreshed) return res
 
-	const retryHeaders = new Headers(reqClone.headers)
+	if (!retryRequest) {
+		retryRequest = new Request(url, attemptInit)
+	}
+
+	const retryHeaders = new Headers(retryRequest.headers)
 	retryHeaders.set('Authorization', `Bearer ${refreshed}`)
-	return fetch(url, {
-		method: reqClone.method,
-		headers: retryHeaders,
-		body: reqClone.body,
-		credentials: 'include',
-		...(reqClone.body ? { duplex: 'half' } : {}),
-	} as RequestInit)
+
+	return fetch(new Request(retryRequest, { headers: retryHeaders }))
 }
 
-// clients
-
-/** unauthenticated client - for login, register, refresh, logout, etc. */
 export const rawApi = createClient<ApiPaths>({
 	baseUrl: '',
 	fetch: rawFetch,
 })
 
-/** authenticated client - waits for auth, injects Bearer, auto-retries on 401. */
 export const api = createClient<ApiPaths>({
 	baseUrl: '',
 	fetch: authFetch,
 })
 
-/** throw if the openapi-fetch response has an error, otherwise return data. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function unwrap<T>(result: { data?: T; error?: any; response: Response }): T {
+export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
 	if (result.error !== undefined) {
-		const detail = result.error?.detail
+		const err = result.error as { detail?: unknown }
+		const detail = err?.detail
 		throw new Error(
 			typeof detail === 'string' ? detail : `request failed (${result.response.status})`
 		)

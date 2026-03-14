@@ -9,7 +9,7 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -117,7 +117,7 @@ class ProjectsCache {
 		if (this.#inFlight) return this.#inFlight
 
 		this.#inFlight = (async () => {
-			const { data, error } = await apiClient().GET('/v1/projects', {
+			const { data, error } = await api.GET('/v1/projects', {
 				params: { query: { sort_by: 'updated_at', sort_dir: 'desc' } },
 			})
 			if (error || !data) return this.list
@@ -149,7 +149,7 @@ class ProjectsCache {
 		this.#cache?.data.set(tempId, placeholder)
 
 		try {
-			const { data, error } = await apiClient().POST('/v1/projects', { body: params })
+			const { data, error } = await api.POST('/v1/projects', { body: params })
 
 			if (error || !data) {
 				if (doRollback) this.#cache?.data.delete(tempId)
@@ -186,7 +186,7 @@ class ProjectsCache {
 		}
 
 		try {
-			const { data, error } = await apiClient().PATCH('/v1/projects/{project_id}', {
+			const { data, error } = await api.PATCH('/v1/projects/{project_id}', {
 				params: { path: { project_id: id } },
 				body: params,
 			})
@@ -214,7 +214,7 @@ class ProjectsCache {
 		this.#cache?.data.delete(id)
 
 		try {
-			const { error } = await apiClient().DELETE('/v1/projects/{project_id}', {
+			const { error } = await api.DELETE('/v1/projects/{project_id}', {
 				params: { path: { project_id: id } },
 			})
 

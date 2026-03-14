@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
@@ -27,6 +27,7 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
+	import { apiFileToResource, files } from '$lib/stores/files.svelte'
 	import { notes, type Note } from '$lib/stores/notes.svelte'
 	import { projects } from '$lib/stores/projects.svelte'
 	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
@@ -142,6 +143,12 @@
 			}
 		}
 
+		for (const file of files.all) {
+			if (file.project_id === projectId) {
+				items.push(apiFileToResource(file))
+			}
+		}
+
 		return items
 	})
 
@@ -152,6 +159,7 @@
 			chat.refreshThreads(),
 			notes.load(),
 			reminders.loadListsAndCounts(),
+			files.load(),
 		])
 		loading = false
 	}
@@ -172,7 +180,7 @@
 			const thread = chat.recentThreads.find((t) => t.id === resource.id)
 			const currentIds = thread?.project_ids ?? []
 			if (!currentIds.includes(projectId)) {
-				const { data } = await apiClient().PATCH('/v1/threads/{thread_id}', {
+				const { data } = await api.PATCH('/v1/threads/{thread_id}', {
 					params: { path: { thread_id: resource.id } },
 					body: { project_ids: [...currentIds, projectId] },
 				})
@@ -181,22 +189,23 @@
 				}
 			}
 		} else if (resource.type === 'note') {
-			await apiClient().PUT('/v1/notes/{note_id}', {
+			await api.PUT('/v1/notes/{note_id}', {
 				params: { path: { note_id: resource.id } },
 				body: { project_id: projectId },
 			})
 			await notes.load({ force: true })
 		} else if (resource.type === 'reminder_list') {
-			await apiClient().PATCH('/v1/reminders/lists/{list_id}', {
+			await api.PATCH('/v1/reminders/lists/{list_id}', {
 				params: { path: { list_id: resource.id } },
 				body: { project_id: projectId },
 			})
 			await reminders.loadListsAndCounts()
 		} else if (resource.type === 'file') {
-			await apiClient().PATCH('/v1/files/{file_id}', {
+			await api.PATCH('/v1/files/{file_id}', {
 				params: { path: { file_id: resource.id } },
 				body: { project_id: projectId },
 			})
+			await files.load({ force: true })
 		}
 
 		isPickerOpen = false

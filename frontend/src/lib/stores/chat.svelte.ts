@@ -1,5 +1,5 @@
 import { browser, dev } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import type { CreateAndRunStreamDelta } from '$lib/api/streaming'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
@@ -200,10 +200,10 @@ class ThreadCache {
 		this.#prefetchInFlight.add(threadId)
 		try {
 			const [threadRes, messagesRes] = await Promise.all([
-				apiClient().GET('/v1/threads/{thread_id}', {
+				api.GET('/v1/threads/{thread_id}', {
 					params: { path: { thread_id: threadId } },
 				}),
-				apiClient().GET('/v1/threads/{thread_id}/messages', {
+				api.GET('/v1/threads/{thread_id}/messages', {
 					params: {
 						path: { thread_id: threadId },
 						query: { skip: 0, limit: 120 },
@@ -226,7 +226,7 @@ class ThreadCache {
 		const cached = this.get(threadId)
 		if (cached) return cached
 
-		const { data, error } = await apiClient().GET('/v1/threads/{thread_id}', {
+		const { data, error } = await api.GET('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 		})
 
@@ -245,7 +245,7 @@ class ThreadCache {
 			if (cached) return { messages: cached, fromCache: true }
 		}
 
-		const { data, error } = await apiClient().GET('/v1/threads/{thread_id}/messages', {
+		const { data, error } = await api.GET('/v1/threads/{thread_id}/messages', {
 			params: {
 				path: { thread_id: threadId },
 				query: { skip, limit },
@@ -426,7 +426,7 @@ class ChatStore {
 
 	fetchUnreadCounts = async (): Promise<void> => {
 		try {
-			const { data } = await apiClient().GET('/v1/threads/unread-counts')
+			const { data } = await api.GET('/v1/threads/unread-counts')
 			this.unreadCounts.clear()
 			if (data) {
 				for (const item of data) {
@@ -443,7 +443,7 @@ class ChatStore {
 	markThreadRead = async (threadId: string): Promise<void> => {
 		if (!threadId) return
 		try {
-			await apiClient().POST('/v1/threads/{thread_id}/read', {
+			await api.POST('/v1/threads/{thread_id}/read', {
 				params: { path: { thread_id: threadId } },
 			})
 		} catch {
@@ -462,7 +462,7 @@ class ChatStore {
 		this.isLoadingThreads = true
 
 		try {
-			const { data } = await apiClient().GET('/v1/threads', {
+			const { data } = await api.GET('/v1/threads', {
 				params: {
 					query: {
 						owner_id: userId,

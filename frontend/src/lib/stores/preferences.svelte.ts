@@ -1,5 +1,5 @@
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { device } from '$lib/stores/device.svelte'
@@ -240,7 +240,7 @@ function createPreferencesStore() {
 		error = null
 
 		try {
-			const { data: res, error: err } = await apiClient().GET('/v1/users/{user_id}', {
+			const { data: res, error: err } = await api.GET('/v1/users/{user_id}', {
 				params: { path: { user_id: uid } },
 			})
 
@@ -277,7 +277,7 @@ function createPreferencesStore() {
 		writeStorage(uid, nextRaw)
 		error = null
 
-		const { error: err } = await apiClient().PATCH('/v1/users/{user_id}', {
+		const { error: err } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { preferences: nextRaw },
 		})

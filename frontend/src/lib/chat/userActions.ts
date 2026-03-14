@@ -2,7 +2,7 @@
  * user-initiated chat actions - send, regenerate, stop, edit, delete.
  */
 
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import type { RunInput } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { deriveToolChoice, type RunModifiers } from '$lib/chat/attachments'
@@ -239,7 +239,7 @@ export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	// the error contract for status codes and potential retry.
 	if (runId && threadId) {
 		try {
-			const { error } = await apiClient().POST(
+			const { error } = await api.POST(
 				'/v1/threads/{thread_id}/runs/{run_id}/cancel',
 				{
 					params: { path: { thread_id: threadId, run_id: runId } },
@@ -264,7 +264,7 @@ export async function handleSaveEditMessage(
 	const msg = ctx.messages.find((m) => m.id === messageId)
 	if (!msg) return
 
-	const { data: updated, error } = await apiClient().PATCH(
+	const { data: updated, error } = await api.PATCH(
 		'/v1/threads/{thread_id}/messages/{message_id}',
 		{
 			params: { path: { thread_id: ctx.thread.id, message_id: messageId } },
@@ -297,7 +297,7 @@ export async function handleSaveAsCopyMessage(
 		parent_id: msg.parent_id ?? null,
 	} satisfies components['schemas']['MessageCreate']
 
-	const { data: newMessage, error } = await apiClient().POST('/v1/threads/{thread_id}/messages', {
+	const { data: newMessage, error } = await api.POST('/v1/threads/{thread_id}/messages', {
 		params: { path: { thread_id: ctx.thread.id } },
 		body,
 	})
@@ -375,7 +375,7 @@ export async function deleteUserMessage(messageId: string, ctx: ChatContext): Pr
 	ctx.streamingAssistant = null
 	ctx.rebuildRunBlocks()
 
-	const { response, error } = await apiClient().DELETE(
+	const { response, error } = await api.DELETE(
 		'/v1/threads/{thread_id}/messages/{message_id}',
 		{
 			params: {

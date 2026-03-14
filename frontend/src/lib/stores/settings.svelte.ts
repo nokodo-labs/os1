@@ -1,5 +1,5 @@
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -106,7 +106,7 @@ export async function loadSettings(options?: {
 		settingsState.error = null
 
 		try {
-			const { data, error, response } = await apiClient().GET('/v1/settings', {})
+			const { data, error, response } = await api.GET('/v1/settings', {})
 			if (error || !response.ok || !data) {
 				settingsState.error = 'could not load settings'
 				settingsState.stale = true

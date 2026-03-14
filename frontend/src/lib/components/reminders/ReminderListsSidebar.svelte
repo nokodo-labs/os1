@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
@@ -112,7 +112,7 @@
 	}
 
 	async function deleteList(listId: string): Promise<number | null> {
-		const { response } = await apiClient().DELETE('/v1/reminders/lists/{list_id}', {
+		const { response } = await api.DELETE('/v1/reminders/lists/{list_id}', {
 			params: { path: { list_id: listId } },
 		})
 		return response.status

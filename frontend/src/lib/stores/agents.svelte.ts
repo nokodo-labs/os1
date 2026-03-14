@@ -1,5 +1,5 @@
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -30,7 +30,7 @@ class AgentsStore {
 		this.#loading = true
 		this.error = null
 		try {
-			const { data, error } = await apiClient().GET('/v1/agents')
+			const { data, error } = await api.GET('/v1/agents')
 			if (error || !data) {
 				this.error = 'failed to load agents'
 				return
@@ -53,7 +53,7 @@ class AgentsStore {
 
 		this.#pending.push(agentId)
 		try {
-			const { data, error } = await apiClient().GET('/v1/agents/{agent_id}', {
+			const { data, error } = await api.GET('/v1/agents/{agent_id}', {
 				params: { path: { agent_id: agentId } },
 			})
 			if (error || !data) return null

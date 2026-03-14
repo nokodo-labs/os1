@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
@@ -34,7 +34,7 @@
 		try {
 			// ensure store is fresh before cross-referencing
 			await friends.load()
-			const { data, error } = await apiClient().GET('/v1/users/search', {
+			const { data, error } = await api.GET('/v1/users/search', {
 				params: { query: { q, limit: 20 } },
 			})
 			results = error || !data ? [] : data

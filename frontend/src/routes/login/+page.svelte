@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -55,7 +55,7 @@
 		isSubmitting = true
 
 		try {
-			const { data, error, response } = await apiClient().POST(
+			const { data, error, response } = await api.POST(
 				'/v1/auth/login/access-token',
 				{
 					headers: {

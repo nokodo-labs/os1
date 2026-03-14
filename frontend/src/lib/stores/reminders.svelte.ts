@@ -11,7 +11,7 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -359,7 +359,7 @@ class RemindersCache {
 
 		this.#listsInFlight = (async () => {
 			const { sort_by, sort_dir } = this.#parseSortMode()
-			const { data, error } = await apiClient().GET('/v1/reminders/lists', {
+			const { data, error } = await api.GET('/v1/reminders/lists', {
 				params: { query: { include_counts: true, sort_by, sort_dir } },
 			})
 			if (error || !data) return this.lists
@@ -475,7 +475,7 @@ class RemindersCache {
 			}
 			if (listId !== null) query.list_id = listId
 
-			const { data, error } = await apiClient().GET('/v1/reminders', {
+			const { data, error } = await api.GET('/v1/reminders', {
 				params: { query },
 			})
 			if (error || !data) return this.getReminders(listId)
@@ -527,7 +527,7 @@ class RemindersCache {
 		this.#listsCache?.data.set(tempId, placeholder)
 
 		try {
-			const { data, error } = await apiClient().POST('/v1/reminders/lists', {
+			const { data, error } = await api.POST('/v1/reminders/lists', {
 				body: {
 					name: params.name,
 					icon: params.icon ?? null,
@@ -594,7 +594,7 @@ class RemindersCache {
 		this.#recomputeCounts(params.listId)
 
 		try {
-			const { data, error } = await apiClient().POST('/v1/reminders', {
+			const { data, error } = await api.POST('/v1/reminders', {
 				body: {
 					title: params.title,
 					list_id: params.listId,
@@ -648,7 +648,7 @@ class RemindersCache {
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
 		try {
-			const { error } = await apiClient().POST('/v1/reminders/{reminder_id}/complete', {
+			const { error } = await api.POST('/v1/reminders/{reminder_id}/complete', {
 				params: { path: { reminder_id: reminder.id } },
 			})
 
@@ -680,7 +680,7 @@ class RemindersCache {
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
 		try {
-			const { error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
+			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
 				params: { path: { reminder_id: reminder.id } },
 				body: { status: 'pending' },
 			})
@@ -716,7 +716,7 @@ class RemindersCache {
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
 		try {
-			const { error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
+			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
 				params: { path: { reminder_id: reminder.id } },
 				body: updates,
 			})
@@ -757,7 +757,7 @@ class RemindersCache {
 		}
 
 		try {
-			const { error } = await apiClient().DELETE('/v1/reminders/{reminder_id}', {
+			const { error } = await api.DELETE('/v1/reminders/{reminder_id}', {
 				params: { path: { reminder_id: reminder.id } },
 			})
 
@@ -809,7 +809,7 @@ class RemindersCache {
 		this.#appendReminderToCache(targetListId, optimistic)
 
 		try {
-			const { error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
+			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
 				params: { path: { reminder_id: reminder.id } },
 				body: { list_id: targetListId },
 			})

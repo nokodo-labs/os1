@@ -2,7 +2,7 @@
  * data loading - events, message ingestion, pagination, tree loading, cache sync.
  */
 
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import type { components } from '$lib/api/types'
 import { chat as chatStore } from '$lib/stores/chat.svelte'
 import { parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
@@ -77,7 +77,7 @@ export async function fetchEventsForThread(
 
 		ctx.toolEventsInFlight = true
 		try {
-			const { data, error } = await apiClient().POST(
+			const { data, error } = await api.POST(
 				'/v1/threads/{thread_id}/events/by-message-ids',
 				{
 					params: { path: { thread_id: threadId } },
@@ -127,7 +127,7 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 	const prevScrollTop = ctx.scrollContainer.scrollTop
 
 	try {
-		const { data, error } = await apiClient().GET('/v1/threads/{thread_id}/messages', {
+		const { data, error } = await api.GET('/v1/threads/{thread_id}/messages', {
 			params: {
 				path: { thread_id: threadId },
 				query: { skip: ctx.messageSkip, limit: 120 },
@@ -175,7 +175,7 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		messagesPage = cachedMessages
 	} else {
 		// fetch from API
-		const { data, error: threadError } = await apiClient().GET('/v1/threads/{thread_id}', {
+		const { data, error: threadError } = await api.GET('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 		})
 		if (threadError) {
@@ -199,7 +199,7 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		}
 		threadData = data
 
-		const { data: msgData, error: msgError } = await apiClient().GET(
+		const { data: msgData, error: msgError } = await api.GET(
 			'/v1/threads/{thread_id}/messages',
 			{ params: { path: { thread_id: threadId }, query: { skip: 0, limit: 120 } } }
 		)

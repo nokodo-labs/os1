@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import LockClosed from '$lib/components/icons/LockClosed.svelte'
 	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
@@ -30,7 +30,7 @@
 		error = null
 		success = false
 		try {
-			const { response, error: apiError } = await apiClient().POST(
+			const { response, error: apiError } = await api.POST(
 				'/v1/auth/change-password',
 				{ body: { current_password: currentPassword, new_password: newPassword } }
 			)
@@ -62,7 +62,7 @@
 				data,
 				error: apiError,
 				response,
-			} = await apiClient().PATCH('/v1/users/{user_id}', {
+			} = await api.PATCH('/v1/users/{user_id}', {
 				params: { path: { user_id: uid } },
 				body: { email: newEmail.trim() },
 			})

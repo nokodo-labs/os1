@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronUpDown from '$lib/components/icons/ChevronUpDown.svelte'
@@ -63,21 +63,21 @@
 			let fetched: AccessRuleResponse[] = []
 			switch (payload.resourceType) {
 				case 'file': {
-					const { data } = await apiClient().GET('/v1/files/{file_id}/access-rules', {
+					const { data } = await api.GET('/v1/files/{file_id}/access-rules', {
 						params: { path: { file_id: payload.resourceId } },
 					})
 					if (data) fetched = data as AccessRuleResponse[]
 					break
 				}
 				case 'thread': {
-					const { data } = await apiClient().GET('/v1/threads/{thread_id}/access-rules', {
+					const { data } = await api.GET('/v1/threads/{thread_id}/access-rules', {
 						params: { path: { thread_id: payload.resourceId } },
 					})
 					if (data) fetched = data as AccessRuleResponse[]
 					break
 				}
 				case 'project': {
-					const { data } = await apiClient().GET(
+					const { data } = await api.GET(
 						'/v1/projects/{project_id}/access-rules',
 						{ params: { path: { project_id: payload.resourceId } } }
 					)
@@ -85,14 +85,14 @@
 					break
 				}
 				case 'group': {
-					const { data } = await apiClient().GET('/v1/groups/{group_id}/access-rules', {
+					const { data } = await api.GET('/v1/groups/{group_id}/access-rules', {
 						params: { path: { group_id: payload.resourceId } },
 					})
 					if (data) fetched = data as AccessRuleResponse[]
 					break
 				}
 				case 'agent': {
-					const { data } = await apiClient().GET('/v1/agents/{agent_id}/access-rules', {
+					const { data } = await api.GET('/v1/agents/{agent_id}/access-rules', {
 						params: { path: { agent_id: payload.resourceId } },
 					})
 					if (data) fetched = data as AccessRuleResponse[]
@@ -126,31 +126,31 @@
 		try {
 			switch (payload.resourceType) {
 				case 'file':
-					await apiClient().PUT('/v1/files/{file_id}/access-rules', {
+					await api.PUT('/v1/files/{file_id}/access-rules', {
 						params: { path: { file_id: payload.resourceId } },
 						body,
 					})
 					break
 				case 'thread':
-					await apiClient().PUT('/v1/threads/{thread_id}/access-rules', {
+					await api.PUT('/v1/threads/{thread_id}/access-rules', {
 						params: { path: { thread_id: payload.resourceId } },
 						body,
 					})
 					break
 				case 'project':
-					await apiClient().PUT('/v1/projects/{project_id}/access-rules', {
+					await api.PUT('/v1/projects/{project_id}/access-rules', {
 						params: { path: { project_id: payload.resourceId } },
 						body,
 					})
 					break
 				case 'group':
-					await apiClient().PUT('/v1/groups/{group_id}/access-rules', {
+					await api.PUT('/v1/groups/{group_id}/access-rules', {
 						params: { path: { group_id: payload.resourceId } },
 						body,
 					})
 					break
 				case 'agent':
-					await apiClient().PUT('/v1/agents/{agent_id}/access-rules', {
+					await api.PUT('/v1/agents/{agent_id}/access-rules', {
 						params: { path: { agent_id: payload.resourceId } },
 						body,
 					})
@@ -172,7 +172,7 @@
 			return
 		}
 		try {
-			const { data } = await apiClient().GET('/v1/users', {
+			const { data } = await api.GET('/v1/users', {
 				params: { query: { q: q.trim(), limit: 10 } },
 			})
 			searchResults = (data ?? []) as UserResult[]

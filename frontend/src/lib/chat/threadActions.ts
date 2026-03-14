@@ -3,14 +3,14 @@
  * these operations act on the thread list in the chat store, not on a per-page ChatContext.
  */
 
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import type { StreamMessage } from '$lib/api/streaming'
 import { chat, type Thread } from '$lib/stores/chat.svelte'
 import { showError } from '$lib/stores/notifications.svelte'
 
 /** delete a thread via API. returns the HTTP status, or null on network error. */
 export async function deleteThread(threadId: string): Promise<number | null> {
-	const { response } = await apiClient().DELETE('/v1/threads/{thread_id}', {
+	const { response } = await api.DELETE('/v1/threads/{thread_id}', {
 		params: { path: { thread_id: threadId } },
 	})
 	return response.status
@@ -35,7 +35,7 @@ export async function updateThread(
 	}))
 
 	try {
-		const { error } = await apiClient().PATCH('/v1/threads/{thread_id}', {
+		const { error } = await api.PATCH('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 			body: { title: title || undefined, tags },
 		})
@@ -99,6 +99,8 @@ export function handleThreadStreamEvent(
 			}
 		})
 	} else if (eventType === 'thread.created') {
-		void chat.refreshThreads({ limit: 25 })
+		// handled by chat.svelte.ts#handleStreamEvent which immediately
+		// prepends the new thread to recentThreads. no async refresh
+		// needed here - it would race and overwrite the list.
 	}
 }

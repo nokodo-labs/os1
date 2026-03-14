@@ -1,5 +1,5 @@
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -36,7 +36,7 @@ class PermissionsStore {
 		this.isLoading = true
 		this.error = null
 		try {
-			const { data, error } = await apiClient().GET('/v1/users/{user_id}/permissions', {
+			const { data, error } = await api.GET('/v1/users/{user_id}/permissions', {
 				params: { path: { user_id: userId } },
 			})
 			if (error || !data) {

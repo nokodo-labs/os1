@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
@@ -72,7 +72,7 @@
 
 		try {
 			const skip = isReset ? 0 : memories.length
-			const { data } = await apiClient().GET('/v1/memories', {
+			const { data } = await api.GET('/v1/memories', {
 				params: {
 					query: {
 						user_id: userId,
@@ -141,7 +141,7 @@
 	async function saveEdit(memoryId: string): Promise<void> {
 		const trimmed = editContent.trim()
 		if (!trimmed) return
-		await apiClient().PUT('/v1/memories/{memory_id}', {
+		await api.PUT('/v1/memories/{memory_id}', {
 			params: { path: { memory_id: memoryId } },
 			body: { content: trimmed },
 		})
@@ -155,7 +155,7 @@
 
 	// delete single
 	async function deleteMemory(memoryId: string): Promise<void> {
-		await apiClient().DELETE('/v1/memories/{memory_id}', {
+		await api.DELETE('/v1/memories/{memory_id}', {
 			params: { path: { memory_id: memoryId } },
 		})
 		memories = memories.filter((m) => m.id !== memoryId)
@@ -165,7 +165,7 @@
 	async function deleteAll(): Promise<void> {
 		deletingAll = true
 		try {
-			await apiClient().DELETE('/v1/memories', {})
+			await api.DELETE('/v1/memories', {})
 			memories = []
 			hasMore = false
 		} finally {

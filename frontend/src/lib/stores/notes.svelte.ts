@@ -9,7 +9,7 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -101,7 +101,7 @@ export const notes = {
 		isLoading = true
 		inFlight = (async () => {
 			const { sort_by, sort_dir } = parseSortMode(currentSortMode)
-			const { data, error } = await apiClient().GET('/v1/notes', {
+			const { data, error } = await api.GET('/v1/notes', {
 				params: { query: { sort_by, sort_dir } },
 			})
 			if (error || !data) return this.all
@@ -150,7 +150,7 @@ export const notes = {
 		}
 
 		try {
-			const { data, error } = await apiClient().POST('/v1/notes', {
+			const { data, error } = await api.POST('/v1/notes', {
 				body: { title: '', content: '' },
 			})
 
@@ -200,7 +200,7 @@ export const notes = {
 		})
 
 		try {
-			const { error } = await apiClient().PUT('/v1/notes/{note_id}', {
+			const { error } = await api.PUT('/v1/notes/{note_id}', {
 				params: { path: { note_id: noteId } },
 				body: { title: nextTitle, content: nextContent },
 			})
@@ -224,7 +224,7 @@ export const notes = {
 	async enhance(noteId: string): Promise<Note | null> {
 		if (!notesMap.has(noteId)) return null
 
-		const { data, error } = await apiClient().POST('/v1/notes/{note_id}/enhance', {
+		const { data, error } = await api.POST('/v1/notes/{note_id}/enhance', {
 			params: { path: { note_id: noteId } },
 		})
 		if (error || !data) {
@@ -246,7 +246,7 @@ export const notes = {
 		notesMap.delete(noteId)
 
 		try {
-			const { error } = await apiClient().DELETE('/v1/notes/{note_id}', {
+			const { error } = await api.DELETE('/v1/notes/{note_id}', {
 				params: { path: { note_id: noteId } },
 			})
 

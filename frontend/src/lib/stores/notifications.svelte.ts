@@ -3,7 +3,7 @@
  * Manages notification state, integrates with event stream for real-time updates.
  */
 
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
@@ -237,7 +237,7 @@ class NotificationsStore {
 		this.error = null
 
 		try {
-			const { data, error } = await apiClient().GET('/v1/notifications/users/{user_id}', {
+			const { data, error } = await api.GET('/v1/notifications/users/{user_id}', {
 				params: {
 					path: { user_id: userId },
 					query: { only_unread: false },
@@ -263,7 +263,7 @@ class NotificationsStore {
 		)
 
 		try {
-			await apiClient().POST('/v1/notifications/{notification_id}/read', {
+			await api.POST('/v1/notifications/{notification_id}/read', {
 				params: { path: { notification_id: notificationId } },
 			})
 		} catch {
@@ -279,7 +279,7 @@ class NotificationsStore {
 		)
 
 		try {
-			await apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
+			await api.POST('/v1/notifications/{notification_id}/dismiss', {
 				params: { path: { notification_id: notificationId } },
 			})
 		} catch {
@@ -301,7 +301,7 @@ class NotificationsStore {
 		try {
 			await Promise.all(
 				unread.map((n) =>
-					apiClient().POST('/v1/notifications/{notification_id}/read', {
+					api.POST('/v1/notifications/{notification_id}/read', {
 						params: { path: { notification_id: n.id } },
 					})
 				)
@@ -315,7 +315,7 @@ class NotificationsStore {
 		this.list = this.list.filter((n) => n.id !== notificationId)
 
 		try {
-			await apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
+			await api.POST('/v1/notifications/{notification_id}/dismiss', {
 				params: { path: { notification_id: notificationId } },
 			})
 		} catch {
@@ -330,7 +330,7 @@ class NotificationsStore {
 		try {
 			await Promise.all(
 				ids.map((id) =>
-					apiClient().POST('/v1/notifications/{notification_id}/dismiss', {
+					api.POST('/v1/notifications/{notification_id}/dismiss', {
 						params: { path: { notification_id: id } },
 					})
 				)
