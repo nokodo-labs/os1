@@ -19,11 +19,19 @@ function resolveUrlStr(input: RequestInfo | URL): string {
 	else raw = input.url
 
 	if (!origin) return raw
-	if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
 
+	// openapi-fetch resolves paths against the browser origin when baseUrl is ''
+	// so raw may already be an absolute URL pointing at the wrong host.
+	// always re-apply the real API origin by extracting just the path+search+hash.
 	const base = origin.endsWith('/') ? origin.slice(0, -1) : origin
-	const path = raw.startsWith('/') ? raw : `/${raw}`
-	return base + path
+	let pathname: string
+	try {
+		pathname = new URL(raw).pathname + new URL(raw).search + new URL(raw).hash
+	} catch {
+		// raw is already a relative path
+		pathname = raw.startsWith('/') ? raw : `/${raw}`
+	}
+	return base + pathname
 }
 
 let refreshInFlight: Promise<string | null> | null = null
