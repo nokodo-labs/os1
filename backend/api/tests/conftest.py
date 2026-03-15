@@ -857,7 +857,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 	from api.database import get_db
 	from api.main import app
-	from api.v1.app import v1_app
 
 	# ensure a local storage backend is available even if the session-scoped
 	# fixture was torn down or cleared by another test
@@ -869,7 +868,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 		yield db_session
 
 	app.dependency_overrides[get_db] = override_get_db
-	v1_app.dependency_overrides[get_db] = override_get_db
 
 	async with AsyncClient(
 		transport=ASGITransport(app=app),
@@ -878,7 +876,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 		yield test_client
 
 	app.dependency_overrides.clear()
-	v1_app.dependency_overrides.clear()
 	boot_settings.TESTING = previous_testing
 
 
