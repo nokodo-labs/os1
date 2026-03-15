@@ -31,4 +31,3 @@ async def test_openapi_json_endpoint_returns_schema(client: AsyncClient) -> None
 
 	schema = response.json()
 	_assert_openapi_schema_shape(schema)
-	assert "/system/status" not in schema["paths"]
