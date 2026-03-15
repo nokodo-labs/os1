@@ -9,11 +9,7 @@ import { apiOriginReady, getApiOrigin } from './origin'
 import { getSessionId } from './sessionId'
 import type { paths } from './types'
 
-type PrefixedPaths<P, Prefix extends string> = {
-	[K in keyof P as K extends string ? `${Prefix}${K}` : never]: P[K]
-}
-
-export type ApiPaths = paths & PrefixedPaths<paths, '/v1'>
+export type ApiPaths = paths
 
 export { getApiOrigin as getApiBaseUrl }
 
@@ -22,29 +18,6 @@ export class BackendUnreachableError extends Error {
 		super('backend unreachable')
 		this.name = 'BackendUnreachableError'
 	}
-}
-
-function resolveUrlStr(input: RequestInfo | URL): string {
-	const origin = getApiOrigin()
-	let raw = ''
-	if (typeof input === 'string') raw = input
-	else if (input instanceof URL) raw = input.toString()
-	else raw = input.url
-
-	if (!origin) return raw
-
-	// openapi-fetch resolves paths against the browser origin when baseUrl is ''
-	// so raw may already be an absolute URL pointing at the wrong host.
-	// always re-apply the real API origin by extracting just the path+search+hash.
-	const base = origin.endsWith('/') ? origin.slice(0, -1) : origin
-	let pathname: string
-	try {
-		pathname = new URL(raw).pathname + new URL(raw).search + new URL(raw).hash
-	} catch {
-		// raw is already a relative path
-		pathname = raw.startsWith('/') ? raw : `/${raw}`
-	}
-	return base + pathname
 }
 
 let refreshInFlight: Promise<string | null> | null = null
@@ -62,7 +35,6 @@ export async function refreshAccessToken(): Promise<string | null> {
 			setAccessToken(data.access_token)
 			return data.access_token
 		} catch {
-			// Do not clear the token on network throw
 			throw new BackendUnreachableError()
 		} finally {
 			refreshInFlight = null
@@ -72,100 +44,107 @@ export async function refreshAccessToken(): Promise<string | null> {
 	return refreshInFlight
 }
 
-function resolveFetchInit(
-	input: RequestInfo | URL,
-	init?: RequestInit
-): { url: string; fetchInit: RequestInit } {
-	const url = resolveUrlStr(input)
+const urlInterceptor = {
+	async onRequest({ request }: { request: Request }) {
+		await apiOriginReady
+
+		const origin = getApiOrigin()
+		if (!origin) return request
+
+		const base = origin.endsWith('/') ? origin.slice(0, -1) : origin
+		let pathname: string
+		try {
+			pathname = new URL(request.url).pathname + new URL(request.url).search + new URL(request.url).hash
+		} catch {
+			pathname = request.url.startsWith('/') ? request.url : `/${request.url}`
+		}
+
+		return new Request(base + pathname, request)
+	},
+}
+
+const authInterceptor = {
+	async onRequest({ request }: { request: Request }) {
+		await authReady
+
+		const token = getAccessToken()
+		if (token && !request.headers.has('Authorization')) {
+			request.headers.set('Authorization', `Bearer ${token}`)
+		}
+
+		const sessionId = getSessionId()
+		if (sessionId && !request.headers.has('X-Session-ID')) {
+			request.headers.set('X-Session-ID', sessionId)
+		}
+
+		return new Request(request, { credentials: 'include' })
+	},
+
+	async onResponse({ request, response }: { request: Request; response: Response }) {
+		if (response.status !== 401) return response
+
+		const refreshed = await refreshAccessToken()
+		if (!refreshed) return response
+
+		request.headers.set('Authorization', `Bearer ${refreshed}`)
+		return safeFetch(request)
+	},
+}
+
+/**
+ * bypasses Chrome's ALPN protocol crash by unwrapping Request objects back into primitive
+ * strings and Blobs. This prevents Chrome from identifying the payload as a ReadableStream.
+ * 
+ * WHY IS THIS REQUIRED?
+ * 1. openapi-fetch internally wraps all payloads into a `new Request(input)` object.
+ * 2. According to the Fetch API, accessing `Request.body` exposes it as a `ReadableStream`.
+ * 3. Chromium strictly mandates HTTP/2 for stream uploads natively (throwing ERR_ALPN_NEGOTIATION_FAILED if H2 is missing).
+ * 4. Chromium REFUSES to negotiate HTTP/2 over cleartext (H2C).
+ * 
+ * Thus, any cross-origin POST with a body from Vite to a local development backend crashes instantly
+ * in Chrome over HTTP. Unpacking the Request into a `fetch(url, blob)` circumvents Chromium's
+ * stream detection perfectly natively.
+ * 
+ * This hack automatically bypasses itself if the request URL is HTTPS, meaning in production behind a
+ * reverse proxy, it uses 100% native fetch.
+ */
+async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+
+	// If the origin is HTTPS, the browser will seamlessly negotiate HTTP/2 via TLS ALPN.
+	// We can safely use the native fetch directly without unwrapping.
+	if (urlStr.startsWith('https://')) {
+		return fetch(input, init)
+	}
+
+	let options: RequestInit = { ...init }
 
 	if (input instanceof Request) {
-		const isStream = input.body instanceof ReadableStream
-		return {
-			url,
-			fetchInit: {
-				method: input.method,
-				headers: new Headers(input.headers),
-				body: input.body,
-				credentials: 'include',
-				...(isStream ? { duplex: 'half' } : {}),
-				...init,
-			} as RequestInit,
+		options = {
+			method: input.method,
+			headers: input.headers,
+			signal: input.signal,
+			credentials: input.credentials,
+			referrer: input.referrer,
+			mode: input.mode,
+			cache: input.cache,
+			redirect: input.redirect,
+			integrity: input.integrity,
+		}
+		if (input.body) {
+			options.body = await input.clone().blob()
 		}
 	}
 
-	const isStream = init?.body instanceof ReadableStream
-	return {
-		url,
-		fetchInit: {
-			credentials: 'include',
-			...(isStream ? { duplex: 'half' } : {}),
-			...init,
-		} as RequestInit,
-	}
+	return fetch(urlStr, options)
 }
 
-async function rawFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	await apiOriginReady
-	const { url, fetchInit } = resolveFetchInit(input, init)
-	return fetch(url, fetchInit)
-}
+export const rawApi = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch })
+rawApi.use(urlInterceptor)
 
-export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	await apiOriginReady
-	await authReady
-
-	const { url, fetchInit } = resolveFetchInit(input, init)
-	const headers = new Headers(fetchInit.headers)
-
-	const token = getAccessToken()
-	if (token && !headers.has('Authorization')) {
-		headers.set('Authorization', `Bearer ${token}`)
-	}
-
-	const sessionId = getSessionId()
-	if (sessionId && !headers.has('X-Session-ID')) {
-		headers.set('X-Session-ID', sessionId)
-	}
-
-	const attemptInit = { ...fetchInit, headers }
-
-	// Open API Fetch allows retrying via cloning request, however cloning a stream body
-	// can sometimes be problematic. By keeping the init dictionary, we can just regenerate the
-	// fetch call without strictly creating Request clones that consume streams.
-	const requestToFetch = new Request(url, attemptInit)
-
-	// clone if possible strictly for retry, but typically refresh doesn't need to read body again
-	let retryRequest: Request | null = null
-	if (!attemptInit.body || typeof attemptInit.body === 'string') {
-		retryRequest = requestToFetch.clone()
-	}
-
-	const res = await fetch(requestToFetch)
-	if (res.status !== 401) return res
-
-	const refreshed = await refreshAccessToken()
-	if (!refreshed) return res
-
-	if (!retryRequest) {
-		// if we couldn't clone it (e.g. consumed stream), just reconstruct it.
-		retryRequest = new Request(url, attemptInit)
-	}
-
-	const retryHeaders = new Headers(retryRequest.headers)
-	retryHeaders.set('Authorization', `Bearer ${refreshed}`)
-
-	return fetch(new Request(retryRequest, { headers: retryHeaders }))
-}
-
-export const rawApi = createClient<ApiPaths>({
-	baseUrl: '',
-	fetch: rawFetch,
-})
-
-export const api = createClient<ApiPaths>({
-	baseUrl: '',
-	fetch: authFetch,
-})
+export const api = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch })
+api.use(urlInterceptor)
+api.use(authInterceptor)
 
 export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
 	if (result.error !== undefined) {
@@ -176,6 +155,23 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
 		)
 	}
 	return result.data as T
+}
+
+/**
+ * use this ONLY for custom manual fetch requests (like raw Blob downloads)
+ * that bypass the api middleware.
+ */
+export async function getAuthHeaders(): Promise<HeadersInit> {
+	await authReady
+	const headers: Record<string, string> = {}
+
+	const token = getAccessToken()
+	if (token) headers['Authorization'] = `Bearer ${token}`
+
+	const sessionId = getSessionId()
+	if (sessionId) headers['X-Session-ID'] = sessionId
+
+	return headers
 }
 
 export async function logout(): Promise<void> {

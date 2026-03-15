@@ -18,7 +18,7 @@ describe('v1 auth login form encoding', () => {
 			},
 		})
 
-		await client.POST('/auth/login/access-token', {
+		await client.POST('/v1/auth/login/access-token', {
 			headers: {
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},

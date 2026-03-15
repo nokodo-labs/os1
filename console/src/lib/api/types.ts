@@ -5,7 +5,89 @@
  */
 
 export interface paths {
-    "/auth/login/access-token": {
+    "/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Root
+         * @description API root with information and links.
+         */
+        get: operations["root__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Check
+         * @description Health check endpoint.
+         */
+        get: operations["health_check_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Status
+         * @description Check system initialization status.
+         *
+         *     A system is considered initialized once at least one user exists.
+         */
+        get: operations["get_system_status_system_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/manifest.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Manifest
+         * @description serve a compiled PWA manifest derived from settings.
+         */
+        get: operations["get_manifest_system_manifest_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/login/access-token": {
         parameters: {
             query?: never;
             header?: never;
@@ -18,14 +100,14 @@ export interface paths {
          * Login Access Token
          * @description OAuth2 compatible token login, get an access token for future requests.
          */
-        post: operations["login_access_token_auth_login_access_token_post"];
+        post: operations["login_access_token_v1_auth_login_access_token_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/refresh": {
+    "/v1/auth/refresh": {
         parameters: {
             query?: never;
             header?: never;
@@ -38,14 +120,14 @@ export interface paths {
          * Refresh Access Token
          * @description exchange refresh token for new access token (sliding refresh).
          */
-        post: operations["refresh_access_token_auth_refresh_post"];
+        post: operations["refresh_access_token_v1_auth_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/change-password": {
+    "/v1/auth/change-password": {
         parameters: {
             query?: never;
             header?: never;
@@ -58,14 +140,14 @@ export interface paths {
          * Change Password
          * @description change the authenticated user's password.
          */
-        post: operations["change_password_auth_change_password_post"];
+        post: operations["change_password_v1_auth_change_password_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/logout": {
+    "/v1/auth/logout": {
         parameters: {
             query?: never;
             header?: never;
@@ -78,14 +160,14 @@ export interface paths {
          * Logout
          * @description clear refresh token cookie to log out.
          */
-        post: operations["logout_auth_logout_post"];
+        post: operations["logout_v1_auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends": {
+    "/v1/users/{user_id}/friends": {
         parameters: {
             query?: never;
             header?: never;
@@ -96,7 +178,7 @@ export interface paths {
          * List Friends
          * @description list all accepted friends.
          */
-        get: operations["list_friends_users__user_id__friends_get"];
+        get: operations["list_friends_v1_users__user_id__friends_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -105,7 +187,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends/requests/incoming": {
+    "/v1/users/{user_id}/friends/requests/incoming": {
         parameters: {
             query?: never;
             header?: never;
@@ -116,7 +198,7 @@ export interface paths {
          * List Incoming Requests
          * @description list pending friend requests received by the current user.
          */
-        get: operations["list_incoming_requests_users__user_id__friends_requests_incoming_get"];
+        get: operations["list_incoming_requests_v1_users__user_id__friends_requests_incoming_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -125,7 +207,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends/requests/outgoing": {
+    "/v1/users/{user_id}/friends/requests/outgoing": {
         parameters: {
             query?: never;
             header?: never;
@@ -136,7 +218,7 @@ export interface paths {
          * List Outgoing Requests
          * @description list pending friend requests sent by the current user.
          */
-        get: operations["list_outgoing_requests_users__user_id__friends_requests_outgoing_get"];
+        get: operations["list_outgoing_requests_v1_users__user_id__friends_requests_outgoing_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -145,7 +227,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends/requests": {
+    "/v1/users/{user_id}/friends/requests": {
         parameters: {
             query?: never;
             header?: never;
@@ -158,14 +240,14 @@ export interface paths {
          * Send Friend Request
          * @description send a friend request to another user.
          */
-        post: operations["send_friend_request_users__user_id__friends_requests_post"];
+        post: operations["send_friend_request_v1_users__user_id__friends_requests_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends/requests/{friendship_id}/accept": {
+    "/v1/users/{user_id}/friends/requests/{friendship_id}/accept": {
         parameters: {
             query?: never;
             header?: never;
@@ -178,14 +260,14 @@ export interface paths {
          * Accept Friend Request
          * @description accept an incoming friend request.
          */
-        post: operations["accept_friend_request_users__user_id__friends_requests__friendship_id__accept_post"];
+        post: operations["accept_friend_request_v1_users__user_id__friends_requests__friendship_id__accept_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends/requests/{friendship_id}/decline": {
+    "/v1/users/{user_id}/friends/requests/{friendship_id}/decline": {
         parameters: {
             query?: never;
             header?: never;
@@ -198,14 +280,14 @@ export interface paths {
          * Decline Friend Request
          * @description decline an incoming friend request.
          */
-        post: operations["decline_friend_request_users__user_id__friends_requests__friendship_id__decline_post"];
+        post: operations["decline_friend_request_v1_users__user_id__friends_requests__friendship_id__decline_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/friends/{friend_user_id}": {
+    "/v1/users/{user_id}/friends/{friend_user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -219,13 +301,13 @@ export interface paths {
          * Remove Friend
          * @description remove an existing friend.
          */
-        delete: operations["remove_friend_users__user_id__friends__friend_user_id__delete"];
+        delete: operations["remove_friend_v1_users__user_id__friends__friend_user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users": {
+    "/v1/users": {
         parameters: {
             query?: never;
             header?: never;
@@ -236,20 +318,20 @@ export interface paths {
          * Read Users
          * @description retrieve users.
          */
-        get: operations["read_users_users_get"];
+        get: operations["read_users_v1_users_get"];
         put?: never;
         /**
          * Create User
          * @description create new user.
          */
-        post: operations["create_user_users_post"];
+        post: operations["create_user_v1_users_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users/active": {
+    "/v1/users/active": {
         parameters: {
             query?: never;
             header?: never;
@@ -260,7 +342,7 @@ export interface paths {
          * Read Active User Ids
          * @description return IDs of users currently connected to the event stream.
          */
-        get: operations["read_active_user_ids_users_active_get"];
+        get: operations["read_active_user_ids_v1_users_active_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -269,7 +351,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/search": {
+    "/v1/users/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -280,7 +362,7 @@ export interface paths {
          * Search Users
          * @description search users by name, username, or email.
          */
-        get: operations["search_users_users_search_get"];
+        get: operations["search_users_v1_users_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -289,7 +371,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}": {
+    "/v1/users/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -300,7 +382,7 @@ export interface paths {
          * Read User
          * @description get user by ID.
          */
-        get: operations["read_user_users__user_id__get"];
+        get: operations["read_user_v1_users__user_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -310,10 +392,10 @@ export interface paths {
          * Update User
          * @description update user.
          */
-        patch: operations["update_user_users__user_id__patch"];
+        patch: operations["update_user_v1_users__user_id__patch"];
         trace?: never;
     };
-    "/users/{user_id}/permissions": {
+    "/v1/users/{user_id}/permissions": {
         parameters: {
             query?: never;
             header?: never;
@@ -324,7 +406,7 @@ export interface paths {
          * Read User Permissions
          * @description get resolved permissions for user.
          */
-        get: operations["read_user_permissions_users__user_id__permissions_get"];
+        get: operations["read_user_permissions_v1_users__user_id__permissions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -333,7 +415,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads": {
+    "/v1/threads": {
         parameters: {
             query?: never;
             header?: never;
@@ -344,20 +426,20 @@ export interface paths {
          * List Threads
          * @description List threads optionally filtered by owner.
          */
-        get: operations["list_threads_threads_get"];
+        get: operations["list_threads_v1_threads_get"];
         put?: never;
         /**
          * Create Thread
          * @description Create a new thread.
          */
-        post: operations["create_thread_threads_post"];
+        post: operations["create_thread_v1_threads_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/create_and_run": {
+    "/v1/threads/create_and_run": {
         parameters: {
             query?: never;
             header?: never;
@@ -374,14 +456,14 @@ export interface paths {
          *     client can capture the thread id. subsequent events are the normal run
          *     events (message_created, delta, done).
          */
-        post: operations["create_and_run_threads_create_and_run_post"];
+        post: operations["create_and_run_v1_threads_create_and_run_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/search": {
+    "/v1/threads/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -392,7 +474,7 @@ export interface paths {
          * Search Threads
          * @description search threads with cursor-based pagination.
          */
-        get: operations["search_threads_threads_search_get"];
+        get: operations["search_threads_v1_threads_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -401,7 +483,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/revectorize": {
+    "/v1/threads/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -414,14 +496,34 @@ export interface paths {
          * Revectorize Threads
          * @description vectorize all threads into qdrant. admin only.
          */
-        post: operations["revectorize_threads_threads_revectorize_post"];
+        post: operations["revectorize_threads_v1_threads_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}": {
+    "/v1/threads/unread-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unread Counts
+         * @description return unread message counts for the current user's threads.
+         */
+        get: operations["get_unread_counts_v1_threads_unread_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -432,24 +534,24 @@ export interface paths {
          * Get Thread
          * @description Fetch a single thread.
          */
-        get: operations["get_thread_threads__thread_id__get"];
+        get: operations["get_thread_v1_threads__thread_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Thread
          * @description Delete a thread.
          */
-        delete: operations["delete_thread_threads__thread_id__delete"];
+        delete: operations["delete_thread_v1_threads__thread_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Thread
          * @description Update thread metadata.
          */
-        patch: operations["update_thread_threads__thread_id__patch"];
+        patch: operations["update_thread_v1_threads__thread_id__patch"];
         trace?: never;
     };
-    "/threads/{thread_id}/metadata/generate": {
+    "/v1/threads/{thread_id}/metadata/generate": {
         parameters: {
             query?: never;
             header?: never;
@@ -465,14 +567,14 @@ export interface paths {
          *     uses the task model configured in settings (ai.tasks).
          *     when replace is false, only fills in missing metadata.
          */
-        post: operations["generate_thread_metadata_threads__thread_id__metadata_generate_post"];
+        post: operations["generate_thread_metadata_v1_threads__thread_id__metadata_generate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/messages": {
+    "/v1/threads/{thread_id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -483,20 +585,20 @@ export interface paths {
          * List Messages
          * @description List messages within a thread.
          */
-        get: operations["list_messages_threads__thread_id__messages_get"];
+        get: operations["list_messages_v1_threads__thread_id__messages_get"];
         put?: never;
         /**
          * Create Message
          * @description Append a message to a thread.
          */
-        post: operations["create_message_threads__thread_id__messages_post"];
+        post: operations["create_message_v1_threads__thread_id__messages_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/events/by-message-ids": {
+    "/v1/threads/{thread_id}/events/by-message-ids": {
         parameters: {
             query?: never;
             header?: never;
@@ -509,14 +611,14 @@ export interface paths {
          * List Events For Message Ids
          * @description List events associated with specific messages in this thread.
          */
-        post: operations["list_events_for_message_ids_threads__thread_id__events_by_message_ids_post"];
+        post: operations["list_events_for_message_ids_v1_threads__thread_id__events_by_message_ids_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/branch": {
+    "/v1/threads/{thread_id}/branch": {
         parameters: {
             query?: never;
             header?: never;
@@ -527,7 +629,7 @@ export interface paths {
          * Get Current Branch
          * @description Return the current root→leaf branch for this thread.
          */
-        get: operations["get_current_branch_threads__thread_id__branch_get"];
+        get: operations["get_current_branch_v1_threads__thread_id__branch_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -536,7 +638,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/tree": {
+    "/v1/threads/{thread_id}/tree": {
         parameters: {
             query?: never;
             header?: never;
@@ -547,7 +649,7 @@ export interface paths {
          * Get Message Tree
          * @description Return all messages for this thread as a flat list.
          */
-        get: operations["get_message_tree_threads__thread_id__tree_get"];
+        get: operations["get_message_tree_v1_threads__thread_id__tree_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -556,7 +658,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/messages/{message_id}": {
+    "/v1/threads/{thread_id}/messages/{message_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -573,17 +675,17 @@ export interface paths {
          *     this deletes the user message and all subsequent messages on the active
          *     branch until (but not including) the next user message, if any.
          */
-        delete: operations["delete_user_message_turn_threads__thread_id__messages__message_id__delete"];
+        delete: operations["delete_user_message_turn_v1_threads__thread_id__messages__message_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update User Message
          * @description update a user message's content in place.
          */
-        patch: operations["update_user_message_threads__thread_id__messages__message_id__patch"];
+        patch: operations["update_user_message_v1_threads__thread_id__messages__message_id__patch"];
         trace?: never;
     };
-    "/threads/{thread_id}/switch": {
+    "/v1/threads/{thread_id}/switch": {
         parameters: {
             query?: never;
             header?: never;
@@ -596,14 +698,14 @@ export interface paths {
          * Switch Branch
          * @description Switch the active branch to the subtree rooted at message_id.
          */
-        post: operations["switch_branch_threads__thread_id__switch_post"];
+        post: operations["switch_branch_v1_threads__thread_id__switch_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/access-rules": {
+    "/v1/threads/{thread_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -614,12 +716,12 @@ export interface paths {
          * List Thread Access Rules
          * @description List access rules for a thread.
          */
-        get: operations["list_thread_access_rules_threads__thread_id__access_rules_get"];
+        get: operations["list_thread_access_rules_v1_threads__thread_id__access_rules_get"];
         /**
          * Set Thread Access Rules
          * @description Replace access rules for a thread.
          */
-        put: operations["set_thread_access_rules_threads__thread_id__access_rules_put"];
+        put: operations["set_thread_access_rules_v1_threads__thread_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -627,7 +729,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/threads/{thread_id}/runs/{run_id}/cancel": {
+    "/v1/threads/{thread_id}/runs/{run_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -640,14 +742,34 @@ export interface paths {
          * Cancel Run
          * @description cancel an active agent run on a thread.
          */
-        post: operations["cancel_run_threads__thread_id__runs__run_id__cancel_post"];
+        post: operations["cancel_run_v1_threads__thread_id__runs__run_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/runs": {
+    "/v1/threads/{thread_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Thread Read
+         * @description mark all messages in a thread as read for the current user.
+         */
+        post: operations["mark_thread_read_v1_threads__thread_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -658,7 +780,7 @@ export interface paths {
          * List Runs
          * @description list all in-memory runs owned by the current user.
          */
-        get: operations["list_runs_runs_get"];
+        get: operations["list_runs_v1_runs_get"];
         put?: never;
         /**
          * Create Run
@@ -670,14 +792,14 @@ export interface paths {
          *     when ``stream`` is false a JSON response is returned instead of SSE
          *     (not yet implemented).
          */
-        post: operations["create_run_runs_post"];
+        post: operations["create_run_v1_runs_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/runs/{run_id}/stream": {
+    "/v1/runs/{run_id}/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -692,7 +814,7 @@ export interface paths {
          *     deltas until the run completes. returns 404 if the run doesn't exist
          *     or has already finished.
          */
-        get: operations["resume_run_stream_runs__run_id__stream_get"];
+        get: operations["resume_run_stream_v1_runs__run_id__stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -701,7 +823,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tasks": {
+    "/v1/tasks": {
         parameters: {
             query?: never;
             header?: never;
@@ -712,20 +834,20 @@ export interface paths {
          * List Tasks
          * @description list tasks with optional filters.
          */
-        get: operations["list_tasks_tasks_get"];
+        get: operations["list_tasks_v1_tasks_get"];
         put?: never;
         /**
          * Create Task
          * @description create a new task.
          */
-        post: operations["create_task_tasks_post"];
+        post: operations["create_task_v1_tasks_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/tasks/{task_id}": {
+    "/v1/tasks/{task_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -742,10 +864,10 @@ export interface paths {
          * Update Task
          * @description update mutable task fields.
          */
-        patch: operations["update_task_tasks__task_id__patch"];
+        patch: operations["update_task_v1_tasks__task_id__patch"];
         trace?: never;
     };
-    "/events": {
+    "/v1/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -756,20 +878,20 @@ export interface paths {
          * List Events
          * @description Query events with flexible filters.
          */
-        get: operations["list_events_events_get"];
+        get: operations["list_events_v1_events_get"];
         put?: never;
         /**
          * Emit Event
          * @description Persist and broadcast an event.
          */
-        post: operations["emit_event_events_post"];
+        post: operations["emit_event_v1_events_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notifications": {
+    "/v1/notifications": {
         parameters: {
             query?: never;
             header?: never;
@@ -782,14 +904,14 @@ export interface paths {
          * Create Notifications
          * @description Create notification(s).
          */
-        post: operations["create_notifications_notifications_post"];
+        post: operations["create_notifications_v1_notifications_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notifications/users/{user_id}": {
+    "/v1/notifications/users/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -800,7 +922,7 @@ export interface paths {
          * List User Notifications
          * @description Return notifications for a user.
          */
-        get: operations["list_user_notifications_notifications_users__user_id__get"];
+        get: operations["list_user_notifications_v1_notifications_users__user_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -809,7 +931,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/notifications/{notification_id}/read": {
+    "/v1/notifications/{notification_id}/read": {
         parameters: {
             query?: never;
             header?: never;
@@ -822,14 +944,14 @@ export interface paths {
          * Mark Notification Read
          * @description Mark a notification as read.
          */
-        post: operations["mark_notification_read_notifications__notification_id__read_post"];
+        post: operations["mark_notification_read_v1_notifications__notification_id__read_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notifications/{notification_id}/dismiss": {
+    "/v1/notifications/{notification_id}/dismiss": {
         parameters: {
             query?: never;
             header?: never;
@@ -842,14 +964,14 @@ export interface paths {
          * Dismiss Notification
          * @description Dismiss a notification without marking it read.
          */
-        post: operations["dismiss_notification_notifications__notification_id__dismiss_post"];
+        post: operations["dismiss_notification_v1_notifications__notification_id__dismiss_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notifications/users/{user_id}/read-all": {
+    "/v1/notifications/users/{user_id}/read-all": {
         parameters: {
             query?: never;
             header?: never;
@@ -863,14 +985,14 @@ export interface paths {
          * @description Mark all notifications as read for a user.
          *     Returns count of updated notifications.
          */
-        post: operations["mark_all_notifications_read_notifications_users__user_id__read_all_post"];
+        post: operations["mark_all_notifications_read_v1_notifications_users__user_id__read_all_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notifications/{notification_id}": {
+    "/v1/notifications/{notification_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -884,13 +1006,13 @@ export interface paths {
          * Delete Notification
          * @description Delete a notification.
          */
-        delete: operations["delete_notification_notifications__notification_id__delete"];
+        delete: operations["delete_notification_v1_notifications__notification_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/memories/search": {
+    "/v1/memories/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -904,7 +1026,7 @@ export interface paths {
          *     memories are only searchable via this dedicated endpoint and are NOT
          *     included in the global /search results.
          */
-        get: operations["search_memories_memories_search_get"];
+        get: operations["search_memories_v1_memories_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -913,7 +1035,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/memories": {
+    "/v1/memories": {
         parameters: {
             query?: never;
             header?: never;
@@ -924,24 +1046,24 @@ export interface paths {
          * List Memories
          * @description list memories for a user.
          */
-        get: operations["list_memories_memories_get"];
+        get: operations["list_memories_v1_memories_get"];
         put?: never;
         /**
          * Create Memory
          * @description capture a new memory.
          */
-        post: operations["create_memory_memories_post"];
+        post: operations["create_memory_v1_memories_post"];
         /**
          * Delete All Memories
          * @description delete all memories for the current user.
          */
-        delete: operations["delete_all_memories_memories_delete"];
+        delete: operations["delete_all_memories_v1_memories_delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/memories/{memory_id}": {
+    "/v1/memories/{memory_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -952,24 +1074,24 @@ export interface paths {
          * Get Memory
          * @description fetch a single memory.
          */
-        get: operations["get_memory_memories__memory_id__get"];
+        get: operations["get_memory_v1_memories__memory_id__get"];
         /**
          * Update Memory
          * @description update a memory.
          */
-        put: operations["update_memory_memories__memory_id__put"];
+        put: operations["update_memory_v1_memories__memory_id__put"];
         post?: never;
         /**
          * Delete Memory
          * @description delete a memory.
          */
-        delete: operations["delete_memory_memories__memory_id__delete"];
+        delete: operations["delete_memory_v1_memories__memory_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/memories/revectorize": {
+    "/v1/memories/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -982,14 +1104,14 @@ export interface paths {
          * Revectorize Memories
          * @description vectorize all memories. admin only.
          */
-        post: operations["revectorize_memories_memories_revectorize_post"];
+        post: operations["revectorize_memories_v1_memories_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notes": {
+    "/v1/notes": {
         parameters: {
             query?: never;
             header?: never;
@@ -1000,20 +1122,20 @@ export interface paths {
          * List Notes
          * @description list notes for a user.
          */
-        get: operations["list_notes_notes_get"];
+        get: operations["list_notes_v1_notes_get"];
         put?: never;
         /**
          * Create Note
          * @description create a new note.
          */
-        post: operations["create_note_notes_post"];
+        post: operations["create_note_v1_notes_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notes/search": {
+    "/v1/notes/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -1024,7 +1146,7 @@ export interface paths {
          * Search Notes
          * @description search notes with cursor-based pagination.
          */
-        get: operations["search_notes_notes_search_get"];
+        get: operations["search_notes_v1_notes_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1033,7 +1155,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/notes/revectorize": {
+    "/v1/notes/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -1046,14 +1168,14 @@ export interface paths {
          * Revectorize Notes
          * @description vectorize all notes into qdrant. admin only.
          */
-        post: operations["revectorize_notes_notes_revectorize_post"];
+        post: operations["revectorize_notes_v1_notes_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notes/{note_id}": {
+    "/v1/notes/{note_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1064,24 +1186,24 @@ export interface paths {
          * Get Note
          * @description fetch a single note.
          */
-        get: operations["get_note_notes__note_id__get"];
+        get: operations["get_note_v1_notes__note_id__get"];
         /**
          * Update Note
          * @description update a note.
          */
-        put: operations["update_note_notes__note_id__put"];
+        put: operations["update_note_v1_notes__note_id__put"];
         post?: never;
         /**
          * Delete Note
          * @description delete a note.
          */
-        delete: operations["delete_note_notes__note_id__delete"];
+        delete: operations["delete_note_v1_notes__note_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notes/{note_id}/enhance": {
+    "/v1/notes/{note_id}/enhance": {
         parameters: {
             query?: never;
             header?: never;
@@ -1094,14 +1216,14 @@ export interface paths {
          * Enhance Note
          * @description enhance a note using AI. stub - returns the note unchanged until implemented.
          */
-        post: operations["enhance_note_notes__note_id__enhance_post"];
+        post: operations["enhance_note_v1_notes__note_id__enhance_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/groups": {
+    "/v1/groups": {
         parameters: {
             query?: never;
             header?: never;
@@ -1112,20 +1234,20 @@ export interface paths {
          * Read Groups
          * @description list groups. optionally filter by member user_id.
          */
-        get: operations["read_groups_groups_get"];
+        get: operations["read_groups_v1_groups_get"];
         put?: never;
         /**
          * Create Group
          * @description create a new group. the caller becomes the owner.
          */
-        post: operations["create_group_groups_post"];
+        post: operations["create_group_v1_groups_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/groups/{group_id}": {
+    "/v1/groups/{group_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1136,24 +1258,24 @@ export interface paths {
          * Read Group
          * @description get a group by id.
          */
-        get: operations["read_group_groups__group_id__get"];
+        get: operations["read_group_v1_groups__group_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Group
          * @description delete a group.
          */
-        delete: operations["delete_group_groups__group_id__delete"];
+        delete: operations["delete_group_v1_groups__group_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Group
          * @description update an existing group.
          */
-        patch: operations["update_group_groups__group_id__patch"];
+        patch: operations["update_group_v1_groups__group_id__patch"];
         trace?: never;
     };
-    "/groups/{group_id}/members": {
+    "/v1/groups/{group_id}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -1166,14 +1288,14 @@ export interface paths {
          * Add Member
          * @description add a user to a group.
          */
-        post: operations["add_member_groups__group_id__members_post"];
+        post: operations["add_member_v1_groups__group_id__members_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/groups/{group_id}/members/{user_id}": {
+    "/v1/groups/{group_id}/members/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1187,13 +1309,13 @@ export interface paths {
          * Remove Member
          * @description remove a user from a group.
          */
-        delete: operations["remove_member_groups__group_id__members__user_id__delete"];
+        delete: operations["remove_member_v1_groups__group_id__members__user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/groups/{group_id}/access-rules": {
+    "/v1/groups/{group_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -1204,12 +1326,12 @@ export interface paths {
          * List Group Access Rules
          * @description list access rules for a group.
          */
-        get: operations["list_group_access_rules_groups__group_id__access_rules_get"];
+        get: operations["list_group_access_rules_v1_groups__group_id__access_rules_get"];
         /**
          * Set Group Access Rules
          * @description replace access rules for a group.
          */
-        put: operations["set_group_access_rules_groups__group_id__access_rules_put"];
+        put: operations["set_group_access_rules_v1_groups__group_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1217,7 +1339,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects": {
+    "/v1/projects": {
         parameters: {
             query?: never;
             header?: never;
@@ -1228,20 +1350,20 @@ export interface paths {
          * List Projects
          * @description list projects accessible by the caller.
          */
-        get: operations["list_projects_projects_get"];
+        get: operations["list_projects_v1_projects_get"];
         put?: never;
         /**
          * Create Project
          * @description create a new project.
          */
-        post: operations["create_project_projects_post"];
+        post: operations["create_project_v1_projects_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/projects/{project_id}": {
+    "/v1/projects/{project_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1252,24 +1374,24 @@ export interface paths {
          * Get Project
          * @description fetch a project by id.
          */
-        get: operations["get_project_projects__project_id__get"];
+        get: operations["get_project_v1_projects__project_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Project
          * @description delete a project.
          */
-        delete: operations["delete_project_projects__project_id__delete"];
+        delete: operations["delete_project_v1_projects__project_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Project
          * @description update a project.
          */
-        patch: operations["update_project_projects__project_id__patch"];
+        patch: operations["update_project_v1_projects__project_id__patch"];
         trace?: never;
     };
-    "/projects/{project_id}/access-rules": {
+    "/v1/projects/{project_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -1280,12 +1402,12 @@ export interface paths {
          * List Project Access Rules
          * @description list access rules for a project.
          */
-        get: operations["list_project_access_rules_projects__project_id__access_rules_get"];
+        get: operations["list_project_access_rules_v1_projects__project_id__access_rules_get"];
         /**
          * Set Project Access Rules
          * @description replace access rules for a project.
          */
-        put: operations["set_project_access_rules_projects__project_id__access_rules_put"];
+        put: operations["set_project_access_rules_v1_projects__project_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1293,7 +1415,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/files": {
+    "/v1/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -1304,20 +1426,20 @@ export interface paths {
          * List Files
          * @description list files accessible by the caller.
          */
-        get: operations["list_files_files_get"];
+        get: operations["list_files_v1_files_get"];
         put?: never;
         /**
          * Create File
          * @description register a new file record (metadata only).
          */
-        post: operations["create_file_files_post"];
+        post: operations["create_file_v1_files_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/files/upload": {
+    "/v1/files/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -1330,14 +1452,14 @@ export interface paths {
          * Upload File
          * @description upload a file (multipart) and create the record.
          */
-        post: operations["upload_file_files_upload_post"];
+        post: operations["upload_file_v1_files_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/files/{file_id}": {
+    "/v1/files/{file_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1348,24 +1470,24 @@ export interface paths {
          * Get File
          * @description fetch a file by id.
          */
-        get: operations["get_file_files__file_id__get"];
+        get: operations["get_file_v1_files__file_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete File
          * @description soft-delete a file.
          */
-        delete: operations["delete_file_files__file_id__delete"];
+        delete: operations["delete_file_v1_files__file_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update File
          * @description update file metadata.
          */
-        patch: operations["update_file_files__file_id__patch"];
+        patch: operations["update_file_v1_files__file_id__patch"];
         trace?: never;
     };
-    "/files/{file_id}/content": {
+    "/v1/files/{file_id}/content": {
         parameters: {
             query?: never;
             header?: never;
@@ -1376,7 +1498,7 @@ export interface paths {
          * Get File Content
          * @description download file content.
          */
-        get: operations["get_file_content_files__file_id__content_get"];
+        get: operations["get_file_content_v1_files__file_id__content_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1385,7 +1507,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/files/{file_id}/url": {
+    "/v1/files/{file_id}/url": {
         parameters: {
             query?: never;
             header?: never;
@@ -1396,7 +1518,7 @@ export interface paths {
          * Get File Url
          * @description get a direct or presigned URL for the file.
          */
-        get: operations["get_file_url_files__file_id__url_get"];
+        get: operations["get_file_url_v1_files__file_id__url_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1405,7 +1527,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/files/{file_id}/access-rules": {
+    "/v1/files/{file_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -1416,12 +1538,12 @@ export interface paths {
          * List File Access Rules
          * @description list access rules for a file.
          */
-        get: operations["list_file_access_rules_files__file_id__access_rules_get"];
+        get: operations["list_file_access_rules_v1_files__file_id__access_rules_get"];
         /**
          * Set File Access Rules
          * @description replace access rules for a file.
          */
-        put: operations["set_file_access_rules_files__file_id__access_rules_put"];
+        put: operations["set_file_access_rules_v1_files__file_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1429,7 +1551,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/reminders/lists": {
+    "/v1/reminders/lists": {
         parameters: {
             query?: never;
             header?: never;
@@ -1440,20 +1562,20 @@ export interface paths {
          * List Reminder Lists
          * @description list all reminder lists, optionally with counts.
          */
-        get: operations["list_reminder_lists_reminders_lists_get"];
+        get: operations["list_reminder_lists_v1_reminders_lists_get"];
         put?: never;
         /**
          * Create Reminder List
          * @description create a new reminder list.
          */
-        post: operations["create_reminder_list_reminders_lists_post"];
+        post: operations["create_reminder_list_v1_reminders_lists_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/reminders/lists/{list_id}": {
+    "/v1/reminders/lists/{list_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1464,24 +1586,24 @@ export interface paths {
          * Get Reminder List
          * @description get a reminder list by id.
          */
-        get: operations["get_reminder_list_reminders_lists__list_id__get"];
+        get: operations["get_reminder_list_v1_reminders_lists__list_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Reminder List
          * @description delete a reminder list and all its reminders.
          */
-        delete: operations["delete_reminder_list_reminders_lists__list_id__delete"];
+        delete: operations["delete_reminder_list_v1_reminders_lists__list_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Reminder List
          * @description update a reminder list.
          */
-        patch: operations["update_reminder_list_reminders_lists__list_id__patch"];
+        patch: operations["update_reminder_list_v1_reminders_lists__list_id__patch"];
         trace?: never;
     };
-    "/reminders/lists/{list_id}/counts": {
+    "/v1/reminders/lists/{list_id}/counts": {
         parameters: {
             query?: never;
             header?: never;
@@ -1492,7 +1614,7 @@ export interface paths {
          * Get Reminder List Counts
          * @description get reminder counts for a specific list (or default list if null).
          */
-        get: operations["get_reminder_list_counts_reminders_lists__list_id__counts_get"];
+        get: operations["get_reminder_list_counts_v1_reminders_lists__list_id__counts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1501,7 +1623,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/reminders": {
+    "/v1/reminders": {
         parameters: {
             query?: never;
             header?: never;
@@ -1514,20 +1636,20 @@ export interface paths {
          *
          *     include_subtasks eagerly loads subtasks.
          */
-        get: operations["list_reminders_reminders_get"];
+        get: operations["list_reminders_v1_reminders_get"];
         put?: never;
         /**
          * Create Reminder
          * @description create a new reminder.
          */
-        post: operations["create_reminder_reminders_post"];
+        post: operations["create_reminder_v1_reminders_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/reminders/search": {
+    "/v1/reminders/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -1538,7 +1660,7 @@ export interface paths {
          * Search Reminders
          * @description search reminders with cursor-based pagination.
          */
-        get: operations["search_reminders_reminders_search_get"];
+        get: operations["search_reminders_v1_reminders_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1547,7 +1669,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/reminders/revectorize": {
+    "/v1/reminders/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -1560,14 +1682,14 @@ export interface paths {
          * Revectorize Reminders
          * @description vectorize all reminders into qdrant. admin only.
          */
-        post: operations["revectorize_reminders_reminders_revectorize_post"];
+        post: operations["revectorize_reminders_v1_reminders_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/reminders/{reminder_id}": {
+    "/v1/reminders/{reminder_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1578,24 +1700,24 @@ export interface paths {
          * Get Reminder
          * @description get a reminder by id with subtasks.
          */
-        get: operations["get_reminder_reminders__reminder_id__get"];
+        get: operations["get_reminder_v1_reminders__reminder_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Reminder
          * @description delete a reminder.
          */
-        delete: operations["delete_reminder_reminders__reminder_id__delete"];
+        delete: operations["delete_reminder_v1_reminders__reminder_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Reminder
          * @description update a reminder.
          */
-        patch: operations["update_reminder_reminders__reminder_id__patch"];
+        patch: operations["update_reminder_v1_reminders__reminder_id__patch"];
         trace?: never;
     };
-    "/reminders/{reminder_id}/complete": {
+    "/v1/reminders/{reminder_id}/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -1608,14 +1730,14 @@ export interface paths {
          * Complete Reminder
          * @description mark a reminder as completed, optionally cascading to subtasks.
          */
-        post: operations["complete_reminder_reminders__reminder_id__complete_post"];
+        post: operations["complete_reminder_v1_reminders__reminder_id__complete_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/reminders/{reminder_id}/move": {
+    "/v1/reminders/{reminder_id}/move": {
         parameters: {
             query?: never;
             header?: never;
@@ -1628,14 +1750,14 @@ export interface paths {
          * Move Reminder
          * @description move a reminder to a different list (or default list if null).
          */
-        post: operations["move_reminder_reminders__reminder_id__move_post"];
+        post: operations["move_reminder_v1_reminders__reminder_id__move_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/search/stream": {
+    "/v1/search/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -1649,7 +1771,7 @@ export interface paths {
          *     each result is emitted as an `event: result` as soon as it's found.
          *     the stream ends with an `event: done`.
          */
-        get: operations["search_stream_search_stream_get"];
+        get: operations["search_stream_v1_search_stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1658,7 +1780,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/search": {
+    "/v1/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -1669,7 +1791,7 @@ export interface paths {
          * Search
          * @description non-streaming search across all entity types.
          */
-        get: operations["search_search_get"];
+        get: operations["search_v1_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1678,7 +1800,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/search/revectorize": {
+    "/v1/search/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -1691,14 +1813,14 @@ export interface paths {
          * Revectorize All
          * @description vectorize all searchable resources into qdrant. admin only.
          */
-        post: operations["revectorize_all_search_revectorize_post"];
+        post: operations["revectorize_all_v1_search_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/providers": {
+    "/v1/providers": {
         parameters: {
             query?: never;
             header?: never;
@@ -1709,20 +1831,20 @@ export interface paths {
          * List Providers
          * @description List configured providers.
          */
-        get: operations["list_providers_providers_get"];
+        get: operations["list_providers_v1_providers_get"];
         put?: never;
         /**
          * Create Provider
          * @description Register a provider.
          */
-        post: operations["create_provider_providers_post"];
+        post: operations["create_provider_v1_providers_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/providers/{provider_id}": {
+    "/v1/providers/{provider_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1733,7 +1855,7 @@ export interface paths {
          * Get Provider
          * @description Fetch a provider.
          */
-        get: operations["get_provider_providers__provider_id__get"];
+        get: operations["get_provider_v1_providers__provider_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1743,10 +1865,10 @@ export interface paths {
          * Update Provider
          * @description Update provider fields.
          */
-        patch: operations["update_provider_providers__provider_id__patch"];
+        patch: operations["update_provider_v1_providers__provider_id__patch"];
         trace?: never;
     };
-    "/models": {
+    "/v1/models": {
         parameters: {
             query?: never;
             header?: never;
@@ -1757,20 +1879,20 @@ export interface paths {
          * List Models
          * @description List models with optional provider filter.
          */
-        get: operations["list_models_models_get"];
+        get: operations["list_models_v1_models_get"];
         put?: never;
         /**
          * Create Model
          * @description Register a model for a provider.
          */
-        post: operations["create_model_models_post"];
+        post: operations["create_model_v1_models_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/models/{model_id}": {
+    "/v1/models/{model_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1781,24 +1903,24 @@ export interface paths {
          * Get Model
          * @description Fetch a single model.
          */
-        get: operations["get_model_models__model_id__get"];
+        get: operations["get_model_v1_models__model_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Model
          * @description Delete a model.
          */
-        delete: operations["delete_model_models__model_id__delete"];
+        delete: operations["delete_model_v1_models__model_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Model
          * @description Update a model.
          */
-        patch: operations["update_model_models__model_id__patch"];
+        patch: operations["update_model_v1_models__model_id__patch"];
         trace?: never;
     };
-    "/agents": {
+    "/v1/agents": {
         parameters: {
             query?: never;
             header?: never;
@@ -1809,20 +1931,20 @@ export interface paths {
          * List Agents
          * @description List all agents visible to the caller.
          */
-        get: operations["list_agents_agents_get"];
+        get: operations["list_agents_v1_agents_get"];
         put?: never;
         /**
          * Create Agent
          * @description Register a new agent.
          */
-        post: operations["create_agent_agents_post"];
+        post: operations["create_agent_v1_agents_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/agents/{agent_id}": {
+    "/v1/agents/{agent_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1833,24 +1955,24 @@ export interface paths {
          * Get Agent
          * @description Fetch an agent.
          */
-        get: operations["get_agent_agents__agent_id__get"];
+        get: operations["get_agent_v1_agents__agent_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Agent
          * @description Delete an agent.
          */
-        delete: operations["delete_agent_agents__agent_id__delete"];
+        delete: operations["delete_agent_v1_agents__agent_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Agent
          * @description Update an agent.
          */
-        patch: operations["update_agent_agents__agent_id__patch"];
+        patch: operations["update_agent_v1_agents__agent_id__patch"];
         trace?: never;
     };
-    "/agents/{agent_id}/access-rules": {
+    "/v1/agents/{agent_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -1864,14 +1986,14 @@ export interface paths {
          *     requires agents:manage permission (not resource-level admin) because
          *     agents are admin-managed resources without individual owners.
          */
-        get: operations["list_agent_access_rules_agents__agent_id__access_rules_get"];
+        get: operations["list_agent_access_rules_v1_agents__agent_id__access_rules_get"];
         /**
          * Set Agent Access Rules
          * @description replace access rules for an agent.
          *
          *     requires agents:manage permission.
          */
-        put: operations["set_agent_access_rules_agents__agent_id__access_rules_put"];
+        put: operations["set_agent_access_rules_v1_agents__agent_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1879,7 +2001,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/roles": {
+    "/v1/roles": {
         parameters: {
             query?: never;
             header?: never;
@@ -1890,20 +2012,20 @@ export interface paths {
          * Read Roles
          * @description list all roles. optionally filter by user_id.
          */
-        get: operations["read_roles_roles_get"];
+        get: operations["read_roles_v1_roles_get"];
         put?: never;
         /**
          * Create Role
          * @description create a new role.
          */
-        post: operations["create_role_roles_post"];
+        post: operations["create_role_v1_roles_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/roles/{role_id}": {
+    "/v1/roles/{role_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1914,24 +2036,24 @@ export interface paths {
          * Read Role
          * @description get a role by id.
          */
-        get: operations["read_role_roles__role_id__get"];
+        get: operations["read_role_v1_roles__role_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Role
          * @description delete a role.
          */
-        delete: operations["delete_role_roles__role_id__delete"];
+        delete: operations["delete_role_v1_roles__role_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Role
          * @description update an existing role.
          */
-        patch: operations["update_role_roles__role_id__patch"];
+        patch: operations["update_role_v1_roles__role_id__patch"];
         trace?: never;
     };
-    "/roles/{role_id}/members": {
+    "/v1/roles/{role_id}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -1942,12 +2064,12 @@ export interface paths {
          * Read Role Members
          * @description list users assigned to a role.
          */
-        get: operations["read_role_members_roles__role_id__members_get"];
+        get: operations["read_role_members_v1_roles__role_id__members_get"];
         /**
          * Set Role Members
          * @description replace the entire member list for a role with the given user IDs.
          */
-        put: operations["set_role_members_roles__role_id__members_put"];
+        put: operations["set_role_members_v1_roles__role_id__members_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1955,7 +2077,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/prompts": {
+    "/v1/prompts": {
         parameters: {
             query?: never;
             header?: never;
@@ -1966,20 +2088,20 @@ export interface paths {
          * List Prompts
          * @description list prompts.
          */
-        get: operations["list_prompts_prompts_get"];
+        get: operations["list_prompts_v1_prompts_get"];
         put?: never;
         /**
          * Create Prompt
          * @description create a prompt.
          */
-        post: operations["create_prompt_prompts_post"];
+        post: operations["create_prompt_v1_prompts_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/prompts/{prompt_id}": {
+    "/v1/prompts/{prompt_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1990,24 +2112,24 @@ export interface paths {
          * Get Prompt
          * @description fetch a prompt.
          */
-        get: operations["get_prompt_prompts__prompt_id__get"];
+        get: operations["get_prompt_v1_prompts__prompt_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Prompt
          * @description delete a prompt.
          */
-        delete: operations["delete_prompt_prompts__prompt_id__delete"];
+        delete: operations["delete_prompt_v1_prompts__prompt_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Prompt
          * @description update a prompt.
          */
-        patch: operations["update_prompt_prompts__prompt_id__patch"];
+        patch: operations["update_prompt_v1_prompts__prompt_id__patch"];
         trace?: never;
     };
-    "/openai/chat/completions": {
+    "/v1/openai/chat/completions": {
         parameters: {
             query?: never;
             header?: never;
@@ -2017,14 +2139,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Chat Completions */
-        post: operations["chat_completions_openai_chat_completions_post"];
+        post: operations["chat_completions_v1_openai_chat_completions_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/plugins/available": {
+    "/v1/plugins/available": {
         parameters: {
             query?: never;
             header?: never;
@@ -2038,7 +2160,7 @@ export interface paths {
          *     native plugins are built into the system and cannot be modified.
          *     use the plugin_type query parameter to filter by type.
          */
-        get: operations["list_available_plugins_plugins_available_get"];
+        get: operations["list_available_plugins_v1_plugins_available_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2047,7 +2169,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plugins/available/{plugin_id}": {
+    "/v1/plugins/available/{plugin_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2058,7 +2180,7 @@ export interface paths {
          * Get Available Plugin
          * @description get details about a specific available plugin (native or user-defined).
          */
-        get: operations["get_available_plugin_plugins_available__plugin_id__get"];
+        get: operations["get_available_plugin_v1_plugins_available__plugin_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2067,7 +2189,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plugins": {
+    "/v1/plugins": {
         parameters: {
             query?: never;
             header?: never;
@@ -2078,20 +2200,20 @@ export interface paths {
          * List Plugins
          * @description list all plugin records.
          */
-        get: operations["list_plugins_plugins_get"];
+        get: operations["list_plugins_v1_plugins_get"];
         put?: never;
         /**
          * Create Plugin
          * @description create a plugin record.
          */
-        post: operations["create_plugin_plugins_post"];
+        post: operations["create_plugin_v1_plugins_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/plugins/{plugin_id}": {
+    "/v1/plugins/{plugin_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2102,24 +2224,24 @@ export interface paths {
          * Get Plugin
          * @description fetch a plugin record by id.
          */
-        get: operations["get_plugin_plugins__plugin_id__get"];
+        get: operations["get_plugin_v1_plugins__plugin_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Plugin
          * @description delete a plugin record.
          */
-        delete: operations["delete_plugin_plugins__plugin_id__delete"];
+        delete: operations["delete_plugin_v1_plugins__plugin_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Plugin
          * @description update plugin fields.
          */
-        patch: operations["update_plugin_plugins__plugin_id__patch"];
+        patch: operations["update_plugin_v1_plugins__plugin_id__patch"];
         trace?: never;
     };
-    "/settings": {
+    "/v1/settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -2130,7 +2252,7 @@ export interface paths {
          * Get Settings
          * @description get all settings.
          */
-        get: operations["get_settings_settings_get"];
+        get: operations["get_settings_v1_settings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2140,10 +2262,10 @@ export interface paths {
          * Update Settings
          * @description partial update settings (admin only).
          */
-        patch: operations["update_settings_settings_patch"];
+        patch: operations["update_settings_v1_settings_patch"];
         trace?: never;
     };
-    "/vectorstores/collections": {
+    "/v1/vectorstores/collections": {
         parameters: {
             query?: never;
             header?: never;
@@ -2154,20 +2276,20 @@ export interface paths {
          * List Collections
          * @description list all vectorstore collections. admin only.
          */
-        get: operations["list_collections_vectorstores_collections_get"];
+        get: operations["list_collections_v1_vectorstores_collections_get"];
         put?: never;
         post?: never;
         /**
          * Wipe All Collections
          * @description delete ALL collections. admin only. use with caution.
          */
-        delete: operations["wipe_all_collections_vectorstores_collections_delete"];
+        delete: operations["wipe_all_collections_v1_vectorstores_collections_delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/vectorstores/collections/{name}": {
+    "/v1/vectorstores/collections/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2178,20 +2300,20 @@ export interface paths {
          * Get Collection
          * @description get detailed info for a specific collection. admin only.
          */
-        get: operations["get_collection_vectorstores_collections__name__get"];
+        get: operations["get_collection_v1_vectorstores_collections__name__get"];
         put?: never;
         post?: never;
         /**
          * Delete Collection
          * @description delete a collection. admin only.
          */
-        delete: operations["delete_collection_vectorstores_collections__name__delete"];
+        delete: operations["delete_collection_v1_vectorstores_collections__name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/vectorstores/search": {
+    "/v1/vectorstores/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -2206,14 +2328,14 @@ export interface paths {
          *
          *     returns raw chunk results with scores for diagnostics.
          */
-        post: operations["search_collection_vectorstores_search_post"];
+        post: operations["search_collection_v1_vectorstores_search_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/vectorstores/revectorize": {
+    "/v1/vectorstores/revectorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -2226,7 +2348,7 @@ export interface paths {
          * Revectorize All
          * @description vectorize all searchable resources. admin only.
          */
-        post: operations["revectorize_all_vectorstores_revectorize_post"];
+        post: operations["revectorize_all_v1_vectorstores_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3039,8 +3161,8 @@ export interface components {
              */
             enabled?: boolean | null;
         };
-        /** Body_login_access_token_auth_login_access_token_post */
-        Body_login_access_token_auth_login_access_token_post: {
+        /** Body_login_access_token_v1_auth_login_access_token_post */
+        Body_login_access_token_v1_auth_login_access_token_post: {
             /** Grant Type */
             grant_type?: string | null;
             /** Username */
@@ -3063,8 +3185,8 @@ export interface components {
              */
             client_secret?: string | null;
         };
-        /** Body_upload_file_files_upload_post */
-        Body_upload_file_files_upload_post: {
+        /** Body_upload_file_v1_files_upload_post */
+        Body_upload_file_v1_files_upload_post: {
             /** File */
             file: string;
             /** Project Id */
@@ -3077,7 +3199,7 @@ export interface components {
             /**
              * Site Name
              * @description site name
-             * @default nokodo
+             * @default OS1
              */
             site_name: string;
             /**
@@ -5449,7 +5571,7 @@ export interface components {
         };
         /**
          * Provider
-         * @description Response schema.
+         * @description response schema.
          */
         Provider: {
             /**
@@ -5473,8 +5595,6 @@ export interface components {
             base_url?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
-            /** Model Prefix */
-            model_prefix?: string | null;
             /** Additional Headers */
             additional_headers?: {
                 [key: string]: string;
@@ -5493,7 +5613,7 @@ export interface components {
         };
         /**
          * ProviderCreate
-         * @description Payload to create a provider.
+         * @description payload to create a provider.
          */
         ProviderCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -5507,8 +5627,6 @@ export interface components {
             base_url?: string | null;
             /** Encrypted Api Key */
             encrypted_api_key?: string | null;
-            /** Model Prefix */
-            model_prefix?: string | null;
             /** Additional Headers */
             additional_headers?: {
                 [key: string]: string;
@@ -5539,7 +5657,7 @@ export interface components {
         ProviderType: "local" | "external";
         /**
          * ProviderUpdate
-         * @description Partial provider update payload.
+         * @description partial provider update payload.
          */
         ProviderUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
@@ -7019,6 +7137,37 @@ export interface components {
             model_id?: string | null;
         };
         /**
+         * ThreadParticipant
+         * @description response schema for a thread participant.
+         */
+        ThreadParticipant: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Membership Role */
+            membership_role?: string | null;
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /** Left At */
+            left_at?: string | null;
+            /** Last Read Message Id */
+            last_read_message_id?: string | null;
+        };
+        /**
          * ThreadSwitchRequest
          * @description Payload to switch a thread's active branch.
          */
@@ -7038,6 +7187,19 @@ export interface components {
             ok: boolean;
             /** Current Message Id */
             current_message_id?: string | null;
+        };
+        /**
+         * ThreadUnreadCount
+         * @description unread count for a single thread.
+         */
+        ThreadUnreadCount: {
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /** Unread Count */
+            unread_count: number;
         };
         /**
          * ThreadUpdate
@@ -7656,7 +7818,91 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    login_access_token_auth_login_access_token_post: {
+    root__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    health_check_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    get_system_status_system_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    get_manifest_system_manifest_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    login_access_token_v1_auth_login_access_token_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -7665,7 +7911,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/x-www-form-urlencoded": components["schemas"]["Body_login_access_token_auth_login_access_token_post"];
+                "application/x-www-form-urlencoded": components["schemas"]["Body_login_access_token_v1_auth_login_access_token_post"];
             };
         };
         responses: {
@@ -7752,7 +7998,7 @@ export interface operations {
             };
         };
     };
-    refresh_access_token_auth_refresh_post: {
+    refresh_access_token_v1_auth_refresh_post: {
         parameters: {
             query?: never;
             header?: {
@@ -7848,7 +8094,7 @@ export interface operations {
             };
         };
     };
-    change_password_auth_change_password_post: {
+    change_password_v1_auth_change_password_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -7942,7 +8188,7 @@ export interface operations {
             };
         };
     };
-    logout_auth_logout_post: {
+    logout_v1_auth_logout_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8034,7 +8280,7 @@ export interface operations {
             };
         };
     };
-    list_friends_users__user_id__friends_get: {
+    list_friends_v1_users__user_id__friends_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -8128,7 +8374,7 @@ export interface operations {
             };
         };
     };
-    list_incoming_requests_users__user_id__friends_requests_incoming_get: {
+    list_incoming_requests_v1_users__user_id__friends_requests_incoming_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -8222,7 +8468,7 @@ export interface operations {
             };
         };
     };
-    list_outgoing_requests_users__user_id__friends_requests_outgoing_get: {
+    list_outgoing_requests_v1_users__user_id__friends_requests_outgoing_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -8316,7 +8562,7 @@ export interface operations {
             };
         };
     };
-    send_friend_request_users__user_id__friends_requests_post: {
+    send_friend_request_v1_users__user_id__friends_requests_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8416,7 +8662,7 @@ export interface operations {
             };
         };
     };
-    accept_friend_request_users__user_id__friends_requests__friendship_id__accept_post: {
+    accept_friend_request_v1_users__user_id__friends_requests__friendship_id__accept_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8513,7 +8759,7 @@ export interface operations {
             };
         };
     };
-    decline_friend_request_users__user_id__friends_requests__friendship_id__decline_post: {
+    decline_friend_request_v1_users__user_id__friends_requests__friendship_id__decline_post: {
         parameters: {
             query?: never;
             header?: {
@@ -8610,7 +8856,7 @@ export interface operations {
             };
         };
     };
-    remove_friend_users__user_id__friends__friend_user_id__delete: {
+    remove_friend_v1_users__user_id__friends__friend_user_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -8705,7 +8951,7 @@ export interface operations {
             };
         };
     };
-    read_users_users_get: {
+    read_users_v1_users_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -8802,7 +9048,7 @@ export interface operations {
             };
         };
     };
-    create_user_users_post: {
+    create_user_v1_users_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -8898,7 +9144,7 @@ export interface operations {
             };
         };
     };
-    read_active_user_ids_users_active_get: {
+    read_active_user_ids_v1_users_active_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -8990,7 +9236,7 @@ export interface operations {
             };
         };
     };
-    search_users_users_search_get: {
+    search_users_v1_users_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -9085,7 +9331,7 @@ export interface operations {
             };
         };
     };
-    read_user_users__user_id__get: {
+    read_user_v1_users__user_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -9179,7 +9425,7 @@ export interface operations {
             };
         };
     };
-    update_user_users__user_id__patch: {
+    update_user_v1_users__user_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -9279,7 +9525,7 @@ export interface operations {
             };
         };
     };
-    read_user_permissions_users__user_id__permissions_get: {
+    read_user_permissions_v1_users__user_id__permissions_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -9373,7 +9619,7 @@ export interface operations {
             };
         };
     };
-    list_threads_threads_get: {
+    list_threads_v1_threads_get: {
         parameters: {
             query?: {
                 owner_id?: string | null;
@@ -9473,7 +9719,7 @@ export interface operations {
             };
         };
     };
-    create_thread_threads_post: {
+    create_thread_v1_threads_post: {
         parameters: {
             query?: never;
             header?: {
@@ -9571,7 +9817,7 @@ export interface operations {
             };
         };
     };
-    create_and_run_threads_create_and_run_post: {
+    create_and_run_v1_threads_create_and_run_post: {
         parameters: {
             query?: never;
             header?: {
@@ -9669,7 +9915,7 @@ export interface operations {
             };
         };
     };
-    search_threads_threads_search_get: {
+    search_threads_v1_threads_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -9766,7 +10012,7 @@ export interface operations {
             };
         };
     };
-    revectorize_threads_threads_revectorize_post: {
+    revectorize_threads_v1_threads_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -9860,7 +10106,101 @@ export interface operations {
             };
         };
     };
-    get_thread_threads__thread_id__get: {
+    get_unread_counts_v1_threads_unread_counts_get: {
+        parameters: {
+            query?: {
+                thread_id?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadUnreadCount"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_thread_v1_threads__thread_id__get: {
         parameters: {
             query?: {
                 include_hidden?: boolean;
@@ -9956,7 +10296,7 @@ export interface operations {
             };
         };
     };
-    delete_thread_threads__thread_id__delete: {
+    delete_thread_v1_threads__thread_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -10050,7 +10390,7 @@ export interface operations {
             };
         };
     };
-    update_thread_threads__thread_id__patch: {
+    update_thread_v1_threads__thread_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -10150,7 +10490,7 @@ export interface operations {
             };
         };
     };
-    generate_thread_metadata_threads__thread_id__metadata_generate_post: {
+    generate_thread_metadata_v1_threads__thread_id__metadata_generate_post: {
         parameters: {
             query?: never;
             header?: {
@@ -10250,7 +10590,7 @@ export interface operations {
             };
         };
     };
-    list_messages_threads__thread_id__messages_get: {
+    list_messages_v1_threads__thread_id__messages_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -10351,7 +10691,7 @@ export interface operations {
             };
         };
     };
-    create_message_threads__thread_id__messages_post: {
+    create_message_v1_threads__thread_id__messages_post: {
         parameters: {
             query?: never;
             header?: {
@@ -10451,7 +10791,7 @@ export interface operations {
             };
         };
     };
-    list_events_for_message_ids_threads__thread_id__events_by_message_ids_post: {
+    list_events_for_message_ids_v1_threads__thread_id__events_by_message_ids_post: {
         parameters: {
             query?: {
                 include_hidden?: boolean;
@@ -10551,7 +10891,7 @@ export interface operations {
             };
         };
     };
-    get_current_branch_threads__thread_id__branch_get: {
+    get_current_branch_v1_threads__thread_id__branch_get: {
         parameters: {
             query?: {
                 include_hidden?: boolean;
@@ -10647,7 +10987,7 @@ export interface operations {
             };
         };
     };
-    get_message_tree_threads__thread_id__tree_get: {
+    get_message_tree_v1_threads__thread_id__tree_get: {
         parameters: {
             query?: {
                 include_hidden?: boolean;
@@ -10743,7 +11083,7 @@ export interface operations {
             };
         };
     };
-    delete_user_message_turn_threads__thread_id__messages__message_id__delete: {
+    delete_user_message_turn_v1_threads__thread_id__messages__message_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -10838,7 +11178,7 @@ export interface operations {
             };
         };
     };
-    update_user_message_threads__thread_id__messages__message_id__patch: {
+    update_user_message_v1_threads__thread_id__messages__message_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -10939,7 +11279,7 @@ export interface operations {
             };
         };
     };
-    switch_branch_threads__thread_id__switch_post: {
+    switch_branch_v1_threads__thread_id__switch_post: {
         parameters: {
             query?: never;
             header?: {
@@ -11039,7 +11379,7 @@ export interface operations {
             };
         };
     };
-    list_thread_access_rules_threads__thread_id__access_rules_get: {
+    list_thread_access_rules_v1_threads__thread_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -11133,7 +11473,7 @@ export interface operations {
             };
         };
     };
-    set_thread_access_rules_threads__thread_id__access_rules_put: {
+    set_thread_access_rules_v1_threads__thread_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -11231,7 +11571,7 @@ export interface operations {
             };
         };
     };
-    cancel_run_threads__thread_id__runs__run_id__cancel_post: {
+    cancel_run_v1_threads__thread_id__runs__run_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -11328,7 +11668,103 @@ export interface operations {
             };
         };
     };
-    list_runs_runs_get: {
+    mark_thread_read_v1_threads__thread_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadParticipant"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_runs_v1_runs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -11420,7 +11856,7 @@ export interface operations {
             };
         };
     };
-    create_run_runs_post: {
+    create_run_v1_runs_post: {
         parameters: {
             query?: never;
             header?: {
@@ -11518,7 +11954,7 @@ export interface operations {
             };
         };
     };
-    resume_run_stream_runs__run_id__stream_get: {
+    resume_run_stream_v1_runs__run_id__stream_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -11612,7 +12048,7 @@ export interface operations {
             };
         };
     };
-    list_tasks_tasks_get: {
+    list_tasks_v1_tasks_get: {
         parameters: {
             query?: {
                 user_id?: string | null;
@@ -11711,7 +12147,7 @@ export interface operations {
             };
         };
     };
-    create_task_tasks_post: {
+    create_task_v1_tasks_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -11807,7 +12243,7 @@ export interface operations {
             };
         };
     };
-    update_task_tasks__task_id__patch: {
+    update_task_v1_tasks__task_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -11905,7 +12341,7 @@ export interface operations {
             };
         };
     };
-    list_events_events_get: {
+    list_events_v1_events_get: {
         parameters: {
             query?: {
                 scope?: components["schemas"]["EventScope"] | null;
@@ -12003,7 +12439,7 @@ export interface operations {
             };
         };
     };
-    emit_event_events_post: {
+    emit_event_v1_events_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -12099,7 +12535,7 @@ export interface operations {
             };
         };
     };
-    create_notifications_notifications_post: {
+    create_notifications_v1_notifications_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -12195,7 +12631,7 @@ export interface operations {
             };
         };
     };
-    list_user_notifications_notifications_users__user_id__get: {
+    list_user_notifications_v1_notifications_users__user_id__get: {
         parameters: {
             query?: {
                 only_unread?: boolean;
@@ -12291,7 +12727,7 @@ export interface operations {
             };
         };
     };
-    mark_notification_read_notifications__notification_id__read_post: {
+    mark_notification_read_v1_notifications__notification_id__read_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -12385,7 +12821,7 @@ export interface operations {
             };
         };
     };
-    dismiss_notification_notifications__notification_id__dismiss_post: {
+    dismiss_notification_v1_notifications__notification_id__dismiss_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -12479,7 +12915,7 @@ export interface operations {
             };
         };
     };
-    mark_all_notifications_read_notifications_users__user_id__read_all_post: {
+    mark_all_notifications_read_v1_notifications_users__user_id__read_all_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -12573,7 +13009,7 @@ export interface operations {
             };
         };
     };
-    delete_notification_notifications__notification_id__delete: {
+    delete_notification_v1_notifications__notification_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -12665,7 +13101,7 @@ export interface operations {
             };
         };
     };
-    search_memories_memories_search_get: {
+    search_memories_v1_memories_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -12762,7 +13198,7 @@ export interface operations {
             };
         };
     };
-    list_memories_memories_get: {
+    list_memories_v1_memories_get: {
         parameters: {
             query: {
                 user_id: string;
@@ -12861,7 +13297,7 @@ export interface operations {
             };
         };
     };
-    create_memory_memories_post: {
+    create_memory_v1_memories_post: {
         parameters: {
             query?: never;
             header?: {
@@ -12959,7 +13395,7 @@ export interface operations {
             };
         };
     };
-    delete_all_memories_memories_delete: {
+    delete_all_memories_v1_memories_delete: {
         parameters: {
             query?: never;
             header?: {
@@ -13051,7 +13487,7 @@ export interface operations {
             };
         };
     };
-    get_memory_memories__memory_id__get: {
+    get_memory_v1_memories__memory_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -13145,7 +13581,7 @@ export interface operations {
             };
         };
     };
-    update_memory_memories__memory_id__put: {
+    update_memory_v1_memories__memory_id__put: {
         parameters: {
             query?: never;
             header?: {
@@ -13245,7 +13681,7 @@ export interface operations {
             };
         };
     };
-    delete_memory_memories__memory_id__delete: {
+    delete_memory_v1_memories__memory_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -13339,7 +13775,7 @@ export interface operations {
             };
         };
     };
-    revectorize_memories_memories_revectorize_post: {
+    revectorize_memories_v1_memories_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -13433,7 +13869,7 @@ export interface operations {
             };
         };
     };
-    list_notes_notes_get: {
+    list_notes_v1_notes_get: {
         parameters: {
             query?: {
                 user_id?: string | null;
@@ -13532,7 +13968,7 @@ export interface operations {
             };
         };
     };
-    create_note_notes_post: {
+    create_note_v1_notes_post: {
         parameters: {
             query?: never;
             header?: {
@@ -13630,7 +14066,7 @@ export interface operations {
             };
         };
     };
-    search_notes_notes_search_get: {
+    search_notes_v1_notes_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -13727,7 +14163,7 @@ export interface operations {
             };
         };
     };
-    revectorize_notes_notes_revectorize_post: {
+    revectorize_notes_v1_notes_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -13821,7 +14257,7 @@ export interface operations {
             };
         };
     };
-    get_note_notes__note_id__get: {
+    get_note_v1_notes__note_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -13915,7 +14351,7 @@ export interface operations {
             };
         };
     };
-    update_note_notes__note_id__put: {
+    update_note_v1_notes__note_id__put: {
         parameters: {
             query?: never;
             header?: {
@@ -14015,7 +14451,7 @@ export interface operations {
             };
         };
     };
-    delete_note_notes__note_id__delete: {
+    delete_note_v1_notes__note_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -14109,7 +14545,7 @@ export interface operations {
             };
         };
     };
-    enhance_note_notes__note_id__enhance_post: {
+    enhance_note_v1_notes__note_id__enhance_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -14203,7 +14639,7 @@ export interface operations {
             };
         };
     };
-    read_groups_groups_get: {
+    read_groups_v1_groups_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -14301,7 +14737,7 @@ export interface operations {
             };
         };
     };
-    create_group_groups_post: {
+    create_group_v1_groups_post: {
         parameters: {
             query?: never;
             header?: {
@@ -14399,7 +14835,7 @@ export interface operations {
             };
         };
     };
-    read_group_groups__group_id__get: {
+    read_group_v1_groups__group_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14493,7 +14929,7 @@ export interface operations {
             };
         };
     };
-    delete_group_groups__group_id__delete: {
+    delete_group_v1_groups__group_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -14587,7 +15023,7 @@ export interface operations {
             };
         };
     };
-    update_group_groups__group_id__patch: {
+    update_group_v1_groups__group_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -14687,7 +15123,7 @@ export interface operations {
             };
         };
     };
-    add_member_groups__group_id__members_post: {
+    add_member_v1_groups__group_id__members_post: {
         parameters: {
             query?: never;
             header?: {
@@ -14787,7 +15223,7 @@ export interface operations {
             };
         };
     };
-    remove_member_groups__group_id__members__user_id__delete: {
+    remove_member_v1_groups__group_id__members__user_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -14882,7 +15318,7 @@ export interface operations {
             };
         };
     };
-    list_group_access_rules_groups__group_id__access_rules_get: {
+    list_group_access_rules_v1_groups__group_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14976,7 +15412,7 @@ export interface operations {
             };
         };
     };
-    set_group_access_rules_groups__group_id__access_rules_put: {
+    set_group_access_rules_v1_groups__group_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -15074,7 +15510,7 @@ export interface operations {
             };
         };
     };
-    list_projects_projects_get: {
+    list_projects_v1_projects_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -15171,7 +15607,7 @@ export interface operations {
             };
         };
     };
-    create_project_projects_post: {
+    create_project_v1_projects_post: {
         parameters: {
             query?: never;
             header?: {
@@ -15269,7 +15705,7 @@ export interface operations {
             };
         };
     };
-    get_project_projects__project_id__get: {
+    get_project_v1_projects__project_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -15363,7 +15799,7 @@ export interface operations {
             };
         };
     };
-    delete_project_projects__project_id__delete: {
+    delete_project_v1_projects__project_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -15457,7 +15893,7 @@ export interface operations {
             };
         };
     };
-    update_project_projects__project_id__patch: {
+    update_project_v1_projects__project_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -15557,7 +15993,7 @@ export interface operations {
             };
         };
     };
-    list_project_access_rules_projects__project_id__access_rules_get: {
+    list_project_access_rules_v1_projects__project_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -15651,7 +16087,7 @@ export interface operations {
             };
         };
     };
-    set_project_access_rules_projects__project_id__access_rules_put: {
+    set_project_access_rules_v1_projects__project_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -15749,7 +16185,7 @@ export interface operations {
             };
         };
     };
-    list_files_files_get: {
+    list_files_v1_files_get: {
         parameters: {
             query?: {
                 project_id?: string | null;
@@ -15847,7 +16283,7 @@ export interface operations {
             };
         };
     };
-    create_file_files_post: {
+    create_file_v1_files_post: {
         parameters: {
             query?: never;
             header?: {
@@ -15945,7 +16381,7 @@ export interface operations {
             };
         };
     };
-    upload_file_files_upload_post: {
+    upload_file_v1_files_upload_post: {
         parameters: {
             query?: never;
             header?: {
@@ -15956,7 +16392,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_upload_file_files_upload_post"];
+                "multipart/form-data": components["schemas"]["Body_upload_file_v1_files_upload_post"];
             };
         };
         responses: {
@@ -16043,7 +16479,7 @@ export interface operations {
             };
         };
     };
-    get_file_files__file_id__get: {
+    get_file_v1_files__file_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16137,7 +16573,7 @@ export interface operations {
             };
         };
     };
-    delete_file_files__file_id__delete: {
+    delete_file_v1_files__file_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -16231,7 +16667,7 @@ export interface operations {
             };
         };
     };
-    update_file_files__file_id__patch: {
+    update_file_v1_files__file_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -16331,7 +16767,7 @@ export interface operations {
             };
         };
     };
-    get_file_content_files__file_id__content_get: {
+    get_file_content_v1_files__file_id__content_get: {
         parameters: {
             query?: {
                 /** @description force browser download instead of inline display */
@@ -16428,7 +16864,7 @@ export interface operations {
             };
         };
     };
-    get_file_url_files__file_id__url_get: {
+    get_file_url_v1_files__file_id__url_get: {
         parameters: {
             query?: {
                 expires_in?: number | null;
@@ -16526,7 +16962,7 @@ export interface operations {
             };
         };
     };
-    list_file_access_rules_files__file_id__access_rules_get: {
+    list_file_access_rules_v1_files__file_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16620,7 +17056,7 @@ export interface operations {
             };
         };
     };
-    set_file_access_rules_files__file_id__access_rules_put: {
+    set_file_access_rules_v1_files__file_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -16718,7 +17154,7 @@ export interface operations {
             };
         };
     };
-    list_reminder_lists_reminders_lists_get: {
+    list_reminder_lists_v1_reminders_lists_get: {
         parameters: {
             query?: {
                 include_counts?: boolean;
@@ -16816,7 +17252,7 @@ export interface operations {
             };
         };
     };
-    create_reminder_list_reminders_lists_post: {
+    create_reminder_list_v1_reminders_lists_post: {
         parameters: {
             query?: never;
             header?: {
@@ -16914,7 +17350,7 @@ export interface operations {
             };
         };
     };
-    get_reminder_list_reminders_lists__list_id__get: {
+    get_reminder_list_v1_reminders_lists__list_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -17008,7 +17444,7 @@ export interface operations {
             };
         };
     };
-    delete_reminder_list_reminders_lists__list_id__delete: {
+    delete_reminder_list_v1_reminders_lists__list_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -17102,7 +17538,7 @@ export interface operations {
             };
         };
     };
-    update_reminder_list_reminders_lists__list_id__patch: {
+    update_reminder_list_v1_reminders_lists__list_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -17202,7 +17638,7 @@ export interface operations {
             };
         };
     };
-    get_reminder_list_counts_reminders_lists__list_id__counts_get: {
+    get_reminder_list_counts_v1_reminders_lists__list_id__counts_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -17298,7 +17734,7 @@ export interface operations {
             };
         };
     };
-    list_reminders_reminders_get: {
+    list_reminders_v1_reminders_get: {
         parameters: {
             query?: {
                 list_id?: string | null;
@@ -17398,7 +17834,7 @@ export interface operations {
             };
         };
     };
-    create_reminder_reminders_post: {
+    create_reminder_v1_reminders_post: {
         parameters: {
             query?: never;
             header?: {
@@ -17496,7 +17932,7 @@ export interface operations {
             };
         };
     };
-    search_reminders_reminders_search_get: {
+    search_reminders_v1_reminders_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -17593,7 +18029,7 @@ export interface operations {
             };
         };
     };
-    revectorize_reminders_reminders_revectorize_post: {
+    revectorize_reminders_v1_reminders_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -17687,7 +18123,7 @@ export interface operations {
             };
         };
     };
-    get_reminder_reminders__reminder_id__get: {
+    get_reminder_v1_reminders__reminder_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -17781,7 +18217,7 @@ export interface operations {
             };
         };
     };
-    delete_reminder_reminders__reminder_id__delete: {
+    delete_reminder_v1_reminders__reminder_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -17875,7 +18311,7 @@ export interface operations {
             };
         };
     };
-    update_reminder_reminders__reminder_id__patch: {
+    update_reminder_v1_reminders__reminder_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -17975,7 +18411,7 @@ export interface operations {
             };
         };
     };
-    complete_reminder_reminders__reminder_id__complete_post: {
+    complete_reminder_v1_reminders__reminder_id__complete_post: {
         parameters: {
             query?: {
                 cascade?: boolean;
@@ -18073,7 +18509,7 @@ export interface operations {
             };
         };
     };
-    move_reminder_reminders__reminder_id__move_post: {
+    move_reminder_v1_reminders__reminder_id__move_post: {
         parameters: {
             query?: {
                 target_list_id?: string | null;
@@ -18172,7 +18608,7 @@ export interface operations {
             };
         };
     };
-    search_stream_search_stream_get: {
+    search_stream_v1_search_stream_get: {
         parameters: {
             query: {
                 q: string;
@@ -18269,7 +18705,7 @@ export interface operations {
             };
         };
     };
-    search_search_get: {
+    search_v1_search_get: {
         parameters: {
             query: {
                 q: string;
@@ -18366,7 +18802,7 @@ export interface operations {
             };
         };
     };
-    revectorize_all_search_revectorize_post: {
+    revectorize_all_v1_search_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -18460,7 +18896,7 @@ export interface operations {
             };
         };
     };
-    list_providers_providers_get: {
+    list_providers_v1_providers_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -18552,7 +18988,7 @@ export interface operations {
             };
         };
     };
-    create_provider_providers_post: {
+    create_provider_v1_providers_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -18648,7 +19084,7 @@ export interface operations {
             };
         };
     };
-    get_provider_providers__provider_id__get: {
+    get_provider_v1_providers__provider_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -18742,7 +19178,7 @@ export interface operations {
             };
         };
     };
-    update_provider_providers__provider_id__patch: {
+    update_provider_v1_providers__provider_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -18840,7 +19276,7 @@ export interface operations {
             };
         };
     };
-    list_models_models_get: {
+    list_models_v1_models_get: {
         parameters: {
             query?: {
                 provider_id?: string | null;
@@ -18934,7 +19370,7 @@ export interface operations {
             };
         };
     };
-    create_model_models_post: {
+    create_model_v1_models_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -19030,7 +19466,7 @@ export interface operations {
             };
         };
     };
-    get_model_models__model_id__get: {
+    get_model_v1_models__model_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -19124,7 +19560,7 @@ export interface operations {
             };
         };
     };
-    delete_model_models__model_id__delete: {
+    delete_model_v1_models__model_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -19216,7 +19652,7 @@ export interface operations {
             };
         };
     };
-    update_model_models__model_id__patch: {
+    update_model_v1_models__model_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -19314,7 +19750,7 @@ export interface operations {
             };
         };
     };
-    list_agents_agents_get: {
+    list_agents_v1_agents_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -19406,7 +19842,7 @@ export interface operations {
             };
         };
     };
-    create_agent_agents_post: {
+    create_agent_v1_agents_post: {
         parameters: {
             query?: never;
             header?: {
@@ -19504,7 +19940,7 @@ export interface operations {
             };
         };
     };
-    get_agent_agents__agent_id__get: {
+    get_agent_v1_agents__agent_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -19598,7 +20034,7 @@ export interface operations {
             };
         };
     };
-    delete_agent_agents__agent_id__delete: {
+    delete_agent_v1_agents__agent_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -19692,7 +20128,7 @@ export interface operations {
             };
         };
     };
-    update_agent_agents__agent_id__patch: {
+    update_agent_v1_agents__agent_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -19792,7 +20228,7 @@ export interface operations {
             };
         };
     };
-    list_agent_access_rules_agents__agent_id__access_rules_get: {
+    list_agent_access_rules_v1_agents__agent_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -19886,7 +20322,7 @@ export interface operations {
             };
         };
     };
-    set_agent_access_rules_agents__agent_id__access_rules_put: {
+    set_agent_access_rules_v1_agents__agent_id__access_rules_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -19984,7 +20420,7 @@ export interface operations {
             };
         };
     };
-    read_roles_roles_get: {
+    read_roles_v1_roles_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -20082,7 +20518,7 @@ export interface operations {
             };
         };
     };
-    create_role_roles_post: {
+    create_role_v1_roles_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -20178,7 +20614,7 @@ export interface operations {
             };
         };
     };
-    read_role_roles__role_id__get: {
+    read_role_v1_roles__role_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -20272,7 +20708,7 @@ export interface operations {
             };
         };
     };
-    delete_role_roles__role_id__delete: {
+    delete_role_v1_roles__role_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -20364,7 +20800,7 @@ export interface operations {
             };
         };
     };
-    update_role_roles__role_id__patch: {
+    update_role_v1_roles__role_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -20462,7 +20898,7 @@ export interface operations {
             };
         };
     };
-    read_role_members_roles__role_id__members_get: {
+    read_role_members_v1_roles__role_id__members_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -20559,7 +20995,7 @@ export interface operations {
             };
         };
     };
-    set_role_members_roles__role_id__members_put: {
+    set_role_members_v1_roles__role_id__members_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -20657,7 +21093,7 @@ export interface operations {
             };
         };
     };
-    list_prompts_prompts_get: {
+    list_prompts_v1_prompts_get: {
         parameters: {
             query?: {
                 skip?: number;
@@ -20754,7 +21190,7 @@ export interface operations {
             };
         };
     };
-    create_prompt_prompts_post: {
+    create_prompt_v1_prompts_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -20850,7 +21286,7 @@ export interface operations {
             };
         };
     };
-    get_prompt_prompts__prompt_id__get: {
+    get_prompt_v1_prompts__prompt_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -20944,7 +21380,7 @@ export interface operations {
             };
         };
     };
-    delete_prompt_prompts__prompt_id__delete: {
+    delete_prompt_v1_prompts__prompt_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -21036,7 +21472,7 @@ export interface operations {
             };
         };
     };
-    update_prompt_prompts__prompt_id__patch: {
+    update_prompt_v1_prompts__prompt_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -21134,7 +21570,7 @@ export interface operations {
             };
         };
     };
-    chat_completions_openai_chat_completions_post: {
+    chat_completions_v1_openai_chat_completions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -21230,7 +21666,7 @@ export interface operations {
             };
         };
     };
-    list_available_plugins_plugins_available_get: {
+    list_available_plugins_v1_plugins_available_get: {
         parameters: {
             query?: {
                 plugin_type?: ("tool" | "filter" | "hook") | null;
@@ -21324,7 +21760,7 @@ export interface operations {
             };
         };
     };
-    get_available_plugin_plugins_available__plugin_id__get: {
+    get_available_plugin_v1_plugins_available__plugin_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -21418,7 +21854,7 @@ export interface operations {
             };
         };
     };
-    list_plugins_plugins_get: {
+    list_plugins_v1_plugins_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -21510,7 +21946,7 @@ export interface operations {
             };
         };
     };
-    create_plugin_plugins_post: {
+    create_plugin_v1_plugins_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -21606,7 +22042,7 @@ export interface operations {
             };
         };
     };
-    get_plugin_plugins__plugin_id__get: {
+    get_plugin_v1_plugins__plugin_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -21700,7 +22136,7 @@ export interface operations {
             };
         };
     };
-    delete_plugin_plugins__plugin_id__delete: {
+    delete_plugin_v1_plugins__plugin_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -21792,7 +22228,7 @@ export interface operations {
             };
         };
     };
-    update_plugin_plugins__plugin_id__patch: {
+    update_plugin_v1_plugins__plugin_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -21890,7 +22326,7 @@ export interface operations {
             };
         };
     };
-    get_settings_settings_get: {
+    get_settings_v1_settings_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -21982,7 +22418,7 @@ export interface operations {
             };
         };
     };
-    update_settings_settings_patch: {
+    update_settings_v1_settings_patch: {
         parameters: {
             query?: never;
             header?: {
@@ -22080,7 +22516,7 @@ export interface operations {
             };
         };
     };
-    list_collections_vectorstores_collections_get: {
+    list_collections_v1_vectorstores_collections_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -22174,7 +22610,7 @@ export interface operations {
             };
         };
     };
-    wipe_all_collections_vectorstores_collections_delete: {
+    wipe_all_collections_v1_vectorstores_collections_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -22268,7 +22704,7 @@ export interface operations {
             };
         };
     };
-    get_collection_vectorstores_collections__name__get: {
+    get_collection_v1_vectorstores_collections__name__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -22364,7 +22800,7 @@ export interface operations {
             };
         };
     };
-    delete_collection_vectorstores_collections__name__delete: {
+    delete_collection_v1_vectorstores_collections__name__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -22460,7 +22896,7 @@ export interface operations {
             };
         };
     };
-    search_collection_vectorstores_search_post: {
+    search_collection_v1_vectorstores_search_post: {
         parameters: {
             query: {
                 q: string;
@@ -22559,7 +22995,7 @@ export interface operations {
             };
         };
     };
-    revectorize_all_vectorstores_revectorize_post: {
+    revectorize_all_v1_vectorstores_revectorize_post: {
         parameters: {
             query?: never;
             header?: never;
