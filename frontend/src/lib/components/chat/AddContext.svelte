@@ -196,7 +196,7 @@
 
 						{#if hasInputContext}
 							<!-- input context section -->
-							<div class="px-4 pt-3 pb-2">
+							<div class="max-h-[30dvh] overflow-y-auto px-4 pt-3 pb-2">
 								<div
 									class="text-foreground/45 mb-3 text-[11px] font-semibold tracking-widest"
 								>

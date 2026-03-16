@@ -1,6 +1,6 @@
 import { browser } from '$app/environment'
 
-import { apiClient, BackendUnreachableError } from '$lib/api/client'
+import { api , BackendUnreachableError } from '$lib/api/client'
 import { eventStreamClient } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtEmail, getJwtUserId } from '$lib/auth/jwt'
@@ -58,7 +58,7 @@ class SessionStore {
 
 		this.isLoadingUser = true
 		try {
-			const { data } = await apiClient().GET('/v1/users/{user_id}', {
+			const { data } = await api.GET('/v1/users/{user_id}', {
 				params: { path: { user_id: userId } },
 			})
 			this.currentUser = data ?? null

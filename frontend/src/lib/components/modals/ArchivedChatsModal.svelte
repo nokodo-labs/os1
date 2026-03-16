@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
@@ -72,7 +72,7 @@
 
 		try {
 			const skip = isReset ? 0 : threads.length
-			const { data } = await apiClient().GET('/v1/threads', {
+			const { data } = await api.GET('/v1/threads', {
 				params: {
 					query: {
 						owner_id: userId,
@@ -131,7 +131,7 @@
 	async function unarchiveThread(threadId: string): Promise<void> {
 		unarchivingId = threadId
 		try {
-			const { error } = await apiClient().PATCH('/v1/threads/{thread_id}', {
+			const { error } = await api.PATCH('/v1/threads/{thread_id}', {
 				params: { path: { thread_id: threadId } },
 				body: { is_archived: false },
 			})

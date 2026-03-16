@@ -9,7 +9,7 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
@@ -102,7 +102,7 @@ class GroupsCache {
 		if (this.#inFlight) return this.#inFlight
 
 		this.#inFlight = (async () => {
-			const { data, error } = await apiClient().GET('/v1/groups', {
+			const { data, error } = await api.GET('/v1/groups', {
 				params: { query: { sort_by: 'updated_at', sort_dir: 'desc' } },
 			})
 			if (error || !data) return this.list
@@ -120,13 +120,13 @@ class GroupsCache {
 	// mutations - return optimistic data for caller; WS delivers truth
 
 	async create(params: GroupCreate): Promise<Group | null> {
-		const { data, error } = await apiClient().POST('/v1/groups', { body: params })
+		const { data, error } = await api.POST('/v1/groups', { body: params })
 		if (error || !data) return null
 		return data
 	}
 
 	async update(id: string, params: GroupUpdate): Promise<Group | null> {
-		const { data, error } = await apiClient().PATCH('/v1/groups/{group_id}', {
+		const { data, error } = await api.PATCH('/v1/groups/{group_id}', {
 			params: { path: { group_id: id } },
 			body: params,
 		})
@@ -135,7 +135,7 @@ class GroupsCache {
 	}
 
 	async remove(id: string): Promise<boolean> {
-		const { error } = await apiClient().DELETE('/v1/groups/{group_id}', {
+		const { error } = await api.DELETE('/v1/groups/{group_id}', {
 			params: { path: { group_id: id } },
 		})
 		return !error
@@ -145,7 +145,7 @@ class GroupsCache {
 		groupId: string,
 		member: GroupMembershipCreate
 	): Promise<GroupMembershipResponse | null> {
-		const { data, error } = await apiClient().POST('/v1/groups/{group_id}/members', {
+		const { data, error } = await api.POST('/v1/groups/{group_id}/members', {
 			params: { path: { group_id: groupId } },
 			body: member,
 		})
@@ -154,7 +154,7 @@ class GroupsCache {
 	}
 
 	async removeMember(groupId: string, userId: string): Promise<boolean> {
-		const { error } = await apiClient().DELETE('/v1/groups/{group_id}/members/{user_id}', {
+		const { error } = await api.DELETE('/v1/groups/{group_id}/members/{user_id}', {
 			params: { path: { group_id: groupId, user_id: userId } },
 		})
 		return !error

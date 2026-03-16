@@ -11,10 +11,11 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { showError } from '$lib/stores/notifications.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 // types from API
@@ -358,7 +359,7 @@ class RemindersCache {
 
 		this.#listsInFlight = (async () => {
 			const { sort_by, sort_dir } = this.#parseSortMode()
-			const { data, error } = await apiClient().GET('/v1/reminders/lists', {
+			const { data, error } = await api.GET('/v1/reminders/lists', {
 				params: { query: { include_counts: true, sort_by, sort_dir } },
 			})
 			if (error || !data) return this.lists
@@ -474,7 +475,7 @@ class RemindersCache {
 			}
 			if (listId !== null) query.list_id = listId
 
-			const { data, error } = await apiClient().GET('/v1/reminders', {
+			const { data, error } = await api.GET('/v1/reminders', {
 				params: { query },
 			})
 			if (error || !data) return this.getReminders(listId)
@@ -502,93 +503,226 @@ class RemindersCache {
 	 * create a new reminder list.
 	 * returns the created list for navigation; WS delivers authoritative cache update.
 	 */
-	async createList(params: {
-		name: string
-		icon?: string | null
-		color?: string | null
-	}): Promise<ReminderListWithCounts | null> {
-		const { data, error } = await apiClient().POST('/v1/reminders/lists', {
-			body: {
-				name: params.name,
-				icon: params.icon ?? null,
-				color: params.color ?? null,
-				position: 0,
-			},
-		})
+	async createList(
+		params: {
+			name: string
+			icon?: string | null
+			color?: string | null
+		},
+		options?: { rollback?: boolean }
+	): Promise<ReminderListWithCounts | null> {
+		const doRollback = options?.rollback ?? true
+		// optimistic: add placeholder list immediately
+		const tempId = `temp-${Date.now()}`
+		const placeholder: ReminderListWithCounts = {
+			id: tempId,
+			name: params.name,
+			icon: params.icon ?? null,
+			color: params.color ?? null,
+			position: 0,
+			total_count: 0,
+			pending_count: 0,
+			completed_count: 0,
+		} as ReminderListWithCounts
+		this.#listsCache?.data.set(tempId, placeholder)
 
-		if (error || !data) return null
+		try {
+			const { data, error } = await api.POST('/v1/reminders/lists', {
+				body: {
+					name: params.name,
+					icon: params.icon ?? null,
+					color: params.color ?? null,
+					position: 0,
+				},
+			})
 
-		const created = toListWithCounts(data as ReminderListWithCounts)
-		this.lastVisitedListId = created.id
-		this.lastVisitedPath = `/reminders/lists/${created.id}`
-		return created
+			if (error || !data) {
+				if (doRollback) this.#listsCache?.data.delete(tempId)
+				showError('could not create list')
+				return null
+			}
+
+			// replace placeholder with real list
+			this.#listsCache?.data.delete(tempId)
+			const created = toListWithCounts(data as ReminderListWithCounts)
+			this.#listsCache?.data.set(created.id, created)
+			this.lastVisitedListId = created.id
+			this.lastVisitedPath = `/reminders/lists/${created.id}`
+			return created
+		} catch {
+			if (doRollback) this.#listsCache?.data.delete(tempId)
+			showError('could not create list')
+			return null
+		}
+	}
+
+	/**
+	 * delete a reminder list.
+	 * optimistic removal; WS confirms via reminder_list.deleted event.
+	 */
+	async deleteList(listId: string): Promise<boolean> {
+		const snapshot = this.#listsCache?.data.get(listId)
+		this.#listsCache?.data.delete(listId)
+		this.#remindersCache.delete(listId)
+
+		try {
+			const { error } = await api.DELETE('/v1/reminders/lists/{list_id}', {
+				params: { path: { list_id: listId } },
+			})
+			if (error) {
+				if (snapshot && this.#listsCache) this.#listsCache.data.set(listId, snapshot)
+				showError('could not delete list')
+				return false
+			}
+			return true
+		} catch {
+			if (snapshot && this.#listsCache) this.#listsCache.data.set(listId, snapshot)
+			showError('could not delete list')
+			return false
+		}
 	}
 
 	/**
 	 * create a new reminder.
 	 * returns the created reminder for the caller; WS delivers authoritative cache update.
 	 */
-	async createReminder(params: {
-		title: string
-		listId: string | null
-		description?: string | null
-	}): Promise<ReminderWithSubtasks | null> {
-		const { data, error } = await apiClient().POST('/v1/reminders', {
-			body: {
-				title: params.title,
-				list_id: params.listId,
-				description: params.description,
-				status: 'pending',
-				position: 0,
-			},
-		})
+	async createReminder(
+		params: {
+			title: string
+			listId: string | null
+			description?: string | null
+		},
+		options?: { rollback?: boolean }
+	): Promise<ReminderWithSubtasks | null> {
+		const doRollback = options?.rollback ?? true
+		// optimistic: add placeholder reminder immediately
+		const tempId = `temp-${Date.now()}`
+		const placeholder: ReminderWithSubtasks = {
+			id: tempId,
+			title: params.title,
+			description: params.description ?? null,
+			list_id: params.listId,
+			status: 'pending',
+			position: 0,
+			owner_id: '',
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+			subtasks: [],
+		} as ReminderWithSubtasks
+		const key = this.#listKey(params.listId)
+		const entry = this.#remindersCache.get(key)
+		if (entry) {
+			this.#remindersCache.set(key, {
+				reminders: [...entry.reminders, placeholder],
+				fetchedAt: entry.fetchedAt,
+			})
+		}
+		this.#recomputeCounts(params.listId)
 
-		if (error || !data) return null
+		try {
+			const { data, error } = await api.POST('/v1/reminders', {
+				body: {
+					title: params.title,
+					list_id: params.listId,
+					description: params.description,
+					status: 'pending',
+					position: 0,
+				},
+			})
 
-		return { ...data, subtasks: [] } as ReminderWithSubtasks
+			if (error || !data) {
+				if (doRollback) {
+					this.#removeReminderFromCache(params.listId, tempId)
+					this.#recomputeCounts(params.listId)
+				}
+				showError('could not create reminder')
+				return null
+			}
+
+			// replace placeholder with real reminder
+			const created = { ...data, subtasks: [] } as ReminderWithSubtasks
+			const currentEntry = this.#remindersCache.get(key)
+			if (currentEntry) {
+				this.#remindersCache.set(key, {
+					reminders: currentEntry.reminders.map((r) => (r.id === tempId ? created : r)),
+					fetchedAt: currentEntry.fetchedAt,
+				})
+			}
+
+			return created
+		} catch {
+			if (doRollback) {
+				this.#removeReminderFromCache(params.listId, tempId)
+				this.#recomputeCounts(params.listId)
+			}
+			showError('could not create reminder')
+			return null
+		}
 	}
 
 	/**
 	 * complete a reminder.
 	 * optimistic update; WS delivers authoritative state.
 	 */
-	async completeReminder(reminder: ReminderWithSubtasks): Promise<ReminderWithSubtasks | null> {
+	async completeReminder(
+		reminder: ReminderWithSubtasks,
+		options?: { rollback?: boolean }
+	): Promise<ReminderWithSubtasks | null> {
+		const doRollback = options?.rollback ?? true
 		const previous = this.#findReminderInCache(reminder.list_id, reminder.id) ?? reminder
 		const optimistic: ReminderWithSubtasks = { ...previous, status: 'completed' }
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
-		const { error } = await apiClient().POST('/v1/reminders/{reminder_id}/complete', {
-			params: { path: { reminder_id: reminder.id } },
-		})
+		try {
+			const { error } = await api.POST('/v1/reminders/{reminder_id}/complete', {
+				params: { path: { reminder_id: reminder.id } },
+			})
 
-		if (error) {
-			this.#updateReminderInCache(reminder.list_id, previous)
+			if (error) {
+				if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
+				showError('could not complete reminder')
+				return null
+			}
+
+			return optimistic
+		} catch {
+			if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
+			showError('could not complete reminder')
 			return null
 		}
-
-		return optimistic
 	}
 
 	/**
 	 * uncomplete a reminder (set status back to pending).
 	 * optimistic update; WS delivers authoritative state.
 	 */
-	async uncompleteReminder(reminder: ReminderWithSubtasks): Promise<ReminderWithSubtasks | null> {
+	async uncompleteReminder(
+		reminder: ReminderWithSubtasks,
+		options?: { rollback?: boolean }
+	): Promise<ReminderWithSubtasks | null> {
+		const doRollback = options?.rollback ?? true
 		const previous = this.#findReminderInCache(reminder.list_id, reminder.id) ?? reminder
 		const optimistic: ReminderWithSubtasks = { ...previous, status: 'pending' }
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
-		const { error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
-			params: { path: { reminder_id: reminder.id } },
-			body: { status: 'pending' },
-		})
+		try {
+			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
+				params: { path: { reminder_id: reminder.id } },
+				body: { status: 'pending' },
+			})
 
-		if (error) {
-			this.#updateReminderInCache(reminder.list_id, previous)
+			if (error) {
+				if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
+				showError('could not update reminder')
+				return null
+			}
+
+			return optimistic
+		} catch {
+			if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
+			showError('could not update reminder')
 			return null
 		}
-
-		return optimistic
 	}
 
 	/**
@@ -597,24 +731,45 @@ class RemindersCache {
 	 */
 	async updateReminder(
 		reminder: ReminderWithSubtasks,
-		updates: { title?: string; description?: string | null }
+		updates: { title?: string; description?: string | null },
+		options?: { rollback?: boolean }
 	): Promise<ReminderWithSubtasks | null> {
-		const { error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
-			params: { path: { reminder_id: reminder.id } },
-			body: updates,
-		})
+		const doRollback = options?.rollback ?? true
+		const previous = this.#findReminderInCache(reminder.list_id, reminder.id) ?? reminder
 
-		if (error) return null
+		// optimistic update
+		const optimistic = { ...previous, ...updates } as ReminderWithSubtasks
+		this.#updateReminderInCache(reminder.list_id, optimistic)
 
-		// return optimistic merge for caller; WS delivers authoritative update
-		return { ...reminder, ...updates } as ReminderWithSubtasks
+		try {
+			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
+				params: { path: { reminder_id: reminder.id } },
+				body: updates,
+			})
+
+			if (error) {
+				if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
+				showError('could not update reminder')
+				return null
+			}
+
+			return optimistic
+		} catch {
+			if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
+			showError('could not update reminder')
+			return null
+		}
 	}
 
 	/**
 	 * delete a reminder.
 	 * optimistic removal; WS confirms via refetch.
 	 */
-	async deleteReminder(reminder: ReminderWithSubtasks): Promise<boolean> {
+	async deleteReminder(
+		reminder: ReminderWithSubtasks,
+		options?: { rollback?: boolean }
+	): Promise<boolean> {
+		const doRollback = options?.rollback ?? true
 		// optimistic removal
 		const key = this.#listKey(reminder.list_id ?? null)
 		const existing = this.#remindersCache.get(key)
@@ -627,22 +782,33 @@ class RemindersCache {
 			})
 		}
 
-		const { error } = await apiClient().DELETE('/v1/reminders/{reminder_id}', {
-			params: { path: { reminder_id: reminder.id } },
-		})
+		try {
+			const { error } = await api.DELETE('/v1/reminders/{reminder_id}', {
+				params: { path: { reminder_id: reminder.id } },
+			})
 
-		if (error) {
-			// rollback
-			if (snapshot && existing) {
+			if (error) {
+				if (doRollback && snapshot && existing) {
+					this.#remindersCache.set(key, {
+						reminders: snapshot,
+						fetchedAt: existing.fetchedAt,
+					})
+				}
+				showError('could not delete reminder')
+				return false
+			}
+
+			return true
+		} catch {
+			if (doRollback && snapshot && existing) {
 				this.#remindersCache.set(key, {
 					reminders: snapshot,
 					fetchedAt: existing.fetchedAt,
 				})
 			}
+			showError('could not delete reminder')
 			return false
 		}
-
-		return true
 	}
 
 	/**
@@ -651,8 +817,10 @@ class RemindersCache {
 	 */
 	async moveReminder(
 		reminder: ReminderWithSubtasks,
-		targetListId: string | null
+		targetListId: string | null,
+		options?: { rollback?: boolean }
 	): Promise<ReminderWithSubtasks | null> {
+		const doRollback = options?.rollback ?? true
 		const currentListId = reminder.list_id ?? null
 		if (currentListId === targetListId) return reminder
 
@@ -666,19 +834,30 @@ class RemindersCache {
 		this.#removeReminderFromCache(currentListId, reminder.id)
 		this.#appendReminderToCache(targetListId, optimistic)
 
-		const { error } = await apiClient().PATCH('/v1/reminders/{reminder_id}', {
-			params: { path: { reminder_id: reminder.id } },
-			body: { list_id: targetListId },
-		})
+		try {
+			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
+				params: { path: { reminder_id: reminder.id } },
+				body: { list_id: targetListId },
+			})
 
-		if (error) {
-			// rollback
-			this.#removeReminderFromCache(targetListId, reminder.id)
-			this.#appendReminderToCache(currentListId, previous)
+			if (error) {
+				if (doRollback) {
+					this.#removeReminderFromCache(targetListId, reminder.id)
+					this.#appendReminderToCache(currentListId, previous)
+				}
+				showError('could not move reminder')
+				return null
+			}
+
+			return optimistic
+		} catch {
+			if (doRollback) {
+				this.#removeReminderFromCache(targetListId, reminder.id)
+				this.#appendReminderToCache(currentListId, previous)
+			}
+			showError('could not move reminder')
 			return null
 		}
-
-		return optimistic
 	}
 
 	#updateReminderInCache(listId: string | null | undefined, updated: ReminderWithSubtasks): void {

@@ -79,3 +79,6 @@ export {
 
 // event subscriptions
 export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions'
+
+// thread actions
+export { deleteThread, handleThreadStreamEvent, updateThread } from './threadActions'

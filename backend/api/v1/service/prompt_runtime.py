@@ -447,6 +447,8 @@ def build_prompt_variables(
 		variables.update(
 			{
 				"user_name": None,
+				"user_real_name": None,
+				"user_username": None,
 				"user_email": None,
 				"user_bio": None,
 				"user_gender": None,
@@ -482,7 +484,9 @@ def build_prompt_variables(
 
 	variables.update(
 		{
-			"user_name": user.display_name or user.email.split("@")[0],
+			"user_name": user.display_name or user.username,
+			"user_real_name": user.display_name,
+			"user_username": user.username,
 			"user_email": user.email,
 			"user_bio": _resolve_bio(
 				ai.bio if ai else None,

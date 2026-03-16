@@ -2,7 +2,7 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import { getSystemStatus } from '$lib/api/system'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
@@ -67,7 +67,7 @@
 
 		isSubmitting = true
 		try {
-			const { data, error, response } = await apiClient().POST('/v1/users', {
+			const { data, error, response } = await api.POST('/v1/users', {
 				body: {
 					email: email.trim(),
 					password,

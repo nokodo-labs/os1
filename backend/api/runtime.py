@@ -26,7 +26,7 @@ def configure_psycopg_asyncio_event_loop_policy() -> None:
 
 
 def selector_loop_factory() -> asyncio.AbstractEventLoop:
-	"""uvicorn loop factory that returns a selector-based loop.
+	"""loop factory that returns a selector-based loop.
 
 	this is required on windows because psycopg async is incompatible with
 	proactor-based event loops.

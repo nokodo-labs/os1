@@ -444,7 +444,7 @@ class AISettings(BaseModel):
 
 
 class BrandingSettings(BaseModel):
-	site_name: str = Field(default="nokodo", description="site name")
+	site_name: str = Field(default="OS1", description="site name")
 	app_version: str = settings_field(
 		default="0.1.0",
 		write_locked=True,

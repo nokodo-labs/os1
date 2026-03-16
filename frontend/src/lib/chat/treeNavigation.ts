@@ -2,7 +2,7 @@
  * message tree navigation - branch switching, leaf resolution, run user lookup.
  */
 
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { SvelteSet } from 'svelte/reactivity'
 import type { RunBlock } from './helpers'
 import type { ChatContext } from './types'
@@ -96,7 +96,7 @@ export async function switchBranch(
 	// persist branch selection to backend
 	if (ctx.thread) {
 		try {
-			await apiClient().PATCH('/v1/threads/{thread_id}', {
+			await api.PATCH('/v1/threads/{thread_id}', {
 				params: { path: { thread_id: ctx.thread.id } },
 				body: { current_message_id: newLeaf },
 			})

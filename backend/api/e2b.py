@@ -33,6 +33,7 @@ class ExecutionResult:
 	stderr: str = ""
 	results: list[str] = field(default_factory=list)
 	error: dict[str, str] | None = None
+	inline_images: list[FileEntry] = field(default_factory=list)
 	files: list[FileEntry] = field(default_factory=list)
 	sandbox_id: str = ""
 
@@ -164,7 +165,8 @@ class E2BClient:
 			stderr=stderr,
 			results=results,
 			error=error,
-			files=image_files + new_files,
+			inline_images=image_files,
+			files=new_files,
 			sandbox_id=self._sandbox.sandbox_id,
 		)
 

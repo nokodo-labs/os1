@@ -14,7 +14,7 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { getApiOrigin } from '$lib/api/origin'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
@@ -219,7 +219,7 @@ export const files = {
 
 		isLoading = true
 		inFlight = (async () => {
-			const { data, error } = await apiClient().GET('/v1/files', {
+			const { data, error } = await api.GET('/v1/files', {
 				params: {
 					query: { limit: PAGE_SIZE, skip: 0, sort_by: 'created_at', sort_dir: 'desc' },
 				},
@@ -251,7 +251,7 @@ export const files = {
 		isLoadingMore = true
 		try {
 			const skip = filesMap.size
-			const { data, error } = await apiClient().GET('/v1/files', {
+			const { data, error } = await api.GET('/v1/files', {
 				params: {
 					query: {
 						limit: PAGE_SIZE,
@@ -291,7 +291,7 @@ export const files = {
 			thumbnailUrls.delete(fileId)
 		}
 
-		const { error } = await apiClient().DELETE('/v1/files/{file_id}', {
+		const { error } = await api.DELETE('/v1/files/{file_id}', {
 			params: { path: { file_id: fileId } },
 		})
 
@@ -309,7 +309,7 @@ export const files = {
 		form.append('file', file)
 		const { getAccessToken } = await import('$lib/auth/session.svelte')
 		const token = getAccessToken()
-		const response = await fetch(`${getApiOrigin()}/v1/files`, {
+		const response = await fetch(`${getApiOrigin()}/v1/files/upload`, {
 			method: 'POST',
 			credentials: 'include',
 			headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -327,6 +327,11 @@ export const files = {
 		filesMap.clear()
 		fetchedAt = null
 	},
+
+	/** mark cache stale so next access triggers a refetch (keeps thumbnails). */
+	invalidate(): void {
+		fetchedAt = null
+	},
 }
 
 // --- event stream integration ---
@@ -334,7 +339,7 @@ export const files = {
 let filesUnsub: (() => void) | null = null
 
 async function fetchSingleFile(fileId: string): Promise<ApiFile | null> {
-	const { data, error } = await apiClient().GET('/v1/files/{file_id}', {
+	const { data, error } = await api.GET('/v1/files/{file_id}', {
 		params: { path: { file_id: fileId } },
 	})
 	if (error || !data) return null

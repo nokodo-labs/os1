@@ -247,6 +247,7 @@ export function processDelta(
 				...notifications.toasts,
 				{
 					id: `unknown-sse-${Date.now()}`,
+					type: 'notification' as const,
 					title: 'unknown event',
 					body: `received unrecognized event: ${unknownData.eventType}`,
 					iconUrl: null,

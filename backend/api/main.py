@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,15 +11,18 @@ from api.boot_settings import boot_settings
 from api.constants import API_V1_MOUNT_PATH
 from api.database import init_db
 from api.exceptions import (
+	http_exception_handler,
 	unhandled_exception_handler,
 	validation_exception_handler,
 )
 from api.logging import configure_logging, get_logger
 from api.middleware import (
+	APIVersionHeaderMiddleware,
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
 )
+from api.openapi import DEFAULT_RESPONSES
 from api.routers import system as system_router
 from api.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.settings import settings
@@ -27,7 +30,7 @@ from api.storage import close_all as close_storage
 from api.storage import register as register_storage
 from api.storage.local import LocalStorageBackend
 from api.storage.s3 import S3StorageBackend
-from api.v1.app import v1_app
+from api.v1.router import api_router
 
 
 configure_psycopg_asyncio_event_loop_policy()
@@ -86,6 +89,9 @@ app = FastAPI(
 	title=settings.branding.site_name,
 	version=settings.branding.app_version,
 	lifespan=lifespan,
+	docs_url="/v1/docs",
+	redoc_url="/v1/redoc",
+	openapi_url="/v1/openapi.json",
 )
 
 # middleware stack (executed in reverse order of addition)
@@ -97,6 +103,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # 3. request logging
 app.add_middleware(RequestLoggingMiddleware)
+
+# 2. api version header
+app.add_middleware(APIVersionHeaderMiddleware, version="v1")
 
 # 1. cors (closest to app)
 app.add_middleware(
@@ -112,6 +121,7 @@ app.add_middleware(
 
 # exception handlers
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
@@ -134,9 +144,8 @@ async def health_check() -> dict[str, str]:
 	return {"status": "healthy"}
 
 
-# Non-versioned routes
+# non-versioned routes
 app.include_router(system_router.router)
 
-
-# Mount API v1
-app.mount(API_V1_MOUNT_PATH, v1_app)
+# v1 api routes
+app.include_router(api_router, prefix=API_V1_MOUNT_PATH, responses=DEFAULT_RESPONSES)

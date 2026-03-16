@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, authFetch, getApiBaseUrl, unwrap, type Schemas } from '$lib/api'
+	import { api, getApiBaseUrl, getAuthHeaders, unwrap, type Schemas } from '$lib/api'
 
 	type File = Schemas['File']
 
@@ -60,8 +60,10 @@
 				return
 			}
 			// local storage - fetch content via auth and trigger blob download
-			const res = await authFetch(
-				`${getApiBaseUrl()}/v1/files/${file.id}/content?download=true`
+			const headers = await getAuthHeaders()
+			const res = await fetch(
+				`${getApiBaseUrl()}/v1/files/${file.id}/content?download=true`,
+				{ headers }
 			)
 			if (!res.ok) throw new Error(`server returned ${res.status}`)
 			const blob = await res.blob()

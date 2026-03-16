@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import Camera from '$lib/components/icons/Camera.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
@@ -71,12 +71,12 @@
 	async function fetchProfile() {
 		try {
 			if (isOwnProfile) {
-				const { data: friends } = await apiClient().GET('/v1/users/{user_id}/friends', {
+				const { data: friends } = await api.GET('/v1/users/{user_id}/friends', {
 					params: { path: { user_id: userId } },
 				})
 				friendsCount = Array.isArray(friends) ? friends.length : 0
 			} else {
-				const { data } = await apiClient().GET('/v1/users/{user_id}', {
+				const { data } = await api.GET('/v1/users/{user_id}', {
 					params: { path: { user_id: userId } },
 				})
 				if (data) profileUser = data as Record<string, unknown>
@@ -102,7 +102,7 @@
 	const saveDisplayName = debounce(async (value: string) => {
 		const uid = session.currentUser?.id
 		if (!uid) return
-		const { data: res } = await apiClient().PATCH('/v1/users/{user_id}', {
+		const { data: res } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { display_name: value || null },
 		})
@@ -112,7 +112,7 @@
 	const saveUsername = debounce(async (value: string) => {
 		const uid = session.currentUser?.id
 		if (!uid) return
-		const { data: res } = await apiClient().PATCH('/v1/users/{user_id}', {
+		const { data: res } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { username: value || null },
 		})
@@ -122,7 +122,7 @@
 	const saveBio = debounce(async (value: string) => {
 		const uid = session.currentUser?.id
 		if (!uid) return
-		const { data: res } = await apiClient().PATCH('/v1/users/{user_id}', {
+		const { data: res } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { bio: value || null },
 		})

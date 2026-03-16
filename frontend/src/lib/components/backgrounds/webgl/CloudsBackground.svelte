@@ -64,13 +64,15 @@
 		vantaEffect?.destroy?.()
 		vantaEffect = null
 
+		const el = containerRef
 		void (async () => {
 			const vanta = await ensureVanta('/backgrounds/vanta.clouds.min.js')
 			const createClouds = vanta.CLOUDS
 			if (!createClouds) throw new Error('vanta clouds is unavailable')
+			if (!el || token !== initToken) return
 
 			const options: Record<string, unknown> = {
-				el: containerRef,
+				el: el,
 				mouseControls,
 				touchControls,
 				gyroControls,

@@ -200,7 +200,7 @@
 		pendingApproval = false
 		if (token) {
 			// access gate
-			await permissions.refresh()
+			await permissions.load()
 			if (permissions.list !== null && !permissions.hasPermission('frontend:access')) {
 				pendingApproval = true
 			}
@@ -481,28 +481,28 @@
 		</div>
 	{/if}
 
-	<!-- notification toasts (global, above all content) -->
-	{#if !chrome.isDockOpen}
-		<NotificationToast
-			toasts={notifications.toasts}
-			onDismiss={(id: string) => notifications.dismissToast(id)}
-			onSwipeDismiss={(id: string) => {
-				const toast = notifications.toasts.find((t) => t.id === id)
-				if (toast) {
-					const match = notifications.list.find((n) => {
-						const data = n.event?.data as Record<string, unknown> | undefined
-						return !n.dismissed && data?.title === toast.title
-					})
-					if (match) void notifications.delete(match.id)
-				}
-				notifications.dismissToast(id)
-			}}
-			onClick={(id: string) => {
-				notifications.dismissToast(id)
-				chrome.openDock()
-			}}
-		/>
-	{/if}
+	<!-- toasts (global, above all content) -->
+	<NotificationToast
+		toasts={chrome.isDockOpen
+			? notifications.toasts.filter((t) => t.type === 'ephemeral')
+			: notifications.toasts}
+		onDismiss={(id: string) => notifications.dismissToast(id)}
+		onSwipeDismiss={(id: string) => {
+			const toast = notifications.toasts.find((t) => t.id === id)
+			if (toast && toast.type === 'notification') {
+				const match = notifications.list.find(
+					(n) => !n.dismissed && n.event_id === toast.eventId
+				)
+				if (match) void notifications.delete(match.id)
+			}
+			notifications.dismissToast(id)
+		}}
+		onClick={(id: string) => {
+			const toast = notifications.toasts.find((t) => t.id === id)
+			notifications.dismissToast(id)
+			if (toast?.type === 'notification') chrome.openDock()
+		}}
+	/>
 </BackgroundManager>
 
 <style>

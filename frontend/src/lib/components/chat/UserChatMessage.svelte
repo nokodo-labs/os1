@@ -260,7 +260,7 @@
 
 	<!-- media attachments rendered OUTSIDE the bubble -->
 	{#if hasMedia && !isEditing}
-		<div class="w-full max-w-sm space-y-1.5 overflow-hidden rounded-2xl">
+		<div class="max-w-sm space-y-1.5 overflow-hidden rounded-2xl">
 			<MediaAttachments {mediaParts} {fileParts} />
 		</div>
 	{/if}
@@ -355,7 +355,7 @@
 					</div>
 				{:else}
 					<div
-						class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap"
+						class="text-foreground leading-relaxed wrap-break-word break-all whitespace-pre-wrap"
 					>
 						{content}
 					</div>
@@ -425,6 +425,7 @@
 
 	.bubble-wrapper {
 		position: relative;
+		max-width: 100%;
 	}
 
 	/* ════════════════════════════════════════════════════════════

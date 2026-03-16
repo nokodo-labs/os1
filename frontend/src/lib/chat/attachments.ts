@@ -7,7 +7,7 @@
  * two-step process: upload file -> get file_id -> include in run content parts.
  */
 
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import type {
 	AttachmentMediaCategory,
 	PendingAttachment,
@@ -27,7 +27,7 @@ export async function uploadFile(file: File): Promise<PendingAttachment> {
 	const formData = new FormData()
 	formData.append('file', file)
 
-	const { data, error } = await apiClient().POST('/v1/files/upload', {
+	const { data, error } = await api.POST('/v1/files/upload', {
 		// openapi-fetch does not support multipart natively via body typing,
 		// so we pass the FormData directly via the fetch init
 		body: formData as never,

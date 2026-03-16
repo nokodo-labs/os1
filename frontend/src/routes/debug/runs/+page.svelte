@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface ActiveRun {
@@ -37,7 +37,7 @@
 		error = null
 		try {
 			// path available after api types regen
-			const { data, response } = await apiClient().GET('/v1/runs', {})
+			const { data, response } = await api.GET('/v1/runs', {})
 			if (!response.ok) {
 				error = `HTTP ${response.status}: ${response.statusText}`
 				return

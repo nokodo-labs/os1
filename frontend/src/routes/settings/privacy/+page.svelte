@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { apiClient } from '$lib/api/client'
+	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import Lock from '$lib/components/icons/Lock.svelte'
 	import { Switch } from '$lib/components/primitives'
@@ -37,7 +37,7 @@
 		const uid = session.currentUser?.id
 		if (!uid) return
 		const updated = { ...(privacy ?? {}), [field]: value } as PrivacySettings
-		const { data } = await apiClient().PATCH('/v1/users/{user_id}', {
+		const { data } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { privacy: updated },
 		})

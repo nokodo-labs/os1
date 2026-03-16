@@ -22,14 +22,24 @@ import { BackendUnreachableError, refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
+import { agents } from '$lib/stores/agents.svelte'
 import { appReadiness } from '$lib/stores/appReadiness.svelte'
+import { chat } from '$lib/stores/chat.svelte'
 import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
+import { files } from '$lib/stores/files.svelte'
+import { friends } from '$lib/stores/friends.svelte'
+import { groups } from '$lib/stores/groups.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
+import { notes } from '$lib/stores/notes.svelte'
+import { notifications } from '$lib/stores/notifications.svelte'
+import { permissions } from '$lib/stores/permissions.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
+import { projects } from '$lib/stores/projects.svelte'
+import { reminders } from '$lib/stores/reminders.svelte'
 import { initServiceWorker } from '$lib/stores/serviceWorker.svelte'
 import { session } from '$lib/stores/session.svelte'
-import { loadSettings } from '$lib/stores/settings.svelte'
+import { invalidateSettings, loadSettings } from '$lib/stores/settings.svelte'
 
 export interface InitResult {
 	authenticated: boolean
@@ -99,7 +109,24 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 			eventStreamClient.connect()
 			preferences.startSync()
 
-			// 7. request geolocation if user has useLocation enabled
+			// 7. invalidate all caches when WS drops (missed events = stale data)
+			eventStreamClient.onStatusChange((newStatus, prevStatus) => {
+				if (prevStatus === 'connected' && newStatus !== 'connected') {
+					chat.threadCache.clear()
+					notes.invalidate()
+					projects.invalidate()
+					reminders.invalidateAll()
+					invalidateSettings()
+					agents.invalidate()
+					files.invalidate()
+					friends.invalidate()
+					groups.invalidate()
+					permissions.invalidate()
+					void notifications.refresh()
+				}
+			})
+
+			// 8. request geolocation if user has useLocation enabled
 			if (preferences.data.privacy.useLocation) {
 				requestGeolocation()
 			}

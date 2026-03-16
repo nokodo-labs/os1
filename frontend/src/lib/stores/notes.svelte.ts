@@ -9,10 +9,11 @@
  */
 
 import { browser } from '$app/environment'
-import { apiClient } from '$lib/api/client'
+import { api } from '$lib/api/client'
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { showError } from '$lib/stores/notifications.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 // types from API
@@ -100,7 +101,7 @@ export const notes = {
 		isLoading = true
 		inFlight = (async () => {
 			const { sort_by, sort_dir } = parseSortMode(currentSortMode)
-			const { data, error } = await apiClient().GET('/v1/notes', {
+			const { data, error } = await api.GET('/v1/notes', {
 				params: { query: { sort_by, sort_dir } },
 			})
 			if (error || !data) return this.all
@@ -126,25 +127,63 @@ export const notes = {
 		return notesMap.get(noteId) ?? null
 	},
 
-	async create(): Promise<Note | null> {
-		const { data, error } = await apiClient().POST('/v1/notes', {
-			body: { title: '', content: '' },
-		})
-		if (error || !data) return null
-
-		const created = toNote(data)
-
-		// prepend: rebuild map with new entry first
-		const entries = [[created.id, created], ...notesMap.entries()] as [string, Note][]
+	async create(options?: { rollback?: boolean }): Promise<Note | null> {
+		const doRollback = options?.rollback ?? true
+		// optimistic: add a placeholder note immediately
+		const tempId = `temp-${Date.now()}`
+		const now = Date.now()
+		const placeholder: Note = {
+			id: tempId,
+			userId: '',
+			title: '',
+			content: '',
+			labels: [],
+			projectId: null,
+			createdAt: now,
+			updatedAt: now,
+		}
+		const prevEntries = [...notesMap.entries()] as [string, Note][]
 		notesMap.clear()
-		for (const [id, note] of entries) {
+		notesMap.set(tempId, placeholder)
+		for (const [id, note] of prevEntries) {
 			notesMap.set(id, note)
 		}
 
-		return created
+		try {
+			const { data, error } = await api.POST('/v1/notes', {
+				body: { title: '', content: '' },
+			})
+
+			if (error || !data) {
+				if (doRollback) notesMap.delete(tempId)
+				showError('could not create note')
+				return null
+			}
+
+			const created = toNote(data)
+
+			// replace placeholder with real note
+			notesMap.delete(tempId)
+			const entries = [[created.id, created], ...notesMap.entries()] as [string, Note][]
+			notesMap.clear()
+			for (const [id, note] of entries) {
+				notesMap.set(id, note)
+			}
+
+			return created
+		} catch {
+			if (doRollback) notesMap.delete(tempId)
+			showError('could not create note')
+			return null
+		}
 	},
 
-	async update(noteId: string, updates: { title?: string; content?: string }): Promise<void> {
+	async update(
+		noteId: string,
+		updates: { title?: string; content?: string },
+		options?: { rollback?: boolean }
+	): Promise<void> {
+		const doRollback = options?.rollback ?? true
 		const existing = notesMap.get(noteId)
 		if (!existing) return
 
@@ -160,14 +199,19 @@ export const notes = {
 			updatedAt: Date.now(),
 		})
 
-		const { error } = await apiClient().PUT('/v1/notes/{note_id}', {
-			params: { path: { note_id: noteId } },
-			body: { title: nextTitle, content: nextContent },
-		})
+		try {
+			const { error } = await api.PUT('/v1/notes/{note_id}', {
+				params: { path: { note_id: noteId } },
+				body: { title: nextTitle, content: nextContent },
+			})
 
-		if (error) {
-			// rollback on failure
-			notesMap.set(noteId, existing)
+			if (error) {
+				if (doRollback) notesMap.set(noteId, existing)
+				showError('could not save note')
+			}
+		} catch {
+			if (doRollback) notesMap.set(noteId, existing)
+			showError('could not save note')
 		}
 	},
 
@@ -180,34 +224,49 @@ export const notes = {
 	async enhance(noteId: string): Promise<Note | null> {
 		if (!notesMap.has(noteId)) return null
 
-		const { data, error } = await apiClient().POST('/v1/notes/{note_id}/enhance', {
+		const { data, error } = await api.POST('/v1/notes/{note_id}/enhance', {
 			params: { path: { note_id: noteId } },
 		})
-		if (error || !data) return null
+		if (error || !data) {
+			showError('could not enhance note')
+			return null
+		}
 
 		const updated = toNote(data)
 		notesMap.set(noteId, updated)
 		return updated
 	},
 
-	async remove(noteId: string): Promise<boolean> {
+	async remove(noteId: string, options?: { rollback?: boolean }): Promise<boolean> {
+		const doRollback = options?.rollback ?? true
 		const existing = notesMap.get(noteId)
 		if (!existing) return false
 
 		// optimistic delete
 		notesMap.delete(noteId)
 
-		const { error } = await apiClient().DELETE('/v1/notes/{note_id}', {
-			params: { path: { note_id: noteId } },
-		})
+		try {
+			const { error } = await api.DELETE('/v1/notes/{note_id}', {
+				params: { path: { note_id: noteId } },
+			})
 
-		if (error) {
-			// rollback on failure
-			notesMap.set(noteId, existing)
+			if (error) {
+				if (doRollback) notesMap.set(noteId, existing)
+				showError('could not delete note')
+				return false
+			}
+
+			return true
+		} catch {
+			if (doRollback) notesMap.set(noteId, existing)
+			showError('could not delete note')
 			return false
 		}
+	},
 
-		return true
+	/** mark cache stale so next access triggers a refetch. */
+	invalidate(): void {
+		fetchedAt = null
 	},
 }
 

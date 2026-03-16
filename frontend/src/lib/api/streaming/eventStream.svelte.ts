@@ -53,6 +53,7 @@ export interface StreamEvent extends StreamMessage {
 }
 
 type EventHandler = (message: StreamMessage) => void
+type StatusChangeHandler = (newStatus: ConnectionStatus, previousStatus: ConnectionStatus) => void
 
 /** how often to send a heartbeat ping (ms) */
 // 4s keeps the connection alive under aggressive NAT/proxy idle timeouts (e.g. Docker virtual switch on Windows ~5s)
@@ -74,6 +75,7 @@ export class EventStreamClient {
 	private pingIntervalId: ReturnType<typeof setInterval> | null = null
 	private pongTimeoutId: ReturnType<typeof setTimeout> | null = null
 	private handlers = new SvelteSet<EventHandler>()
+	private statusHandlers = new SvelteSet<StatusChangeHandler>()
 	private intentionalDisconnect = false
 	private awaitingPong = false
 	private connecting = false
@@ -121,12 +123,26 @@ export class EventStreamClient {
 		this.cleanup()
 		this.removeBrowserListeners()
 		this.isConnected = false
-		this.state.status = 'disconnected'
+		this.setStatus('disconnected')
 	}
 
 	subscribe(handler: EventHandler): () => void {
 		this.handlers.add(handler)
 		return () => this.handlers.delete(handler)
+	}
+
+	/** subscribe to connection status changes (e.g. for cache invalidation). */
+	onStatusChange(handler: StatusChangeHandler): () => void {
+		this.statusHandlers.add(handler)
+		return () => this.statusHandlers.delete(handler)
+	}
+
+	/** update status and notify status change handlers. */
+	private setStatus(status: ConnectionStatus): void {
+		const previous = this.state.status
+		if (previous === status) return
+		this.state.status = status
+		this.statusHandlers.forEach((h) => h(status, previous))
 	}
 
 	/** send a JSON message to the server (typing events, etc.) */
@@ -146,7 +162,7 @@ export class EventStreamClient {
 		if (!this.isConnected || this.connecting) return
 		this.connecting = true
 
-		this.state.status = this.reconnectAttempts === 0 ? 'connecting' : 'reconnecting'
+		this.setStatus(this.reconnectAttempts === 0 ? 'connecting' : 'reconnecting')
 
 		try {
 			this.ws = new WebSocket(await this.buildWsUrl())
@@ -158,7 +174,7 @@ export class EventStreamClient {
 
 		this.ws.onopen = () => {
 			this.connecting = false
-			this.state.status = 'connected'
+			this.setStatus('connected')
 			this.state.sessionId = getSessionId()
 			this.reconnectAttempts = 0
 			this.awaitingPong = false
@@ -194,14 +210,14 @@ export class EventStreamClient {
 
 			if (event.code === 4001 || event.code === 4003) {
 				// 4001 = unauthorized, 4003 = origin not allowed
-				this.state.status = 'disconnected'
+				this.setStatus('disconnected')
 				this.isConnected = false
 				return
 			}
 			if (!this.intentionalDisconnect) {
 				this.scheduleReconnect()
 			} else {
-				this.state.status = 'disconnected'
+				this.setStatus('disconnected')
 			}
 		}
 
@@ -215,7 +231,7 @@ export class EventStreamClient {
 	private scheduleReconnect(): void {
 		if (this.intentionalDisconnect) return
 
-		this.state.status = 'reconnecting'
+		this.setStatus('reconnecting')
 		this.reconnectAttempts++
 
 		// exponential backoff: 500, 1000, 2000, … capped at 30s
