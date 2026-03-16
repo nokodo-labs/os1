@@ -77,7 +77,7 @@ const authInterceptor = {
 			request.headers.set('X-Session-ID', sessionId)
 		}
 
-		return new Request(request, { credentials: 'include' })
+		return request
 	},
 
 	async onResponse({ request, response }: { request: Request; response: Response }) {
@@ -139,10 +139,10 @@ async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 	return fetch(urlStr, options)
 }
 
-export const rawApi = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch })
+export const rawApi = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch, credentials: 'include' })
 rawApi.use(urlInterceptor)
 
-export const api = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch })
+export const api = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch, credentials: 'include' })
 api.use(urlInterceptor)
 api.use(authInterceptor)
 
