@@ -367,6 +367,10 @@ export async function resumeCreateAndRun(
 	chatStore.threadCache.set(realThread)
 	chatStore.activeThread = realThread
 
+	if (!realThread.is_temporary && !chatStore.recentThreads.some((t) => t.id === realThread.id)) {
+		chatStore.recentThreads = [realThread, ...chatStore.recentThreads]
+	}
+
 	const runId = ctx.incrementActiveRun()
 	ctx.isGenerating = true
 	ctx.viewingStreamingBranch = true

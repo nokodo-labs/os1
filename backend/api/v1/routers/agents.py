@@ -120,10 +120,6 @@ async def set_agent_access_rules(
 
 	requires agents:manage permission.
 	"""
-	require_permission(principal, "agents:manage")
-	return await access_rules_service.set_access_rules_unchecked(
-		ResourceType.AGENT,
-		agent_id,
-		rules,
-		db,
+	return await agent_service.set_agent_access_rules(
+		agent_id, rules, db, principal=principal
 	)

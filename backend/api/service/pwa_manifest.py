@@ -204,6 +204,11 @@ def _build_screenshots(cdn: str) -> list[dict[str, str]]:
 def _compile() -> dict[str, Any]:
 	"""build a complete PWA manifest from current settings."""
 	branding = settings.branding
+	frontend = (
+		str(branding.public_frontend_origin).rstrip("/")
+		if branding.public_frontend_origin
+		else ""
+	)
 	cdn = (
 		str(branding.public_cdn_origin).rstrip("/")
 		if branding.public_cdn_origin
@@ -215,8 +220,8 @@ def _compile() -> dict[str, Any]:
 		"short_name": branding.site_name,
 		"description": "your interface with AI",
 		"orientation": "natural",
-		"start_url": "/",
-		"scope": "/",
+		"start_url": f"{frontend}/",
+		"scope": f"{frontend}/",
 		"display": "standalone",
 		"theme_color": branding.primary_color,
 		"background_color": "#000000",

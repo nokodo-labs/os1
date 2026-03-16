@@ -1,4 +1,4 @@
-"""Thread model."""
+"""thread model."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class Thread(
 	SoftDeleteMixin,
 	Base,
 ):
-	"""Conversation container tying together messages, events, and tasks."""
+	"""conversation container tying together messages, events, and tasks."""
 
 	__tablename__ = "threads"
 	__typeid_prefix__ = "thread"

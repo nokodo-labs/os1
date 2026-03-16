@@ -12,6 +12,7 @@
 	import { PopupMenu } from '$lib/components/primitives'
 	import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 
 	type Props = {
@@ -44,6 +45,10 @@
 	const displayTitle = $derived(thread.title || 'new chat')
 	const hasTags = $derived(thread.tags && thread.tags.length > 0)
 
+	const visibilityMode = $derived(
+		device.isMobile ? 'always' : hasRun || hasUnread ? 'overlay-always' : 'hover'
+	)
+
 	let menuButtonEl = $state<HTMLElement | null>(null)
 </script>
 
@@ -57,7 +62,7 @@
 		onSelect={async () => {
 			await onOpenThread(thread.id)
 		}}
-		actionsVisibility={hasRun || hasUnread ? 'always' : 'hover'}
+		actionsVisibility={visibilityMode}
 	>
 		<div class="min-w-0 flex-1 overflow-hidden">
 			<!-- primary row: title -->

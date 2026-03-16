@@ -11,8 +11,10 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
+from api.schemas.access_rule import AccessRuleCreate
 from api.schemas.agent import Agent as AgentSchema
 from api.schemas.agent import AgentCreate, AgentUpdate
+from api.v1.service import access_rules as access_rules_service
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
@@ -184,3 +186,28 @@ async def delete_agent(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+
+
+async def set_agent_access_rules(
+	agent_id: str,
+	rules: list[AccessRuleCreate],
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> list:
+	"""replace access rules for an agent and notify affected users."""
+	require_permission(principal, "agents:manage")
+	updated_rules = await access_rules_service.set_access_rules_unchecked(
+		ResourceType.AGENT, agent_id, rules, session
+	)
+	agent = await _get_agent(TypeID(agent_id), session)
+	agent_data = AgentSchema.model_validate(agent).model_dump(mode="json")
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.AGENT_UPDATED,
+		data={"id": agent_id, **agent_data},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(session, event=event)
+	return updated_rules

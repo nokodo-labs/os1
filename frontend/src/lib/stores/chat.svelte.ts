@@ -349,6 +349,8 @@ class ChatStore {
 			// bump unread count for threads the user is not currently viewing
 			if (this.activeThread?.id !== threadId) {
 				this.unreadCounts.set(threadId, (this.unreadCounts.get(threadId) ?? 0) + 1)
+			} else {
+				void this.markThreadRead(threadId)
 			}
 		} else if (message.type === 'message.updated') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
