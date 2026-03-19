@@ -424,13 +424,13 @@ export interface paths {
         };
         /**
          * List Threads
-         * @description List threads optionally filtered by owner.
+         * @description list threads optionally filtered by owner.
          */
         get: operations["list_threads_v1_threads_get"];
         put?: never;
         /**
          * Create Thread
-         * @description Create a new thread.
+         * @description create a new thread.
          */
         post: operations["create_thread_v1_threads_post"];
         delete?: never;
@@ -532,21 +532,21 @@ export interface paths {
         };
         /**
          * Get Thread
-         * @description Fetch a single thread.
+         * @description fetch a single thread.
          */
         get: operations["get_thread_v1_threads__thread_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Thread
-         * @description Delete a thread.
+         * @description delete a thread.
          */
         delete: operations["delete_thread_v1_threads__thread_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Thread
-         * @description Update thread metadata.
+         * @description update thread metadata.
          */
         patch: operations["update_thread_v1_threads__thread_id__patch"];
         trace?: never;
@@ -583,13 +583,13 @@ export interface paths {
         };
         /**
          * List Messages
-         * @description List messages within a thread.
+         * @description list messages within a thread.
          */
         get: operations["list_messages_v1_threads__thread_id__messages_get"];
         put?: never;
         /**
          * Create Message
-         * @description Append a message to a thread.
+         * @description append a message to a thread.
          */
         post: operations["create_message_v1_threads__thread_id__messages_post"];
         delete?: never;
@@ -609,7 +609,7 @@ export interface paths {
         put?: never;
         /**
          * List Events For Message Ids
-         * @description List events associated with specific messages in this thread.
+         * @description list events associated with specific messages in this thread.
          */
         post: operations["list_events_for_message_ids_v1_threads__thread_id__events_by_message_ids_post"];
         delete?: never;
@@ -627,7 +627,7 @@ export interface paths {
         };
         /**
          * Get Current Branch
-         * @description Return the current root→leaf branch for this thread.
+         * @description return the current root→leaf branch for this thread.
          */
         get: operations["get_current_branch_v1_threads__thread_id__branch_get"];
         put?: never;
@@ -647,7 +647,7 @@ export interface paths {
         };
         /**
          * Get Message Tree
-         * @description Return all messages for this thread as a flat list.
+         * @description return all messages for this thread as a flat list.
          */
         get: operations["get_message_tree_v1_threads__thread_id__tree_get"];
         put?: never;
@@ -696,7 +696,7 @@ export interface paths {
         put?: never;
         /**
          * Switch Branch
-         * @description Switch the active branch to the subtree rooted at message_id.
+         * @description switch the active branch to the subtree rooted at message_id.
          */
         post: operations["switch_branch_v1_threads__thread_id__switch_post"];
         delete?: never;
@@ -714,14 +714,34 @@ export interface paths {
         };
         /**
          * List Thread Access Rules
-         * @description List access rules for a thread.
+         * @description list access rules for a thread.
          */
         get: operations["list_thread_access_rules_v1_threads__thread_id__access_rules_get"];
         /**
          * Set Thread Access Rules
-         * @description Replace access rules for a thread.
+         * @description replace access rules for a thread.
          */
         put: operations["set_thread_access_rules_v1_threads__thread_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/access-level": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Access Level
+         * @description return the requester's effective access level on a thread.
+         */
+        get: operations["get_thread_access_level_v1_threads__thread_id__access_level_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -7031,7 +7051,7 @@ export interface components {
         };
         /**
          * Thread
-         * @description Detailed response schema.
+         * @description detailed response schema.
          */
         Thread: {
             /**
@@ -7085,7 +7105,7 @@ export interface components {
         };
         /**
          * ThreadCreate
-         * @description Payload for creating a thread.
+         * @description payload for creating a thread.
          */
         ThreadCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -7158,7 +7178,7 @@ export interface components {
         };
         /**
          * ThreadMetadataGenerateRequest
-         * @description Request body for generating thread metadata.
+         * @description request body for generating thread metadata.
          */
         ThreadMetadataGenerateRequest: {
             /**
@@ -7202,7 +7222,7 @@ export interface components {
         };
         /**
          * ThreadSwitchRequest
-         * @description Payload to switch a thread's active branch.
+         * @description payload to switch a thread's active branch.
          */
         ThreadSwitchRequest: {
             /**
@@ -7213,7 +7233,7 @@ export interface components {
         };
         /**
          * ThreadSwitchResponse
-         * @description Response for a thread branch switch.
+         * @description response for a thread branch switch.
          */
         ThreadSwitchResponse: {
             /** Ok */
@@ -7236,7 +7256,7 @@ export interface components {
         };
         /**
          * ThreadUpdate
-         * @description Payload for updating a thread.
+         * @description payload for updating a thread.
          */
         ThreadUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
@@ -7464,7 +7484,7 @@ export interface components {
             online_status: components["schemas"]["Visibility"];
             /** @default everyone */
             profile_picture: components["schemas"]["Visibility"];
-            /** @default everyone */
+            /** @default friends */
             real_name: components["schemas"]["Visibility"];
             /** @default everyone */
             bio: components["schemas"]["Visibility"];
@@ -11528,6 +11548,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_thread_access_level_v1_threads__thread_id__access_level_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessLevel"];
                 };
             };
             /** @description bad request */

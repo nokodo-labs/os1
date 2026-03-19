@@ -220,5 +220,9 @@ async def set_file_access_rules(
 ) -> list[AccessRule]:
 	"""replace access rules for a file."""
 	return await access_rules_service.set_access_rules(
-		ResourceType.FILE, file_id, rules, db, principal=principal,
+		ResourceType.FILE,
+		file_id,
+		rules,
+		db,
+		principal=principal,
 	)

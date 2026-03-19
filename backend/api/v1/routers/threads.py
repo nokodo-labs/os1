@@ -463,7 +463,10 @@ async def get_thread_access_level(
 ) -> AccessLevel:
 	"""return the requester's effective access level on a thread."""
 	level = await get_effective_access_level(
-		db, principal, ResourceType.THREAD, thread_id,
+		db,
+		principal,
+		ResourceType.THREAD,
+		thread_id,
 	)
 	if level is None:
 		raise HTTPException(
