@@ -277,3 +277,16 @@ export function syncCacheAfterRun(ctx: ChatContext): void {
 		allMessages.map((m) => m.id)
 	)
 }
+
+type AccessLevel = components['schemas']['AccessLevel']
+
+/**
+ * fetch the requester's effective access level on a thread.
+ * returns the level string, or null if the request fails.
+ */
+export async function fetchThreadAccessLevel(threadId: string): Promise<AccessLevel | null> {
+	const { data } = await api.GET('/v1/threads/{thread_id}/access-level', {
+		params: { path: { thread_id: threadId } },
+	})
+	return data ?? null
+}

@@ -55,6 +55,7 @@ from .types import (
 	OpenAIChatModel,
 	OpenAICompletionUsage,
 	OpenAIJSONSchema,
+	OpenAIReasoningEffort,
 	OpenAIResponseFormatJSONSchema,
 )
 
@@ -63,6 +64,13 @@ if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
 
 logger = logging.getLogger(__name__)
+
+
+def _to_openai_reasoning_effort(
+	effort: Literal["none", "minimal", "low", "medium", "high", "max"],
+) -> OpenAIReasoningEffort:
+	"""map internal effort label to the openai API value ('max' -> 'xhigh')."""
+	return "xhigh" if effort == "max" else effort
 
 
 class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
@@ -149,7 +157,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			frequency_penalty=params.frequency_penalty
 			if params and params.frequency_penalty is not None
 			else openai.omit,
-			reasoning_effort=params.reasoning_effort
+			reasoning_effort=_to_openai_reasoning_effort(params.reasoning_effort)
 			if params and params.reasoning_effort is not None
 			else openai.omit,
 		)
@@ -197,7 +205,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			frequency_penalty=params.frequency_penalty
 			if params and params.frequency_penalty is not None
 			else openai.omit,
-			reasoning_effort=params.reasoning_effort
+			reasoning_effort=_to_openai_reasoning_effort(params.reasoning_effort)
 			if params and params.reasoning_effort is not None
 			else openai.omit,
 		)

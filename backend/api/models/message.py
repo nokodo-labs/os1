@@ -103,6 +103,8 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	# Token usage from chat model response (matches SDK Usage model)
 	usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	read_by: Mapped[list[str]] = mapped_column(JSONB, default=list)
+	# Citation references used in this message (see api.schemas.citations)
+	citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 
 	__mapper_args__ = {
 		"polymorphic_on": type,

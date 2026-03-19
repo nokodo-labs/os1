@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
@@ -292,7 +293,7 @@
 					onclick={() => void deleteAll()}
 				>
 					<Trash class="h-3.5 w-3.5" />
-					{deletingAll ? 'deleting...' : 'delete all'}
+					{#if deletingAll}<ShimmerText className="inline-block">deleting</ShimmerText>{:else}delete all{/if}
 				</button>
 			{/if}
 		{/snippet}

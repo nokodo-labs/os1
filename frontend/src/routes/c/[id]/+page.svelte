@@ -9,6 +9,7 @@
 		createChatState,
 		extractFileParts,
 		extractMediaParts,
+		fetchThreadAccessLevel,
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
@@ -59,6 +60,7 @@
 	let didLoadAgents = $state(false)
 	let inputFocusToken = $state(0)
 	let lastInputFocusKey = $state<string | null>(null)
+	let isReadOnly = $state(false)
 
 	// system chrome for agent selector
 	const chrome = useSystemChrome()
@@ -174,6 +176,33 @@
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
 		return () => chrome.setContextActions(null)
+	})
+
+	// effects: resolve read-only access for non-owner threads
+	$effect(() => {
+		const thread = chat.thread
+		const userId = session.currentUser?.id
+		if (!thread || !userId) {
+			isReadOnly = false
+			return
+		}
+		if (thread.owner_id === userId) {
+			isReadOnly = false
+			return
+		}
+		// non-owner: fetch effective access level
+		let cancelled = false
+		void fetchThreadAccessLevel(thread.id)
+			.then((level) => {
+				if (cancelled) return
+				isReadOnly = !level || level === 'reader'
+			})
+			.catch(() => {
+				if (!cancelled) isReadOnly = true
+			})
+		return () => {
+			cancelled = true
+		}
 	})
 
 	// effects: real-time event subscriptions (tool, message, typing, run events)
@@ -595,6 +624,8 @@
 																segment.item.message.content
 															)}
 															isStreaming={false}
+															citations={segment.item.message
+																.citations ?? []}
 														/>
 													</div>
 												{:else if segment.type === 'tool_group'}
@@ -741,6 +772,7 @@
 					onStop={chat.handleStopGeneration}
 					isGenerating={chat.isGenerating}
 					placeholder="send a message"
+					disabled={isReadOnly}
 					focusToken={inputFocusToken}
 					viewTransitionName="chat-input"
 					threadAttachments={chat.threadAttachments}

@@ -3343,6 +3343,35 @@ export interface components {
             api_key?: string | null;
         };
         /**
+         * Citation
+         * @description a single citation reference within a message.
+         *
+         *     ``index`` is the branch-cumulative number used as the [n] marker.
+         *     ``source_type`` discriminates the resource kind.
+         *     ``source_id`` is the source-specific value (URL, TypeID string, etc.).
+         */
+        Citation: {
+            /**
+             * Index
+             * @description branch-cumulative citation number
+             */
+            index: number;
+            source_type: components["schemas"]["CitationSource"];
+            /**
+             * Source Id
+             * @description source-specific value: URL string, TypeID, tool_call_id, etc.
+             */
+            source_id: string;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * CitationSource
+         * @description what kind of resource a citation points to.
+         * @enum {string}
+         */
+        CitationSource: "url" | "file" | "note" | "memory" | "thread" | "tool_result";
+        /**
          * ClientContext
          * @description optional runtime context sent by the client with each agent run.
          *
@@ -4518,7 +4547,7 @@ export interface components {
         };
         /**
          * Message
-         * @description Response schema.
+         * @description response schema.
          */
         Message: {
             /**
@@ -4550,6 +4579,8 @@ export interface components {
             } | null;
             /** Read By */
             read_by?: string[];
+            /** Citations */
+            citations?: components["schemas"]["Citation"][];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -4571,11 +4602,11 @@ export interface components {
         };
         /**
          * MessageCreate
-         * @description Payload for creating a message within a thread.
+         * @description payload for creating a message within a thread.
          *
-         *     Content can be provided as:
-         *     - A string (converted to [TextContent(text=...)])
-         *     - A list of ContentPart objects (validated via discriminated union)
+         *     content can be provided as:
+         *     - a string (converted to [TextContent(text=...)])
+         *     - a list of ContentPart objects (validated via discriminated union)
          */
         MessageCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -4600,6 +4631,8 @@ export interface components {
             } | null;
             /** Read By */
             read_by?: string[];
+            /** Citations */
+            citations?: components["schemas"]["Citation"][];
             /** Parent Id */
             parent_id?: string | null;
             /** Task Id */
@@ -4617,7 +4650,7 @@ export interface components {
         MessageType: "user" | "assistant" | "tool" | "system";
         /**
          * MessageUpdate
-         * @description Payload for updating a user message's content in place.
+         * @description payload for updating a user message's content in place.
          */
         MessageUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronUpDown from '$lib/components/icons/ChevronUpDown.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
@@ -9,6 +10,7 @@
 	import User from '$lib/components/icons/User.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { groups } from '$lib/stores/groups.svelte'
 	import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
 
@@ -66,14 +68,14 @@
 					const { data } = await api.GET('/v1/files/{file_id}/access-rules', {
 						params: { path: { file_id: payload.resourceId } },
 					})
-					if (data) fetched = data as AccessRuleResponse[]
+					if (data) fetched = data
 					break
 				}
 				case 'thread': {
 					const { data } = await api.GET('/v1/threads/{thread_id}/access-rules', {
 						params: { path: { thread_id: payload.resourceId } },
 					})
-					if (data) fetched = data as AccessRuleResponse[]
+					if (data) fetched = data
 					break
 				}
 				case 'project': {
@@ -81,21 +83,21 @@
 						'/v1/projects/{project_id}/access-rules',
 						{ params: { path: { project_id: payload.resourceId } } }
 					)
-					if (data) fetched = data as AccessRuleResponse[]
+					if (data) fetched = data
 					break
 				}
 				case 'group': {
 					const { data } = await api.GET('/v1/groups/{group_id}/access-rules', {
 						params: { path: { group_id: payload.resourceId } },
 					})
-					if (data) fetched = data as AccessRuleResponse[]
+					if (data) fetched = data
 					break
 				}
 				case 'agent': {
 					const { data } = await api.GET('/v1/agents/{agent_id}/access-rules', {
 						params: { path: { agent_id: payload.resourceId } },
 					})
-					if (data) fetched = data as AccessRuleResponse[]
+					if (data) fetched = data
 					break
 				}
 			}
@@ -365,7 +367,7 @@
 				access rules {rules.length > 0 ? `(${rules.length})` : ''}
 			</p>
 			{#if isLoading}
-				<p class="text-foreground/40 py-4 text-center text-sm">loading...</p>
+				<div class="py-4 flex justify-center"><NokodoLoader shimmer /></div>
 			{:else if rules.length === 0}
 				<p class="text-foreground/30 py-4 text-center text-sm">
 					no rules yet — add users or groups above
@@ -454,7 +456,7 @@
 				onclick={saveRules}
 				disabled={isSaving}
 			>
-				{isSaving ? 'saving...' : 'save'}
+				{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText>{:else}save{/if}
 			</button>
 		</div>
 	</div>

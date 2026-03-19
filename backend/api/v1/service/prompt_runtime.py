@@ -37,6 +37,7 @@ SENTINEL_REFERENCED_ATTACHMENTS = "<<FILTER:referenced_attachments>>"
 SENTINEL_USER_MEMORIES = "<<FILTER:user_memories>>"
 SENTINEL_CHAT_CONTEXT = "<<FILTER:chat_context>>"
 SENTINEL_CHAT_WINDOW_INFO = "<<FILTER:chat_window_info>>"
+SENTINEL_CITATION_SOURCES = "<<FILTER:citation_sources>>"
 
 _PROMPT_REF_RE = re.compile(r"{{\s*PROMPTS\.([a-zA-Z0-9-_]+)\s*}}")
 _INCLUDE_RE = re.compile(r"{%-?\s*include\s+['\"]([a-zA-Z0-9-_/]+)['\"]\s*-?%}")
@@ -440,6 +441,7 @@ def build_prompt_variables(
 	# user_memories and chat_context sentinels are set later, gated by prefs.
 	variables["referenced_attachments"] = SENTINEL_REFERENCED_ATTACHMENTS
 	variables["chat_window_info"] = SENTINEL_CHAT_WINDOW_INFO
+	variables["citation_sources"] = SENTINEL_CITATION_SOURCES
 
 	if user is None:
 		variables["user_memories"] = SENTINEL_USER_MEMORIES

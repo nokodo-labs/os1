@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { projects, type Project } from '$lib/stores/projects.svelte'
 
@@ -95,7 +96,7 @@
 				disabled={saving || !name.trim()}
 				onclick={() => void save()}
 			>
-				{saving ? 'saving...' : 'save'}
+				{#if saving}<ShimmerText className="inline-block">saving</ShimmerText>{:else}save{/if}
 			</button>
 		</div>
 	</form>

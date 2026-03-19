@@ -42,6 +42,8 @@ from .types import (
 	GoogleGenerateContentConfig,
 	GoogleGenerateContentResponse,
 	GooglePart,
+	GoogleThinkingConfig,
+	GoogleThinkingLevel,
 	GoogleTool,
 	GoogleToolConfig,
 	GoogleToolListUnion,
@@ -53,6 +55,26 @@ if TYPE_CHECKING:
 
 
 PROVIDER_NAME = "google.generate_content"
+
+
+_GOOGLE_THINKING_LEVEL: dict[str, GoogleThinkingLevel] = {
+	"minimal": GoogleThinkingLevel.MINIMAL,
+	"low": GoogleThinkingLevel.LOW,
+	"medium": GoogleThinkingLevel.MEDIUM,
+	"high": GoogleThinkingLevel.HIGH,
+}
+
+
+def _reasoning_effort_to_google(
+	effort: str,
+) -> GoogleThinkingConfig:
+	"""convert reasoning_effort to a google ThinkingConfig."""
+	if effort == "none":
+		return GoogleThinkingConfig(thinking_budget=0)
+	if effort == "max":
+		return GoogleThinkingConfig(thinking_budget=-1)
+	level = _GOOGLE_THINKING_LEVEL.get(effort, GoogleThinkingLevel.MEDIUM)
+	return GoogleThinkingConfig(thinking_level=level)
 
 
 def _tool_choice_to_google(tool_choice: str) -> GoogleToolConfig:
@@ -444,6 +466,9 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			tools=google_tools,
 			tool_config=google_tool_config,
 			stop_sequences=params.stop if params.stop else None,
+			thinking_config=_reasoning_effort_to_google(params.reasoning_effort)
+			if params.reasoning_effort is not None
+			else None,
 			response_mime_type="application/json" if params.response_model else None,
 			response_json_schema=dict[str, object](params.response_model)
 			if params.response_model
@@ -497,6 +522,9 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			tools=google_tools,
 			tool_config=google_tool_config,
 			stop_sequences=params.stop if params.stop else None,
+			thinking_config=_reasoning_effort_to_google(params.reasoning_effort)
+			if params.reasoning_effort is not None
+			else None,
 			response_mime_type="application/json" if params.response_model else None,
 			response_json_schema=dict[str, object](params.response_model)
 			if params.response_model

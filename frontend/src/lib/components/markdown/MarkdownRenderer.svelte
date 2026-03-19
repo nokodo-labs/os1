@@ -1,18 +1,47 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import type { components } from '$lib/api/types'
 	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
 	import { tryUseDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { Streamdown, type Extension } from 'svelte-streamdown'
 	import Code from 'svelte-streamdown/code'
 	import Math from 'svelte-streamdown/math'
 
+	type Citation = components['schemas']['Citation']
+
 	type Props = {
 		content: string
 		class?: string
 		isStreaming?: boolean
+		citations?: Citation[]
 	}
 
-	let { content, class: className, isStreaming = false }: Props = $props()
+	let { content, class: className, isStreaming = false, citations = [] }: Props = $props()
+
+	/** map citation source type to a navigable URL */
+	function citationUrl(c: Citation): string {
+		switch (c.source_type) {
+			case 'url':
+				return c.source_id
+			case 'file':
+				return `/api/v1/files/${c.source_id}/content`
+			case 'note':
+				return `/notes/${c.source_id}`
+			case 'thread':
+				return `/c/${c.source_id}`
+			default:
+				return ''
+		}
+	}
+
+	const sources = $derived(
+		Object.fromEntries(
+			citations.map((c) => [
+				String(c.index),
+				{ title: c.title ?? '', url: citationUrl(c) },
+			])
+		)
+	)
 
 	const debugUi = tryUseDebugUi()
 
@@ -102,6 +131,8 @@
 	{allowedImagePrefixes}
 	baseTheme="shadcn"
 	{theme}
+	{sources}
+	inlineCitationsMode="carousel"
 	extensions={[detailsExtension]}
 	components={{
 		code: Code,

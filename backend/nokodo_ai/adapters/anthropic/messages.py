@@ -43,6 +43,7 @@ from .types import (
 	AnthropicTextBlock,
 	AnthropicTextBlockParam,
 	AnthropicTextDelta,
+	AnthropicThinkingConfigParam,
 	AnthropicToolChoice,
 	AnthropicToolChoiceAnyParam,
 	AnthropicToolChoiceAutoParam,
@@ -58,6 +59,26 @@ from .types import (
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
+
+
+_ANTHROPIC_THINKING_BUDGET: dict[str, int] = {
+	"minimal": 512,
+	"low": 2000,
+	"medium": 5000,
+	"high": 10000,
+}
+
+
+def _reasoning_effort_to_anthropic(
+	effort: str,
+) -> AnthropicThinkingConfigParam:
+	"""convert reasoning_effort to an anthropic thinking config param."""
+	if effort == "none":
+		return {"type": "disabled"}
+	if effort == "max":
+		return {"type": "adaptive"}
+	budget = _ANTHROPIC_THINKING_BUDGET.get(effort, 5000)
+	return {"type": "enabled", "budget_tokens": budget}
 
 
 class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
@@ -146,6 +167,9 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			top_p=params.top_p if params.top_p is not None else anthropic.omit,
 			top_k=params.top_k if params.top_k is not None else anthropic.omit,
 			stop_sequences=params.stop if params.stop else anthropic.omit,
+			thinking=_reasoning_effort_to_anthropic(params.reasoning_effort)
+			if params.reasoning_effort is not None
+			else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
 			extra_headers=extra_headers,
@@ -239,6 +263,9 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			top_p=params.top_p if params.top_p is not None else anthropic.omit,
 			top_k=params.top_k if params.top_k is not None else anthropic.omit,
 			stop_sequences=params.stop if params.stop else anthropic.omit,
+			thinking=_reasoning_effort_to_anthropic(params.reasoning_effort)
+			if params.reasoning_effort is not None
+			else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
 			extra_headers=extra_headers,

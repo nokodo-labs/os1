@@ -16,6 +16,15 @@ from anthropic.types import (
 	ImageBlockParam as AnthropicImageBlockParam,
 )
 from anthropic.types import (
+	ThinkingConfigDisabledParam as AnthropicThinkingConfigDisabledParam,
+)
+from anthropic.types import (
+	ThinkingConfigEnabledParam as AnthropicThinkingConfigEnabledParam,
+)
+from anthropic.types import (
+	ThinkingConfigParam as AnthropicThinkingConfigParam,
+)
+from anthropic.types import (
 	URLImageSourceParam as AnthropicURLImageSourceParam,
 )
 from anthropic.types.input_json_delta import (
@@ -90,6 +99,9 @@ __all__ = [
 	"AnthropicToolResultBlockParam",
 	"AnthropicToolUseBlock",
 	"AnthropicToolUseBlockParam",
+	"AnthropicThinkingConfigParam",
+	"AnthropicThinkingConfigEnabledParam",
+	"AnthropicThinkingConfigDisabledParam",
 ]
 
 type AnthropicToolChoice = (

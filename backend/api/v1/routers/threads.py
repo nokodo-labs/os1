@@ -1,4 +1,4 @@
-"""Thread and message routers."""
+"""thread and message routers."""
 
 from __future__ import annotations
 
@@ -45,7 +45,11 @@ from api.v1.service import access_rules as access_rules_service
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin, require_thread_access
+from api.v1.service.authorization import (
+	get_effective_access_level,
+	require_admin,
+	require_thread_access,
+)
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_response
@@ -68,7 +72,7 @@ async def create_thread(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Thread:
-	"""Create a new thread."""
+	"""create a new thread."""
 	return await thread_service.create_thread(
 		thread_in, db, principal=principal, origin_session_id=x_session_id
 	)
@@ -127,7 +131,7 @@ async def list_threads(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Thread]:
-	"""List threads optionally filtered by owner."""
+	"""list threads optionally filtered by owner."""
 	return await thread_service.list_threads(
 		db,
 		principal=principal,
@@ -195,7 +199,7 @@ async def get_thread(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Thread:
-	"""Fetch a single thread."""
+	"""fetch a single thread."""
 	return await thread_service.get_thread(
 		thread_id,
 		db,
@@ -212,7 +216,7 @@ async def update_thread(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Thread:
-	"""Update thread metadata."""
+	"""update thread metadata."""
 	return await thread_service.update_thread(
 		thread_id,
 		thread_in,
@@ -252,7 +256,7 @@ async def delete_thread(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> None:
-	"""Delete a thread."""
+	"""delete a thread."""
 	await thread_service.delete_thread(
 		thread_id, db, principal=principal, origin_session_id=x_session_id
 	)
@@ -270,7 +274,7 @@ async def list_messages(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
-	"""List messages within a thread."""
+	"""list messages within a thread."""
 	return await thread_service.list_messages(
 		thread_id,
 		db,
@@ -295,7 +299,7 @@ async def list_events_for_message_ids(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Event]:
-	"""List events associated with specific messages in this thread."""
+	"""list events associated with specific messages in this thread."""
 	return await thread_service.list_events_for_message_ids(
 		thread_id,
 		req.message_ids,
@@ -312,7 +316,7 @@ async def get_current_branch(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
-	"""Return the current root→leaf branch for this thread."""
+	"""return the current root→leaf branch for this thread."""
 	return await thread_service.get_current_branch(
 		thread_id,
 		db,
@@ -328,7 +332,7 @@ async def get_message_tree(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
-	"""Return all messages for this thread as a flat list."""
+	"""return all messages for this thread as a flat list."""
 	return await thread_service.list_message_tree(
 		thread_id,
 		db,
@@ -349,7 +353,7 @@ async def create_message(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Message:
-	"""Append a message to a thread."""
+	"""append a message to a thread."""
 	return await thread_service.create_message(
 		thread_id,
 		message_in,
@@ -415,7 +419,7 @@ async def switch_branch(
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> ThreadSwitchResponse:
-	"""Switch the active branch to the subtree rooted at message_id."""
+	"""switch the active branch to the subtree rooted at message_id."""
 	thread = await thread_service.switch_branch(
 		thread_id,
 		req.message_id,
@@ -432,9 +436,9 @@ async def list_thread_access_rules(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessRule]:
-	"""List access rules for a thread."""
+	"""list access rules for a thread."""
 	return await access_rules_service.list_access_rules(
-		ResourceType.THREAD, str(thread_id), db, principal=principal
+		ResourceType.THREAD, thread_id, db, principal=principal
 	)
 
 
@@ -445,10 +449,28 @@ async def set_thread_access_rules(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessRule]:
-	"""Replace access rules for a thread."""
+	"""replace access rules for a thread."""
 	return await access_rules_service.set_access_rules(
-		ResourceType.THREAD, str(thread_id), rules, db, principal=principal
+		ResourceType.THREAD, thread_id, rules, db, principal=principal
 	)
+
+
+@router.get("/{thread_id}/access-level", response_model=AccessLevel)
+async def get_thread_access_level(
+	thread_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> AccessLevel:
+	"""return the requester's effective access level on a thread."""
+	level = await get_effective_access_level(
+		db, principal, ResourceType.THREAD, thread_id,
+	)
+	if level is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="thread not found",
+		)
+	return level
 
 
 @router.post("/{thread_id}/runs/{run_id}/cancel")
@@ -460,7 +482,7 @@ async def cancel_run(
 ) -> dict[str, str]:
 	"""cancel an active agent run on a thread."""
 	await require_thread_access(
-		str(thread_id),
+		thread_id,
 		db,
 		principal,
 		required_level=AccessLevel.EDITOR,

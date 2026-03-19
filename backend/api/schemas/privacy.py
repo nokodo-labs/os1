@@ -28,7 +28,7 @@ class UserPrivacy(BaseModel):
 
 	online_status: Visibility = Field(default=Visibility.FRIENDS)
 	profile_picture: Visibility = Field(default=Visibility.EVERYONE)
-	real_name: Visibility = Field(default=Visibility.EVERYONE)
+	real_name: Visibility = Field(default=Visibility.FRIENDS)
 	bio: Visibility = Field(default=Visibility.EVERYONE)
 	gender: Visibility = Field(default=Visibility.FRIENDS)
 	birth_date: Visibility = Field(default=Visibility.FRIENDS)

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import { permissions } from '$lib/stores/permissions.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -79,7 +80,7 @@
 				disabled={isRefreshing}
 			>
 				<ArrowPath class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
-				{isRefreshing ? 'checking...' : 'refresh'}
+				{#if isRefreshing}<ShimmerText className="inline-block">checking</ShimmerText>{:else}refresh{/if}
 			</button>
 			<button
 				type="button"

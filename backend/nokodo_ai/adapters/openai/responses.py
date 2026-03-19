@@ -32,8 +32,10 @@ from ...utils.provider_meta import (
 from ...utils.validators import warn_known_model
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
+from .chat_completions import _to_openai_reasoning_effort
 from .types import (
 	OpenAIEasyInputMessageParam,
+	OpenAIReasoning,
 	OpenAIResponseCompletedEvent,
 	OpenAIResponseFunctionCallArgumentsDeltaEvent,
 	OpenAIResponseFunctionCallArgumentsDoneEvent,
@@ -137,6 +139,11 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			if params.tool_choice is not None
 			else openai.omit,
 			tools=_tools_to_openai_responses(tools) if tools else openai.omit,
+			reasoning=OpenAIReasoning(
+				effort=_to_openai_reasoning_effort(params.reasoning_effort)
+			)
+			if params.reasoning_effort is not None
+			else openai.omit,
 			top_p=params.top_p if params.top_p is not None else openai.omit,
 		)
 
@@ -204,6 +211,11 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			else openai.omit,
 			tool_choice=openai_tool_choice,
 			tools=openai_tools,
+			reasoning=OpenAIReasoning(
+				effort=_to_openai_reasoning_effort(params.reasoning_effort)
+			)
+			if params.reasoning_effort is not None
+			else openai.omit,
 			top_p=params.top_p if params.top_p is not None else openai.omit,
 		)
 

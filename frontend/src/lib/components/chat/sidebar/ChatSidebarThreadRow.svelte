@@ -127,7 +127,7 @@
 					: hasUnread
 						? 'unread messages'
 						: 'thread actions'}
-				title={hasRun ? 'agent is running...' : hasUnread ? 'unread messages' : 'Menu'}
+				title={hasRun ? 'agent is running' : hasUnread ? 'unread messages' : 'Menu'}
 			>
 				{#if hasRun}
 					<div class="relative flex h-2 w-2 shrink-0 items-center justify-center">

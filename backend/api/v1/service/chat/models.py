@@ -15,6 +15,7 @@ from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from api.settings import settings
 from nokodo_ai.adapters.audio import resolve_audio_adapter
+from nokodo_ai.adapters.base.chat import ChatGenerationParams
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.adapters.images import resolve_image_adapter
@@ -50,15 +51,13 @@ def build_sdk_adapter_config(
 def build_chat_model(
 	model: Model,
 	*,
-	temperature: float | None = None,
-	max_tokens: int | None = None,
+	params: ChatGenerationParams | dict[str, object] | None = None,
 ) -> ChatModel:
 	"""create an sdk ChatModel with fully explicit adapter configuration.
 
 	args:
 		model: orm Model instance with provider relationship loaded
-		temperature: optional temperature override
-		max_tokens: optional max_tokens override
+		params: optional chat model params to apply at construction time
 
 	returns:
 		configured ChatModel ready for use
@@ -73,11 +72,18 @@ def build_chat_model(
 		raise ValueError(f"unknown provider: {provider_key}")
 
 	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
+	if params is None:
+		param_kwargs: dict[str, object] = {}
+	elif isinstance(params, ChatGenerationParams):
+		param_kwargs = params.model_dump(exclude_unset=True)
+	else:
+		param_kwargs = ChatGenerationParams.model_validate(params).model_dump(
+			exclude_unset=True
+		)
 	return ChatModel.create(
 		model.name,
 		adapter=adapter_config,
-		temperature=temperature,
-		max_tokens=max_tokens,
+		**param_kwargs,
 	)
 
 
@@ -206,8 +212,6 @@ async def resolve_chat_model(
 	agent_id: TypeID | None = None,
 	model_id: TypeID | None = None,
 	model: str | None = None,
-	temperature: float | None = None,
-	max_tokens: int | None = None,
 ) -> ChatModel:
 	"""resolve and build an sdk ChatModel with full adapter config."""
 	resolved_model = await resolve_model_for_run(
@@ -216,11 +220,7 @@ async def resolve_chat_model(
 		model_id=model_id,
 		model=model,
 	)
-	return build_chat_model(
-		resolved_model,
-		temperature=temperature,
-		max_tokens=max_tokens,
-	)
+	return build_chat_model(resolved_model)
 
 
 async def resolve_embedding_model(

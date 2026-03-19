@@ -164,7 +164,6 @@
 	onMount(async () => {
 		// ensure the first route has had a chance to render + paint.
 		await tick()
-		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 		appReadiness.markShellReady()
 
 		// don't run auth redirects on not-found routes.

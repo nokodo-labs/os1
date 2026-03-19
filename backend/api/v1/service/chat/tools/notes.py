@@ -118,7 +118,19 @@ class NoteGetTool(Tool[AppContext]):
 			}
 			if note.labels:
 				result["labels"] = [str(label) for label in note.labels]
-			return self.success(json.dumps(result), __agent_context__)
+			return ToolMessage(
+				tool_call_id=__agent_context__.tool_call_id,
+				tool_output=json.dumps(result),
+				metadata={
+					"citable_sources": [
+						{
+							"source_type": "note",
+							"source_id": str(note.id),
+							"title": note.title,
+						},
+					],
+				},
+			)
 
 		if not inp.query:
 			return self.error(

@@ -48,7 +48,7 @@
 		{
 			key: 'online_status',
 			label: 'online status',
-			description: 'who can see when you are online',
+			description: 'who can see your online/activity status',
 		},
 		{
 			key: 'profile_picture',

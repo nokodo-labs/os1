@@ -123,6 +123,11 @@ async def load_sdk_thread(
 	for m in branch_orm:
 		sdk = m.to_sdk()
 		enriched = {**(sdk.metadata or {}), "message_id": str(m.id)}
+		# inject citations column into assistant message metadata so
+		# downstream filters can rebuild the citation index without a
+		# separate ORM lookup.
+		if m.type == "assistant" and m.citations:
+			enriched["citations"] = m.citations
 		sdk_messages.append(sdk.model_copy(update={"metadata": enriched}))
 
 	sdk_thread = SDKThread(

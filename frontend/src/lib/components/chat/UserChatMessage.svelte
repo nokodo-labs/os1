@@ -9,6 +9,7 @@
 	import type { ApiMessage } from '$lib/chat/types'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
@@ -298,7 +299,7 @@
 							bind:this={editTextarea}
 							bind:value={editContent}
 							class="text-foreground placeholder:text-foreground/40 w-full resize-none bg-transparent leading-relaxed wrap-break-word outline-none disabled:opacity-60"
-							placeholder="edit your message..."
+							placeholder="edit your message"
 							disabled={isSaving}
 							rows={1}
 							oninput={(e) => {
@@ -348,7 +349,11 @@
 									disabled={isSaving || !editContent.trim()}
 									class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
 								>
-									{isSaving ? 'saving...' : 'send'}
+									{#if isSaving}
+								<ShimmerText className="inline-block">saving</ShimmerText>
+							{:else}
+								send
+							{/if}
 								</button>
 							{/if}
 						</div>

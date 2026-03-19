@@ -323,10 +323,15 @@
 				back to projects
 			</button>
 		</div>
+	{:else if loading && !project}
+		<div class="flex items-center gap-3">
+			<FinderFolder class="h-7 w-7 shrink-0 text-foreground" variant="solid" />
+			<div class="bg-foreground/10 h-8 w-48 animate-pulse rounded-full"></div>
+		</div>
 	{:else}
 		<div class="flex items-start gap-3">
 			<div class="flex-1">
-				<PageTitle icon={FinderFolder} label={project?.name ?? 'loading...'} />
+				<PageTitle icon={FinderFolder} label={project?.name ?? ''} />
 				{#if project?.description}
 					<p class="text-foreground/60 mt-2 text-sm">{project.description}</p>
 				{/if}

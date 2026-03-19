@@ -6,6 +6,7 @@ from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.attachment_decay import AttachmentDecayFilter
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.filters.chat_context import ChatContextFilter
+from api.v1.service.chat.filters.citation_index import CitationIndexFilter
 from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.filters.memory import MemoryContextFilter
@@ -44,6 +45,7 @@ def resolve_filters(filter_ids: list[str]) -> list[AppFilter]:
 __all__ = [
 	"AttachmentDecayFilter",
 	"ChatContextFilter",
+	"CitationIndexFilter",
 	"ContextWindowingFilter",
 	"FileResolveFilter",
 	"Filter",
