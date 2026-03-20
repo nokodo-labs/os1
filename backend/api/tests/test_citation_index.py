@@ -82,6 +82,9 @@ def _mock_app_ctx(entries: list[Citation | None] | None = None) -> MagicMock:
 	ctx = MagicMock()
 	ctx.citations = entries if entries is not None else [None]
 	ctx.session = AsyncMock()
+	ctx.event_emitter = AsyncMock()
+	ctx.thread_id = None
+	ctx.user_id = "user_test"
 	return ctx
 
 

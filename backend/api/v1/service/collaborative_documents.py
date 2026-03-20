@@ -20,6 +20,7 @@ from api.v1.service.document_sessions import (
 	DocumentParticipant,
 	document_session_store,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -35,15 +36,15 @@ _DOC_RESOURCE_MAP: dict[str, ResourceType] = {
 }
 
 
-def _parse_document_id(document_id: str) -> tuple[ResourceType, str] | None:
-	"""parse a document_id like 'note:{uuid}' into (ResourceType, uuid)."""
+def _parse_document_id(document_id: str) -> tuple[ResourceType, TypeID] | None:
+	"""parse a document_id like 'note:{uuid}' into (ResourceType, TypeID)."""
 	parts = document_id.split(":", 1)
 	if len(parts) != 2:
 		return None
 	resource_type = _DOC_RESOURCE_MAP.get(parts[0])
 	if resource_type is None:
 		return None
-	return (resource_type, parts[1])
+	return (resource_type, TypeID(parts[1]))
 
 
 def _serialize_participant(p: DocumentParticipant) -> dict[str, str | None]:
@@ -74,7 +75,7 @@ class DocError:
 async def handle_join(
 	document_id: str,
 	user: User,
-	user_id: str,
+	user_id: TypeID,
 	ws_session_id: str,
 ) -> JoinResult | DocError:
 	"""validate access, join the room, notify peers, return state."""
@@ -126,7 +127,7 @@ async def handle_join(
 
 async def handle_leave(
 	document_id: str,
-	user_id: str,
+	user_id: TypeID,
 	ws_session_id: str,
 ) -> None:
 	"""leave a document room and notify remaining participants."""
@@ -172,7 +173,7 @@ async def handle_update(
 async def handle_awareness(
 	document_id: str,
 	awareness_data: dict[str, object],
-	user_id: str,
+	user_id: TypeID,
 	ws_session_id: str,
 ) -> None:
 	"""store awareness data and relay to peers."""
@@ -197,7 +198,7 @@ async def handle_awareness(
 
 
 async def handle_disconnect(
-	user_id: str,
+	user_id: TypeID,
 	ws_session_id: str,
 ) -> None:
 	"""clean up all document sessions for a disconnected WS and notify peers."""

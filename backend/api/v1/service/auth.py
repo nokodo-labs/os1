@@ -117,9 +117,9 @@ class Principal:
 	"""authenticated principal for authorization decisions."""
 
 	user: User
-	group_ids: tuple[str, ...]
+	group_ids: tuple[TypeID, ...]
 	permissions: frozenset[str]
-	role_ids: tuple[str, ...] = ()
+	role_ids: tuple[TypeID, ...] = ()
 	# merged resource access defaults across all roles + global
 	role_resource_defaults: DefaultResourceAccess = field(
 		default_factory=DefaultResourceAccess,
@@ -242,15 +242,15 @@ async def get_current_principal(
 	group_ids_result = await session.execute(
 		select(GroupMembership.group_id).where(GroupMembership.user_id == user.id)
 	)
-	group_ids = tuple(str(row[0]) for row in group_ids_result.all())
+	group_ids = tuple(TypeID(row[0]) for row in group_ids_result.all())
 
 	# aggregate permissions and resource defaults across all roles
 	all_permissions: list[str] = []
 	merged_access = DefaultResourceAccess()
-	role_ids: list[str] = []
+	role_ids: list[TypeID] = []
 
 	for role in user.roles:
-		role_ids.append(str(role.id))
+		role_ids.append(role.id)
 		dp = role.get_default_permissions()
 		all_permissions.extend(str(p) for p in dp.action_permissions)
 		merged_access = merged_access.merge(dp.resource_access)

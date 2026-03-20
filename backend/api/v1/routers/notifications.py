@@ -32,7 +32,7 @@ async def create_notifications(
 		db,
 		title=payload.title,
 		body=payload.body,
-		user_ids=[str(uid) for uid in payload.user_ids],
+		user_ids=payload.user_ids,
 	)
 
 

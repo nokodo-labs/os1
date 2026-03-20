@@ -19,6 +19,8 @@ from pydantic import Field
 from sqlalchemy import String, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event, EventScope
+from api.models.event_types import EventType
 from api.schemas.citations import Citation, CitationSource
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
@@ -73,9 +75,31 @@ class CitationIndexFilter(Filter):
 		# rebuild individual citation entries from persisted citations
 		_rebuild_from_existing(thread, entries)
 		# assign indices to new tool results
-		self._assign_new_citations(thread, entries)
+		citations_by_msg = self._assign_new_citations(thread, entries)
 		# inject reference card into system prompt
 		self._inject_manifest(thread, entries)
+
+		# emit per-message citation source events so frontends can build
+		# the sources map before the assistant message streams.
+		thread_id = app_context.thread_id
+		if citations_by_msg and not thread_id:
+			logger.warning("skipping citation event: no thread_id on app_context")
+		elif citations_by_msg and thread_id:
+			for msg_id, citations in citations_by_msg.items():
+				await app_context.event_emitter(
+					Event(
+						scope=EventScope.MESSAGE,
+						scope_id=msg_id,
+						type=EventType.CITATION_SOURCES,
+						data={
+							"thread_id": str(thread_id),
+							"citations": [c.model_dump(mode="json") for c in citations],
+						},
+						user_id=app_context.user_id,
+						thread_id=thread_id,
+						message_id=msg_id,
+					)
+				)
 
 		return thread
 
@@ -83,8 +107,12 @@ class CitationIndexFilter(Filter):
 		self,
 		thread: SDKThread,
 		entries: list[Citation | None],
-	) -> None:
-		"""find tool messages with citable_sources and assign indices."""
+	) -> dict[str, list[Citation]]:
+		"""find tool messages with citable_sources and assign indices.
+
+		returns a dict mapping tool message_id to newly assigned citations.
+		"""
+		by_message: dict[str, list[Citation]] = {}
 		for i, msg in enumerate(thread.messages):
 			if not isinstance(msg, SDKToolMessage):
 				continue
@@ -113,6 +141,11 @@ class CitationIndexFilter(Filter):
 			if not assigned:
 				continue
 
+			# track per source tool message for event scoping
+			msg_id = meta.get("message_id")
+			if msg_id:
+				by_message.setdefault(str(msg_id), []).extend(assigned)
+
 			# rewrite tool output to append citation markers
 			source_lines = [
 				f"[{e.index}] {e.title or e.source_id or e.source_type}"
@@ -127,6 +160,8 @@ class CitationIndexFilter(Filter):
 					"metadata": new_meta,
 				}
 			)
+
+		return by_message
 
 	def _inject_manifest(
 		self,

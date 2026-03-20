@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, ForeignKey, String, Text
+from sqlalchemy import ARRAY, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
@@ -29,6 +29,20 @@ class Note(
 
 	__tablename__ = "notes"
 	__typeid_prefix__ = "note"
+	__table_args__ = (
+		Index(
+			"idx_notes_title_trgm",
+			"title",
+			postgresql_using="gin",
+			postgresql_ops={"title": "gin_trgm_ops"},
+		),
+		Index(
+			"idx_notes_content_trgm",
+			"content",
+			postgresql_using="gin",
+			postgresql_ops={"content": "gin_trgm_ops"},
+		),
+	)
 
 	user_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),

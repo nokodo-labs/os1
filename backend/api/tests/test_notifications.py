@@ -304,7 +304,7 @@ async def test_send_agent_notification_thread_includes_owner_when_no_participant
 
 	user_ids = await list_accessible_user_ids(
 		ResourceType.THREAD,
-		str(thread.id),
+		thread.id,
 		db_session,
 	)
 

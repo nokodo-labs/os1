@@ -80,7 +80,12 @@ class File(
 	)
 	message_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
-		ForeignKey("messages.id", ondelete="SET NULL"),
+		ForeignKey(
+			"messages.id",
+			ondelete="SET NULL",
+			use_alter=True,
+			name="files_message_id_fkey",
+		),
 		index=True,
 	)
 

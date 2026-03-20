@@ -13,6 +13,7 @@ import type { SvelteMap, SvelteSet } from 'svelte/reactivity'
 // --- API types ---
 
 export type ApiMessage = components['schemas']['Message']
+export type ApiCitation = components['schemas']['Citation']
 
 // --- content part types ---
 
@@ -164,6 +165,11 @@ export interface ChatContext {
 	readonly pendingActions: Map<string, 'reveal' | 'reference'>
 	readonly attachmentStates: SvelteMap<string, AttachmentStatus>
 	readonly threadAttachments: ThreadAttachment[]
+
+	// citations (message-scoped, accumulated from citation.sources WS events)
+	readonly citationSources: SvelteMap<string, ApiCitation[]>
+	addCitationSources(citations: ApiCitation[]): void
+	flushCitationsToMessage(messageId: string): void
 
 	// realtime
 	readonly typingUsers: SvelteSet<string>

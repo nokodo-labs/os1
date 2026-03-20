@@ -625,7 +625,11 @@
 															)}
 															isStreaming={false}
 															citations={segment.item.message
-																.citations ?? []}
+																.citations?.length
+																? segment.item.message.citations
+																: (chat.citationSources.get(
+																		segment.item.message.id
+																	) ?? [])}
 														/>
 													</div>
 												{:else if segment.type === 'tool_group'}
@@ -660,6 +664,10 @@
 																	.content}
 																isStreaming={!chat
 																	.streamingAssistant.isError}
+																citations={chat.citationSources.get(
+																	chat.streamingAssistant
+																		.messageId
+																) ?? []}
 															/>
 														</div>
 													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls && !hasActiveTools}

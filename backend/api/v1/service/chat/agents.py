@@ -235,8 +235,8 @@ async def run_agent(
 			)
 			create_background_task(
 				broadcast_run_event(
-					thread_id=str(thread_id),
-					agent_id=str(agent_id),
+					thread_id=thread_id,
+					agent_id=agent_id,
 					run_id=run_id_str,
 					started=True,
 				),
@@ -653,11 +653,12 @@ async def run_agent(
 		except GeneratorExit:
 			await safe_rollback(session)
 			if persist:
+				assert thread_id is not None
 				await run_status_store.fail_run(run_id_str)
 				create_background_task(
 					broadcast_run_event(
-						thread_id=str(thread_id),
-						agent_id=str(agent_id),
+						thread_id=thread_id,
+						agent_id=agent_id,
 						run_id=run_id_str,
 						started=False,
 					),
@@ -668,11 +669,12 @@ async def run_agent(
 			logger.exception("error during agent streaming")
 			await safe_rollback(session)
 			if persist:
+				assert thread_id is not None
 				await run_status_store.fail_run(run_id_str)
 				create_background_task(
 					broadcast_run_event(
-						thread_id=str(thread_id),
-						agent_id=str(agent_id),
+						thread_id=thread_id,
+						agent_id=agent_id,
 						run_id=run_id_str,
 						started=False,
 					),
@@ -686,11 +688,12 @@ async def run_agent(
 				await message_queue.put(("__STOP__", SDKAssistantMessage()))
 
 		if persist:
+			assert thread_id is not None
 			await run_status_store.complete_run(run_id_str)
 			create_background_task(
 				broadcast_run_event(
-					thread_id=str(thread_id),
-					agent_id=str(agent_id),
+					thread_id=thread_id,
+					agent_id=agent_id,
 					run_id=run_id_str,
 					started=False,
 				),

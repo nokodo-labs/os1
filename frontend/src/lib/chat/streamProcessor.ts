@@ -124,6 +124,8 @@ export function processDelta(
 				const isNewStreamingMessage =
 					!ctx.streamingAssistant || ctx.streamingAssistant.messageId !== messageId
 				if (isNewStreamingMessage) {
+					// flush any pending citation sources into this message's slot
+					ctx.flushCitationsToMessage(messageId)
 					hapticFeedback()
 					const runId = typeof env.run_id === 'string' ? env.run_id : null
 					ctx.streamingAssistant = {

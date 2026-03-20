@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, LargeBinary, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
@@ -27,6 +27,14 @@ class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	__tablename__ = "memories"
 	__typeid_prefix__ = "mem"
+	__table_args__ = (
+		Index(
+			"idx_memories_content_trgm",
+			"content",
+			postgresql_using="gin",
+			postgresql_ops={"content": "gin_trgm_ops"},
+		),
+	)
 
 	user_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),

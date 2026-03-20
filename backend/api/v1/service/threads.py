@@ -1237,8 +1237,8 @@ async def delete_user_message_turn(
 async def handle_typing_event(
 	*,
 	session: AsyncSession,
-	user_id: str,
-	thread_id: str,
+	user_id: TypeID,
+	thread_id: TypeID,
 	typing: bool,
 ) -> None:
 	"""broadcast a typing indicator to all users with access to a thread.

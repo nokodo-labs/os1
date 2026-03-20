@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -36,6 +36,14 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 
 	__tablename__ = "reminder_lists"
 	__typeid_prefix__ = "reml"
+	__table_args__ = (
+		Index(
+			"idx_reminder_lists_name_trgm",
+			"name",
+			postgresql_using="gin",
+			postgresql_ops={"name": "gin_trgm_ops"},
+		),
+	)
 
 	owner_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),
@@ -74,6 +82,20 @@ class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	__tablename__ = "reminders"
 	__typeid_prefix__ = "rem"
+	__table_args__ = (
+		Index(
+			"idx_reminders_title_trgm",
+			"title",
+			postgresql_using="gin",
+			postgresql_ops={"title": "gin_trgm_ops"},
+		),
+		Index(
+			"idx_reminders_description_trgm",
+			"description",
+			postgresql_using="gin",
+			postgresql_ops={"description": "gin_trgm_ops"},
+		),
+	)
 
 	owner_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),

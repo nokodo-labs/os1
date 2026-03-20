@@ -823,8 +823,10 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 	test_db_url = _create_isolated_test_database_url()
 	engine = await _create_async_engine_with_fallback(test_db_url)
 
+	original_session_factory = _db_module._async_session_factory
 	try:
 		async with engine.begin() as conn:
+			await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
 			await conn.run_sync(Base.metadata.create_all)
 
 		test_session_local = async_sessionmaker(

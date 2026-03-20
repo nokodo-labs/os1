@@ -246,7 +246,7 @@ async def list_accessible_user_ids(
 	session: AsyncSession,
 	*,
 	required_level: AccessLevel = AccessLevel.READER,
-) -> list[str]:
+) -> list[TypeID]:
 	"""return all user IDs that have at least *required_level* access to a resource.
 
 	resolves the same grant paths as ``resource_access_predicate`` but inverted:
@@ -304,7 +304,7 @@ async def list_accessible_user_ids(
 	#    grant sufficient access for this resource type
 	role_result = await session.execute(select(Role))
 	default_role_ids = [
-		str(r.id)
+		r.id
 		for r in role_result.scalars().all()
 		if _role_grants_default(r, resource_type, required_level)
 	]
@@ -326,7 +326,7 @@ async def list_accessible_user_ids(
 
 	combined = union(*queries).subquery()
 	result = await session.execute(select(combined.c[0]))
-	return [str(row[0]) for row in result.all()]
+	return [TypeID(row[0]) for row in result.all()]
 
 
 def _role_grants_default(

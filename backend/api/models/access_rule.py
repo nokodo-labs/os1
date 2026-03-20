@@ -14,6 +14,7 @@ from api.models.mixins import (
 	TypeIDPrimaryKeyMixin,
 )
 from api.permissions import AccessLevel
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -55,17 +56,17 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	__typeid_prefix__ = "arule"
 
 	# subject specification (exactly one, or none for public)
-	subject_user_id: Mapped[str | None] = mapped_column(
+	subject_user_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 		index=True,
 	)
-	subject_group_id: Mapped[str | None] = mapped_column(
+	subject_group_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("groups.id", ondelete="CASCADE"),
 		index=True,
 	)
-	subject_role_id: Mapped[str | None] = mapped_column(
+	subject_role_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("roles.id", ondelete="CASCADE"),
 		index=True,

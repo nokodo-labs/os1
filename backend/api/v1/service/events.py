@@ -101,10 +101,12 @@ _EVENT_ROUTING: dict[str, tuple[ResourceType, str]] = {
 	EventType.TOOL_PROGRESS: (ResourceType.THREAD, "thread_id"),
 	EventType.TOOL_CUSTOM: (ResourceType.THREAD, "thread_id"),
 	EventType.TOOL_NOTIFICATION: (ResourceType.THREAD, "thread_id"),
+	# citation events (route via thread)
+	EventType.CITATION_SOURCES: (ResourceType.THREAD, "thread_id"),
 }
 
 
-def _resolve_routing(event: Event) -> tuple[ResourceType, str] | None:
+def _resolve_routing(event: Event) -> tuple[ResourceType, TypeID] | None:
 	"""resolve the resource type and ID for access-based fan-out.
 
 	returns None for events that should use the legacy routing path
@@ -115,12 +117,12 @@ def _resolve_routing(event: Event) -> tuple[ResourceType, str] | None:
 		return None
 	resource_type, data_key = config
 	# extract resource ID from event data
-	resource_id: str | None = None
+	resource_id: TypeID | None = None
 	if event.data and data_key in event.data:
-		resource_id = str(event.data[data_key])
+		resource_id = TypeID(str(event.data[data_key]))
 	# fallback: thread-scoped resources can use event.thread_id
 	if not resource_id and resource_type == ResourceType.THREAD and event.thread_id:
-		resource_id = str(event.thread_id)
+		resource_id = event.thread_id
 	if not resource_id:
 		return None
 	return (resource_type, resource_id)
@@ -150,7 +152,7 @@ def _build_event_data(
 
 async def _resolve_recipient_ids(
 	event: Event,
-) -> list[str] | None:
+) -> list[TypeID] | None:
 	"""resolve all user IDs that should receive this event.
 
 	uses a fresh read-only session so pending deletes in the caller's
@@ -169,23 +171,23 @@ class ConnectionManager:
 	"""Manages active WebSocket connections per user for event broadcasting."""
 
 	def __init__(self) -> None:
-		self._connections: dict[str, set[WebSocket]] = defaultdict(set)
+		self._connections: dict[TypeID, set[WebSocket]] = defaultdict(set)
 		self._lock = asyncio.Lock()
 
-	async def connect(self, user_id: str, websocket: WebSocket) -> None:
+	async def connect(self, user_id: TypeID, websocket: WebSocket) -> None:
 		await websocket.accept()
 		async with self._lock:
 			self._connections[user_id].add(websocket)
 		logger.debug("websocket connected for user %s", user_id)
 
-	async def disconnect(self, user_id: str, websocket: WebSocket) -> None:
+	async def disconnect(self, user_id: TypeID, websocket: WebSocket) -> None:
 		async with self._lock:
 			self._connections[user_id].discard(websocket)
 			if not self._connections[user_id]:
 				del self._connections[user_id]
 		logger.debug("websocket disconnected for user %s", user_id)
 
-	async def send_to_user(self, user_id: str, data: dict[str, Any]) -> None:
+	async def send_to_user(self, user_id: TypeID, data: dict[str, Any]) -> None:
 		async with self._lock:
 			connections = list(self._connections.get(user_id, []))
 
@@ -197,10 +199,10 @@ class ConnectionManager:
 
 	async def send_to_users(
 		self,
-		user_ids: list[str],
+		user_ids: list[TypeID],
 		data: dict[str, Any],
 		*,
-		exclude_user_id: str | None = None,
+		exclude_user_id: TypeID | None = None,
 	) -> None:
 		"""send to all sessions of multiple users concurrently."""
 		targets = (uid for uid in user_ids if uid != exclude_user_id)
@@ -233,7 +235,7 @@ class ConnectionManager:
 		"""
 		event_data = _build_event_data(event, origin_session_id)
 		if event.user_id:
-			await self.send_to_user(str(event.user_id), event_data)
+			await self.send_to_user(event.user_id, event_data)
 		else:
 			await self.broadcast(event_data)
 
@@ -256,7 +258,7 @@ def build_event_emitter(
 	recipient lists are resolved on first use per resource and cached for the
 	lifetime of this emitter (a single agent run).
 	"""
-	_recipient_cache: dict[str, list[str]] = {}
+	_recipient_cache: dict[str, list[TypeID]] = {}
 
 	async def _broadcast_with_routing(event: Event) -> None:
 		"""broadcast an event with access-based routing (cached per resource)."""
@@ -278,7 +280,7 @@ def build_event_emitter(
 				return
 		# fallback: owner-only or broadcast
 		if event.user_id:
-			await event_connections.send_to_user(str(event.user_id), event_data)
+			await event_connections.send_to_user(event.user_id, event_data)
 		else:
 			await event_connections.broadcast(event_data)
 
@@ -294,7 +296,7 @@ def build_event_emitter(
 		if event.message_id is None and message_id_provider:
 			msg_id = message_id_provider()
 			if msg_id:
-				event.message_id = msg_id
+				event.message_id = TypeID(msg_id)
 
 		# broadcast immediately (with access-based routing)
 		_track(
@@ -353,7 +355,7 @@ async def publish_event(
 	if recipient_ids:
 		await event_connections.send_to_users(recipient_ids, event_data)
 	elif event.user_id:
-		await event_connections.send_to_user(str(event.user_id), event_data)
+		await event_connections.send_to_user(event.user_id, event_data)
 	else:
 		await event_connections.broadcast(event_data)
 
@@ -369,8 +371,7 @@ async def emit_event(
 	"""emit an event via the API."""
 	require_permission(principal, "events:manage")
 	if event_in.user_id is not None and not principal.is_admin:
-		target_user_id = str(event_in.user_id)
-		if target_user_id != principal.user_id:
+		if event_in.user_id != principal.user_id:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",

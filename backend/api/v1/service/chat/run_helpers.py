@@ -67,8 +67,8 @@ def message_to_sse_data(msg: MessageORM) -> dict[str, object]:
 
 async def broadcast_run_event(
 	*,
-	thread_id: str,
-	agent_id: str,
+	thread_id: TypeID,
+	agent_id: TypeID,
 	run_id: str,
 	started: bool,
 ) -> None:
