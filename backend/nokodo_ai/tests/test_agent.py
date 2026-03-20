@@ -548,3 +548,79 @@ async def test_agent_tool_call_with_no_metadata_sets_empty_context_metadata() ->
 	result = await agent.run(thread)
 	tool_msg = next(m for m in result if isinstance(m, ToolMessage))
 	assert tool_msg.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
+	"""when a tool returns a ToolMessage with custom metadata (e.g.
+	citable_sources) but no provider_data, the agent must still propagate
+	provider_data from the original ToolCall into the ToolMessage.
+
+	regression test for the bug where deep_merge(overwrite=False) treated
+	None base values for provider_data as existing, silently dropping
+	the overlay.
+	"""
+	from nokodo_ai.messages import PROVIDER_DATA_KEY
+
+	provider_meta = {
+		PROVIDER_DATA_KEY: {
+			"anthropic.messages": {"tool_call_id": "toolu_01ABC"},
+		}
+	}
+
+	class _CitableNoteTool(Tool[None]):
+		async def call(
+			self,
+			__agent_context__: AgentContext,
+			__app_context__: None,
+			**kwargs: object,
+		) -> ToolMessage:
+			# mimics NoteGetTool: returns custom metadata without provider_data
+			return ToolMessage(
+				tool_call_id=__agent_context__.tool_call_id,
+				tool_output="note content here",
+				metadata={
+					"citable_sources": [
+						{"source_type": "note", "source_id": "n1", "title": "My Note"},
+					],
+				},
+			)
+
+	adapter = _QueuedChatAdapter(
+		sync_responses=[
+			AssistantMessage(
+				tool_calls=[
+					ToolCall(
+						id="tc1",
+						name="citable_note",
+						arguments={},
+						metadata=provider_meta,
+					),
+				]
+			),
+			AssistantMessage.from_text("done"),
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	agent = Agent(
+		chat_model=chat_model,
+		tools=[
+			_CitableNoteTool(name="citable_note", description="fetch a note"),
+		],
+	)
+	thread = Thread()
+	thread.add(UserMessage.from_text("get my note"))
+
+	result = await agent.run(thread)
+	tool_msg = next(m for m in result if isinstance(m, ToolMessage))
+
+	# provider_data must be propagated despite tool returning custom metadata
+	assert tool_msg.metadata is not None
+	pd = tool_msg.metadata.get(PROVIDER_DATA_KEY)
+	assert pd is not None, "provider_data was not propagated to ToolMessage"
+	assert pd == {"anthropic.messages": {"tool_call_id": "toolu_01ABC"}}
+
+	# tool's own metadata must also be preserved
+	assert tool_msg.metadata.get("citable_sources") == [
+		{"source_type": "note", "source_id": "n1", "title": "My Note"},
+	]

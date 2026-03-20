@@ -99,7 +99,7 @@ class CitationIndexFilter(Filter):
 			for src in sources:
 				if not isinstance(src, dict) or "source_type" not in src:
 					continue
-				idx = len(entries)
+				idx = max(len(entries), 1)
 				raw_title = src.get("title")
 				entry = Citation(
 					index=idx,

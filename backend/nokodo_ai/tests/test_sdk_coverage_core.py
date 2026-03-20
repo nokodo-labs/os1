@@ -30,6 +30,7 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.threads import Thread
+from nokodo_ai.utils.dicts import deep_merge
 from nokodo_ai.utils.json_schema import schema_from_callable
 from nokodo_ai.utils.validators import (
 	types_compatible,
@@ -389,3 +390,38 @@ async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 
 	with pytest.raises(NotImplementedError, match="execute method must be"):
 		await h.execute(Thread(), None)
+
+
+# deep_merge
+
+
+def test_deep_merge_none_base_value_filled_by_overlay() -> None:
+	"""overwrite=False must fill None base values with overlay data.
+
+	regression test: when tool metadata had _provider_data=None and the
+	overlay had the real provider dict, deep_merge silently dropped it.
+	"""
+	base = {"_provider_data": None}
+	overlay = {"_provider_data": {"anthropic.messages": {"tool_call_id": "toolu_01"}}}
+	result = deep_merge(base, overlay, overwrite=False)
+	assert result["_provider_data"] == {
+		"anthropic.messages": {"tool_call_id": "toolu_01"}
+	}
+
+
+def test_deep_merge_none_base_value_filled_overwrite_true() -> None:
+	result = deep_merge({"a": None}, {"a": 42}, overwrite=True)
+	assert result["a"] == 42
+
+
+def test_deep_merge_overwrite_false_preserves_existing() -> None:
+	result = deep_merge({"a": 1}, {"a": 2}, overwrite=False)
+	assert result["a"] == 1
+
+
+def test_deep_merge_nested_none_filled() -> None:
+	"""None at a nested level is also treated as absent."""
+	base = {"outer": {"inner": None}}
+	overlay = {"outer": {"inner": "filled"}}
+	result = deep_merge(base, overlay, overwrite=False)
+	assert result["outer"]["inner"] == "filled"

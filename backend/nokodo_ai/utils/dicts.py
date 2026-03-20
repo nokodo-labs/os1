@@ -47,6 +47,12 @@ def deep_merge(
 			)
 			continue
 
+		# treat None as absent so overlay can fill missing values
+		# regardless of overwrite mode.
+		if base_value is None:
+			result[key] = value
+			continue
+
 		if overwrite:
 			result[key] = value
 

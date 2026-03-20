@@ -195,7 +195,9 @@
 		"iex": false,
 		"uv run mypy": true,
 		"uv run ruff": true,
-		"uv run pytest": true
+		"uv run pytest": true,
+		"pnpm exec svelte-check": true,
+		"pnpm exec eslint": true
 	},
 	"postman.settings.dotenv-detection-notification-visibility": false
 }
