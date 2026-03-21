@@ -49,17 +49,19 @@
 				isUnread={true}
 			/>
 		{:else if execution.status === 'running' || execution.status === 'pending'}
-			<div class="animate-pulse space-y-2 bg-foreground/5 p-3">
-				<div class="h-3 w-32 bg-foreground/10"></div>
-				<div class="h-3 w-48 bg-foreground/10"></div>
+			<div class="bg-foreground/5 animate-pulse space-y-2 p-3">
+				<div class="bg-foreground/10 h-3 w-32"></div>
+				<div class="bg-foreground/10 h-3 w-48"></div>
 			</div>
 		{/if}
 
 		{#if execution.events.length > 0}
 			<div class="mt-3 space-y-1">
 				{#each execution.events as event (event.id)}
-					<div class="flex items-start gap-2 text-xs text-foreground/60">
-						<span class="text-foreground/45">{event.timestamp.toLocaleTimeString()}</span>
+					<div class="text-foreground/60 flex items-start gap-2 text-xs">
+						<span class="text-foreground/45"
+							>{event.timestamp.toLocaleTimeString()}</span
+						>
 						<span>{formatToolEventLine(event)}</span>
 					</div>
 				{/each}

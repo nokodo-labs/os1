@@ -212,19 +212,19 @@
 		{#snippet items()}
 			{#each memories as memory (memory.id)}
 				<div
-					class="group rounded-container border border-foreground/8 bg-foreground/3 px-4 py-3 transition-colors hover:bg-foreground/5"
+					class="group rounded-container border-foreground/8 bg-foreground/3 hover:bg-foreground/5 border px-4 py-3 transition-colors"
 				>
 					{#if editingId === memory.id}
 						<!-- editing mode -->
 						<textarea
-							class="w-full resize-none rounded-lg border border-foreground/15 bg-foreground/5 px-3 py-2 text-sm text-foreground/90 outline-none focus:border-foreground/25"
+							class="border-foreground/15 bg-foreground/5 text-foreground/90 focus:border-foreground/25 w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none"
 							rows="3"
 							bind:value={editContent}
 						></textarea>
 						<div class="mt-2 flex items-center justify-end gap-1.5">
 							<button
 								type="button"
-								class="rounded-pill flex items-center gap-1 border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-xs text-foreground/60 transition-colors hover:bg-foreground/10 hover:text-foreground/80"
+								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 hover:text-foreground/80 flex items-center gap-1 border px-2.5 py-1 text-xs transition-colors"
 								onclick={cancelEdit}
 							>
 								<XMark class="h-3.5 w-3.5" />
@@ -232,7 +232,7 @@
 							</button>
 							<button
 								type="button"
-								class="rounded-pill flex items-center gap-1 border border-foreground/10 bg-foreground/10 px-2.5 py-1 text-xs text-foreground/80 transition-colors hover:bg-foreground/15"
+								class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/80 hover:bg-foreground/15 flex items-center gap-1 border px-2.5 py-1 text-xs transition-colors"
 								onclick={() => void saveEdit(memory.id)}
 							>
 								<Check class="h-3.5 w-3.5" />
@@ -243,10 +243,10 @@
 						<!-- display mode -->
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0 flex-1">
-								<p class="text-sm leading-relaxed text-foreground/80">
+								<p class="text-foreground/80 text-sm leading-relaxed">
 									{memory.content}
 								</p>
-								<p class="mt-1.5 text-xs text-foreground/50">
+								<p class="text-foreground/50 mt-1.5 text-xs">
 									created {formatDate(memory.created_at)}{memory.updated_at !==
 									memory.created_at
 										? ` · updated ${formatDate(memory.updated_at)}`
@@ -258,7 +258,7 @@
 							>
 								<button
 									type="button"
-									class="rounded-circle flex h-7 w-7 cursor-pointer items-center justify-center text-foreground/40 transition-colors hover:bg-foreground/10 hover:text-foreground/70"
+									class="rounded-circle text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70 flex h-7 w-7 cursor-pointer items-center justify-center transition-colors"
 									onclick={() => startEdit(memory)}
 									aria-label="edit memory"
 								>
@@ -266,7 +266,7 @@
 								</button>
 								<button
 									type="button"
-									class="rounded-circle flex h-7 w-7 cursor-pointer items-center justify-center text-foreground/40 transition-colors hover:bg-red-500/15 hover:text-red-400"
+									class="rounded-circle text-foreground/40 flex h-7 w-7 cursor-pointer items-center justify-center transition-colors hover:bg-red-500/15 hover:text-red-400"
 									onclick={() => void deleteMemory(memory.id)}
 									aria-label="delete memory"
 								>
@@ -293,7 +293,8 @@
 					onclick={() => void deleteAll()}
 				>
 					<Trash class="h-3.5 w-3.5" />
-					{#if deletingAll}<ShimmerText className="inline-block">deleting</ShimmerText>{:else}delete all{/if}
+					{#if deletingAll}<ShimmerText className="inline-block">deleting</ShimmerText
+						>{:else}delete all{/if}
 				</button>
 			{/if}
 		{/snippet}

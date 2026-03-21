@@ -55,19 +55,16 @@
 		isSubmitting = true
 
 		try {
-			const { data, error, response } = await api.POST(
-				'/v1/auth/login/access-token',
-				{
-					headers: {
-						'Content-Type': 'application/x-www-form-urlencoded',
-					},
-					body: {
-						username: identifier.trim(),
-						password,
-						scope: '',
-					},
-				}
-			)
+			const { data, error, response } = await api.POST('/v1/auth/login/access-token', {
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: {
+					username: identifier.trim(),
+					password,
+					scope: '',
+				},
+			})
 
 			if (error || !data) {
 				const detail = (error as { detail?: unknown } | undefined)?.detail

@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { getApiBaseUrl } from '$lib/api/client'
+	import type { components } from '$lib/api/types'
 	import {
 		blockHasStreamingAssistant,
 		contentPartsToText,
@@ -24,6 +25,8 @@
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
+	import CitationSourcesModal from '$lib/components/chat/CitationSourcesModal.svelte'
+	import CitationSourcesPill from '$lib/components/chat/CitationSourcesPill.svelte'
 	import CopyButton from '$lib/components/chat/CopyButton.svelte'
 	import FloatingButtons from '$lib/components/chat/FloatingButtons.svelte'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
@@ -61,6 +64,10 @@
 	let inputFocusToken = $state(0)
 	let lastInputFocusKey = $state<string | null>(null)
 	let isReadOnly = $state(false)
+
+	// citation sources modal state
+	type Citation = components['schemas']['Citation']
+	let sourcesModalCitations = $state<Citation[] | null>(null)
 
 	// system chrome for agent selector
 	const chrome = useSystemChrome()
@@ -685,6 +692,27 @@
 									{/snippet}
 
 									{#snippet actions()}
+										{@const blockCitations = [
+											...responseItems
+												.filter(
+													(
+														i
+													): i is {
+														kind: 'assistant'
+														message: ApiMessage
+													} => i.kind === 'assistant'
+												)
+												.flatMap((i) => [
+													...(i.message.citations ?? []),
+													...(chat.citationSources.get(i.message.id) ??
+														[]),
+												]),
+											...(isStreamingBlock && chat.streamingAssistant
+												? (chat.citationSources.get(
+														chat.streamingAssistant.messageId
+													) ?? [])
+												: []),
+										]}
 										<CopyButton
 											content={() => {
 												const allText = responseItems
@@ -728,6 +756,14 @@
 											>
 												retry
 											</button>
+										{/if}
+										{#if blockCitations.length > 0}
+											<CitationSourcesPill
+												citations={blockCitations}
+												onclick={() => {
+													sourcesModalCitations = blockCitations
+												}}
+											/>
 										{/if}
 									{/snippet}
 								</AssistantChatMessage>
@@ -884,3 +920,11 @@
 		</div>
 	</div>
 {/if}
+
+<CitationSourcesModal
+	open={sourcesModalCitations !== null}
+	citations={sourcesModalCitations ?? []}
+	onClose={() => {
+		sourcesModalCitations = null
+	}}
+/>

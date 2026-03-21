@@ -122,6 +122,11 @@ def _parse_response(
 	return ImageGenerationResult(images=images)
 
 
+def _is_legacy_dalle(model: str) -> bool:
+	"""return True for DALL-E models that use response_format (not output_format)."""
+	return model.startswith("dall-e")
+
+
 class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 	"""openai image generation via images.generate / images.edit.
 
@@ -142,17 +147,29 @@ class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 		quality = _map_quality(params.quality)
 		fmt = _map_output_format(params.output_format)
 
-		response = await client.images.generate(
-			prompt=prompt,
-			model=warn_known_model(model, OpenAIImageModel),
-			n=params.n,
-			size=size if size else openai.omit,
-			quality=quality if quality else openai.omit,
-			style=(params.style if params.style else openai.omit),
-			output_format=fmt if fmt else openai.omit,
-			background=(params.background if params.background else openai.omit),
-			response_format="b64_json",
-		)
+		if _is_legacy_dalle(model):
+			# DALL-E 2/3: uses response_format; output_format not supported
+			response = await client.images.generate(
+				prompt=prompt,
+				model=warn_known_model(model, OpenAIImageModel),
+				n=params.n,
+				size=size if size else openai.omit,
+				quality=quality if quality else openai.omit,
+				style=(params.style if params.style else openai.omit),
+				response_format="b64_json",
+			)
+		else:
+			# gpt-image-1+: uses output_format; response_format not supported
+			response = await client.images.generate(
+				prompt=prompt,
+				model=warn_known_model(model, OpenAIImageModel),
+				n=params.n,
+				size=size if size else openai.omit,
+				quality=quality if quality else openai.omit,
+				style=(params.style if params.style else openai.omit),
+				output_format=fmt if fmt else openai.omit,
+				background=(params.background if params.background else openai.omit),
+			)
 
 		return _parse_response(response, fmt)
 
@@ -170,15 +187,28 @@ class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 		quality = _map_quality(params.quality)
 		fmt = _map_output_format(params.output_format)
 
-		response = await client.images.edit(
-			prompt=prompt,
-			image=image,
-			model=warn_known_model(model, OpenAIImageModel),
-			n=params.n,
-			mask=mask if mask is not None else openai.omit,
-			size=(cast(OpenAIImageEditSize, size) if size else openai.omit),
-			quality=quality if quality else openai.omit,
-			response_format="b64_json",
-		)
+		if _is_legacy_dalle(model):
+			# DALL-E 2: uses response_format; output_format not supported
+			response = await client.images.edit(
+				prompt=prompt,
+				image=image,
+				model=warn_known_model(model, OpenAIImageModel),
+				n=params.n,
+				mask=mask if mask is not None else openai.omit,
+				size=(cast(OpenAIImageEditSize, size) if size else openai.omit),
+				response_format="b64_json",
+			)
+		else:
+			# gpt-image-1+: uses output_format; response_format not supported
+			response = await client.images.edit(
+				prompt=prompt,
+				image=image,
+				model=warn_known_model(model, OpenAIImageModel),
+				n=params.n,
+				mask=mask if mask is not None else openai.omit,
+				size=(cast(OpenAIImageEditSize, size) if size else openai.omit),
+				quality=quality if quality else openai.omit,
+				output_format=fmt if fmt else openai.omit,
+			)
 
 		return _parse_response(response, fmt)

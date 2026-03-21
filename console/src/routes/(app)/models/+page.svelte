@@ -111,15 +111,12 @@
 
 	$effect(() => {
 		if (showModal) {
-			// auto-select adapter when only one option, clear if invalid
-			if (adapterOptions.length === 1) {
+			// auto-select adapter; when current adapter is invalid for the new type, pick first
+			const currentValid =
+				formState.adapter && adapterOptions.find((o) => o.value === formState.adapter)
+			if (!currentValid && adapterOptions.length > 0) {
 				formState.adapter = adapterOptions[0].value
-			} else if (!formState.adapter && adapterOptions.length > 0) {
-				formState.adapter = adapterOptions[0].value
-			} else if (
-				formState.adapter &&
-				!adapterOptions.find((o) => o.value === formState.adapter)
-			) {
+			} else if (adapterOptions.length === 0) {
 				formState.adapter = null
 			}
 		}
@@ -535,6 +532,13 @@
 					{#if submitError}
 						<div class="rounded-md bg-red-500/10 p-3 text-sm text-red-500">
 							{submitError}
+						</div>
+					{/if}
+
+					{#if modalMode === 'edit' && editingId}
+						<div class="space-y-1">
+							<Label class="text-xs text-zinc-500">id</Label>
+							<p class="font-mono text-xs text-zinc-400 select-all">{editingId}</p>
 						</div>
 					{/if}
 

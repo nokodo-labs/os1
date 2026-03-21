@@ -9,12 +9,12 @@ import pytest
 from api.schemas.citations import Citation, CitationSource
 from api.v1.service.chat.filters.citation_index import (
 	CitationIndexFilter,
-	_ensure_slot,
 	_find_nci_in_window,
+	_next_index,
 	_oldest_message_id,
 	_overfetch_nci,
 	_rebuild_from_existing,
-	_seed_entries,
+	_resolve_nci,
 	resolve_assistant_citations,
 )
 from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
@@ -78,9 +78,9 @@ def _assistant_msg(
 	)
 
 
-def _mock_app_ctx(entries: list[Citation | None] | None = None) -> MagicMock:
+def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 	ctx = MagicMock()
-	ctx.citations = entries if entries is not None else [None]
+	ctx.citations = entries if entries is not None else []
 	ctx.session = AsyncMock()
 	ctx.event_emitter = AsyncMock()
 	ctx.thread_id = None
@@ -88,25 +88,30 @@ def _mock_app_ctx(entries: list[Citation | None] | None = None) -> MagicMock:
 	return ctx
 
 
-# -- _ensure_slot ------------------------------------------------------------
+# -- _next_index -------------------------------------------------------------
 
 
-class TestEnsureSlot:
-	def test_grows_list(self) -> None:
-		lst: list[Citation | None] = [None]
-		_ensure_slot(lst, 5)
-		assert len(lst) == 6
-		assert all(x is None for x in lst)
+class TestNextIndex:
+	def test_first_citation_from_empty(self) -> None:
+		assert _next_index([], 0) == 1
 
-	def test_no_op_when_already_large(self) -> None:
-		lst: list[Citation | None] = [None] * 10
-		_ensure_slot(lst, 3)
-		assert len(lst) == 10
+	def test_continues_from_existing(self) -> None:
+		entries = [_citation(1), _citation(2)]
+		assert _next_index(entries, 0) == 3
 
-	def test_exact_boundary(self) -> None:
-		lst: list[Citation | None] = [None]
-		_ensure_slot(lst, 1)
-		assert len(lst) == 2
+	def test_respects_nci_floor(self) -> None:
+		# nci=5 means last run ended at index 4, next should be 5
+		assert _next_index([], 5) == 5
+
+	def test_entries_take_priority_over_nci(self) -> None:
+		entries = [_citation(1), _citation(2), _citation(3)]
+		# entries highest=3 > nci-1=1, so next=4
+		assert _next_index(entries, 2) == 4
+
+	def test_nci_takes_priority_when_higher(self) -> None:
+		entries = [_citation(1)]
+		# nci=5 -> nci-1=4 > highest=1, so next=5
+		assert _next_index(entries, 5) == 5
 
 
 # -- _find_nci_in_window -----------------------------------------------------
@@ -192,7 +197,7 @@ class TestOldestMessageId:
 
 class TestRebuildFromExisting:
 	def test_rebuilds_citations_from_assistant_metadata(self) -> None:
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		citation_data = {
 			"index": 1,
 			"source_type": "url",
@@ -205,12 +210,12 @@ class TestRebuildFromExisting:
 			]
 		)
 		_rebuild_from_existing(thread, entries)
-		assert len(entries) == 2
-		assert entries[1] is not None
-		assert entries[1].source_id == "https://example.com"
+		assert len(entries) == 1
+		assert entries[0].index == 1
+		assert entries[0].source_id == "https://example.com"
 
 	def test_skips_non_assistant_messages(self) -> None:
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				UserMessage.from_text("hi"),
@@ -218,11 +223,11 @@ class TestRebuildFromExisting:
 			]
 		)
 		_rebuild_from_existing(thread, entries)
-		assert entries == [None]
+		assert entries == []
 
 	def test_does_not_overwrite_existing_entries(self) -> None:
 		existing = _citation(1, source_id="https://original.com")
-		entries: list[Citation | None] = [None, existing]
+		entries: list[Citation] = [existing]
 		citation_data = {
 			"index": 1,
 			"source_type": "url",
@@ -231,10 +236,11 @@ class TestRebuildFromExisting:
 		}
 		thread = Thread(messages=[_assistant_msg(citations=[citation_data])])
 		_rebuild_from_existing(thread, entries)
-		assert entries[1] is existing
+		assert len(entries) == 1
+		assert entries[0] is existing
 
 	def test_skips_invalid_citation_data(self) -> None:
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_assistant_msg(
@@ -256,10 +262,10 @@ class TestRebuildFromExisting:
 			]
 		)
 		_rebuild_from_existing(thread, entries)
-		assert entries == [None]
+		assert entries == []
 
 	def test_skips_invalid_pydantic_data(self) -> None:
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_assistant_msg(
@@ -270,24 +276,21 @@ class TestRebuildFromExisting:
 			]
 		)
 		_rebuild_from_existing(thread, entries)
-		# invalid source_type should cause model_validate to fail
-		assert len(entries) >= 2
-		# depending on pydantic strictness, the entry may or may not be set
-		# if it fails, the slot should still be None
+		# invalid source_type causes model_validate to fail, entry skipped
 		# (the key behavior: no crash)
 
 	def test_handles_missing_citations_metadata(self) -> None:
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_assistant_msg(),  # no citations in metadata
 			]
 		)
 		_rebuild_from_existing(thread, entries)
-		assert entries == [None]
+		assert entries == []
 
 	def test_rebuilds_sparse_indices(self) -> None:
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_assistant_msg(
@@ -303,14 +306,11 @@ class TestRebuildFromExisting:
 			]
 		)
 		_rebuild_from_existing(thread, entries)
-		assert len(entries) == 6
-		assert entries[1] is None
-		assert entries[2] is None
-		assert entries[3] is not None
-		assert entries[3].source_id == "https://a.com"
-		assert entries[4] is None
-		assert entries[5] is not None
-		assert entries[5].source_type == CitationSource.NOTE
+		assert len(entries) == 2
+		assert entries[0].index == 3
+		assert entries[0].source_id == "https://a.com"
+		assert entries[1].index == 5
+		assert entries[1].source_type == CitationSource.NOTE
 
 
 # -- _assign_new_citations (via filter instance) -----------------------------
@@ -322,7 +322,7 @@ class TestAssignNewCitations:
 
 	def test_assigns_indices_to_citable_sources(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -337,12 +337,11 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
-		assert len(entries) == 2
-		assert entries[1] is not None
-		assert entries[1].index == 1
-		assert entries[1].source_id == "https://a.com"
-		assert entries[1].title == "Site A"
+		f._assign_new_citations(thread, entries, 0)
+		assert len(entries) == 1
+		assert entries[0].index == 1
+		assert entries[0].source_id == "https://a.com"
+		assert entries[0].title == "Site A"
 		# tool output should have markers appended
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
@@ -350,7 +349,7 @@ class TestAssignNewCitations:
 
 	def test_skips_already_assigned(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -360,31 +359,31 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
-		assert entries == [None]
+		f._assign_new_citations(thread, entries, 0)
+		assert entries == []
 
 	def test_skips_non_tool_messages(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				UserMessage.from_text("hi"),
 				_assistant_msg(),
 			]
 		)
-		f._assign_new_citations(thread, entries)
-		assert entries == [None]
+		f._assign_new_citations(thread, entries, 0)
+		assert entries == []
 
 	def test_skips_tool_without_citable_sources(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(messages=[_tool_msg(output="just text")])
-		f._assign_new_citations(thread, entries)
-		assert entries == [None]
+		f._assign_new_citations(thread, entries, 0)
+		assert entries == []
 
 	def test_skips_invalid_source_entries(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -397,15 +396,14 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
+		f._assign_new_citations(thread, entries, 0)
 		# only the valid one should be assigned
-		assert len(entries) == 2
-		assert entries[1] is not None
-		assert entries[1].source_id == "valid"
+		assert len(entries) == 1
+		assert entries[0].source_id == "valid"
 
 	def test_multiple_sources_in_one_tool(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -425,12 +423,10 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
-		assert len(entries) == 3
-		assert entries[1] is not None
-		assert entries[1].source_type == CitationSource.URL
-		assert entries[2] is not None
-		assert entries[2].source_type == CitationSource.NOTE
+		f._assign_new_citations(thread, entries, 0)
+		assert len(entries) == 2
+		assert entries[0].source_type == CitationSource.URL
+		assert entries[1].source_type == CitationSource.NOTE
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert "[1] A" in msg.tool_output
@@ -438,7 +434,7 @@ class TestAssignNewCitations:
 
 	def test_indices_continue_from_existing(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None, _citation(1), _citation(2)]
+		entries: list[Citation] = [_citation(1), _citation(2)]
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -453,15 +449,14 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
-		assert len(entries) == 4
-		assert entries[3] is not None
-		assert entries[3].index == 3
-		assert entries[3].source_id == "https://b.com"
+		f._assign_new_citations(thread, entries, 0)
+		assert len(entries) == 3
+		assert entries[2].index == 3
+		assert entries[2].source_id == "https://b.com"
 
 	def test_uses_source_id_as_label_when_no_title(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -472,14 +467,14 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
+		f._assign_new_citations(thread, entries, 0)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert "[1] https://notitle.com" in msg.tool_output
 
 	def test_uses_source_type_as_fallback_label(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -490,14 +485,14 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
+		f._assign_new_citations(thread, entries, 0)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert "[1] tool_result" in msg.tool_output
 
 	def test_marks_tool_message_as_assigned(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(
@@ -508,7 +503,7 @@ class TestAssignNewCitations:
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries)
+		f._assign_new_citations(thread, entries, 0)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert msg.metadata is not None
@@ -516,18 +511,18 @@ class TestAssignNewCitations:
 
 	def test_empty_citable_sources_list(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				_tool_msg(output="content", citable_sources=[]),
 			]
 		)
-		f._assign_new_citations(thread, entries)
-		assert entries == [None]
+		f._assign_new_citations(thread, entries, 0)
+		assert entries == []
 
 	def test_all_sources_invalid_skips_tool(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		tool = ToolMessage(
 			tool_call_id="tc_1",
 			tool_output="content",
@@ -540,12 +535,30 @@ class TestAssignNewCitations:
 			},
 		)
 		thread = Thread(messages=[tool])
-		f._assign_new_citations(thread, entries)
-		assert entries == [None]
+		f._assign_new_citations(thread, entries, 0)
+		assert entries == []
 		# tool output should be unchanged (no markers appended)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert msg.tool_output == "content"
+
+	def test_nci_floor_prevents_index_collision(self) -> None:
+		"""when nci is higher than entries count, new indices start at nci."""
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="content",
+					citable_sources=[
+						{"source_type": "url", "source_id": "x", "title": "X"},
+					],
+				),
+			]
+		)
+		f._assign_new_citations(thread, entries, 5)
+		assert len(entries) == 1
+		assert entries[0].index == 5
 
 
 # -- _inject_manifest --------------------------------------------------------
@@ -557,8 +570,7 @@ class TestInjectManifest:
 
 	def test_replaces_sentinel_with_manifest(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [
-			None,
+		entries: list[Citation] = [
 			_citation(1, title="Site A"),
 			_citation(2, source_type="note", source_id="note_1", title="My Note"),
 		]
@@ -576,7 +588,7 @@ class TestInjectManifest:
 
 	def test_clears_sentinel_when_no_citations(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None]
+		entries: list[Citation] = []
 		thread = Thread(
 			messages=[
 				SystemMessage.from_text(f"prompt\n{SENTINEL_CITATION_SOURCES}\nend"),
@@ -588,28 +600,9 @@ class TestInjectManifest:
 		assert SENTINEL_CITATION_SOURCES not in msg.text
 		assert "prompt" in msg.text
 
-	def test_skips_none_entries_in_manifest(self) -> None:
-		f = self._make_filter()
-		entries: list[Citation | None] = [
-			None,
-			_citation(1, title="A"),
-			None,
-			_citation(3, title="C"),
-		]
-		thread = Thread(
-			messages=[
-				SystemMessage.from_text(f"x{SENTINEL_CITATION_SOURCES}y"),
-			]
-		)
-		f._inject_manifest(thread, entries)
-		msg = thread.messages[0]
-		assert isinstance(msg, SystemMessage)
-		assert "[1] A" in msg.text
-		assert "[3] C" in msg.text
-
 	def test_no_sentinel_in_thread(self) -> None:
 		f = self._make_filter()
-		entries: list[Citation | None] = [None, _citation(1)]
+		entries: list[Citation] = [_citation(1)]
 		thread = Thread(
 			messages=[
 				SystemMessage.from_text("no sentinel here"),
@@ -627,8 +620,7 @@ class TestInjectManifest:
 
 class TestResolveAssistantCitations:
 	def test_resolves_markers_to_citations(self) -> None:
-		entries: list[Citation | None] = [
-			None,
+		entries: list[Citation] = [
 			_citation(1, source_id="https://a.com"),
 			_citation(2, source_id="https://b.com"),
 		]
@@ -638,31 +630,30 @@ class TestResolveAssistantCitations:
 		assert result[1].source_id == "https://b.com"
 
 	def test_returns_empty_for_no_text(self) -> None:
-		entries: list[Citation | None] = [None, _citation(1)]
+		entries: list[Citation] = [_citation(1)]
 		assert resolve_assistant_citations("", entries) == []
 
 	def test_returns_empty_for_no_entries(self) -> None:
-		assert resolve_assistant_citations("see [1]", [None]) == []
+		assert resolve_assistant_citations("see [1]", []) == []
 
 	def test_ignores_out_of_range_indices(self) -> None:
-		entries: list[Citation | None] = [None, _citation(1)]
+		entries: list[Citation] = [_citation(1)]
 		result = resolve_assistant_citations("see [1] and [99]", entries)
 		assert len(result) == 1
 
 	def test_ignores_zero_index(self) -> None:
-		entries: list[Citation | None] = [None, _citation(1)]
+		entries: list[Citation] = [_citation(1)]
 		result = resolve_assistant_citations("[0] and [1]", entries)
 		assert len(result) == 1
 		assert result[0].index == 1
 
 	def test_deduplicates_repeated_markers(self) -> None:
-		entries: list[Citation | None] = [None, _citation(1)]
+		entries: list[Citation] = [_citation(1)]
 		result = resolve_assistant_citations("[1] then [1] again", entries)
 		assert len(result) == 1
 
 	def test_returns_sorted_by_index(self) -> None:
-		entries: list[Citation | None] = [
-			None,
+		entries: list[Citation] = [
 			_citation(1, source_id="a"),
 			_citation(2, source_id="b"),
 			_citation(3, source_id="c"),
@@ -670,71 +661,76 @@ class TestResolveAssistantCitations:
 		result = resolve_assistant_citations("[3] then [1] then [2]", entries)
 		assert [c.index for c in result] == [1, 2, 3]
 
-	def test_skips_none_slots(self) -> None:
-		entries: list[Citation | None] = [None, None, _citation(2)]
-		result = resolve_assistant_citations("[1] and [2]", entries)
-		assert len(result) == 1
-		assert result[0].index == 2
-
 	def test_handles_adjacent_markers(self) -> None:
-		entries: list[Citation | None] = [None, _citation(1), _citation(2)]
+		entries: list[Citation] = [_citation(1), _citation(2)]
 		result = resolve_assistant_citations("[1][2]", entries)
 		assert len(result) == 2
 
 	def test_ignores_non_numeric_brackets(self) -> None:
-		entries: list[Citation | None] = [None, _citation(1)]
+		entries: list[Citation] = [_citation(1)]
 		result = resolve_assistant_citations("[abc] and [1]", entries)
 		assert len(result) == 1
 
+	def test_resolves_footnote_style_markers(self) -> None:
+		"""models sometimes emit [^n] instead of [n]."""
+		entries: list[Citation] = [
+			_citation(1, source_id="https://a.com"),
+			_citation(2, source_id="https://b.com"),
+		]
+		result = resolve_assistant_citations("see [^1] and [^2]", entries)
+		assert len(result) == 2
+		assert result[0].source_id == "https://a.com"
+		assert result[1].source_id == "https://b.com"
 
-# -- _seed_entries -----------------------------------------------------------
+	def test_resolves_mixed_bracket_and_footnote(self) -> None:
+		entries: list[Citation] = [_citation(1), _citation(2)]
+		result = resolve_assistant_citations("[1] and [^2]", entries)
+		assert len(result) == 2
+
+	def test_footnote_definition_lines_are_matched(self) -> None:
+		"""footnote defs like [^1]: ... still contain [^1] and should match."""
+		entries: list[Citation] = [_citation(1)]
+		text = "see [^1] for details.\n\n[^1]: source title"
+		result = resolve_assistant_citations(text, entries)
+		assert len(result) == 1
 
 
-class TestSeedEntries:
-	async def test_seeds_from_nci_in_window(self) -> None:
-		entries: list[Citation | None] = [None]
+# -- _resolve_nci ------------------------------------------------------------
+
+
+class TestResolveNci:
+	async def test_returns_nci_from_window(self) -> None:
 		thread = Thread(messages=[_assistant_msg(nci=5)])
 		session = AsyncMock()
-		await _seed_entries(entries, thread, session)
-		assert len(entries) == 5
+		result = await _resolve_nci(thread, session)
+		assert result == 5
 
-	async def test_no_op_when_entries_already_large_enough(self) -> None:
-		entries: list[Citation | None] = [None] * 10
-		thread = Thread(messages=[_assistant_msg(nci=5)])
-		session = AsyncMock()
-		await _seed_entries(entries, thread, session)
-		assert len(entries) == 10  # unchanged
-
-	async def test_no_op_when_no_nci_and_no_message_ids(self) -> None:
-		entries: list[Citation | None] = [None]
+	async def test_returns_zero_when_no_nci(self) -> None:
 		thread = Thread(messages=[_assistant_msg()])
 		session = AsyncMock()
-		await _seed_entries(entries, thread, session)
-		assert len(entries) == 1  # unchanged
+		result = await _resolve_nci(thread, session)
+		assert result == 0
 
 	async def test_overfetch_path_when_window_has_no_nci(self) -> None:
-		entries: list[Citation | None] = [None]
-		# no nci in assistant metadata, but has message_id -> triggers overfetch
 		thread = Thread(messages=[_assistant_msg(message_id="msg_001")])
 		session = AsyncMock()
 		with patch(
 			"api.v1.service.chat.filters.citation_index._overfetch_nci",
 			return_value=4,
 		) as mock_overfetch:
-			await _seed_entries(entries, thread, session)
+			result = await _resolve_nci(thread, session)
 			mock_overfetch.assert_awaited_once_with(session, "msg_001")
-		assert len(entries) == 4
+		assert result == 4
 
 	async def test_overfetch_returns_none(self) -> None:
-		entries: list[Citation | None] = [None]
 		thread = Thread(messages=[_assistant_msg(message_id="msg_001")])
 		session = AsyncMock()
 		with patch(
 			"api.v1.service.chat.filters.citation_index._overfetch_nci",
 			return_value=None,
 		):
-			await _seed_entries(entries, thread, session)
-		assert len(entries) == 1  # unchanged
+			result = await _resolve_nci(thread, session)
+		assert result == 0
 
 
 # -- _overfetch_nci ----------------------------------------------------------
@@ -810,9 +806,9 @@ class TestCitationIndexFilterProcess:
 		)
 		result = await f.process(thread, ctx)
 		# citation should be assigned
-		assert len(ctx.citations) == 2
-		assert ctx.citations[1] is not None
-		assert ctx.citations[1].source_id == "https://x.com"
+		assert len(ctx.citations) == 1
+		assert ctx.citations[0].index == 1
+		assert ctx.citations[0].source_id == "https://x.com"
 		# sentinel should be replaced
 		sys_msg = result.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
@@ -849,16 +845,68 @@ class TestCitationIndexFilterProcess:
 		)
 		result = await f.process(thread, ctx)
 		# entries should contain both rebuilt and new
-		assert len(ctx.citations) == 3
-		assert ctx.citations[1] is not None
-		assert ctx.citations[1].source_id == "https://old.com"
-		assert ctx.citations[2] is not None
-		assert ctx.citations[2].source_id == "note_1"
+		assert len(ctx.citations) == 2
+		assert ctx.citations[0].index == 1
+		assert ctx.citations[0].source_id == "https://old.com"
+		assert ctx.citations[1].index == 2
+		assert ctx.citations[1].source_id == "note_1"
 		# manifest should contain both
 		sys_msg = result.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
 		assert "[1] Old" in sys_msg.text
 		assert "[2] New Note" in sys_msg.text
+
+	async def test_empty_list_assigns_correctly(self) -> None:
+		"""ctx.citations starts as [] in production - verify it works."""
+		f = CitationIndexFilter()
+		ctx = _mock_app_ctx(entries=[])
+		thread = Thread(
+			messages=[
+				SystemMessage.from_text(f"prompt\n{SENTINEL_CITATION_SOURCES}"),
+				_tool_msg(
+					output="fetched page",
+					citable_sources=[
+						{
+							"source_type": "url",
+							"source_id": "https://x.com",
+							"title": "X",
+						},
+					],
+				),
+			]
+		)
+		await f.process(thread, ctx)
+		assert len(ctx.citations) == 1
+		assert ctx.citations[0].index == 1
+		assert ctx.citations[0].source_id == "https://x.com"
+		# ensure resolve_assistant_citations can find it
+		resolved = resolve_assistant_citations("see [1] here", ctx.citations)
+		assert len(resolved) == 1
+		assert resolved[0].source_id == "https://x.com"
+
+	async def test_single_source_resolvable(self) -> None:
+		"""a single citable source is properly resolvable."""
+		f = CitationIndexFilter()
+		ctx = _mock_app_ctx(entries=[])
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="content",
+					citable_sources=[
+						{
+							"source_type": "url",
+							"source_id": "https://only.com",
+							"title": "Only Source",
+						},
+					],
+				),
+			]
+		)
+		await f.process(thread, ctx)
+		result = resolve_assistant_citations("check [1] out", ctx.citations)
+		assert len(result) == 1
+		assert result[0].index == 1
+		assert result[0].source_id == "https://only.com"
 
 
 # -- Citation schema ---------------------------------------------------------

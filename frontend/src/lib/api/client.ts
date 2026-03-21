@@ -54,7 +54,10 @@ const urlInterceptor = {
 		const base = origin.endsWith('/') ? origin.slice(0, -1) : origin
 		let pathname: string
 		try {
-			pathname = new URL(request.url).pathname + new URL(request.url).search + new URL(request.url).hash
+			pathname =
+				new URL(request.url).pathname +
+				new URL(request.url).search +
+				new URL(request.url).hash
 		} catch {
 			pathname = request.url.startsWith('/') ? request.url : `/${request.url}`
 		}
@@ -94,22 +97,23 @@ const authInterceptor = {
 /**
  * bypasses Chrome's ALPN protocol crash by unwrapping Request objects back into primitive
  * strings and Blobs. This prevents Chrome from identifying the payload as a ReadableStream.
- * 
+ *
  * WHY IS THIS REQUIRED?
  * 1. openapi-fetch internally wraps all payloads into a `new Request(input)` object.
  * 2. According to the Fetch API, accessing `Request.body` exposes it as a `ReadableStream`.
  * 3. Chromium strictly mandates HTTP/2 for stream uploads natively (throwing ERR_ALPN_NEGOTIATION_FAILED if H2 is missing).
  * 4. Chromium REFUSES to negotiate HTTP/2 over cleartext (H2C).
- * 
+ *
  * Thus, any cross-origin POST with a body from Vite to a local development backend crashes instantly
  * in Chrome over HTTP. Unpacking the Request into a `fetch(url, blob)` circumvents Chromium's
  * stream detection perfectly natively.
- * 
+ *
  * This hack automatically bypasses itself if the request URL is HTTPS, meaning in production behind a
  * reverse proxy, it uses 100% native fetch.
  */
 async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+	const urlStr =
+		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
 
 	// If the origin is HTTPS, the browser will seamlessly negotiate HTTP/2 via TLS ALPN.
 	// We can safely use the native fetch directly without unwrapping.
@@ -139,7 +143,11 @@ async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 	return fetch(urlStr, options)
 }
 
-export const rawApi = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch, credentials: 'include' })
+export const rawApi = createClient<ApiPaths>({
+	baseUrl: '',
+	fetch: safeFetch,
+	credentials: 'include',
+})
 rawApi.use(urlInterceptor)
 
 export const api = createClient<ApiPaths>({ baseUrl: '', fetch: safeFetch, credentials: 'include' })

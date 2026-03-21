@@ -217,7 +217,9 @@
 					disabled={isDownloading}
 				>
 					<Download class="size-4" />
-					{#if isDownloading}<ShimmerText className="inline-block">downloading</ShimmerText>{:else}download{/if}
+					{#if isDownloading}<ShimmerText className="inline-block"
+							>downloading</ShimmerText
+						>{:else}download{/if}
 				</button>
 				<button
 					class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
@@ -244,7 +246,8 @@
 					disabled={isDeleting}
 				>
 					<Trash class="size-4" />
-					{#if isDeleting}<ShimmerText className="inline-block">deleting</ShimmerText>{:else}delete{/if}
+					{#if isDeleting}<ShimmerText className="inline-block">deleting</ShimmerText
+						>{:else}delete{/if}
 				</button>
 			</div>
 

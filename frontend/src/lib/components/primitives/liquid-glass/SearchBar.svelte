@@ -62,7 +62,7 @@
 >
 	<!-- search icon -->
 	<svg
-		class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-foreground/40"
+		class="text-foreground/40 pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
 		width="18"
 		height="18"
 		viewBox="0 0 24 24"
@@ -83,7 +83,7 @@
 		{disabled}
 		onfocus={() => (isFocused = true)}
 		onblur={() => (isFocused = false)}
-		class="h-full w-full bg-transparent pr-4 pl-11 text-sm text-foreground/80 outline-none placeholder:text-foreground/40"
+		class="text-foreground/80 placeholder:text-foreground/40 h-full w-full bg-transparent pr-4 pl-11 text-sm outline-none"
 		style="border-radius: {radius}px;"
 	/>
 </div>

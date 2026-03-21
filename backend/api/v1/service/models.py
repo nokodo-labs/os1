@@ -457,7 +457,6 @@ async def _sync_autofetched_models(
 				existing.enabled = True
 				existing.is_autofetched = True
 				existing.display_name = fm.display_name
-				existing.model_type = fm.model_type
 				existing.input_modalities = modalities
 				if existing.adapter is None:
 					existing.adapter = adapter

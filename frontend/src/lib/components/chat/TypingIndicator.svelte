@@ -28,7 +28,7 @@
 
 {#if isVisible}
 	<div
-		class="flex items-center gap-2 px-3 py-1.5 text-xs text-foreground/50 {className}"
+		class="text-foreground/50 flex items-center gap-2 px-3 py-1.5 text-xs {className}"
 		aria-live="polite"
 		aria-label={label}
 	>

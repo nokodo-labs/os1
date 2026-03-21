@@ -10,7 +10,7 @@ export type {
 	ChatState,
 	OptimisticUserMessage,
 	StreamDeltaContext,
-	ThreadAttachment
+	ThreadAttachment,
 } from './types'
 
 // helpers (pure functions + types)
@@ -43,7 +43,7 @@ export {
 	type ResponseSegment,
 	type RunBlock,
 	type RunItem,
-	type StreamingAssistantState
+	type StreamingAssistantState,
 } from './helpers'
 
 // stream processing
@@ -54,7 +54,7 @@ export {
 	findRunUserMessage,
 	getLatestLeaf,
 	isOnStreamingBranch,
-	switchBranch
+	switchBranch,
 } from './treeNavigation'
 
 // data loading
@@ -64,7 +64,7 @@ export {
 	ingestMessages,
 	loadOlderMessages,
 	loadTree,
-	syncCacheAfterRun
+	syncCacheAfterRun,
 } from './dataLoader'
 
 // user actions
@@ -75,7 +75,7 @@ export {
 	handleSaveEditMessage,
 	handleSendMessage,
 	handleStopGeneration,
-	requestDeleteUserMessage
+	requestDeleteUserMessage,
 } from './userActions'
 
 // event subscriptions

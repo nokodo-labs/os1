@@ -65,7 +65,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+				class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 				onclick={() => {
 					notes.sortMode = option.value
 					closeSortMenu()
@@ -92,6 +92,6 @@
 	<div
 		class="flex h-[calc(100vh-var(--chrome-island-offset,0px)-var(--spacing-island-content)-2.5rem)] items-center justify-center"
 	>
-		<p class="text-sm text-foreground/50">select or create a note</p>
+		<p class="text-foreground/50 text-sm">select or create a note</p>
 	</div>
 {/if}

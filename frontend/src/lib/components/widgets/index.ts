@@ -10,3 +10,4 @@ export type {
 	ResourceSortMode,
 	ResourceType,
 } from './types'
+export { default as UrlWidget } from './UrlWidget.svelte'

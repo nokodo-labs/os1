@@ -43,12 +43,6 @@ _CITATIONS_ASSIGNED_KEY = "_citations_assigned"
 _NCI_KEY = "next_citation_index"
 
 
-def _ensure_slot(entries: list[Citation | None], index: int) -> None:
-	"""grow the list so entries[index] is addressable."""
-	while len(entries) <= index:
-		entries.append(None)
-
-
 class CitationIndexFilter(Filter):
 	"""assign citation indices to tool results and build a reference card."""
 
@@ -67,15 +61,15 @@ class CitationIndexFilter(Filter):
 
 		entries = app_context.citations
 
-		# seed the entries list from the highest next_citation_index
-		# found on any assistant message in the loaded window.
-		# this handles both full-branch and partial-branch loads.
-		await _seed_entries(entries, thread, app_context.session)
+		# resolve the next-citation-index floor from persisted metadata.
+		# this tells us where new indices should start even when the
+		# original citations aren't in the loaded window.
+		nci = await _resolve_nci(thread, app_context.session)
 
 		# rebuild individual citation entries from persisted citations
 		_rebuild_from_existing(thread, entries)
 		# assign indices to new tool results
-		citations_by_msg = self._assign_new_citations(thread, entries)
+		citations_by_msg = self._assign_new_citations(thread, entries, nci)
 		# inject reference card into system prompt
 		self._inject_manifest(thread, entries)
 
@@ -106,7 +100,8 @@ class CitationIndexFilter(Filter):
 	def _assign_new_citations(
 		self,
 		thread: SDKThread,
-		entries: list[Citation | None],
+		entries: list[Citation],
+		nci: int,
 	) -> dict[str, list[Citation]]:
 		"""find tool messages with citable_sources and assign indices.
 
@@ -127,7 +122,7 @@ class CitationIndexFilter(Filter):
 			for src in sources:
 				if not isinstance(src, dict) or "source_type" not in src:
 					continue
-				idx = max(len(entries), 1)
+				idx = _next_index(entries, nci)
 				raw_title = src.get("title")
 				entry = Citation(
 					index=idx,
@@ -166,17 +161,15 @@ class CitationIndexFilter(Filter):
 	def _inject_manifest(
 		self,
 		thread: SDKThread,
-		entries: list[Citation | None],
+		entries: list[Citation],
 	) -> None:
 		"""replace the citation_sources sentinel with a reference card."""
-		if len(entries) <= 1:
+		if not entries:
 			self._replace_sentinel(thread, SENTINEL_CITATION_SOURCES, "")
 			return
 
 		lines = []
 		for entry in entries:
-			if entry is None:
-				continue
 			label = entry.title or entry.source_id or entry.source_type
 			lines.append(f"[{entry.index}] {label}")
 
@@ -184,30 +177,33 @@ class CitationIndexFilter(Filter):
 		self._replace_sentinel(thread, SENTINEL_CITATION_SOURCES, manifest)
 
 
-# -- seeding and rebuild helpers (module-level for testability) ----------------
+# -- helpers (module-level for testability) ------------------------------------
 
 
-async def _seed_entries(
-	entries: list[Citation | None],
+def _next_index(entries: list[Citation], nci: int) -> int:
+	"""compute the next 1-based citation index.
+
+	takes the highest existing index in entries and nci (persisted floor)
+	into account so indices never collide or go backwards.
+	"""
+	highest = entries[-1].index if entries else 0
+	return max(highest, nci - 1) + 1
+
+
+async def _resolve_nci(
 	thread: SDKThread,
 	session: AsyncSession,
-) -> None:
-	"""ensure entries has at least ``next_citation_index`` slots.
+) -> int:
+	"""find the next-citation-index from the loaded window or overfetch.
 
-	walks assistant messages in reverse to find the latest
-	next_citation_index. if none found in the loaded window,
-	falls back to an overfetch query.
+	returns 0 when no nci metadata is found anywhere.
 	"""
 	nci = _find_nci_in_window(thread)
 	if nci is None:
-		# overfetch: walk the branch upward from the oldest loaded
-		# message until an assistant message with the key is found.
 		oldest_id = _oldest_message_id(thread)
 		if oldest_id is not None:
 			nci = await _overfetch_nci(session, oldest_id)
-	if nci is not None and nci > len(entries):
-		while len(entries) < nci:
-			entries.append(None)
+	return nci or 0
 
 
 def _find_nci_in_window(thread: SDKThread) -> int | None:
@@ -289,9 +285,10 @@ async def _overfetch_nci(
 
 def _rebuild_from_existing(
 	thread: SDKThread,
-	entries: list[Citation | None],
+	entries: list[Citation],
 ) -> None:
-	"""scan assistant messages for persisted citations and rebuild map."""
+	"""scan assistant messages for persisted citations and fill entries."""
+	seen: set[int] = {c.index for c in entries}
 	for msg in thread.messages:
 		if not isinstance(msg, SDKAssistantMessage):
 			continue
@@ -305,35 +302,37 @@ def _rebuild_from_existing(
 			idx = citation_data.get("index")
 			if not isinstance(idx, int) or idx < 1:
 				continue
-			_ensure_slot(entries, idx)
-			if entries[idx] is not None:
+			if idx in seen:
 				continue
 			try:
-				entries[idx] = Citation.model_validate(citation_data)
+				entries.append(Citation.model_validate(citation_data))
+				seen.add(idx)
 			except Exception:
 				logger.debug("skipping invalid persisted citation at [%d]", idx)
+	# keep entries sorted by index for consistent ordering
+	entries.sort(key=lambda c: c.index)
 
 
 def resolve_assistant_citations(
 	text: str,
-	entries: list[Citation | None],
+	entries: list[Citation],
 ) -> list[Citation]:
-	"""extract [n] markers from assistant text, resolve to Citation objects.
+	"""extract citation markers from assistant text, resolve to Citation objects.
+
+	matches both ``[n]`` and markdown footnote ``[^n]`` syntax so that
+	citations are captured regardless of how the model formats them.
 
 	returns a list of Citation instances ready for message.citations persistence.
 	"""
-	if len(entries) <= 1 or not text:
+	if not entries or not text:
 		return []
 
+	by_index: dict[int, Citation] = {c.index: c for c in entries}
+
 	used_indices: set[int] = set()
-	for match in re.finditer(r"\[(\d+)\]", text):
+	for match in re.finditer(r"\[\^?(\d+)\]", text):
 		idx = int(match.group(1))
-		if 0 < idx < len(entries) and entries[idx] is not None:
+		if idx in by_index:
 			used_indices.add(idx)
 
-	citations: list[Citation] = []
-	for idx in sorted(used_indices):
-		entry = entries[idx]
-		if entry is not None:
-			citations.append(entry)
-	return citations
+	return [by_index[idx] for idx in sorted(used_indices)]

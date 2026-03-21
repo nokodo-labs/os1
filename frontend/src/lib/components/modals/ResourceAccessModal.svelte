@@ -79,10 +79,9 @@
 					break
 				}
 				case 'project': {
-					const { data } = await api.GET(
-						'/v1/projects/{project_id}/access-rules',
-						{ params: { path: { project_id: payload.resourceId } } }
-					)
+					const { data } = await api.GET('/v1/projects/{project_id}/access-rules', {
+						params: { path: { project_id: payload.resourceId } },
+					})
 					if (data) fetched = data
 					break
 				}
@@ -367,7 +366,7 @@
 				access rules {rules.length > 0 ? `(${rules.length})` : ''}
 			</p>
 			{#if isLoading}
-				<div class="py-4 flex justify-center"><NokodoLoader shimmer /></div>
+				<div class="flex justify-center py-4"><NokodoLoader shimmer /></div>
 			{:else if rules.length === 0}
 				<p class="text-foreground/30 py-4 text-center text-sm">
 					no rules yet — add users or groups above
@@ -456,7 +455,8 @@
 				onclick={saveRules}
 				disabled={isSaving}
 			>
-				{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText>{:else}save{/if}
+				{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText
+					>{:else}save{/if}
 			</button>
 		</div>
 	</div>

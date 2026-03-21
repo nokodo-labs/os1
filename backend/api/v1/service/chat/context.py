@@ -60,7 +60,7 @@ class AppContext:
 	thread_id: TypeID | None = None
 	context_window: int | None = None
 	retrieval: RetrievalContext = field(default_factory=RetrievalContext)
-	citations: list[Citation | None] = field(
+	citations: list[Citation] = field(
 		default_factory=list,
 	)
 

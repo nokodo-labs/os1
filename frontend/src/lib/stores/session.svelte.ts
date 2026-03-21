@@ -1,6 +1,6 @@
 import { browser } from '$app/environment'
 
-import { api , BackendUnreachableError } from '$lib/api/client'
+import { api, BackendUnreachableError } from '$lib/api/client'
 import { eventStreamClient } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtEmail, getJwtUserId } from '$lib/auth/jwt'

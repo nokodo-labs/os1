@@ -325,7 +325,7 @@
 		</div>
 	{:else if loading && !project}
 		<div class="flex items-center gap-3">
-			<FinderFolder class="h-7 w-7 shrink-0 text-foreground" variant="solid" />
+			<FinderFolder class="text-foreground h-7 w-7 shrink-0" variant="solid" />
 			<div class="bg-foreground/10 h-8 w-48 animate-pulse rounded-full"></div>
 		</div>
 	{:else}

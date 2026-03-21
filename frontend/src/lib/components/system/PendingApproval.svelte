@@ -80,7 +80,8 @@
 				disabled={isRefreshing}
 			>
 				<ArrowPath class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
-				{#if isRefreshing}<ShimmerText className="inline-block">checking</ShimmerText>{:else}refresh{/if}
+				{#if isRefreshing}<ShimmerText className="inline-block">checking</ShimmerText
+					>{:else}refresh{/if}
 			</button>
 			<button
 				type="button"

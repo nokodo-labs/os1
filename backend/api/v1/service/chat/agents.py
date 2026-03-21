@@ -324,8 +324,8 @@ async def run_agent(
 								create_in.citations = citations
 							# stamp the running index so future runs can
 							# pick up without loading the full branch.
-							nci = len(ctx.citations)
-							if nci > 1:
+							if ctx.citations:
+								nci = ctx.citations[-1].index + 1
 								create_in.metadata["next_citation_index"] = nci
 						create_in.metadata["run_id"] = run_id
 						if _model_id_for_persist:

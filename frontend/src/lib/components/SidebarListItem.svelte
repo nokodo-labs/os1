@@ -66,7 +66,10 @@
 		{:else}
 			<!-- overlay: no layout space taken; appears on top with gradient backdrop -->
 			<div
-				class="from-sidebar/90 absolute inset-y-0 right-0 flex items-center bg-linear-to-l to-transparent pl-6 pr-2.5 transition-opacity duration-150 {actionsVisibility === 'hover' ? 'pointer-events-none opacity-0 group-hover/sidebar-item:pointer-events-auto group-hover/sidebar-item:opacity-100' : 'pointer-events-auto opacity-100'}"
+				class="from-sidebar/90 absolute inset-y-0 right-0 flex items-center bg-linear-to-l to-transparent pr-2.5 pl-6 transition-opacity duration-150 {actionsVisibility ===
+				'hover'
+					? 'pointer-events-none opacity-0 group-hover/sidebar-item:pointer-events-auto group-hover/sidebar-item:opacity-100'
+					: 'pointer-events-auto opacity-100'}"
 			>
 				{@render actions()}
 			</div>

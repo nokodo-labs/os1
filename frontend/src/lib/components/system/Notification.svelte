@@ -144,7 +144,7 @@
 >
 	<!-- icon -->
 	<div
-		class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/8 text-foreground/85"
+		class="bg-foreground/8 text-foreground/85 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
 	>
 		{#if iconUrl}
 			<img src={iconUrl} alt="" class="h-5 w-5 rounded-full object-cover" />
@@ -175,7 +175,7 @@
 				<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400"></span>
 			{/if}
 			{#if !expanded}
-				<span class="shrink-0 text-foreground/30">·</span>
+				<span class="text-foreground/30 shrink-0">·</span>
 				<Timestamp
 					{timestamp}
 					mode="relative"
@@ -217,14 +217,14 @@
 	<div class="flex shrink-0 flex-col items-center gap-1.5">
 		{#if !device.isTouch && onDismiss}
 			<XMark
-				class="size-6 cursor-pointer text-foreground/50 transition-all duration-150 hover:scale-[1.05] hover:text-foreground/80 active:scale-[0.97]"
+				class="text-foreground/50 hover:text-foreground/80 size-6 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 				onclick={() => onDismiss?.(notification.id)}
 			/>
 		{/if}
 		{#if canExpand}
 			<button
 				type="button"
-				class="cursor-pointer text-foreground/80 transition-all duration-150 hover:text-foreground"
+				class="text-foreground/80 hover:text-foreground cursor-pointer transition-all duration-150"
 				onclick={toggleExpand}
 			>
 				<ChevronDown

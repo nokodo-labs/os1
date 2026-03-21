@@ -350,10 +350,10 @@
 									class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
 								>
 									{#if isSaving}
-								<ShimmerText className="inline-block">saving</ShimmerText>
-							{:else}
-								send
-							{/if}
+										<ShimmerText className="inline-block">saving</ShimmerText>
+									{:else}
+										send
+									{/if}
 								</button>
 							{/if}
 						</div>
