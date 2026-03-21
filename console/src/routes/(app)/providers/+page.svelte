@@ -20,11 +20,12 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Bot, Cpu, Pencil, Plus, Settings2, Sparkles, Trash2, X } from '@lucide/svelte'
+	import { Bot, Cpu, Pencil, Plus, Search, Settings2, Sparkles, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
 	let providers = $state<Provider[]>([])
+	let searchQuery = $state('')
 	let showModal = $state(false)
 	let modalMode = $state<'create' | 'edit'>('create')
 	let modalStep = $state<'select' | 'configure'>('select')
@@ -98,6 +99,17 @@
 			icon: Settings2,
 		},
 	]
+
+	const filteredProviders = $derived.by(() => {
+		if (!searchQuery.trim()) return providers
+		const q = searchQuery.toLowerCase()
+		return providers.filter(
+			(p) =>
+				p.name.toLowerCase().includes(q) ||
+				p.adapter_type.toLowerCase().includes(q) ||
+				p.id.toLowerCase().includes(q)
+		)
+	})
 
 	onMount(async () => {
 		await loadProviders()
@@ -244,15 +256,36 @@
 
 <div class="min-h-0 flex-1 overflow-y-auto">
 	<div class="space-y-6">
-		<div class="flex items-center justify-between">
+		<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 			<div>
 				<h2 class="text-2xl font-bold tracking-tight">providers</h2>
 				<p class="text-zinc-400">manage your AI model providers.</p>
 			</div>
-			<Button onclick={openCreateModal} class="gap-2 rounded-xl">
-				<Plus class="h-4 w-4" />
-				add provider
-			</Button>
+			<div class="flex flex-wrap items-center gap-2">
+				<div class="relative">
+					<Search
+						class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+					/>
+					<Input
+						type="search"
+						placeholder="search providers..."
+						bind:value={searchQuery}
+						class="h-9 w-50 pl-8 lg:w-75"
+					/>
+				</div>
+				<Button onclick={openCreateModal} class="gap-2 rounded-xl">
+					<Plus class="h-4 w-4" />
+					add provider
+				</Button>
+				<Button
+					variant="outline"
+					class="rounded-xl"
+					onclick={() => loadProviders()}
+					disabled={isFetching}
+				>
+					{isFetching ? 'loading...' : 'refresh'}
+				</Button>
+			</div>
 		</div>
 
 		{#if isFetching}
@@ -267,8 +300,8 @@
 				<Button variant="outline" class="mt-4" onclick={loadProviders}>Retry</Button>
 			</div>
 		{:else}
-			<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{#each providers as provider (provider.id)}
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				{#each filteredProviders as provider (provider.id)}
 					<Card
 						class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
 					>

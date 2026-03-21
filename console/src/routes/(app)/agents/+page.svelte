@@ -25,7 +25,18 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { BookOpen, FileText, Pencil, Plus, Shield, Trash2, X } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		BookOpen,
+		FileText,
+		Pencil,
+		Plus,
+		Search,
+		Shield,
+		Trash2,
+		X,
+	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -39,6 +50,19 @@ user: {{ user_name }}.
 <chat_context>{{ chat_context }}</chat_context>
 
 {{ referenced_attachments }}`
+
+	type SortKey = 'name' | 'model' | 'plugins'
+	type SortDir = 'asc' | 'desc'
+
+	const sortOptions: Array<{ value: SortKey; label: string }> = [
+		{ value: 'name', label: 'name' },
+		{ value: 'model', label: 'model' },
+		{ value: 'plugins', label: 'plugins' },
+	]
+
+	let sortKey = $state<SortKey>('name')
+	let sortDir = $state<SortDir>('asc')
+	let searchQuery = $state('')
 
 	let agents = $state<Agent[]>([])
 	let models = $state<Model[]>([])
@@ -81,6 +105,45 @@ user: {{ user_name }}.
 	})
 
 	const chatModels = $derived(models.filter((m) => m.model_type === 'chat_model'))
+
+	const filteredAgents = $derived.by(() => {
+		let result = agents
+		if (searchQuery.trim()) {
+			const q = searchQuery.toLowerCase()
+			result = result.filter(
+				(a) =>
+					(a.name ?? '').toLowerCase().includes(q) ||
+					(a.description ?? '').toLowerCase().includes(q) ||
+					a.id.toLowerCase().includes(q)
+			)
+		}
+		const dir = sortDir === 'asc' ? 1 : -1
+		return [...result].sort((a, b) => {
+			switch (sortKey) {
+				case 'name':
+					return (a.name ?? '').localeCompare(b.name ?? '') * dir
+				case 'model':
+					return getModelLabel(a.model_id).localeCompare(getModelLabel(b.model_id)) * dir
+				case 'plugins':
+					return ((a.plugin_ids?.length ?? 0) - (b.plugin_ids?.length ?? 0)) * dir
+				default:
+					return 0
+			}
+		})
+	})
+
+	function setSort(next: SortKey) {
+		if (sortKey === next) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+		} else {
+			sortKey = next
+			sortDir = 'asc'
+		}
+	}
+
+	function toggleSortDir() {
+		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+	}
 
 	async function fetchData() {
 		isFetching = true
@@ -315,15 +378,62 @@ user: {{ user_name }}.
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-6">
-	<div class="flex shrink-0 items-center justify-between">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">agents</h2>
 			<p class="text-zinc-400">create and manage agents.</p>
 		</div>
-		<Button onclick={openCreateModal} class="gap-2 rounded-xl">
-			<Plus class="h-4 w-4" />
-			add agent
-		</Button>
+		<div class="flex flex-wrap items-center gap-2">
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search agents..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
+			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
+				<SelectTrigger class="w-40 rounded-xl">
+					<span class="truncate text-left">
+						{sortOptions.find((o) => o.value === sortKey)?.label ?? sortKey}
+					</span>
+				</SelectTrigger>
+				<SelectContent>
+					{#each sortOptions as opt (opt.value)}
+						<SelectItem value={opt.value}>{opt.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+			<Button
+				variant="outline"
+				class="rounded-xl px-3"
+				onclick={() => toggleSortDir()}
+				disabled={isFetching}
+				title="toggle sort direction"
+				aria-label="toggle sort direction"
+			>
+				{#if sortDir === 'asc'}
+					<ArrowUp class="h-4 w-4" />
+				{:else}
+					<ArrowDown class="h-4 w-4" />
+				{/if}
+			</Button>
+			<Button onclick={openCreateModal} class="gap-2 rounded-xl">
+				<Plus class="h-4 w-4" />
+				add agent
+			</Button>
+			<Button
+				variant="outline"
+				class="rounded-xl"
+				onclick={() => fetchData()}
+				disabled={isFetching}
+			>
+				{isFetching ? 'loading...' : 'refresh'}
+			</Button>
+		</div>
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
@@ -340,20 +450,22 @@ user: {{ user_name }}.
 					<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
 				</div>
 			{:else}
-				<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-					{#each agents as agent (agent.id)}
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+					{#each filteredAgents as agent (agent.id)}
 						<Card
 							class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
 						>
 							<CardHeader>
 								<div class="flex items-start justify-between">
-									<div>
-										<CardTitle>{agent.name}</CardTitle>
+									<div class="min-w-0 flex-1">
+										<CardTitle class="truncate">{agent.name}</CardTitle>
 										{#if agent.description}
-											<CardDescription>{agent.description}</CardDescription>
+											<CardDescription class="line-clamp-2"
+												>{agent.description}</CardDescription
+											>
 										{/if}
 									</div>
-									<div class="flex gap-1">
+									<div class="flex shrink-0 gap-1">
 										<Button
 											variant="ghost"
 											size="icon"
@@ -377,8 +489,8 @@ user: {{ user_name }}.
 							</CardHeader>
 							<CardContent>
 								<div class="space-y-1 text-sm text-zinc-400">
-									<div class="flex justify-between">
-										<span>model:</span>
+									<div class="flex justify-between gap-2">
+										<span class="shrink-0">model:</span>
 										<span class="truncate">{getModelLabel(agent.model_id)}</span
 										>
 									</div>
@@ -392,6 +504,14 @@ user: {{ user_name }}.
 							</CardContent>
 						</Card>
 					{/each}
+
+					{#if filteredAgents.length === 0 && agents.length > 0}
+						<div
+							class="col-span-full rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+						>
+							no agents match your search
+						</div>
+					{/if}
 
 					{#if agents.length === 0}
 						<EmptyState

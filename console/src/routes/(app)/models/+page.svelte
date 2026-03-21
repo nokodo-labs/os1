@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type Model = Schemas['Model']
@@ -15,11 +14,24 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Pencil, Plus, Search, Trash2, X } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Pencil, Plus, Search, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
 	type ModelCreateForm = ModelCreate & { adapter?: string | null }
+
+	type ModelSortKey = 'name' | 'model_type' | 'provider' | 'enabled'
+	type SortDir = 'asc' | 'desc'
+
+	const modelSortOptions: Array<{ value: ModelSortKey; label: string }> = [
+		{ value: 'name', label: 'name' },
+		{ value: 'model_type', label: 'type' },
+		{ value: 'provider', label: 'provider' },
+		{ value: 'enabled', label: 'enabled' },
+	]
+
+	let modelSortKey = $state<ModelSortKey>('name')
+	let modelSortDir = $state<SortDir>('asc')
 
 	const ALL_MODALITIES = ['text', 'images', 'audio', 'video'] as const
 	type InputModality = (typeof ALL_MODALITIES)[number]
@@ -50,8 +62,8 @@
 	const emptyStateNoProvidersHint = 'add a provider first to create models.'
 	const emptyStateNoModelsMessage = 'no models configured yet.'
 
-	const filteredModels = $derived(
-		models.filter((m) => {
+	const filteredModels = $derived.by(() => {
+		let result = models.filter((m) => {
 			const q = searchQuery.toLowerCase()
 			return (
 				m.name.toLowerCase().includes(q) ||
@@ -59,7 +71,39 @@
 				m.id.toLowerCase().includes(q)
 			)
 		})
-	)
+		const dir = modelSortDir === 'asc' ? 1 : -1
+		return [...result].sort((a, b) => {
+			switch (modelSortKey) {
+				case 'name':
+					return (a.display_name || a.name).localeCompare(b.display_name || b.name) * dir
+				case 'model_type':
+					return a.model_type.localeCompare(b.model_type) * dir
+				case 'provider':
+					return (
+						getProviderName(a.provider_id).localeCompare(
+							getProviderName(b.provider_id)
+						) * dir
+					)
+				case 'enabled':
+					return (Number(a.enabled) - Number(b.enabled)) * dir
+				default:
+					return 0
+			}
+		})
+	})
+
+	function setModelSort(next: ModelSortKey) {
+		if (modelSortKey === next) {
+			modelSortDir = modelSortDir === 'asc' ? 'desc' : 'asc'
+		} else {
+			modelSortKey = next
+			modelSortDir = 'asc'
+		}
+	}
+
+	function toggleModelSortDir() {
+		modelSortDir = modelSortDir === 'asc' ? 'desc' : 'asc'
+	}
 
 	// Form state
 	let formState = $state<ModelCreateForm>({
@@ -383,40 +427,69 @@
 			<h2 class="text-2xl font-bold tracking-tight">models</h2>
 			<p class="text-zinc-400">manage your AI models.</p>
 		</div>
-		{#if hasProviders}
-			<Button onclick={openCreateModal}>
-				<Plus class="mr-2 h-4 w-4" />
-				add model
+		<div class="flex flex-wrap items-center gap-2">
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search models..."
+					bind:value={searchQuery}
+					class="h-9 w-50 pl-8 lg:w-75"
+				/>
+			</div>
+			<Select
+				value={modelSortKey}
+				onValueChange={(v: string) => setModelSort(v as ModelSortKey)}
+			>
+				<SelectTrigger class="w-40 rounded-xl">
+					<span class="truncate text-left">
+						{modelSortOptions.find((o) => o.value === modelSortKey)?.label ??
+							modelSortKey}
+					</span>
+				</SelectTrigger>
+				<SelectContent>
+					{#each modelSortOptions as opt (opt.value)}
+						<SelectItem value={opt.value}>{opt.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+			<Button
+				variant="outline"
+				class="rounded-xl px-3"
+				onclick={() => toggleModelSortDir()}
+				disabled={isFetching}
+				title="toggle sort direction"
+				aria-label="toggle sort direction"
+			>
+				{#if modelSortDir === 'asc'}
+					<ArrowUp class="h-4 w-4" />
+				{:else}
+					<ArrowDown class="h-4 w-4" />
+				{/if}
 			</Button>
-		{:else}
-			<div class="flex flex-col items-end gap-1">
+			{#if hasProviders}
+				<Button onclick={openCreateModal} class="gap-2 rounded-xl">
+					<Plus class="h-4 w-4" />
+					add model
+				</Button>
+			{:else}
 				<span title={addModelDisabledReason}>
-					<Button onclick={openCreateModal} disabled>
-						<Plus class="mr-2 h-4 w-4" />
+					<Button onclick={openCreateModal} disabled class="gap-2 rounded-xl">
+						<Plus class="h-4 w-4" />
 						add model
 					</Button>
 				</span>
-				<a
-					href={resolve('/providers')}
-					class="text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
-				>
-					{addModelDisabledReason}
-				</a>
-			</div>
-		{/if}
-	</div>
-
-	<div class="flex w-full shrink-0 items-center space-x-2">
-		<div class="relative">
-			<Search
-				class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
-			/>
-			<Input
-				type="search"
-				placeholder="search models..."
-				bind:value={searchQuery}
-				class="h-9 max-w-sm pl-8"
-			/>
+			{/if}
+			<Button
+				variant="outline"
+				class="rounded-xl"
+				onclick={() => fetchData()}
+				disabled={isFetching}
+			>
+				{isFetching ? 'loading...' : 'refresh'}
+			</Button>
 		</div>
 	</div>
 
@@ -431,7 +504,7 @@
 					{error}
 				</div>
 			{:else}
-				<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 					{#each filteredModels as model (model.id)}
 						<Card class="border-zinc-800 bg-zinc-900 text-zinc-100">
 							<CardHeader
