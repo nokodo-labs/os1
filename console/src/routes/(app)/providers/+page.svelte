@@ -393,6 +393,15 @@
 			{:else}
 				<form onsubmit={handleSubmit} class="flex min-h-0 flex-1 flex-col">
 					<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+						{#if modalMode === 'edit' && editingId}
+							<div class="space-y-1">
+								<Label class="text-xs text-zinc-500">id</Label>
+								<p class="font-mono text-xs text-zinc-400 select-all">
+									{editingId}
+								</p>
+							</div>
+						{/if}
+
 						<div class="space-y-2">
 							<Label for="name">name</Label>
 							<Input

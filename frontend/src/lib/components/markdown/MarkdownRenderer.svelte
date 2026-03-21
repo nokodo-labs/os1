@@ -1,11 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import type { components } from '$lib/api/types'
-	import Brain from '$lib/components/icons/Brain.svelte'
-	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-	import CommandLine from '$lib/components/icons/CommandLine.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
-	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
+	import { getSourceConfig } from '$lib/citations/config'
 	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
 	import CitationWidget from '$lib/components/widgets/CitationWidget.svelte'
 	import { tryUseDebugUi } from '$lib/contexts/debugUiContext.svelte'
@@ -45,22 +41,6 @@
 		return text
 	})
 
-	/** map citation source type to a navigable URL */
-	function citationUrl(c: Citation): string {
-		switch (c.source_type) {
-			case 'url':
-				return c.source_id
-			case 'file':
-				return `/api/v1/files/${c.source_id}/content`
-			case 'note':
-				return `/notes/${c.source_id}`
-			case 'thread':
-				return `/c/${c.source_id}`
-			default:
-				return ''
-		}
-	}
-
 	/** build a lookup from citation index to the full Citation object */
 	const citationByIndex = $derived(new Map(citations.map((c) => [String(c.index), c])))
 
@@ -68,7 +48,7 @@
 	const sources = $derived(
 		Object.fromEntries(
 			citations.map((c) => {
-				const url = citationUrl(c)
+				const url = getSourceConfig(c.source_type).href(c.source_id)
 				return [String(c.index), { title: c.title ?? '', url }]
 			})
 		)
@@ -189,21 +169,10 @@
 	})}
 		{@const c = firstCitation(token)}
 		{#if c}
+			{@const cfg = getSourceConfig(c.source_type)}
 			<span class="inline-flex items-center gap-1">
-				{#if c.source_type === 'note'}
-					<Document variant="solid" class="size-3.5 text-amber-400" />
-				{:else if c.source_type === 'thread'}
-					<ChatBubbles variant="solid" class="size-3.5 text-emerald-400" />
-				{:else if c.source_type === 'file'}
-					<Document variant="solid" class="size-3.5 text-rose-400" />
-				{:else if c.source_type === 'url'}
-					<GlobeAlt variant="solid" class="size-3.5 text-sky-400" />
-				{:else if c.source_type === 'memory'}
-					<Brain class="size-3.5 text-purple-400" />
-				{:else if c.source_type === 'tool_result'}
-					<CommandLine class="size-3.5 text-orange-400" />
-				{/if}
-				<span class="max-w-[18ch] truncate">{c.title || 'source'}</span>
+				<cfg.icon variant={cfg.iconVariant} class="size-3.5 {cfg.color}" />
+				<span class="max-w-[18ch] truncate">{c.title || cfg.label}</span>
 			</span>
 		{/if}
 	{/snippet}

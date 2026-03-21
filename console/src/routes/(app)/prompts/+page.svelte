@@ -450,6 +450,14 @@
 							{modalError}
 						</div>
 					{/if}
+
+					{#if modalMode === 'edit' && editingId}
+						<div class="space-y-1">
+							<Label class="text-xs text-zinc-500">id</Label>
+							<p class="font-mono text-xs text-zinc-400 select-all">{editingId}</p>
+						</div>
+					{/if}
+
 					<div class="space-y-2">
 						<Label for="command">command</Label>
 						<Input
