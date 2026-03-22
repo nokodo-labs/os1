@@ -6491,8 +6491,8 @@ export interface components {
             id: string;
             /** Title */
             title: string;
-            /** Subtitle */
-            subtitle?: string | null;
+            /** Preview */
+            preview?: string | null;
             /** Score */
             score?: number | null;
             /**

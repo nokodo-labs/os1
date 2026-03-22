@@ -3209,8 +3209,11 @@ export interface components {
         Body_upload_file_v1_files_upload_post: {
             /** File */
             file: string;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /** @default upload */
             source: components["schemas"]["FileSource"];
         };
@@ -3879,8 +3882,11 @@ export interface components {
             filename?: string | null;
             /** Mime Type */
             mime_type?: string | null;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -3943,8 +3949,11 @@ export interface components {
             filename?: string | null;
             /** Mime Type */
             mime_type?: string | null;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /** @default upload */
             source: components["schemas"]["FileSource"];
             /** Storage Backend */
@@ -3976,8 +3985,8 @@ export interface components {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Filename */
             filename?: string | null;
-            /** Project Id */
-            project_id?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
             status?: components["schemas"]["FileStatus"] | null;
         };
         /**
@@ -4857,8 +4866,11 @@ export interface components {
             content: string;
             /** Labels */
             labels?: string[];
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -4887,8 +4899,11 @@ export interface components {
             content: string;
             /** Labels */
             labels?: string[];
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /** User Id */
             user_id?: string | null;
         };
@@ -4904,8 +4919,8 @@ export interface components {
             content?: string | null;
             /** Labels */
             labels?: string[] | null;
-            /** Project Id */
-            project_id?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
         };
         /**
          * Notification
@@ -5936,8 +5951,11 @@ export interface components {
              * @default 0
              */
             position: number;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -5968,8 +5986,11 @@ export interface components {
              * @default 0
              */
             position: number;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
         };
         /**
          * ReminderListUpdate
@@ -5987,8 +6008,8 @@ export interface components {
             icon?: string | null;
             /** Position */
             position?: number | null;
-            /** Project Id */
-            project_id?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
         };
         /**
          * ReminderListWithCounts
@@ -6019,8 +6040,11 @@ export interface components {
              * @default 0
              */
             position: number;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -6491,8 +6515,8 @@ export interface components {
             id: string;
             /** Title */
             title: string;
-            /** Subtitle */
-            subtitle?: string | null;
+            /** Preview */
+            preview?: string | null;
             /** Score */
             score?: number | null;
             /**
