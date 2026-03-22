@@ -78,7 +78,9 @@
 		onClose?.()
 	}
 
-	function openResource(route: string, uid: string) {
+	type ResourceRoute = '/threads' | '/memories' | '/notes' | '/files' | '/groups' | '/reminders'
+
+	function openResource(route: ResourceRoute, uid: string) {
 		void goto(resolve(route), { state: { user: uid } })
 		close()
 	}
@@ -252,12 +254,12 @@
 				{:else if user}
 					<div class="flex flex-wrap gap-2">
 						{#each [
-							{ key: 'threads', label: 'threads', icon: MessageSquare, route: '/threads' },
-							{ key: 'memories', label: 'memories', icon: Brain, route: '/memories' },
-							{ key: 'notes', label: 'notes', icon: FileText, route: '/notes' },
-							{ key: 'files', label: 'files', icon: FileIcon, route: '/files' },
-							{ key: 'groups', label: 'groups', icon: Users, route: '/groups' },
-							{ key: 'reminders', label: 'reminders', icon: ListChecks, route: '/reminders' },
+							{ key: 'threads', label: 'threads', icon: MessageSquare, route: '/threads' as ResourceRoute },
+							{ key: 'memories', label: 'memories', icon: Brain, route: '/memories' as ResourceRoute },
+							{ key: 'notes', label: 'notes', icon: FileText, route: '/notes' as ResourceRoute },
+							{ key: 'files', label: 'files', icon: FileIcon, route: '/files' as ResourceRoute },
+							{ key: 'groups', label: 'groups', icon: Users, route: '/groups' as ResourceRoute },
+							{ key: 'reminders', label: 'reminders', icon: ListChecks, route: '/reminders' as ResourceRoute },
 						] as resource (resource.key)}
 							<Button
 								variant="outline"

@@ -203,7 +203,7 @@
 				memories
 			</a>
 			<a
-				href={resolve('/(app)/vectors')}
+				href={resolve('/vectors')}
 				class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors {page.url.pathname.startsWith(
 					'/vectors'
 				)

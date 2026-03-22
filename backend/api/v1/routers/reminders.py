@@ -108,9 +108,7 @@ async def get_default_reminder_list_counts(
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
 	"""get reminder counts for the default list (reminders without a list)."""
-	return await reminder_service.get_list_counts(
-		db, principal=principal, list_id=None
-	)
+	return await reminder_service.get_list_counts(db, principal=principal, list_id=None)
 
 
 @router.patch("/lists/{list_id}", response_model=ReminderListSchema)
