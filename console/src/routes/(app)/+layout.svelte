@@ -290,10 +290,19 @@
 			>
 				<Menu class="h-4 w-4" />
 			</button>
-			<span class="text-sm font-semibold text-zinc-100">console</span>
+			<div class="flex items-center gap-2">
+				<img
+					src="https://nokodo.net/media/images/logo_full.svg"
+					alt="nokodo logo"
+					class="h-5 w-auto object-contain"
+				/>
+				<span class="text-sm font-semibold text-zinc-100">console</span>
+			</div>
 		</div>
-		<div class="flex flex-1 flex-col overflow-auto p-8">
-			{@render children()}
+		<div class="flex flex-1 flex-col overflow-x-hidden overflow-y-auto bg-zinc-950">
+			<div class="flex flex-1 flex-col px-4 py-6 sm:px-6 md:px-8 md:py-8 mx-auto w-full max-w-[1600px]">
+				{@render children()}
+			</div>
 		</div>
 	</main>
 </div>

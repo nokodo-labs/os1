@@ -27,6 +27,10 @@
 		Wifi,
 		X,
 		XCircle,
+		FileIcon,
+		FileText,
+		Users,
+		ListChecks,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
@@ -41,6 +45,7 @@
 	let { open = $bindable(false), userId, onClose, onUpdated, onDeleted }: Props = $props()
 
 	let user = $state<User | null>(null)
+	let counts = $state<Record<string, number>>({})
 	let isLoading = $state(false)
 	let loadError = $state<string | null>(null)
 
@@ -73,18 +78,8 @@
 		onClose?.()
 	}
 
-	function openThreads(uid: string) {
-		void goto(resolve('/threads'), { state: { user: uid } })
-		close()
-	}
-
-	function openMemories(uid: string) {
-		void goto(resolve('/memories'), { state: { user: uid } })
-		close()
-	}
-
-	function openRoles(uid: string) {
-		void goto(resolve('/roles'), { state: { user: uid } })
+	function openResource(route: string, uid: string) {
+		void goto(resolve(route), { state: { user: uid } })
 		close()
 	}
 
@@ -199,10 +194,15 @@
 		user = null
 		isEditing = false
 		prefsExpanded = false
-		api.GET('/v1/users/{user_id}', { params: { path: { user_id: userId } } })
-			.then((r) => unwrap(r))
-			.then((u) => {
+		Promise.all([
+			api.GET('/v1/users/{user_id}', { params: { path: { user_id: userId } } }).then((r) => unwrap(r)),
+			api.GET('/v1/users/{user_id}/counts', { params: { path: { user_id: userId } } })
+				.then((r) => r.data ?? {})
+				.catch(() => ({}))
+		])
+			.then(([u, c]) => {
 				user = u
+				counts = c as Record<string, number>
 			})
 			.catch((e: unknown) => {
 				loadError = e instanceof Error ? e.message : 'failed to load user'
@@ -251,30 +251,28 @@
 					</div>
 				{:else if user}
 					<div class="flex flex-wrap gap-2">
-						<Button
-							variant="outline"
-							class="rounded-xl"
-							onclick={() => user && openThreads(user.id)}
-						>
-							<MessageSquare class="mr-1.5 h-3.5 w-3.5" />
-							threads
-						</Button>
-						<Button
-							variant="outline"
-							class="rounded-xl"
-							onclick={() => user && openMemories(user.id)}
-						>
-							<Brain class="mr-1.5 h-3.5 w-3.5" />
-							memories
-						</Button>
-						<Button
-							variant="outline"
-							class="rounded-xl"
-							onclick={() => user && openRoles(user.id)}
-						>
-							<Shield class="mr-1.5 h-3.5 w-3.5" />
-							roles
-						</Button>
+						{#each [
+							{ key: 'threads', label: 'threads', icon: MessageSquare, route: '/threads' },
+							{ key: 'memories', label: 'memories', icon: Brain, route: '/memories' },
+							{ key: 'notes', label: 'notes', icon: FileText, route: '/notes' },
+							{ key: 'files', label: 'files', icon: FileIcon, route: '/files' },
+							{ key: 'groups', label: 'groups', icon: Users, route: '/groups' },
+							{ key: 'reminders', label: 'reminders', icon: ListChecks, route: '/reminders' },
+						] as resource (resource.key)}
+							<Button
+								variant="outline"
+								class="rounded-xl"
+								onclick={() => user && openResource(resource.route, user.id)}
+							>
+								<resource.icon class="mr-1.5 h-3.5 w-3.5" />
+								{resource.label}
+								{#if counts[resource.key] !== undefined}
+									<span class="ml-1 rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+										{counts[resource.key]}
+									</span>
+								{/if}
+							</Button>
+						{/each}
 					</div>
 
 					<div class="space-y-1.5">
@@ -464,8 +462,11 @@
 										variant="ghost"
 										size="sm"
 										class="rounded-xl"
-										onclick={cancelEdit}>cancel</Button
+										onclick={cancelEdit}
 									>
+										<X class="mr-1.5 h-3.5 w-3.5" />
+										cancel
+									</Button>
 								</div>
 							</div>
 						{:else}
@@ -606,6 +607,7 @@
 									class="rounded-xl text-xs text-zinc-400"
 									onclick={() => (confirmDeactivate = false)}
 								>
+									<X class="mr-1.5 h-3.5 w-3.5" />
 									cancel
 								</Button>
 							</div>

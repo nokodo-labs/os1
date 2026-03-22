@@ -8,14 +8,9 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListDetailsModal from '$lib/components/ReminderListDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
+	import { auth } from '$lib/auth.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
@@ -28,6 +23,7 @@
 		ListChecks,
 		Search,
 		User,
+		RefreshCw,
 	} from '@lucide/svelte'
 
 	type ListSortKey = 'updated_at' | 'created_at' | 'name' | 'position'
@@ -124,19 +120,40 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/reminders/lists', {
-			params: {
-				query: {
-					include_counts: true,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					limit: 200,
+		Promise.all([
+			api.GET('/v1/reminders/lists', {
+				params: {
+					query: {
+						include_counts: true,
+						sort_by: sortKey,
+						sort_dir: sortDir,
+						limit: 200,
+					},
 				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
-				lists = result
+			}).then((r) => unwrap(r)),
+			api.GET('/v1/reminders/counts', {})
+				.then((r) => r.data)
+				.catch(() => undefined)
+		])
+			.then(([listsResult, defaultCounts]) => {
+				const mergedLists = [...listsResult]
+				if (defaultCounts && defaultCounts.total_count > 0) {
+					// @ts-expect-error: We need a synthetic ID for UI logic
+					mergedLists.unshift({
+						id: '',
+						owner_id: auth.user?.id || '',
+						name: 'default list',
+						description: 'reminders without a specific list',
+						position: -1,
+						color: '#52525b', // zinc-500
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString(),
+						total_count: defaultCounts.total_count,
+						pending_count: defaultCounts.pending_count,
+						completed_count: defaultCounts.completed_count,
+					})
+				}
+				lists = mergedLists as typeof lists
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load reminder lists'
@@ -148,14 +165,14 @@
 	})
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
+<div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">reminders</h2>
 			<p class="text-zinc-400">all reminder lists and their reminders.</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			<div class="relative">
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="relative w-full sm:w-auto sm:flex-1">
 				<Search
 					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
 				/>
@@ -163,43 +180,48 @@
 					type="search"
 					placeholder="search lists..."
 					bind:value={searchQuery}
-					class="h-9 w-50 pl-8 lg:w-75"
+					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
-			<Select value={sortKey} onValueChange={(v: string) => setSort(v as ListSortKey)}>
-				<SelectTrigger class="w-56 rounded-xl">
-					<span class="truncate text-left">
-						{listSortOptions.find((o) => o.value === sortKey)?.label ?? sortKey}
-					</span>
-				</SelectTrigger>
-				<SelectContent>
-					{#each listSortOptions as opt (opt.value)}
-						<SelectItem value={opt.value}>{opt.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-			<Button
-				variant="outline"
-				class="rounded-xl px-3"
-				onclick={() => toggleSortDir()}
-				disabled={isLoading}
-				title="toggle sort direction"
-				aria-label="toggle sort direction"
-			>
-				{#if sortDir === 'asc'}
-					<ArrowUp class="h-4 w-4" />
-				{:else}
-					<ArrowDown class="h-4 w-4" />
-				{/if}
-			</Button>
-			<Button
-				variant="outline"
-				class="rounded-xl"
-				onclick={() => refresh()}
-				disabled={isLoading}
-			>
-				{isLoading ? 'loading...' : 'refresh'}
-			</Button>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Select value={sortKey} onValueChange={(v: string) => setSort(v as ListSortKey)}>
+					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-56">
+						<span class="truncate text-left">
+							{listSortOptions.find((o) => o.value === sortKey)?.label ?? sortKey}
+						</span>
+					</SelectTrigger>
+					<SelectContent>
+						{#each listSortOptions as opt (opt.value)}
+							<SelectItem value={opt.value}>{opt.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+				<Button
+					variant="outline"
+					class="shrink-0 rounded-xl px-3"
+					onclick={() => toggleSortDir()}
+					disabled={isLoading}
+					title="toggle sort direction"
+					aria-label="toggle sort direction"
+				>
+					{#if sortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
+				</Button>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Button
+					variant="outline"
+					class="flex-1 rounded-xl sm:flex-none"
+					onclick={() => refresh()}
+					disabled={isLoading}
+				>
+					<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+					{isLoading ? 'loading...' : 'refresh'}
+				</Button>
+			</div>
 		</div>
 	</div>
 
@@ -211,18 +233,13 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader class="shrink-0">
-			<CardTitle>{searchQuery.trim() ? 'reminders' : 'reminder lists'}</CardTitle>
-			<CardDescription>
-				{searchQuery.trim()
-					? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
-					: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
-			</CardDescription>
-		</CardHeader>
-		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
+	<div class="flex flex-col gap-4">
+		<div class="text-sm text-zinc-400">
+			{searchQuery.trim()
+				? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
+				: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if searchQuery.trim()}
 				<!-- search results mode: individual reminders -->
 				{#if isSearching}
@@ -256,9 +273,9 @@
 										<Circle class="h-4 w-4 text-zinc-500" />
 										<span class="truncate font-medium">{r.title}</span>
 									</div>
-									{#if r.subtitle}
+									{#if r.preview}
 										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.subtitle}
+											{r.preview}
 										</div>
 									{/if}
 									<span
@@ -297,27 +314,30 @@
 
 				{#each lists as list (list.id)}
 					<div
-						role="button"
-						tabindex="0"
-						class="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-zinc-700"
-						onclick={(e: MouseEvent) => {
-							if (
-								(e.target as HTMLElement).closest('button:not([data-row-click])') ==
-								null
-							) {
-								openList(list.id)
-							}
-						}}
-						onkeydown={(e: KeyboardEvent) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								e.preventDefault()
-								openList(list.id)
-							}
-						}}
-					>
-						<div class="flex w-full items-start gap-3 p-4 text-left">
-							<div class="min-w-0 flex-1 space-y-2">
-								<div class="flex items-center gap-2">
+					role="button"
+					tabindex="0"
+					class="flex w-full items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+					onclick={(e: MouseEvent) => {
+						if (
+							(e.target as HTMLElement).closest('button:not([data-row-click])') ==
+							null
+						) {
+							openList(list.id)
+						}
+					}}
+					onkeydown={(e: KeyboardEvent) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault()
+							openList(list.id)
+						}
+					}}
+				>
+					<div class="flex min-w-0 flex-1 items-center gap-4">
+						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<ListChecks class="h-5 w-5" />
+						</div>
+						<div class="min-w-0 flex-1 space-y-1">
+							<div class="flex flex-wrap items-center gap-2">
 									{#if list.color}
 										<span
 											class="inline-block h-3 w-3 rounded-full"
@@ -331,18 +351,12 @@
 										{list.description}
 									</div>
 								{/if}
-								<div
-									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
-								>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
-										<Hash class="h-3.5 w-3.5" />
+								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+										<Hash class="h-3 w-3" />
 										{list.id}
 									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
+									<span class="inline-flex items-center gap-1">
 										<User class="h-3.5 w-3.5" />
 										<button
 											type="button"
@@ -355,38 +369,32 @@
 											{list.owner_id}
 										</button>
 									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
-										<ListChecks class="h-3.5 w-3.5" />
+									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+										<ListChecks class="h-3 w-3" />
 										total {list.total_count}
 									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
-										<Circle class="h-3.5 w-3.5" />
+									<span class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase">
+										<Circle class="h-3 w-3" />
 										pending {list.pending_count}
 									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
-										<CircleCheck class="h-3.5 w-3.5" />
+									<span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-emerald-400 uppercase">
+										<CircleCheck class="h-3 w-3" />
 										completed {list.completed_count}
 									</span>
 								</div>
 							</div>
-							<div class="shrink-0 text-xs text-zinc-500">
-								<div class="flex items-center gap-1">
-									<Clock class="h-3.5 w-3.5" />
-									updated {new Date(list.updated_at).toLocaleString()}
-								</div>
+						</div>
+						<div class="shrink-0 text-xs text-zinc-500">
+							<div class="flex items-center gap-1.5 whitespace-nowrap">
+								<Clock class="h-3.5 w-3.5" />
+								{new Date(list.updated_at).toLocaleString()}
 							</div>
 						</div>
 					</div>
 				{/each}
 			{/if}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />

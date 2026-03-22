@@ -9,16 +9,9 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, Search, User, Users } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Clock, Hash, Search, User, Users, RefreshCw, X, ChevronLeft, ChevronRight } from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'name'
@@ -179,14 +172,14 @@
 	})
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
+<div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">groups</h2>
 			<p class="text-zinc-400">all groups in the system.</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			<div class="relative">
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="relative w-full sm:w-auto sm:flex-1">
 				<Search
 					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
 				/>
@@ -194,53 +187,59 @@
 					type="search"
 					placeholder="search groups..."
 					bind:value={searchQuery}
-					class="h-9 w-50 pl-8 lg:w-75"
+					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
-			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
-				<SelectTrigger class="w-56 rounded-xl">
-					<span class="truncate text-left">
-						{sortOptions.find((o) => o.value === sortKey)?.label ?? sortKey}
-					</span>
-				</SelectTrigger>
-				<SelectContent>
-					{#each sortOptions as opt (opt.value)}
-						<SelectItem value={opt.value}>{opt.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-			<Button
-				variant="outline"
-				class="rounded-xl px-3"
-				onclick={() => toggleSortDir()}
-				disabled={isLoading}
-				title="toggle sort direction"
-				aria-label="toggle sort direction"
-			>
-				{#if sortDir === 'asc'}
-					<ArrowUp class="h-4 w-4" />
-				{:else}
-					<ArrowDown class="h-4 w-4" />
-				{/if}
-			</Button>
-			{#if memberFilter}
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
+					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-56">
+						<span class="truncate text-left">
+							{sortOptions.find((o) => o.value === sortKey)?.label ?? sortKey}
+						</span>
+					</SelectTrigger>
+					<SelectContent>
+						{#each sortOptions as opt (opt.value)}
+							<SelectItem value={opt.value}>{opt.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
 				<Button
 					variant="outline"
-					class="rounded-xl"
-					onclick={() => clearMemberFilter()}
+					class="shrink-0 rounded-xl px-3"
+					onclick={() => toggleSortDir()}
+					disabled={isLoading}
+					title="toggle sort direction"
+					aria-label="toggle sort direction"
+				>
+					{#if sortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
+				</Button>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				{#if memberFilter}
+					<Button
+						variant="outline"
+						class="flex-1 rounded-xl sm:flex-none"
+						onclick={() => clearMemberFilter()}
+						disabled={isLoading}
+					>
+						<X class="mr-2 h-4 w-4" />
+						member: {memberFilter}
+					</Button>
+				{/if}
+				<Button
+					variant="outline"
+					class="flex-1 rounded-xl sm:flex-none"
+					onclick={() => refresh()}
 					disabled={isLoading}
 				>
-					member: {memberFilter} · clear
+					<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+					{isLoading ? 'loading...' : 'refresh'}
 				</Button>
-			{/if}
-			<Button
-				variant="outline"
-				class="rounded-xl"
-				onclick={() => refresh()}
-				disabled={isLoading}
-			>
-				{isLoading ? 'loading...' : 'refresh'}
-			</Button>
+			</div>
 		</div>
 	</div>
 
@@ -252,18 +251,8 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader
-			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div>
-				<CardTitle>list</CardTitle>
-				<CardDescription>
-					page {pageIndex + 1} · showing {filteredGroups.length}{hasNext ? '+' : ''}
-				</CardDescription>
-			</div>
+	<div class="flex flex-col gap-4">
+		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">
 				<Button
 					variant="outline"
@@ -273,6 +262,7 @@
 					}}
 					disabled={pageIndex === 0 || isLoading}
 				>
+					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
 				<Button
@@ -284,10 +274,11 @@
 					disabled={!hasNext || isLoading}
 				>
 					next
+					<ChevronRight class="ml-1.5 h-4 w-4" />
 				</Button>
 			</div>
-		</CardHeader>
-		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if isLoading && groups.length === 0}
 				<div
 					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -308,7 +299,7 @@
 				<div
 					role="button"
 					tabindex="0"
-					class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
+					class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
 					onclick={(e) => {
 						if (
 							(e.target as HTMLElement).closest('button:not([data-row-click])') ==
@@ -323,57 +314,59 @@
 						}
 					}}
 				>
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0 flex-1 space-y-2">
-							<div class="truncate font-medium">{g.name}</div>
+					<div class="flex min-w-0 flex-1 items-center gap-4">
+						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<Users class="h-5 w-5" />
+						</div>
+						<div class="min-w-0 flex-1 space-y-1">
+							<div class="flex flex-wrap items-center gap-2">
+								<span class="truncate text-base font-medium text-zinc-100">{g.name}</span>
+							</div>
 							{#if g.description}
 								<div class="line-clamp-1 text-sm text-zinc-400">
 									{g.description}
 								</div>
 							{/if}
-							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Hash class="h-3.5 w-3.5" />
+							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+									<Hash class="h-3 w-3" />
 									{g.id}
 								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
+								<span class="inline-flex items-center gap-1">
 									<User class="h-3.5 w-3.5" />
 									<button
 										type="button"
 										class="underline underline-offset-4 hover:text-zinc-200"
-										onclick={() => openUser(g.owner_id)}
+										onclick={(e) => {
+											e.stopPropagation()
+											openUser(g.owner_id)
+										}}
 									>
 										{g.owner_id}
 									</button>
 								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Users class="h-3.5 w-3.5" />
+								<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<Users class="h-3 w-3" />
 									{g.memberships.length}
 									{g.memberships.length === 1 ? 'member' : 'members'}
 								</span>
 							</div>
 						</div>
-						<div class="shrink-0 text-xs text-zinc-500">
-							<div class="flex items-center gap-1">
-								<Clock class="h-3.5 w-3.5" />
-								updated {new Date(g.updated_at).toLocaleString()}
-							</div>
-							<div class="mt-1 flex items-center gap-1">
-								<Clock class="h-3.5 w-3.5" />
-								created {new Date(g.created_at).toLocaleString()}
-							</div>
+					</div>
+					<div class="shrink-0 text-xs text-zinc-500">
+						<div class="flex items-center gap-1.5 whitespace-nowrap">
+							<Clock class="h-3.5 w-3.5" />
+							{new Date(g.updated_at).toLocaleString()}
+						</div>
+						<div class="mt-1 flex items-center gap-1.5 whitespace-nowrap">
+							<Clock class="h-3.5 w-3.5" />
+							{new Date(g.created_at).toLocaleString()}
 						</div>
 					</div>
 				</div>
 			{/each}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
