@@ -49,6 +49,7 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.projects import load_projects
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
@@ -92,17 +93,21 @@ async def create_reminder_list(
 ) -> ReminderList:
 	"""create a new reminder list."""
 	require_permission(principal, "reminders:create")
-	if data.project_id is not None:
+	for pid in data.project_ids:
 		await require_project_access(
-			data.project_id,
+			pid,
 			session,
 			principal,
 			required_level=AccessLevel.EDITOR,
 		)
 	reminder_list = ReminderList(
 		owner_id=principal.user_id,
-		**data.model_dump(exclude_unset=True, by_alias=True),
+		**data.model_dump(exclude_unset=True, by_alias=True, exclude={"project_ids"}),
 	)
+	if data.project_ids:
+		reminder_list.projects = await load_projects(
+			data.project_ids, session, principal
+		)
 	session.add(reminder_list)
 	await session.flush()
 	await session.refresh(reminder_list)
@@ -247,7 +252,7 @@ async def get_reminder_list(
 			detail="reminder list not found",
 		)
 	await require_resource_access(
-		str(list_id),
+		list_id,
 		session,
 		principal,
 		ResourceType.REMINDER_LIST,
@@ -267,15 +272,17 @@ async def update_reminder_list(
 	"""update a reminder list."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
 	update_data = data.model_dump(exclude_unset=True, by_alias=True)
-	new_project_id = update_data.get("project_id")
-	if new_project_id is not None and str(new_project_id) != str(
-		reminder_list.project_id or ""
-	):
-		await require_project_access(
-			new_project_id,
-			session,
-			principal,
-			required_level=AccessLevel.EDITOR,
+	new_project_ids = update_data.pop("project_ids", None)
+	if new_project_ids is not None:
+		for pid in new_project_ids:
+			await require_project_access(
+				pid,
+				session,
+				principal,
+				required_level=AccessLevel.EDITOR,
+			)
+		reminder_list.projects = await load_projects(
+			new_project_ids, session, principal
 		)
 	for key, value in update_data.items():
 		setattr(reminder_list, key, value)
@@ -314,7 +321,7 @@ async def delete_reminder_list(
 ) -> None:
 	"""delete a reminder list and all its reminders."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
-	list_id_str = str(reminder_list.id)
+	list_id_str = reminder_list.id
 	await session.delete(reminder_list)
 	await session.flush()
 
@@ -447,7 +454,7 @@ async def get_reminder(
 		if reminder.list_id:
 			# delegate to list access check - raises 403 if denied
 			await require_resource_access(
-				str(reminder.list_id),
+				reminder.list_id,
 				session,
 				principal,
 				ResourceType.REMINDER_LIST,

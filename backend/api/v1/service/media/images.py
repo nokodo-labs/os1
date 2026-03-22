@@ -58,12 +58,12 @@ async def generate_image(
 	size: str | None = None,
 	aspect_ratio: str | None = None,
 	quality: str | None = None,
-	model_id: str | None = None,
-	project_id: str | None = None,
-	message_id: str | None = None,
+	model_id: TypeID | None = None,
+	project_ids: list[TypeID] | None = None,
+	message_id: TypeID | None = None,
 	origin_session_id: str | None = None,
 	agent_id: TypeID | None = None,
-	thread_id: str | None = None,
+	thread_id: TypeID | None = None,
 ) -> list[ImageResult]:
 	"""generate or edit images and persist them as File records.
 
@@ -82,7 +82,7 @@ async def generate_image(
 		aspect_ratio: aspect ratio like "16:9" (None = use default).
 		quality: quality level (None = use default).
 		model_id: override model id (None = use settings default).
-		project_id: optional project to associate files with.
+		project_ids: optional projects to associate files with.
 		message_id: optional message to associate files with.
 		origin_session_id: SSE origin session for event dedup.
 		agent_id: agent that triggered the generation (stored in file metadata).
@@ -149,7 +149,7 @@ async def generate_image(
 				filename=f"generated-{i + 1}.{img.mime_type.split('/')[-1]}",
 				content_type=img.mime_type,
 				source=FileSource.GENERATED,
-				project_id=project_id,
+				project_ids=project_ids,
 				message_id=message_id,
 				origin_session_id=origin_session_id,
 			)

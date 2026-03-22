@@ -10,11 +10,13 @@ from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
+from api.models.many_to_many import reminder_list_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -45,7 +47,7 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 		),
 	)
 
-	owner_id: Mapped[str] = mapped_column(
+	owner_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)
@@ -54,16 +56,13 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 	color: Mapped[str | None] = mapped_column(String(7))  # hex color e.g. #FF5733
 	icon: Mapped[str | None] = mapped_column(String(50))  # emoji or icon name
 	position: Mapped[float] = mapped_column(Float, default=0.0)
-	project_id: Mapped[str | None] = mapped_column(
-		String(TYPEID_LENGTH),
-		ForeignKey("projects.id", ondelete="SET NULL"),
-		index=True,
-	)
 
 	owner: Mapped[User] = relationship("User", back_populates="reminder_lists")
-	project: Mapped[Project | None] = relationship(
+	projects: Mapped[list[Project]] = relationship(
 		"Project",
+		secondary=reminder_list_project_association,
 		back_populates="reminder_lists",
+		lazy="selectin",
 	)
 	reminders: Mapped[list[Reminder]] = relationship(
 		"Reminder",
@@ -75,6 +74,11 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 		back_populates="reminder_list",
 		cascade="all, delete-orphan",
 	)
+
+	@property
+	def project_ids(self) -> list[TypeID]:
+		"""ids of all projects this reminder list belongs to."""
+		return [p.id for p in self.projects]
 
 
 class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
@@ -97,19 +101,19 @@ class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		),
 	)
 
-	owner_id: Mapped[str] = mapped_column(
+	owner_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)
-	list_id: Mapped[str | None] = mapped_column(
+	list_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("reminder_lists.id"),
 	)
-	parent_id: Mapped[str | None] = mapped_column(
+	parent_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("reminders.id"),
 	)
-	source_thread_id: Mapped[str | None] = mapped_column(
+	source_thread_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id"),
 	)

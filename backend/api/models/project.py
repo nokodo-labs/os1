@@ -8,12 +8,18 @@ from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
-from api.models.many_to_many import thread_project_association
+from api.models.many_to_many import (
+	file_project_association,
+	note_project_association,
+	reminder_list_project_association,
+	thread_project_association,
+)
 from api.models.mixins import (
 	MetadataJSONMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -34,7 +40,7 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	name: Mapped[str] = mapped_column(String(100))
 	description: Mapped[str | None] = mapped_column(String(500))
-	owner_id: Mapped[str] = mapped_column(
+	owner_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)
@@ -57,13 +63,16 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	files: Mapped[list[File]] = relationship(
 		"File",
-		back_populates="project",
+		secondary=file_project_association,
+		back_populates="projects",
 	)
 	notes: Mapped[list[Note]] = relationship(
 		"Note",
-		back_populates="project",
+		secondary=note_project_association,
+		back_populates="projects",
 	)
 	reminder_lists: Mapped[list[ReminderList]] = relationship(
 		"ReminderList",
-		back_populates="project",
+		secondary=reminder_list_project_association,
+		back_populates="projects",
 	)

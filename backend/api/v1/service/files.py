@@ -25,6 +25,8 @@ from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
+from api.models.many_to_many import file_project_association
+from api.models.project import Project
 from api.permissions import ResourceType
 from api.schemas.file import FileCreate, FileUpdate
 from api.settings import settings
@@ -38,6 +40,7 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.projects import load_projects
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -112,8 +115,8 @@ async def _emit_file_event(
 	session: AsyncSession,
 	*,
 	event_type: EventType,
-	file_id: str,
-	user_id: str,
+	file_id: TypeID,
+	user_id: TypeID,
 	filename: str | None = None,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -146,8 +149,8 @@ async def store_file(
 	filename: str | None = None,
 	content_type: MimeType = "application/octet-stream",
 	source: FileSource = FileSource.GENERATED,
-	project_id: str | None = None,
-	message_id: str | None = None,
+	project_ids: list[TypeID] | None = None,
+	message_id: TypeID | None = None,
 	backend_name: str | None = None,
 	key_prefix: str | None = None,
 	emit_event: bool = True,
@@ -186,18 +189,25 @@ async def store_file(
 		size_bytes=size_bytes,
 		checksum_sha256=checksum,
 		status=FileStatus.AVAILABLE,
-		project_id=project_id,
 		message_id=message_id,
 	)
 	session.add(file)
 	await session.flush()
+
+	if project_ids:
+		projects = await session.scalars(
+			select(Project).where(Project.id.in_(project_ids))
+		)
+		file.projects = list(projects.all())
+		await session.flush()
+
 	await session.refresh(file)
 
 	if emit_event:
 		await _emit_file_event(
 			session,
 			event_type=EventType.FILE_CREATED,
-			file_id=str(file_id),
+			file_id=file_id,
 			user_id=owner_id,
 			filename=filename,
 			origin_session_id=origin_session_id,
@@ -225,7 +235,7 @@ async def read_content(
 
 
 async def resolve_file_data(
-	file_id: str,
+	file_id: TypeID,
 	session: AsyncSession,
 	*,
 	principal: Principal,
@@ -253,7 +263,7 @@ async def resolve_file_data(
 	# treats it identically to "file not found" (no info leak).
 	try:
 		await require_resource_access(
-			str(file_id),
+			file_id,
 			session,
 			principal,
 			ResourceType.FILE,
@@ -315,16 +325,19 @@ async def create_file(
 ) -> File:
 	"""register a new file record (metadata only, no bytes)."""
 	require_permission(principal, "files:create")
-	if file_in.project_id is not None:
+	for pid in file_in.project_ids:
 		await require_project_access(
-			file_in.project_id,
+			pid,
 			session,
 			principal,
 			required_level=AccessLevel.EDITOR,
 		)
-	data = file_in.model_dump(by_alias=True)
+	data = file_in.model_dump(by_alias=True, exclude={"project_ids"})
 	data["owner_id"] = principal.user_id
 	file = File(**data)
+	if file_in.project_ids:
+		projects = await load_projects(file_in.project_ids, session, principal)
+		file.projects = projects
 	session.add(file)
 	await session.flush()
 	await session.refresh(file)
@@ -332,7 +345,7 @@ async def create_file(
 	await _emit_file_event(
 		session,
 		event_type=EventType.FILE_CREATED,
-		file_id=str(file.id),
+		file_id=file.id,
 		user_id=principal.user_id,
 		filename=file.filename,
 		origin_session_id=origin_session_id,
@@ -345,7 +358,7 @@ async def upload_file(
 	session: AsyncSession,
 	*,
 	principal: Principal,
-	project_id: TypeID | None = None,
+	project_ids: list[TypeID] | None = None,
 	source: FileSource = FileSource.UPLOAD,
 	origin_session_id: str | None = None,
 ) -> File:
@@ -355,9 +368,9 @@ async def upload_file(
 	and checking permissions.
 	"""
 	require_permission(principal, "files:create")
-	if project_id is not None:
+	for pid in project_ids or []:
 		await require_project_access(
-			project_id,
+			pid,
 			session,
 			principal,
 			required_level=AccessLevel.EDITOR,
@@ -378,7 +391,7 @@ async def upload_file(
 		filename=upload.filename,
 		content_type=content_type,
 		source=source,
-		project_id=str(project_id) if project_id else None,
+		project_ids=project_ids,
 		origin_session_id=origin_session_id,
 	)
 
@@ -394,7 +407,7 @@ async def get_file_content(
 	returns (stream, content_type, filename, size_bytes).
 	"""
 	await require_resource_access(
-		str(file_id),
+		file_id,
 		session,
 		principal,
 		ResourceType.FILE,
@@ -420,7 +433,7 @@ async def get_file_url(
 ) -> str | None:
 	"""get a direct/presigned URL for the file, or None if unsupported."""
 	await require_resource_access(
-		str(file_id),
+		file_id,
 		session,
 		principal,
 		ResourceType.FILE,
@@ -451,7 +464,10 @@ async def list_files(
 		),
 	)
 	if project_id is not None:
-		stmt = stmt.where(File.project_id == project_id)
+		stmt = stmt.join(
+			file_project_association,
+			File.id == file_project_association.c.file_id,
+		).where(file_project_association.c.project_id == project_id)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -476,7 +492,7 @@ async def get_file(
 ) -> File:
 	"""get a file by id (requires reader access)."""
 	await require_resource_access(
-		str(file_id),
+		file_id,
 		session,
 		principal,
 		ResourceType.FILE,
@@ -495,7 +511,7 @@ async def update_file(
 ) -> File:
 	"""update file metadata (requires editor access)."""
 	await require_resource_access(
-		str(file_id),
+		file_id,
 		session,
 		principal,
 		ResourceType.FILE,
@@ -503,14 +519,16 @@ async def update_file(
 	)
 	file = await _get_file(file_id, session)
 	updates = file_in.model_dump(exclude_unset=True, by_alias=True)
-	new_project_id = updates.get("project_id")
-	if new_project_id is not None and str(new_project_id) != str(file.project_id or ""):
-		await require_project_access(
-			new_project_id,
-			session,
-			principal,
-			required_level=AccessLevel.EDITOR,
-		)
+	new_project_ids = updates.pop("project_ids", None)
+	if new_project_ids is not None:
+		for pid in new_project_ids:
+			await require_project_access(
+				pid,
+				session,
+				principal,
+				required_level=AccessLevel.EDITOR,
+			)
+		file.projects = await load_projects(new_project_ids, session, principal)
 	for field, value in updates.items():
 		setattr(file, field, value)
 	await session.flush()
@@ -519,7 +537,7 @@ async def update_file(
 	await _emit_file_event(
 		session,
 		event_type=EventType.FILE_UPDATED,
-		file_id=str(file_id),
+		file_id=file_id,
 		user_id=principal.user_id,
 		filename=file.filename,
 		origin_session_id=origin_session_id,
@@ -539,7 +557,7 @@ async def delete_file(
 	hard deletes also remove bytes from the storage backend.
 	"""
 	await require_resource_access(
-		str(file_id),
+		file_id,
 		session,
 		principal,
 		ResourceType.FILE,
@@ -558,7 +576,7 @@ async def delete_file(
 	await _emit_file_event(
 		session,
 		event_type=EventType.FILE_DELETED,
-		file_id=str(file_id),
+		file_id=file_id,
 		user_id=principal.user_id,
 		origin_session_id=origin_session_id,
 	)

@@ -442,9 +442,9 @@ class TestStoreFile:
 			db_session,
 			data=b"project file",
 			owner_id=owner_id,
-			project_id=project_id,
+			project_ids=[project_id],
 		)
-		assert file.project_id == project_id
+		assert project_id in file.project_ids
 
 
 class TestReadContent:

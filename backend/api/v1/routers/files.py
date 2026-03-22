@@ -63,7 +63,7 @@ async def create_file(
 )
 async def upload_file(
 	file: UploadFile,
-	project_id: TypeID | None = Form(default=None),
+	project_ids: list[TypeID] = Form(default=[]),
 	source: FileSource = Form(default=FileSource.UPLOAD),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -74,7 +74,7 @@ async def upload_file(
 		file,
 		db,
 		principal=principal,
-		project_id=project_id,
+		project_ids=project_ids,
 		source=source,
 		origin_session_id=x_session_id,
 	)
