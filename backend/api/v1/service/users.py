@@ -24,6 +24,7 @@ from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.security import hash_password
+from nokodo_ai.utils.typeid import TypeID
 
 
 async def list_users(
@@ -56,7 +57,7 @@ async def list_users(
 
 
 async def get_user(
-	user_id: str,
+	user_id: TypeID,
 	session: AsyncSession,
 	*,
 	principal: Principal,
@@ -80,7 +81,7 @@ async def get_user(
 
 
 async def get_user_counts(
-	user_id: str,
+	user_id: TypeID,
 	session: AsyncSession,
 	*,
 	principal: Principal,
@@ -245,7 +246,7 @@ async def create_user(
 
 
 async def update_user(
-	user_id: str,
+	user_id: TypeID,
 	user_in: UserUpdate,
 	session: AsyncSession,
 	*,
