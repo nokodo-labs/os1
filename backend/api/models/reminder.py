@@ -62,8 +62,13 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 		"Project",
 		secondary=reminder_list_project_association,
 		back_populates="reminder_lists",
-		lazy="selectin",
 	)
+
+	@property
+	def project_ids(self) -> list[TypeID]:
+		"""IDs of linked projects (requires projects to be loaded)."""
+		return [p.id for p in self.projects]
+
 	reminders: Mapped[list[Reminder]] = relationship(
 		"Reminder",
 		back_populates="reminder_list",
@@ -74,11 +79,6 @@ class ReminderList(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Bas
 		back_populates="reminder_list",
 		cascade="all, delete-orphan",
 	)
-
-	@property
-	def project_ids(self) -> list[TypeID]:
-		"""ids of all projects this reminder list belongs to."""
-		return [p.id for p in self.projects]
 
 
 class Reminder(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):

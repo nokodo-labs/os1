@@ -103,14 +103,14 @@ async def create_reminder_list(
 	reminder_list = ReminderList(
 		owner_id=principal.user_id,
 		**data.model_dump(exclude_unset=True, by_alias=True, exclude={"project_ids"}),
+		projects=(
+			await load_projects(data.project_ids, session, principal)
+			if data.project_ids
+			else []
+		),
 	)
-	if data.project_ids:
-		reminder_list.projects = await load_projects(
-			data.project_ids, session, principal
-		)
 	session.add(reminder_list)
 	await session.flush()
-	await session.refresh(reminder_list)
 
 	# emit reminder_list.created event
 	event = Event(
@@ -148,7 +148,9 @@ async def list_reminder_lists(
 			sort_dir=sort_dir,
 			columns=_REMINDER_LIST_SORT_COLUMNS,
 		)
-		stmt = stmt.offset(skip).limit(limit)
+		stmt = (
+			stmt.offset(skip).limit(limit).options(selectinload(ReminderList.projects))
+		)
 		result = await session.execute(stmt)
 		no_count_lists = result.scalars().all()
 		return [ReminderListWithCounts.model_validate(rl) for rl in no_count_lists]
@@ -186,7 +188,11 @@ async def list_reminder_lists(
 		sort_dir=sort_dir,
 		columns=_REMINDER_LIST_SORT_COLUMNS,
 	)
-	counts_stmt = counts_stmt.offset(skip).limit(limit)
+	counts_stmt = (
+		counts_stmt.offset(skip)
+		.limit(limit)
+		.options(selectinload(ReminderList.projects))
+	)
 
 	result = await session.execute(counts_stmt)
 	rows = result.all()
@@ -245,7 +251,12 @@ async def get_reminder_list(
 	principal: Principal,
 ) -> ReminderList:
 	"""get a reminder list by id."""
-	reminder_list = await session.get(ReminderList, list_id)
+	result = await session.execute(
+		select(ReminderList)
+		.where(ReminderList.id == list_id)
+		.options(selectinload(ReminderList.projects))
+	)
+	reminder_list = result.scalars().one_or_none()
 	if not reminder_list:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
@@ -287,7 +298,6 @@ async def update_reminder_list(
 	for key, value in update_data.items():
 		setattr(reminder_list, key, value)
 	await session.flush()
-	await session.refresh(reminder_list)
 
 	# partial event: only changed fields + id + updated_at
 	event_data = data.model_dump(mode="json", exclude_unset=True)
