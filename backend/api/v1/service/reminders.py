@@ -780,7 +780,7 @@ async def _autocomplete_reminders(
 			type=SearchResultType.REMINDER,
 			id=TypeID(rem.id),
 			title=rem.title or "",
-			subtitle=(rem.description[:100] if rem.description else None),
+			preview=(rem.description[:100] if rem.description else None),
 			created_at=rem.created_at,
 			updated_at=rem.updated_at,
 		)
@@ -848,7 +848,7 @@ async def _hybrid_search_reminders(
 				type=SearchResultType.REMINDER,
 				id=TypeID(rem.id),
 				title=rem.title or "",
-				subtitle=(rem.description[:100] if rem.description else None),
+				preview=(rem.description[:100] if rem.description else None),
 				score=score_by_rid.get(rid),
 				created_at=rem.created_at,
 				updated_at=rem.updated_at,

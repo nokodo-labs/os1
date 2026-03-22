@@ -357,7 +357,7 @@ async def _autocomplete_notes(
 			type=SearchResultType.NOTE,
 			id=TypeID(note.id),
 			title=note.title or "",
-			subtitle=(note.content[:100] if note.content else None),
+			preview=(note.content[:100] if note.content else None),
 			created_at=note.created_at,
 			updated_at=note.updated_at,
 		)
@@ -424,7 +424,7 @@ async def _hybrid_search_notes(
 				type=SearchResultType.NOTE,
 				id=TypeID(note.id),
 				title=note.title or "",
-				subtitle=(note.content[:100] if note.content else None),
+				preview=(note.content[:100] if note.content else None),
 				score=score_by_rid.get(rid),
 				created_at=note.created_at,
 				updated_at=note.updated_at,

@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
+from api.models.file import File
+from api.models.group import Group
 from api.models.many_to_many import user_role_association
+from api.models.memory import Memory
+from api.models.note import Note
+from api.models.reminder import Reminder, ReminderList
+from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import ActionPermission
 from api.schemas.user import UserCreate, UserUpdate
@@ -71,6 +77,46 @@ async def get_user(
 		)
 
 	return user
+
+
+async def get_user_counts(
+	user_id: str,
+	session: AsyncSession,
+	*,
+	principal: Principal,
+) -> dict[str, int]:
+	# ensure actor has permission
+	await get_user(user_id, session, principal=principal)
+
+	# only resources that have a real user-ownership column
+	queries = {
+		"threads": select(func.count())
+		.select_from(Thread)
+		.where(Thread.owner_id == user_id),
+		"memories": select(func.count())
+		.select_from(Memory)
+		.where(Memory.user_id == user_id),
+		"notes": select(func.count()).select_from(Note).where(Note.user_id == user_id),
+		"files": select(func.count()).select_from(File).where(File.owner_id == user_id),
+		"groups": select(func.count())
+		.select_from(Group)
+		.where(Group.owner_id == user_id),
+		"reminders": (
+			select(func.count())
+			.select_from(Reminder)
+			.where(Reminder.owner_id == user_id)
+		),
+		"reminder_lists": (
+			select(func.count())
+			.select_from(ReminderList)
+			.where(ReminderList.owner_id == user_id)
+		),
+	}
+	counts: dict[str, int] = {}
+	for key, stmt in queries.items():
+		result = await session.execute(stmt)
+		counts[key] = result.scalar() or 0
+	return counts
 
 
 async def create_user(
