@@ -24,7 +24,7 @@
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.54.0",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
-		"@tailwindcss/postcss": "^4.2.1",
+		"@tailwindcss/postcss": "^4.2.2",
 		"@tsconfig/svelte": "^5.0.8",
 		"@types/node": "^25.4.0",
 		"@vitest/coverage-v8": "^4.0.18",
