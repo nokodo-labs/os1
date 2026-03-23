@@ -14,7 +14,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { ArrowDown, ArrowUp, Pencil, Plus, Search, Trash2, X } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Pencil, Plus, Search, Trash2, X, RefreshCw, Cpu } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -421,14 +421,14 @@
 	}
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
+<div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">models</h2>
 			<p class="text-zinc-400">manage your AI models.</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			<div class="relative">
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="relative w-full sm:w-auto sm:flex-1">
 				<Search
 					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
 				/>
@@ -436,67 +436,71 @@
 					type="search"
 					placeholder="search models..."
 					bind:value={searchQuery}
-					class="h-9 w-50 pl-8 lg:w-75"
+					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
-			<Select
-				value={modelSortKey}
-				onValueChange={(v: string) => setModelSort(v as ModelSortKey)}
-			>
-				<SelectTrigger class="w-40 rounded-xl">
-					<span class="truncate text-left">
-						{modelSortOptions.find((o) => o.value === modelSortKey)?.label ??
-							modelSortKey}
-					</span>
-				</SelectTrigger>
-				<SelectContent>
-					{#each modelSortOptions as opt (opt.value)}
-						<SelectItem value={opt.value}>{opt.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-			<Button
-				variant="outline"
-				class="rounded-xl px-3"
-				onclick={() => toggleModelSortDir()}
-				disabled={isFetching}
-				title="toggle sort direction"
-				aria-label="toggle sort direction"
-			>
-				{#if modelSortDir === 'asc'}
-					<ArrowUp class="h-4 w-4" />
-				{:else}
-					<ArrowDown class="h-4 w-4" />
-				{/if}
-			</Button>
-			{#if hasProviders}
-				<Button onclick={openCreateModal} class="gap-2 rounded-xl">
-					<Plus class="h-4 w-4" />
-					add model
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Select
+					value={modelSortKey}
+					onValueChange={(v: string) => setModelSort(v as ModelSortKey)}
+				>
+					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-40">
+						<span class="truncate text-left">
+							{modelSortOptions.find((o) => o.value === modelSortKey)?.label ??
+								modelSortKey}
+						</span>
+					</SelectTrigger>
+					<SelectContent>
+						{#each modelSortOptions as opt (opt.value)}
+							<SelectItem value={opt.value}>{opt.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+				<Button
+					variant="outline"
+					class="shrink-0 rounded-xl px-3"
+					onclick={() => toggleModelSortDir()}
+					disabled={isFetching}
+					title="toggle sort direction"
+					aria-label="toggle sort direction"
+				>
+					{#if modelSortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
 				</Button>
-			{:else}
-				<span title={addModelDisabledReason}>
-					<Button onclick={openCreateModal} disabled class="gap-2 rounded-xl">
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				{#if hasProviders}
+					<Button onclick={openCreateModal} class="flex-1 gap-2 rounded-xl sm:flex-none">
 						<Plus class="h-4 w-4" />
 						add model
 					</Button>
-				</span>
-			{/if}
-			<Button
-				variant="outline"
-				class="rounded-xl"
-				onclick={() => fetchData()}
-				disabled={isFetching}
-			>
-				{isFetching ? 'loading...' : 'refresh'}
-			</Button>
+				{:else}
+					<span title={addModelDisabledReason} class="flex-1 sm:flex-none">
+						<Button onclick={openCreateModal} disabled class="w-full gap-2 rounded-xl">
+							<Plus class="h-4 w-4" />
+							add model
+						</Button>
+					</span>
+				{/if}
+				<Button
+					variant="outline"
+					class="flex-1 rounded-xl sm:flex-none"
+					onclick={() => fetchData()}
+					disabled={isFetching}
+				>
+					<RefreshCw class="mr-2 h-4 w-4 {isFetching ? 'animate-spin' : ''}" />
+					{isFetching ? 'loading...' : 'refresh'}
+				</Button>
+			</div>
 		</div>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-y-auto">
-		<div class="flex min-h-0 flex-1 flex-col gap-6">
+		<div class="flex flex-col gap-6">
 			{#if isFetching}
-				<div class="flex min-h-0 flex-1 items-center justify-center">
+				<div class="flex flex-col items-center justify-center py-16">
 					<NokodoLoader />
 				</div>
 			{:else if error}
@@ -506,49 +510,54 @@
 			{:else}
 				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 					{#each filteredModels as model (model.id)}
-						<Card class="border-zinc-800 bg-zinc-900 text-zinc-100">
-							<CardHeader
-								class="flex flex-row items-start justify-between space-y-0 pb-2"
-							>
-								<CardTitle class="text-base font-medium">
-									{model.display_name || model.name}
-								</CardTitle>
-								<div class="flex gap-2">
-									<Button
-										variant="ghost"
-										size="icon"
-										class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
-										onclick={() => openEditModal(model)}
-									>
-										<Pencil class="h-4 w-4" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
-										class="h-8 w-8 text-zinc-400 hover:text-red-500"
-										onclick={() => handleDelete(model.id)}
-									>
-										<Trash2 class="h-4 w-4" />
-									</Button>
+						<Card class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50">
+							<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
+								<div class="flex items-start justify-between gap-4">
+									<div class="flex min-w-0 flex-1 items-start gap-3">
+										<div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pink-500/10 text-pink-400">
+											<Cpu class="h-4 w-4" />
+										</div>
+										<div class="min-w-0 flex-1">
+											<CardTitle class="truncate text-base">{model.display_name || model.name}</CardTitle>
+											<div class="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
+												<span class="truncate">{getProviderName(model.provider_id)}</span>
+												<span>•</span>
+												<span class="truncate">{getModelTypeLabel(model.model_type)}</span>
+											</div>
+										</div>
+									</div>
+									<div class="flex shrink-0 gap-1">
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
+											onclick={() => openEditModal(model)}
+										>
+											<Pencil class="h-3.5 w-3.5" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-7 w-7 text-zinc-500 hover:text-red-400"
+											onclick={() => handleDelete(model.id)}
+										>
+											<Trash2 class="h-3.5 w-3.5" />
+										</Button>
+									</div>
 								</div>
 							</CardHeader>
-							<CardContent>
-								<div class="mb-4 text-sm text-zinc-400">
-									{getProviderName(model.provider_id)} • {getModelTypeLabel(
-										model.model_type
-									)}
-								</div>
-								<div class="flex items-center gap-2">
-									<div
-										class={`h-2 w-2 rounded-full ${
-											model.enabled ? 'bg-green-500' : 'bg-zinc-700'
-										}`}
-									></div>
-									<span class="text-xs text-zinc-500">
-										{model.enabled ? 'enabled' : 'disabled'}
-									</span>
+							<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
+								<div class="flex items-center justify-between gap-2">
+									<div class="flex items-center gap-2">
+										<div class={`h-2 w-2 rounded-full ${model.enabled ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`}></div>
+										<span class="text-xs font-medium tracking-wider text-zinc-400 uppercase">
+											{model.enabled ? 'enabled' : 'disabled'}
+										</span>
+									</div>
 									{#if model.is_autofetched}
-										<span class="ml-2 text-xs text-blue-500">autofetched</span>
+										<span class="inline-flex items-center rounded-md bg-zinc-800/50 px-2 py-0.5 text-[10px] uppercase font-medium tracking-wider text-zinc-300">
+											autofetched
+										</span>
 									{/if}
 								</div>
 							</CardContent>
@@ -568,7 +577,6 @@
 				</div>
 			{/if}
 		</div>
-	</div>
 </div>
 
 <Dialog.Root

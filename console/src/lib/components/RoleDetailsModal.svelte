@@ -13,7 +13,7 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
-	import { Trash2, X } from '@lucide/svelte'
+	import { Trash2, X, Save } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type Props = {
@@ -428,6 +428,7 @@
 						delete
 					</Button>
 					<Button class="rounded-xl" onclick={saveRole} disabled={isSaving || isLoading}>
+						<Save class="mr-1.5 h-4 w-4" />
 						{isSaving ? 'saving…' : 'save role'}
 					</Button>
 				</div>

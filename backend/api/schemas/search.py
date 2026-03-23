@@ -75,7 +75,7 @@ class SearchResultItem(ORMModel):
 	type: SearchResultType
 	id: TypeID
 	title: str
-	subtitle: str | None = None
+	preview: str | None = None
 	score: float | None = None
 	created_at: datetime
 	updated_at: datetime

@@ -234,25 +234,25 @@
 
 <div class="flex h-full flex-col gap-6 overflow-y-auto">
 	<!-- header -->
-	<div class="flex items-center justify-between">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
-			<h2 class="text-2xl font-semibold">vector data</h2>
-			<p class="mt-1 text-sm text-zinc-400">
+			<h2 class="text-2xl font-bold tracking-tight">vector data</h2>
+			<p class="text-zinc-400">
 				manage vector collections, run diagnostic searches, and reindex data
 			</p>
 		</div>
-		<div class="flex gap-2">
-			<Button variant="outline" size="sm" onclick={() => (showSearchModal = true)}>
+		<div class="flex flex-wrap items-center gap-2">
+			<Button variant="outline" class="rounded-xl" onclick={() => (showSearchModal = true)}>
 				<Search class="mr-2 h-4 w-4" />
 				search
 			</Button>
-			<Button variant="outline" size="sm" onclick={revectorizeAll} disabled={isReindexing}>
+			<Button variant="outline" class="rounded-xl" onclick={revectorizeAll} disabled={isReindexing}>
 				<RefreshCw class="mr-2 h-4 w-4 {isReindexing ? 'animate-spin' : ''}" />
 				{isReindexing ? 'revectorizing...' : 'revectorize all'}
 			</Button>
 			<Button
 				variant="destructive"
-				size="sm"
+				class="rounded-xl"
 				onclick={() => (showWipeConfirm = true)}
 				disabled={collections.length === 0}
 			>

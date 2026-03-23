@@ -111,6 +111,7 @@ frontend/
 │   │   │   └── streaming/
 │   │   ├── auth/
 │   │   ├── chat/
+│   │   ├── citations/        # centralized citation source config (icon, color, href, widget per source type)
 │   │   ├── collaboration/
 │   │   ├── components/
 │   │   │   ├── backgrounds/ (webgl/)
