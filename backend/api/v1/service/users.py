@@ -62,7 +62,7 @@ async def get_user(
 	*,
 	principal: Principal,
 ) -> User:
-	if not principal.is_admin and str(user_id) != str(principal.user.id):
+	if not principal.is_admin and user_id != principal.user.id:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
@@ -253,7 +253,7 @@ async def update_user(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> User:
-	if not principal.is_admin and str(user_id) != str(principal.user.id):
+	if not principal.is_admin and user_id != principal.user.id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 	if not principal.is_admin:
@@ -361,13 +361,13 @@ async def update_user(
 	if user_in.preferences is not None:
 		event = Event(
 			scope=EventScope.USER,
-			scope_id=str(user.id),
+			scope_id=user.id,
 			type=EventType.USER_PREFERENCES_UPDATED,
 			data={
-				"user_id": str(user.id),
+				"user_id": user.id,
 				"preferences": user.preferences,
 			},
-			user_id=str(user.id),
+			user_id=user.id,
 		)
 		await event_service.publish_event(
 			session, event=event, origin_session_id=origin_session_id
