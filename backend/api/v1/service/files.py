@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
@@ -178,6 +179,13 @@ async def store_file(
 	size_bytes = info.size if info else None
 	checksum = await backend.checksum_sha256(key)
 
+	projects: list[Project] = []
+	if project_ids:
+		result = await session.scalars(
+			select(Project).where(Project.id.in_(project_ids))
+		)
+		projects = list(result.all())
+
 	file = File(
 		id=file_id,
 		owner_id=owner_id,
@@ -190,18 +198,10 @@ async def store_file(
 		checksum_sha256=checksum,
 		status=FileStatus.AVAILABLE,
 		message_id=message_id,
+		projects=projects,
 	)
 	session.add(file)
 	await session.flush()
-
-	if project_ids:
-		projects = await session.scalars(
-			select(Project).where(Project.id.in_(project_ids))
-		)
-		file.projects = list(projects.all())
-		await session.flush()
-
-	await session.refresh(file)
 
 	if emit_event:
 		await _emit_file_event(
@@ -334,13 +334,14 @@ async def create_file(
 		)
 	data = file_in.model_dump(by_alias=True, exclude={"project_ids"})
 	data["owner_id"] = principal.user_id
-	file = File(**data)
-	if file_in.project_ids:
-		projects = await load_projects(file_in.project_ids, session, principal)
-		file.projects = projects
+	projects = (
+		await load_projects(file_in.project_ids, session, principal)
+		if file_in.project_ids
+		else []
+	)
+	file = File(**data, projects=projects)
 	session.add(file)
 	await session.flush()
-	await session.refresh(file)
 
 	await _emit_file_event(
 		session,
@@ -480,7 +481,9 @@ async def list_files(
 		},
 		tie_breaker=File.id,
 	)
-	result = await session.execute(stmt.offset(skip).limit(limit))
+	result = await session.execute(
+		stmt.offset(skip).limit(limit).options(selectinload(File.projects))
+	)
 	return list(result.scalars().all())
 
 
@@ -498,7 +501,18 @@ async def get_file(
 		ResourceType.FILE,
 		required_level=AccessLevel.READER,
 	)
-	return await _get_file(file_id, session)
+	result = await session.execute(
+		select(File)
+		.where(File.id == file_id, File.deleted_at.is_(None))
+		.options(selectinload(File.projects))
+	)
+	file = result.scalars().one_or_none()
+	if not file:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="file not found",
+		)
+	return file
 
 
 async def update_file(
@@ -528,11 +542,20 @@ async def update_file(
 				principal,
 				required_level=AccessLevel.EDITOR,
 			)
+		# load current projects so reassignment doesn't trigger lazy IO
+		await session.execute(
+			select(File).where(File.id == file_id).options(selectinload(File.projects))
+		)
 		file.projects = await load_projects(new_project_ids, session, principal)
 	for field, value in updates.items():
 		setattr(file, field, value)
 	await session.flush()
-	await session.refresh(file)
+	result = await session.execute(
+		select(File)
+		.where(File.id == file_id, File.deleted_at.is_(None))
+		.options(selectinload(File.projects))
+	)
+	file = result.scalars().one()
 
 	await _emit_file_event(
 		session,

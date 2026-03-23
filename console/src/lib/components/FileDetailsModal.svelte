@@ -242,13 +242,15 @@
 									>{file.owner_id}</span
 								>
 							</div>
-							{#if file.project_id}
-								<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
-									<Package class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-									<span class="w-24 shrink-0 text-xs text-zinc-500">project</span>
-									<span class="min-w-0 truncate font-mono text-xs text-zinc-300"
-										>{file.project_id}</span
-									>
+							{#if file.project_ids && file.project_ids.length > 0}
+								<div class="flex flex-col border-b border-zinc-800/60 transition-colors">
+									{#each file.project_ids as pid (pid)}
+										<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
+											<Package class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+											<span class="w-24 shrink-0 text-xs text-zinc-500">project</span>
+											<span class="min-w-0 truncate font-mono text-xs text-zinc-300">{pid}</span>
+										</div>
+									{/each}
 								</div>
 							{/if}
 							{#if file.message_id}
@@ -458,6 +460,7 @@
 									class="rounded-lg"
 									onclick={() => (confirmDelete = false)}
 								>
+									<X class="mr-1.5 h-4 w-4" />
 									cancel
 								</Button>
 							</div>
