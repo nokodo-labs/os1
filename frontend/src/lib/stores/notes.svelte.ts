@@ -25,7 +25,7 @@ export interface Note {
 	title: string
 	content: string
 	labels: string[]
-	projectId: string | null
+	projectIds: string[]
 	createdAt: number
 	updatedAt: number
 }
@@ -60,7 +60,7 @@ function toNote(apiNote: ApiNote): Note {
 		title: apiNote.title,
 		content: apiNote.content,
 		labels: apiNote.labels ?? [],
-		projectId: apiNote.project_id ?? null,
+		projectIds: apiNote.project_ids,
 		createdAt: new Date(apiNote.created_at).getTime(),
 		updatedAt: new Date(apiNote.updated_at).getTime(),
 	}
@@ -138,7 +138,7 @@ export const notes = {
 			title: '',
 			content: '',
 			labels: [],
-			projectId: null,
+			projectIds: [],
 			createdAt: now,
 			updatedAt: now,
 		}
@@ -151,7 +151,7 @@ export const notes = {
 
 		try {
 			const { data, error } = await api.POST('/v1/notes', {
-				body: { title: '', content: '' },
+				body: { title: '', content: '', project_ids: [] },
 			})
 
 			if (error || !data) {
