@@ -106,7 +106,11 @@ class MemoryRecallTool(Tool[AppContext]):
 			return self.success(json.dumps(out), __agent_context__)
 
 		results: JSONArray = [
-			{"id": str(item.id), "title": item.title, "subtitle": item.subtitle or ""}
+			{
+				"id": item.id,
+				"title": item.title,
+				**({"category": item.preview} if item.preview else {}),
+			}
 			for item in page.items
 		]
 		n = len(results)

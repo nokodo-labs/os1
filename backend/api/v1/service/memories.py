@@ -324,7 +324,7 @@ async def _autocomplete_memories(
 			type=SearchResultType.MEMORY,
 			id=TypeID(mem.id),
 			title=mem.content[:80] if mem.content else "",
-			subtitle=mem.category,
+			preview=mem.category,
 			created_at=mem.created_at,
 			updated_at=mem.updated_at,
 		)
@@ -384,7 +384,7 @@ async def _hybrid_search_memories(
 				type=SearchResultType.MEMORY,
 				id=TypeID(mem.id),
 				title=mem.content[:80] if mem.content else "",
-				subtitle=mem.category,
+				preview=mem.category,
 				score=score_by_rid.get(rid),
 				created_at=mem.created_at,
 				updated_at=mem.updated_at,

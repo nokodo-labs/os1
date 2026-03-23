@@ -222,4 +222,10 @@
 	:global(dialog[data-streamdown-citation-popover]::after) {
 		content: none;
 	}
+	/* boost opacity for the widget card used as a floating popover */
+	:global(dialog[data-streamdown-citation-popover] .liquid-glass--frosted) {
+		--lg-frost-bg-dark: rgba(15, 15, 15, 0.94);
+		--lg-frost-bg-light: rgba(248, 248, 248, 0.93);
+		--lg-frost-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+	}
 </style>
