@@ -19,7 +19,7 @@
 		"generate:api-types": "openapi-typescript http://localhost:1383/v1/openapi.json -o src/lib/api/types.ts && node -e \"var f='src/lib/api/types.ts',s=require('fs');s.writeFileSync(f,'// @ts-nocheck\\n'+s.readFileSync(f,'utf8'))\""
 	},
 	"devDependencies": {
-		"@eslint/js": "^9.39.4",
+		"@eslint/js": "^10.0.1",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.55.0",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
