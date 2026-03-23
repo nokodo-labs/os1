@@ -107,3 +107,8 @@ the backend is configured to **automatically run `uv run alembic upgrade head` o
     cd backend
     alembic -c api/migrations/alembic.ini upgrade head
     ```
+
+## M2M relationships
+
+- **ORM**: default lazy (no extra queries) + a read-only `_ids` property. expose IDs, not objects.
+- **service**: `selectinload()` only in queries whose results are serialized to API responses. internal/background paths skip it.

@@ -34,6 +34,17 @@ class BootSettings(BaseSettings):
 		"via `heads` command instead of `head` on startup migrations.",
 	)
 
+	@field_validator(
+		"DEBUG", "JSON_LOGS", "TESTING", "BRANCHING_MIGRATIONS", mode="before"
+	)
+	@classmethod
+	def coerce_bool(cls, v: object) -> bool:
+		if isinstance(v, bool):
+			return v
+		if isinstance(v, str):
+			return v.lower() in {"1", "true", "yes", "on"}
+		return bool(v)
+
 	DATABASE_URL: str = (
 		"postgresql+psycopg://nokodo-ai-admin:nokodo-ai@127.0.0.1:5432/nokodo-ai-dev"
 	)
@@ -45,7 +56,7 @@ class BootSettings(BaseSettings):
 		allowed = {"postgresql", "postgresql+psycopg"}
 		scheme = v.split(":", 1)[0]
 		if scheme not in allowed:
-			raise ValueError(f"Unsupported DATABASE_URL scheme: {scheme}")
+			raise ValueError(f"unsupported DATABASE_URL scheme: {scheme}")
 		return v
 
 

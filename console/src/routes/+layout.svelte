@@ -13,6 +13,8 @@
 	let { children } = $props()
 
 	let isInitialized = $state<boolean | null>(null)
+	// false until restoreSession() resolves on mount - prevents premature routing
+	let sessionRestored = $state(false)
 	let pendingApproval = $state(false)
 
 	onMount(async () => {
@@ -29,6 +31,7 @@
 			await auth.restoreSession().catch(() => {})
 		}
 
+		sessionRestored = true
 		markAuthReady()
 	})
 
@@ -50,7 +53,8 @@
 	})
 
 	$effect(() => {
-		if (isInitialized === null) return
+		// wait for both system check and session restoration before routing
+		if (isInitialized === null || !sessionRestored) return
 
 		const path = page.url.pathname
 
@@ -59,7 +63,7 @@
 		} else if (!auth.isAuthenticated) {
 			if (path !== '/login' && path !== '/welcome') void goto(resolve('/login'))
 		} else {
-			// Authenticated
+			// authenticated - only redirect from root/auth pages
 			if (path === '/login' || path === '/welcome' || path === '/') {
 				void goto(resolve('/dashboard'))
 			}

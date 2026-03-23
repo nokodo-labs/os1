@@ -118,7 +118,7 @@
 			id: result.id,
 			type: typeMap[result.type] ?? 'file',
 			title: result.title,
-			subtitle: result.subtitle ?? undefined,
+			preview: result.preview ?? undefined,
 			href: resolve((hrefMap[result.type] ?? '#') as `/c/${string}`),
 			updatedAt: new Date(result.updated_at).getTime(),
 			createdAt: new Date(result.created_at).getTime(),

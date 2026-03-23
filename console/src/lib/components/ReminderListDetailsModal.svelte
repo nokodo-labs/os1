@@ -235,8 +235,11 @@
 								variant="ghost"
 								size="sm"
 								class="h-7 rounded-lg px-2 text-xs text-zinc-400"
-								onclick={() => (confirmDelete = false)}>cancel</Button
+								onclick={() => (confirmDelete = false)}
 							>
+								<X class="mr-1 h-3 w-3" />
+								cancel
+							</Button>
 						{/if}
 					{/if}
 					<Button variant="ghost" size="icon" class="shrink-0 rounded-xl" onclick={close}>
@@ -387,8 +390,11 @@
 									variant="ghost"
 									size="sm"
 									class="rounded-xl"
-									onclick={cancelEdit}>cancel</Button
+									onclick={cancelEdit}
 								>
+									<X class="mr-1.5 h-3.5 w-3.5" />
+									cancel
+								</Button>
 							</div>
 						</div>
 					{:else}
