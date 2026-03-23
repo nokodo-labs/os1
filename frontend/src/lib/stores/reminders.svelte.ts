@@ -533,6 +533,7 @@ class RemindersCache {
 					icon: params.icon ?? null,
 					color: params.color ?? null,
 					position: 0,
+					project_ids: [],
 				},
 			})
 
