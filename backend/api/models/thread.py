@@ -1,4 +1,4 @@
-"""Thread model."""
+"""thread model."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
 	DateTime,
 	ForeignKey,
+	Index,
 	String,
 	func,
 )
@@ -45,10 +46,18 @@ class Thread(
 	SoftDeleteMixin,
 	Base,
 ):
-	"""Conversation container tying together messages, events, and tasks."""
+	"""conversation container tying together messages, events, and tasks."""
 
 	__tablename__ = "threads"
 	__typeid_prefix__ = "thread"
+	__table_args__ = (
+		Index(
+			"idx_threads_title_trgm",
+			"title",
+			postgresql_using="gin",
+			postgresql_ops={"title": "gin_trgm_ops"},
+		),
+	)
 
 	title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 	tags: Mapped[list[str]] = mapped_column(JSONB, default=list)
@@ -66,12 +75,22 @@ class Thread(
 	)
 	spawned_from_message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
-		ForeignKey("messages.id", ondelete="SET NULL"),
+		ForeignKey(
+			"messages.id",
+			ondelete="SET NULL",
+			use_alter=True,
+			name="fk_threads_spawned_from_message_id_messages",
+		),
 		index=True,
 	)
 	current_message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
-		ForeignKey("messages.id", ondelete="SET NULL"),
+		ForeignKey(
+			"messages.id",
+			ondelete="SET NULL",
+			use_alter=True,
+			name="fk_threads_current_message_id_messages",
+		),
 		index=True,
 	)
 

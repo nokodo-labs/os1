@@ -1,4 +1,4 @@
-"""Message schemas."""
+"""message schemas."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Annotated
 from pydantic import Field, field_validator, model_validator
 
 from api.models.message import MessageType
+from api.schemas.citations import Citation
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from api.schemas.content import (
 	ContentPart,
@@ -23,12 +24,12 @@ from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.utils.typeid import TypeID
 
 
-# Type adapter for content validation
+# type adapter for content validation
 ContentPartList = Annotated[list[ContentPart], Field(default_factory=list)]
 
 
 class MessageBase(MetadataModel):
-	"""Shared message attributes."""
+	"""shared message attributes."""
 
 	type: MessageType = MessageType.USER
 	content: ContentPartList = Field(default_factory=list)
@@ -37,14 +38,15 @@ class MessageBase(MetadataModel):
 	tool_calls: list[dict[str, object]] = Field(default_factory=list)
 	usage: dict[str, object] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
+	citations: list[Citation] = Field(default_factory=list)
 
 
 class MessageCreate(MetadataModel):
-	"""Payload for creating a message within a thread.
+	"""payload for creating a message within a thread.
 
-	Content can be provided as:
-	- A string (converted to [TextContent(text=...)])
-	- A list of ContentPart objects (validated via discriminated union)
+	content can be provided as:
+	- a string (converted to [TextContent(text=...)])
+	- a list of ContentPart objects (validated via discriminated union)
 	"""
 
 	type: MessageType = MessageType.USER
@@ -54,6 +56,7 @@ class MessageCreate(MetadataModel):
 	tool_calls: list[dict[str, object]] = Field(default_factory=list)
 	usage: dict[str, object] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
+	citations: list[Citation] = Field(default_factory=list)
 	parent_id: TypeID | None = None
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
@@ -100,9 +103,9 @@ class MessageCreate(MetadataModel):
 		cls,
 		v: str | list[object],
 	) -> list[ContentPart]:
-		"""Normalize content to list of ContentPart models.
+		"""normalize content to list of ContentPart models.
 
-		Accepts strings, dicts (validated via discriminated union), or
+		accepts strings, dicts (validated via discriminated union), or
 		ContentPart instances.
 		"""
 		if isinstance(v, str):
@@ -177,7 +180,7 @@ class MessageCreate(MetadataModel):
 
 
 class MessageUpdate(MetadataUpdateModel):
-	"""Payload for updating a user message's content in place."""
+	"""payload for updating a user message's content in place."""
 
 	content: str | list[ContentPart]
 
@@ -187,14 +190,14 @@ class MessageUpdate(MetadataUpdateModel):
 		cls,
 		v: str | list[object],
 	) -> list[ContentPart]:
-		"""Normalize content to list of ContentPart models."""
+		"""normalize content to list of ContentPart models."""
 		if isinstance(v, str):
 			return [TextContent(text=v)] if v else []
 		return [ContentPartAdapter.validate_python(item) for item in v]
 
 
 class Message(MessageBase, TimestampedModel):
-	"""Response schema."""
+	"""response schema."""
 
 	id: TypeID
 	thread_id: TypeID

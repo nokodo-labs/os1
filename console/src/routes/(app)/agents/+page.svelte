@@ -25,7 +25,20 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { BookOpen, FileText, Pencil, Plus, Shield, Trash2, X } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		BookOpen,
+		Bot,
+		FileText,
+		Pencil,
+		Plus,
+		Search,
+		Shield,
+		Trash2,
+		X,
+		RefreshCw,
+	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -39,6 +52,19 @@ user: {{ user_name }}.
 <chat_context>{{ chat_context }}</chat_context>
 
 {{ referenced_attachments }}`
+
+	type SortKey = 'name' | 'model' | 'plugins'
+	type SortDir = 'asc' | 'desc'
+
+	const sortOptions: Array<{ value: SortKey; label: string }> = [
+		{ value: 'name', label: 'name' },
+		{ value: 'model', label: 'model' },
+		{ value: 'plugins', label: 'plugins' },
+	]
+
+	let sortKey = $state<SortKey>('name')
+	let sortDir = $state<SortDir>('asc')
+	let searchQuery = $state('')
 
 	let agents = $state<Agent[]>([])
 	let models = $state<Model[]>([])
@@ -81,6 +107,45 @@ user: {{ user_name }}.
 	})
 
 	const chatModels = $derived(models.filter((m) => m.model_type === 'chat_model'))
+
+	const filteredAgents = $derived.by(() => {
+		let result = agents
+		if (searchQuery.trim()) {
+			const q = searchQuery.toLowerCase()
+			result = result.filter(
+				(a) =>
+					(a.name ?? '').toLowerCase().includes(q) ||
+					(a.description ?? '').toLowerCase().includes(q) ||
+					a.id.toLowerCase().includes(q)
+			)
+		}
+		const dir = sortDir === 'asc' ? 1 : -1
+		return [...result].sort((a, b) => {
+			switch (sortKey) {
+				case 'name':
+					return (a.name ?? '').localeCompare(b.name ?? '') * dir
+				case 'model':
+					return getModelLabel(a.model_id).localeCompare(getModelLabel(b.model_id)) * dir
+				case 'plugins':
+					return ((a.plugin_ids?.length ?? 0) - (b.plugin_ids?.length ?? 0)) * dir
+				default:
+					return 0
+			}
+		})
+	})
+
+	function setSort(next: SortKey) {
+		if (sortKey === next) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+		} else {
+			sortKey = next
+			sortDir = 'asc'
+		}
+	}
+
+	function toggleSortDir() {
+		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+	}
 
 	async function fetchData() {
 		isFetching = true
@@ -314,22 +379,73 @@ user: {{ user_name }}.
 	}
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
-	<div class="flex shrink-0 items-center justify-between">
+<div class="flex flex-col gap-6">
+	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">agents</h2>
 			<p class="text-zinc-400">create and manage agents.</p>
 		</div>
-		<Button onclick={openCreateModal} class="gap-2 rounded-xl">
-			<Plus class="h-4 w-4" />
-			add agent
-		</Button>
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="relative w-full sm:w-auto sm:flex-1">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search agents..."
+					bind:value={searchQuery}
+					class="w-full pl-8 sm:w-50 lg:w-75"
+				/>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
+					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-40">
+						<span class="truncate text-left">
+							{sortOptions.find((o) => o.value === sortKey)?.label ?? sortKey}
+						</span>
+					</SelectTrigger>
+					<SelectContent>
+						{#each sortOptions as opt (opt.value)}
+							<SelectItem value={opt.value}>{opt.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+				<Button
+					variant="outline"
+					class="shrink-0 rounded-xl px-3"
+					onclick={() => toggleSortDir()}
+					disabled={isFetching}
+					title="toggle sort direction"
+					aria-label="toggle sort direction"
+				>
+					{#if sortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
+				</Button>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Button onclick={openCreateModal} class="flex-1 gap-2 rounded-xl sm:flex-none">
+					<Plus class="h-4 w-4" />
+					add agent
+				</Button>
+				<Button
+					variant="outline"
+					class="flex-1 rounded-xl sm:flex-none"
+					onclick={() => fetchData()}
+					disabled={isFetching}
+				>
+					<RefreshCw class="mr-2 h-4 w-4 {isFetching ? 'animate-spin' : ''}" />
+					{isFetching ? 'loading...' : 'refresh'}
+				</Button>
+			</div>
+		</div>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-y-auto">
-		<div class="flex min-h-0 flex-1 flex-col gap-6">
+		<div class="flex flex-col gap-6">
 			{#if isFetching}
-				<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
+				<div class="flex flex-col items-center justify-center gap-4 py-16">
 					<NokodoLoader expanded={true} />
 				</div>
 			{:else if error}
@@ -340,58 +456,84 @@ user: {{ user_name }}.
 					<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
 				</div>
 			{:else}
-				<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-					{#each agents as agent (agent.id)}
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+					{#each filteredAgents as agent (agent.id)}
 						<Card
-							class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
+							class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
 						>
-							<CardHeader>
-								<div class="flex items-start justify-between">
-									<div>
-										<CardTitle>{agent.name}</CardTitle>
-										{#if agent.description}
-											<CardDescription>{agent.description}</CardDescription>
-										{/if}
+							<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
+								<div class="flex items-start justify-between gap-4">
+									<div class="flex min-w-0 flex-1 items-start gap-3">
+										<div
+											class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400"
+										>
+											<Bot class="h-4 w-4" />
+										</div>
+										<div class="min-w-0 flex-1">
+											<CardTitle class="truncate text-base">{agent.name}</CardTitle>
+											{#if agent.description}
+												<CardDescription class="mt-1 line-clamp-2 text-xs">
+													{agent.description}
+												</CardDescription>
+											{/if}
+										</div>
 									</div>
-									<div class="flex gap-1">
+									<div class="flex shrink-0 gap-1">
 										<Button
 											variant="ghost"
 											size="icon"
-											class="h-8 w-8 text-zinc-500"
+											class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
 											onclick={() => openAclModal(agent.id)}
 											title="access rules"
 										>
-											<Shield class="h-4 w-4" />
+											<Shield class="h-3.5 w-3.5" />
 										</Button>
 										<Button
 											variant="ghost"
 											size="icon"
-											class="h-8 w-8 text-zinc-500"
+											class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
 											onclick={() => openEditModal(agent)}
 											title="edit agent"
 										>
-											<Pencil class="h-4 w-4" />
+											<Pencil class="h-3.5 w-3.5" />
 										</Button>
 									</div>
 								</div>
 							</CardHeader>
-							<CardContent>
-								<div class="space-y-1 text-sm text-zinc-400">
-									<div class="flex justify-between">
-										<span>model:</span>
-										<span class="truncate">{getModelLabel(agent.model_id)}</span
+							<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
+								<div class="flex flex-col gap-2 text-xs text-zinc-500">
+									<div class="flex items-center justify-between gap-2">
+										<span class="shrink-0 font-medium tracking-wider text-zinc-600 uppercase"
+											>model</span
 										>
+										<span class="truncate font-medium text-zinc-300">
+											{getModelLabel(agent.model_id)}
+										</span>
 									</div>
 									{#if agent.plugin_ids && agent.plugin_ids.length > 0}
-										<div class="flex justify-between">
-											<span>plugins:</span>
-											<span class="truncate">{agent.plugin_ids.length}</span>
+										<div class="flex items-center justify-between gap-2">
+											<span class="shrink-0 font-medium tracking-wider text-zinc-600 uppercase"
+												>plugins</span
+											>
+											<span
+												class="inline-flex items-center rounded-md bg-zinc-800/50 px-2 py-0.5 font-medium text-zinc-300"
+											>
+												{agent.plugin_ids.length}
+											</span>
 										</div>
 									{/if}
 								</div>
 							</CardContent>
 						</Card>
 					{/each}
+
+					{#if filteredAgents.length === 0 && agents.length > 0}
+						<div
+							class="col-span-full rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+						>
+							no agents match your search
+						</div>
+					{/if}
 
 					{#if agents.length === 0}
 						<EmptyState
@@ -402,7 +544,6 @@ user: {{ user_name }}.
 				</div>
 			{/if}
 		</div>
-	</div>
 </div>
 
 <Dialog.Root
@@ -436,6 +577,13 @@ user: {{ user_name }}.
 					{#if submitError}
 						<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
 							{submitError}
+						</div>
+					{/if}
+
+					{#if modalMode === 'edit' && editingId}
+						<div class="space-y-1">
+							<Label class="text-xs text-zinc-500">id</Label>
+							<p class="font-mono text-xs text-zinc-400 select-all">{editingId}</p>
 						</div>
 					{/if}
 

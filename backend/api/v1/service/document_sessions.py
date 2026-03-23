@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 
 from pycrdt import Doc
 
+from nokodo_ai.utils.typeid import TypeID
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
 class DocumentParticipant:
 	"""a user's presence in a collaborative editing session."""
 
-	user_id: str
+	user_id: TypeID
 	session_id: str
 	user_name: str = ""
 	avatar_url: str | None = None
@@ -67,7 +69,7 @@ class DocumentSessionStore:
 	async def join(
 		self,
 		document_id: str,
-		user_id: str,
+		user_id: TypeID,
 		session_id: str,
 		user_name: str = "",
 		avatar_url: str | None = None,

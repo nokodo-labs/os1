@@ -54,13 +54,13 @@
 	</span>
 {:else}
 	<div
-		class="rounded-container overflow-hidden border border-foreground/10 bg-foreground/5 backdrop-blur-sm"
+		class="rounded-container border-foreground/10 bg-foreground/5 overflow-hidden border backdrop-blur-sm"
 		in:fade={{ duration: 150 }}
 	>
 		{#if expandable}
 			<button
 				type="button"
-				class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-foreground/5"
+				class="hover:bg-foreground/5 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
 				onclick={toggleExpand}
 			>
 				<div
@@ -83,23 +83,23 @@
 
 				<div class="min-w-0 flex-1">
 					<div class="flex items-center gap-2">
-						<span class="font-medium text-foreground/90">{summary.title}</span>
+						<span class="text-foreground/90 font-medium">{summary.title}</span>
 					</div>
 					{#if summary.subtitle}
-						<p class="truncate text-sm text-foreground/50">{summary.subtitle}</p>
+						<p class="text-foreground/50 truncate text-sm">{summary.subtitle}</p>
 					{/if}
 				</div>
 
 				<div class="flex items-center gap-2">
 					{#if progressPercent !== null && execution.status === 'running'}
-						<div class="h-1.5 w-16 overflow-hidden rounded-full bg-foreground/10">
+						<div class="bg-foreground/10 h-1.5 w-16 overflow-hidden rounded-full">
 							<div
 								class="h-full bg-blue-400 transition-all duration-300"
 								style="width: {progressPercent}%"
 							></div>
 						</div>
 					{/if}
-					<span class="text-xs text-foreground/50">{statusLabel}</span>
+					<span class="text-foreground/50 text-xs">{statusLabel}</span>
 					<span
 						class="text-foreground/50 transition-transform duration-200"
 						class:rotate-180={isExpanded}
@@ -130,29 +130,29 @@
 
 				<div class="min-w-0 flex-1">
 					<div class="flex items-center gap-2">
-						<span class="font-medium text-foreground/90">{summary.title}</span>
+						<span class="text-foreground/90 font-medium">{summary.title}</span>
 					</div>
 					{#if summary.subtitle}
-						<p class="truncate text-sm text-foreground/50">{summary.subtitle}</p>
+						<p class="text-foreground/50 truncate text-sm">{summary.subtitle}</p>
 					{/if}
 				</div>
 
 				<div class="flex items-center gap-2">
 					{#if progressPercent !== null && execution.status === 'running'}
-						<div class="h-1.5 w-16 overflow-hidden rounded-full bg-foreground/10">
+						<div class="bg-foreground/10 h-1.5 w-16 overflow-hidden rounded-full">
 							<div
 								class="h-full bg-blue-400 transition-all duration-300"
 								style="width: {progressPercent}%"
 							></div>
 						</div>
 					{/if}
-					<span class="text-xs text-foreground/50">{statusLabel}</span>
+					<span class="text-foreground/50 text-xs">{statusLabel}</span>
 				</div>
 			</div>
 		{/if}
 
 		{#if body && (!expandable || isExpanded)}
-			<div class="border-t border-foreground/10 px-4 py-3" in:fade={{ duration: 100 }}>
+			<div class="border-foreground/10 border-t px-4 py-3" in:fade={{ duration: 100 }}>
 				{@render body()}
 			</div>
 		{/if}

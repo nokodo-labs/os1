@@ -114,7 +114,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="rounded-pill flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm text-foreground/80 transition-colors duration-150 hover:bg-foreground/10"
+				class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
 				onclick={() => {
 					sort = option.value as SortMode
 					closeSortMenu()
@@ -141,7 +141,7 @@
 >
 	<div>
 		<PageTitle icon={FinderFolder} label="projects" />
-		<p class="mt-2 text-sm text-foreground/60">
+		<p class="text-foreground/60 mt-2 text-sm">
 			organize your chats, notes, and files into projects.
 		</p>
 	</div>

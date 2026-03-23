@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
 from api.models.mixins import TimestampMixin, TypeIDPrimaryKeyMixin
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -23,12 +24,12 @@ class Notification(TypeIDPrimaryKeyMixin, TimestampMixin, Base):
 	__tablename__ = "notifications"
 	__typeid_prefix__ = "notif"
 
-	user_id: Mapped[str] = mapped_column(
+	user_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 		index=True,
 	)
-	event_id: Mapped[str] = mapped_column(
+	event_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("events.id", ondelete="CASCADE"),
 		index=True,

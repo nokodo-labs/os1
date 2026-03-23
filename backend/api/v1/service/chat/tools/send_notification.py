@@ -17,6 +17,7 @@ from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
@@ -95,19 +96,19 @@ class SendNotificationTool(Tool[AppContext]):
 				__agent_context__,
 			)
 
-		agent_id = str(ctx.agent_id) if ctx.agent_id else None
-		thread_id = str(ctx.thread_id) if ctx.thread_id else None
+		agent_id = ctx.agent_id
+		thread_id = ctx.thread_id
 
 		# use an isolated session to avoid dirtying the shared request session.
 		# if any DB operation fails, only this session is affected.
 		try:
 			async with async_session_local() as tool_session:
 				if target_user_id:
-					target_user_ids = [str(target_user_id)]
+					target_user_ids: list[TypeID] = [TypeID(str(target_user_id))]
 				elif ctx.thread_id is not None:
 					target_user_ids = await list_accessible_user_ids(
 						ResourceType.THREAD,
-						str(ctx.thread_id),
+						ctx.thread_id,
 						tool_session,
 					)
 				else:
@@ -137,7 +138,7 @@ class SendNotificationTool(Tool[AppContext]):
 
 		tool_event = Event(
 			scope=EventScope.THREAD if thread_id else EventScope.USER,
-			scope_id=thread_id or str(ctx.user_id),
+			scope_id=thread_id or ctx.user_id,
 			type=EventType.TOOL_NOTIFICATION,
 			data={
 				"tool_call_id": tool_call_id,
@@ -149,7 +150,7 @@ class SendNotificationTool(Tool[AppContext]):
 				"target_user_id": str(target_user_id) if target_user_id else None,
 				"status": "sent",
 			},
-			user_id=str(ctx.user_id),
+			user_id=ctx.user_id,
 			thread_id=thread_id,
 		)
 		await ctx.event_emitter(tool_event)

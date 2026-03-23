@@ -1,4 +1,4 @@
-"""Thread schemas."""
+"""thread schemas."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 def _populate_project_ids(data: Any) -> Any:
-	"""Attach project_ids to ORM instances without mutating schema defaults."""
+	"""attach project_ids to ORM instances without mutating schema defaults."""
 	try:
 		from api.models.thread import Thread as ThreadModel
 	except Exception:  # pragma: no cover
@@ -41,7 +41,7 @@ def _populate_project_ids(data: Any) -> Any:
 
 
 class ThreadBase(MetadataModel):
-	"""Fields shared across thread payloads."""
+	"""fields shared across thread payloads."""
 
 	title: str | None = None
 	tags: list[str] = Field(default_factory=list)
@@ -51,13 +51,13 @@ class ThreadBase(MetadataModel):
 
 
 class ThreadCreate(ThreadBase):
-	"""Payload for creating a thread."""
+	"""payload for creating a thread."""
 
 	owner_id: TypeID
 
 
 class ThreadUpdate(MetadataUpdateModel):
-	"""Payload for updating a thread."""
+	"""payload for updating a thread."""
 
 	title: str | None = None
 	tags: list[str] | None = None
@@ -69,7 +69,7 @@ class ThreadUpdate(MetadataUpdateModel):
 
 
 class ThreadSummary(ORMModel):
-	"""Compact representation for listings."""
+	"""compact representation for listings."""
 
 	id: TypeID
 	title: str | None = None
@@ -84,7 +84,7 @@ class ThreadSummary(ORMModel):
 
 
 class Thread(ThreadBase, TimestampedModel):
-	"""Detailed response schema."""
+	"""detailed response schema."""
 
 	id: TypeID
 	owner_id: TypeID
@@ -100,20 +100,20 @@ class Thread(ThreadBase, TimestampedModel):
 
 
 class ThreadSwitchRequest(ORMModel):
-	"""Payload to switch a thread's active branch."""
+	"""payload to switch a thread's active branch."""
 
 	message_id: TypeID
 
 
 class ThreadSwitchResponse(ORMModel):
-	"""Response for a thread branch switch."""
+	"""response for a thread branch switch."""
 
 	ok: bool
 	current_message_id: TypeID | None = None
 
 
 class ThreadMetadataGenerateRequest(ORMModel):
-	"""Request body for generating thread metadata."""
+	"""request body for generating thread metadata."""
 
 	replace: bool = False
 	model_id: TypeID | None = None

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
@@ -140,7 +141,7 @@
 
 					<!-- action button -->
 					{#if pendingIds.has(user.id)}
-						<span class="text-foreground/40 shrink-0 text-xs font-medium">...</span>
+						<ShimmerText className="shrink-0 text-xs font-medium">pending</ShimmerText>
 					{:else if relationship?.kind === 'accepted'}
 						<span
 							class="flex shrink-0 items-center gap-1 text-xs font-medium text-green-500/70"

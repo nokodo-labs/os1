@@ -148,7 +148,10 @@
 
 <div class="mx-auto w-full max-w-5xl px-6 pt-10 pb-24">
 	<div class="mb-6 flex items-center gap-3">
-		<a href={resolve('/debug')} class="text-sm text-foreground/50 transition hover:text-foreground/75">
+		<a
+			href={resolve('/debug')}
+			class="text-foreground/50 hover:text-foreground/75 text-sm transition"
+		>
 			← debug
 		</a>
 	</div>
@@ -162,18 +165,18 @@
 	<div class="mt-6 flex flex-wrap items-center gap-3">
 		<button
 			type="button"
-			class="rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs font-medium text-foreground/75 transition hover:bg-foreground/10"
+			class="border-foreground/10 bg-foreground/5 text-foreground/75 hover:bg-foreground/10 rounded-lg border px-3 py-1.5 text-xs font-medium transition"
 			onclick={fetchRuns}
 			disabled={loading}
 		>
 			{loading ? 'loading…' : 'refresh'}
 		</button>
-		<label class="flex items-center gap-2 text-xs text-foreground/60">
+		<label class="text-foreground/60 flex items-center gap-2 text-xs">
 			<input type="checkbox" bind:checked={autoRefresh} class="accent-green-400" />
 			auto-refresh ({refreshInterval / 1000}s)
 		</label>
 		{#if lastFetched}
-			<span class="text-xs text-foreground/40">
+			<span class="text-foreground/40 text-xs">
 				last: {lastFetched.toLocaleTimeString()}
 			</span>
 		{/if}
@@ -185,13 +188,15 @@
 	<!-- runs list -->
 	<div class="mt-6 space-y-3">
 		{#if runs.length === 0 && !loading}
-			<div class="rounded-xl border border-foreground/10 bg-foreground/5 p-5 text-sm text-foreground/40">
+			<div
+				class="border-foreground/10 bg-foreground/5 text-foreground/40 rounded-xl border p-5 text-sm"
+			>
 				no runs
 			</div>
 		{/if}
 
 		{#each runs as run (run.run_id)}
-			<div class="rounded-xl border border-foreground/10 bg-foreground/5 p-5">
+			<div class="border-foreground/10 bg-foreground/5 rounded-xl border p-5">
 				<div class="flex items-start justify-between gap-4">
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
@@ -202,7 +207,7 @@
 								class="inline-block h-2 w-2 animate-pulse rounded-full bg-green-400"
 							></span>
 						</div>
-						<div class="mt-1 space-y-0.5 text-xs text-foreground/50">
+						<div class="text-foreground/50 mt-1 space-y-0.5 text-xs">
 							<div>
 								<span class="text-foreground/30">run:</span>
 								<code class="text-foreground/60">{run.run_id}</code>
@@ -223,7 +228,7 @@
 						</div>
 					</div>
 
-					<div class="flex shrink-0 flex-col items-end gap-1 text-xs text-foreground/40">
+					<div class="text-foreground/40 flex shrink-0 flex-col items-end gap-1 text-xs">
 						<div>started {relativeTime(run.started_at)}</div>
 						<div>updated {relativeTime(run.updated_at)}</div>
 					</div>
@@ -232,7 +237,7 @@
 				<div class="mt-3">
 					<a
 						href={resolve(`/c/${run.thread_id}`)}
-						class="rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-xs text-foreground/60 transition hover:bg-foreground/10"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 rounded-lg border px-2.5 py-1 text-xs transition"
 					>
 						open thread
 					</a>
@@ -248,9 +253,9 @@
 			inspect the active service worker and Cache Storage entries on this device.
 		</p>
 
-		<div class="mt-4 rounded-xl border border-foreground/10 bg-foreground/5 p-5">
-			<div class="text-sm font-semibold text-foreground/85">service worker</div>
-			<div class="mt-2 space-y-1 text-xs text-foreground/50">
+		<div class="border-foreground/10 bg-foreground/5 mt-4 rounded-xl border p-5">
+			<div class="text-foreground/85 text-sm font-semibold">service worker</div>
+			<div class="text-foreground/50 mt-2 space-y-1 text-xs">
 				<div>
 					<span class="text-foreground/30">status:</span>
 					<span class="text-foreground/60">{swStatus}</span>
@@ -258,14 +263,14 @@
 				{#if swScriptUrl}
 					<div>
 						<span class="text-foreground/30">script:</span>
-						<code class="break-all text-foreground/60">{swScriptUrl}</code>
+						<code class="text-foreground/60 break-all">{swScriptUrl}</code>
 					</div>
 				{/if}
 			</div>
 			<div class="mt-3 flex flex-wrap items-center gap-2">
 				<button
 					type="button"
-					class="rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-xs text-foreground/60 transition hover:bg-foreground/10"
+					class="border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 rounded-lg border px-2.5 py-1 text-xs transition"
 					onclick={forceSwUpdate}
 				>
 					force update + activate
@@ -279,7 +284,7 @@
 				</button>
 				<button
 					type="button"
-					class="rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-xs text-foreground/60 transition hover:bg-foreground/10"
+					class="border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10 rounded-lg border px-2.5 py-1 text-xs transition"
 					onclick={probeSwAndCaches}
 				>
 					refresh info
@@ -287,9 +292,9 @@
 			</div>
 		</div>
 
-		<div class="mt-4 rounded-xl border border-foreground/10 bg-foreground/5 p-5">
+		<div class="border-foreground/10 bg-foreground/5 mt-4 rounded-xl border p-5">
 			<div class="flex items-center justify-between">
-				<div class="text-sm font-semibold text-foreground/85">cache storage</div>
+				<div class="text-foreground/85 text-sm font-semibold">cache storage</div>
 				<button
 					type="button"
 					class="rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1 text-xs text-red-400/80 transition hover:bg-red-500/10"
@@ -299,12 +304,12 @@
 				</button>
 			</div>
 			{#if caches_.length === 0}
-				<div class="mt-3 text-xs text-foreground/40">no caches found</div>
+				<div class="text-foreground/40 mt-3 text-xs">no caches found</div>
 			{:else}
 				<div class="mt-3 space-y-1.5">
 					{#each caches_ as cache (cache.name)}
 						<div
-							class="flex items-center justify-between rounded-lg border border-foreground/5 bg-foreground/2 px-3 py-2 text-xs"
+							class="border-foreground/5 bg-foreground/2 flex items-center justify-between rounded-lg border px-3 py-2 text-xs"
 						>
 							<code class="text-foreground/60">{cache.name}</code>
 							<span class="text-foreground/40">{cache.count} entries</span>

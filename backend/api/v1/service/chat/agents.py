@@ -27,6 +27,10 @@ from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import ToolResultTruncationFilter, resolve_filters
 from api.v1.service.chat.filters.chat_context import ChatContextFilter
+from api.v1.service.chat.filters.citation_index import (
+	CitationIndexFilter,
+	resolve_assistant_citations,
+)
 from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.hooks import resolve_hooks
@@ -133,9 +137,6 @@ def build_agent(
 async def build_agent_from_orm(
 	agent_orm: AgentORM,
 	context: AppContext,
-	*,
-	temperature: float | None = None,
-	max_tokens: int | None = None,
 ) -> SDKAgent[AppContext]:
 	"""build an sdk Agent from an orm Agent instance.
 
@@ -143,8 +144,6 @@ async def build_agent_from_orm(
 
 	args:
 		agent_orm: orm Agent with model relationship loaded
-		temperature: optional temperature override
-		max_tokens: optional max_tokens override
 		context: execution context for tool and filter execution
 
 	returns:
@@ -152,11 +151,16 @@ async def build_agent_from_orm(
 	"""
 	if agent_orm.model is None:
 		raise ValueError(f"agent {agent_orm.id} has no model configured")
+	cfg = agent_orm.config or {}
+	raw_chat_model_config = cfg.get("chat_model")
+	if raw_chat_model_config is not None and not isinstance(
+		raw_chat_model_config, dict
+	):
+		raise ValueError(f"agent {agent_orm.id} chat_model config must be an object")
 
 	chat_model = build_chat_model(
 		agent_orm.model,
-		temperature=temperature,
-		max_tokens=max_tokens,
+		params=raw_chat_model_config,
 	)
 
 	# resolve plugins from agent's plugin_ids
@@ -167,12 +171,12 @@ async def build_agent_from_orm(
 	filters.insert(0, ToolResultTruncationFilter())
 	filters.append(ChatContextFilter())
 	filters.append(FileResolveFilter())
+	filters.append(CitationIndexFilter())
 	filters.append(ContextWindowingFilter())
 	hooks = resolve_hooks(agent_orm.plugin_ids)
 
 	# extract max_iterations from agent config
 	max_iterations = 10
-	cfg = agent_orm.config or {}
 	if isinstance(cfg.get("max_iterations"), int):
 		max_iterations = int(cfg["max_iterations"])
 
@@ -231,8 +235,8 @@ async def run_agent(
 			)
 			create_background_task(
 				broadcast_run_event(
-					thread_id=str(thread_id),
-					agent_id=str(agent_id),
+					thread_id=thread_id,
+					agent_id=agent_id,
 					run_id=run_id_str,
 					started=True,
 				),
@@ -309,6 +313,20 @@ async def run_agent(
 							sdk_msg,
 							sender_agent_id=agent_id,
 						)
+						# resolve citations for assistant messages
+						if isinstance(sdk_msg, SDKAssistantMessage):
+							text = ""
+							for part in sdk_msg.content or []:
+								if isinstance(part, TextContent) and part.text:
+									text += part.text
+							citations = resolve_assistant_citations(text, ctx.citations)
+							if citations:
+								create_in.citations = citations
+							# stamp the running index so future runs can
+							# pick up without loading the full branch.
+							if ctx.citations:
+								nci = ctx.citations[-1].index + 1
+								create_in.metadata["next_citation_index"] = nci
 						create_in.metadata["run_id"] = run_id
 						if _model_id_for_persist:
 							create_in.metadata["model_id"] = _model_id_for_persist
@@ -635,11 +653,12 @@ async def run_agent(
 		except GeneratorExit:
 			await safe_rollback(session)
 			if persist:
+				assert thread_id is not None
 				await run_status_store.fail_run(run_id_str)
 				create_background_task(
 					broadcast_run_event(
-						thread_id=str(thread_id),
-						agent_id=str(agent_id),
+						thread_id=thread_id,
+						agent_id=agent_id,
 						run_id=run_id_str,
 						started=False,
 					),
@@ -650,11 +669,12 @@ async def run_agent(
 			logger.exception("error during agent streaming")
 			await safe_rollback(session)
 			if persist:
+				assert thread_id is not None
 				await run_status_store.fail_run(run_id_str)
 				create_background_task(
 					broadcast_run_event(
-						thread_id=str(thread_id),
-						agent_id=str(agent_id),
+						thread_id=thread_id,
+						agent_id=agent_id,
 						run_id=run_id_str,
 						started=False,
 					),
@@ -668,11 +688,12 @@ async def run_agent(
 				await message_queue.put(("__STOP__", SDKAssistantMessage()))
 
 		if persist:
+			assert thread_id is not None
 			await run_status_store.complete_run(run_id_str)
 			create_background_task(
 				broadcast_run_event(
-					thread_id=str(thread_id),
-					agent_id=str(agent_id),
+					thread_id=thread_id,
+					agent_id=agent_id,
 					run_id=run_id_str,
 					started=False,
 				),

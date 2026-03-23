@@ -69,11 +69,11 @@ class TestUploadFile:
 			"/v1/files/upload",
 			headers=headers,
 			files={"file": ("proj.txt", io.BytesIO(payload), "text/plain")},
-			data={"project_id": project_id},
+			data={"project_ids": project_id},
 		)
 		assert resp.status_code == 201
 		body = resp.json()
-		assert body["project_id"] == project_id
+		assert project_id in body["project_ids"]
 
 	async def test_upload_custom_source(
 		self, client: AsyncClient, admin_auth: dict
@@ -442,9 +442,9 @@ class TestStoreFile:
 			db_session,
 			data=b"project file",
 			owner_id=owner_id,
-			project_id=project_id,
+			project_ids=[project_id],
 		)
-		assert file.project_id == project_id
+		assert project_id in file.project_ids
 
 
 class TestReadContent:

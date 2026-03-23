@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button'
 	import { copyToClipboard } from '$lib/utils/clipboard'
-	import { BookOpen, Check, Copy, Info } from '@lucide/svelte'
+	import { BookOpen, Check, Copy, Info, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	let {
@@ -38,6 +38,11 @@
 					name: 'referenced_attachments',
 					description:
 						'injects decayed attachment manifest (requires attachment_decay filter)',
+				},
+				{
+					name: 'citation_sources',
+					description:
+						'injects numbered source reference card for tool-provided citations (requires citation_index filter)',
 				},
 			],
 		},
@@ -298,11 +303,26 @@ user: {{ user_name }}.
 about the user: {{ user_bio }}
 {% endif %}
 
-<long_term_memory>{{ user_memories }}</long_term_memory>
+<long_term_memory>
+these are auto-retrieved, context-relevant memories from your long-term memory:
+{{ user_memories }}
+</long_term_memory>
 
-<chat_context>{{ chat_context }}</chat_context>
+<chat_context>
+these are some auto-retrieved chats. only consider these if directly relevant, most of the time they won't be:
+{{ chat_context }}
+</chat_context>
 
-{{ referenced_attachments }}`
+<chat_attachments>
+this is a manifest of attachments from the current chat, including decay state and metadata:
+{{ referenced_attachments }}
+</chat_attachments>
+
+<citation_sources>
+these are the sources available for citation in the current context:
+{{ citation_sources }}
+to cite a source, include [source #] in your response (e.g. "the Burj Khalifa is currently the tallest building in the world [source 1]").
+</citation_sources>`
 </script>
 
 <Dialog.Root bind:open>
@@ -400,7 +420,9 @@ about the user: <span class="text-sky-400">{'{{ user_bio }}'}</span>
 
 &lt;chat_context&gt;<span class="text-sky-400">{'{{ chat_context }}'}</span>&lt;/chat_context&gt;
 
-<span class="text-sky-400">{'{{ referenced_attachments }}'}</span></pre>
+<span class="text-sky-400">{'{{ referenced_attachments }}'}</span>
+
+<span class="text-sky-400">{'{{ citation_sources }}'}</span></pre>
 				</div>
 
 				<!-- available prompts as include targets -->
@@ -493,6 +515,7 @@ about the user: <span class="text-sky-400">{'{{ user_bio }}'}</span>
 						available
 					</span>
 					<Button variant="outline" class="rounded-xl" onclick={() => (open = false)}>
+						<X class="mr-1.5 h-3.5 w-3.5" />
 						close
 					</Button>
 				</div>

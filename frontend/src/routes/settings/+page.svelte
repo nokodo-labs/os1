@@ -25,9 +25,9 @@
 		label="settings"
 		description="select a section to get started"
 	>
-		<div class="rounded-container flex flex-col gap-2 bg-foreground/5 p-5">
-			<div class="text-sm font-semibold text-foreground/85">select a section</div>
-			<div class="text-sm text-foreground/50">
+		<div class="rounded-container bg-foreground/5 flex flex-col gap-2 p-5">
+			<div class="text-foreground/85 text-sm font-semibold">select a section</div>
+			<div class="text-foreground/50 text-sm">
 				choose an item from the sidebar to view its settings
 			</div>
 		</div>

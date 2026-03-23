@@ -16,6 +16,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -49,30 +50,30 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		StringEnum(EventScope),
 		default=EventScope.SYSTEM,
 	)
-	scope_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH))
+	scope_id: Mapped[TypeID | None] = mapped_column(String(TYPEID_LENGTH))
 	type: Mapped[str] = mapped_column(String(100))
 	data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	version: Mapped[int] = mapped_column(Integer(), default=1)
-	user_id: Mapped[str | None] = mapped_column(
+	user_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="SET NULL"),
 		index=True,
 	)
-	thread_id: Mapped[str | None] = mapped_column(
+	thread_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="SET NULL"),
 		index=True,
 	)
-	message_id: Mapped[str | None] = mapped_column(
+	message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="CASCADE"),
 	)
-	task_id: Mapped[str | None] = mapped_column(
+	task_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("tasks.id", ondelete="SET NULL"),
 	)
-	project_id: Mapped[str | None] = mapped_column(
+	project_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("projects.id", ondelete="SET NULL"),
 	)

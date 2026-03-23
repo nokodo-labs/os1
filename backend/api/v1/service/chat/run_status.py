@@ -31,6 +31,7 @@ from api.database import async_session_local
 from api.permissions import ResourceType
 from api.v1.service.authorization import list_accessible_user_ids
 from nokodo_ai.utils.sse import sse_encode
+from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
@@ -360,7 +361,7 @@ class RunStatusStore:
 run_status_store = RunStatusStore()
 
 
-async def get_active_runs_signal(user_id: str) -> dict[str, Any] | None:
+async def get_active_runs_signal(user_id: TypeID) -> dict[str, Any] | None:
 	"""build a single WS signal listing active agent runs for the user.
 
 	returns a ready-to-send dict ``{type: 'runs.active', data: [...]}``
@@ -380,7 +381,7 @@ async def get_active_runs_signal(user_id: str) -> dict[str, Any] | None:
 	async with async_session_local() as db_session:
 		for tid in unique_thread_ids:
 			user_ids = await list_accessible_user_ids(
-				ResourceType.THREAD, tid, db_session
+				ResourceType.THREAD, TypeID(tid), db_session
 			)
 			if user_id in user_ids:
 				accessible_threads.add(tid)

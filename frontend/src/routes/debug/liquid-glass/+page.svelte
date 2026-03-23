@@ -156,10 +156,12 @@
 <div class="flex h-dvh w-full flex-col overflow-auto lg:flex-row">
 	<!-- left half: liquid glass components on transparent background (webgl behind) -->
 	<section
-		class="relative min-h-80 flex-1 overflow-hidden border-b border-foreground/10 lg:border-r lg:border-b-0"
+		class="border-foreground/10 relative min-h-80 flex-1 overflow-hidden border-b lg:border-r lg:border-b-0"
 	>
 		<div class="absolute top-3 left-4 z-30">
-			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-foreground/80">
+			<div
+				class="text-foreground/80 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium"
+			>
 				liquid glass components
 			</div>
 		</div>
@@ -168,37 +170,37 @@
 			class="relative z-10 flex h-full w-full flex-col items-center justify-center gap-12 px-8 py-16"
 		>
 			<div class="grid gap-3 text-center">
-				<div class="text-xs font-semibold tracking-wider text-foreground/60 uppercase">
+				<div class="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
 					search bar
 				</div>
 				<SearchBar bind:value={searchQuery} width={340} height={48} />
-				<div class="text-xs text-foreground/50">
+				<div class="text-foreground/50 text-xs">
 					{searchQuery || 'type to search...'}
 				</div>
 			</div>
 
 			<div class="grid gap-3 text-center">
-				<div class="text-xs font-semibold tracking-wider text-foreground/60 uppercase">
+				<div class="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
 					switch
 				</div>
 				<Switch size="lg" bind:checked={switchChecked} />
-				<div class="text-xs text-foreground/50">
+				<div class="text-foreground/50 text-xs">
 					{switchChecked ? 'on' : 'off'}
 				</div>
 			</div>
 
 			<div class="grid gap-3 text-center">
-				<div class="text-xs font-semibold tracking-wider text-foreground/60 uppercase">
+				<div class="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
 					slider
 				</div>
 				<Slider size="md" bind:value={sliderValue} />
-				<div class="text-xs text-foreground/50">
+				<div class="text-foreground/50 text-xs">
 					{sliderValue}
 				</div>
 			</div>
 
 			<div class="grid gap-3 text-center">
-				<div class="text-xs font-semibold tracking-wider text-foreground/60 uppercase">
+				<div class="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
 					switch sizes
 				</div>
 				<div class="flex items-center gap-6">
@@ -213,7 +215,9 @@
 	<!-- right half: version B -->
 	<section class="relative min-h-80 flex-1 overflow-hidden">
 		<div class="absolute top-3 left-4 z-30">
-			<div class="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-foreground/80">
+			<div
+				class="text-foreground/80 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium"
+			>
 				version b - svg displacement
 			</div>
 		</div>
@@ -229,33 +233,33 @@
 		<div class="pointer-events-none absolute inset-0 z-10 p-5 pt-12">
 			<div class="pointer-events-auto grid gap-3">
 				<div
-					class="flex items-center px-5 text-sm text-foreground/90"
+					class="text-foreground/90 flex items-center px-5 text-sm"
 					style="width: {pillW}px; height: {pillH}px; border-radius: {pillRadius}px; backdrop-filter: url(#{pillFilterId}); -webkit-backdrop-filter: url(#{pillFilterId});"
 				>
 					navigation pill
 				</div>
 				<div class="flex gap-3">
 					<div
-						class="grid place-items-center text-xs text-foreground/85"
+						class="text-foreground/85 grid place-items-center text-xs"
 						style="width: {btnW}px; height: {btnH}px; border-radius: {cornerRadius}px; backdrop-filter: url(#{btnFilterId}); -webkit-backdrop-filter: url(#{btnFilterId});"
 					>
 						subtle button
 					</div>
 					<div
-						class="grid place-items-center text-xs text-foreground/85"
+						class="text-foreground/85 grid place-items-center text-xs"
 						style="width: {btnW}px; height: {btnH}px; border-radius: {cornerRadius}px; backdrop-filter: url(#{btnFilterId}); -webkit-backdrop-filter: url(#{btnFilterId});"
 					>
 						heavy button
 					</div>
 				</div>
 				<div
-					class="px-5 py-4 text-xs text-foreground/80"
+					class="text-foreground/80 px-5 py-4 text-xs"
 					style="width: {panelW}px; height: {panelH}px; border-radius: {cornerRadius}px; backdrop-filter: url(#{panelFilterId}); -webkit-backdrop-filter: url(#{panelFilterId});"
 				>
-					<div class="font-medium text-foreground/90">glass panel</div>
-					<div class="mt-1.5 text-foreground/60">focus the input to see state change</div>
+					<div class="text-foreground/90 font-medium">glass panel</div>
+					<div class="text-foreground/60 mt-1.5">focus the input to see state change</div>
 					<input
-						class="mt-2.5 w-full rounded-2xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/80 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/80 mt-2.5 w-full rounded-2xl border px-3 py-2 text-xs outline-none"
 						placeholder="type here"
 					/>
 				</div>
@@ -297,20 +301,22 @@
 			onpointerup={() => (draggingB = false)}
 			onpointercancel={() => (draggingB = false)}
 		>
-			<div class="grid h-full w-full place-items-center text-xs text-foreground/70">drag me</div>
+			<div class="text-foreground/70 grid h-full w-full place-items-center text-xs">
+				drag me
+			</div>
 		</div>
 
 		<!-- controls panel -->
 		<div
-			class="absolute right-3 bottom-3 z-30 max-h-[calc(100%-24px)] w-72 overflow-y-auto rounded-2xl border border-foreground/10 bg-black/80 p-4 backdrop-blur-md"
+			class="border-foreground/10 absolute right-3 bottom-3 z-30 max-h-[calc(100%-24px)] w-72 overflow-y-auto rounded-2xl border bg-black/80 p-4 backdrop-blur-md"
 		>
-			<div class="mb-3 text-xs font-semibold tracking-wider text-foreground/70 uppercase">
+			<div class="text-foreground/70 mb-3 text-xs font-semibold tracking-wider uppercase">
 				version b controls
 			</div>
-			<div class="grid gap-2.5 text-xs text-foreground/80">
+			<div class="text-foreground/80 grid gap-2.5 text-xs">
 				<!-- corner radius -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">corner radius</span>
+					<span class="text-foreground/60 w-28 shrink-0">corner radius</span>
 					<input
 						type="range"
 						min="4"
@@ -325,13 +331,13 @@
 						max="100"
 						step="1"
 						bind:value={cornerRadius}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- bezel width -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">bezel width</span>
+					<span class="text-foreground/60 w-28 shrink-0">bezel width</span>
 					<input
 						type="range"
 						min="4"
@@ -346,13 +352,13 @@
 						max="80"
 						step="1"
 						bind:value={bezelWidth}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- glass thickness (bezel height) -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">bezel height</span>
+					<span class="text-foreground/60 w-28 shrink-0">bezel height</span>
 					<input
 						type="range"
 						min="1"
@@ -367,13 +373,13 @@
 						max="60"
 						step="1"
 						bind:value={thickness}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- flat glass thickness -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">glass thickness</span>
+					<span class="text-foreground/60 w-28 shrink-0">glass thickness</span>
 					<input
 						type="range"
 						min="0"
@@ -388,13 +394,13 @@
 						max="200"
 						step="1"
 						bind:value={glassThickness}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- refraction strength -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">refraction</span>
+					<span class="text-foreground/60 w-28 shrink-0">refraction</span>
 					<input
 						type="range"
 						min="0"
@@ -409,13 +415,13 @@
 						max="3"
 						step="0.05"
 						bind:value={refractionStrength}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- inner refraction -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">inner refraction</span>
+					<span class="text-foreground/60 w-28 shrink-0">inner refraction</span>
 					<input
 						type="range"
 						min="0"
@@ -430,13 +436,13 @@
 						max="0.5"
 						step="0.01"
 						bind:value={innerRefraction}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- blur radius -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">blur radius</span>
+					<span class="text-foreground/60 w-28 shrink-0">blur radius</span>
 					<input
 						type="range"
 						min="0"
@@ -451,13 +457,13 @@
 						max="10"
 						step="0.1"
 						bind:value={blurRadius}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- specular opacity -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">specular opacity</span>
+					<span class="text-foreground/60 w-28 shrink-0">specular opacity</span>
 					<input
 						type="range"
 						min="0"
@@ -472,13 +478,13 @@
 						max="1"
 						step="0.01"
 						bind:value={specularOpacity}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- specular saturation -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">saturation</span>
+					<span class="text-foreground/60 w-28 shrink-0">saturation</span>
 					<input
 						type="range"
 						min="1"
@@ -493,13 +499,13 @@
 						max="20"
 						step="0.5"
 						bind:value={specularSaturation}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- specular angle -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">specular angle</span>
+					<span class="text-foreground/60 w-28 shrink-0">specular angle</span>
 					<input
 						type="range"
 						min="0"
@@ -514,13 +520,13 @@
 						max="360"
 						step="5"
 						bind:value={specularAngle}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- chromatic aberration -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">chromatic</span>
+					<span class="text-foreground/60 w-28 shrink-0">chromatic</span>
 					<input
 						type="range"
 						min="0"
@@ -535,13 +541,13 @@
 						max="0.3"
 						step="0.01"
 						bind:value={chromaticAberration}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 
 				<!-- glass tint -->
 				<label class="flex items-center gap-2">
-					<span class="w-28 shrink-0 text-foreground/60">glass tint</span>
+					<span class="text-foreground/60 w-28 shrink-0">glass tint</span>
 					<input
 						type="range"
 						min="0"
@@ -556,7 +562,7 @@
 						max="0.15"
 						step="0.005"
 						bind:value={glassTint}
-						class="w-14 rounded border border-foreground/10 bg-foreground/5 px-1.5 py-0.5 text-right font-mono text-foreground/60 outline-none"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 w-14 rounded border px-1.5 py-0.5 text-right font-mono outline-none"
 					/>
 				</label>
 			</div>

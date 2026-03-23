@@ -20,7 +20,7 @@
 
 <div class="flex items-center gap-3 {className}">
 	<Icon class="h-7 w-7 shrink-0 {iconColor}" variant="solid" />
-	<svelte:element this={tag} class="min-w-0 truncate text-2xl font-bold text-foreground">
+	<svelte:element this={tag} class="text-foreground min-w-0 truncate text-2xl font-bold">
 		{label}
 	</svelte:element>
 </div>

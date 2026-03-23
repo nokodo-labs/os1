@@ -239,12 +239,9 @@ export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	// the error contract for status codes and potential retry.
 	if (runId && threadId) {
 		try {
-			const { error } = await api.POST(
-				'/v1/threads/{thread_id}/runs/{run_id}/cancel',
-				{
-					params: { path: { thread_id: threadId, run_id: runId } },
-				}
-			)
+			const { error } = await api.POST('/v1/threads/{thread_id}/runs/{run_id}/cancel', {
+				params: { path: { thread_id: threadId, run_id: runId } },
+			})
 			if (error) {
 				console.error('cancel run failed', error)
 			}
@@ -375,17 +372,14 @@ export async function deleteUserMessage(messageId: string, ctx: ChatContext): Pr
 	ctx.streamingAssistant = null
 	ctx.rebuildRunBlocks()
 
-	const { response, error } = await api.DELETE(
-		'/v1/threads/{thread_id}/messages/{message_id}',
-		{
-			params: {
-				path: {
-					thread_id: ctx.thread.id,
-					message_id: messageId,
-				},
+	const { response, error } = await api.DELETE('/v1/threads/{thread_id}/messages/{message_id}', {
+		params: {
+			path: {
+				thread_id: ctx.thread.id,
+				message_id: messageId,
 			},
-		}
-	)
+		},
+	})
 	if (!response.ok || error) {
 		console.error('failed to delete user message', error)
 		// rollback

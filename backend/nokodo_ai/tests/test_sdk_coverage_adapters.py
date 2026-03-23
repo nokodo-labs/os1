@@ -1101,6 +1101,31 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 
 
 @pytest.mark.asyncio
+async def test_openai_responses_passes_reasoning_effort(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	captured: dict[str, Any] = {}
+
+	class _DummyClient:
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
+				captured.update(kwargs)
+				return SimpleNamespace(output=[], output_text="", usage=None)
+
+			self.responses = SimpleNamespace(create=_create)
+
+	monkeypatch.setattr(BaseOpenAIAdapter, "_get_client", lambda self: _DummyClient())
+	adapter = OpenAIResponsesAdapter()
+	await adapter.generate(
+		[UserMessage.from_text("hi")],
+		"gpt-5.1",
+		params=resp_mod.ChatGenerationParams(reasoning_effort="none"),
+	)
+
+	assert captured["reasoning"] == {"effort": "none"}
+
+
+@pytest.mark.asyncio
 async def test_anthropic_adapter_generate_once_and_streaming(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -14,7 +14,7 @@ from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.v1.service.auth import Principal
 from api.v1.service.events import event_connections
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 async def _get_notification(
@@ -43,10 +43,10 @@ async def list_user_notifications(
 	session: AsyncSession,
 	*,
 	principal: Principal,
-	user_id: str,
+	user_id: TypeID,
 	only_unread: bool = False,
 ) -> list[Notification]:
-	if not principal.is_admin and str(user_id) != str(principal.user.id):
+	if not principal.is_admin and user_id != principal.user_id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 	stmt = (
@@ -69,8 +69,8 @@ async def send_agent_notification(
 	*,
 	title: str,
 	body: str,
-	agent_id: str | None = None,
-	user_ids: list[str],
+	agent_id: TypeID | None = None,
+	user_ids: list[TypeID],
 ) -> list[Notification]:
 	"""Send notification(s) triggered by an agent.
 
@@ -82,10 +82,9 @@ async def send_agent_notification(
 	if not user_ids:
 		raise ValueError("user_ids is required")
 
-	seen: set[str] = set()
-	target_user_ids: list[str] = []
+	seen: set[TypeID] = set()
+	target_user_ids: list[TypeID] = []
 	for uid in user_ids:
-		uid = str(uid)
 		if uid == "" or uid in seen:
 			continue
 		seen.add(uid)

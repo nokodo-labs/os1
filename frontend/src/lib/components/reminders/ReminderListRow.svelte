@@ -47,7 +47,7 @@
 	{#snippet leading()}
 		{#if leadingInfo.type === 'checkbox'}
 			<span
-				class="rounded-pill flex h-8 w-8 items-center justify-center text-foreground/80 {rowIconBackground
+				class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
 					? 'bg-foreground/8'
 					: ''}"
 			>
@@ -55,7 +55,7 @@
 			</span>
 		{:else}
 			<span
-				class="rounded-pill flex h-8 w-8 items-center justify-center text-foreground"
+				class="rounded-pill text-foreground flex h-8 w-8 items-center justify-center"
 				style:background-color={leadingInfo.color ?? 'rgba(255,255,255,0.08)'}
 			>
 				<span class="text-sm">{leadingInfo.emoji}</span>
@@ -64,9 +64,9 @@
 	{/snippet}
 
 	<span class="flex min-w-0 items-center gap-2">
-		<span class="min-w-0 truncate text-[0.95rem] font-medium text-foreground/90">{title}</span>
+		<span class="text-foreground/90 min-w-0 truncate text-[0.95rem] font-medium">{title}</span>
 		{#if count !== null && count > 0}
-			<span class="text-xs text-foreground/55">{count}</span>
+			<span class="text-foreground/55 text-xs">{count}</span>
 		{/if}
 	</span>
 
@@ -74,7 +74,7 @@
 		{#if onMenu}
 			<button
 				type="button"
-				class="rounded-circle inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent text-foreground/70 transition-all duration-150 hover:border-foreground/10 hover:bg-foreground/8 hover:text-foreground"
+				class="rounded-circle text-foreground/70 hover:border-foreground/10 hover:bg-foreground/8 hover:text-foreground inline-flex h-9 w-9 cursor-pointer items-center justify-center border border-transparent bg-transparent transition-all duration-150"
 				aria-label="list options"
 				onclick={(event) => {
 					event.stopPropagation()

@@ -32,13 +32,17 @@ class AgentsStore {
 		try {
 			const { data, error } = await api.GET('/v1/agents')
 			if (error || !data) {
-				this.error = 'failed to load agents'
+				if (this.list.length === 0) {
+					this.error = 'failed to load agents'
+				}
 				return
 			}
 			this.list = data
 			this.byId = Object.fromEntries(data.map((a) => [a.id, a]))
 		} catch {
-			this.error = 'failed to load agents'
+			if (this.list.length === 0) {
+				this.error = 'failed to load agents'
+			}
 		} finally {
 			this.#loading = false
 		}
@@ -94,10 +98,9 @@ class AgentsStore {
 
 		// agent.created or agent.updated - data contains full agent payload
 		const agent = data as unknown as Agent
-		if (eventType === 'agent.created') {
-			if (!this.byId[agentId]) {
-				this.list = [agent, ...this.list]
-			}
+		if (!this.byId[agentId]) {
+			// new agent (created, or user just gained access via updated rules)
+			this.list = [agent, ...this.list]
 		} else {
 			this.list = this.list.map((a) => (a.id === agentId ? agent : a))
 		}
@@ -117,8 +120,8 @@ class AgentsStore {
 
 	invalidate = (): void => {
 		this.#loading = false
-		this.list = []
-		this.byId = {}
+		// purposefully do not clear list and byId to avoid showing empty state / error
+		// will fetch fresh data on next load
 	}
 
 	clear = (): void => {

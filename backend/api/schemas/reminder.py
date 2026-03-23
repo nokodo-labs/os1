@@ -22,7 +22,7 @@ class ReminderListBase(MetadataModel):
 	color: str | None = Field(default=None, max_length=7)
 	icon: str | None = Field(default=None, max_length=50)
 	position: float = 0.0
-	project_id: TypeID | None = None
+	project_ids: list[TypeID] = []
 
 
 class ReminderListCreate(ReminderListBase):
@@ -39,7 +39,7 @@ class ReminderListUpdate(MetadataUpdateModel):
 	color: str | None = None
 	icon: str | None = None
 	position: float | None = None
-	project_id: TypeID | None = None
+	project_ids: list[TypeID] | None = None
 
 
 class ReminderList(ReminderListBase, TimestampedModel):

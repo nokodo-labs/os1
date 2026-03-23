@@ -69,7 +69,7 @@
 
 {#if compact}
 	<span
-		class="inline-flex items-center gap-1.5 text-xs text-foreground/60"
+		class="text-foreground/60 inline-flex items-center gap-1.5 text-xs"
 		in:fade={{ duration: 150 }}
 	>
 		<Brain class="h-3.5 w-3.5" />
@@ -104,7 +104,7 @@
 					class="absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-green-500/90"
 					in:fade={{ duration: 150 }}
 				>
-					<Check class="h-2.5 w-2.5 text-foreground" strokeWidth="3" />
+					<Check class="text-foreground h-2.5 w-2.5" strokeWidth="3" />
 				</div>
 			{/if}
 		</div>
@@ -112,7 +112,7 @@
 		<div class="flex items-center gap-2 text-sm">
 			{#if isActive}
 				<ShimmerText className="text-foreground/70">thinking</ShimmerText>
-				<span class="text-xs text-foreground/50 tabular-nums">{elapsed.toFixed(1)}s</span>
+				<span class="text-foreground/50 text-xs tabular-nums">{elapsed.toFixed(1)}s</span>
 			{:else if isDone}
 				<span class="text-foreground/50">thought for {displayElapsed}s</span>
 			{:else if isError}

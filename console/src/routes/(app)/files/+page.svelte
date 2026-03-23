@@ -7,15 +7,8 @@
 	import FileDetailsModal from '$lib/components/FileDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, FileIcon, Trash2 } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, FileIcon, Trash2, RefreshCw, ChevronLeft, ChevronRight } from '@lucide/svelte'
 
 	type SortKey = 'created_at' | 'updated_at' | 'filename' | 'size_bytes'
 
@@ -148,44 +141,49 @@
 	}
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
+<div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">files</h2>
 			<p class="text-zinc-400">all uploaded and registered files in the system.</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
-				<SelectTrigger class="w-44 rounded-xl">
-					<span class="truncate text-left">{sortLabel(sortKey)}</span>
-				</SelectTrigger>
-				<SelectContent>
-					{#each sortOrder as key (key)}
-						<SelectItem value={key}>{sortLabel(key)}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-			<Button
-				variant="outline"
-				class="rounded-xl px-3"
-				onclick={() => toggleSortDir()}
-				disabled={isLoading}
-				title="toggle sort direction"
-			>
-				{#if sortDir === 'asc'}
-					<ArrowUp class="h-4 w-4" />
-				{:else}
-					<ArrowDown class="h-4 w-4" />
-				{/if}
-			</Button>
-			<Button
-				variant="outline"
-				class="rounded-xl"
-				onclick={() => refresh()}
-				disabled={isLoading}
-			>
-				{isLoading ? 'loading...' : 'refresh'}
-			</Button>
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
+					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-44">
+						<span class="truncate text-left">{sortLabel(sortKey)}</span>
+					</SelectTrigger>
+					<SelectContent>
+						{#each sortOrder as key (key)}
+							<SelectItem value={key}>{sortLabel(key)}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+				<Button
+					variant="outline"
+					class="shrink-0 rounded-xl px-3"
+					onclick={() => toggleSortDir()}
+					disabled={isLoading}
+					title="toggle sort direction"
+				>
+					{#if sortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
+				</Button>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Button
+					variant="outline"
+					class="flex-1 rounded-xl sm:flex-none"
+					onclick={() => refresh()}
+					disabled={isLoading}
+				>
+					<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+					{isLoading ? 'loading...' : 'refresh'}
+				</Button>
+			</div>
 		</div>
 	</div>
 
@@ -205,18 +203,8 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader
-			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div>
-				<CardTitle>list</CardTitle>
-				<CardDescription>
-					page {pageIndex + 1} · showing {files.length}{hasNext ? '+' : ''}
-				</CardDescription>
-			</div>
+	<div class="flex flex-col gap-4">
+		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">
 				<Button
 					variant="outline"
@@ -226,6 +214,7 @@
 					}}
 					disabled={pageIndex === 0 || isLoading}
 				>
+					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
 				<Button
@@ -237,10 +226,11 @@
 					disabled={!hasNext || isLoading}
 				>
 					next
+					<ChevronRight class="ml-1.5 h-4 w-4" />
 				</Button>
 			</div>
-		</CardHeader>
-		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if isLoading && files.length === 0}
 				<div
 					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -258,31 +248,43 @@
 					<div
 						role="button"
 						tabindex="0"
-						class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 transition-colors hover:border-zinc-700"
+						class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
 						onclick={() => openDetail(file)}
 						onkeydown={(e) => {
 							if (e.key === 'Enter' || e.key === ' ') openDetail(file)
 						}}
 					>
-						<FileIcon class="h-4 w-4 shrink-0 text-zinc-500" />
-						<div class="min-w-0 flex-1">
-							<div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-								<span class="truncate text-sm font-medium">
-									{file.filename ?? '(no filename)'}
-								</span>
-								<span class="font-mono text-xs text-zinc-500">{file.id}</span>
+						<div class="flex min-w-0 flex-1 items-center gap-4">
+							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+								<FileIcon class="h-5 w-5" />
 							</div>
-							<div
-								class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500"
-							>
-								<span>{file.mime_type ?? 'unknown type'}</span>
-								<span>{formatBytes(file.size_bytes)}</span>
-								<span class="capitalize">{file.source}</span>
-								<span class="capitalize">{file.status}</span>
+							<div class="min-w-0 flex-1 space-y-1">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="truncate text-base font-medium text-zinc-100">{file.filename ?? '(no filename)'}</span>
+								</div>
+								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+										{file.id}
+									</span>
+									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+										{file.mime_type ?? 'unknown type'}
+									</span>
+									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+										{formatBytes(file.size_bytes)}
+									</span>
+									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+										{file.source}
+									</span>
+									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+										{file.status}
+									</span>
+								</div>
+							</div>
+						</div>
+						<div class="shrink-0 text-xs text-zinc-500 flex flex-col items-end">
+							<div class="flex items-center gap-1.5 whitespace-nowrap">
 								{#if file.deleted_at}
-									<span class="text-red-400"
-										>deleted {formatDate(file.deleted_at)}</span
-									>
+									<span class="text-red-400">deleted {formatDate(file.deleted_at)}</span>
 								{:else}
 									<span>{formatDate(file.created_at)}</span>
 								{/if}
@@ -331,8 +333,8 @@
 					</div>
 				{/each}
 			{/if}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>
 
 <FileDetailsModal bind:open={detailOpen} file={selectedFile} onDeleted={handleDeleteFromModal} />

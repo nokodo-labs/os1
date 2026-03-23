@@ -12,7 +12,10 @@ from api.database import get_db
 from api.models.access_rule import AccessRule
 from api.models.file import File, FileSource
 from api.permissions import ResourceType
-from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
+from api.schemas.access_rule import (
+	AccessRuleCreate,
+	AccessRuleResponse,
+)
 from api.schemas.file import File as FileSchema
 from api.schemas.file import FileCreate, FileUpdate
 from api.schemas.sorting import SortDir
@@ -60,7 +63,7 @@ async def create_file(
 )
 async def upload_file(
 	file: UploadFile,
-	project_id: TypeID | None = Form(default=None),
+	project_ids: list[TypeID] = Form(default=[]),
 	source: FileSource = Form(default=FileSource.UPLOAD),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -71,7 +74,7 @@ async def upload_file(
 		file,
 		db,
 		principal=principal,
-		project_id=project_id,
+		project_ids=project_ids,
 		source=source,
 		origin_session_id=x_session_id,
 	)
@@ -204,7 +207,7 @@ async def list_file_access_rules(
 ) -> list[AccessRule]:
 	"""list access rules for a file."""
 	return await access_rules_service.list_access_rules(
-		ResourceType.FILE, str(file_id), db, principal=principal
+		ResourceType.FILE, file_id, db, principal=principal
 	)
 
 
@@ -218,7 +221,7 @@ async def set_file_access_rules(
 	"""replace access rules for a file."""
 	return await access_rules_service.set_access_rules(
 		ResourceType.FILE,
-		str(file_id),
+		file_id,
 		rules,
 		db,
 		principal=principal,

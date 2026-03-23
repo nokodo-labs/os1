@@ -3,12 +3,14 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { getApiBaseUrl } from '$lib/api/client'
+	import type { components } from '$lib/api/types'
 	import {
 		blockHasStreamingAssistant,
 		contentPartsToText,
 		createChatState,
 		extractFileParts,
 		extractMediaParts,
+		fetchThreadAccessLevel,
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
@@ -23,6 +25,8 @@
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
+	import CitationSourcesModal from '$lib/components/chat/CitationSourcesModal.svelte'
+	import CitationSourcesPill from '$lib/components/chat/CitationSourcesPill.svelte'
 	import CopyButton from '$lib/components/chat/CopyButton.svelte'
 	import FloatingButtons from '$lib/components/chat/FloatingButtons.svelte'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
@@ -59,6 +63,11 @@
 	let didLoadAgents = $state(false)
 	let inputFocusToken = $state(0)
 	let lastInputFocusKey = $state<string | null>(null)
+	let isReadOnly = $state(false)
+
+	// citation sources modal state
+	type Citation = components['schemas']['Citation']
+	let sourcesModalCitations = $state<Citation[] | null>(null)
 
 	// system chrome for agent selector
 	const chrome = useSystemChrome()
@@ -174,6 +183,33 @@
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
 		return () => chrome.setContextActions(null)
+	})
+
+	// effects: resolve read-only access for non-owner threads
+	$effect(() => {
+		const thread = chat.thread
+		const userId = session.currentUser?.id
+		if (!thread || !userId) {
+			isReadOnly = false
+			return
+		}
+		if (thread.owner_id === userId) {
+			isReadOnly = false
+			return
+		}
+		// non-owner: fetch effective access level
+		let cancelled = false
+		void fetchThreadAccessLevel(thread.id)
+			.then((level) => {
+				if (cancelled) return
+				isReadOnly = !level || level === 'reader'
+			})
+			.catch(() => {
+				if (!cancelled) isReadOnly = true
+			})
+		return () => {
+			cancelled = true
+		}
 	})
 
 	// effects: real-time event subscriptions (tool, message, typing, run events)
@@ -595,6 +631,12 @@
 																segment.item.message.content
 															)}
 															isStreaming={false}
+															citations={segment.item.message
+																.citations?.length
+																? segment.item.message.citations
+																: (chat.citationSources.get(
+																		segment.item.message.id
+																	) ?? [])}
 														/>
 													</div>
 												{:else if segment.type === 'tool_group'}
@@ -629,6 +671,10 @@
 																	.content}
 																isStreaming={!chat
 																	.streamingAssistant.isError}
+																citations={chat.citationSources.get(
+																	chat.streamingAssistant
+																		.messageId
+																) ?? []}
 															/>
 														</div>
 													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls && !hasActiveTools}
@@ -646,6 +692,27 @@
 									{/snippet}
 
 									{#snippet actions()}
+										{@const blockCitations = [
+											...responseItems
+												.filter(
+													(
+														i
+													): i is {
+														kind: 'assistant'
+														message: ApiMessage
+													} => i.kind === 'assistant'
+												)
+												.flatMap((i) => [
+													...(i.message.citations ?? []),
+													...(chat.citationSources.get(i.message.id) ??
+														[]),
+												]),
+											...(isStreamingBlock && chat.streamingAssistant
+												? (chat.citationSources.get(
+														chat.streamingAssistant.messageId
+													) ?? [])
+												: []),
+										]}
 										<CopyButton
 											content={() => {
 												const allText = responseItems
@@ -689,6 +756,14 @@
 											>
 												retry
 											</button>
+										{/if}
+										{#if blockCitations.length > 0}
+											<CitationSourcesPill
+												citations={blockCitations}
+												onclick={() => {
+													sourcesModalCitations = blockCitations
+												}}
+											/>
 										{/if}
 									{/snippet}
 								</AssistantChatMessage>
@@ -741,6 +816,7 @@
 					onStop={chat.handleStopGeneration}
 					isGenerating={chat.isGenerating}
 					placeholder="send a message"
+					disabled={isReadOnly}
 					focusToken={inputFocusToken}
 					viewTransitionName="chat-input"
 					threadAttachments={chat.threadAttachments}
@@ -844,3 +920,11 @@
 		</div>
 	</div>
 {/if}
+
+<CitationSourcesModal
+	open={sourcesModalCitations !== null}
+	citations={sourcesModalCitations ?? []}
+	onClose={() => {
+		sourcesModalCitations = null
+	}}
+/>

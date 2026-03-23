@@ -147,17 +147,17 @@
 	<div class="space-y-4">
 		<!-- experimental features -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground/85">experimental features</div>
-			<div class="mt-1 text-sm text-foreground/55">
+			<div class="text-foreground/85 text-sm font-semibold">experimental features</div>
+			<div class="text-foreground/55 mt-1 text-sm">
 				these features are experimental and may cause performance issues or bugs.
 			</div>
 
 			<div class="mt-6 flex items-center justify-between">
 				<div>
-					<span id="svg-liquid-glass-label" class="text-sm text-foreground/70"
+					<span id="svg-liquid-glass-label" class="text-foreground/70 text-sm"
 						>enable svg liquid glass globally</span
 					>
-					<div class="mt-1 text-xs text-foreground/40">
+					<div class="text-foreground/40 mt-1 text-xs">
 						use svg-based liquid glass effects everywhere when your browser supports it.
 						this can be very heavy on performance.
 					</div>
@@ -172,10 +172,10 @@
 
 			<div class="mt-6 flex items-center justify-between">
 				<div>
-					<span id="svg-liquid-glass-island-label" class="text-sm text-foreground/70"
+					<span id="svg-liquid-glass-island-label" class="text-foreground/70 text-sm"
 						>enable svg liquid glass for island</span
 					>
-					<div class="mt-1 text-xs text-foreground/40">
+					<div class="text-foreground/40 mt-1 text-xs">
 						use svg-based liquid glass effects specifically for the island component.
 					</div>
 				</div>
@@ -189,10 +189,10 @@
 
 			<div class="mt-6 flex items-center justify-between">
 				<div>
-					<span id="svg-liquid-metal-label" class="text-sm text-foreground/70"
+					<span id="svg-liquid-metal-label" class="text-foreground/70 text-sm"
 						>enable svg liquid metal</span
 					>
-					<div class="mt-1 text-xs text-foreground/40">
+					<div class="text-foreground/40 mt-1 text-xs">
 						use svg-based liquid metal edge refractions when supported by your browser.
 					</div>
 				</div>
@@ -207,8 +207,8 @@
 
 		<!-- homepage suggestions -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">homepage suggestions</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground text-sm font-semibold">homepage suggestions</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				choose which apps appear when you search on the home screen.
 			</div>
 			<div class="mt-4 space-y-2">
@@ -217,7 +217,7 @@
 					{@const enabled = preferences.data.homepage[app.key]}
 					{@const color = accentColors[app.accent]?.primary}
 					<label
-						class="rounded-pill flex w-full cursor-pointer items-center gap-3 border border-foreground/10 px-4 py-3 text-left text-sm transition-all hover:border-foreground/15 {enabled
+						class="rounded-pill border-foreground/10 hover:border-foreground/15 flex w-full cursor-pointer items-center gap-3 border px-4 py-3 text-left text-sm transition-all {enabled
 							? 'bg-foreground/5'
 							: 'bg-foreground/2'}"
 					>
@@ -232,10 +232,14 @@
 							/>
 						</div>
 						<div class="min-w-0 flex-1">
-							<div class="font-medium {enabled ? 'text-foreground/80' : 'text-foreground/40'}">
+							<div
+								class="font-medium {enabled
+									? 'text-foreground/80'
+									: 'text-foreground/40'}"
+							>
 								{app.label}
 							</div>
-							<div class="text-xs text-foreground/50">{app.description}</div>
+							<div class="text-foreground/50 text-xs">{app.description}</div>
 						</div>
 						<Switch
 							checked={enabled ?? true}
@@ -249,23 +253,25 @@
 
 		<!-- data export -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">data export</div>
-			<div class="mt-1 text-sm text-foreground/50">download your data in portable formats.</div>
+			<div class="text-foreground text-sm font-semibold">data export</div>
+			<div class="text-foreground/50 mt-1 text-sm">
+				download your data in portable formats.
+			</div>
 			<div class="mt-4 space-y-2">
 				{#each exportActions as action (action.label)}
 					{@const Icon = action.icon}
 					<button
 						type="button"
 						disabled
-						class="rounded-pill flex w-full items-center gap-3 border border-foreground/10 bg-foreground/3 px-4 py-3 text-left text-sm transition-all hover:border-foreground/15 hover:bg-foreground/5 disabled:opacity-50"
+						class="rounded-pill border-foreground/10 bg-foreground/3 hover:border-foreground/15 hover:bg-foreground/5 flex w-full items-center gap-3 border px-4 py-3 text-left text-sm transition-all disabled:opacity-50"
 					>
-						<Icon class="h-4.5 w-4.5 shrink-0 text-foreground/50" />
+						<Icon class="text-foreground/50 h-4.5 w-4.5 shrink-0" />
 						<div class="min-w-0 flex-1">
-							<div class="font-medium text-foreground/80">{action.label}</div>
-							<div class="text-xs text-foreground/50">{action.description}</div>
+							<div class="text-foreground/80 font-medium">{action.label}</div>
+							<div class="text-foreground/50 text-xs">{action.description}</div>
 						</div>
 						<span
-							class="rounded-pill bg-foreground/5 px-2 py-0.5 text-[0.65rem] text-foreground/45"
+							class="rounded-pill bg-foreground/5 text-foreground/45 px-2 py-0.5 text-[0.65rem]"
 							>soon</span
 						>
 					</button>
@@ -275,8 +281,10 @@
 
 		<!-- chat management -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">chat management</div>
-			<div class="mt-1 text-sm text-foreground/50">organize or clean up your conversations.</div>
+			<div class="text-foreground text-sm font-semibold">chat management</div>
+			<div class="text-foreground/50 mt-1 text-sm">
+				organize or clean up your conversations.
+			</div>
 			<div class="mt-4 space-y-2">
 				{#each manageActions as action (action.label)}
 					{@const Icon = action.icon}
@@ -301,10 +309,10 @@
 							>
 								{action.label}
 							</div>
-							<div class="text-xs text-foreground/50">{action.description}</div>
+							<div class="text-foreground/50 text-xs">{action.description}</div>
 						</div>
 						<span
-							class="rounded-pill bg-foreground/5 px-2 py-0.5 text-[0.65rem] text-foreground/45"
+							class="rounded-pill bg-foreground/5 text-foreground/45 px-2 py-0.5 text-[0.65rem]"
 							>soon</span
 						>
 					</button>
@@ -320,13 +328,13 @@
 				onclick={() => (owuiExpanded = !owuiExpanded)}
 			>
 				<div>
-					<div class="text-sm font-semibold text-foreground">open webui import</div>
-					<div class="mt-1 text-sm text-foreground/50">
+					<div class="text-foreground text-sm font-semibold">open webui import</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						import data from an open webui instance.
 					</div>
 				</div>
 				<ChevronDown
-					class="h-4.5 w-4.5 text-foreground/50 transition-transform duration-200 {owuiExpanded
+					class="text-foreground/50 h-4.5 w-4.5 transition-transform duration-200 {owuiExpanded
 						? 'rotate-180'
 						: ''}"
 				/>
@@ -334,33 +342,33 @@
 
 			{#if owuiExpanded}
 				<div
-					class="border-t border-foreground/14 px-5 pt-4 pb-5"
+					class="border-foreground/14 border-t px-5 pt-4 pb-5"
 					transition:slide={{ duration: 200 }}
 				>
 					<form class="space-y-3" onsubmit={(e) => e.preventDefault()} autocomplete="off">
 						<div>
 							<label
-								class="mb-1.5 block text-xs font-medium text-foreground/50"
+								class="text-foreground/50 mb-1.5 block text-xs font-medium"
 								for="owui-host">host URL</label
 							>
 							<input
 								id="owui-host"
 								type="url"
-								class="rounded-pill w-full border border-foreground/10 bg-foreground/5 px-4 py-2.5 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 								placeholder="https://your-open-webui.example.com"
 								bind:value={owuiHost}
 							/>
 						</div>
 						<div>
 							<label
-								class="mb-1.5 block text-xs font-medium text-foreground/50"
+								class="text-foreground/50 mb-1.5 block text-xs font-medium"
 								for="owui-jwt">JWT token</label
 							>
 							<input
 								id="owui-jwt"
 								type="password"
 								autocomplete="off"
-								class="rounded-pill w-full border border-foreground/10 bg-foreground/5 px-4 py-2.5 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 								placeholder="paste your open webui JWT here"
 								bind:value={owuiJwt}
 							/>
@@ -370,29 +378,29 @@
 							<button
 								type="button"
 								disabled
-								class="rounded-pill flex-1 border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/50 transition-colors disabled:opacity-50"
+								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/50 flex-1 border px-3 py-2 text-sm transition-colors disabled:opacity-50"
 							>
 								import all chats
 							</button>
 							<button
 								type="button"
 								disabled
-								class="rounded-pill flex-1 border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/50 transition-colors disabled:opacity-50"
+								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/50 flex-1 border px-3 py-2 text-sm transition-colors disabled:opacity-50"
 							>
 								import all memories
 							</button>
 						</div>
-						<p class="text-xs text-foreground/45">coming soon</p>
+						<p class="text-foreground/45 text-xs">coming soon</p>
 					</form>
 
-					<div class="mt-5 border-t border-foreground/14 pt-4">
-						<div class="text-xs font-medium text-foreground/50">
+					<div class="border-foreground/14 mt-5 border-t pt-4">
+						<div class="text-foreground/50 text-xs font-medium">
 							more imports coming soon
 						</div>
 						<div class="mt-2 flex flex-wrap gap-2">
 							{#each ['ChatGPT', 'Claude', 'Gemini', 'LibreChat'] as platform (platform)}
 								<span
-									class="rounded-pill border border-foreground/14 bg-foreground/3 px-3 py-1 text-xs text-foreground/45"
+									class="rounded-pill border-foreground/14 bg-foreground/3 text-foreground/45 border px-3 py-1 text-xs"
 								>
 									{platform}
 								</span>
@@ -409,7 +417,7 @@
 				<Trash class="h-4.5 w-4.5 text-red-400/70" />
 				<div class="text-sm font-semibold text-red-400">danger zone</div>
 			</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground/50 mt-1 text-sm">
 				irreversible actions. proceed with extreme caution.
 			</div>
 			<div class="mt-4">
@@ -420,7 +428,7 @@
 				>
 					delete account
 				</button>
-				<p class="mt-2 text-xs text-foreground/45">
+				<p class="text-foreground/45 mt-2 text-xs">
 					this will permanently delete your account and all associated data. coming soon.
 				</p>
 			</div>

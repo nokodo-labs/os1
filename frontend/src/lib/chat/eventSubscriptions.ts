@@ -15,7 +15,7 @@ import { SvelteDate, SvelteMap } from 'svelte/reactivity'
 import { buildMessageChildren, type ApiMessage } from './helpers'
 import { consumeStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
-import type { ChatContext } from './types'
+import type { ApiCitation, ChatContext } from './types'
 
 /** lightweight pointer for a run signal received over WS */
 interface RunSignal {
@@ -253,6 +253,19 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
+	// citation events
+
+	function handleCitationEvent(ev: StreamEvent): void {
+		if (ev.thread_id !== threadId) return
+		const data = (ev.data ?? {}) as Record<string, unknown>
+		const citations = data.citations as ApiCitation[] | undefined
+		if (!Array.isArray(citations)) return
+		const valid = citations.filter((c) => typeof c.index === 'number')
+		if (valid.length > 0) {
+			ctx.addCitationSources(valid)
+		}
+	}
+
 	// single unified listener
 
 	const unsub = eventStreamClient.subscribe((msg) => {
@@ -268,6 +281,8 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleTypingEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('attachment.')) {
 			handleAttachmentEvent(ev as StreamEvent)
+		} else if (ev.type.startsWith('citation.')) {
+			handleCitationEvent(ev as StreamEvent)
 		} else if (
 			ev.type === 'runs.active' ||
 			ev.type === 'run.started' ||

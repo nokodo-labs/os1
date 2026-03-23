@@ -65,8 +65,8 @@
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center justify-between">
 				<div>
-					<div class="text-sm font-semibold text-foreground">use account bio</div>
-					<div class="mt-1 text-sm text-foreground/50">
+					<div class="text-foreground text-sm font-semibold">use account bio</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						use your account bio as context for AI conversations instead of a separate
 						AI bio.
 					</div>
@@ -76,16 +76,16 @@
 
 			{#if !useAccountBio}
 				<div
-					class="mt-5 border-t border-foreground/15 pt-5"
+					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-sm font-semibold text-foreground">AI bio</div>
-					<div class="mt-1 text-sm text-foreground/50">
+					<div class="text-foreground text-sm font-semibold">AI bio</div>
+					<div class="text-foreground/50 mt-1 text-sm">
 						tell the AI about yourself - your interests, work, and preferences. this
 						helps personalize responses.
 					</div>
 					<textarea
-						class="mt-3 w-full resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+						class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
 						rows="4"
 						placeholder="e.g., i'm a software engineer interested in AI and design..."
 						value={aiBio}
@@ -98,40 +98,42 @@
 		<!-- memories -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center gap-3 pb-1">
-				<Brain class="h-5 w-5 text-foreground/60" />
-				<div class="text-sm font-semibold text-foreground">memories</div>
+				<Brain class="text-foreground/60 h-5 w-5" />
+				<div class="text-foreground text-sm font-semibold">memories</div>
 			</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground/50 mt-1 text-sm">
 				the AI remembers things you tell it across conversations to provide more relevant
 				responses.
 			</div>
 
 			<div class="mt-4 space-y-3">
 				<div class="flex items-center justify-between">
-					<span class="text-sm text-foreground/70">enable memories</span>
+					<span class="text-foreground/70 text-sm">enable memories</span>
 					<Switch size="md" checked={memoriesEnabled} onchange={setMemoriesEnabled} />
 				</div>
 
 				{#if memoriesEnabled}
 					<div transition:slide={{ duration: 200 }}>
 						<div class="flex items-center justify-between">
-							<span class="text-sm text-foreground/70">chat recall</span>
+							<span class="text-foreground/70 text-sm">chat recall</span>
 							<Switch size="md" checked={chatRecall} onchange={setChatRecall} />
 						</div>
-						<div class="mt-1 pl-0 text-xs text-foreground/40">
+						<div class="text-foreground/40 mt-1 pl-0 text-xs">
 							allow the AI to reference previous conversations for context.
 						</div>
 					</div>
 
 					<div
-						class="mt-3 border-t border-foreground/15 pt-3"
+						class="border-foreground/15 mt-3 border-t pt-3"
 						transition:slide={{ duration: 200 }}
 					>
 						<div class="flex items-center justify-between">
-							<div class="text-sm font-medium text-foreground/70">manage memories</div>
+							<div class="text-foreground/70 text-sm font-medium">
+								manage memories
+							</div>
 							<button
 								type="button"
-								class="rounded-pill flex items-center gap-1.5 border border-foreground/10 bg-foreground/5 px-3 py-1.5 text-xs text-foreground/60 transition-all hover:border-foreground/20 hover:bg-foreground/10 hover:text-foreground/80"
+								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 hover:border-foreground/20 hover:bg-foreground/10 hover:text-foreground/80 flex items-center gap-1.5 border px-3 py-1.5 text-xs transition-all"
 								onclick={() => modals.open('memories')}
 							>
 								<Brain class="h-3.5 w-3.5" />
@@ -145,13 +147,13 @@
 
 		<!-- custom instructions -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">custom instructions</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground text-sm font-semibold">custom instructions</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				provide specific instructions the AI should always follow. these apply to every
 				conversation.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+				class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
 				rows="4"
 				placeholder="e.g., always respond in a casual tone, prefer code examples in TypeScript..."
 				value={customInstructions}
@@ -161,12 +163,12 @@
 
 		<!-- AI personality -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">personality</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground text-sm font-semibold">personality</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				describe how you'd like the AI to communicate - its tone, style, and character.
 			</div>
 			<textarea
-				class="mt-3 w-full resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+				class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
 				rows="3"
 				placeholder="e.g., friendly and concise, like talking to a knowledgeable colleague..."
 				value={personality}

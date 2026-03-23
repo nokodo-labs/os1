@@ -279,7 +279,7 @@ class Agent[AppContextT = None](Base):
 			thread,
 			stream=True,
 			tools=self.tool_definitions,
-			tool_choice=None,
+			tool_choice="none",
 		):
 			final_message = final_message.merge(chat_delta.message)
 			yield AgentDelta(chat=chat_delta, chunk_index=chunk_index)
@@ -389,20 +389,14 @@ class Agent[AppContextT = None](Base):
 
 		# ensure ToolMessage carries the provider tool_call id metadata (e.g. openai)
 		# even if the concrete tool returned a ToolMessage without metadata.
-		tool_call_provider_meta = {
-			PROVIDER_DATA_KEY: (tool_call.metadata or {}).get(PROVIDER_DATA_KEY)
-		}
-		tool_message_provider_meta = {
-			PROVIDER_DATA_KEY: (tool_message.metadata or {}).get(PROVIDER_DATA_KEY)
-		}
-		merged_provider_meta = deep_merge(
-			tool_message_provider_meta,
-			tool_call_provider_meta,
-			overwrite=False,
-		)
-		merged_provider_data = merged_provider_meta.get(PROVIDER_DATA_KEY)
-		if merged_provider_data is not None:
+		tool_call_pd = (tool_call.metadata or {}).get(PROVIDER_DATA_KEY)
+		if isinstance(tool_call_pd, dict):
+			tool_msg_pd = (tool_message.metadata or {}).get(PROVIDER_DATA_KEY)
+			if isinstance(tool_msg_pd, dict):
+				merged_pd = deep_merge(tool_msg_pd, tool_call_pd, overwrite=False)
+			else:
+				merged_pd = tool_call_pd
 			tool_message.metadata = tool_message.metadata or {}
-			tool_message.metadata[PROVIDER_DATA_KEY] = merged_provider_data
+			tool_message.metadata[PROVIDER_DATA_KEY] = merged_pd
 
 		return tool_message

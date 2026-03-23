@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
+from api.models.agent import Agent as AgentORM
 from api.models.message import (
 	AssistantMessage as AssistantMessageORM,
 )
@@ -26,6 +27,8 @@ from api.models.message import (
 from api.models.message import (
 	UserMessage as UserMessageORM,
 )
+from api.models.model import Model as ModelORM
+from api.models.provider import Provider as ProviderORM
 from api.schemas.message import MessageCreate
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
@@ -727,6 +730,82 @@ async def test_chat_service_conversions() -> None:
 
 	with pytest.raises(HTTPException):
 		await chat_service.resolve_model_for_run(_FakeSession(), model=None)  # type: ignore[arg-type]
+
+
+def test_chat_service_build_chat_model_applies_full_param_set() -> None:
+	provider = ProviderORM()
+	provider.adapter_type = "openai"
+	provider.base_url = None
+	provider.encrypted_api_key = None
+
+	model = ModelORM()
+	model.name = "chat"
+	model.adapter = None
+	model.provider = provider
+
+	chat_model = chat_service.build_chat_model(
+		model,
+		params={
+			"temperature": 0.25,
+			"max_tokens": 512,
+			"top_p": 0.8,
+			"stop": ["END"],
+			"reasoning_effort": "none",
+		},
+	)
+
+	assert chat_model.temperature == 0.25
+	assert chat_model.max_tokens == 512
+	assert chat_model.top_p == 0.8
+	assert chat_model.stop == ["END"]
+	assert chat_model.reasoning_effort == "none"
+
+
+@pytest.mark.asyncio
+async def test_build_agent_from_orm_uses_chat_model_config(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	provider = ProviderORM()
+	provider.adapter_type = "openai"
+	provider.base_url = None
+	provider.encrypted_api_key = None
+
+	model = ModelORM()
+	model.name = "chat"
+	model.adapter = None
+	model.provider = provider
+
+	agent_orm = AgentORM()
+	agent_orm.model = model
+	agent_orm.plugin_ids = []
+	agent_orm.config = {
+		"chat_model": {
+			"temperature": 0.4,
+			"max_tokens": 256,
+			"top_p": 0.9,
+			"reasoning_effort": "none",
+		},
+		"max_iterations": 7,
+	}
+
+	async def _resolve_tools(*, tool_ids: list[str]) -> list[object]:
+		assert tool_ids == []
+		return []
+
+	monkeypatch.setattr(chat_runner, "resolve_tools", _resolve_tools)
+	monkeypatch.setattr(chat_runner, "resolve_filters", lambda _tool_ids: [])
+	monkeypatch.setattr(chat_runner, "resolve_hooks", lambda _tool_ids: [])
+
+	sdk_agent = await chat_runner.build_agent_from_orm(
+		agent_orm,
+		context=MagicMock(),
+	)
+
+	assert sdk_agent.chat_model.temperature == 0.4
+	assert sdk_agent.chat_model.max_tokens == 256
+	assert sdk_agent.chat_model.top_p == 0.9
+	assert sdk_agent.chat_model.reasoning_effort == "none"
+	assert sdk_agent.max_iterations == 7
 
 
 def test_chat_service_orm_to_sdk_variants() -> None:

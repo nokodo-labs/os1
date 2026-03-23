@@ -14,7 +14,7 @@ from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -118,7 +118,19 @@ class NoteGetTool(Tool[AppContext]):
 			}
 			if note.labels:
 				result["labels"] = [str(label) for label in note.labels]
-			return self.success(json.dumps(result), __agent_context__)
+			return ToolMessage(
+				tool_call_id=__agent_context__.tool_call_id,
+				tool_output=json.dumps(result),
+				metadata={
+					"citable_sources": [
+						{
+							"source_type": "note",
+							"source_id": str(note.id),
+							"title": note.title,
+						},
+					],
+				},
+			)
 
 		if not inp.query:
 			return self.error(
@@ -147,13 +159,25 @@ class NoteGetTool(Tool[AppContext]):
 			return self.success(json.dumps(out), __agent_context__)
 
 		results = [
-			{"id": str(item.id), "title": item.title, "subtitle": item.subtitle or ""}
+			{
+				"id": item.id,
+				"title": item.title,
+				**({"preview": item.preview[:50]} if item.preview else {}),
+			}
 			for item in page.items
 		]
 		n = len(results)
 		msg = f"found {n} {'note' if n == 1 else 'notes'}"
 		out = {"status": "success", "message": msg, "count": n, "results": results}
-		return self.success(json.dumps(out), __agent_context__)
+		citable_sources: list[JSONValue] = [
+			{"source_type": "note", "source_id": item.id, "title": item.title}
+			for item in page.items
+		]
+		return ToolMessage(
+			tool_call_id=__agent_context__.tool_call_id,
+			tool_output=json.dumps(out),
+			metadata={"citable_sources": citable_sources},
+		)
 
 
 class NoteWriteTool(Tool[AppContext]):

@@ -91,9 +91,9 @@ async def _store_output_files(
 	*,
 	session: AsyncSession,
 	owner_id: TypeID,
-	project_id: str | None = None,
-	agent_id: str | None = None,
-	thread_id: str | None = None,
+	project_ids: list[TypeID] | None = None,
+	agent_id: TypeID | None = None,
+	thread_id: TypeID | None = None,
 ) -> list[ImageContent | FileContent]:
 	"""persist E2B output files and return tool attachments.
 
@@ -115,7 +115,7 @@ async def _store_output_files(
 				filename=entry.filename,
 				content_type=entry.mime_type,
 				source=FileSource.GENERATED,
-				project_id=project_id,
+				project_ids=project_ids,
 			)
 			file_meta: JSONObject = {}
 			if agent_id:
@@ -303,23 +303,21 @@ class CodeInterpreterTool(Tool[AppContext]):
 			output = json.dumps(response, ensure_ascii=False)
 
 		# persist output files and build attachments
-		thread_project_id: str | None = None
+		thread_project_id: TypeID | None = None
 		if __app_context__.thread_id:
 			thread_project_id = await resolve_thread_project_id(
 				__app_context__.thread_id, __app_context__.session
 			)
 
-		agent_id = str(__app_context__.agent_id) if __app_context__.agent_id else None
-		thread_id = (
-			str(__app_context__.thread_id) if __app_context__.thread_id else None
-		)
+		agent_id = __app_context__.agent_id if __app_context__.agent_id else None
+		thread_id = __app_context__.thread_id if __app_context__.thread_id else None
 
 		attachments = await _store_output_files(
 			result.inline_images,
 			result.files,
 			session=__app_context__.session,
 			owner_id=__app_context__.user_id,
-			project_id=thread_project_id,
+			project_ids=[thread_project_id] if thread_project_id else None,
 			agent_id=agent_id,
 			thread_id=thread_id,
 		)

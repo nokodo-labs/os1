@@ -30,10 +30,9 @@
 		error = null
 		success = false
 		try {
-			const { response, error: apiError } = await api.POST(
-				'/v1/auth/change-password',
-				{ body: { current_password: currentPassword, new_password: newPassword } }
-			)
+			const { response, error: apiError } = await api.POST('/v1/auth/change-password', {
+				body: { current_password: currentPassword, new_password: newPassword },
+			})
 			if (!response.ok) {
 				const detail = (apiError as Record<string, unknown>)?.detail
 				error = typeof detail === 'string' ? detail : 'failed to change password'
@@ -91,10 +90,10 @@
 		<!-- JWT / session info -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="flex items-center gap-2">
-				<LockClosed class="h-4.5 w-4.5 text-foreground/60" />
-				<div class="text-sm font-semibold text-foreground">session</div>
+				<LockClosed class="text-foreground/60 h-4.5 w-4.5" />
+				<div class="text-foreground text-sm font-semibold">session</div>
 			</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground/50 mt-1 text-sm">
 				your current session is secured with a JWT token. tokens are automatically
 				refreshed.
 			</div>
@@ -110,35 +109,36 @@
 
 		<!-- change password -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">change password</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground text-sm font-semibold">change password</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				update your account password. you'll need to enter your current password.
 			</div>
 			<form class="mt-4 space-y-3" onsubmit={handleSubmit} autocomplete="off">
 				<div>
 					<label
-						class="mb-1.5 block text-xs font-medium text-foreground/50"
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
 						for="current-password">current password</label
 					>
 					<input
 						id="current-password"
 						type="password"
 						autocomplete="current-password"
-						class="rounded-pill w-full border border-foreground/10 bg-foreground/5 px-4 py-2.5 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 						placeholder="enter current password"
 						bind:value={currentPassword}
 						disabled={saving}
 					/>
 				</div>
 				<div>
-					<label class="mb-1.5 block text-xs font-medium text-foreground/50" for="new-password"
-						>new password</label
+					<label
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
+						for="new-password">new password</label
 					>
 					<input
 						id="new-password"
 						type="password"
 						autocomplete="new-password"
-						class="rounded-pill w-full border border-foreground/10 bg-foreground/5 px-4 py-2.5 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 						placeholder="enter new password (min 8 characters)"
 						bind:value={newPassword}
 						disabled={saving}
@@ -155,7 +155,7 @@
 				<button
 					type="submit"
 					disabled={!canSubmit || saving}
-					class="rounded-pill border border-foreground/10 bg-foreground/10 px-4 py-2 text-sm text-foreground/80 transition-colors hover:bg-foreground/15 disabled:text-foreground/40 disabled:hover:bg-foreground/10"
+					class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/80 hover:bg-foreground/15 disabled:text-foreground/40 disabled:hover:bg-foreground/10 border px-4 py-2 text-sm transition-colors"
 				>
 					{#if saving}
 						<ShimmerText className="inline-block">updating</ShimmerText>
@@ -168,8 +168,8 @@
 
 		<!-- OIDC -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">external authentication</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground text-sm font-semibold">external authentication</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				connect your account to an external identity provider via OpenID Connect (OIDC) for
 				single sign-on.
 			</div>
@@ -177,35 +177,36 @@
 				<button
 					type="button"
 					disabled
-					class="rounded-pill border border-foreground/10 bg-foreground/5 px-4 py-2 text-sm text-foreground/50 transition-colors"
+					class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/50 border px-4 py-2 text-sm transition-colors"
 				>
 					connect OIDC provider
 				</button>
-				<p class="mt-2 text-xs text-foreground/45">coming soon</p>
+				<p class="text-foreground/45 mt-2 text-xs">coming soon</p>
 			</div>
 		</div>
 
 		<!-- change email -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-sm font-semibold text-foreground">email address</div>
-			<div class="mt-1 text-sm text-foreground/50">
+			<div class="text-foreground text-sm font-semibold">email address</div>
+			<div class="text-foreground/50 mt-1 text-sm">
 				your email address for notifications and account recovery.
 			</div>
 			<div
-				class="rounded-pill mt-3 flex w-full items-center border border-foreground/14 bg-foreground/3 px-4 py-2.5 text-sm text-foreground/60"
+				class="rounded-pill border-foreground/14 bg-foreground/3 text-foreground/60 mt-3 flex w-full items-center border px-4 py-2.5 text-sm"
 			>
 				{currentEmail}
 			</div>
 			<form class="mt-3 space-y-3" onsubmit={handleEmailSubmit} autocomplete="off">
 				<div>
-					<label class="mb-1.5 block text-xs font-medium text-foreground/50" for="new-email"
-						>new email</label
+					<label
+						class="text-foreground/50 mb-1.5 block text-xs font-medium"
+						for="new-email">new email</label
 					>
 					<input
 						id="new-email"
 						type="email"
 						autocomplete="email"
-						class="rounded-pill w-full border border-foreground/10 bg-foreground/5 px-4 py-2.5 text-sm text-foreground/90 placeholder:text-foreground/40 transition-colors outline-none focus:border-foreground/20 focus:bg-foreground/8"
+						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
 						placeholder="new email address"
 						bind:value={newEmail}
 						disabled={emailSaving}
@@ -222,7 +223,7 @@
 				<button
 					type="submit"
 					disabled={!canSubmitEmail || emailSaving}
-					class="rounded-pill border border-foreground/10 bg-foreground/10 px-4 py-2 text-sm text-foreground/80 transition-colors hover:bg-foreground/15 disabled:text-foreground/40 disabled:hover:bg-foreground/10"
+					class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/80 hover:bg-foreground/15 disabled:text-foreground/40 disabled:hover:bg-foreground/10 border px-4 py-2 text-sm transition-colors"
 				>
 					{#if emailSaving}
 						<ShimmerText className="inline-block">updating</ShimmerText>

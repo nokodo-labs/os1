@@ -49,6 +49,7 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.projects import load_projects
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
@@ -92,20 +93,24 @@ async def create_reminder_list(
 ) -> ReminderList:
 	"""create a new reminder list."""
 	require_permission(principal, "reminders:create")
-	if data.project_id is not None:
+	for pid in data.project_ids:
 		await require_project_access(
-			data.project_id,
+			pid,
 			session,
 			principal,
 			required_level=AccessLevel.EDITOR,
 		)
 	reminder_list = ReminderList(
 		owner_id=principal.user_id,
-		**data.model_dump(exclude_unset=True, by_alias=True),
+		**data.model_dump(exclude_unset=True, by_alias=True, exclude={"project_ids"}),
+		projects=(
+			await load_projects(data.project_ids, session, principal)
+			if data.project_ids
+			else []
+		),
 	)
 	session.add(reminder_list)
 	await session.flush()
-	await session.refresh(reminder_list)
 
 	# emit reminder_list.created event
 	event = Event(
@@ -143,7 +148,9 @@ async def list_reminder_lists(
 			sort_dir=sort_dir,
 			columns=_REMINDER_LIST_SORT_COLUMNS,
 		)
-		stmt = stmt.offset(skip).limit(limit)
+		stmt = (
+			stmt.offset(skip).limit(limit).options(selectinload(ReminderList.projects))
+		)
 		result = await session.execute(stmt)
 		no_count_lists = result.scalars().all()
 		return [ReminderListWithCounts.model_validate(rl) for rl in no_count_lists]
@@ -181,7 +188,11 @@ async def list_reminder_lists(
 		sort_dir=sort_dir,
 		columns=_REMINDER_LIST_SORT_COLUMNS,
 	)
-	counts_stmt = counts_stmt.offset(skip).limit(limit)
+	counts_stmt = (
+		counts_stmt.offset(skip)
+		.limit(limit)
+		.options(selectinload(ReminderList.projects))
+	)
 
 	result = await session.execute(counts_stmt)
 	rows = result.all()
@@ -240,14 +251,19 @@ async def get_reminder_list(
 	principal: Principal,
 ) -> ReminderList:
 	"""get a reminder list by id."""
-	reminder_list = await session.get(ReminderList, list_id)
+	result = await session.execute(
+		select(ReminderList)
+		.where(ReminderList.id == list_id)
+		.options(selectinload(ReminderList.projects))
+	)
+	reminder_list = result.scalars().one_or_none()
 	if not reminder_list:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="reminder list not found",
 		)
 	await require_resource_access(
-		str(list_id),
+		list_id,
 		session,
 		principal,
 		ResourceType.REMINDER_LIST,
@@ -267,20 +283,21 @@ async def update_reminder_list(
 	"""update a reminder list."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
 	update_data = data.model_dump(exclude_unset=True, by_alias=True)
-	new_project_id = update_data.get("project_id")
-	if new_project_id is not None and str(new_project_id) != str(
-		reminder_list.project_id or ""
-	):
-		await require_project_access(
-			new_project_id,
-			session,
-			principal,
-			required_level=AccessLevel.EDITOR,
+	new_project_ids = update_data.pop("project_ids", None)
+	if new_project_ids is not None:
+		for pid in new_project_ids:
+			await require_project_access(
+				pid,
+				session,
+				principal,
+				required_level=AccessLevel.EDITOR,
+			)
+		reminder_list.projects = await load_projects(
+			new_project_ids, session, principal
 		)
 	for key, value in update_data.items():
 		setattr(reminder_list, key, value)
 	await session.flush()
-	await session.refresh(reminder_list)
 
 	# partial event: only changed fields + id + updated_at
 	event_data = data.model_dump(mode="json", exclude_unset=True)
@@ -314,7 +331,7 @@ async def delete_reminder_list(
 ) -> None:
 	"""delete a reminder list and all its reminders."""
 	reminder_list = await get_reminder_list(list_id, session, principal=principal)
-	list_id_str = str(reminder_list.id)
+	list_id_str = reminder_list.id
 	await session.delete(reminder_list)
 	await session.flush()
 
@@ -447,7 +464,7 @@ async def get_reminder(
 		if reminder.list_id:
 			# delegate to list access check - raises 403 if denied
 			await require_resource_access(
-				str(reminder.list_id),
+				reminder.list_id,
 				session,
 				principal,
 				ResourceType.REMINDER_LIST,
@@ -773,7 +790,7 @@ async def _autocomplete_reminders(
 			type=SearchResultType.REMINDER,
 			id=TypeID(rem.id),
 			title=rem.title or "",
-			subtitle=(rem.description[:100] if rem.description else None),
+			preview=(rem.description[:100] if rem.description else None),
 			created_at=rem.created_at,
 			updated_at=rem.updated_at,
 		)
@@ -841,7 +858,7 @@ async def _hybrid_search_reminders(
 				type=SearchResultType.REMINDER,
 				id=TypeID(rem.id),
 				title=rem.title or "",
-				subtitle=(rem.description[:100] if rem.description else None),
+				preview=(rem.description[:100] if rem.description else None),
 				score=score_by_rid.get(rid),
 				created_at=rem.created_at,
 				updated_at=rem.updated_at,

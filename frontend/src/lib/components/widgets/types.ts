@@ -15,6 +15,13 @@ export type ResourceFilterMode = 'all' | 'threads' | 'notes' | 'reminders' | 'fi
 
 export type ResourceLayoutMode = 'grid' | 'list'
 
+/** shared props accepted by all resource widget components */
+export interface WidgetProps {
+	resource: ResourceItem
+	layout?: ResourceLayoutMode
+	class?: string
+}
+
 export interface ResourceItem {
 	id: string
 	type: ResourceType

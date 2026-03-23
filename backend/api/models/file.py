@@ -9,12 +9,14 @@ from sqlalchemy import BigInteger, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
+from api.models.many_to_many import file_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
 	SoftDeleteMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -73,14 +75,14 @@ class File(
 		default=FileStatus.PENDING,
 	)
 
-	project_id: Mapped[str | None] = mapped_column(
-		String(TYPEID_LENGTH),
-		ForeignKey("projects.id", ondelete="SET NULL"),
-		index=True,
-	)
 	message_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
-		ForeignKey("messages.id", ondelete="SET NULL"),
+		ForeignKey(
+			"messages.id",
+			ondelete="SET NULL",
+			use_alter=True,
+			name="files_message_id_fkey",
+		),
 		index=True,
 	)
 
@@ -89,10 +91,17 @@ class File(
 		back_populates="files",
 		innerjoin=True,
 	)
-	project: Mapped[Project | None] = relationship(
+	projects: Mapped[list[Project]] = relationship(
 		"Project",
+		secondary=file_project_association,
 		back_populates="files",
 	)
+
+	@property
+	def project_ids(self) -> list[TypeID]:
+		"""IDs of linked projects (requires projects to be loaded)."""
+		return [p.id for p in self.projects]
+
 	message: Mapped[Message | None] = relationship(
 		"Message",
 		back_populates="files",

@@ -9,6 +9,7 @@ from collections.abc import Coroutine
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.database import build_cursor_page, decode_cursor
 from api.database.main import session_scope
@@ -36,6 +37,7 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.projects import load_projects
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
@@ -57,7 +59,11 @@ async def _get_note(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Note:
-	stmt = select(Note).where(Note.id == note_id, Note.deleted_at.is_(None))
+	stmt = (
+		select(Note)
+		.where(Note.id == note_id, Note.deleted_at.is_(None))
+		.options(selectinload(Note.projects))
+	)
 	if not principal.is_admin:
 		stmt = stmt.where(Note.user_id == principal.user.id)
 	result = await session.execute(stmt)
@@ -78,22 +84,28 @@ async def create_note(
 	origin_session_id: str | None = None,
 ) -> Note:
 	require_permission(principal, "notes:create")
-	if note_in.project_id is not None:
+	for pid in note_in.project_ids:
 		await require_project_access(
-			note_in.project_id,
+			pid,
 			session,
 			principal,
 			required_level=AccessLevel.EDITOR,
 		)
-	data = note_in.model_dump(by_alias=True)
+	data = note_in.model_dump(by_alias=True, exclude={"project_ids"})
 	data["user_id"] = data.get("user_id") or principal.user.id
 	if not principal.is_admin:
 		data["user_id"] = principal.user.id
 
-	note = Note(**data)
+	note = Note(
+		**data,
+		projects=(
+			await load_projects(note_in.project_ids, session, principal)
+			if note_in.project_ids
+			else []
+		),
+	)
 	session.add(note)
 	await session.flush()
-	await session.refresh(note)
 	note_id = TypeID(note.id)
 	event = Event(
 		scope=EventScope.USER,
@@ -149,6 +161,7 @@ async def list_notes(
 		)
 		.offset(skip)
 		.limit(limit)
+		.options(selectinload(Note.projects))
 	)
 
 	if effective_user_id:
@@ -180,19 +193,20 @@ async def update_note(
 	note = await _get_note(note_id, session, principal)
 
 	update_data = note_in.model_dump(exclude_unset=True, by_alias=True)
-	new_project_id = update_data.get("project_id")
-	if new_project_id is not None and str(new_project_id) != str(note.project_id or ""):
-		await require_project_access(
-			new_project_id,
-			session,
-			principal,
-			required_level=AccessLevel.EDITOR,
-		)
+	new_project_ids = update_data.pop("project_ids", None)
+	if new_project_ids is not None:
+		for pid in new_project_ids:
+			await require_project_access(
+				pid,
+				session,
+				principal,
+				required_level=AccessLevel.EDITOR,
+			)
+		note.projects = await load_projects(new_project_ids, session, principal)
 	for key, value in update_data.items():
 		setattr(note, key, value)
 
 	await session.flush()
-	await session.refresh(note)
 
 	# partial event: only changed fields + id + updated_at
 	event_data = note_in.model_dump(mode="json", exclude_unset=True, by_alias=True)
@@ -268,7 +282,7 @@ def _note_metadata(note: Note) -> JSONObject:
 		"owner_id": str(note.user_id),
 		"title": note.title or "",
 		"labels": list(note.labels or []),
-		"project_id": (str(note.project_id) if note.project_id else None),
+		"project_ids": [str(pid) for pid in note.project_ids],
 		# acl fields - populated at vectorize time from access_rules table
 		"allowed_user_ids": [],
 		"allowed_group_ids": [],
@@ -281,7 +295,7 @@ async def _note_should_revectorize(
 	note_in: NoteUpdate,
 	session: AsyncSession,
 ) -> bool:
-	_fields = {"title", "content", "labels", "project_id"}
+	_fields = {"title", "content", "labels", "project_ids"}
 	update_data = note_in.model_dump(exclude_unset=True, mode="python")
 	return bool(_fields & update_data.keys())
 
@@ -299,7 +313,11 @@ NOTE_SPEC: VectorSpec[Note] = VectorSpec(
 
 async def vectorize_all_notes(session: AsyncSession) -> int:
 	"""vectorize all non-deleted notes in bulk. returns count."""
-	stmt = select(Note).where(Note.deleted_at.is_(None))
+	stmt = (
+		select(Note)
+		.where(Note.deleted_at.is_(None))
+		.options(selectinload(Note.projects))
+	)
 	result = await session.execute(stmt)
 	valid: list[tuple[Note, str]] = []
 	for n in result.scalars().all():
@@ -352,7 +370,7 @@ async def _autocomplete_notes(
 			type=SearchResultType.NOTE,
 			id=TypeID(note.id),
 			title=note.title or "",
-			subtitle=(note.content[:100] if note.content else None),
+			preview=(note.content[:100] if note.content else None),
 			created_at=note.created_at,
 			updated_at=note.updated_at,
 		)
@@ -419,7 +437,7 @@ async def _hybrid_search_notes(
 				type=SearchResultType.NOTE,
 				id=TypeID(note.id),
 				title=note.title or "",
-				subtitle=(note.content[:100] if note.content else None),
+				preview=(note.content[:100] if note.content else None),
 				score=score_by_rid.get(rid),
 				created_at=note.created_at,
 				updated_at=note.updated_at,

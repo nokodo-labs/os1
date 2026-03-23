@@ -134,6 +134,12 @@ from openai.types.responses.response_create_params import (
 from openai.types.responses.response_input_item_param import (
 	FunctionCallOutput as OpenAIResponseFunctionCallOutput,
 )
+from openai.types.shared import (
+	ReasoningEffort as OpenAIReasoningEffort,
+)
+from openai.types.shared_params import (
+	Reasoning as OpenAIReasoning,
+)
 from openai.types.shared_params.response_format_json_schema import (
 	JSONSchema as OpenAIJSONSchema,
 )
@@ -148,6 +154,8 @@ OpenAIChatCompletionFunctionToolCallParam = ChatCompletionMessageFunctionToolCal
 __all__ = [
 	# shared
 	"OpenAIChatModel",
+	"OpenAIReasoning",
+	"OpenAIReasoningEffort",
 	"OpenAIImageModel",
 	"OpenAIImagesResponse",
 	"OpenAIJSONSchema",

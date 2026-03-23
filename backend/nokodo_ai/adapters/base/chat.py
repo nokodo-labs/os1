@@ -30,7 +30,9 @@ class ChatGenerationParams(Base):
 	reasoning_tags: list[str] | None = None
 	seed: int | None = None
 	stop: list[str] | None = None
-	reasoning_effort: Literal["low", "medium", "high"] | None = None
+	reasoning_effort: (
+		Literal["none", "minimal", "low", "medium", "high", "max"] | None
+	) = None
 	logit_bias: dict[str, float] | None = None
 	top_k: int | None = None
 	top_p: float | None = None

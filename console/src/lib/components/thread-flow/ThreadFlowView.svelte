@@ -89,8 +89,8 @@
 		const roots = msgs.filter((m) => !m.parent_id || !byId[m.parent_id])
 
 		// BFS to assign levels and positions
-		const levelOffset = 300
-		const siblingOffset = 230
+		const levelOffset = 350
+		const siblingOffset = 270
 		const posMap: Record<string, { level: number; position: number }> = {}
 		const layerWidths: Record<number, number> = {}
 

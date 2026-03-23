@@ -134,6 +134,7 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			for i, c in enumerate(result.citations, 1):
 				label = c.title or c.url
 				parts.append(f"{i}. {label} - {c.url}")
+
 		return self.success("\n".join(parts), __agent_context__)
 
 
@@ -213,4 +214,12 @@ class FetchUrlTool(Tool[AppContext]):
 				+ f"\n\n[truncated - showing first {max_chars} chars]"
 			)
 
-		return self.success(f"content from {domain}:\n\n{content}", __agent_context__)
+		return ToolMessage(
+			tool_call_id=__agent_context__.tool_call_id,
+			tool_output=f"content from {domain}:\n\n{content}",
+			metadata={
+				"citable_sources": [
+					{"source_type": "url", "source_id": inp.url, "title": domain},
+				],
+			},
+		)

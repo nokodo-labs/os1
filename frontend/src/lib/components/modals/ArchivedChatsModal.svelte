@@ -190,7 +190,7 @@
 		{#snippet items()}
 			{#each filteredThreads as thread (thread.id)}
 				<div
-					class="group rounded-container flex items-center gap-3 border border-foreground/8 bg-foreground/3 px-5 py-2.5 transition-colors hover:bg-foreground/5"
+					class="group rounded-container border-foreground/8 bg-foreground/3 hover:bg-foreground/5 flex items-center gap-3 border px-5 py-2.5 transition-colors"
 				>
 					<button
 						type="button"
@@ -206,7 +206,7 @@
 							>
 								{thread.title || 'untitled'}
 							</span>
-							<span class="ml-auto shrink-0 text-[11px] text-foreground/35">
+							<span class="text-foreground/35 ml-auto shrink-0 text-[11px]">
 								{formatDate(thread.last_activity_at)}
 							</span>
 						</div>
@@ -215,27 +215,27 @@
 							<div class="mt-1 flex items-center gap-1 overflow-hidden">
 								{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
 									<span
-										class="inline-flex max-w-20 shrink-0 items-center truncate rounded-full bg-foreground/8 px-1.5 py-px text-[10px] leading-tight text-foreground/50"
+										class="bg-foreground/8 text-foreground/50 inline-flex max-w-20 shrink-0 items-center truncate rounded-full px-1.5 py-px text-[10px] leading-tight"
 										title={tag}
 									>
 										{tag}
 									</span>
 								{/each}
 								{#if (thread.tags ?? []).length > 3}
-									<span class="shrink-0 text-[10px] text-foreground/30">
+									<span class="text-foreground/30 shrink-0 text-[10px]">
 										+{(thread.tags ?? []).length - 3}
 									</span>
 								{/if}
 							</div>
 						{/if}
 						<!-- created date -->
-						<div class="mt-0.5 text-[11px] text-foreground/30">
+						<div class="text-foreground/30 mt-0.5 text-[11px]">
 							created {formatDate(thread.created_at)}
 						</div>
 					</button>
 					<button
 						type="button"
-						class="rounded-circle flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center text-foreground/40 transition-colors hover:bg-foreground/10 hover:text-foreground/70 disabled:opacity-40"
+						class="rounded-circle text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center transition-colors disabled:opacity-40"
 						disabled={unarchivingId === thread.id}
 						onclick={() => void unarchiveThread(thread.id)}
 						aria-label="unarchive thread"
@@ -243,7 +243,7 @@
 					>
 						{#if unarchivingId === thread.id}
 							<div
-								class="h-4 w-4 animate-spin rounded-full border-2 border-foreground/20 border-t-white/60"
+								class="border-foreground/20 h-4 w-4 animate-spin rounded-full border-2 border-t-white/60"
 							></div>
 						{:else}
 							<ArrowUpTray class="h-4 w-4" />

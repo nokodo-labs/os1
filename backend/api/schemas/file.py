@@ -21,7 +21,7 @@ class FileBase(MetadataModel):
 
 	filename: str | None = None
 	mime_type: str | None = None
-	project_id: TypeID | None = None
+	project_ids: list[TypeID] = []
 
 
 class FileCreate(FileBase):
@@ -38,7 +38,7 @@ class FileUpdate(MetadataUpdateModel):
 	"""payload to update a file record."""
 
 	filename: str | None = None
-	project_id: TypeID | None = None
+	project_ids: list[TypeID] | None = None
 	status: FileStatus | None = None
 
 

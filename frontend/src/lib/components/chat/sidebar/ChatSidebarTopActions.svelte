@@ -21,7 +21,7 @@
 
 <!-- Search -->
 <button
-	class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-foreground transition-all duration-200 hover:border-foreground/10 hover:bg-foreground/5"
+	class="text-foreground hover:border-foreground/10 hover:bg-foreground/5 relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 transition-all duration-200"
 	onclick={(e) => {
 		stop(e)
 		onSearchClick()
@@ -32,7 +32,7 @@
 		<Search class={iconClass} />
 	</div>
 	<span
-	class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
+		class="min-w-0 overflow-hidden text-sm font-medium whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out {showTopLabels
 			? 'max-w-40 opacity-100'
 			: 'max-w-0 opacity-0'}"
 		aria-hidden={!showTopLabels}
@@ -45,7 +45,7 @@
 {#each items as item (item.id)}
 	{@const Icon = item.icon}
 	<button
-		class="relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 text-foreground transition-all duration-200 hover:border-foreground/10 hover:bg-foreground/5"
+		class="text-foreground hover:border-foreground/10 hover:bg-foreground/5 relative flex h-12 w-full shrink-0 cursor-pointer items-center rounded-full border border-transparent bg-transparent py-0 transition-all duration-200"
 		onclick={(e) => {
 			stop(e)
 			void item.action()

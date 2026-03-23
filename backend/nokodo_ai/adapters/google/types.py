@@ -34,6 +34,12 @@ from google.genai.types import (
 	Part as GooglePart,
 )
 from google.genai.types import (
+	ThinkingConfig as GoogleThinkingConfig,
+)
+from google.genai.types import (
+	ThinkingLevel as GoogleThinkingLevel,
+)
+from google.genai.types import (
 	Tool as GoogleTool,
 )
 from google.genai.types import (
@@ -57,4 +63,6 @@ __all__ = [
 	"GoogleTool",
 	"GoogleToolConfig",
 	"GoogleToolListUnion",
+	"GoogleThinkingConfig",
+	"GoogleThinkingLevel",
 ]

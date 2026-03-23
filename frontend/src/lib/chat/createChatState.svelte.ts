@@ -27,7 +27,7 @@ import {
 } from './helpers'
 import { resumeCreateAndRun } from './streamProcessor'
 import { findRunUserMessage, switchBranch } from './treeNavigation'
-import type { ChatState, OptimisticUserMessage } from './types'
+import type { ApiCitation, ChatState, OptimisticUserMessage } from './types'
 import {
 	deleteUserMessage,
 	handleRegenerateMessage,
@@ -95,6 +95,13 @@ export function createChatState(): ChatState {
 	// event-derived ground truth for attachment states, updated from
 	// WebSocket events (attachment.decayed / attachment.revealed)
 	const attachmentStates = new SvelteMap<string, 'active' | 'reference'>()
+
+	// citation sources - message-scoped map populated from citation.sources WS events.
+	// keyed by assistant message_id so each message has its own citation set.
+	const citationSources = new SvelteMap<string, ApiCitation[]>()
+	// run-level accumulator: citations are cumulative across iterations within
+	// a single run. flushed into citationSources per-message on stream start.
+	let runCitationAccumulator: ApiCitation[] = []
 
 	// typing indicators (other users typing in this thread)
 	const typingUsers = new SvelteSet<string>()
@@ -231,6 +238,8 @@ export function createChatState(): ChatState {
 		// clear attachment state for previous thread
 		pendingActions.clear()
 		attachmentStates.clear()
+		citationSources.clear()
+		runCitationAccumulator = []
 	}
 
 	// unified state object
@@ -405,6 +414,17 @@ export function createChatState(): ChatState {
 		get threadAttachments() {
 			return threadAttachments
 		},
+		get citationSources() {
+			return citationSources
+		},
+		addCitationSources(citations: ApiCitation[]) {
+			runCitationAccumulator.push(...citations)
+		},
+		flushCitationsToMessage(messageId: string) {
+			if (runCitationAccumulator.length > 0) {
+				citationSources.set(messageId, [...runCitationAccumulator])
+			}
+		},
 		toggleAttachmentStatus(fileId: string, action: 'reveal' | 'reference') {
 			pendingActions.set(fileId, action)
 			// optimistic: update local state immediately
@@ -487,6 +507,7 @@ export function createChatState(): ChatState {
 
 		// coordinator methods
 		incrementActiveRun() {
+			runCitationAccumulator = []
 			return ++activeRun
 		},
 		rebuildRunBlocks,

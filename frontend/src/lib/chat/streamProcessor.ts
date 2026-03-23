@@ -124,6 +124,8 @@ export function processDelta(
 				const isNewStreamingMessage =
 					!ctx.streamingAssistant || ctx.streamingAssistant.messageId !== messageId
 				if (isNewStreamingMessage) {
+					// flush any pending citation sources into this message's slot
+					ctx.flushCitationsToMessage(messageId)
 					hapticFeedback()
 					const runId = typeof env.run_id === 'string' ? env.run_id : null
 					ctx.streamingAssistant = {
@@ -366,6 +368,10 @@ export async function resumeCreateAndRun(
 	ctx.thread = realThread
 	chatStore.threadCache.set(realThread)
 	chatStore.activeThread = realThread
+
+	if (!realThread.is_temporary && !chatStore.recentThreads.some((t) => t.id === realThread.id)) {
+		chatStore.recentThreads = [realThread, ...chatStore.recentThreads]
+	}
 
 	const runId = ctx.incrementActiveRun()
 	ctx.isGenerating = true

@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths'
 	import { getApiOrigin } from '$lib/api/origin'
 	import ImageLightbox from '$lib/components/chat/ImageLightbox.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowsPointingOut from '$lib/components/icons/ArrowsPointingOut.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
@@ -216,7 +217,9 @@
 					disabled={isDownloading}
 				>
 					<Download class="size-4" />
-					{isDownloading ? 'downloading...' : 'download'}
+					{#if isDownloading}<ShimmerText className="inline-block"
+							>downloading</ShimmerText
+						>{:else}download{/if}
 				</button>
 				<button
 					class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
@@ -243,7 +246,8 @@
 					disabled={isDeleting}
 				>
 					<Trash class="size-4" />
-					{isDeleting ? 'deleting...' : 'delete'}
+					{#if isDeleting}<ShimmerText className="inline-block">deleting</ShimmerText
+						>{:else}delete{/if}
 				</button>
 			</div>
 

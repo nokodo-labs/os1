@@ -1237,8 +1237,8 @@ async def delete_user_message_turn(
 async def handle_typing_event(
 	*,
 	session: AsyncSession,
-	user_id: str,
-	thread_id: str,
+	user_id: TypeID,
+	thread_id: TypeID,
 	typing: bool,
 ) -> None:
 	"""broadcast a typing indicator to all users with access to a thread.
@@ -1548,7 +1548,7 @@ async def _autocomplete_threads(
 			type=SearchResultType.THREAD,
 			id=TypeID(t.id),
 			title=t.title or "",
-			subtitle=None,
+			preview=None,
 			created_at=t.created_at,
 			updated_at=t.updated_at,
 		)
@@ -1622,7 +1622,7 @@ async def _hybrid_search_threads(
 				type=SearchResultType.THREAD,
 				id=TypeID(thread.id),
 				title=thread.title or "",
-				subtitle=(str(summary)[:100] if summary else None),
+				preview=(str(summary)[:100] if summary else None),
 				score=score_by_rid.get(rid),
 				created_at=thread.created_at,
 				updated_at=thread.updated_at,

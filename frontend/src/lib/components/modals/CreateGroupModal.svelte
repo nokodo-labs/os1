@@ -56,7 +56,7 @@
 				<UserGroup class="h-7 w-7 text-(--accent-primary)" variant="solid" />
 			</div>
 			<input
-				class="min-w-0 flex-1 rounded-full bg-foreground/8 px-4 py-3 text-sm text-foreground ring-1 ring-foreground/10 transition-all outline-none placeholder:text-foreground/30 focus:ring-(--accent-primary)/50"
+				class="bg-foreground/8 text-foreground ring-foreground/10 placeholder:text-foreground/30 min-w-0 flex-1 rounded-full px-4 py-3 text-sm ring-1 transition-all outline-none focus:ring-(--accent-primary)/50"
 				type="text"
 				placeholder="group name"
 				bind:value={name}

@@ -44,12 +44,12 @@ async def _get_project(project_id: TypeID, session: AsyncSession) -> Project:
 async def resolve_thread_project_id(
 	thread_id: TypeID,
 	session: AsyncSession,
-) -> str | None:
+) -> TypeID | None:
 	"""resolve the project_id associated with a thread, if any."""
 	row = (
 		await session.execute(
 			select(thread_project_association.c.project_id)
-			.where(thread_project_association.c.thread_id == str(thread_id))
+			.where(thread_project_association.c.thread_id == thread_id)
 			.limit(1)
 		)
 	).first()
@@ -100,14 +100,14 @@ async def create_project(
 	session.add(project)
 	await session.flush()
 	await session.refresh(project)
-	project_id = TypeID(project.id)
+	project_id = project.id
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.PROJECT_CREATED,
-		data={"project_id": str(project_id), "name": project.name},
+		data={"project_id": project_id, "name": project.name},
 		user_id=principal.user_id,
-		project_id=str(project_id),
+		project_id=project_id,
 	)
 	await event_service.publish_event(
 		session,
@@ -155,7 +155,7 @@ async def get_project(
 ) -> Project:
 	"""get a project by id (requires reader access)."""
 	await require_resource_access(
-		str(project_id),
+		project_id,
 		session,
 		principal,
 		ResourceType.PROJECT,
@@ -174,7 +174,7 @@ async def update_project(
 ) -> Project:
 	"""update a project (requires editor access)."""
 	await require_resource_access(
-		str(project_id),
+		project_id,
 		session,
 		principal,
 		ResourceType.PROJECT,
@@ -211,7 +211,7 @@ async def delete_project(
 ) -> None:
 	"""delete a project (requires editor access + ownership or admin)."""
 	await require_resource_access(
-		str(project_id),
+		project_id,
 		session,
 		principal,
 		ResourceType.PROJECT,
@@ -228,9 +228,9 @@ async def delete_project(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.PROJECT_DELETED,
-		data={"project_id": str(project_id)},
+		data={"project_id": project_id},
 		user_id=principal.user_id,
-		project_id=str(project_id),
+		project_id=project_id,
 	)
 	await event_service.publish_event(
 		session,

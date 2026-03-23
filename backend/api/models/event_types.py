@@ -13,34 +13,34 @@ from enum import StrEnum
 class EventType(StrEnum):
 	"""Standard event types for the platform."""
 
-	# --- stream control events (internal) ---
+	# stream control events (internal)
 	STREAM_CONNECTED = "stream.connected"
 	STREAM_PONG = "stream.pong"
 
-	# --- thread events ---
+	# thread events
 	THREAD_CREATED = "thread.created"
 	THREAD_UPDATED = "thread.updated"
 	THREAD_DELETED = "thread.deleted"
 	THREAD_READ = "thread.read"
 
-	# --- message events ---
+	# message events
 	MESSAGE_CREATED = "message.created"
 	MESSAGE_UPDATED = "message.updated"
 	MESSAGE_DELETED = "message.deleted"
 
-	# --- typing indicators ---
+	# typing indicators
 	TYPING_USER_START = "typing.user.start"
 	TYPING_USER_STOP = "typing.user.stop"
 
-	# --- agent run lifecycle ---
+	# agent run lifecycle
 	RUN_STARTED = "run.started"
 	RUN_COMPLETED = "run.completed"
 
-	# --- notification events ---
+	# notification events
 	NOTIFICATION_CUSTOM = "notification.custom"
 	NOTIFICATION_AGENT = "notification.agent"
 
-	# --- reminder events ---
+	# reminder events
 	REMINDER_CREATED = "reminder.created"
 	REMINDER_UPDATED = "reminder.updated"
 	REMINDER_COMPLETED = "reminder.completed"
@@ -49,67 +49,70 @@ class EventType(StrEnum):
 	REMINDER_LIST_UPDATED = "reminder_list.updated"
 	REMINDER_LIST_DELETED = "reminder_list.deleted"
 
-	# --- task events ---
+	# task events
 	TASK_CREATED = "task.created"
 	TASK_UPDATED = "task.updated"
 	TASK_COMPLETED = "task.completed"
 	TASK_FAILED = "task.failed"
 
-	# --- project events ---
+	# project events
 	PROJECT_CREATED = "project.created"
 	PROJECT_UPDATED = "project.updated"
 	PROJECT_DELETED = "project.deleted"
 
-	# --- file events ---
+	# file events
 	FILE_CREATED = "file.created"
 	FILE_UPDATED = "file.updated"
 	FILE_DELETED = "file.deleted"
 	FILE_PROCESSING = "file.processing"
 	FILE_READY = "file.ready"
 
-	# --- agent events ---
+	# agent events
 	AGENT_CREATED = "agent.created"
 	AGENT_UPDATED = "agent.updated"
 	AGENT_DELETED = "agent.deleted"
 
-	# --- memory events ---
+	# memory events
 	MEMORY_CREATED = "memory.created"
 	MEMORY_UPDATED = "memory.updated"
 	MEMORY_DELETED = "memory.deleted"
 
-	# --- note events ---
+	# note events
 	NOTE_CREATED = "note.created"
 	NOTE_UPDATED = "note.updated"
 	NOTE_DELETED = "note.deleted"
 
-	# --- group events ---
+	# group events ---
 	GROUP_CREATED = "group.created"
 	GROUP_UPDATED = "group.updated"
 	GROUP_DELETED = "group.deleted"
 	GROUP_MEMBER_ADDED = "group.member_added"
 	GROUP_MEMBER_REMOVED = "group.member_removed"
 
-	# --- friendship events ---
+	# friendship events
 	FRIEND_REQUEST_SENT = "friend.request_sent"
 	FRIEND_REQUEST_ACCEPTED = "friend.request_accepted"
 	FRIEND_REQUEST_DECLINED = "friend.request_declined"
 	FRIEND_REMOVED = "friend.removed"
 
-	# --- settings events ---
+	# settings events
 	SETTINGS_UPDATED = "settings.updated"
 
-	# --- user events ---
+	# user events
 	USER_PREFERENCES_UPDATED = "user.preferences_updated"
 
-	# --- role events ---
+	# role events
 	ROLE_UPDATED = "role.updated"
 	ROLE_DELETED = "role.deleted"
 
-	# --- attachment lifecycle events ---
+	# attachment lifecycle events
 	ATTACHMENT_DECAYED = "attachment.decayed"
 	ATTACHMENT_REVEALED = "attachment.revealed"
 
-	# --- tool events (scoped to tool_call_id) ---
+	# citation events
+	CITATION_SOURCES = "citation.sources"
+
+	# tool events (scoped to tool_call_id)
 	TOOL_PROGRESS = "tool.progress"
 	TOOL_CUSTOM = "tool.custom"  # generic tool event. can include custom UI components
 	TOOL_NOTIFICATION = "tool.notification"
@@ -225,4 +228,8 @@ TASK_EVENTS = {
 ATTACHMENT_EVENTS = {
 	EventType.ATTACHMENT_DECAYED,
 	EventType.ATTACHMENT_REVEALED,
+}
+
+CITATION_EVENTS = {
+	EventType.CITATION_SOURCES,
 }

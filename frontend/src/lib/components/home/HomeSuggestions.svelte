@@ -15,7 +15,13 @@
 		icon: IconComponent
 	}
 
-	type SuggestionRoute = '/' | `/c/${string}` | '/library' | NotesRouteId | RemindersRouteId | SettingsRouteId
+	type SuggestionRoute =
+		| '/'
+		| `/c/${string}`
+		| '/library'
+		| NotesRouteId
+		| RemindersRouteId
+		| SettingsRouteId
 
 	export type SuggestionAction =
 		| { type: 'navigate'; path: SuggestionRoute }
@@ -144,7 +150,7 @@
 		const apiResults: HomeSuggestion[] = searchResults.map((r) => ({
 			id: `search:${r.type}:${r.id}`,
 			title: r.title,
-			subtitle: r.subtitle ?? r.type,
+			subtitle: r.preview ?? r.type,
 			icon: searchResultIcons[r.type] ?? ChatBubbles,
 		}))
 
@@ -369,7 +375,7 @@
 					<!-- shimmer autocomplete state -->
 					<div class="flex items-center gap-3 px-3 py-2.5">
 						<div
-							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-foreground/8 text-foreground/85"
+							class="rounded-pill bg-foreground/8 text-foreground/85 flex h-9 w-9 shrink-0 items-center justify-center"
 						>
 							<Search class="h-5 w-5" strokeWidth="2" />
 						</div>
@@ -385,24 +391,24 @@
 						>
 							<XMark class="h-5 w-5" />
 						</div>
-						<div class="text-sm text-foreground/40">search failed - try again</div>
+						<div class="text-foreground/40 text-sm">search failed - try again</div>
 					</div>
 				{:else if suggestions.length === 0 && !isFullSearching}
 					<!-- no results -->
 					<div class="flex items-center gap-3 px-3 py-2.5">
 						<div
-							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-foreground/8 text-foreground/40"
+							class="rounded-pill bg-foreground/8 text-foreground/40 flex h-9 w-9 shrink-0 items-center justify-center"
 						>
 							<Search class="h-5 w-5" strokeWidth="2" />
 						</div>
-						<div class="text-sm text-foreground/40">no results found</div>
+						<div class="text-foreground/40 text-sm">no results found</div>
 					</div>
 				{:else}
 					{#if isFullSearching}
 						<!-- shimmer row while full search runs -->
 						<div class="flex items-center gap-3 px-3 py-2">
 							<div
-								class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-foreground/6 text-foreground/50"
+								class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
 							>
 								<Search class="h-4 w-4" strokeWidth="2" />
 							</div>
@@ -420,7 +426,7 @@
 							class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors {index ===
 								highlightedIndex && highlightedIndex >= 0
 								? 'bg-foreground/10'
-								: 'bg-transparent hover:bg-foreground/7'}"
+								: 'hover:bg-foreground/7 bg-transparent'}"
 							onmouseenter={() => {
 								highlightedIndex = index
 								isSuggestionNavigationActive = true
@@ -428,16 +434,16 @@
 							onclick={() => selectSuggestion(suggestion)}
 						>
 							<div
-								class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-foreground/8 text-foreground/85"
+								class="rounded-pill bg-foreground/8 text-foreground/85 flex h-9 w-9 shrink-0 items-center justify-center"
 							>
 								<Icon class="h-5 w-5" strokeWidth="2" />
 							</div>
 							<div class="min-w-0">
-								<div class="truncate text-sm font-semibold text-foreground/90">
+								<div class="text-foreground/90 truncate text-sm font-semibold">
 									{suggestion.title}
 								</div>
 								{#if suggestion.subtitle}
-									<div class="truncate text-sm text-foreground/55">
+									<div class="text-foreground/55 truncate text-sm">
 										{suggestion.subtitle}
 									</div>
 								{/if}
@@ -446,18 +452,18 @@
 					{/each}
 					{#if !hasDoneFullSearch && !isFullSearching && suggestions.length > 0}
 						<!-- full search trigger -->
-						<div class="mt-1 border-t border-foreground/8 pt-1">
+						<div class="border-foreground/8 mt-1 border-t pt-1">
 							<button
 								type="button"
-								class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors hover:bg-foreground/7"
+								class="rounded-pill hover:bg-foreground/7 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors"
 								onclick={triggerFullSearch}
 							>
 								<div
-									class="rounded-pill flex h-8 w-8 shrink-0 items-center justify-center bg-foreground/6 text-foreground/50"
+									class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
 								>
 									<Search class="h-4 w-4" strokeWidth="2" />
 								</div>
-								<div class="text-xs text-foreground/50">search more in-depth</div>
+								<div class="text-foreground/50 text-xs">search more in-depth</div>
 							</button>
 						</div>
 					{/if}

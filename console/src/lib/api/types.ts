@@ -415,6 +415,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/{user_id}/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read User Counts
+         * @description get counts of all resources owned by user.
+         */
+        get: operations["read_user_counts_v1_users__user_id__counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/threads": {
         parameters: {
             query?: never;
@@ -424,13 +444,13 @@ export interface paths {
         };
         /**
          * List Threads
-         * @description List threads optionally filtered by owner.
+         * @description list threads optionally filtered by owner.
          */
         get: operations["list_threads_v1_threads_get"];
         put?: never;
         /**
          * Create Thread
-         * @description Create a new thread.
+         * @description create a new thread.
          */
         post: operations["create_thread_v1_threads_post"];
         delete?: never;
@@ -532,21 +552,21 @@ export interface paths {
         };
         /**
          * Get Thread
-         * @description Fetch a single thread.
+         * @description fetch a single thread.
          */
         get: operations["get_thread_v1_threads__thread_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Thread
-         * @description Delete a thread.
+         * @description delete a thread.
          */
         delete: operations["delete_thread_v1_threads__thread_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Thread
-         * @description Update thread metadata.
+         * @description update thread metadata.
          */
         patch: operations["update_thread_v1_threads__thread_id__patch"];
         trace?: never;
@@ -583,13 +603,13 @@ export interface paths {
         };
         /**
          * List Messages
-         * @description List messages within a thread.
+         * @description list messages within a thread.
          */
         get: operations["list_messages_v1_threads__thread_id__messages_get"];
         put?: never;
         /**
          * Create Message
-         * @description Append a message to a thread.
+         * @description append a message to a thread.
          */
         post: operations["create_message_v1_threads__thread_id__messages_post"];
         delete?: never;
@@ -609,7 +629,7 @@ export interface paths {
         put?: never;
         /**
          * List Events For Message Ids
-         * @description List events associated with specific messages in this thread.
+         * @description list events associated with specific messages in this thread.
          */
         post: operations["list_events_for_message_ids_v1_threads__thread_id__events_by_message_ids_post"];
         delete?: never;
@@ -627,7 +647,7 @@ export interface paths {
         };
         /**
          * Get Current Branch
-         * @description Return the current root→leaf branch for this thread.
+         * @description return the current root→leaf branch for this thread.
          */
         get: operations["get_current_branch_v1_threads__thread_id__branch_get"];
         put?: never;
@@ -647,7 +667,7 @@ export interface paths {
         };
         /**
          * Get Message Tree
-         * @description Return all messages for this thread as a flat list.
+         * @description return all messages for this thread as a flat list.
          */
         get: operations["get_message_tree_v1_threads__thread_id__tree_get"];
         put?: never;
@@ -696,7 +716,7 @@ export interface paths {
         put?: never;
         /**
          * Switch Branch
-         * @description Switch the active branch to the subtree rooted at message_id.
+         * @description switch the active branch to the subtree rooted at message_id.
          */
         post: operations["switch_branch_v1_threads__thread_id__switch_post"];
         delete?: never;
@@ -714,14 +734,34 @@ export interface paths {
         };
         /**
          * List Thread Access Rules
-         * @description List access rules for a thread.
+         * @description list access rules for a thread.
          */
         get: operations["list_thread_access_rules_v1_threads__thread_id__access_rules_get"];
         /**
          * Set Thread Access Rules
-         * @description Replace access rules for a thread.
+         * @description replace access rules for a thread.
          */
         put: operations["set_thread_access_rules_v1_threads__thread_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/access-level": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Access Level
+         * @description return the requester's effective access level on a thread.
+         */
+        get: operations["get_thread_access_level_v1_threads__thread_id__access_level_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1612,9 +1652,29 @@ export interface paths {
         };
         /**
          * Get Reminder List Counts
-         * @description get reminder counts for a specific list (or default list if null).
+         * @description get reminder counts for a specific list.
          */
         get: operations["get_reminder_list_counts_v1_reminders_lists__list_id__counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminders/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Default Reminder List Counts
+         * @description get reminder counts for the default list (reminders without a list).
+         */
+        get: operations["get_default_reminder_list_counts_v1_reminders_counts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3189,8 +3249,11 @@ export interface components {
         Body_upload_file_v1_files_upload_post: {
             /** File */
             file: string;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /** @default upload */
             source: components["schemas"]["FileSource"];
         };
@@ -3342,6 +3405,35 @@ export interface components {
              */
             api_key?: string | null;
         };
+        /**
+         * Citation
+         * @description a single citation reference within a message.
+         *
+         *     ``index`` is the branch-cumulative number used as the [n] marker.
+         *     ``source_type`` discriminates the resource kind.
+         *     ``source_id`` is the source-specific value (URL, TypeID string, etc.).
+         */
+        Citation: {
+            /**
+             * Index
+             * @description branch-cumulative citation number
+             */
+            index: number;
+            source_type: components["schemas"]["CitationSource"];
+            /**
+             * Source Id
+             * @description source-specific value: URL string, TypeID, tool_call_id, etc.
+             */
+            source_id: string;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * CitationSource
+         * @description what kind of resource a citation points to.
+         * @enum {string}
+         */
+        CitationSource: "url" | "file" | "note" | "memory" | "thread" | "tool_result";
         /**
          * ClientContext
          * @description optional runtime context sent by the client with each agent run.
@@ -3830,8 +3922,11 @@ export interface components {
             filename?: string | null;
             /** Mime Type */
             mime_type?: string | null;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -3894,8 +3989,11 @@ export interface components {
             filename?: string | null;
             /** Mime Type */
             mime_type?: string | null;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /** @default upload */
             source: components["schemas"]["FileSource"];
             /** Storage Backend */
@@ -3927,8 +4025,8 @@ export interface components {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
             /** Filename */
             filename?: string | null;
-            /** Project Id */
-            project_id?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
             status?: components["schemas"]["FileStatus"] | null;
         };
         /**
@@ -4518,7 +4616,7 @@ export interface components {
         };
         /**
          * Message
-         * @description Response schema.
+         * @description response schema.
          */
         Message: {
             /**
@@ -4550,6 +4648,8 @@ export interface components {
             } | null;
             /** Read By */
             read_by?: string[];
+            /** Citations */
+            citations?: components["schemas"]["Citation"][];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -4571,11 +4671,11 @@ export interface components {
         };
         /**
          * MessageCreate
-         * @description Payload for creating a message within a thread.
+         * @description payload for creating a message within a thread.
          *
-         *     Content can be provided as:
-         *     - A string (converted to [TextContent(text=...)])
-         *     - A list of ContentPart objects (validated via discriminated union)
+         *     content can be provided as:
+         *     - a string (converted to [TextContent(text=...)])
+         *     - a list of ContentPart objects (validated via discriminated union)
          */
         MessageCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -4600,6 +4700,8 @@ export interface components {
             } | null;
             /** Read By */
             read_by?: string[];
+            /** Citations */
+            citations?: components["schemas"]["Citation"][];
             /** Parent Id */
             parent_id?: string | null;
             /** Task Id */
@@ -4617,7 +4719,7 @@ export interface components {
         MessageType: "user" | "assistant" | "tool" | "system";
         /**
          * MessageUpdate
-         * @description Payload for updating a user message's content in place.
+         * @description payload for updating a user message's content in place.
          */
         MessageUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
@@ -4804,8 +4906,11 @@ export interface components {
             content: string;
             /** Labels */
             labels?: string[];
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -4834,8 +4939,11 @@ export interface components {
             content: string;
             /** Labels */
             labels?: string[];
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /** User Id */
             user_id?: string | null;
         };
@@ -4851,8 +4959,8 @@ export interface components {
             content?: string | null;
             /** Labels */
             labels?: string[] | null;
-            /** Project Id */
-            project_id?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
         };
         /**
          * Notification
@@ -5883,8 +5991,11 @@ export interface components {
              * @default 0
              */
             position: number;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -5915,8 +6026,11 @@ export interface components {
              * @default 0
              */
             position: number;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
         };
         /**
          * ReminderListUpdate
@@ -5934,8 +6048,8 @@ export interface components {
             icon?: string | null;
             /** Position */
             position?: number | null;
-            /** Project Id */
-            project_id?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
         };
         /**
          * ReminderListWithCounts
@@ -5966,8 +6080,11 @@ export interface components {
              * @default 0
              */
             position: number;
-            /** Project Id */
-            project_id?: string | null;
+            /**
+             * Project Ids
+             * @default []
+             */
+            project_ids: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -6438,8 +6555,8 @@ export interface components {
             id: string;
             /** Title */
             title: string;
-            /** Subtitle */
-            subtitle?: string | null;
+            /** Preview */
+            preview?: string | null;
             /** Score */
             score?: number | null;
             /**
@@ -6998,7 +7115,7 @@ export interface components {
         };
         /**
          * Thread
-         * @description Detailed response schema.
+         * @description detailed response schema.
          */
         Thread: {
             /**
@@ -7052,7 +7169,7 @@ export interface components {
         };
         /**
          * ThreadCreate
-         * @description Payload for creating a thread.
+         * @description payload for creating a thread.
          */
         ThreadCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -7125,7 +7242,7 @@ export interface components {
         };
         /**
          * ThreadMetadataGenerateRequest
-         * @description Request body for generating thread metadata.
+         * @description request body for generating thread metadata.
          */
         ThreadMetadataGenerateRequest: {
             /**
@@ -7169,7 +7286,7 @@ export interface components {
         };
         /**
          * ThreadSwitchRequest
-         * @description Payload to switch a thread's active branch.
+         * @description payload to switch a thread's active branch.
          */
         ThreadSwitchRequest: {
             /**
@@ -7180,7 +7297,7 @@ export interface components {
         };
         /**
          * ThreadSwitchResponse
-         * @description Response for a thread branch switch.
+         * @description response for a thread branch switch.
          */
         ThreadSwitchResponse: {
             /** Ok */
@@ -7203,7 +7320,7 @@ export interface components {
         };
         /**
          * ThreadUpdate
-         * @description Payload for updating a thread.
+         * @description payload for updating a thread.
          */
         ThreadUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
@@ -7431,7 +7548,7 @@ export interface components {
             online_status: components["schemas"]["Visibility"];
             /** @default everyone */
             profile_picture: components["schemas"]["Visibility"];
-            /** @default everyone */
+            /** @default friends */
             real_name: components["schemas"]["Visibility"];
             /** @default everyone */
             bio: components["schemas"]["Visibility"];
@@ -9619,6 +9736,102 @@ export interface operations {
             };
         };
     };
+    read_user_counts_v1_users__user_id__counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_threads_v1_threads_get: {
         parameters: {
             query?: {
@@ -11495,6 +11708,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_thread_access_level_v1_threads__thread_id__access_level_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessLevel"];
                 };
             };
             /** @description bad request */
@@ -17643,8 +17950,102 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                list_id: string | null;
+                list_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_default_reminder_list_counts_v1_reminders_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

@@ -205,7 +205,7 @@
 				<Select
 					value={selectParam('reasoning_effort')}
 					onValueChange={(v: string) =>
-						setParam('reasoning_effort', v === '__none__' ? undefined : v)}
+						setParam('reasoning_effort', v === '__default__' ? undefined : v)}
 				>
 					<SelectTrigger id="p-reasoning" class="h-8 rounded-lg text-xs">
 						<span class="truncate text-left">
@@ -213,10 +213,12 @@
 						</span>
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value="__none__">default</SelectItem>
+						<SelectItem value="__default__">default</SelectItem>
+						<SelectItem value="none">no reasoning</SelectItem>
 						<SelectItem value="low">low</SelectItem>
 						<SelectItem value="medium">medium</SelectItem>
 						<SelectItem value="high">high</SelectItem>
+						<SelectItem value="max">max</SelectItem>
 					</SelectContent>
 				</Select>
 			</div>

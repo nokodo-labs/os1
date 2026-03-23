@@ -14,8 +14,10 @@ from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	RESOURCE_CONFIG,
 	require_resource_access,
+	resolve_effective_level,
 )
 from api.v1.service.vectorize import sync_resource_vector_acl
+from nokodo_ai.utils.typeid import TypeID
 
 
 def _rule_key(rule: AccessRuleCreate) -> str:
@@ -43,7 +45,7 @@ def _access_rule_key(rule: AccessRule) -> str:
 def _apply_resource_fk(
 	access_rule: AccessRule,
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 ) -> None:
 	"""set the correct resource FK on an access rule by resource type."""
 	match resource_type:
@@ -73,7 +75,7 @@ def _apply_resource_fk(
 
 async def _list_rules_for_resource(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	session: AsyncSession,
 ) -> list[AccessRule]:
 	"""list all access rules for a specific resource, ordered by order_index."""
@@ -90,7 +92,7 @@ async def _list_rules_for_resource(
 
 async def list_access_rules_unchecked(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	session: AsyncSession,
 ) -> list[AccessRule]:
 	"""list access rules for a resource without authorization checks.
@@ -103,25 +105,54 @@ async def list_access_rules_unchecked(
 
 async def list_access_rules(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	session: AsyncSession,
 	*,
 	principal: Principal,
 ) -> list[AccessRule]:
-	"""list access rules for a resource (requires admin access on the resource)."""
-	await require_resource_access(
-		resource_id,
-		session,
+	"""list access rules for a resource (requires admin access).
+
+	fetches rules once for both the admin check and the return value,
+	avoiding a redundant DB round-trip vs require_resource_access + fetch.
+	"""
+	config = RESOURCE_CONFIG[resource_type]
+	stmt = select(config.id_col)
+	if config.owner_fk is not None:
+		stmt = select(config.id_col, config.owner_fk)
+	stmt = stmt.where(config.id_col == resource_id)
+
+	result = await session.execute(stmt)
+	row = result.one_or_none()
+	if row is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail=f"{resource_type.value} not found",
+		)
+
+	owner_id: TypeID | None = (
+		row[1] if config.owner_fk is not None and len(row) > 1 else None
+	)
+
+	rules = await _list_rules_for_resource(resource_type, resource_id, session)
+
+	effective = resolve_effective_level(
 		principal,
 		resource_type,
-		required_level=AccessLevel.ADMIN,
+		rules,
+		owner_id=owner_id,
 	)
-	return await _list_rules_for_resource(resource_type, resource_id, session)
+	if effective != AccessLevel.ADMIN:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail=f"{resource_type.value} not found",
+		)
+
+	return rules
 
 
 async def set_access_rules(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	rules: list[AccessRuleCreate],
 	session: AsyncSession,
 	*,
@@ -145,7 +176,7 @@ async def set_access_rules(
 
 async def set_access_rules_unchecked(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	rules: list[AccessRuleCreate],
 	session: AsyncSession,
 ) -> list[AccessRule]:
@@ -160,7 +191,7 @@ async def set_access_rules_unchecked(
 
 async def _set_rules_impl(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	rules: list[AccessRuleCreate],
 	session: AsyncSession,
 ) -> list[AccessRule]:

@@ -242,11 +242,11 @@ def resource_access_predicate(
 
 async def list_accessible_user_ids(
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	session: AsyncSession,
 	*,
 	required_level: AccessLevel = AccessLevel.READER,
-) -> list[str]:
+) -> list[TypeID]:
 	"""return all user IDs that have at least *required_level* access to a resource.
 
 	resolves the same grant paths as ``resource_access_predicate`` but inverted:
@@ -304,7 +304,7 @@ async def list_accessible_user_ids(
 	#    grant sufficient access for this resource type
 	role_result = await session.execute(select(Role))
 	default_role_ids = [
-		str(r.id)
+		r.id
 		for r in role_result.scalars().all()
 		if _role_grants_default(r, resource_type, required_level)
 	]
@@ -326,7 +326,7 @@ async def list_accessible_user_ids(
 
 	combined = union(*queries).subquery()
 	result = await session.execute(select(combined.c[0]))
-	return [str(row[0]) for row in result.all()]
+	return [TypeID(row[0]) for row in result.all()]
 
 
 def _role_grants_default(
@@ -372,9 +372,9 @@ async def get_effective_access_level(
 	session: AsyncSession,
 	principal: Principal,
 	resource_type: ResourceType,
-	resource_id: str,
+	resource_id: TypeID,
 	*,
-	owner_id: str | None = None,
+	owner_id: TypeID | None = None,
 ) -> AccessLevel | None:
 	"""
 	compute the effective access level for a principal on a specific resource.
@@ -390,7 +390,7 @@ async def get_effective_access_level(
 	if principal.is_admin:
 		return AccessLevel.ADMIN
 
-	if owner_id is not None and str(principal.user.id) == str(owner_id):
+	if owner_id is not None and principal.user.id == owner_id:
 		return AccessLevel.ADMIN
 
 	config = RESOURCE_CONFIG[resource_type]
@@ -403,18 +403,39 @@ async def get_effective_access_level(
 	)
 
 	result = await session.execute(stmt)
-	rules = result.scalars().all()
+	rules = list(result.scalars().all())
+
+	return resolve_effective_level(principal, resource_type, rules)
+
+
+def resolve_effective_level(
+	principal: Principal,
+	resource_type: ResourceType,
+	rules: list[AccessRule],
+	*,
+	owner_id: TypeID | None = None,
+) -> AccessLevel | None:
+	"""compute effective level from already-fetched rules (pure, no DB).
+
+	same evaluation order as ``get_effective_access_level`` but operates on
+	a pre-loaded rules list so it can reuse a query that was already issued.
+	"""
+	if principal.is_admin:
+		return AccessLevel.ADMIN
+
+	if owner_id is not None and principal.user.id == owner_id:
+		return AccessLevel.ADMIN
 
 	effective_level: AccessLevel | None = None
 
 	for rule in rules:
 		applies = False
 		if rule.subject_user_id is not None:
-			applies = str(rule.subject_user_id) == str(principal.user.id)
+			applies = rule.subject_user_id == principal.user.id
 		elif rule.subject_group_id is not None:
-			applies = str(rule.subject_group_id) in principal.group_ids
+			applies = rule.subject_group_id in principal.group_ids
 		elif rule.subject_role_id is not None:
-			applies = str(rule.subject_role_id) in principal.role_ids
+			applies = rule.subject_role_id in principal.role_ids
 		else:
 			# public rule
 			applies = True
@@ -430,14 +451,14 @@ async def get_effective_access_level(
 
 
 async def require_resource_access(
-	resource_id: str,
+	resource_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	resource_type: ResourceType,
 	*,
 	required_level: AccessLevel = AccessLevel.READER,
 	include_deleted: bool = False,
-	owner_id: str | None = None,
+	owner_id: TypeID | None = None,
 ) -> None:
 	"""
 	check that principal has required access level on a resource.
@@ -467,7 +488,7 @@ async def require_resource_access(
 		)
 
 	if config.owner_fk is not None and owner_id is None:
-		owner_id = str(row[1]) if len(row) > 1 else None
+		owner_id = row[1] if len(row) > 1 else None
 
 	effective = await get_effective_access_level(
 		session,
@@ -487,7 +508,7 @@ async def require_resource_access(
 
 # backwards-compatible helpers
 async def require_thread_access(
-	thread_id: str,
+	thread_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	*,

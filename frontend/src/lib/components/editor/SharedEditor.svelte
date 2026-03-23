@@ -285,7 +285,7 @@
 
 <div
 	bind:this={editorElement}
-	class="shared-editor h-full prose prose-invert max-w-none {className}"
+	class="shared-editor prose prose-invert h-full max-w-none {className}"
 ></div>
 
 <style>

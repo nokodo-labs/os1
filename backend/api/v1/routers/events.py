@@ -84,7 +84,7 @@ async def events_stream(websocket: WebSocket) -> None:
 		await websocket.close(code=4001, reason="unauthorized")
 		return
 
-	user_id = str(user.id)
+	user_id = user.id
 
 	# reuse the per-tab session ID the client already generates (sent as
 	# X-Session-ID on HTTP requests). this keeps one identity per browser tab
@@ -118,15 +118,15 @@ async def events_stream(websocket: WebSocket) -> None:
 				await user_activity_store.touch(user_id)
 				await websocket.send_json({"type": "stream.pong"})
 			elif msg_type in ("typing.start", "typing.stop"):
-				thread_id = data.get("thread_id")
-				if not thread_id:
+				thread_id_raw = data.get("thread_id")
+				if not thread_id_raw:
 					continue
 				# delegate to threads service (participant-scoped broadcast)
 				async with async_session_local() as db_session:
 					await thread_service.handle_typing_event(
 						session=db_session,
 						user_id=user_id,
-						thread_id=thread_id,
+						thread_id=TypeID(str(thread_id_raw)),
 						typing=msg_type == "typing.start",
 					)
 

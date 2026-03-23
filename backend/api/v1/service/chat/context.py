@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event
+from api.schemas.citations import Citation
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID
 
@@ -59,6 +60,9 @@ class AppContext:
 	thread_id: TypeID | None = None
 	context_window: int | None = None
 	retrieval: RetrievalContext = field(default_factory=RetrievalContext)
+	citations: list[Citation] = field(
+		default_factory=list,
+	)
 
 	@property
 	def user_id(self) -> TypeID:
@@ -74,4 +78,5 @@ class AppContext:
 			event_emitter=emitter,
 			context_window=self.context_window,
 			retrieval=self.retrieval,
+			citations=self.citations,
 		)

@@ -60,6 +60,7 @@ export {
 // data loading
 export {
 	fetchEventsForThread,
+	fetchThreadAccessLevel,
 	ingestMessages,
 	loadOlderMessages,
 	loadTree,

@@ -9,7 +9,10 @@ from api.database import get_db
 from api.models.access_rule import AccessRule
 from api.models.agent import Agent
 from api.permissions import ResourceType
-from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
+from api.schemas.access_rule import (
+	AccessRuleCreate,
+	AccessRuleResponse,
+)
 from api.schemas.agent import Agent as AgentSchema
 from api.schemas.agent import AgentCreate, AgentUpdate
 from api.v1.service import access_rules as access_rules_service
@@ -94,7 +97,7 @@ async def delete_agent(
 
 @router.get("/{agent_id}/access-rules", response_model=list[AccessRuleResponse])
 async def list_agent_access_rules(
-	agent_id: str,
+	agent_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessRule]:
@@ -120,10 +123,6 @@ async def set_agent_access_rules(
 
 	requires agents:manage permission.
 	"""
-	require_permission(principal, "agents:manage")
-	return await access_rules_service.set_access_rules_unchecked(
-		ResourceType.AGENT,
-		agent_id,
-		rules,
-		db,
+	return await agent_service.set_agent_access_rules(
+		agent_id, rules, db, principal=principal
 	)

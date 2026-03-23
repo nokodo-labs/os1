@@ -35,6 +35,8 @@
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
 	"githubIssues.issueBranchTitle": "issues/${issueNumber}-${user}",
+
+	// Python
 	"[python]": {
 		"editor.defaultFormatter": "charliermarsh.ruff",
 		"editor.formatOnSave": true,
@@ -195,7 +197,13 @@
 		"iex": false,
 		"uv run mypy": true,
 		"uv run ruff": true,
-		"uv run pytest": true
+		"uv run pytest": true,
+		"pnpm exec svelte-check": true,
+		"pnpm exec eslint": true,
+		"/^uv run alembic -c api/migrations/alembic\\.ini check 2>&1$/": {
+			"approve": true,
+			"matchCommandLine": true
+		}
 	},
 	"postman.settings.dotenv-detection-notification-visibility": false
 }

@@ -55,7 +55,7 @@ export function getMediaUrls(): {
 		appleTouchIcon: resolve('appleTouchIcon', media?.apple_touch_icon_url, baseUrl),
 		manifest: settingsState.data?.branding?.pwa_manifest_url
 			? String(settingsState.data.branding.pwa_manifest_url)
-			: browser
+			: settingsState.data && browser
 				? `${getApiBaseUrl()}/system/manifest.json`
 				: null,
 		sidebarLogo: resolve('sidebarLogo', media?.sidebar_logo_url, baseUrl),

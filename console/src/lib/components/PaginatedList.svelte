@@ -16,13 +16,7 @@
 	import { page } from '$app/state'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+	import { ChevronLeft, ChevronRight, RefreshCw } from '@lucide/svelte'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import type { Snippet } from 'svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
@@ -166,6 +160,7 @@
 				onclick={() => onRefresh()}
 				disabled={isLoading}
 			>
+				<RefreshCw class="mr-1.5 h-4 w-4" />
 				{isLoading ? 'loading...' : 'refresh'}
 			</Button>
 		</div>
@@ -179,18 +174,8 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader
-			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div>
-				<CardTitle>list</CardTitle>
-				<CardDescription>
-					page {pageIndex + 1} · showing {items.length}{hasNext ? '+' : ''}
-				</CardDescription>
-			</div>
+	<div class="flex flex-col gap-4">
+		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">
 				<Button
 					variant="outline"
@@ -198,6 +183,7 @@
 					onclick={() => onPageChange(Math.max(0, pageIndex - 1))}
 					disabled={pageIndex === 0 || isLoading}
 				>
+					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
 				<Button
@@ -207,10 +193,11 @@
 					disabled={!hasNext || isLoading}
 				>
 					next
+					<ChevronRight class="ml-1.5 h-4 w-4" />
 				</Button>
 			</div>
-		</CardHeader>
-		<CardContent class="min-h-0 flex-1 space-y-2 overflow-y-auto">
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if isLoading && items.length === 0}
 				<div
 					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -230,6 +217,6 @@
 			{#each items as item (item)}
 				{@render itemTemplate(item)}
 			{/each}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>

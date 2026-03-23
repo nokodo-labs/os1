@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
@@ -131,7 +132,7 @@
 									</span>
 								</button>
 								{#if actionPending.has(request.id)}
-									<span class="text-foreground/40 shrink-0 text-xs">...</span>
+									<ShimmerText className="shrink-0 text-xs">pending</ShimmerText>
 								{:else}
 									<div class="flex shrink-0 items-center gap-1.5">
 										<button
@@ -242,7 +243,7 @@
 								</span>
 							</button>
 							{#if actionPending.has(friend.id)}
-								<span class="text-foreground/40 shrink-0 text-xs">...</span>
+								<ShimmerText className="shrink-0 text-xs">pending</ShimmerText>
 							{:else}
 								<button
 									class="text-foreground/0 group-hover:text-foreground/30 hover:bg-foreground/8 hover:text-foreground/60 shrink-0 rounded-lg p-1.5 transition-all"

@@ -170,7 +170,7 @@ async def list_group_access_rules(
 ) -> list[AccessRule]:
 	"""list access rules for a group."""
 	return await access_rules_service.list_access_rules(
-		ResourceType.GROUP, str(group_id), db, principal=principal
+		ResourceType.GROUP, group_id, db, principal=principal
 	)
 
 
@@ -186,5 +186,5 @@ async def set_group_access_rules(
 ) -> list[AccessRule]:
 	"""replace access rules for a group."""
 	return await access_rules_service.set_access_rules(
-		ResourceType.GROUP, str(group_id), rules, db, principal=principal
+		ResourceType.GROUP, group_id, rules, db, principal=principal
 	)
