@@ -10,13 +10,7 @@
 	import ThreadDetailsModal from '$lib/components/ThreadDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
@@ -24,13 +18,16 @@
 		Archive,
 		ArrowDown,
 		ArrowUp,
-		Clock,
 		Hash,
 		MessageSquare,
 		Search,
 		Timer,
 		Trash2,
 		User,
+		RefreshCw,
+		X,
+		ChevronLeft,
+		ChevronRight,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
@@ -232,14 +229,14 @@
 	})
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
+<div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">threads</h2>
 			<p class="text-zinc-400">all threads in the system (including hidden).</p>
 		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			<div class="relative">
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="relative w-full sm:w-auto sm:flex-1">
 				<Search
 					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
 				/>
@@ -247,51 +244,57 @@
 					type="search"
 					placeholder="search threads..."
 					bind:value={searchQuery}
-					class="h-9 w-50 pl-8 lg:w-75"
+					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
-			<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
-				<SelectTrigger class="w-56 rounded-xl">
-					<span class="truncate text-left">{sortLabel(sortKey)}</span>
-				</SelectTrigger>
-				<SelectContent>
-					{#each sortOrder as key (key)}
-						<SelectItem value={key}>{sortLabel(key)}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-			<Button
-				variant="outline"
-				class="rounded-xl px-3"
-				onclick={() => toggleSortDir()}
-				disabled={isLoading}
-				title="toggle sort direction"
-				aria-label="toggle sort direction"
-			>
-				{#if sortDir === 'asc'}
-					<ArrowUp class="h-4 w-4" />
-				{:else}
-					<ArrowDown class="h-4 w-4" />
-				{/if}
-			</Button>
-			{#if ownerIdFilter}
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Select value={sortKey} onValueChange={(v: string) => setSort(v as SortKey)}>
+					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-56">
+						<span class="truncate text-left">{sortLabel(sortKey)}</span>
+					</SelectTrigger>
+					<SelectContent>
+						{#each sortOrder as key (key)}
+							<SelectItem value={key}>{sortLabel(key)}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
 				<Button
 					variant="outline"
-					class="rounded-xl"
-					onclick={() => clearOwnerFilter()}
+					class="shrink-0 rounded-xl px-3"
+					onclick={() => toggleSortDir()}
+					disabled={isLoading}
+					title="toggle sort direction"
+					aria-label="toggle sort direction"
+				>
+					{#if sortDir === 'asc'}
+						<ArrowUp class="h-4 w-4" />
+					{:else}
+						<ArrowDown class="h-4 w-4" />
+					{/if}
+				</Button>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				{#if ownerIdFilter}
+					<Button
+						variant="outline"
+						class="flex-1 rounded-xl sm:flex-none"
+						onclick={() => clearOwnerFilter()}
+						disabled={isLoading}
+					>
+						<X class="mr-2 h-4 w-4" />
+						owner: {ownerIdFilter}
+					</Button>
+				{/if}
+				<Button
+					variant="outline"
+					class="flex-1 rounded-xl sm:flex-none"
+					onclick={() => refresh()}
 					disabled={isLoading}
 				>
-					owner: {ownerIdFilter} · clear
+					<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+					{isLoading ? 'loading...' : 'refresh'}
 				</Button>
-			{/if}
-			<Button
-				variant="outline"
-				class="rounded-xl"
-				onclick={() => refresh()}
-				disabled={isLoading}
-			>
-				{isLoading ? 'loading...' : 'refresh'}
-			</Button>
+			</div>
 		</div>
 	</div>
 
@@ -303,20 +306,8 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader
-			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div>
-				<CardTitle>list</CardTitle>
-				<CardDescription>
-					page {pageIndex + 1} · showing {searchQuery.trim()
-						? searchResults.length
-						: threads.length}{!searchQuery.trim() && hasNext ? '+' : ''}
-				</CardDescription>
-			</div>
+	<div class="flex flex-col gap-4">
+		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">
 				<Button
 					variant="outline"
@@ -326,6 +317,7 @@
 					}}
 					disabled={pageIndex === 0 || isLoading}
 				>
+					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
 				<Button
@@ -337,10 +329,11 @@
 					disabled={!hasNext || isLoading}
 				>
 					next
+					<ChevronRight class="ml-1.5 h-4 w-4" />
 				</Button>
 			</div>
-		</CardHeader>
-		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if searchQuery.trim()}
 				<!-- search results mode -->
 				{#if isSearching}
@@ -374,9 +367,9 @@
 										<MessageSquare class="h-4 w-4 text-zinc-500" />
 										<span class="truncate font-medium">{r.title}</span>
 									</div>
-									{#if r.subtitle}
+									{#if r.preview}
 										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.subtitle}
+											{r.preview}
 										</div>
 									{/if}
 									<div class="flex items-center gap-2 text-xs text-zinc-400">
@@ -419,7 +412,7 @@
 					<div
 						role="button"
 						tabindex="0"
-						class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+						class="flex w-full items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
 						onclick={() => openThread(t.id)}
 						onkeydown={(e) => {
 							if (e.key === 'Enter' || e.key === ' ') {
@@ -428,10 +421,11 @@
 							}
 						}}
 					>
-						<div
-							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
-						>
-							<div class="min-w-0 flex-1 space-y-2">
+						<div class="flex min-w-0 flex-1 items-center gap-4">
+							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+								<MessageSquare class="h-5 w-5" />
+							</div>
+							<div class="min-w-0 flex-1 space-y-1">
 								<div class="flex flex-wrap items-center gap-2">
 									<span class="truncate font-medium"
 										>{t.title ?? '(untitled)'}</span
@@ -461,18 +455,12 @@
 										</span>
 									{/if}
 								</div>
-								<div
-									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
-								>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
-										<Hash class="h-3.5 w-3.5" />
+								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+										<Hash class="h-3 w-3" />
 										{t.id}
 									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
+									<span class="inline-flex items-center gap-1">
 										<User class="h-3.5 w-3.5" />
 										{#if t.owner_id}
 											<button
@@ -491,22 +479,18 @@
 									</span>
 								</div>
 							</div>
-							<div class="shrink-0 text-xs text-zinc-500">
-								<div class="flex items-center gap-1">
-									<Clock class="h-3.5 w-3.5" />
-									updated {new Date(t.updated_at).toLocaleString()}
-								</div>
-								<div class="mt-1 flex items-center gap-1">
-									<Activity class="h-3.5 w-3.5" />
-									activity {new Date(t.last_activity_at).toLocaleString()}
-								</div>
+						</div>
+						<div class="shrink-0 text-xs text-zinc-500">
+							<div class="flex items-center gap-1.5 whitespace-nowrap">
+								<Activity class="h-3.5 w-3.5" />
+								{new Date(t.last_activity_at).toLocaleString()}
 							</div>
 						</div>
 					</div>
 				{/each}
 			{/if}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />

@@ -22,6 +22,8 @@ export interface CitationSourceConfig {
 	icon: Component<Record<string, unknown>>
 	/** tailwind text color class for the icon */
 	color: string
+	/** tailwind bg class for small icon badges (pill, overlapping circles) */
+	iconBg: string
 	/** whether the icon supports variant="solid" */
 	iconVariant?: 'solid'
 	/** build a navigable URL from source_id */
@@ -42,6 +44,7 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 	url: {
 		icon: GlobeAlt,
 		color: 'text-sky-400',
+		iconBg: 'bg-sky-500/20',
 		iconVariant: 'solid',
 		href: (id) => id,
 		widget: () => import('$lib/components/widgets/UrlWidget.svelte'),
@@ -51,6 +54,7 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 	file: {
 		icon: Document,
 		color: 'text-rose-400',
+		iconBg: 'bg-rose-500/20',
 		iconVariant: 'solid',
 		href: (id) => `/api/v1/files/${id}/content`,
 		widget: () => import('$lib/components/widgets/FileWidget.svelte'),
@@ -60,6 +64,7 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 	note: {
 		icon: Document,
 		color: 'text-amber-400',
+		iconBg: 'bg-amber-500/20',
 		iconVariant: 'solid',
 		href: (id) => `/notes/${id}`,
 		widget: () => import('$lib/components/widgets/NoteWidget.svelte'),
@@ -69,6 +74,7 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 	memory: {
 		icon: Brain,
 		color: 'text-purple-400',
+		iconBg: 'bg-purple-500/20',
 		href: () => '#',
 		widget: () => import('$lib/components/widgets/UrlWidget.svelte'),
 		resourceType: 'file',
@@ -77,6 +83,7 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 	thread: {
 		icon: ChatBubbles,
 		color: 'text-emerald-400',
+		iconBg: 'bg-emerald-500/20',
 		iconVariant: 'solid',
 		href: (id) => `/c/${id}`,
 		widget: () => import('$lib/components/widgets/ChatWidget.svelte'),
@@ -86,6 +93,7 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 	tool_result: {
 		icon: CommandLine,
 		color: 'text-orange-400',
+		iconBg: 'bg-orange-500/20',
 		href: () => '#',
 		widget: () => import('$lib/components/widgets/UrlWidget.svelte'),
 		resourceType: 'file',

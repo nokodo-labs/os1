@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { api, unwrap, type BackgroundType, type Schemas } from '$lib/api'
 
 	type Agent = Schemas['Agent']
@@ -22,6 +22,7 @@
 	import SettingsUI from '$lib/components/settings/SettingsUI.svelte'
 	import SettingsWebSearch from '$lib/components/settings/SettingsWebSearch.svelte'
 	import { Button } from '$lib/components/ui/button'
+	import { RefreshCw, RotateCcw, Save } from '@lucide/svelte'
 	import { onMount } from 'svelte'
 
 	type ThemeMode = 'light' | 'dark' | 'system'
@@ -2178,33 +2179,39 @@
 	})
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-6">
+<div class="flex min-h-0 min-w-0 flex-1 flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">settings</h2>
 			<p class="text-zinc-400">manage backend settings (admin only).</p>
 		</div>
 		<div class="flex items-center gap-2">
-			<Button variant="secondary" onclick={fetchSettings} disabled={isFetching || isSaving}
-				>reload</Button
-			>
+			<Button variant="secondary" class="rounded-xl" onclick={fetchSettings} disabled={isFetching || isSaving}>
+				<RefreshCw class="mr-1.5 h-4 w-4" />
+				reload
+			</Button>
 			<Button
 				variant="secondary"
+				class="rounded-xl"
 				onclick={resetDraft}
-				disabled={!response || isFetching || isSaving || !hasChanges}>reset</Button
+				disabled={!response || isFetching || isSaving || !hasChanges}
 			>
-			<Button onclick={save} disabled={!response || isFetching || isSaving || !hasChanges}
-				>{isSaving ? 'saving…' : 'save'}</Button
-			>
+				<RotateCcw class="mr-1.5 h-4 w-4" />
+				reset
+			</Button>
+			<Button class="rounded-xl" onclick={save} disabled={!response || isFetching || isSaving || !hasChanges}>
+				<Save class="mr-1.5 h-4 w-4" />
+				{isSaving ? 'saving…' : 'save'}
+			</Button>
 		</div>
 	</div>
 
 	<div
 		bind:this={scrollContainer}
-		class="min-h-0 flex-1 overflow-y-auto"
+		class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
 		onscroll={() => (showScrollTop = (scrollContainer?.scrollTop ?? 0) > 200)}
 	>
-		<div class="flex min-h-0 flex-1 flex-col gap-6">
+		<div class="mx-auto flex w-full max-w-full min-h-0 min-w-0 flex-col gap-6">
 			{#if error}
 				<div
 					class="rounded-lg border border-red-900/40 bg-red-950/40 p-4 text-sm text-red-200"
@@ -2232,7 +2239,7 @@
 					<NokodoLoader className="opacity-70" />
 				</div>
 			{:else if response}
-				<div class="space-y-6">
+				<div class="min-w-0 space-y-6">
 					<!-- nav legend -->
 					<nav
 						class="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-950/90 px-3 py-2 backdrop-blur"

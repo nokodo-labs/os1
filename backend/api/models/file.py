@@ -95,8 +95,13 @@ class File(
 		"Project",
 		secondary=file_project_association,
 		back_populates="files",
-		lazy="selectin",
 	)
+
+	@property
+	def project_ids(self) -> list[TypeID]:
+		"""IDs of linked projects (requires projects to be loaded)."""
+		return [p.id for p in self.projects]
+
 	message: Mapped[Message | None] = relationship(
 		"Message",
 		back_populates="files",
@@ -106,8 +111,3 @@ class File(
 		back_populates="file",
 		cascade="all, delete-orphan",
 	)
-
-	@property
-	def project_ids(self) -> list[TypeID]:
-		"""ids of all projects this file belongs to."""
-		return [p.id for p in self.projects]

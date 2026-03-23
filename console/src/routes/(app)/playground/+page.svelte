@@ -12,14 +12,22 @@
 	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
+	import { fade, slide } from 'svelte/transition'
 	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardFooter,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
+		BrainCircuit,
+		Bot,
+		Cpu,
+		Hammer,
+		MessageSquarePlus,
+		Play,
+		RefreshCw,
+		SendHorizonal,
+		Settings,
+		ShieldCheck,
+		Sparkles,
+		Terminal,
+		Hash,
+	} from '@lucide/svelte'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
@@ -169,16 +177,20 @@
 <div class="flex min-h-0 flex-1 flex-col gap-6">
 	<div class="flex shrink-0 items-center justify-between">
 		<div>
-			<h2 class="text-2xl font-bold tracking-tight">playground</h2>
-			<p class="text-zinc-400">test agents and models in a temporary thread.</p>
+			<h2 class="flex items-center gap-2 text-2xl font-bold tracking-tight">
+				<Hammer class="h-6 w-6 text-emerald-400" />
+				playground
+			</h2>
+			<p class="text-zinc-400">test agents and models directly via api.</p>
 		</div>
 		{#if thread}
 			<Button
 				variant="outline"
-				class="rounded-xl"
+				class="rounded-xl border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800 hover:text-white"
 				onclick={resetSession}
 				disabled={isWorking}
 			>
+				<RefreshCw class="mr-1.5 h-4 w-4 {isWorking ? 'animate-spin' : ''}" />
 				reset session
 			</Button>
 		{/if}
@@ -189,191 +201,218 @@
 			<NokodoLoader />
 		</div>
 	{:else if error}
-		<div
-			class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
-		>
+		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400 shadow-xl shadow-red-900/5">
 			<p>{error}</p>
-			<Button variant="outline" class="mt-4" onclick={loadMeta}>Retry</Button>
+			<Button variant="outline" class="mt-4 border-red-800 hover:bg-red-900" onclick={loadMeta}>
+				<RefreshCw class="mr-2 h-4 w-4" /> retry
+			</Button>
 		</div>
 	{:else}
-		<div class="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-			<Card class="flex flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-				<CardHeader class="shrink-0">
-					<CardTitle>session</CardTitle>
-					<CardDescription>
-						{thread
-							? 'thread active - send messages below.'
-							: 'configure and create a thread.'}
-					</CardDescription>
-				</CardHeader>
-				<CardContent class="min-h-0 flex-1 space-y-4 overflow-y-auto">
-					{#if actionError}
-						<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
-							{actionError}
+		<div class="grid min-h-0 flex-1 gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
+			<!-- sidebar config pane -->
+			<div class="flex flex-col gap-6 overflow-y-auto pr-2" transition:fade>
+				{#if !thread}
+					<div class="flex flex-col gap-5 rounded-3xl border border-zinc-800/60 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl">
+						<div>
+							<h3 class="flex items-center gap-2 text-lg font-semibold text-zinc-100">
+								<Settings class="h-5 w-5 text-zinc-400" />
+								configuration
+							</h3>
+							<p class="text-sm text-zinc-500">setup the environment before initializing.</p>
 						</div>
-					{/if}
 
-					<div class="space-y-2">
-						<Label>agent (optional)</Label>
-						<Select
-							value={selectedAgentId}
-							onValueChange={(v: string) => (selectedAgentId = v)}
-						>
-							<SelectTrigger class="rounded-xl">
-								<span class="truncate text-left">
-									{selectedAgentId ? getAgentLabel(selectedAgentId) : 'none'}
-								</span>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="">none</SelectItem>
-								{#each agents as agent (agent.id)}
-									<SelectItem value={agent.id}>{agent.name}</SelectItem>
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
+						{#if actionError}
+							<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
+								{actionError}
+							</div>
+						{/if}
 
-					<div class="space-y-2">
-						<Label>model override (optional)</Label>
-						<Select
-							value={selectedModelId}
-							onValueChange={(v: string) => (selectedModelId = v)}
-						>
-							<SelectTrigger class="rounded-xl">
-								<span class="truncate text-left">
-									{selectedModelId
-										? getModelLabel(selectedModelId)
-										: 'use agent default'}
-								</span>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="">use agent default</SelectItem>
-								{#each models as model (model.id)}
-									<SelectItem value={model.id}
-										>{model.display_name || model.name}</SelectItem
-									>
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
+						<div class="space-y-4">
+							<div class="space-y-2">
+								<Label class="text-xs font-medium text-zinc-400">agent configuration</Label>
+								<Select value={selectedAgentId} onValueChange={(v: string) => (selectedAgentId = v)}>
+									<SelectTrigger class="h-11 rounded-xl border-zinc-800 bg-zinc-950/50">
+										<div class="flex items-center gap-2 truncate text-left">
+											<Bot class="h-4 w-4 text-emerald-400" />
+											{selectedAgentId ? getAgentLabel(selectedAgentId) : 'none (default behavior)'}
+										</div>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="">none (default behavior)</SelectItem>
+										{#each agents as agent (agent.id)}
+											<SelectItem value={agent.id}>{agent.name}</SelectItem>
+										{/each}
+									</SelectContent>
+								</Select>
+							</div>
 
-					{#if !thread}
-						<div class="space-y-2">
-							<Label for="threadTitle">thread title (optional)</Label>
-							<Input
-								id="threadTitle"
-								bind:value={threadTitle}
-								class="rounded-xl"
-								placeholder="e.g. model sanity check"
-							/>
+							<div class="space-y-2">
+								<Label class="text-xs font-medium text-zinc-400">model override</Label>
+								<Select value={selectedModelId} onValueChange={(v: string) => (selectedModelId = v)}>
+									<SelectTrigger class="h-11 rounded-xl border-zinc-800 bg-zinc-950/50">
+										<div class="flex items-center gap-2 truncate text-left">
+											<Cpu class="h-4 w-4 text-indigo-400" />
+											{selectedModelId ? getModelLabel(selectedModelId) : 'use agent default'}
+										</div>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="">use agent default</SelectItem>
+										{#each models as model (model.id)}
+											<SelectItem value={model.id}>{model.display_name || model.name}</SelectItem>
+										{/each}
+									</SelectContent>
+								</Select>
+							</div>
+
+							<div class="space-y-2 pt-2">
+								<Label for="threadTitle" class="text-xs font-medium text-zinc-400">session title (optional)</Label>
+								<Input
+									id="threadTitle"
+									bind:value={threadTitle}
+									class="h-11 rounded-xl border-zinc-800 bg-zinc-950/50 focus:border-emerald-500/50 focus:ring-emerald-500/20"
+									placeholder="e.g. reasoning test run..."
+								/>
+							</div>
 						</div>
 
 						<Button
-							class="w-full rounded-xl"
+							class="group relative mt-2 h-12 w-full overflow-hidden rounded-xl bg-linear-to-r from-emerald-500 to-teal-500 text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-emerald-500/25"
 							onclick={createThread}
 							disabled={isWorking}
 						>
-							{isWorking ? 'creating...' : 'create thread'}
+							<div class="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-100"></div>
+							<div class="relative flex items-center justify-center gap-2">
+								{#if isWorking}
+									<RefreshCw class="h-5 w-5 animate-spin" />
+									<span class="font-medium">initializing...</span>
+								{:else}
+									<Play class="h-5 w-5 fill-current" />
+									<span class="font-medium">start session</span>
+								{/if}
+							</div>
 						</Button>
-					{:else}
-						<div
-							class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-400"
-						>
-							<div class="flex justify-between">
-								<span>thread id:</span>
-								<span class="font-mono text-xs">{thread.id}</span>
+					</div>
+				{:else}
+					<!-- active session controls pane -->
+					<div class="flex flex-col gap-4 rounded-3xl border border-emerald-900/30 bg-linear-to-br from-emerald-950/20 to-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl" transition:slide>
+						<div class="flex items-start justify-between">
+							<div class="space-y-1">
+								<h3 class="flex items-center gap-2 text-lg font-semibold text-emerald-400">
+									<Sparkles class="h-5 w-5" />
+									session active
+								</h3>
+								<div class="flex items-center gap-1.5 text-xs text-zinc-500">
+									<Hash class="h-3.5 w-3.5" />
+									<span class="font-mono">{thread.id}</span>
+								</div>
 							</div>
-							<div class="mt-3 flex justify-end">
-								<Button
-									variant="outline"
-									size="sm"
-									class="rounded-xl"
-									onclick={() => (isAclOpen = true)}
-								>
-									permissions
-								</Button>
-							</div>
+							<Button
+								variant="outline"
+								size="sm"
+								class="h-8 rounded-lg border-zinc-800 bg-zinc-950/50 text-xs hover:bg-zinc-800"
+								onclick={() => (isAclOpen = true)}
+							>
+								<ShieldCheck class="mr-1.5 h-3.5 w-3.5" /> permissions
+							</Button>
 						</div>
 
-						<div class="space-y-2">
-							<Label for="message">message</Label>
+						<div class="mt-4 flex flex-col gap-3 rounded-2xl bg-zinc-950/50 p-4">
+							{#if actionError}
+								<div class="rounded-lg bg-red-900/20 p-2 text-sm text-red-400 mb-1">
+									{actionError}
+								</div>
+							{/if}
+							<Label for="message" class="text-xs font-semibold tracking-wider text-zinc-400 uppercase">Input Payload</Label>
 							<textarea
 								id="message"
 								bind:value={messageContent}
 								rows={6}
-								placeholder="type a message to store on the thread..."
-								class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+								placeholder="enter prompt text..."
+								class="w-full resize-none rounded-xl border-0 bg-transparent py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:ring-0"
+								style="box-shadow: none;"
 							></textarea>
+							<div class="flex justify-end pt-2 border-t border-zinc-800/50">
+								<Button
+									class="group relative h-10 overflow-hidden rounded-xl bg-linear-to-r from-zinc-200 to-zinc-400 text-zinc-950 shadow-md transition-all hover:scale-[1.02] hover:shadow-white/10"
+									onclick={sendMessage}
+									disabled={isWorking || !messageContent.trim()}
+								>
+									<div class="relative flex items-center gap-2 px-2">
+										{#if isWorking}
+											<RefreshCw class="h-4 w-4 animate-spin" />
+											<span class="font-medium">executing...</span>
+										{:else}
+											<span class="font-medium">send message</span>
+											<SendHorizonal class="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+										{/if}
+									</div>
+								</Button>
+							</div>
 						</div>
-					{/if}
-				</CardContent>
-				{#if thread}
-					<CardFooter class="flex shrink-0 justify-end border-t border-zinc-800">
-						<Button
-							class="rounded-xl"
-							onclick={sendMessage}
-							disabled={isWorking || !messageContent.trim()}
-						>
-							{isWorking ? 'sending...' : 'send message'}
-						</Button>
-					</CardFooter>
+					</div>
 				{/if}
-			</Card>
+			</div>
 
-			<Card class="flex flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100">
-				<CardHeader class="flex shrink-0 flex-row items-center justify-between">
-					<div>
-						<CardTitle>messages</CardTitle>
-						<CardDescription>
-							{#if thread}
-								{messages.length} message{messages.length === 1 ? '' : 's'}
-							{:else}
-								create a thread to start.
-							{/if}
-						</CardDescription>
+			<!-- main chat pane -->
+			<div class="flex min-h-0 flex-col rounded-3xl border border-zinc-800/60 bg-zinc-950/50 shadow-2xl">
+				<div class="flex shrink-0 items-center justify-between border-b border-zinc-800/50 px-6 py-4 backdrop-blur-md">
+					<div class="flex items-center gap-3">
+						<Terminal class="h-5 w-5 text-zinc-400" />
+						<div class="text-sm font-medium text-zinc-200">execution log</div>
 					</div>
 					{#if thread}
 						<Button
-							variant="outline"
+							variant="ghost"
 							size="sm"
-							class="rounded-xl"
+							class="h-8 rounded-xl text-zinc-400 hover:text-white"
 							onclick={refreshMessages}
 							disabled={isWorking}
 						>
-							reload
+							<RefreshCw class="mr-1.5 h-3.5 w-3.5 {isWorking ? 'animate-spin' : ''}" /> reload log
 						</Button>
 					{/if}
-				</CardHeader>
-				<CardContent class="min-h-0 flex-1 space-y-3 overflow-y-auto">
+				</div>
+
+				<div class="min-h-0 flex-1 space-y-6 overflow-y-auto p-6 scroll-smooth">
 					{#if !thread}
-						<div
-							class="flex h-full items-center justify-center rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
-						>
-							create a thread to start.
+						<div class="flex h-full flex-col items-center justify-center text-center opacity-40" transition:fade>
+							<MessageSquarePlus class="mb-4 h-16 w-16 text-zinc-600" />
+							<p class="text-lg font-medium text-zinc-400">ready to start</p>
+							<p class="mt-1 max-w-sm text-sm text-zinc-500">configure an agent and click start session to begin testing.</p>
 						</div>
 					{:else if messages.length === 0}
-						<div
-							class="flex h-full items-center justify-center rounded-lg border border-dashed border-zinc-800 p-12 text-center text-zinc-500"
-						>
-							no messages yet.
+						<div class="flex h-full flex-col items-center justify-center text-center opacity-40" transition:fade>
+							<BrainCircuit class="mb-4 h-16 w-16 text-zinc-600" />
+							<p class="text-lg font-medium text-zinc-400">thread created</p>
+							<p class="mt-1 text-sm text-zinc-500">awaiting your input...</p>
 						</div>
 					{:else}
 						{#each messages as msg (msg.id)}
-							<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-								<div
-									class="mb-2 flex items-center justify-between text-xs text-zinc-500"
-								>
-									<span class="font-mono">{msg.id}</span>
-									<span>{msg.created_at}</span>
+							{@const isUser = msg.type === 'user'}
+							<div class="flex w-full {isUser ? 'justify-end' : 'justify-start'}" transition:slide={{ duration: 200 }}>
+								<div class="max-w-[85%] sm:max-w-[75%]">
+									<div class="mb-1.5 flex items-center {isUser ? 'justify-end' : 'justify-start'} gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+										{#if isUser}
+											<span class="opacity-60">{new Date(msg.created_at).toLocaleTimeString()}</span>
+											<span>user payload</span>
+										{:else}
+											<span class="text-emerald-500">agent response</span>
+											<span class="opacity-60">{new Date(msg.created_at).toLocaleTimeString()}</span>
+										{/if}
+									</div>
+									<div class="relative overflow-hidden rounded-2xl p-4 {isUser ? 'bg-zinc-800 text-zinc-100' : 'border border-zinc-800 bg-zinc-900/80 text-zinc-200'}">
+										<p class="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+									</div>
+									<div class="mt-1.5 flex {isUser ? 'justify-end' : 'justify-start'}">
+										<span class="font-mono text-[10px] text-zinc-600">{msg.id}</span>
+									</div>
 								</div>
-								<p class="text-sm whitespace-pre-wrap text-zinc-200">
-									{msg.content}
-								</p>
 							</div>
 						{/each}
+						<!-- dummy anchor to auto-scroll to bottom could be placed here -->
 					{/if}
-				</CardContent>
-			</Card>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>

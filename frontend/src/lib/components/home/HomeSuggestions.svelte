@@ -150,7 +150,7 @@
 		const apiResults: HomeSuggestion[] = searchResults.map((r) => ({
 			id: `search:${r.type}:${r.id}`,
 			title: r.title,
-			subtitle: r.subtitle ?? r.type,
+			subtitle: r.preview ?? r.type,
 			icon: searchResultIcons[r.type] ?? ChatBubbles,
 		}))
 
