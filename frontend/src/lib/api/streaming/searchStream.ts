@@ -13,7 +13,7 @@ export interface SearchResult {
 	type: 'thread' | 'reminder' | 'note' | 'memory'
 	id: string
 	title: string
-	subtitle?: string | null
+	preview?: string | null
 	created_at: string
 	updated_at: string
 }

@@ -15,6 +15,7 @@ from api.models.message import MessageType
 from api.models.project import Project
 from api.models.thread import Thread
 from api.models.user import User
+from api.schemas.content import TextContent
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.settings import settings
@@ -1164,7 +1165,7 @@ async def test_create_message_unknown_type_service(
 		principal=principal,
 	)
 	message_in = MessageCreate.model_construct(
-		content=[{"type": "text", "text": "Fallback"}],
+		content=[TextContent(text="Fallback")],
 		sender_user_id=user.id,
 		type=cast(Any, "custom"),
 	)
