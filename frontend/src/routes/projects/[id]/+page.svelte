@@ -132,19 +132,19 @@
 		}
 
 		for (const note of notes.all) {
-			if (note.projectId === projectId) {
+			if (note.projectIds.includes(projectId)) {
 				items.push(noteToResource(note))
 			}
 		}
 
 		for (const list of reminders.lists) {
-			if (list.project_id === projectId) {
+			if (list.project_ids.includes(projectId)) {
 				items.push(reminderListToResource(list))
 			}
 		}
 
 		for (const file of files.all) {
-			if (file.project_id === projectId) {
+			if (file.project_ids.includes(projectId)) {
 				items.push(apiFileToResource(file))
 			}
 		}
@@ -189,23 +189,35 @@
 				}
 			}
 		} else if (resource.type === 'note') {
-			await api.PUT('/v1/notes/{note_id}', {
-				params: { path: { note_id: resource.id } },
-				body: { project_id: projectId },
-			})
-			await notes.load({ force: true })
+			const note = notes.get(resource.id)
+			const currentIds = note?.projectIds ?? []
+			if (!currentIds.includes(projectId)) {
+				await api.PUT('/v1/notes/{note_id}', {
+					params: { path: { note_id: resource.id } },
+					body: { project_ids: [...currentIds, projectId] },
+				})
+				await notes.load({ force: true })
+			}
 		} else if (resource.type === 'reminder_list') {
-			await api.PATCH('/v1/reminders/lists/{list_id}', {
-				params: { path: { list_id: resource.id } },
-				body: { project_id: projectId },
-			})
-			await reminders.loadListsAndCounts()
+			const list = reminders.lists.find((l) => l.id === resource.id)
+			const currentIds = list?.project_ids ?? []
+			if (!currentIds.includes(projectId)) {
+				await api.PATCH('/v1/reminders/lists/{list_id}', {
+					params: { path: { list_id: resource.id } },
+					body: { project_ids: [...currentIds, projectId] },
+				})
+				await reminders.loadListsAndCounts()
+			}
 		} else if (resource.type === 'file') {
-			await api.PATCH('/v1/files/{file_id}', {
-				params: { path: { file_id: resource.id } },
-				body: { project_id: projectId },
-			})
-			await files.load({ force: true })
+			const file = files.all.find((f) => f.id === resource.id)
+			const currentIds = file?.project_ids ?? []
+			if (!currentIds.includes(projectId)) {
+				await api.PATCH('/v1/files/{file_id}', {
+					params: { path: { file_id: resource.id } },
+					body: { project_ids: [...currentIds, projectId] },
+				})
+				await files.load({ force: true })
+			}
 		}
 
 		isPickerOpen = false
