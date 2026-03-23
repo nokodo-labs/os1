@@ -64,15 +64,15 @@ class Note(
 		"Project",
 		secondary=note_project_association,
 		back_populates="notes",
-		lazy="selectin",
 	)
+
+	@property
+	def project_ids(self) -> list[TypeID]:
+		"""IDs of linked projects (requires projects to be loaded)."""
+		return [p.id for p in self.projects]
+
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		back_populates="note",
 		cascade="all, delete-orphan",
 	)
-
-	@property
-	def project_ids(self) -> list[TypeID]:
-		"""ids of all projects this note belongs to."""
-		return [p.id for p in self.projects]

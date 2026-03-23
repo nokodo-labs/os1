@@ -9,15 +9,8 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import RoleDetailsModal from '$lib/components/RoleDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, ListOrdered, Plus, Shield } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Clock, Hash, ListOrdered, Plus, Shield, RefreshCw, ChevronLeft, ChevronRight } from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'priority' | 'name' | 'created_at' | 'updated_at'
@@ -260,7 +253,8 @@
 				onclick={() => refresh()}
 				disabled={isLoading}
 			>
-				{isLoading ? 'loading...' : 'refresh'}
+				<RefreshCw class="mr-1.5 h-4 w-4" />
+				refresh
 			</Button>
 		</div>
 	</div>
@@ -273,18 +267,8 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader
-			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div>
-				<CardTitle>list</CardTitle>
-				<CardDescription>
-					page {pageIndex + 1} · showing {roles.length}{hasNext ? '+' : ''}
-				</CardDescription>
-			</div>
+	<div class="flex flex-col gap-4">
+		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">
 				<Button
 					variant="outline"
@@ -294,6 +278,7 @@
 					}}
 					disabled={pageIndex === 0 || isLoading}
 				>
+					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
 				<Button
@@ -305,10 +290,11 @@
 					disabled={!hasNext || isLoading}
 				>
 					next
+					<ChevronRight class="ml-1.5 h-4 w-4" />
 				</Button>
 			</div>
-		</CardHeader>
-		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if isLoading && roles.length === 0}
 				<div
 					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -329,7 +315,7 @@
 				<div
 					role="button"
 					tabindex="0"
-					class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
+					class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
 					onclick={() => openRole(role.id)}
 					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
@@ -338,79 +324,77 @@
 						}
 					}}
 				>
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0 flex-1 space-y-2">
-							<div class="flex items-center gap-2">
-								<Shield class="h-4 w-4 text-zinc-500" />
-								<span class="truncate font-medium">{role.name}</span>
+					<div class="flex min-w-0 flex-1 items-center gap-4">
+						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<Shield class="h-5 w-5" />
+						</div>
+						<div class="min-w-0 flex-1 space-y-1">
+							<div class="flex flex-wrap items-center gap-2">
+								<span class="truncate text-base font-medium text-zinc-100">{role.name}</span>
 							</div>
 							{#if role.description}
 								<div class="line-clamp-1 text-sm text-zinc-400">
 									{role.description}
 								</div>
 							{/if}
-							<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<Hash class="h-3.5 w-3.5" />
+							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+									<Hash class="h-3 w-3" />
 									{role.id}
 								</span>
-								<span
-									class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-								>
-									<ListOrdered class="h-3.5 w-3.5" />
+								<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<ListOrdered class="h-3 w-3" />
 									priority {role.priority ?? 0}
 								</span>
 							</div>
 						</div>
-						<div class="flex items-start gap-3">
-							{#if sortKey === 'priority'}
-								<div class="flex flex-col gap-1">
-									<Button
-										variant="outline"
-										class="h-7 w-7 rounded-lg p-0"
-										onclick={(e) => {
-											e.stopPropagation()
-											moveRole(role.id, 'up')
-										}}
-										disabled={isReordering || index === 0}
-										aria-label="move role up"
-										title="move role up"
-									>
-										<ArrowUp class="h-3.5 w-3.5" />
-									</Button>
-									<Button
-										variant="outline"
-										class="h-7 w-7 rounded-lg p-0"
-										onclick={(e) => {
-											e.stopPropagation()
-											moveRole(role.id, 'down')
-										}}
-										disabled={isReordering || index === roles.length - 1}
-										aria-label="move role down"
-										title="move role down"
-									>
-										<ArrowDown class="h-3.5 w-3.5" />
-									</Button>
-								</div>
-							{/if}
-							<div class="shrink-0 text-xs text-zinc-500">
-								<div class="flex items-center gap-1">
-									<Clock class="h-3.5 w-3.5" />
-									updated {new Date(role.updated_at).toLocaleString()}
-								</div>
-								<div class="mt-1 flex items-center gap-1">
-									<Clock class="h-3.5 w-3.5" />
-									created {new Date(role.created_at).toLocaleString()}
-								</div>
+					</div>
+					<div class="flex shrink-0 items-start gap-3">
+						{#if sortKey === 'priority'}
+							<div class="flex flex-col gap-1">
+								<Button
+									variant="outline"
+									class="h-7 w-7 rounded-lg p-0"
+									onclick={(e) => {
+										e.stopPropagation()
+										moveRole(role.id, 'up')
+									}}
+									disabled={isReordering || index === 0}
+									aria-label="move role up"
+									title="move role up"
+								>
+									<ArrowUp class="h-3.5 w-3.5" />
+								</Button>
+								<Button
+									variant="outline"
+									class="h-7 w-7 rounded-lg p-0"
+									onclick={(e) => {
+										e.stopPropagation()
+										moveRole(role.id, 'down')
+									}}
+									disabled={isReordering || index === roles.length - 1}
+									aria-label="move role down"
+									title="move role down"
+								>
+									<ArrowDown class="h-3.5 w-3.5" />
+								</Button>
+							</div>
+						{/if}
+						<div class="flex flex-col items-end shrink-0 text-xs text-zinc-500">
+							<div class="flex items-center gap-1.5 whitespace-nowrap">
+								<Clock class="h-3.5 w-3.5" />
+								{new Date(role.updated_at).toLocaleString()}
+							</div>
+							<div class="mt-1 flex items-center gap-1.5 whitespace-nowrap">
+								<Clock class="h-3.5 w-3.5" />
+								{new Date(role.created_at).toLocaleString()}
 							</div>
 						</div>
 					</div>
 				</div>
 			{/each}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>
 
 <CreateRoleModal

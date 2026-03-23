@@ -8,13 +8,6 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PromptVariablesLegend from '$lib/components/PromptVariablesLegend.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle,
-	} from '$lib/components/ui/card'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
@@ -28,6 +21,10 @@
 		Terminal,
 		Trash2,
 		X,
+		ChevronLeft,
+		ChevronRight,
+		Save,
+		RefreshCw,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
@@ -286,7 +283,8 @@
 				onclick={() => refresh()}
 				disabled={isLoading}
 			>
-				{isLoading ? 'loading...' : 'refresh'}
+				<RefreshCw class="mr-1.5 h-4 w-4" />
+				refresh
 			</Button>
 		</div>
 	</div>
@@ -299,18 +297,8 @@
 		</div>
 	{/if}
 
-	<Card
-		class="flex min-h-0 flex-1 flex-col rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-	>
-		<CardHeader
-			class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div>
-				<CardTitle>list</CardTitle>
-				<CardDescription>
-					page {pageIndex + 1} · showing {prompts.length}{hasNext ? '+' : ''}
-				</CardDescription>
-			</div>
+	<div class="flex flex-col gap-4">
+		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">
 				<Button
 					variant="outline"
@@ -320,6 +308,7 @@
 					}}
 					disabled={pageIndex === 0 || isLoading}
 				>
+					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
 				<Button
@@ -331,10 +320,11 @@
 					disabled={!hasNext || isLoading}
 				>
 					next
+					<ChevronRight class="ml-1.5 h-4 w-4" />
 				</Button>
 			</div>
-		</CardHeader>
-		<CardContent class="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto">
+		</div>
+		<div class="flex flex-col space-y-2">
 			{#if isLoading && prompts.length === 0}
 				<div
 					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -348,50 +338,38 @@
 					no prompts yet
 				</div>
 			{:else}
-				{#each prompts as p (p.id)}
-					<button
-						type="button"
-						class="w-full cursor-pointer rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-left transition-colors hover:border-zinc-700"
-						onclick={() => openEditModal(p)}
-					>
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+					{#each prompts as p (p.id)}
 						<div
-							class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+							role="button"
+							tabindex="0"
+							class="flex w-full cursor-pointer flex-col justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+							onclick={() => openEditModal(p)}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault()
+									openEditModal(p)
+								}
+							}}
 						>
-							<div class="min-w-0 flex-1 space-y-2">
-								<div class="flex items-center gap-2">
-									<Terminal class="h-4 w-4 text-zinc-500" />
-									<span class="truncate font-medium">{p.command}</span>
-								</div>
-								<div class="font-mono text-xs whitespace-pre-wrap text-zinc-400">
-									{preview(p.content)}
-								</div>
-								<div
-									class="flex flex-wrap items-center gap-2 text-xs text-zinc-400"
-								>
-									<span
-										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
-									>
-										<Hash class="h-3.5 w-3.5" />
-										{p.id}
-									</span>
-								</div>
-							</div>
-							<div class="flex shrink-0 items-start gap-3">
-								<div class="text-xs text-zinc-500">
-									<div class="flex items-center gap-1">
-										<Clock class="h-3.5 w-3.5" />
-										updated {new Date(p.updated_at).toLocaleString()}
+							<div class="flex items-start justify-between gap-4">
+								<div class="flex min-w-0 flex-1 items-start gap-4">
+									<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+										<Terminal class="h-5 w-5" />
 									</div>
-									<div class="mt-1 flex items-center gap-1">
-										<Clock class="h-3.5 w-3.5" />
-										created {new Date(p.created_at).toLocaleString()}
+									<div class="min-w-0 flex-1 space-y-1">
+										<span class="truncate text-base font-medium text-zinc-100">{p.command}</span>
+										<div class="font-mono text-[10px] opacity-50 flex items-center gap-1.5">
+											<Hash class="h-3 w-3" />
+											{p.id}
+										</div>
 									</div>
 								</div>
-								<div class="flex gap-1">
+								<div class="flex shrink-0 gap-1">
 									<Button
 										variant="ghost"
 										size="icon"
-										class="h-8 w-8 text-zinc-400 hover:text-red-500"
+										class="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-500/10"
 										onclick={(e: Event) => {
 											e.stopPropagation()
 											handleDelete(p.id)
@@ -402,12 +380,21 @@
 									</Button>
 								</div>
 							</div>
+							<div class="font-mono text-xs whitespace-pre-wrap text-zinc-400">
+								{preview(p.content)}
+							</div>
+							<div class="shrink-0 text-xs text-zinc-500">
+								<div class="flex items-center gap-1.5 whitespace-nowrap">
+									<Clock class="h-3.5 w-3.5" />
+									updated {new Date(p.updated_at).toLocaleString()}
+								</div>
+							</div>
 						</div>
-					</button>
-				{/each}
+					{/each}
+				</div>
 			{/if}
-		</CardContent>
-	</Card>
+		</div>
+	</div>
 </div>
 
 <Dialog.Root
@@ -504,10 +491,12 @@
 						onclick={closeModal}
 						disabled={isSaving}
 					>
+						<X class="mr-1.5 h-4 w-4" />
 						cancel
 					</Button>
 					<Button type="submit" class="rounded-xl" disabled={isSaving}>
-						{isSaving ? 'saving...' : 'save'}
+						<Save class="mr-1.5 h-4 w-4" />
+						{isSaving ? 'saving...' : modalMode === 'create' ? 'create' : 'save'}
 					</Button>
 				</div>
 			</form>

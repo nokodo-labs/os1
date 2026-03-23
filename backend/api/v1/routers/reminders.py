@@ -92,14 +92,23 @@ async def get_reminder_list(
 
 @router.get("/lists/{list_id}/counts")
 async def get_reminder_list_counts(
-	list_id: TypeID | None = None,
+	list_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
-	"""get reminder counts for a specific list (or default list if null)."""
+	"""get reminder counts for a specific list."""
 	return await reminder_service.get_list_counts(
 		db, principal=principal, list_id=list_id
 	)
+
+
+@router.get("/counts")
+async def get_default_reminder_list_counts(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""get reminder counts for the default list (reminders without a list)."""
+	return await reminder_service.get_list_counts(db, principal=principal, list_id=None)
 
 
 @router.patch("/lists/{list_id}", response_model=ReminderListSchema)

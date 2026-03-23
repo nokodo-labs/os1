@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button'
 	import { copyToClipboard } from '$lib/utils/clipboard'
-	import { BookOpen, Check, Copy, Info } from '@lucide/svelte'
+	import { BookOpen, Check, Copy, Info, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	let {
@@ -515,6 +515,7 @@ about the user: <span class="text-sky-400">{'{{ user_bio }}'}</span>
 						available
 					</span>
 					<Button variant="outline" class="rounded-xl" onclick={() => (open = false)}>
+						<X class="mr-1.5 h-3.5 w-3.5" />
 						close
 					</Button>
 				</div>
