@@ -9,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Label } from '$lib/components/ui/label'
 	import { generateUUID } from '$lib/utils/crypto'
-	import { Globe, Shield, Users, UsersRound } from '@lucide/svelte'
+	import { Globe, Shield, Users, UsersRound, X, Save, Trash2 } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type PrincipalType = 'user' | 'group' | 'role'
@@ -302,10 +302,11 @@
 										<div class="shrink-0">
 											<Button
 												variant="outline"
-												class="h-8 rounded-xl px-2 text-xs"
+												class="h-8 rounded-xl px-2 text-xs text-zinc-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-400"
 												onclick={() => removeEntry(entry.id)}
 												disabled={isSaving}
 											>
+												<Trash2 class="mr-1.5 h-3.5 w-3.5" />
 												remove
 											</Button>
 										</div>
@@ -324,9 +325,11 @@
 					onclick={() => (open = false)}
 					disabled={isSaving}
 				>
+					<X class="mr-1.5 h-4 w-4" />
 					cancel
 				</Button>
 				<Button class="rounded-xl" onclick={save} disabled={isSaving || isLoading}>
+					<Save class="mr-1.5 h-4 w-4" />
 					{isSaving ? 'saving...' : 'save'}
 				</Button>
 			</div>
