@@ -130,6 +130,16 @@ async def read_user_permissions(
 	)
 
 
+@router.get("/{user_id}/counts", response_model=dict[str, int])
+async def read_user_counts(
+	user_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""get counts of all resources owned by user."""
+	return await user_service.get_user_counts(str(user_id), db, principal=principal)
+
+
 @router.patch("/{user_id}", response_model=UserSchema)
 async def update_user(
 	user_id: TypeID,

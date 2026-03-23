@@ -20,7 +20,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { Bot, Cpu, Pencil, Plus, Search, Settings2, Sparkles, Trash2, X } from '@lucide/svelte'
+	import { Bot, Cpu, Pencil, Plus, Search, Settings2, Sparkles, Trash2, X, RefreshCw, Server } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -254,37 +254,40 @@
 	}
 </script>
 
-<div class="min-h-0 flex-1 overflow-y-auto">
+<div class="flex flex-col gap-6">
 	<div class="space-y-6">
 		<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 			<div>
 				<h2 class="text-2xl font-bold tracking-tight">providers</h2>
 				<p class="text-zinc-400">manage your AI model providers.</p>
 			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<div class="relative">
-					<Search
-						class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
-					/>
-					<Input
-						type="search"
-						placeholder="search providers..."
-						bind:value={searchQuery}
-						class="h-9 w-50 pl-8 lg:w-75"
-					/>
-				</div>
-				<Button onclick={openCreateModal} class="gap-2 rounded-xl">
+		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+			<div class="relative w-full sm:w-auto sm:flex-1">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					type="search"
+					placeholder="search providers..."
+					bind:value={searchQuery}
+					class="w-full pl-8 sm:w-50 lg:w-75"
+				/>
+			</div>
+			<div class="flex w-full items-center gap-2 sm:w-auto">
+				<Button onclick={openCreateModal} class="flex-1 gap-2 rounded-xl sm:flex-none">
 					<Plus class="h-4 w-4" />
 					add provider
 				</Button>
 				<Button
 					variant="outline"
-					class="rounded-xl"
+					class="flex-1 rounded-xl sm:flex-none"
 					onclick={() => loadProviders()}
 					disabled={isFetching}
 				>
+					<RefreshCw class="mr-2 h-4 w-4 {isFetching ? 'animate-spin' : ''}" />
 					{isFetching ? 'loading...' : 'refresh'}
 				</Button>
+			</div>
 			</div>
 		</div>
 
@@ -302,53 +305,52 @@
 		{:else}
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 				{#each filteredProviders as provider (provider.id)}
-					<Card
-						class="overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 text-zinc-100"
-					>
-						<CardHeader>
-							<div class="flex items-start justify-between">
-								<div>
-									<CardTitle>{provider.name}</CardTitle>
-									<CardDescription>{provider.adapter_type}</CardDescription>
+					<Card class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50">
+						<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
+							<div class="flex items-start justify-between gap-4">
+								<div class="flex min-w-0 flex-1 items-start gap-3">
+									<div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+										<Server class="h-4 w-4" />
+									</div>
+									<div class="min-w-0 flex-1">
+										<CardTitle class="truncate text-base">{provider.name}</CardTitle>
+										<CardDescription class="mt-1 truncate text-xs">{provider.adapter_type}</CardDescription>
+									</div>
 								</div>
 								<Button
 									variant="ghost"
 									size="icon"
-									class="h-8 w-8 text-zinc-400 hover:text-zinc-100"
+									class="h-7 w-7 shrink-0 text-zinc-500 hover:text-zinc-300"
 									onclick={() => openEditModal(provider)}
 								>
-									<Pencil class="h-4 w-4" />
+									<Pencil class="h-3.5 w-3.5" />
 								</Button>
 							</div>
 						</CardHeader>
-						<CardContent>
-							<div class="space-y-1 text-sm text-zinc-400">
-								<div class="flex justify-between">
-									<span>status:</span>
-									<span
-										class={provider.status === 'enabled'
-											? 'text-green-400'
-											: 'text-zinc-500'}>{provider.status}</span
-									>
+						<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
+							<div class="flex flex-col gap-2 text-xs">
+								<div class="flex items-center justify-between gap-2">
+									<div class="flex items-center gap-2">
+										<div class={`h-2 w-2 rounded-full ${provider.status === 'enabled' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-700'}`}></div>
+										<span class="text-xs font-medium tracking-wider text-zinc-400 uppercase">
+											{provider.status}
+										</span>
+									</div>
+									<span class="truncate font-medium text-zinc-500 uppercase tracking-wider">
+										{provider.provider_type}
+									</span>
 								</div>
-								<div class="flex justify-between">
-									<span>type:</span>
-									<span>{provider.provider_type}</span>
-								</div>
-								<div class="flex justify-between">
-									<span>autofetch:</span>
-									<span
-										class={provider.is_autofetch_enabled
-											? 'text-blue-400'
-											: 'text-zinc-500'}
-										>{provider.is_autofetch_enabled
-											? 'enabled'
-											: 'disabled'}</span
-									>
-								</div>
+								{#if provider.is_autofetch_enabled}
+									<div class="flex items-center justify-between gap-2 border-t border-zinc-800/50 pt-2 mt-1">
+										<span class="shrink-0 font-medium tracking-wider text-zinc-600 uppercase">models</span>
+										<span class="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-blue-400 uppercase">
+											autofetched
+										</span>
+									</div>
+								{/if}
 								{#if provider.base_url}
-									<div class="mt-2 border-t border-zinc-800 pt-2">
-										<p class="truncate font-mono text-xs opacity-70">
+									<div class="mt-1 border-t border-zinc-800/50 pt-2">
+										<p class="truncate font-mono text-[10px] text-zinc-500" title={provider.base_url}>
 											{provider.base_url}
 										</p>
 									</div>
