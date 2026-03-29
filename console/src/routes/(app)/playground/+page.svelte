@@ -1,68 +1,58 @@
 <script lang="ts">
 	import { api, unwrap, type Schemas } from '$lib/api'
-
-	type Agent = Schemas['Agent']
-	type Message = Schemas['Message']
-	type MessageCreate = Schemas['MessageCreate']
-	type Model = Schemas['Model']
-	type Thread = Schemas['Thread']
-	type ThreadCreate = Schemas['ThreadCreate']
-
-	import { auth } from '$lib/auth.svelte'
-	import AclModal from '$lib/components/AclModal.svelte'
+	import { getApiBaseUrl, getAuthHeaders } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import { fade, slide } from 'svelte/transition'
-	import {
-		BrainCircuit,
-		Bot,
-		Cpu,
-		Hammer,
-		MessageSquarePlus,
-		Play,
-		RefreshCw,
-		SendHorizonal,
-		Settings,
-		ShieldCheck,
-		Sparkles,
-		Terminal,
-		Hash,
-	} from '@lucide/svelte'
-	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { onMount } from 'svelte'
+	import {
+		Bot,
+		ChevronDown,
+		ChevronUp,
+		CircleStop,
+		Eraser,
+		FlaskConical,
+		MinusCircle,
+		Play,
+		Plus,
+		RefreshCw,
+		User,
+	} from '@lucide/svelte'
+	import { onMount, tick } from 'svelte'
 
+	type Agent = Schemas['Agent']
+
+	// metadata
 	let agents = $state<Agent[]>([])
-	let models = $state<Model[]>([])
-
 	let isFetching = $state(true)
-	let error = $state<string | null>(null)
+	let fetchError = $state<string | null>(null)
 
-	let thread = $state<Thread | null>(null)
-	let messages = $state<Message[]>([])
-	let isWorking = $state(false)
-	let actionError = $state<string | null>(null)
-	let isAclOpen = $state(false)
-
-	let threadTitle = $state('')
-	let messageContent = $state('')
+	// playground state
+	let systemPrompt = $state('')
+	let showSystem = $state(false)
 	let selectedAgentId = $state<string>('')
-	let selectedModelId = $state<string>('')
+
+	type PlaygroundMessage = { role: 'user' | 'assistant' | 'system'; content: string }
+	let messages = $state<PlaygroundMessage[]>([])
+	let inputRole = $state<'user' | 'assistant'>('user')
+	let inputContent = $state('')
+
+	let isStreaming = $state(false)
+	let currentAbortController: AbortController | null = null
+	let streamError = $state<string | null>(null)
+
+	let messagesContainer: HTMLDivElement | undefined = $state()
+	let systemTextarea: HTMLTextAreaElement | undefined = $state()
+	let inputTextarea: HTMLTextAreaElement | undefined = $state()
 
 	async function loadMeta() {
 		isFetching = true
-		error = null
+		fetchError = null
 		try {
-			const [agentsData, modelsData] = await Promise.all([
-				api.GET('/v1/agents').then((r) => unwrap(r)),
-				api.GET('/v1/models').then((r) => unwrap(r)),
-			])
-			agents = agentsData
-			models = modelsData
+			agents = await api.GET('/v1/agents').then((r) => unwrap(r))
 		} catch (e) {
 			console.error('Failed to load playground metadata', e)
-			error = 'Failed to load models/agents'
+			fetchError = 'failed to load agents'
 		} finally {
 			isFetching = false
 		}
@@ -77,100 +67,172 @@
 		return a ? a.name : agentId
 	}
 
-	function getModelLabel(modelId: string) {
-		const m = models.find((m) => m.id === modelId)
-		return m ? m.display_name || m.name : modelId
-	}
-
-	async function refreshMessages() {
-		if (!thread) return
-		messages = unwrap(
-			await api.GET('/v1/threads/{thread_id}/messages', {
-				params: { path: { thread_id: thread.id } },
-			})
-		)
-	}
-
-	async function createThread() {
-		actionError = null
-		if (!auth.user) {
-			actionError = 'You must be logged in to create a thread.'
-			return
-		}
-
-		isWorking = true
-		try {
-			const payload: ThreadCreate = {
-				owner_id: auth.user.id,
-				title: threadTitle.trim() ? threadTitle.trim() : null,
-				is_archived: false,
-				is_temporary: true,
-			}
-			thread = unwrap(await api.POST('/v1/threads', { body: payload }))
-			messages = []
-			await refreshMessages()
-		} catch (e: unknown) {
-			console.error('Failed to create thread', e)
-			actionError = e instanceof Error ? e.message : String(e)
-		} finally {
-			isWorking = false
+	async function scrollToBottom() {
+		await tick()
+		if (messagesContainer) {
+			messagesContainer.scrollTop = messagesContainer.scrollHeight
 		}
 	}
 
-	async function sendMessage() {
-		actionError = null
-		if (!thread) {
-			actionError = 'Create a thread first.'
-			return
-		}
-		if (!auth.user) {
-			actionError = 'You must be logged in to send a message.'
-			return
-		}
-		if (!messageContent.trim()) return
+	function resizeTextarea(el: HTMLTextAreaElement | undefined) {
+		if (!el) return
+		el.style.height = ''
+		el.style.height = Math.min(el.scrollHeight, 300) + 'px'
+	}
 
-		isWorking = true
-		try {
-			const metadata: Record<string, unknown> = {}
-			if (selectedModelId) metadata.model_id = selectedModelId
-			if (selectedAgentId) metadata.agent_id = selectedAgentId
-
-			const payload: MessageCreate = {
-				type: 'user',
-				content: messageContent.trim(),
-				sender_user_id: auth.user.id,
-				sender_agent_id: selectedAgentId || null,
-				metadata_:
-					Object.keys(metadata).length > 0
-						? (metadata as unknown as MessageCreate['metadata_'])
-						: undefined,
-			}
-
-			unwrap(
-				await api.POST('/v1/threads/{thread_id}/messages', {
-					params: { path: { thread_id: thread.id } },
-					body: payload,
-				})
-			)
-			messageContent = ''
-			await refreshMessages()
-		} catch (e: unknown) {
-			console.error('Failed to send message', e)
-			actionError = e instanceof Error ? e.message : String(e)
-		} finally {
-			isWorking = false
+	function addMessage() {
+		if (!inputContent.trim()) return
+		messages.push({ role: inputRole, content: inputContent.trim() })
+		messages = messages
+		inputContent = ''
+		inputRole = inputRole === 'user' ? 'assistant' : 'user'
+		scrollToBottom()
+		if (inputTextarea) {
+			inputTextarea.style.height = ''
 		}
 	}
 
-	function resetSession() {
-		thread = null
+	function removeMessage(idx: number) {
+		messages = messages.filter((_, i) => i !== idx)
+	}
+
+	function clearAll() {
 		messages = []
-		threadTitle = ''
-		messageContent = ''
-		selectedAgentId = ''
-		selectedModelId = ''
-		actionError = null
-		isAclOpen = false
+		inputContent = ''
+		systemPrompt = ''
+		streamError = null
+	}
+
+	async function runCompletion() {
+		if (!selectedAgentId) {
+			streamError = 'select an agent first'
+			return
+		}
+
+		streamError = null
+
+		// flush pending input into message list
+		if (inputContent.trim()) {
+			messages.push({ role: inputRole, content: inputContent.trim() })
+			messages = messages
+			inputContent = ''
+		}
+
+		// ensure there's at least one message to send
+		const userMessages = messages.filter((m) => m.role === 'user')
+		if (userMessages.length === 0) {
+			streamError = 'add at least one user message'
+			return
+		}
+
+		isStreaming = true
+
+		// build the input text from the last user message
+		const lastUserMsg = messages[messages.length - 1]
+		const inputText =
+			lastUserMsg?.role === 'user'
+				? lastUserMsg.content
+				: messages.findLast((m) => m.role === 'user')?.content ?? ''
+
+		// add empty assistant to stream into
+		const assistantMsg: PlaygroundMessage = { role: 'assistant', content: '' }
+		messages.push(assistantMsg)
+		messages = messages
+		await scrollToBottom()
+
+		const controller = new AbortController()
+		currentAbortController = controller
+
+		try {
+			const headers = await getAuthHeaders()
+			const base = getApiBaseUrl() || ''
+
+			const body = {
+				agent_id: selectedAgentId,
+				input: { text: inputText },
+				stream: true,
+				persist: false,
+			}
+
+			const res = await fetch(`${base}/v1/runs`, {
+				method: 'POST',
+				headers: {
+					...headers,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(body),
+				signal: controller.signal,
+				credentials: 'include',
+			})
+
+			if (!res.ok) {
+				const text = await res.text()
+				streamError = `request failed (${res.status}): ${text}`
+				messages = messages.filter((m) => m !== assistantMsg)
+				return
+			}
+
+			if (!res.body) {
+				streamError = 'no response body'
+				messages = messages.filter((m) => m !== assistantMsg)
+				return
+			}
+
+			const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+
+			while (true) {
+				const { value, done } = await reader.read()
+				if (done) break
+
+				const lines = value.split('\n')
+				for (const line of lines) {
+					if (!line.trim()) continue
+
+					// parse SSE format: "event: ...\ndata: ..."
+					const dataMatch = line.match(/^data:\s*(.+)$/)
+					if (!dataMatch) continue
+
+					const raw = dataMatch[1]
+					if (raw === '[DONE]') continue
+
+					try {
+						const data = JSON.parse(raw)
+
+						// handle different event types from the runs SSE stream
+						if (data.type === 'delta' && data.delta?.text) {
+							assistantMsg.content += data.delta.text
+							messages = messages
+							scrollToBottom()
+						} else if (data.type === 'message_created' && data.message?.type === 'assistant') {
+							// new assistant message started - content arrives via deltas
+						} else if (data.type === 'done') {
+							// run completed
+						} else if (data.choices?.[0]?.delta?.content) {
+							// openai-style streaming format fallback
+							assistantMsg.content += data.choices[0].delta.content
+							messages = messages
+							scrollToBottom()
+						}
+					} catch {
+						// skip non-JSON lines
+					}
+				}
+			}
+		} catch (e: unknown) {
+			if (e instanceof DOMException && e.name === 'AbortError') {
+				// user cancelled
+			} else {
+				console.error('Stream error', e)
+				streamError = e instanceof Error ? e.message : String(e)
+			}
+		} finally {
+			isStreaming = false
+			currentAbortController = null
+		}
+	}
+
+	function stopStream() {
+		currentAbortController?.abort()
 	}
 </script>
 
@@ -178,250 +240,278 @@
 	<div class="flex shrink-0 items-center justify-between">
 		<div>
 			<h2 class="flex items-center gap-2 text-2xl font-bold tracking-tight">
-				<Hammer class="h-6 w-6 text-emerald-400" />
+				<FlaskConical class="h-6 w-6 text-emerald-400" />
 				playground
 			</h2>
-			<p class="text-zinc-400">test agents and models directly via api.</p>
+			<p class="text-zinc-400">
+				test agents interactively with ephemeral, non-persisted runs.
+			</p>
 		</div>
-		{#if thread}
-			<Button
-				variant="outline"
-				class="rounded-xl border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-				onclick={resetSession}
-				disabled={isWorking}
-			>
-				<RefreshCw class="mr-1.5 h-4 w-4 {isWorking ? 'animate-spin' : ''}" />
-				reset session
-			</Button>
-		{/if}
+		<div class="flex items-center gap-2">
+			{#if messages.length > 0}
+				<Button
+					variant="outline"
+					class="rounded-xl border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+					onclick={clearAll}
+					disabled={isStreaming}
+				>
+					<Eraser class="mr-1.5 h-4 w-4" />
+					clear all
+				</Button>
+			{/if}
+		</div>
 	</div>
 
 	{#if isFetching}
 		<div class="flex min-h-0 flex-1 items-center justify-center">
 			<NokodoLoader />
 		</div>
-	{:else if error}
-		<div class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400 shadow-xl shadow-red-900/5">
-			<p>{error}</p>
-			<Button variant="outline" class="mt-4 border-red-800 hover:bg-red-900" onclick={loadMeta}>
+	{:else if fetchError}
+		<div
+			class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400 shadow-xl shadow-red-900/5"
+		>
+			<p>{fetchError}</p>
+			<Button
+				variant="outline"
+				class="mt-4 border-red-800 hover:bg-red-900"
+				onclick={loadMeta}
+			>
 				<RefreshCw class="mr-2 h-4 w-4" /> retry
 			</Button>
 		</div>
 	{:else}
-		<div class="grid min-h-0 flex-1 gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
-			<!-- sidebar config pane -->
-			<div class="flex flex-col gap-6 overflow-y-auto pr-2" transition:fade>
-				{#if !thread}
-					<div class="flex flex-col gap-5 rounded-3xl border border-zinc-800/60 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl">
-						<div>
-							<h3 class="flex items-center gap-2 text-lg font-semibold text-zinc-100">
-								<Settings class="h-5 w-5 text-zinc-400" />
-								configuration
-							</h3>
-							<p class="text-sm text-zinc-500">setup the environment before initializing.</p>
-						</div>
-
-						{#if actionError}
-							<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
-								{actionError}
+		<div class="flex min-h-0 flex-1 flex-col gap-4">
+			<!-- agent selector -->
+			<div
+				class="flex shrink-0 flex-wrap items-end gap-4 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4"
+			>
+				<div class="min-w-[240px] flex-1 space-y-1.5">
+					<Label class="text-xs font-medium text-zinc-400">agent</Label>
+					<Select
+						value={selectedAgentId}
+						onValueChange={(v: string) => (selectedAgentId = v)}
+					>
+						<SelectTrigger class="h-10 rounded-xl border-zinc-800 bg-zinc-950/50">
+							<div class="flex items-center gap-2 truncate text-left">
+								<Bot class="h-4 w-4 text-emerald-400" />
+								{selectedAgentId
+									? getAgentLabel(selectedAgentId)
+									: 'select an agent...'}
 							</div>
-						{/if}
-
-						<div class="space-y-4">
-							<div class="space-y-2">
-								<Label class="text-xs font-medium text-zinc-400">agent configuration</Label>
-								<Select value={selectedAgentId} onValueChange={(v: string) => (selectedAgentId = v)}>
-									<SelectTrigger class="h-11 rounded-xl border-zinc-800 bg-zinc-950/50">
-										<div class="flex items-center gap-2 truncate text-left">
-											<Bot class="h-4 w-4 text-emerald-400" />
-											{selectedAgentId ? getAgentLabel(selectedAgentId) : 'none (default behavior)'}
-										</div>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="">none (default behavior)</SelectItem>
-										{#each agents as agent (agent.id)}
-											<SelectItem value={agent.id}>{agent.name}</SelectItem>
-										{/each}
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div class="space-y-2">
-								<Label class="text-xs font-medium text-zinc-400">model override</Label>
-								<Select value={selectedModelId} onValueChange={(v: string) => (selectedModelId = v)}>
-									<SelectTrigger class="h-11 rounded-xl border-zinc-800 bg-zinc-950/50">
-										<div class="flex items-center gap-2 truncate text-left">
-											<Cpu class="h-4 w-4 text-indigo-400" />
-											{selectedModelId ? getModelLabel(selectedModelId) : 'use agent default'}
-										</div>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="">use agent default</SelectItem>
-										{#each models as model (model.id)}
-											<SelectItem value={model.id}>{model.display_name || model.name}</SelectItem>
-										{/each}
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div class="space-y-2 pt-2">
-								<Label for="threadTitle" class="text-xs font-medium text-zinc-400">session title (optional)</Label>
-								<Input
-									id="threadTitle"
-									bind:value={threadTitle}
-									class="h-11 rounded-xl border-zinc-800 bg-zinc-950/50 focus:border-emerald-500/50 focus:ring-emerald-500/20"
-									placeholder="e.g. reasoning test run..."
-								/>
-							</div>
-						</div>
-
-						<Button
-							class="group relative mt-2 h-12 w-full overflow-hidden rounded-xl bg-linear-to-r from-emerald-500 to-teal-500 text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-emerald-500/25"
-							onclick={createThread}
-							disabled={isWorking}
-						>
-							<div class="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-100"></div>
-							<div class="relative flex items-center justify-center gap-2">
-								{#if isWorking}
-									<RefreshCw class="h-5 w-5 animate-spin" />
-									<span class="font-medium">initializing...</span>
-								{:else}
-									<Play class="h-5 w-5 fill-current" />
-									<span class="font-medium">start session</span>
-								{/if}
-							</div>
-						</Button>
-					</div>
-				{:else}
-					<!-- active session controls pane -->
-					<div class="flex flex-col gap-4 rounded-3xl border border-emerald-900/30 bg-linear-to-br from-emerald-950/20 to-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl" transition:slide>
-						<div class="flex items-start justify-between">
-							<div class="space-y-1">
-								<h3 class="flex items-center gap-2 text-lg font-semibold text-emerald-400">
-									<Sparkles class="h-5 w-5" />
-									session active
-								</h3>
-								<div class="flex items-center gap-1.5 text-xs text-zinc-500">
-									<Hash class="h-3.5 w-3.5" />
-									<span class="font-mono">{thread.id}</span>
-								</div>
-							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								class="h-8 rounded-lg border-zinc-800 bg-zinc-950/50 text-xs hover:bg-zinc-800"
-								onclick={() => (isAclOpen = true)}
-							>
-								<ShieldCheck class="mr-1.5 h-3.5 w-3.5" /> permissions
-							</Button>
-						</div>
-
-						<div class="mt-4 flex flex-col gap-3 rounded-2xl bg-zinc-950/50 p-4">
-							{#if actionError}
-								<div class="rounded-lg bg-red-900/20 p-2 text-sm text-red-400 mb-1">
-									{actionError}
-								</div>
+						</SelectTrigger>
+						<SelectContent>
+							{#each agents as agent (agent.id)}
+								<SelectItem value={agent.id}>{agent.name}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				{#if selectedAgentId}
+					{@const agent = agents.find((a) => a.id === selectedAgentId)}
+					{#if agent}
+						<div class="flex items-center gap-3 text-xs text-zinc-500">
+							{#if agent.model_id}
+								<span class="rounded-md bg-zinc-800 px-2 py-1">
+									{agent.model_id}
+								</span>
 							{/if}
-							<Label for="message" class="text-xs font-semibold tracking-wider text-zinc-400 uppercase">Input Payload</Label>
-							<textarea
-								id="message"
-								bind:value={messageContent}
-								rows={6}
-								placeholder="enter prompt text..."
-								class="w-full resize-none rounded-xl border-0 bg-transparent py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:ring-0"
-								style="box-shadow: none;"
-							></textarea>
-							<div class="flex justify-end pt-2 border-t border-zinc-800/50">
-								<Button
-									class="group relative h-10 overflow-hidden rounded-xl bg-linear-to-r from-zinc-200 to-zinc-400 text-zinc-950 shadow-md transition-all hover:scale-[1.02] hover:shadow-white/10"
-									onclick={sendMessage}
-									disabled={isWorking || !messageContent.trim()}
-								>
-									<div class="relative flex items-center gap-2 px-2">
-										{#if isWorking}
-											<RefreshCw class="h-4 w-4 animate-spin" />
-											<span class="font-medium">executing...</span>
-										{:else}
-											<span class="font-medium">send message</span>
-											<SendHorizonal class="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
-										{/if}
-									</div>
-								</Button>
-							</div>
 						</div>
+					{/if}
+				{/if}
+			</div>
+
+			<!-- system prompt collapsible -->
+			<div class="shrink-0">
+				<button
+					type="button"
+					class="flex w-full items-center justify-between rounded-xl border border-zinc-800/60 bg-zinc-900/40 px-4 py-2.5 text-sm transition-colors hover:border-zinc-700"
+					onclick={() => {
+						showSystem = !showSystem
+						if (showSystem) {
+							tick().then(() => resizeTextarea(systemTextarea))
+						}
+					}}
+				>
+					<div class="flex items-center gap-2">
+						<span class="font-medium text-zinc-200">system instructions</span>
+						{#if !showSystem && systemPrompt.trim()}
+							<span class="line-clamp-1 max-w-xs text-zinc-500">
+								{systemPrompt}
+							</span>
+						{/if}
+					</div>
+					{#if showSystem}
+						<ChevronUp class="h-4 w-4 text-zinc-400" />
+					{:else}
+						<ChevronDown class="h-4 w-4 text-zinc-400" />
+					{/if}
+				</button>
+				{#if showSystem}
+					<div class="mt-1 rounded-xl border border-zinc-800/60 bg-zinc-950/50 p-3">
+						<textarea
+							bind:this={systemTextarea}
+							bind:value={systemPrompt}
+							class="w-full resize-none bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+							placeholder="you are a helpful assistant..."
+							rows={4}
+							oninput={() => resizeTextarea(systemTextarea)}
+						></textarea>
 					</div>
 				{/if}
 			</div>
 
-			<!-- main chat pane -->
-			<div class="flex min-h-0 flex-col rounded-3xl border border-zinc-800/60 bg-zinc-950/50 shadow-2xl">
-				<div class="flex shrink-0 items-center justify-between border-b border-zinc-800/50 px-6 py-4 backdrop-blur-md">
-					<div class="flex items-center gap-3">
-						<Terminal class="h-5 w-5 text-zinc-400" />
-						<div class="text-sm font-medium text-zinc-200">execution log</div>
-					</div>
-					{#if thread}
-						<Button
-							variant="ghost"
-							size="sm"
-							class="h-8 rounded-xl text-zinc-400 hover:text-white"
-							onclick={refreshMessages}
-							disabled={isWorking}
+			<!-- messages area -->
+			<div
+				class="flex min-h-0 flex-1 flex-col rounded-2xl border border-zinc-800/60 bg-zinc-950/50"
+			>
+				<div
+					bind:this={messagesContainer}
+					class="flex-1 space-y-3 overflow-y-auto scroll-smooth p-4"
+				>
+					{#if messages.length === 0}
+						<div
+							class="flex h-full flex-col items-center justify-center text-center opacity-40"
 						>
-							<RefreshCw class="mr-1.5 h-3.5 w-3.5 {isWorking ? 'animate-spin' : ''}" /> reload log
-						</Button>
-					{/if}
-				</div>
-
-				<div class="min-h-0 flex-1 space-y-6 overflow-y-auto p-6 scroll-smooth">
-					{#if !thread}
-						<div class="flex h-full flex-col items-center justify-center text-center opacity-40" transition:fade>
-							<MessageSquarePlus class="mb-4 h-16 w-16 text-zinc-600" />
-							<p class="text-lg font-medium text-zinc-400">ready to start</p>
-							<p class="mt-1 max-w-sm text-sm text-zinc-500">configure an agent and click start session to begin testing.</p>
-						</div>
-					{:else if messages.length === 0}
-						<div class="flex h-full flex-col items-center justify-center text-center opacity-40" transition:fade>
-							<BrainCircuit class="mb-4 h-16 w-16 text-zinc-600" />
-							<p class="text-lg font-medium text-zinc-400">thread created</p>
-							<p class="mt-1 text-sm text-zinc-500">awaiting your input...</p>
+							<FlaskConical class="mb-4 h-16 w-16 text-zinc-600" />
+							<p class="text-lg font-medium text-zinc-400">ready to experiment</p>
+							<p class="mt-1 max-w-sm text-sm text-zinc-500">
+								add messages below, then click run to start an ephemeral agent
+								run.
+							</p>
 						</div>
 					{:else}
-						{#each messages as msg (msg.id)}
-							{@const isUser = msg.type === 'user'}
-							<div class="flex w-full {isUser ? 'justify-end' : 'justify-start'}" transition:slide={{ duration: 200 }}>
-								<div class="max-w-[85%] sm:max-w-[75%]">
-									<div class="mb-1.5 flex items-center {isUser ? 'justify-end' : 'justify-start'} gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-										{#if isUser}
-											<span class="opacity-60">{new Date(msg.created_at).toLocaleTimeString()}</span>
-											<span>user payload</span>
-										{:else}
-											<span class="text-emerald-500">agent response</span>
-											<span class="opacity-60">{new Date(msg.created_at).toLocaleTimeString()}</span>
-										{/if}
+						{#each messages as msg, idx (idx)}
+							<div class="group flex gap-3">
+								<div class="flex shrink-0 items-start pt-2">
+									<div
+										class="flex h-7 min-w-20 items-center justify-center rounded-lg text-xs font-semibold uppercase {msg.role ===
+										'user'
+											? 'bg-blue-500/10 text-blue-400'
+											: msg.role === 'assistant'
+												? 'bg-emerald-500/10 text-emerald-400'
+												: 'bg-amber-500/10 text-amber-400'}"
+									>
+										{msg.role}
 									</div>
-									<div class="relative overflow-hidden rounded-2xl p-4 {isUser ? 'bg-zinc-800 text-zinc-100' : 'border border-zinc-800 bg-zinc-900/80 text-zinc-200'}">
-										<p class="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
-									</div>
-									<div class="mt-1.5 flex {isUser ? 'justify-end' : 'justify-start'}">
-										<span class="font-mono text-[10px] text-zinc-600">{msg.id}</span>
-									</div>
+								</div>
+								<div class="flex-1">
+									<textarea
+										class="w-full resize-none rounded-xl bg-zinc-900/50 p-3 text-sm text-zinc-100 transition-colors outline-none placeholder:text-zinc-600 focus:bg-zinc-900"
+										rows={1}
+										bind:value={msg.content}
+										oninput={(e) => {
+											const t = e.currentTarget
+											t.style.height = ''
+											t.style.height =
+												Math.min(t.scrollHeight, 400) + 'px'
+										}}
+										onfocus={(e) => {
+											const t = e.currentTarget
+											t.style.height = ''
+											t.style.height =
+												Math.min(t.scrollHeight, 400) + 'px'
+										}}
+									></textarea>
+								</div>
+								<div class="flex shrink-0 items-start pt-2">
+									<button
+										type="button"
+										class="rounded-lg p-1.5 text-zinc-600 opacity-0 transition-all group-hover:opacity-100 hover:bg-zinc-800 hover:text-red-400"
+										onclick={() => removeMessage(idx)}
+										disabled={isStreaming}
+									>
+										<MinusCircle class="h-4 w-4" />
+									</button>
 								</div>
 							</div>
 						{/each}
-						<!-- dummy anchor to auto-scroll to bottom could be placed here -->
 					{/if}
+				</div>
+
+				<!-- input bar -->
+				<div class="shrink-0 border-t border-zinc-800/50 p-4">
+					{#if streamError}
+						<div class="mb-3 rounded-lg bg-red-900/20 px-3 py-2 text-sm text-red-400">
+							{streamError}
+						</div>
+					{/if}
+
+					<div class="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-3">
+						<textarea
+							bind:this={inputTextarea}
+							bind:value={inputContent}
+							class="w-full resize-none bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+							placeholder="enter {inputRole} message here..."
+							rows={2}
+							oninput={() => resizeTextarea(inputTextarea)}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+									e.preventDefault()
+									runCompletion()
+								}
+							}}
+						></textarea>
+
+						<div
+							class="mt-2 flex flex-col gap-2 border-t border-zinc-800/50 pt-2 sm:flex-row sm:items-center sm:justify-between"
+						>
+							<div class="flex items-center gap-2">
+								<button
+									type="button"
+									class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors {inputRole ===
+									'user'
+										? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
+										: 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'}"
+									onclick={() =>
+										(inputRole =
+											inputRole === 'user' ? 'assistant' : 'user')}
+								>
+									{#if inputRole === 'user'}
+										<User class="h-3.5 w-3.5" />
+									{:else}
+										<Bot class="h-3.5 w-3.5" />
+									{/if}
+									{inputRole}
+								</button>
+							</div>
+
+							<div class="flex items-center gap-2">
+								<Button
+									variant="outline"
+									class="h-9 rounded-xl border-zinc-700 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800"
+									onclick={addMessage}
+									disabled={!inputContent.trim() || isStreaming}
+								>
+									<Plus class="mr-1.5 h-3.5 w-3.5" />
+									add
+								</Button>
+
+								{#if isStreaming}
+									<Button
+										class="h-9 rounded-xl bg-red-500/80 text-white hover:bg-red-500"
+										onclick={stopStream}
+									>
+										<CircleStop class="mr-1.5 h-3.5 w-3.5" />
+										stop
+									</Button>
+								{:else}
+									<Button
+										class="h-9 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
+										onclick={runCompletion}
+										disabled={!selectedAgentId ||
+											(messages.length === 0 && !inputContent.trim())}
+									>
+										<Play class="mr-1.5 h-3.5 w-3.5 fill-current" />
+										run
+									</Button>
+								{/if}
+							</div>
+						</div>
+					</div>
+
+					<p class="mt-2 text-center text-[10px] text-zinc-600">ctrl+enter to run</p>
 				</div>
 			</div>
 		</div>
 	{/if}
 </div>
-
-{#if thread}
-	<AclModal
-		bind:open={isAclOpen}
-		resourceType="thread"
-		resourceId={thread.id}
-		title="thread permissions"
-	/>
-{/if}
