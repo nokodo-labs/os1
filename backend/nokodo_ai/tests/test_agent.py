@@ -103,6 +103,21 @@ class _EchoTool(Tool[None]):
 		)
 
 
+class _TimingCaptureTool(Tool[None]):
+	"""captures tool_call_start_time from the agent context for assertions."""
+
+	captured_start_times: list[float] = []
+
+	async def call(
+		self,
+		__agent_context__: AgentContext,
+		__app_context__: None,
+		**kwargs: object,
+	) -> ToolMessage:
+		self.captured_start_times.append(__agent_context__.tool_call_start_time)
+		return self.success("ok", __agent_context__)
+
+
 class _ExplodingTool(Tool[None]):
 	async def call(
 		self,
@@ -624,3 +639,59 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	assert tool_msg.metadata.get("citable_sources") == [
 		{"source_type": "note", "source_id": "n1", "title": "My Note"},
 	]
+
+
+# -- tool_call_start_time monotonic propagation --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_agent_sync_passes_monotonic_start_time_to_tool() -> None:
+	"""tool_call_start_time in AgentContext must come from ToolCall.created_at_monotonic."""
+
+	tc = ToolCall(id="tc1", name="capture", arguments={})
+	expected_mono = tc.created_at_monotonic
+	assert expected_mono > 0
+
+	timing_tool = _TimingCaptureTool(name="capture", description="capture timing")
+
+	adapter = _QueuedChatAdapter(
+		sync_responses=[
+			AssistantMessage(tool_calls=[tc]),
+			AssistantMessage.from_text("done"),
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	agent = Agent(chat_model=chat_model, tools=[timing_tool])
+	thread = Thread()
+	thread.add(UserMessage.from_text("go"))
+
+	await agent.run(thread)
+
+	assert len(timing_tool.captured_start_times) == 1
+	assert timing_tool.captured_start_times[0] == expected_mono
+
+
+@pytest.mark.asyncio
+async def test_agent_streaming_passes_monotonic_start_time_to_tool() -> None:
+	"""streaming path must also propagate created_at_monotonic."""
+	tc = ToolCall(id="tc1", name="capture", arguments={})
+	expected_mono = tc.created_at_monotonic
+
+	timing_tool = _TimingCaptureTool(name="capture", description="capture timing")
+
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[AssistantMessage(tool_calls=[tc])],
+			[AssistantMessage.from_text("done")],
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	agent = Agent(chat_model=chat_model, tools=[timing_tool])
+	thread = Thread()
+	thread.add(UserMessage.from_text("go"))
+
+	stream = await agent.run(thread, stream=True)
+	_ = [d async for d in stream]
+
+	assert len(timing_tool.captured_start_times) == 1
+	assert timing_tool.captured_start_times[0] == expected_mono

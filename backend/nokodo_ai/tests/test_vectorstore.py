@@ -211,3 +211,72 @@ async def test_update_with_field_match_any_in_all_of() -> None:
 	assert by_id["x1"].metadata.get("flagged") is True
 	assert by_id["x2"].metadata.get("flagged") is True
 	assert "flagged" not in by_id.get("x3", make_chunk("x3", [])).metadata
+
+
+# -- Qdrant _build_field_condition float handling -----------------------------
+
+
+def test_qdrant_build_field_condition_string_uses_match_value() -> None:
+	from qdrant_client.models import MatchValue
+
+	cond = QdrantVectorstoreAdapter._build_field_condition(
+		FieldMatch(key="status", value="active")
+	)
+	assert cond.key == "status"
+	assert isinstance(cond.match, MatchValue)
+	assert cond.match.value == "active"
+
+
+def test_qdrant_build_field_condition_int_uses_match_value() -> None:
+	from qdrant_client.models import MatchValue
+
+	cond = QdrantVectorstoreAdapter._build_field_condition(
+		FieldMatch(key="count", value=42)
+	)
+	assert isinstance(cond.match, MatchValue)
+	assert cond.match.value == 42
+
+
+def test_qdrant_build_field_condition_bool_uses_match_value() -> None:
+	from qdrant_client.models import MatchValue
+
+	cond = QdrantVectorstoreAdapter._build_field_condition(
+		FieldMatch(key="active", value=True)
+	)
+	assert isinstance(cond.match, MatchValue)
+	assert cond.match.value is True
+
+
+def test_qdrant_build_field_condition_integral_float_coerces_to_int() -> None:
+	"""integral floats (e.g. 5.0) should be sent as int via MatchValue."""
+	from qdrant_client.models import MatchValue
+
+	cond = QdrantVectorstoreAdapter._build_field_condition(
+		FieldMatch(key="score", value=5.0)
+	)
+	assert isinstance(cond.match, MatchValue)
+	assert cond.match.value == 5
+	assert isinstance(cond.match.value, int)
+
+
+def test_qdrant_build_field_condition_non_integral_float_uses_range() -> None:
+	"""non-integral floats must use Range(gte=lte=value) for numeric matching."""
+	from qdrant_client.models import Range
+
+	cond = QdrantVectorstoreAdapter._build_field_condition(
+		FieldMatch(key="threshold", value=0.75)
+	)
+	assert cond.match is None
+	assert isinstance(cond.range, Range)
+	assert cond.range.gte == 0.75
+	assert cond.range.lte == 0.75
+
+
+def test_qdrant_build_field_condition_match_any() -> None:
+	from qdrant_client.models import MatchAny
+
+	cond = QdrantVectorstoreAdapter._build_field_condition(
+		FieldMatchAny(key="tags", values=["a", "b"])
+	)
+	assert isinstance(cond.match, MatchAny)
+	assert cond.match.any == ["a", "b"]
