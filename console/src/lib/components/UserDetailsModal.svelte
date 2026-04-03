@@ -81,7 +81,7 @@
 	type ResourceRoute = '/threads' | '/memories' | '/notes' | '/files' | '/groups' | '/reminders'
 
 	function openResource(route: ResourceRoute, uid: string) {
-		void goto(resolve(route), { state: { user: uid } })
+		void goto(resolve(`${route}?user=${encodeURIComponent(uid)}`))
 		close()
 	}
 

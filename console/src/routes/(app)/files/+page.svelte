@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
+	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type File = Schemas['File']
@@ -44,6 +46,7 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let ownerIdFilter = $state<string | null>(null)
 
 	let deletingId = $state<string | null>(null)
 	let deleteError = $state<string | null>(null)
@@ -62,6 +65,16 @@
 	}
 
 	$effect(() => {
+		if (!browser) return
+
+		const user = page.url.searchParams.get('user')
+		const nextOwner = user?.trim() || null
+
+		if (ownerIdFilter !== nextOwner) pageIndex = 0
+		ownerIdFilter = nextOwner
+	})
+
+	$effect(() => {
 		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
@@ -74,6 +87,7 @@
 					limit,
 					sort_by: sortKey,
 					sort_dir: sortDir,
+					...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
 				},
 			},
 		})
@@ -217,6 +231,9 @@
 					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
+				<span class="text-xs text-zinc-400 tabular-nums">
+					page {pageIndex + 1}{files.length > 0 ? ` \u00b7 ${files.length} items` : ''}
+				</span>
 				<Button
 					variant="outline"
 					class="rounded-xl"

@@ -28,7 +28,7 @@ from nokodo_ai.threads import Thread
 from nokodo_ai.types import JSONObject, JSONValue
 
 
-# -- helpers -----------------------------------------------------------------
+# helpers
 
 
 def _citation(
@@ -88,7 +88,7 @@ def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 	return ctx
 
 
-# -- _next_index -------------------------------------------------------------
+# _next_index
 
 
 class TestNextIndex:
@@ -114,7 +114,7 @@ class TestNextIndex:
 		assert _next_index(entries, 5) == 5
 
 
-# -- _find_nci_in_window -----------------------------------------------------
+# _find_nci_in_window
 
 
 class TestFindNciInWindow:
@@ -156,7 +156,7 @@ class TestFindNciInWindow:
 		assert _find_nci_in_window(thread) == 5
 
 
-# -- _oldest_message_id ------------------------------------------------------
+# _oldest_message_id
 
 
 class TestOldestMessageId:
@@ -192,7 +192,7 @@ class TestOldestMessageId:
 		assert _oldest_message_id(thread) is None
 
 
-# -- _rebuild_from_existing --------------------------------------------------
+# _rebuild_from_existing
 
 
 class TestRebuildFromExisting:
@@ -313,7 +313,7 @@ class TestRebuildFromExisting:
 		assert entries[1].source_type == CitationSource.NOTE
 
 
-# -- _assign_new_citations (via filter instance) -----------------------------
+# _assign_new_citations (via filter instance)
 
 
 class TestAssignNewCitations:
@@ -560,8 +560,202 @@ class TestAssignNewCitations:
 		assert len(entries) == 1
 		assert entries[0].index == 5
 
+	def test_dedup_same_source_in_two_tool_messages(self) -> None:
+		"""same (source_type, source_id) across two tools reuses the index."""
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="first fetch",
+					citable_sources=[
+						{
+							"source_type": "note",
+							"source_id": "note_1",
+							"title": "My Note",
+						},
+					],
+				),
+				_tool_msg(
+					output="second fetch",
+					citable_sources=[
+						{
+							"source_type": "note",
+							"source_id": "note_1",
+							"title": "My Note",
+						},
+					],
+				),
+			]
+		)
+		f._assign_new_citations(thread, entries, 0)
+		# only one unique entry in the entries list
+		assert len(entries) == 1
+		assert entries[0].index == 1
+		# both tool messages get the same [1] marker
+		msg0 = thread.messages[0]
+		msg1 = thread.messages[1]
+		assert isinstance(msg0, ToolMessage)
+		assert isinstance(msg1, ToolMessage)
+		assert "[1] My Note" in msg0.tool_output
+		assert "[1] My Note" in msg1.tool_output
 
-# -- _inject_manifest --------------------------------------------------------
+	def test_dedup_reuses_rebuilt_entry(self) -> None:
+		"""source already in entries (from _rebuild_from_existing) is reused."""
+		f = self._make_filter()
+		existing = _citation(1, source_type="url", source_id="https://a.com", title="A")
+		entries: list[Citation] = [existing]
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="fetched again",
+					citable_sources=[
+						{
+							"source_type": "url",
+							"source_id": "https://a.com",
+							"title": "A",
+						},
+					],
+				),
+			]
+		)
+		f._assign_new_citations(thread, entries, 0)
+		# no new entry added
+		assert len(entries) == 1
+		assert entries[0] is existing
+		# marker uses the existing index
+		msg = thread.messages[0]
+		assert isinstance(msg, ToolMessage)
+		assert "[1] A" in msg.tool_output
+
+	def test_dedup_mixed_new_and_existing(self) -> None:
+		"""mix of new and duplicate sources in one tool message."""
+		f = self._make_filter()
+		existing = _citation(1, source_type="note", source_id="note_1", title="Note 1")
+		entries: list[Citation] = [existing]
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="search results",
+					citable_sources=[
+						{
+							"source_type": "note",
+							"source_id": "note_1",
+							"title": "Note 1",
+						},
+						{
+							"source_type": "note",
+							"source_id": "note_2",
+							"title": "Note 2",
+						},
+					],
+				),
+			]
+		)
+		f._assign_new_citations(thread, entries, 0)
+		assert len(entries) == 2
+		assert entries[0].source_id == "note_1"
+		assert entries[0].index == 1
+		assert entries[1].source_id == "note_2"
+		assert entries[1].index == 2
+
+	def test_dedup_does_not_apply_to_empty_source_id(self) -> None:
+		"""sources with empty source_id are never deduplicated."""
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="result 1",
+					citable_sources=[
+						{"source_type": "tool_result"},
+					],
+				),
+				_tool_msg(
+					output="result 2",
+					citable_sources=[
+						{"source_type": "tool_result"},
+					],
+				),
+			]
+		)
+		f._assign_new_citations(thread, entries, 0)
+		# both get unique indices since source_id is empty
+		assert len(entries) == 2
+		assert entries[0].index == 1
+		assert entries[1].index == 2
+
+	def test_dedup_different_source_types_same_id(self) -> None:
+		"""same source_id but different source_type are NOT deduplicated."""
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="content 1",
+					citable_sources=[
+						{"source_type": "url", "source_id": "abc", "title": "URL"},
+					],
+				),
+				_tool_msg(
+					output="content 2",
+					citable_sources=[
+						{"source_type": "note", "source_id": "abc", "title": "Note"},
+					],
+				),
+			]
+		)
+		f._assign_new_citations(thread, entries, 0)
+		assert len(entries) == 2
+		assert entries[0].source_type == CitationSource.URL
+		assert entries[1].source_type == CitationSource.NOTE
+
+	def test_dedup_events_include_reused_citations(self) -> None:
+		"""by_message dict includes reused citations for WS event emission."""
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				ToolMessage(
+					tool_call_id="tc_1",
+					tool_output="first",
+					metadata={
+						"citable_sources": [
+							{
+								"source_type": "note",
+								"source_id": "note_1",
+								"title": "N",
+							},
+						],
+						"message_id": "msg_tool_1",
+					},
+				),
+				ToolMessage(
+					tool_call_id="tc_2",
+					tool_output="second",
+					metadata={
+						"citable_sources": [
+							{
+								"source_type": "note",
+								"source_id": "note_1",
+								"title": "N",
+							},
+						],
+						"message_id": "msg_tool_2",
+					},
+				),
+			]
+		)
+		by_message = f._assign_new_citations(thread, entries, 0)
+		# both tool messages have a citation event entry
+		assert "msg_tool_1" in by_message
+		assert "msg_tool_2" in by_message
+		# both reference the same citation (index 1)
+		assert by_message["msg_tool_1"][0].index == 1
+		assert by_message["msg_tool_2"][0].index == 1
+
+
+# _inject_manifest
 
 
 class TestInjectManifest:
@@ -615,7 +809,7 @@ class TestInjectManifest:
 		assert msg.text == "no sentinel here"
 
 
-# -- resolve_assistant_citations ---------------------------------------------
+# resolve_assistant_citations
 
 
 class TestResolveAssistantCitations:
@@ -695,7 +889,7 @@ class TestResolveAssistantCitations:
 		assert len(result) == 1
 
 
-# -- _resolve_nci ------------------------------------------------------------
+# _resolve_nci
 
 
 class TestResolveNci:
@@ -733,7 +927,7 @@ class TestResolveNci:
 		assert result == 0
 
 
-# -- _overfetch_nci ----------------------------------------------------------
+# _overfetch_nci
 
 
 class TestOverfetchNci:
@@ -776,7 +970,7 @@ class TestOverfetchNci:
 		assert result is None
 
 
-# -- CitationIndexFilter.process (integration) -------------------------------
+# CitationIndexFilter.process (integration)
 
 
 class TestCitationIndexFilterProcess:
@@ -909,7 +1103,7 @@ class TestCitationIndexFilterProcess:
 		assert result[0].source_id == "https://only.com"
 
 
-# -- Citation schema ---------------------------------------------------------
+# Citation schema
 
 
 class TestCitationSchema:

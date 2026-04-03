@@ -14,6 +14,7 @@
 		content: string
 		timestamp?: Date
 		actions?: Snippet
+		persistentActions?: Snippet
 		lead?: Snippet
 		tail?: Snippet
 		isLastMessage?: boolean
@@ -33,6 +34,7 @@
 		content,
 		timestamp,
 		actions,
+		persistentActions,
 		lead,
 		tail,
 		isLastMessage = false,
@@ -285,6 +287,16 @@
 					>
 						<ChevronRight class="size-4" strokeWidth="2" />
 					</button>
+				</div>
+			{/if}
+
+			{#if persistentActions}
+				<div
+					class="flex items-center gap-2"
+					role="none"
+					use:captureClick
+				>
+					{@render persistentActions()}
 				</div>
 			{/if}
 

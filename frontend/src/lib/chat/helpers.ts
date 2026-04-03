@@ -5,6 +5,7 @@
 
 import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from '$lib/tools'
 import type {
+	ApiCitation,
 	ApiMessage,
 	AttachmentMediaCategory,
 	AttachmentStatus,
@@ -611,4 +612,45 @@ export function buildAgentLookup<A extends { id: string }, T>(
 	selector: (agent: A) => T
 ): Map<string, T> {
 	return new Map(list.map((a) => [a.id, selector(a)]))
+}
+
+// citation helpers
+
+/**
+ * compute the cited-only citations for a run block's sources pill.
+ * gathers all available sources from the citationSources map, then
+ * filters to only indices actually referenced in the block's content.
+ */
+export function computeBlockCitations(
+	responseItems: ReturnType<typeof getBlockResponseItems>,
+	streamingAssistant: StreamingAssistantState | null,
+	citationSources: ReadonlyMap<string, ApiCitation[]>
+): ApiCitation[] {
+	const allSources: ApiCitation[] = []
+	const seen = new Set<number>()
+	for (const item of responseItems) {
+		if (item.kind !== 'assistant') continue
+		for (const c of citationSources.get(item.message.id) ?? []) {
+			if (!seen.has(c.index)) {
+				seen.add(c.index)
+				allSources.push(c)
+			}
+		}
+	}
+	if (streamingAssistant) {
+		for (const c of citationSources.get(streamingAssistant.messageId) ?? []) {
+			if (!seen.has(c.index)) {
+				seen.add(c.index)
+				allSources.push(c)
+			}
+		}
+	}
+	if (allSources.length === 0) return []
+	let combined = responseItems
+		.filter((i): i is { kind: 'assistant'; message: ApiMessage } => i.kind === 'assistant')
+		.map((i) => contentPartsToText(i.message.content))
+		.join('\n')
+	if (streamingAssistant) combined += '\n' + streamingAssistant.content
+	const cited = new Set([...combined.matchAll(/\[\^?(\d+)\]/g)].map((m) => Number(m[1])))
+	return allSources.filter((c) => cited.has(c.index))
 }

@@ -186,6 +186,9 @@
 					<ChevronLeft class="mr-1.5 h-4 w-4" />
 					prev
 				</Button>
+				<span class="text-xs text-zinc-400 tabular-nums">
+					page {pageIndex + 1}{items.length > 0 ? ` \u00b7 ${items.length} items` : ''}
+				</span>
 				<Button
 					variant="outline"
 					class="rounded-xl"

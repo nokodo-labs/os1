@@ -55,8 +55,7 @@ export function createChatState(): ChatState {
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
 
-	// thread state
-	let thread = $state<Thread | null>(null)
+	// thread state (activeThread in chatStore is the source of truth)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
 
@@ -102,6 +101,9 @@ export function createChatState(): ChatState {
 	// run-level accumulator: citations are cumulative across iterations within
 	// a single run. flushed into citationSources per-message on stream start.
 	let runCitationAccumulator: ApiCitation[] = []
+	// last finalized assistant message id - fallback target for late WS citation
+	// events that arrive after the SSE stream has already finalized the message.
+	let citationTargetMessageId: string | null = null
 
 	// typing indicators (other users typing in this thread)
 	const typingUsers = new SvelteSet<string>()
@@ -116,7 +118,7 @@ export function createChatState(): ChatState {
 	let runAbortController: AbortController | null = null
 
 	// derived state
-	const isTemporaryChat = $derived(thread?.is_temporary ?? false)
+	const isTemporaryChat = $derived(chatStore.activeThread?.is_temporary ?? false)
 	const showThreadLoader = $derived(isThreadLoading)
 	const currentUserId = $derived(session.currentUser?.id ?? null)
 
@@ -181,7 +183,7 @@ export function createChatState(): ChatState {
 		// initialScrollDone is set once we have loaded and pinned to bottom.
 		if (!initialScrollDone) return
 		if (scrollContainer.scrollTop <= 80) {
-			const threadId = thread?.id
+			const threadId = chatStore.activeThread?.id
 			if (!threadId) return
 			if (!hasMoreMessages) return
 			if (isLoadingOlderMessages) return
@@ -208,12 +210,10 @@ export function createChatState(): ChatState {
 
 	// thread lifecycle
 	function setThread(t: Thread | null) {
-		thread = t
 		chatStore.activeThread = t
 	}
 
 	function clearThread() {
-		thread = null
 		chatStore.activeThread = null
 		messageTree.clear()
 		currentLeafId = null
@@ -240,6 +240,7 @@ export function createChatState(): ChatState {
 		attachmentStates.clear()
 		citationSources.clear()
 		runCitationAccumulator = []
+		citationTargetMessageId = null
 	}
 
 	// unified state object
@@ -248,10 +249,10 @@ export function createChatState(): ChatState {
 	const state: ChatState = {
 		// thread
 		get thread() {
-			return thread
+			return chatStore.activeThread
 		},
 		set thread(v) {
-			thread = v
+			chatStore.activeThread = v
 		},
 
 		// message tree
@@ -417,8 +418,22 @@ export function createChatState(): ChatState {
 		get citationSources() {
 			return citationSources
 		},
+		get citationTargetMessageId() {
+			return citationTargetMessageId
+		},
+		set citationTargetMessageId(v: string | null) {
+			citationTargetMessageId = v
+		},
 		addCitationSources(citations: ApiCitation[]) {
 			runCitationAccumulator.push(...citations)
+			// live-update the reactive map so both MarkdownRenderer and the
+			// sources pill see new citations immediately. prefer the active
+			// streaming message; fall back to the last finalized message for
+			// late WS events that arrive after the SSE stream finished.
+			const targetId = streamingAssistant?.messageId ?? citationTargetMessageId
+			if (targetId) {
+				citationSources.set(targetId, [...runCitationAccumulator])
+			}
 		},
 		flushCitationsToMessage(messageId: string) {
 			if (runCitationAccumulator.length > 0) {
@@ -508,6 +523,7 @@ export function createChatState(): ChatState {
 		// coordinator methods
 		incrementActiveRun() {
 			runCitationAccumulator = []
+			citationTargetMessageId = null
 			return ++activeRun
 		},
 		rebuildRunBlocks,
