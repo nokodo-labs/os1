@@ -28,7 +28,7 @@ from nokodo_ai.threads import Thread
 from nokodo_ai.types import JSONObject, JSONValue
 
 
-# -- helpers -----------------------------------------------------------------
+# helpers
 
 
 def _citation(
@@ -88,7 +88,7 @@ def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 	return ctx
 
 
-# -- _next_index -------------------------------------------------------------
+# _next_index
 
 
 class TestNextIndex:
@@ -114,7 +114,7 @@ class TestNextIndex:
 		assert _next_index(entries, 5) == 5
 
 
-# -- _find_nci_in_window -----------------------------------------------------
+# _find_nci_in_window
 
 
 class TestFindNciInWindow:
@@ -156,7 +156,7 @@ class TestFindNciInWindow:
 		assert _find_nci_in_window(thread) == 5
 
 
-# -- _oldest_message_id ------------------------------------------------------
+# _oldest_message_id
 
 
 class TestOldestMessageId:
@@ -192,7 +192,7 @@ class TestOldestMessageId:
 		assert _oldest_message_id(thread) is None
 
 
-# -- _rebuild_from_existing --------------------------------------------------
+# _rebuild_from_existing
 
 
 class TestRebuildFromExisting:
@@ -313,7 +313,7 @@ class TestRebuildFromExisting:
 		assert entries[1].source_type == CitationSource.NOTE
 
 
-# -- _assign_new_citations (via filter instance) -----------------------------
+# _assign_new_citations (via filter instance)
 
 
 class TestAssignNewCitations:
@@ -755,7 +755,7 @@ class TestAssignNewCitations:
 		assert by_message["msg_tool_2"][0].index == 1
 
 
-# -- _inject_manifest --------------------------------------------------------
+# _inject_manifest
 
 
 class TestInjectManifest:
@@ -809,7 +809,7 @@ class TestInjectManifest:
 		assert msg.text == "no sentinel here"
 
 
-# -- resolve_assistant_citations ---------------------------------------------
+# resolve_assistant_citations
 
 
 class TestResolveAssistantCitations:
@@ -889,7 +889,7 @@ class TestResolveAssistantCitations:
 		assert len(result) == 1
 
 
-# -- _resolve_nci ------------------------------------------------------------
+# _resolve_nci
 
 
 class TestResolveNci:
@@ -927,7 +927,7 @@ class TestResolveNci:
 		assert result == 0
 
 
-# -- _overfetch_nci ----------------------------------------------------------
+# _overfetch_nci
 
 
 class TestOverfetchNci:
@@ -970,7 +970,7 @@ class TestOverfetchNci:
 		assert result is None
 
 
-# -- CitationIndexFilter.process (integration) -------------------------------
+# CitationIndexFilter.process (integration)
 
 
 class TestCitationIndexFilterProcess:
@@ -1103,7 +1103,7 @@ class TestCitationIndexFilterProcess:
 		assert result[0].source_id == "https://only.com"
 
 
-# -- Citation schema ---------------------------------------------------------
+# Citation schema
 
 
 class TestCitationSchema:
