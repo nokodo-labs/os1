@@ -1,6 +1,6 @@
 {
 	".": "0.1.0",
-	"backend/nokodo_ai": "0.1.0",
+	"backend/nokodo_ai": "0.2.0",
 	"backend/api": "0.1.0",
 	"frontend": "0.1.0",
 	"console": "0.1.0"
