@@ -6,6 +6,7 @@
 	import type { components } from '$lib/api/types'
 	import {
 		blockHasStreamingAssistant,
+		computeBlockCitations,
 		contentPartsToText,
 		createChatState,
 		extractFileParts,
@@ -552,6 +553,11 @@
 								{@const firstAssistant = getBlockFirstAssistant(block)}
 								{@const isStreamingBlock =
 									blockHasStreamingAssistant(block) && chat.streamingAssistant}
+								{@const blockCitations = computeBlockCitations(
+									responseItems,
+									isStreamingBlock ? chat.streamingAssistant : null,
+									chat.citationSources
+								)}
 								{@const rootId = block.responseRootId}
 								{@const blockParentId =
 									(rootId
@@ -631,12 +637,9 @@
 																segment.item.message.content
 															)}
 															isStreaming={false}
-															citations={segment.item.message
-																.citations?.length
-																? segment.item.message.citations
-																: (chat.citationSources.get(
-																		segment.item.message.id
-																	) ?? [])}
+																citations={chat.citationSources.get(
+																	segment.item.message.id
+																) ?? []}
 														/>
 													</div>
 												{:else if segment.type === 'tool_group'}
@@ -692,27 +695,6 @@
 									{/snippet}
 
 									{#snippet actions()}
-										{@const blockCitations = [
-											...responseItems
-												.filter(
-													(
-														i
-													): i is {
-														kind: 'assistant'
-														message: ApiMessage
-													} => i.kind === 'assistant'
-												)
-												.flatMap((i) => [
-													...(i.message.citations ?? []),
-													...(chat.citationSources.get(i.message.id) ??
-														[]),
-												]),
-											...(isStreamingBlock && chat.streamingAssistant
-												? (chat.citationSources.get(
-														chat.streamingAssistant.messageId
-													) ?? [])
-												: []),
-										]}
 										<CopyButton
 											content={() => {
 												const allText = responseItems
@@ -757,6 +739,9 @@
 												retry
 											</button>
 										{/if}
+									{/snippet}
+
+									{#snippet persistentActions()}
 										{#if blockCitations.length > 0}
 											<CitationSourcesPill
 												citations={blockCitations}

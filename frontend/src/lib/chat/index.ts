@@ -20,6 +20,7 @@ export {
 	buildAgentLookup,
 	buildMessageChildren,
 	buildRunBlocks,
+	computeBlockCitations,
 	computeIsAtBottom,
 	computeThreadAttachments,
 	contentPartsToText,

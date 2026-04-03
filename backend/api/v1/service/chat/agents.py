@@ -371,17 +371,13 @@ async def run_agent(
 		def _message_id_provider() -> str | None:
 			return active_message_id_for_events
 
-		_has_user_message = persist and bool(resolved_input)
-		if _has_user_message:
+		if persist:
 			emitter = build_event_emitter(
 				message_id_provider=_message_id_provider,
 				before_persist=_before_persist_event,
 			)
 		else:
-			# no user message (regeneration / ephemeral) - suppress attachment
-			# lifecycle events. decay/reveal still work via message history,
-			# but events are not persisted since there is no message to scope
-			# them to.
+			# ephemeral run - no thread to persist events to
 			async def _noop_emitter(_event: Event) -> None:
 				pass
 
@@ -619,6 +615,9 @@ async def run_agent(
 						_alloc_message_id() if persist else str(new_typeid("msg"))
 					)
 					message_id = tool_message_id
+					if delta.tool.metadata is None:
+						delta.tool.metadata = {}
+					delta.tool.metadata["message_id"] = tool_message_id
 					if persist:
 						await message_queue.put((tool_message_id, delta.tool))
 						tool_content: list[dict[str, object]] = []

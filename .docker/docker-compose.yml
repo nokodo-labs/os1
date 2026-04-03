@@ -21,7 +21,7 @@ services:
     profiles: ["deps", "local"]
 
   qdrant:
-    image: qdrant/qdrant:v1.16.2
+    image: qdrant/qdrant:v1.17.1
     container_name: os1-qdrant
     restart: unless-stopped
     ports:
