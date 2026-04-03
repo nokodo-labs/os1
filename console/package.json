@@ -53,7 +53,7 @@
 		"pnpm": ">=10.0.0"
 	},
 	"dependencies": {
-		"@xyflow/svelte": "^1.5.1",
+		"@xyflow/svelte": "^1.5.2",
 		"bits-ui": "^2.16.4",
 		"clsx": "^2.1.1",
 		"openapi-fetch": "^0.17.0",
