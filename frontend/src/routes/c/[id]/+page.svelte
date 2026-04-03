@@ -219,6 +219,16 @@
 		return chat.subscribeToChatEvents(chat.thread.id)
 	})
 
+	// effects: navigate away when thread is deleted (e.g. from another session)
+	$effect(() => {
+		if (chat.thread) return
+		if (!page.params.id) return
+		// thread was nulled while we're on a /c/[id] route - redirect home
+		if (chat.isThreadLoading) return
+		if (chat.hasLoadedBranch === false && !chatStore.pendingCreateAndRun) return
+		void goto(resolve('/'), { replaceState: true })
+	})
+
 	// effects: pending create-and-run stream handoff
 	$effect(() => {
 		if (!chat.thread) return
@@ -637,9 +647,9 @@
 																segment.item.message.content
 															)}
 															isStreaming={false}
-																citations={chat.citationSources.get(
-																	segment.item.message.id
-																) ?? []}
+															citations={chat.citationSources.get(
+																segment.item.message.id
+															) ?? []}
 														/>
 													</div>
 												{:else if segment.type === 'tool_group'}

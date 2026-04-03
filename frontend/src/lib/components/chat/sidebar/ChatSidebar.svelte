@@ -3,8 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import type { StreamMessage } from '$lib/api/streaming'
-	import { deleteThread, handleThreadStreamEvent, updateThread } from '$lib/chat/threadActions'
+	import { deleteThread, updateThread } from '$lib/chat/threadActions'
 	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
@@ -15,7 +14,7 @@
 	import { chat, type Thread } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
-	import { onThreadEvent } from '$lib/stores/notifications.svelte'
+
 	import { session } from '$lib/stores/session.svelte'
 
 	// SSG-safe query param access
@@ -99,18 +98,6 @@
 			if (unmountTimeout !== null) window.clearTimeout(unmountTimeout)
 		}
 	})
-
-	// subscribe to thread events for real-time updates
-	$effect(() => {
-		const unsubscribe = onThreadEvent(handleThreadEvent)
-		return unsubscribe
-	})
-
-	function handleThreadEvent(event: StreamMessage): void {
-		handleThreadStreamEvent(event, page.url.pathname, (path) => {
-			void goto(resolve(path), { replaceState: true })
-		})
-	}
 
 	$effect(() => {
 		if (device.isMobile) sidebar.closeChatSidebar()
