@@ -16,6 +16,10 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 	grpc_port: int | None = Field(default=None, description="qdrant gRPC port")
 	https: bool | None = Field(default=None, description="use HTTPS for remote mode")
 	use_grpc: bool = Field(default=True, description="prefer qdrant gRPC transport")
+	check_compatibility: bool = Field(
+		default=False,
+		description="check client/server version compatibility on init",
+	)
 	location: str | None = Field(
 		default=None,
 		description="path or :memory: for local/in-memory mode",
@@ -30,6 +34,7 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 			return AsyncQdrantClient(
 				location=self.location,
 				timeout=timeout,
+				check_compatibility=self.check_compatibility,
 			)
 
 		# structured remote mode
@@ -42,6 +47,7 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 				https=self.https or False,
 				api_key=self.api_key,
 				timeout=timeout,
+				check_compatibility=self.check_compatibility,
 			)
 
 		# URL-based remote mode
@@ -57,6 +63,7 @@ class BaseQdrantAdapter(BaseClientAdapter[AsyncQdrantClient]):
 			timeout=timeout,
 			prefer_grpc=self.use_grpc,
 			grpc_port=self.grpc_port or 6334,
+			check_compatibility=self.check_compatibility,
 		)
 
 	async def close(self) -> None:

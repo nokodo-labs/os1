@@ -168,6 +168,7 @@ export interface ChatContext {
 
 	// citations (message-scoped, accumulated from citation.sources WS events)
 	readonly citationSources: SvelteMap<string, ApiCitation[]>
+	citationTargetMessageId: string | null
 	addCitationSources(citations: ApiCitation[]): void
 	flushCitationsToMessage(messageId: string): void
 

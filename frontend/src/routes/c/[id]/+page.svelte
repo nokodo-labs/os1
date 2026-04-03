@@ -6,6 +6,7 @@
 	import type { components } from '$lib/api/types'
 	import {
 		blockHasStreamingAssistant,
+		computeBlockCitations,
 		contentPartsToText,
 		createChatState,
 		extractFileParts,
@@ -216,6 +217,16 @@
 	$effect(() => {
 		if (!chat.thread) return
 		return chat.subscribeToChatEvents(chat.thread.id)
+	})
+
+	// effects: navigate away when thread is deleted (e.g. from another session)
+	$effect(() => {
+		if (chat.thread) return
+		if (!page.params.id) return
+		// thread was nulled while we're on a /c/[id] route - redirect home
+		if (chat.isThreadLoading) return
+		if (chat.hasLoadedBranch === false && !chatStore.pendingCreateAndRun) return
+		void goto(resolve('/'), { replaceState: true })
 	})
 
 	// effects: pending create-and-run stream handoff
@@ -552,6 +563,11 @@
 								{@const firstAssistant = getBlockFirstAssistant(block)}
 								{@const isStreamingBlock =
 									blockHasStreamingAssistant(block) && chat.streamingAssistant}
+								{@const blockCitations = computeBlockCitations(
+									responseItems,
+									isStreamingBlock ? chat.streamingAssistant : null,
+									chat.citationSources
+								)}
 								{@const rootId = block.responseRootId}
 								{@const blockParentId =
 									(rootId
@@ -631,12 +647,9 @@
 																segment.item.message.content
 															)}
 															isStreaming={false}
-															citations={segment.item.message
-																.citations?.length
-																? segment.item.message.citations
-																: (chat.citationSources.get(
-																		segment.item.message.id
-																	) ?? [])}
+															citations={chat.citationSources.get(
+																segment.item.message.id
+															) ?? []}
 														/>
 													</div>
 												{:else if segment.type === 'tool_group'}
@@ -692,27 +705,6 @@
 									{/snippet}
 
 									{#snippet actions()}
-										{@const blockCitations = [
-											...responseItems
-												.filter(
-													(
-														i
-													): i is {
-														kind: 'assistant'
-														message: ApiMessage
-													} => i.kind === 'assistant'
-												)
-												.flatMap((i) => [
-													...(i.message.citations ?? []),
-													...(chat.citationSources.get(i.message.id) ??
-														[]),
-												]),
-											...(isStreamingBlock && chat.streamingAssistant
-												? (chat.citationSources.get(
-														chat.streamingAssistant.messageId
-													) ?? [])
-												: []),
-										]}
 										<CopyButton
 											content={() => {
 												const allText = responseItems
@@ -757,6 +749,9 @@
 												retry
 											</button>
 										{/if}
+									{/snippet}
+
+									{#snippet persistentActions()}
 										{#if blockCitations.length > 0}
 											<CitationSourcesPill
 												citations={blockCitations}

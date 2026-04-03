@@ -124,7 +124,8 @@ export function processDelta(
 				const isNewStreamingMessage =
 					!ctx.streamingAssistant || ctx.streamingAssistant.messageId !== messageId
 				if (isNewStreamingMessage) {
-					// flush any pending citation sources into this message's slot
+					// flush all available citation sources so MarkdownRenderer can
+					// resolve inline [n] widgets. the sources pill filters to cited only.
 					ctx.flushCitationsToMessage(messageId)
 					hapticFeedback()
 					const runId = typeof env.run_id === 'string' ? env.run_id : null
@@ -196,6 +197,11 @@ export function processDelta(
 					const now = new SvelteDate().toISOString()
 					const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
 					const resolvedParent = deltaParent ?? sctx.getAssistantParentId()
+					const streamCitations = ctx.citationSources.get(streaming.messageId)
+					const citedIndices = new Set(
+						[...content.matchAll(/\[\^?(\d+)\]/g)].map((m) => Number(m[1]))
+					)
+					const citedSources = streamCitations?.filter((c) => citedIndices.has(c.index))
 					const finalized = {
 						id: streaming.messageId,
 						thread_id: sctx.threadId,
@@ -207,6 +213,7 @@ export function processDelta(
 							name: tc.name,
 							arguments: tc.arguments,
 						})),
+						citations: citedSources?.length ? citedSources : undefined,
 						metadata_: streaming.runId ? { run_id: streaming.runId } : undefined,
 						sender_agent_id: streaming.senderAgentId,
 						sender_user_id: null,
@@ -214,6 +221,7 @@ export function processDelta(
 						updated_at: now,
 					} satisfies ApiMessage
 					ctx.messageTree.set(finalized.id, finalized)
+					ctx.citationTargetMessageId = finalized.id
 					ctx.streamingLeafId = finalized.id
 					if (ctx.viewingStreamingBranch) {
 						ctx.currentLeafId = finalized.id

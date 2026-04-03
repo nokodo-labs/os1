@@ -308,24 +308,34 @@ class ChatStore {
 			const threadId = (data.id as string) ?? (message.thread_id as string)
 			if (!threadId) return
 
-			// merge partial update into cached thread
+			// extract only known Thread-compatible fields from the event
+			const patch: Partial<Thread> = {}
+			if (typeof data.title === 'string') patch.title = data.title
+			if (Array.isArray(data.tags)) {
+				patch.tags = data.tags.filter((t): t is string => typeof t === 'string')
+			}
+			if (typeof data.updated_at === 'string') patch.updated_at = data.updated_at
+			if (typeof data.last_activity_at === 'string')
+				patch.last_activity_at = data.last_activity_at
+			if (typeof data.is_archived === 'boolean') patch.is_archived = data.is_archived
+			if (typeof data.is_temporary === 'boolean') patch.is_temporary = data.is_temporary
+			if (typeof data.current_message_id === 'string')
+				patch.current_message_id = data.current_message_id
+			if (typeof data.owner_id === 'string') patch.owner_id = data.owner_id
+			if (Array.isArray(data.projects)) patch.projects = data.projects as Thread['projects']
+
+			// merge into cache
 			const cached = this.threadCache.get(threadId)
 			if (cached) {
-				this.threadCache.set({ ...cached, ...(data as Partial<Thread>) } as Thread)
+				this.threadCache.set({ ...cached, ...patch })
 			} else {
 				this.threadCache.invalidate(threadId)
 			}
 
-			this.updateRecentThread(threadId, (t) => ({
-				...t,
-				...(data as Partial<Thread>),
-			}))
+			this.updateRecentThread(threadId, (t) => ({ ...t, ...patch }))
 
 			if (this.activeThread?.id === threadId) {
-				this.activeThread = {
-					...this.activeThread,
-					...(data as Partial<Thread>),
-				}
+				this.activeThread = { ...this.activeThread, ...patch }
 			}
 		} else if (message.type === 'thread.deleted') {
 			const threadId = (data.id as string) ?? (message.thread_id as string)
@@ -333,6 +343,9 @@ class ChatStore {
 
 			this.threadCache.invalidateAll(threadId)
 			this.removeRecentThread(threadId)
+			if (this.activeThread?.id === threadId) {
+				this.activeThread = null
+			}
 		} else if (message.type === 'thread.read') {
 			// another session/tab marked a thread as read - sync unread state
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)

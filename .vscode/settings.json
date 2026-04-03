@@ -200,6 +200,7 @@
 		"uv run pytest": true,
 		"pnpm exec svelte-check": true,
 		"pnpm exec eslint": true,
+		"/^pnpm (vitest|run test|exec vitest)\\b/": true,
 		"/^uv run alembic -c api/migrations/alembic\\.ini check 2>&1$/": {
 			"approve": true,
 			"matchCommandLine": true

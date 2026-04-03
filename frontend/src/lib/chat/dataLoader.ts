@@ -108,6 +108,9 @@ export function ingestMessages(msgs: ApiMessage[], ctx: ChatContext): void {
 		ctx.messageTree.set(msg.id, msg)
 		if (msg.type === 'assistant') {
 			for (const tc of parseToolCalls(msg)) ctx.toolTracker.registerToolCall(tc)
+			if (msg.citations?.length) {
+				ctx.citationSources.set(msg.id, msg.citations)
+			}
 		}
 		if (msg.type === 'tool') {
 			const result = parseToolResult(msg)

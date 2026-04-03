@@ -105,9 +105,18 @@ class CitationIndexFilter(Filter):
 	) -> dict[str, list[Citation]]:
 		"""find tool messages with citable_sources and assign indices.
 
+		deduplicates by (source_type, source_id): if the same source was
+		already assigned an index (within the current window), reuse it
+		instead of allocating a new one. sources without a meaningful
+		source_id (empty string) are never deduplicated.
+
 		returns a dict mapping tool message_id to newly assigned citations.
 		"""
 		by_message: dict[str, list[Citation]] = {}
+		# dedup index: reuse existing citation when the same source appears again
+		seen: dict[tuple[str, str], Citation] = {
+			(c.source_type, c.source_id): c for c in entries if c.source_id
+		}
 		for i, msg in enumerate(thread.messages):
 			if not isinstance(msg, SDKToolMessage):
 				continue
@@ -122,15 +131,23 @@ class CitationIndexFilter(Filter):
 			for src in sources:
 				if not isinstance(src, dict) or "source_type" not in src:
 					continue
+				src_type = str(src["source_type"])
+				src_id = str(src.get("source_id", ""))
+				dedup_key = (src_type, src_id)
+				if src_id and dedup_key in seen:
+					assigned.append(seen[dedup_key])
+					continue
 				idx = _next_index(entries, nci)
 				raw_title = src.get("title")
 				entry = Citation(
 					index=idx,
-					source_type=CitationSource(str(src["source_type"])),
-					source_id=str(src.get("source_id", "")),
+					source_type=CitationSource(src_type),
+					source_id=src_id,
 					title=str(raw_title) if raw_title is not None else None,
 				)
 				entries.append(entry)
+				if src_id:
+					seen[dedup_key] = entry
 				assigned.append(entry)
 
 			if not assigned:
