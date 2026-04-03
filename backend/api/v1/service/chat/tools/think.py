@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from time import time
+from time import monotonic
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -75,7 +75,7 @@ class ThinkingTool(Tool[AppContext]):
 		first created (i.e. when the first streaming delta for this
 		tool call arrived), capturing the chat model's generation time.
 		"""
-		elapsed_time = time() - __agent_context__.tool_call_start_time
+		elapsed_time = monotonic() - __agent_context__.tool_call_start_time
 		try:
 			chain = ChainOfThoughts.model_validate(kwargs)
 		except Exception:

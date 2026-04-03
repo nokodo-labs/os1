@@ -26,6 +26,9 @@ class AgentContext:
 		iteration: current agent loop iteration (0-indexed)
 		tool_call_id: id of the current tool call (only set during tool execution)
 		retry_count: number of retries for the current operation
+		tool_call_start_time: monotonic timestamp from when the tool call generation
+			began (earliest streaming delta). use with time.monotonic() for elapsed
+			time calculations.
 	"""
 
 	thread: Thread = field()

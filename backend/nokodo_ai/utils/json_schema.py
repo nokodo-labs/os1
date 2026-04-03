@@ -482,18 +482,35 @@ def process_schema(
 	for key, value in list(result.items()):
 		if key not in ("properties", "$defs"):
 			item_path = _current_path + [key]
-			result[key] = process_schema(
-				value,
-				model_class=model_class,
-				make_all_required=make_all_required,
-				set_additionalproperties_field=set_additionalproperties_field,
-				process_defaults=process_defaults,
-				process_examples=process_examples,
-				process_enums=process_enums,
-				enum_description_strategy=enum_description_strategy,
-				process_array_constraints=process_array_constraints,
-				_current_path=item_path,
-			)
+			if isinstance(value, list):
+				result[key] = [
+					process_schema(
+						item,
+						model_class=model_class,
+						make_all_required=make_all_required,
+						set_additionalproperties_field=set_additionalproperties_field,
+						process_defaults=process_defaults,
+						process_examples=process_examples,
+						process_enums=process_enums,
+						enum_description_strategy=enum_description_strategy,
+						process_array_constraints=process_array_constraints,
+						_current_path=item_path + [str(i)],
+					)
+					for i, item in enumerate(value)
+				]
+			else:
+				result[key] = process_schema(
+					value,
+					model_class=model_class,
+					make_all_required=make_all_required,
+					set_additionalproperties_field=set_additionalproperties_field,
+					process_defaults=process_defaults,
+					process_examples=process_examples,
+					process_enums=process_enums,
+					enum_description_strategy=enum_description_strategy,
+					process_array_constraints=process_array_constraints,
+					_current_path=item_path,
+				)
 
 	return result
 

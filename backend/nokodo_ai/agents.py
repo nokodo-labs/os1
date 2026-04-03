@@ -64,7 +64,11 @@ class Agent[AppContextT = None](Base):
 			async def call(self, agent_ctx, app_ctx, *, city: str) -> ToolMessage:
 				return self.success(f"sunny in {city}", agent_ctx)
 
-		chat_model = ChatModel("gpt-4o", temperature=0.7)
+		chat_model = ChatModel.create(
+			"gpt-4o",
+			adapter={"type": "openai", "api_key": "..."},
+			temperature=0.7,
+		)
 		agent = Agent(chat_model=chat_model, tools=[WeatherTool()])
 
 		thread = Thread()
@@ -190,7 +194,7 @@ class Agent[AppContextT = None](Base):
 					model=self.chat_model,
 					tool_call_id=tool_call.id,
 					iteration=iteration,
-					tool_call_start_time=tool_call.created_at,
+					tool_call_start_time=tool_call.created_at_monotonic,
 				)
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
@@ -262,7 +266,7 @@ class Agent[AppContextT = None](Base):
 					model=self.chat_model,
 					tool_call_id=tool_call.id,
 					iteration=iteration,
-					tool_call_start_time=tool_call.created_at,
+					tool_call_start_time=tool_call.created_at_monotonic,
 				)
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,

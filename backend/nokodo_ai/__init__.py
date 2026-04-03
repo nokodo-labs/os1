@@ -7,21 +7,20 @@ different providers.
 
 core principle: magic by default, explicitly customizable if needed.
 
-usage (simple):
+usage:
 	from nokodo_ai import ChatModel, EmbeddingModel
 
-	chat_model = ChatModel("gpt-4o")
+	chat_model = ChatModel.create(
+		"gpt-4o",
+		adapter={"type": "openai", "api_key": "..."},
+	)
 	response = await chat_model.generate(messages)
 
-	embedder = EmbeddingModel(model="openai:text-embedding-3-large")
+	embedder = EmbeddingModel.create(
+		"text-embedding-3-large",
+		adapter={"type": "openai", "api_key": "..."},
+	)
 	vectors = await embedder.embed(["hello", "world"])
-
-usage (explicit adapter):
-	from nokodo_ai import ChatModel
-	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
-
-	adapter = OpenAIResponsesAdapter(api_key="...", base_url="https://custom-proxy.com")
-	chat_model = ChatModel(adapter=adapter)
 """
 
 from __future__ import annotations
