@@ -646,7 +646,8 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 
 @pytest.mark.asyncio
 async def test_agent_sync_passes_monotonic_start_time_to_tool() -> None:
-	"""tool_call_start_time in AgentContext must come from ToolCall.created_at_monotonic."""
+	"""tool_call_start_time in AgentContext must come
+	from ToolCall.created_at_monotonic."""
 
 	tc = ToolCall(id="tc1", name="capture", arguments={})
 	expected_mono = tc.created_at_monotonic
