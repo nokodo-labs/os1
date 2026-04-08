@@ -1039,6 +1039,11 @@ class WebLoaderSettings(BaseModel):
 		default="Mozilla/5.0 (compatible; NokodoAI/1.0; +https://nokodo.ai)",
 		description="user agent string for web loader requests",
 	)
+	max_chars: int = Field(
+		default=50_000,
+		ge=100,
+		description="maximum characters returned per fetched URL",
+	)
 	tavily: TavilySettings = Field(
 		default_factory=TavilySettings,
 		description="tavily-specific settings for web loading",
@@ -1120,6 +1125,11 @@ class WebSearchSettings(BaseModel):
 
 	search_agent: SearchAgent = Field(
 		default="native", description="agent to use for agentic web search tool."
+	)
+	max_chars: int = Field(
+		default=50_000,
+		ge=100,
+		description="maximum characters returned in web search result summaries",
 	)
 	blacklisted_domains: list[str] = Field(
 		default_factory=list,

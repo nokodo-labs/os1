@@ -641,7 +641,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	]
 
 
-# -- tool_call_start_time monotonic propagation --------------------------------
+# tool_call_start_time monotonic propagation
 
 
 @pytest.mark.asyncio
