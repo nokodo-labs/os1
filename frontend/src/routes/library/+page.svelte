@@ -55,7 +55,7 @@
 		const [field, dir] = sort.split(':') as [string, 'asc' | 'desc']
 		const sorted = [...files.resources]
 		sorted.sort((a, b) => {
-			let cmp = 0
+			let cmp: number
 			if (field === 'title') {
 				cmp = a.title.localeCompare(b.title)
 			} else if (field === 'created_at') {

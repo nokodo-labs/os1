@@ -58,6 +58,7 @@
 		keyHandler?: ((event: KeyboardEvent) => boolean) | undefined
 	}
 
+	// eslint-disable-next-line no-useless-assignment
 	let { query, onAction, keyHandler = $bindable(undefined) }: Props = $props()
 
 	const chrome = useSystemChrome()
@@ -357,6 +358,7 @@
 		return false
 	}
 
+	// eslint-disable-next-line no-useless-assignment
 	keyHandler = handleKeyDown
 </script>
 
