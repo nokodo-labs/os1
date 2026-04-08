@@ -5,30 +5,42 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 30
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "backend"
+    groups:
+      backend-all:
+        patterns:
+          - "*"
 
   # frontend dependencies
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 30
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "frontend"
+    groups:
+      frontend-all:
+        patterns:
+          - "*"
 
   # console dependencies
   - package-ecosystem: "npm"
     directory: "/console"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 30
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "console"
+    groups:
+      console-all:
+        patterns:
+          - "*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -38,6 +50,10 @@ updates:
     labels:
       - "dependencies"
       - "ci/cd"
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
 
   # Docker
   - package-ecosystem: "docker"
@@ -47,3 +63,7 @@ updates:
     labels:
       - "dependencies"
       - "containerization"
+    groups:
+      docker-all:
+        patterns:
+          - "*"
