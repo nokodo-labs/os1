@@ -55,11 +55,10 @@
 	interface Props {
 		query: string
 		onAction: (action: SuggestionAction) => void
-		keyHandler?: ((event: KeyboardEvent) => boolean) | undefined
+		onKeyHandler?: (handler: (event: KeyboardEvent) => boolean) => void
 	}
 
-	// eslint-disable-next-line no-useless-assignment
-	let { query, onAction, keyHandler = $bindable(undefined) }: Props = $props()
+	let { query, onAction, onKeyHandler }: Props = $props()
 
 	const chrome = useSystemChrome()
 
@@ -358,8 +357,9 @@
 		return false
 	}
 
-	// eslint-disable-next-line no-useless-assignment
-	keyHandler = handleKeyDown
+	$effect(() => {
+		onKeyHandler?.(handleKeyDown)
+	})
 </script>
 
 {#if open}
