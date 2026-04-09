@@ -176,6 +176,7 @@ async def test_db_settings_source_loads_overrides_sync_and_excludes_write_locked
 ) -> None:
 	test_session_local = _make_test_session_local(db_session)
 	monkeypatch.setattr(settings_db, "async_session_local", test_session_local)
+	monkeypatch.setattr(settings_db.boot_settings, "TESTING", False)
 
 	db_session.add(
 		SettingsDocument(
@@ -205,6 +206,7 @@ async def test_db_settings_source_loads_overrides_inside_running_loop(
 ) -> None:
 	test_session_local = _make_test_session_local(db_session)
 	monkeypatch.setattr(settings_db, "async_session_local", test_session_local)
+	monkeypatch.setattr(settings_db.boot_settings, "TESTING", False)
 
 	db_session.add(
 		SettingsDocument(
