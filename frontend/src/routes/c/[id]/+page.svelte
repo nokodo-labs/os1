@@ -571,9 +571,10 @@
 								{@const rootId = block.responseRootId}
 								{@const blockParentId =
 									(rootId
-										? (chat.messageTree.get(rootId)?.parent_id ?? null)
-										: null) ??
-									(isStreamingBlock ? chat.streamingAssistantParentId : null)}
+										? chat.messageTree.get(rootId)?.parent_id
+										: undefined) ??
+									(isStreamingBlock ? chat.streamingAssistantParentId : null) ??
+									null}
 								{@const assistantSiblings =
 									chat.messageChildren.get(blockParentId) ?? []}
 								{@const currentSiblingIndex = rootId

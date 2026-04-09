@@ -1,8 +1,9 @@
 import { sveltekit } from '@sveltejs/kit/vite'
+import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: [tailwindcss(), sveltekit()],
 	build: {
 		// TODO: large chunks come from mermaid (~2MB), shiki (~1.9MB), and other heavy libs.
 		// proper fix requires dynamic imports in components that use these libraries.

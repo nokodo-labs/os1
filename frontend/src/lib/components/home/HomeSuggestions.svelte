@@ -55,10 +55,10 @@
 	interface Props {
 		query: string
 		onAction: (action: SuggestionAction) => void
-		keyHandler?: ((event: KeyboardEvent) => boolean) | undefined
+		onKeyHandler?: (handler: (event: KeyboardEvent) => boolean) => void
 	}
 
-	let { query, onAction, keyHandler = $bindable(undefined) }: Props = $props()
+	let { query, onAction, onKeyHandler }: Props = $props()
 
 	const chrome = useSystemChrome()
 
@@ -357,7 +357,9 @@
 		return false
 	}
 
-	keyHandler = handleKeyDown
+	$effect(() => {
+		onKeyHandler?.(handleKeyDown)
+	})
 </script>
 
 {#if open}
