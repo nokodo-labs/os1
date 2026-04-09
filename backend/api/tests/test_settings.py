@@ -254,6 +254,8 @@ def test_settings_customise_sources_includes_db_source() -> None:
 def test_db_overrides_filters_invalid_sections_and_non_models(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+	monkeypatch.setattr(settings_db.boot_settings, "TESTING", False)
+
 	class DummySettings(Settings):
 		ui: int = 1  # type: ignore[assignment]
 
@@ -313,6 +315,8 @@ def test_is_write_locked_handles_missing_and_non_dict_extra() -> None:
 def test_db_settings_source_returns_empty_on_error(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+	monkeypatch.setattr(settings_db.boot_settings, "TESTING", False)
+
 	def _boom() -> Any:
 		raise RuntimeError("db down")
 
