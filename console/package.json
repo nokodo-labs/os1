@@ -25,6 +25,7 @@
 		"@sveltejs/kit": "^2.57.0",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@tailwindcss/postcss": "^4.2.2",
+		"@tailwindcss/vite": "^4.2.2",
 		"@tsconfig/svelte": "^5.0.8",
 		"@types/node": "^25.5.2",
 		"@vitest/coverage-v8": "^4.1.3",
