@@ -72,5 +72,12 @@ export const BUMP_TYPES = ["feat", "fix", "perf", "refactor", "revert"];
 export const BREAKING_KEYWORDS = ["BREAKING CHANGE", "BREAKING-CHANGE"];
 
 // labels applied to release PRs.
-export const RELEASE_LABELS = ["bot", "release"];
-export const PRERELEASE_LABELS = ["bot", "release", "prerelease"];
+export const RELEASE_LABELS = ["bot", "release", "release: pending"];
+export const PRERELEASE_LABELS = [
+	"bot",
+	"release",
+	"prerelease",
+	"release: pending",
+];
+// label swapped in after release is tagged.
+export const RELEASE_TAGGED_LABEL = "release: tagged";

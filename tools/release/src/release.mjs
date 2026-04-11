@@ -30,21 +30,25 @@ import {
 	PRERELEASE_LABELS,
 	RELEASE_LABELS,
 } from "./config.mjs";
-import { getLatestTag, getRepoSlug, getSemverTags, tagExists } from "./git.mjs";
-import { createRelease, upsertReleasePR } from "./github.mjs";
+import {
+	getHighestTag,
+	getLatestTag,
+	getRepoSlug,
+	getSemverTags,
+	tagExists,
+} from "./git.mjs";
+import {
+	createRelease,
+	findMergedReleasePR,
+	swapReleaseLabel,
+	upsertReleasePR,
+} from "./github.mjs";
 import { readVersion, updateAllVersions } from "./version.mjs";
 
 function git(...args) {
 	return execFileSync("git", args, {
 		encoding: "utf-8",
 		stdio: ["pipe", "pipe", "pipe"],
-	}).trim();
-}
-
-function gh(...args) {
-	return execFileSync("gh", args, {
-		encoding: "utf-8",
-		env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN },
 	}).trim();
 }
 
@@ -110,42 +114,24 @@ function getComponentTags(version) {
 }
 
 // check if the current HEAD was merged from a release PR.
-// uses gh CLI to find the most recently merged release PR, then compares its
-// merge commit SHA against HEAD to avoid false positives from stale merges.
-function isReleasePRMerge(branch, repoSlug) {
-	try {
-		const raw = gh(
-			"pr",
-			"list",
-			"--repo",
-			repoSlug,
-			"--base",
-			branch,
-			"--head",
-			`release/${branch}`,
-			"--state",
-			"merged",
-			"--json",
-			"number,mergeCommit",
-			"--limit",
-			"1",
-		);
-		const prs = raw ? JSON.parse(raw) : [];
-		if (prs.length === 0) return false;
+// returns the PR number if it was, null otherwise.
+function getReleasePRMerge(branch, repoSlug) {
+	const pr = findMergedReleasePR(repoSlug, branch);
+	if (!pr) return null;
 
-		// compare the merge commit SHA to the current HEAD
-		const headSha = git("rev-parse", "HEAD");
-		const mergeSha = prs[0].mergeCommit?.oid;
-		return mergeSha && headSha === mergeSha;
+	// compare the merge commit SHA to the current HEAD
+	const headSha = git("rev-parse", "HEAD");
+	const mergeSha = pr.mergeCommit?.oid;
+	if (mergeSha && headSha === mergeSha) return pr.number;
+
+	// fallback: check commit message
+	try {
+		const msg = git("log", "-1", "--format=%s", "HEAD");
+		if (msg.includes(`release/${branch}`)) return pr.number;
 	} catch {
-		// fallback: check commit message
-		try {
-			const msg = git("log", "-1", "--format=%s", "HEAD");
-			return msg.includes(`release/${branch}`);
-		} catch {
-			return false;
-		}
+		// ignore
 	}
+	return null;
 }
 
 // main release logic.
@@ -172,11 +158,12 @@ function main() {
 	console.log(`Repository: ${repoSlug}`);
 
 	// check if this is a merged release PR
-	if (isReleasePRMerge(branch, repoSlug)) {
+	const mergedPRNumber = getReleasePRMerge(branch, repoSlug);
+	if (mergedPRNumber) {
 		console.log(
-			"Detected merged release PR, creating tags and GitHub release...",
+			`Detected merged release PR #${mergedPRNumber}, creating tags and GitHub release...`,
 		);
-		handleMergedReleasePR(branch, repoSlug);
+		handleMergedReleasePR(branch, repoSlug, mergedPRNumber);
 		return;
 	}
 
@@ -187,12 +174,15 @@ function main() {
 // handle a regular push: analyze commits and create/update release PR.
 function handleReleasePR(branch, repoSlug) {
 	const lastTag = getLatestTag();
-	console.log(`Latest tag: ${lastTag || "(none)"}`);
+	const highestTag = getHighestTag();
+	console.log(`Latest tag on branch: ${lastTag || "(none)"}`);
+	console.log(`Highest tag in repo: ${highestTag || "(none)"}`);
 
-	const currentVersion = lastTag ? semver.clean(lastTag) : null;
+	// use the highest tag across the repo for version computation to prevent regression
+	const currentVersion = highestTag ? semver.clean(highestTag) : null;
 	const manualVersion = process.env.RELEASE_AS;
 
-	// parse commits since last tag
+	// parse commits since the last tag reachable from this branch (for changelog)
 	const commits = parseCommitRange(lastTag, "HEAD");
 	console.log(
 		`Found ${commits.length} conventional commits since ${lastTag || "beginning"}`,
@@ -255,10 +245,11 @@ function handleReleasePR(branch, repoSlug) {
 		return;
 	}
 
-	// generate changelog
+	// generate changelog (budget for PR body header/footer)
 	const changelog = renderChangelog(commits, repoSlug, {
 		compareFrom: lastTag || "",
 		compareTo: tagName,
+		maxLength: 60000,
 	});
 
 	// create/update release PR
@@ -341,7 +332,7 @@ function handleReleasePR(branch, repoSlug) {
 }
 
 // handle a merged release PR: create tags and GitHub release.
-function handleMergedReleasePR(branch, repoSlug) {
+function handleMergedReleasePR(branch, repoSlug, prNumber) {
 	// try packages with version files until one succeeds
 	const versionPkg = PACKAGES.find(
 		(p) => p.releaseType === "node" || p.releaseType === "python",
@@ -398,6 +389,11 @@ function handleMergedReleasePR(branch, repoSlug) {
 	console.log(
 		`Created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
 	);
+
+	// swap release: pending -> release: tagged
+	if (prNumber) {
+		swapReleaseLabel(repoSlug, prNumber);
+	}
 
 	writeOutputs({
 		release_created: true,

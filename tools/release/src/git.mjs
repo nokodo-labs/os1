@@ -109,11 +109,18 @@ export function shortHash(hash) {
 export function tagExists(tag) {
 	assertSafeRef(tag);
 	try {
-		exec("git", ["rev-parse", tag]);
+		exec("git", ["rev-parse", "--verify", `refs/tags/${tag}`]);
 		return true;
 	} catch {
 		return false;
 	}
+}
+
+// get the highest semver tag across the entire repo (any branch).
+// used to prevent version regression when branches diverge.
+export function getHighestTag() {
+	const tags = getSemverTags();
+	return tags.length > 0 ? tags[0] : null;
 }
 
 // get the repo owner/name from git remote.

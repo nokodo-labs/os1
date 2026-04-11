@@ -140,6 +140,7 @@
 		"git diff": true,
 		"git grep": true,
 		"git branch": true,
+		"git merge-base": true,
 		"/^git branch\\b.*-(d|D|m|M|-delete|-force)\\b/": false,
 		"Write-Host": true,
 		"Write-Output": true,

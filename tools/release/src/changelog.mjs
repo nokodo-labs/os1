@@ -74,6 +74,7 @@ export function recommendBump(parsedCommits) {
 // repoSlug: "owner/repo" for generating links.
 // options.compareFrom/compareTo: refs for the compare link.
 // options.title: optional title override.
+// options.maxLength: max character length; sections are trimmed if exceeded.
 export function renderChangelog(parsedCommits, repoSlug, options = {}) {
 	const grouped = new Map();
 	for (const section of SECTION_ORDER) {
@@ -124,7 +125,25 @@ export function renderChangelog(parsedCommits, repoSlug, options = {}) {
 		lines.push("");
 	}
 
-	return lines.join("\n").trim();
+	let result = lines.join("\n").trim();
+
+	// truncate if exceeding maxLength
+	if (options.maxLength && result.length > options.maxLength) {
+		const compareBlock =
+			options.compareFrom && options.compareTo && repoSlug
+				? `\n\n## 🔗 full changelog\nhttps://github.com/${repoSlug}/compare/${options.compareFrom}...${options.compareTo}`
+				: "";
+		const truncNote = `\n\n> **note:** changelog truncated (${parsedCommits.length} commits). see full changelog link below for complete diff.`;
+		const budget =
+			options.maxLength - truncNote.length - compareBlock.length - 10;
+		result = result.slice(0, budget);
+		// trim to last complete line
+		const lastNewline = result.lastIndexOf("\n");
+		if (lastNewline > 0) result = result.slice(0, lastNewline);
+		result += truncNote + compareBlock;
+	}
+
+	return result;
 }
 
 function formatCommitLine(commit, repoSlug) {
