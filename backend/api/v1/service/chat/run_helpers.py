@@ -122,7 +122,11 @@ async def load_sdk_thread(
 	sdk_messages = []
 	for m in branch_orm:
 		sdk = m.to_sdk()
-		enriched = {**(sdk.metadata or {}), "message_id": str(m.id)}
+		enriched = {
+			**(sdk.metadata or {}),
+			"message_id": str(m.id),
+			"created_at": m.created_at.isoformat(),
+		}
 		# inject citations column into assistant message metadata so
 		# downstream filters can rebuild the citation index without a
 		# separate ORM lookup.

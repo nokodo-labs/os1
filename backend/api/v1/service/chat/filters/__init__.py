@@ -13,6 +13,9 @@ from api.v1.service.chat.filters.memory import MemoryContextFilter
 from api.v1.service.chat.filters.tool_result_truncation import (
 	ToolResultTruncationFilter,
 )
+from api.v1.service.chat.filters.user_message_timestamp import (
+	UserMessageTimestampFilter,
+)
 from nokodo_ai.filters import Filter as SDKFilter
 
 
@@ -23,6 +26,7 @@ FILTER_REGISTRY: dict[str, AppFilter] = {
 	"memory_context": MemoryContextFilter(),
 	"chat_context": ChatContextFilter(),
 	"attachment_decay": AttachmentDecayFilter(),
+	"user_message_timestamp": UserMessageTimestampFilter(),
 }
 
 
@@ -50,6 +54,7 @@ __all__ = [
 	"FileResolveFilter",
 	"Filter",
 	"MemoryContextFilter",
+	"UserMessageTimestampFilter",
 	"ToolResultTruncationFilter",
 	"FILTER_REGISTRY",
 	"get_registered_names",
