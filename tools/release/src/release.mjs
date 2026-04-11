@@ -362,7 +362,7 @@ function createComponentPRs(
 	);
 
 	for (const pkg of componentPkgs) {
-		const componentBranch = `release/${branch}/${pkg.name}`;
+		const componentBranch = `release--${pkg.name}/${branch}`;
 		const componentTag = `${pkg.name}-v${nextVersion}`;
 		const componentLabels = [
 			...(isPrerelease ? PRERELEASE_LABELS : RELEASE_LABELS),

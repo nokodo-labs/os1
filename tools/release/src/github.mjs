@@ -241,7 +241,7 @@ export function findMergedReleasePR(repoSlug, branch) {
 // close component PRs and delete their branches after root PR merge.
 export function closeComponentPRs(repoSlug, branch, componentNames) {
 	for (const name of componentNames) {
-		const headBranch = `release/${branch}/${name}`;
+		const headBranch = `release--${name}/${branch}`;
 		try {
 			// find open component PR
 			const raw = gh([
