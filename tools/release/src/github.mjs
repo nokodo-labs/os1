@@ -48,7 +48,8 @@ export function createRelease(
 }
 
 // find an existing release PR on a branch.
-export function findReleasePR(repoSlug, branch) {
+export function findReleasePR(repoSlug, branch, headBranch) {
+	const head = headBranch || `release/${branch}`;
 	try {
 		const raw = gh([
 			"pr",
@@ -56,7 +57,7 @@ export function findReleasePR(repoSlug, branch) {
 			"--repo",
 			repoSlug,
 			"--head",
-			`release/${branch}`,
+			head,
 			"--base",
 			branch,
 			"--state",
@@ -80,7 +81,7 @@ export function upsertReleasePR(
 	{ branch, title, body, labels = [], headBranch },
 ) {
 	const head = headBranch || `release/${branch}`;
-	const existing = findReleasePR(repoSlug, branch);
+	const existing = findReleasePR(repoSlug, branch, head);
 
 	// ensure labels exist before creating/editing the PR (include tagged label for later swap)
 	if (labels.length > 0) {
@@ -148,6 +149,10 @@ function ensureLabels(repoSlug, labels) {
 		prerelease: "fbca04",
 		"release: pending": "c2e0c6",
 		"release: tagged": "0e8a16",
+		backend: "3572A5",
+		api: "3572A5",
+		frontend: "f1e05a",
+		console: "f1e05a",
 	};
 
 	for (const label of labels) {
@@ -230,5 +235,45 @@ export function findMergedReleasePR(repoSlug, branch) {
 		return prs.length > 0 ? prs[0] : null;
 	} catch {
 		return null;
+	}
+}
+
+// close component PRs and delete their branches after root PR merge.
+export function closeComponentPRs(repoSlug, branch, componentNames) {
+	for (const name of componentNames) {
+		const headBranch = `release/${branch}/${name}`;
+		try {
+			// find open component PR
+			const raw = gh([
+				"pr",
+				"list",
+				"--repo",
+				repoSlug,
+				"--head",
+				headBranch,
+				"--base",
+				branch,
+				"--state",
+				"open",
+				"--json",
+				"number",
+				"--limit",
+				"1",
+			]);
+			const prs = raw ? JSON.parse(raw) : [];
+			if (prs.length > 0) {
+				gh([
+					"pr",
+					"close",
+					String(prs[0].number),
+					"--repo",
+					repoSlug,
+					"--delete-branch",
+				]);
+				console.log(`closed component PR #${prs[0].number} (${name})`);
+			}
+		} catch {
+			// best effort - branch may already be deleted
+		}
 	}
 }

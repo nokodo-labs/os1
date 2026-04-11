@@ -38,12 +38,13 @@ import {
 	tagExists,
 } from "./git.mjs";
 import {
+	closeComponentPRs,
 	createRelease,
 	findMergedReleasePR,
 	swapReleaseLabel,
 	upsertReleasePR,
 } from "./github.mjs";
-import { readVersion, updateAllVersions } from "./version.mjs";
+import { readVersion, updateAllVersions, writeVersion } from "./version.mjs";
 
 function git(...args) {
 	return execFileSync("git", args, {
@@ -323,12 +324,93 @@ function handleReleasePR(branch, repoSlug) {
 		headBranch,
 	});
 
+	// create/update per-component PRs
+	createComponentPRs(branch, repoSlug, nextVersion, tagName, isPrerelease);
+
 	writeOutputs({
 		release_created: false, // pr created, not release yet
 		pr_created: true,
 		tag_name: tagName,
 		version: nextVersion,
 	});
+}
+
+// create separate tracking PRs for each component with version files.
+function createComponentPRs(
+	branch,
+	repoSlug,
+	nextVersion,
+	tagName,
+	isPrerelease,
+) {
+	const repoUrl = `https://github.com/${repoSlug}`;
+	const componentPkgs = PACKAGES.filter(
+		(p) =>
+			p.componentTag &&
+			(p.releaseType === "node" || p.releaseType === "python"),
+	);
+
+	for (const pkg of componentPkgs) {
+		const componentBranch = `release/${branch}/${pkg.name}`;
+		const componentTag = `${pkg.name}-v${nextVersion}`;
+		const componentLabels = [
+			...(isPrerelease ? PRERELEASE_LABELS : RELEASE_LABELS),
+			...(pkg.extraLabels || []),
+		];
+		const componentTitle = isPrerelease
+			? `chore(release): prerelease ${pkg.name} v${nextVersion}`
+			: `chore(release): release ${pkg.name} v${nextVersion}`;
+		const componentBody = [
+			isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
+			"",
+			`> **component** \`${pkg.name}\` **version** \`${nextVersion}\``,
+			"",
+			`- 📦 component tag: [\`${componentTag}\`](${repoUrl}/releases/tag/${componentTag})`,
+			`- 🤖 *this PR was created by the [release automation](${repoUrl}/actions)*`,
+		].join("\n");
+
+		try {
+			// create or reset the component branch
+			try {
+				git("branch", "-D", componentBranch);
+			} catch {
+				// ok
+			}
+			git("checkout", "-b", componentBranch);
+
+			// bump only this component's version file
+			const versionFile = writeVersion(pkg, nextVersion);
+			if (versionFile) {
+				git("add", versionFile);
+				git(
+					"commit",
+					"-m",
+					`chore(release): bump ${pkg.name} version to ${nextVersion}`,
+					"--no-verify",
+				);
+			}
+
+			git("push", "origin", componentBranch, "--force");
+			git("checkout", branch);
+
+			upsertReleasePR(repoSlug, {
+				branch,
+				title: componentTitle,
+				body: componentBody,
+				labels: componentLabels,
+				headBranch: componentBranch,
+			});
+		} catch (err) {
+			console.error(
+				`Failed to create component PR for ${pkg.name}: ${err.message}`,
+			);
+			try {
+				git("checkout", branch);
+			} catch {
+				// best effort
+			}
+		}
+	}
 }
 
 // handle a merged release PR: create tags and GitHub release.
@@ -394,6 +476,14 @@ function handleMergedReleasePR(branch, repoSlug, prNumber) {
 	if (prNumber) {
 		swapReleaseLabel(repoSlug, prNumber);
 	}
+
+	// close component tracking PRs (their changes are included in the root PR)
+	const componentNames = PACKAGES.filter(
+		(p) =>
+			p.componentTag &&
+			(p.releaseType === "node" || p.releaseType === "python"),
+	).map((p) => p.name);
+	closeComponentPRs(repoSlug, branch, componentNames);
 
 	writeOutputs({
 		release_created: true,

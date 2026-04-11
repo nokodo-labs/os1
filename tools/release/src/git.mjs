@@ -68,18 +68,19 @@ export function getLatestTagOnBranch(branch) {
 }
 
 // get raw commit messages between two refs (exclusive from, inclusive to).
-// returns array of { hash, message } objects.
+// returns array of { hash, message, author } objects.
 export function getCommits(from, to = "HEAD") {
 	assertSafeRef(from);
 	assertSafeRef(to);
 	const range = from ? `${from}..${to}` : to;
 	const SEP = "---COMMIT_SEP---";
+	const REC = "---COMMIT_REC---";
 	let raw;
 	try {
 		raw = exec("git", [
 			"log",
 			range,
-			`--format=%H${SEP}%B${SEP}${SEP}`,
+			`--format=%H${SEP}%aN${SEP}%B${REC}`,
 			"--no-merges",
 		]);
 	} catch {
@@ -88,14 +89,16 @@ export function getCommits(from, to = "HEAD") {
 	if (!raw) return [];
 
 	return raw
-		.split(`${SEP}${SEP}`)
+		.split(REC)
 		.map((block) => block.trim())
 		.filter(Boolean)
 		.map((block) => {
-			const sepIdx = block.indexOf(SEP);
-			const hash = block.slice(0, sepIdx).trim();
-			const message = block.slice(sepIdx + SEP.length).trim();
-			return { hash, message };
+			const firstSep = block.indexOf(SEP);
+			const secondSep = block.indexOf(SEP, firstSep + SEP.length);
+			const hash = block.slice(0, firstSep).trim();
+			const author = block.slice(firstSep + SEP.length, secondSep).trim();
+			const message = block.slice(secondSep + SEP.length).trim();
+			return { hash, author, message };
 		})
 		.filter((c) => c.hash && c.message);
 }

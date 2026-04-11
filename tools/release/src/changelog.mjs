@@ -22,12 +22,26 @@ export function parseCommit(rawMessage) {
 	return parser.parse(rawMessage);
 }
 
+// extract PR number from commit message body trailers or squash-merge subject.
+// GitHub adds (#123) to squash-merge subjects and trailers like "PR-URL: .../pull/123".
+function extractPRNumber(message) {
+	// squash-merge pattern: subject (#123)
+	const squashMatch = message.match(/\(#(\d+)\)\s*$/m);
+	if (squashMatch) return parseInt(squashMatch[1], 10);
+	// trailer pattern: PR-URL or Closes
+	const trailerMatch = message.match(
+		/(?:PR-URL|Closes|Fixes|Resolves):\s*(?:.*\/pull\/|#)(\d+)/i,
+	);
+	if (trailerMatch) return parseInt(trailerMatch[1], 10);
+	return null;
+}
+
 // parse all commits between two refs and return structured data.
 export function parseCommitRange(from, to = "HEAD") {
 	const rawCommits = getCommits(from, to);
 	const parsed = [];
 
-	for (const { hash, message } of rawCommits) {
+	for (const { hash, author, message } of rawCommits) {
 		const commit = parseCommit(message);
 		if (!commit.type) continue;
 
@@ -40,6 +54,8 @@ export function parseCommitRange(from, to = "HEAD") {
 			scope: commit.scope || null,
 			subject: commit.subject,
 			section,
+			author: author || null,
+			pr: extractPRNumber(message),
 			breaking: commit.notes.some(
 				(n) =>
 					n.title === "BREAKING CHANGE" ||
@@ -151,7 +167,12 @@ function formatCommitLine(commit, repoSlug) {
 	const hash = repoSlug
 		? `([${commit.hash}](https://github.com/${repoSlug}/commit/${commit.hash}))`
 		: `(${commit.hash})`;
-	return `- ${scope}${commit.subject} ${hash}`;
+	const pr =
+		commit.pr && repoSlug
+			? ` [#${commit.pr}](https://github.com/${repoSlug}/pull/${commit.pr})`
+			: "";
+	const author = commit.author ? ` - @${commit.author}` : "";
+	return `- ${scope}${commit.subject} ${hash}${pr}${author}`;
 }
 
 // CLI entry point: node src/changelog.mjs --from <ref> --to <ref>

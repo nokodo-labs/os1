@@ -44,24 +44,28 @@ export const PACKAGES = [
 		name: "library",
 		releaseType: "python",
 		componentTag: true,
+		extraLabels: ["backend"],
 	},
 	{
 		path: "backend/api",
 		name: "api",
 		releaseType: "none",
 		componentTag: true,
+		extraLabels: ["api"],
 	},
 	{
 		path: "frontend",
 		name: "frontend",
 		releaseType: "node",
 		componentTag: true,
+		extraLabels: ["frontend"],
 	},
 	{
 		path: "console",
 		name: "console",
 		releaseType: "node",
 		componentTag: true,
+		extraLabels: ["console"],
 	},
 ];
 
