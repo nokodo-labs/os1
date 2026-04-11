@@ -160,3 +160,143 @@ describe("version validation", () => {
 		assert.ok(semver.gte(stable, "0.2.0"));
 	});
 });
+
+// -- pyproject.toml parsing tests --
+// uses the actual readVersion/writeVersion from version.mjs
+// with a temp file to avoid touching real project files.
+
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before } from "node:test";
+import { PACKAGES } from "../src/config.mjs";
+import { readVersion } from "../src/version.mjs";
+
+describe("pyproject.toml version parsing", () => {
+	let tmpDir;
+
+	before(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "release-test-"));
+	});
+
+	after(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	// helper: parse [project] section and extract version
+	function parsePyprojectVersion(content) {
+		const sections = content.split(/^(?=\[)/m);
+		const projectBlock = sections.find((s) => /^\[project\]\s*$/m.test(s));
+		if (!projectBlock) return null;
+		const match = projectBlock.match(/^version\s*=\s*"([^"]+)"/m);
+		return match ? match[1] : null;
+	}
+
+	// helper: write version into pyproject.toml content
+	function writePyprojectVersion(content, newVersion) {
+		const sections = content.split(/^(?=\[)/m);
+		const projectBlock = sections.find((s) => /^\[project\]\s*$/m.test(s));
+		if (!projectBlock) return null;
+		const versionMatch = projectBlock.match(/^version\s*=\s*"([^"]+)"/m);
+		if (!versionMatch) return null;
+		const offset = content.indexOf(projectBlock);
+		const versionIdx = offset + projectBlock.indexOf(versionMatch[0]);
+		return (
+			content.slice(0, versionIdx) +
+			`version = "${newVersion}"` +
+			content.slice(versionIdx + versionMatch[0].length)
+		);
+	}
+
+	it("should read version from standard pyproject.toml", () => {
+		const content = [
+			"[project]",
+			'name = "my-pkg"',
+			'version = "1.2.3"',
+			'description = "test"',
+			"",
+			"[tool.ruff]",
+			"line-length = 88",
+		].join("\n");
+		assert.equal(parsePyprojectVersion(content), "1.2.3");
+	});
+
+	it("should not match version in [tool.*] sections", () => {
+		const content = [
+			"[project]",
+			'name = "my-pkg"',
+			"",
+			"[tool.setuptools]",
+			'version = "9.9.9"',
+		].join("\n");
+		// no version in [project], should return null
+		assert.equal(parsePyprojectVersion(content), null);
+	});
+
+	it("should handle version in [project] when followed by [project.optional-dependencies]", () => {
+		const content = [
+			"[project]",
+			'name = "nokodo-ai"',
+			'version = "0.1.0"',
+			'description = "Core library"',
+			'requires-python = ">=3.13"',
+			"",
+			"[project.optional-dependencies]",
+			"api = [",
+			'    "fastapi>=0.115.0",',
+			"]",
+			"",
+			"[build-system]",
+			'requires = ["setuptools"]',
+		].join("\n");
+		assert.equal(parsePyprojectVersion(content), "0.1.0");
+	});
+
+	it("should write version correctly", () => {
+		const original = [
+			"[project]",
+			'name = "my-pkg"',
+			'version = "1.0.0"',
+			'description = "test"',
+			"",
+			"[tool.ruff]",
+			"line-length = 88",
+		].join("\n");
+		const updated = writePyprojectVersion(original, "2.0.0");
+		assert.ok(updated);
+		assert.equal(parsePyprojectVersion(updated), "2.0.0");
+		// ensure other content is preserved
+		assert.ok(updated.includes('name = "my-pkg"'));
+		assert.ok(updated.includes("line-length = 88"));
+	});
+
+	it("should read version from actual backend pyproject.toml", () => {
+		const lib = PACKAGES.find((p) => p.name === "library");
+		const version = readVersion(lib);
+		assert.ok(version, "should read a version from backend pyproject.toml");
+		assert.ok(
+			semver.valid(version),
+			`version should be valid semver: ${version}`,
+		);
+	});
+
+	it("should return null for pyproject.toml without version in [project]", () => {
+		const content = [
+			"[project]",
+			'name = "test"',
+			"",
+			"[build-system]",
+			'requires = ["setuptools"]',
+		].join("\n");
+		assert.equal(parsePyprojectVersion(content), null);
+	});
+
+	it("should return null when no [project] section exists", () => {
+		const content = [
+			"[tool.ruff]",
+			"line-length = 88",
+			'version = "1.0.0"',
+		].join("\n");
+		assert.equal(parsePyprojectVersion(content), null);
+	});
+});
