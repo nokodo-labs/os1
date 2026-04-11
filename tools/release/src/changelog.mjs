@@ -183,7 +183,7 @@ if (process.argv[1] && process.argv[1].endsWith("changelog.mjs")) {
 	const toIdx = args.indexOf("--to");
 
 	if (fromIdx === -1 || toIdx === -1) {
-		console.error("Usage: node changelog.mjs --from <ref> --to <ref>");
+		console.error("usage: node changelog.mjs --from <ref> --to <ref>");
 		process.exit(1);
 	}
 

@@ -40,11 +40,12 @@ export const SECTION_ORDER = [
 export const PACKAGES = [
 	{ path: ".", name: "os1", releaseType: "simple", componentTag: false },
 	{
-		path: "backend",
+		path: "backend/nokodo_ai",
 		name: "library",
 		releaseType: "python",
 		componentTag: true,
 		extraLabels: ["backend"],
+		versionDir: "backend",
 	},
 	{
 		path: "backend/api",

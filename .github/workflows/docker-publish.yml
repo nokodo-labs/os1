@@ -8,6 +8,11 @@ on:
         description: "release version if a release happened (empty = no release)"
         required: false
         default: ""
+      component_tags:
+        type: string
+        description: 'JSON map of component name to version (e.g. {"frontend":"0.2.0"})'
+        required: false
+        default: ""
   workflow_dispatch:
     inputs:
       release_tag:
@@ -101,6 +106,25 @@ jobs:
           echo "tag suffixes: $SUFFIXES"
           echo "SUFFIXES=$SUFFIXES" >> $GITHUB_OUTPUT
 
+          # build per-service component version suffixes from release component_tags
+          COMPONENT_TAGS='${{ inputs.component_tags }}'
+          BACKEND_SUFFIXES=""
+          FRONTEND_SUFFIXES=""
+          CONSOLE_SUFFIXES=""
+          if [ -n "$COMPONENT_TAGS" ] && [ "$COMPONENT_TAGS" != "{}" ]; then
+            LIBRARY_VER=$(echo "$COMPONENT_TAGS" | jq -r '.library // empty')
+            API_VER=$(echo "$COMPONENT_TAGS" | jq -r '.api // empty')
+            FRONTEND_VER=$(echo "$COMPONENT_TAGS" | jq -r '.frontend // empty')
+            CONSOLE_VER=$(echo "$COMPONENT_TAGS" | jq -r '.console // empty')
+            if [ -n "$LIBRARY_VER" ]; then BACKEND_SUFFIXES="library-v$LIBRARY_VER"; fi
+            if [ -n "$API_VER" ]; then BACKEND_SUFFIXES="$BACKEND_SUFFIXES api-v$API_VER"; fi
+            if [ -n "$FRONTEND_VER" ]; then FRONTEND_SUFFIXES="frontend-v$FRONTEND_VER"; fi
+            if [ -n "$CONSOLE_VER" ]; then CONSOLE_SUFFIXES="console-v$CONSOLE_VER"; fi
+          fi
+          echo "BACKEND_SUFFIXES=$BACKEND_SUFFIXES" >> $GITHUB_OUTPUT
+          echo "FRONTEND_SUFFIXES=$FRONTEND_SUFFIXES" >> $GITHUB_OUTPUT
+          echo "CONSOLE_SUFFIXES=$CONSOLE_SUFFIXES" >> $GITHUB_OUTPUT
+
       # --- backend ---
 
       - name: build backend
@@ -116,6 +140,12 @@ jobs:
           for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
             tag="$BASE/os1-backend:$suffix"
             echo "pushing $tag"
+            docker tag os1-backend "$tag"
+            docker push "$tag"
+          done
+          for suffix in ${{ steps.determine_tags.outputs.BACKEND_SUFFIXES }}; do
+            tag="$BASE/os1-backend:$suffix"
+            echo "pushing component tag $tag"
             docker tag os1-backend "$tag"
             docker push "$tag"
           done
@@ -137,6 +167,12 @@ jobs:
             docker tag os1-frontend "$tag"
             docker push "$tag"
           done
+          for suffix in ${{ steps.determine_tags.outputs.FRONTEND_SUFFIXES }}; do
+            tag="$BASE/os1-frontend:$suffix"
+            echo "pushing component tag $tag"
+            docker tag os1-frontend "$tag"
+            docker push "$tag"
+          done
 
       # --- console ---
 
@@ -152,6 +188,12 @@ jobs:
           for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
             tag="$BASE/os1-console:$suffix"
             echo "pushing $tag"
+            docker tag os1-console "$tag"
+            docker push "$tag"
+          done
+          for suffix in ${{ steps.determine_tags.outputs.CONSOLE_SUFFIXES }}; do
+            tag="$BASE/os1-console:$suffix"
+            echo "pushing component tag $tag"
             docker tag os1-console "$tag"
             docker push "$tag"
           done

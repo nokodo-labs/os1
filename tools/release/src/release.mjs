@@ -114,6 +114,17 @@ function getComponentTags(version) {
 	return tags;
 }
 
+// generate a map of component name -> version string for docker tagging.
+function getComponentTagMap(version) {
+	const map = {};
+	for (const pkg of PACKAGES) {
+		if (pkg.componentTag) {
+			map[pkg.name] = version;
+		}
+	}
+	return map;
+}
+
 // check if the current HEAD was merged from a release PR.
 // returns the PR number if it was, null otherwise.
 function getReleasePRMerge(branch, repoSlug) {
@@ -144,25 +155,25 @@ function main() {
 	}
 
 	if (branch !== "dev" && branch !== "stable") {
-		console.log(`Branch "${branch}" is not a release branch, skipping.`);
+		console.log(`branch "${branch}" is not a release branch, skipping.`);
 		writeOutputs({ release_created: false });
 		return;
 	}
 
 	const repoSlug = process.env.GITHUB_REPOSITORY || getRepoSlug();
 	if (!repoSlug) {
-		console.error("Could not determine repo slug from git remote");
+		console.error("could not determine repo slug from git remote");
 		process.exit(1);
 	}
 
-	console.log(`Release process for branch: ${branch}`);
-	console.log(`Repository: ${repoSlug}`);
+	console.log(`release process for branch: ${branch}`);
+	console.log(`repository: ${repoSlug}`);
 
 	// check if this is a merged release PR
 	const mergedPRNumber = getReleasePRMerge(branch, repoSlug);
 	if (mergedPRNumber) {
 		console.log(
-			`Detected merged release PR #${mergedPRNumber}, creating tags and GitHub release...`,
+			`detected merged release PR #${mergedPRNumber}, creating tags and GitHub release...`,
 		);
 		handleMergedReleasePR(branch, repoSlug, mergedPRNumber);
 		return;
@@ -176,8 +187,8 @@ function main() {
 function handleReleasePR(branch, repoSlug) {
 	const lastTag = getLatestTag();
 	const highestTag = getHighestTag();
-	console.log(`Latest tag on branch: ${lastTag || "(none)"}`);
-	console.log(`Highest tag in repo: ${highestTag || "(none)"}`);
+	console.log(`latest tag on branch: ${lastTag || "(none)"}`);
+	console.log(`highest tag in repo: ${highestTag || "(none)"}`);
 
 	// use the highest tag across the repo for version computation to prevent regression
 	const currentVersion = highestTag ? semver.clean(highestTag) : null;
@@ -186,7 +197,7 @@ function handleReleasePR(branch, repoSlug) {
 	// parse commits since the last tag reachable from this branch (for changelog)
 	const commits = parseCommitRange(lastTag, "HEAD");
 	console.log(
-		`Found ${commits.length} conventional commits since ${lastTag || "beginning"}`,
+		`found ${commits.length} conventional commits since ${lastTag || "beginning"}`,
 	);
 
 	let nextVersion;
@@ -199,35 +210,35 @@ function handleReleasePR(branch, repoSlug) {
 		) {
 			nextVersion = computeNextStable(currentVersion, "patch");
 			console.log(
-				`Promoting RC ${currentVersion} to stable ${nextVersion}`,
+				`promoting RC ${currentVersion} to stable ${nextVersion}`,
 			);
 		} else {
-			console.log("No releasable commits found, skipping.");
+			console.log("no releasable commits found, skipping.");
 			writeOutputs({ release_created: false });
 			return;
 		}
 	} else if (manualVersion) {
 		nextVersion = semver.clean(manualVersion);
 		if (!nextVersion) {
-			console.error(`Invalid manual version: ${manualVersion}`);
+			console.error(`invalid manual version: ${manualVersion}`);
 			process.exit(1);
 		}
 		if (currentVersion && !semver.gt(nextVersion, currentVersion)) {
 			console.error(
-				`Manual version ${nextVersion} must be greater than current ${currentVersion}`,
+				`manual version ${nextVersion} must be greater than current ${currentVersion}`,
 			);
 			process.exit(1);
 		}
-		console.log(`Using manual version override: ${nextVersion}`);
+		console.log(`using manual version override: ${nextVersion}`);
 	} else {
 		const bumpType = recommendBump(commits);
 		if (!bumpType) {
-			console.log("No version-bumping commits found, skipping.");
+			console.log("no version-bumping commits found, skipping.");
 			writeOutputs({ release_created: false });
 			return;
 		}
 
-		console.log(`Recommended bump: ${bumpType}`);
+		console.log(`recommended bump: ${bumpType}`);
 
 		if (branch === "dev") {
 			nextVersion = computeNextRC(currentVersion, bumpType);
@@ -237,11 +248,11 @@ function handleReleasePR(branch, repoSlug) {
 	}
 
 	const tagName = `v${nextVersion}`;
-	console.log(`Next version: ${nextVersion} (tag: ${tagName})`);
+	console.log(`next version: ${nextVersion} (tag: ${tagName})`);
 
 	// check if tag already exists
 	if (tagExists(tagName)) {
-		console.log(`Tag ${tagName} already exists, skipping.`);
+		console.log(`tag ${tagName} already exists, skipping.`);
 		writeOutputs({ release_created: false });
 		return;
 	}
@@ -286,7 +297,7 @@ function handleReleasePR(branch, repoSlug) {
 
 		// update version files
 		const changedFiles = updateAllVersions(nextVersion);
-		console.log(`Updated version files: ${changedFiles.length} files`);
+		console.log(`updated version files: ${changedFiles.length} files`);
 
 		if (changedFiles.length > 0) {
 			for (const f of changedFiles) {
@@ -306,7 +317,7 @@ function handleReleasePR(branch, repoSlug) {
 		// switch back
 		git("checkout", branch);
 	} catch (err) {
-		console.error(`Failed to create release branch: ${err.message}`);
+		console.error(`failed to create release branch: ${err.message}`);
 		try {
 			git("checkout", branch);
 		} catch {
@@ -402,7 +413,7 @@ function createComponentPRs(
 			});
 		} catch (err) {
 			console.error(
-				`Failed to create component PR for ${pkg.name}: ${err.message}`,
+				`failed to create component PR for ${pkg.name}: ${err.message}`,
 			);
 			try {
 				git("checkout", branch);
@@ -422,14 +433,14 @@ function handleMergedReleasePR(branch, repoSlug, prNumber) {
 	const version = versionPkg ? readVersion(versionPkg) : null;
 
 	if (!version) {
-		console.error("Could not read version from package files after merge");
+		console.error("could not read version from package files after merge");
 		process.exit(1);
 	}
 
 	const tagName = `v${version}`;
 	const isPrerelease = branch === "dev";
 
-	console.log(`Creating release for version ${version} (tag: ${tagName})`);
+	console.log(`creating release for version ${version} (tag: ${tagName})`);
 
 	// generate changelog BEFORE creating tags (so getLatestTag finds the previous one)
 	const lastStableTag = getSemverTags().find(
@@ -447,29 +458,29 @@ function handleMergedReleasePR(branch, repoSlug, prNumber) {
 
 	// create root tag
 	if (!tagExists(tagName)) {
-		git("tag", "-a", tagName, "-m", `Release ${tagName}`);
-		console.log(`Created tag: ${tagName}`);
+		git("tag", "-a", tagName, "-m", `release ${tagName}`);
+		console.log(`created tag: ${tagName}`);
 	}
 
 	// create component tags
 	const componentTags = getComponentTags(version);
 	for (const ct of componentTags) {
 		if (!tagExists(ct)) {
-			git("tag", "-a", ct, "-m", `Release ${ct}`);
-			console.log(`Created component tag: ${ct}`);
+			git("tag", "-a", ct, "-m", `release ${ct}`);
+			console.log(`created component tag: ${ct}`);
 		}
 	}
 
 	// push all tags
 	git("push", "origin", "--tags");
-	console.log("Pushed tags to origin");
+	console.log("pushed tags to origin");
 
 	// create GitHub release
 	createRelease(repoSlug, tagName, changelog, {
 		prerelease: isPrerelease,
 	});
 	console.log(
-		`Created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
+		`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
 	);
 
 	// swap release: pending -> release: tagged
@@ -489,6 +500,7 @@ function handleMergedReleasePR(branch, repoSlug, prNumber) {
 		release_created: true,
 		tag_name: tagName,
 		version,
+		component_tags: JSON.stringify(getComponentTagMap(version)),
 	});
 }
 
@@ -501,13 +513,13 @@ function writeOutputs(outputs) {
 	}
 
 	for (const [key, value] of Object.entries(outputs)) {
-		console.log(`Output: ${key}=${value}`);
+		console.log(`output: ${key}=${value}`);
 	}
 }
 
 try {
 	main();
 } catch (err) {
-	console.error("Release failed:", err);
+	console.error("release failed:", err);
 	process.exit(1);
 }

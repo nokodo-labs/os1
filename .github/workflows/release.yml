@@ -11,6 +11,8 @@ on:
         value: ${{ jobs.release.outputs.tag_name }}
       version:
         value: ${{ jobs.release.outputs.version }}
+      component_tags:
+        value: ${{ jobs.release.outputs.component_tags }}
   workflow_dispatch:
 
 jobs:
@@ -28,6 +30,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
+      component_tags: ${{ steps.release.outputs.component_tags }}
 
     steps:
       - name: checkout

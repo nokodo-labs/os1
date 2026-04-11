@@ -254,3 +254,4 @@ jobs:
     secrets: inherit
     with:
       release_version: ${{ needs.release.outputs.version }}
+      component_tags: ${{ needs.release.outputs.component_tags }}

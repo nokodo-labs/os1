@@ -12,7 +12,8 @@ function repoRoot() {
 // read the current version from a package's version file.
 export function readVersion(pkg) {
 	const root = repoRoot();
-	const pkgPath = pkg.path === "." ? root : join(root, pkg.path);
+	const dir = pkg.versionDir || pkg.path;
+	const pkgPath = dir === "." ? root : join(root, dir);
 
 	if (pkg.releaseType === "node") {
 		const pjPath = join(pkgPath, "package.json");
@@ -39,7 +40,8 @@ export function readVersion(pkg) {
 // write a new version to a package's version file.
 export function writeVersion(pkg, version) {
 	const root = repoRoot();
-	const pkgPath = pkg.path === "." ? root : join(root, pkg.path);
+	const dir = pkg.versionDir || pkg.path;
+	const pkgPath = dir === "." ? root : join(root, dir);
 
 	if (pkg.releaseType === "node") {
 		const pjPath = join(pkgPath, "package.json");
@@ -89,7 +91,8 @@ export function getVersionFilePaths() {
 	const root = repoRoot();
 	const paths = [];
 	for (const pkg of PACKAGES) {
-		const pkgPath = pkg.path === "." ? root : join(root, pkg.path);
+		const dir = pkg.versionDir || pkg.path;
+		const pkgPath = dir === "." ? root : join(root, dir);
 		if (pkg.releaseType === "node") {
 			paths.push(join(pkgPath, "package.json"));
 		} else if (pkg.releaseType === "python") {

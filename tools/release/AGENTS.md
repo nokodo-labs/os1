@@ -41,6 +41,7 @@ cd tools/release
 npm ci
 node src/release.mjs        # main entry (requires BRANCH, GITHUB_TOKEN env vars)
 node src/changelog.mjs --from <ref> --to <ref>   # standalone changelog generation
+npm test                     # run unit tests (node:test runner)
 ```
 
 ## environment variables
