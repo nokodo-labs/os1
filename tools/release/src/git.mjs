@@ -69,7 +69,8 @@ export function getLatestTagOnBranch(branch) {
 
 // get raw commit messages between two refs (exclusive from, inclusive to).
 // returns array of { hash, message, author } objects.
-export function getCommits(from, to = "HEAD") {
+// paths: optional array of file/dir paths to restrict commits to.
+export function getCommits(from, to = "HEAD", paths = []) {
 	assertSafeRef(from);
 	assertSafeRef(to);
 	const range = from ? `${from}..${to}` : to;
@@ -77,12 +78,14 @@ export function getCommits(from, to = "HEAD") {
 	const REC = "---COMMIT_REC---";
 	let raw;
 	try {
-		raw = exec("git", [
+		const args = [
 			"log",
 			range,
 			`--format=%H${SEP}%aN${SEP}%B${REC}`,
 			"--no-merges",
-		]);
+		];
+		if (paths.length > 0) args.push("--", ...paths);
+		raw = exec("git", args);
 	} catch {
 		return [];
 	}

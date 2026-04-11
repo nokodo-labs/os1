@@ -48,6 +48,7 @@ jobs:
               - 'console/**'
             docker:
               - '.docker/**'
+              - '.github/workflows/docker-publish.yml'
             backend_ci_workflow:
               - '.github/workflows/backend-ci.yml'
             frontend_ci_workflow:

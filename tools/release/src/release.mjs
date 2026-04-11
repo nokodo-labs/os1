@@ -336,7 +336,14 @@ function handleReleasePR(branch, repoSlug) {
 	});
 
 	// create/update per-component PRs
-	createComponentPRs(branch, repoSlug, nextVersion, tagName, isPrerelease);
+	createComponentPRs(
+		branch,
+		repoSlug,
+		nextVersion,
+		tagName,
+		isPrerelease,
+		lastTag,
+	);
 
 	writeOutputs({
 		release_created: false, // pr created, not release yet
@@ -353,6 +360,7 @@ function createComponentPRs(
 	nextVersion,
 	tagName,
 	isPrerelease,
+	lastTag,
 ) {
 	const repoUrl = `https://github.com/${repoSlug}`;
 	const componentPkgs = PACKAGES.filter(
@@ -371,11 +379,23 @@ function createComponentPRs(
 		const componentTitle = isPrerelease
 			? `chore(release): prerelease ${pkg.name} v${nextVersion}`
 			: `chore(release): release ${pkg.name} v${nextVersion}`;
+
+		// generate component-scoped changelog
+		const componentCommits = parseCommitRange(lastTag, "HEAD", [pkg.path]);
+		const componentChangelog = renderChangelog(componentCommits, repoSlug, {
+			compareFrom: lastTag || "",
+			compareTo: tagName,
+			maxLength: 50000,
+		});
+
 		const componentBody = [
 			isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 			"",
 			`> **component** \`${pkg.name}\` **version** \`${nextVersion}\``,
 			"",
+			componentChangelog,
+			"",
+			"---",
 			`- 📦 component tag: [\`${componentTag}\`](${repoUrl}/releases/tag/${componentTag})`,
 			`- 🤖 *this PR was created by the [release automation](${repoUrl}/actions)*`,
 		].join("\n");
@@ -393,13 +413,27 @@ function createComponentPRs(
 			const versionFile = writeVersion(pkg, nextVersion);
 			if (versionFile) {
 				git("add", versionFile);
-				git(
-					"commit",
-					"-m",
-					`chore(release): bump ${pkg.name} version to ${nextVersion}`,
-					"--no-verify",
-				);
 			}
+
+			// check if there are staged changes; skip if no diff
+			try {
+				git("diff", "--cached", "--quiet");
+				// exit 0 = no staged changes, skip this component
+				console.log(
+					`no version changes for ${pkg.name}, skipping component PR`,
+				);
+				git("checkout", branch);
+				continue;
+			} catch {
+				// exit 1 = there are staged changes, proceed
+			}
+
+			git(
+				"commit",
+				"-m",
+				`chore(release): bump ${pkg.name} version to ${nextVersion}`,
+				"--no-verify",
+			);
 
 			git("push", "origin", componentBranch, "--force");
 			git("checkout", branch);

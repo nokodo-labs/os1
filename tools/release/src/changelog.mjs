@@ -37,8 +37,9 @@ function extractPRNumber(message) {
 }
 
 // parse all commits between two refs and return structured data.
-export function parseCommitRange(from, to = "HEAD") {
-	const rawCommits = getCommits(from, to);
+// paths: optional array of file/dir paths to restrict commits to.
+export function parseCommitRange(from, to = "HEAD", paths = []) {
+	const rawCommits = getCommits(from, to, paths);
 	const parsed = [];
 
 	for (const { hash, author, message } of rawCommits) {
