@@ -232,6 +232,6 @@ BSD 3-Clause - see [LICENSE](LICENSE) for details.
 | **backend**  | FastAPI, Python 3.13+, SQLAlchemy 2.0+, PostgreSQL 17, Alembic |
 | **frontend** | Svelte 5, Vite, Vercel Streamdown, Tailwind 4, TypeScript      |
 | **console**  | Svelte 5, Vite, shadcn-svelte, Tailwind 4, TypeScript          |
-| **infra**    | Docker Compose, Nginx, GitHub Actions, Release Please          |
+| **infra**    | Docker Compose, Nginx, GitHub Actions, custom release tooling  |
 
 </details>

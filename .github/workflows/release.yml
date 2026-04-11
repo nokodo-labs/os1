@@ -4,18 +4,18 @@ on:
   workflow_call:
     outputs:
       pr_created:
-        value: ${{ jobs.release-please.outputs.pr_created }}
+        value: ${{ jobs.release.outputs.pr_created }}
       release_created:
-        value: ${{ jobs.release-please.outputs.release_created }}
+        value: ${{ jobs.release.outputs.release_created }}
       tag_name:
-        value: ${{ jobs.release-please.outputs.tag_name }}
+        value: ${{ jobs.release.outputs.tag_name }}
       version:
-        value: ${{ jobs.release-please.outputs.version }}
+        value: ${{ jobs.release.outputs.version }}
   workflow_dispatch:
 
 jobs:
-  release-please:
-    name: Release Please
+  release:
+    name: manage release
     runs-on: ubuntu-latest
     concurrency:
       group: release-${{ github.ref_name }}
@@ -24,40 +24,36 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      pr_created: ${{ steps.release.outputs.pr_created || steps.pre-release.outputs.pr_created }}
-      release_created: ${{ steps.release.outputs.release_created || steps.pre-release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name || steps.pre-release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version || steps.pre-release.outputs.version }}
+      pr_created: ${{ steps.release.outputs.pr_created }}
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
 
     steps:
-      - name: manage prerelease
-        if: ${{ github.ref_name == 'dev' }}
-        id: pre-release
-        uses: googleapis/release-please-action@v4
+      - name: checkout
+        uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: tools/release_please/release-please-config.prerelease.json
-          manifest-file: tools/release_please/release-please-manifest.json
-          target-branch: dev
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: manage full release
-        if: ${{ github.ref_name == 'stable' }}
+      - name: configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: install release tooling
+        working-directory: tools/release
+        run: npm ci
+
+      - name: run release
         id: release
-        uses: googleapis/release-please-action@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: tools/release_please/release-please-config.json
-          manifest-file: tools/release_please/release-please-manifest.json
-          target-branch: stable
-
-  docker-publish:
-    name: build and publish Docker image
-    needs: release-please
-    if: needs.release-please.outputs.version != ''
-    uses: ./.github/workflows/docker-publish.yml
-    secrets: inherit
-    permissions:
-      contents: read
-      packages: write
-    with:
-      release_version: ${{ needs.release-please.outputs.version }}
+        working-directory: tools/release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: node src/release.mjs

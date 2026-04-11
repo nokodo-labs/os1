@@ -50,7 +50,7 @@ jobs:
             docs:
               - 'docs/**'
             release:
-              - 'tools/release_please/**'
+              - 'tools/release/**'
 
   ci-carryover:
     name: carryover CI gate
