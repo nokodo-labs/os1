@@ -15,7 +15,7 @@ jobs:
     # case 1: PR from non-core branch → core branch (dev/stable): Run CI
     # case 2: PR from core branch (dev/stable) → any branch: Skip (same repo only)
     # case 3: Push to core branch → Run CI + CD
-    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name != github.repository || (github.head_ref != 'dev' && github.head_ref != 'stable'))) }}
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name != github.repository || (github.head_ref != 'dev' && github.head_ref != 'stable' && !startsWith(github.head_ref, 'release/')))) }}
     permissions:
       contents: read
       pull-requests: read
@@ -24,6 +24,7 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       console: ${{ steps.changes.outputs.console }}
       docker: ${{ steps.changes.outputs.docker }}
+      docker_ci_workflow: ${{ steps.changes.outputs.docker_ci_workflow }}
       backend_ci_workflow: ${{ steps.changes.outputs.backend_ci_workflow }}
       frontend_ci_workflow: ${{ steps.changes.outputs.frontend_ci_workflow }}
       console_ci_workflow: ${{ steps.changes.outputs.console_ci_workflow }}
@@ -48,6 +49,7 @@ jobs:
               - 'console/**'
             docker:
               - '.docker/**'
+            docker_ci_workflow:
               - '.github/workflows/docker-publish.yml'
             backend_ci_workflow:
               - '.github/workflows/backend-ci.yml'
@@ -237,7 +239,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    if: ${{ !cancelled() && (needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (needs.console-ci.result == 'success' || needs.console-ci.result == 'skipped') && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && ((needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.docker == 'true') || needs.release.outputs.version != '') }}
+    if: ${{ !cancelled() && (needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (needs.console-ci.result == 'success' || needs.console-ci.result == 'skipped') && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.docker_ci_workflow == 'true' || needs.release.outputs.release_created == 'true') }}
     uses: ./.github/workflows/docker-publish.yml
     secrets: inherit
     with:

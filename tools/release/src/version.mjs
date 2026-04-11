@@ -24,12 +24,13 @@ export function readVersion(pkg) {
 	if (pkg.releaseType === "python") {
 		const tomlPath = join(pkgPath, "pyproject.toml");
 		const content = readFileSync(tomlPath, "utf-8");
-		// match version within [project] section, not arbitrary [tool.*] sections
-		const projectSection = content.match(
-			/^\[project\]\s*\n([\s\S]*?)(?=^\[(?!project\.)|$)/m,
-		);
-		if (!projectSection) return null;
-		const match = projectSection[1].match(/^version\s*=\s*"([^"]+)"/m);
+		// extract the [project] section: everything from [project] to the next
+		// top-level section header (excluding [project.*] subsections).
+		// split on section headers and grab the first block after [project].
+		const sections = content.split(/^(?=\[)/m);
+		const projectBlock = sections.find((s) => /^\[project\]\s*$/m.test(s));
+		if (!projectBlock) return null;
+		const match = projectBlock.match(/^version\s*=\s*"([^"]+)"/m);
 		return match ? match[1] : null;
 	}
 
@@ -54,17 +55,15 @@ export function writeVersion(pkg, version) {
 	if (pkg.releaseType === "python") {
 		const tomlPath = join(pkgPath, "pyproject.toml");
 		let content = readFileSync(tomlPath, "utf-8");
-		// match version within [project] section only
-		const projectMatch = content.match(
-			/^\[project\]\s*\n([\s\S]*?)(?=^\[(?!project\.)|$)/m,
-		);
-		if (!projectMatch) return null;
-		const offset = content.indexOf(projectMatch[0]);
-		const sectionContent = projectMatch[1];
-		const versionMatch = sectionContent.match(/^version\s*=\s*"([^"]+)"/m);
+		// find [project] section by splitting on section headers
+		const sections = content.split(/^(?=\[)/m);
+		const projectBlock = sections.find((s) => /^\[project\]\s*$/m.test(s));
+		if (!projectBlock) return null;
+		const versionMatch = projectBlock.match(/^version\s*=\s*"([^"]+)"/m);
 		if (!versionMatch) return null;
 
-		const versionIdx = offset + projectMatch[0].indexOf(versionMatch[0]);
+		const offset = content.indexOf(projectBlock);
+		const versionIdx = offset + projectBlock.indexOf(versionMatch[0]);
 		content =
 			content.slice(0, versionIdx) +
 			`version = "${version}"` +
