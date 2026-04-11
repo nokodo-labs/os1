@@ -1,5 +1,5 @@
 {
-	".": "0.0.1",
+	".": "0.1.0",
 	"backend/nokodo_ai": "0.0.1",
 	"backend/api": "0.0.1",
 	"frontend": "0.0.1",
