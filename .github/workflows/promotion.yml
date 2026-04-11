@@ -71,6 +71,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: ensure branch refs
+        if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
+        run: |
+          git fetch origin "+refs/heads/${{ steps.config.outputs.target_branch }}:refs/heads/${{ steps.config.outputs.target_branch }}"
+
       - name: setup Node.js
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
         uses: actions/setup-node@v4
@@ -82,18 +87,20 @@ jobs:
         id: changelog
         run: |
           cd tools/release && npm ci
-          BODY=$(node src/changelog.mjs --from "${{ steps.config.outputs.target_branch }}" --to "${{ steps.config.outputs.source_branch }}")
-          if [ -z "$BODY" ]; then
+          BODY=$(node src/changelog.mjs --from "${{ steps.config.outputs.target_branch }}" --to "${{ steps.config.outputs.source_branch }}") || true
+          # renderChangelog returns just a compare link when no commits are parsed;
+          # treat that as empty so the fallback triggers.
+          if [ -z "$BODY" ] || ! echo "$BODY" | grep -q '^- '; then
             BODY="## what's changed
 
           no conventional commits detected.
 
-          ## 🔗 full changelog
+          ## full changelog
           https://github.com/${{ github.repository }}/compare/${{ steps.config.outputs.target_branch }}...${{ steps.config.outputs.source_branch }}"
           fi
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "changelog<<$EOF" >> $GITHUB_OUTPUT
-          echo "$BODY" >> $GITHUB_OUTPUT
+          printf '%s\n' "$BODY" >> $GITHUB_OUTPUT
           echo "$EOF" >> $GITHUB_OUTPUT
 
       - name: ensure labels exist
@@ -121,25 +128,22 @@ jobs:
             - trigger: `${{ github.event_name }}`
             - merge strategy expectation: **merge commit** (no squash) to preserve history
         run: |
-          set +e
-          pr_exists=$(gh pr list --head "$SOURCE_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
-          set -e
+          set -euo pipefail
 
-          if [ -n "$pr_exists" ]; then
-            echo "updating existing PR #$pr_exists"
-            gh pr edit "$pr_exists" \
+          pr_number=$(gh pr list --head "$SOURCE_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$pr_number" ]; then
+            echo "updating existing PR #$pr_number"
+            printf '%s' "$PR_BODY" | gh pr edit "$pr_number" \
               --title "$PR_TITLE" \
-              --body "$PR_BODY"
-
-            # Add labels separately as edit doesn't support --add-label
-            gh pr edit "$pr_exists" --add-label bot || true
-            gh pr edit "$pr_exists" --add-label promotion || true
+              --body-file -
+            gh pr edit "$pr_number" --add-label "bot,promotion" 2>/dev/null || true
           else
             echo "creating new promotion PR"
-            gh pr create \
+            printf '%s' "$PR_BODY" | gh pr create \
               --title "$PR_TITLE" \
-              --body "$PR_BODY" \
+              --body-file - \
               --base "$TARGET_BRANCH" \
               --head "$SOURCE_BRANCH" \
-              --label bot,promotion
+              --label "bot,promotion"
           fi

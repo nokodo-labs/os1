@@ -108,6 +108,24 @@ export function upsertReleasePR(
 				env: ghEnv(),
 			},
 		);
+
+		// sync labels on existing PR
+		if (labels.length > 0) {
+			try {
+				gh([
+					"pr",
+					"edit",
+					String(existing.number),
+					"--repo",
+					repoSlug,
+					"--add-label",
+					labels.join(","),
+				]);
+			} catch {
+				// best effort - labels might already be applied
+			}
+		}
+
 		console.log(`updated release PR #${existing.number}`);
 		return existing;
 	}
