@@ -36,6 +36,7 @@ import {
 } from "./config.mjs";
 import {
 	getHighestTag,
+	getLatestComponentTag,
 	getLatestTag,
 	getRepoSlug,
 	getSemverTags,
@@ -328,14 +329,7 @@ function handleReleasePR(branch, repoSlug) {
 	});
 
 	// create/update per-component PRs
-	createComponentPRs(
-		branch,
-		repoSlug,
-		nextVersion,
-		tagName,
-		isPrerelease,
-		lastTag,
-	);
+	createComponentPRs(branch, repoSlug, nextVersion, tagName, isPrerelease);
 
 	writeOutputs({
 		release_created: false, // pr created, not release yet
@@ -352,7 +346,6 @@ function createComponentPRs(
 	nextVersion,
 	tagName,
 	isPrerelease,
-	lastTag,
 ) {
 	const repoUrl = `https://github.com/${repoSlug}`;
 	const componentPkgs = PACKAGES.filter((p) => p.componentTag);
@@ -368,10 +361,13 @@ function createComponentPRs(
 			? `chore(release): prerelease ${pkg.name} v${nextVersion}`
 			: `chore(release): release ${pkg.name} v${nextVersion}`;
 
-		// generate component-scoped changelog
-		const componentCommits = parseCommitRange(lastTag, "HEAD", [pkg.path]);
+		// generate component-scoped changelog using the component's own last tag
+		const lastComponentTag = getLatestComponentTag(pkg.name);
+		const componentCommits = parseCommitRange(lastComponentTag, "HEAD", [
+			pkg.path,
+		]);
 		const componentChangelog = renderChangelog(componentCommits, repoSlug, {
-			compareFrom: lastTag || "",
+			compareFrom: lastComponentTag || "",
 			compareTo: branch,
 			maxLength: 50000,
 		});
@@ -538,7 +534,8 @@ function writeOutputs(outputs) {
 
 // only run main when executed directly (not when imported for tests).
 const isDirectRun =
-	process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+	process.argv[1] &&
+	import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isDirectRun) {
 	try {
 		main();

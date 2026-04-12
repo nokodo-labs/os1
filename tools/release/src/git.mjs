@@ -112,6 +112,47 @@ export function getHighestTag() {
 	return tags.length > 0 ? tags[0] : null;
 }
 
+// get all semver tags for a component, sorted descending by semver.
+// component tags follow the pattern "{name}-v{version}".
+export function getComponentSemverTags(name) {
+	const prefix = `${name}-v`;
+	let raw;
+	try {
+		raw = exec("git", ["tag", "--list", `${prefix}*`]);
+	} catch {
+		return [];
+	}
+	if (!raw) return [];
+
+	return raw
+		.split("\n")
+		.map((t) => t.trim())
+		.filter((t) => {
+			const ver = t.startsWith(prefix) ? t.slice(prefix.length) : null;
+			return ver && semver.valid(ver);
+		})
+		.sort((a, b) => {
+			const va = a.slice(prefix.length);
+			const vb = b.slice(prefix.length);
+			return semver.rcompare(va, vb);
+		});
+}
+
+// get the latest component tag reachable from HEAD.
+// returns the full tag string (e.g., "api-v0.1.0-rc.0") or null.
+export function getLatestComponentTag(name) {
+	const tags = getComponentSemverTags(name);
+	for (const tag of tags) {
+		try {
+			exec("git", ["merge-base", "--is-ancestor", tag, "HEAD"]);
+			return tag;
+		} catch {
+			// not reachable from HEAD
+		}
+	}
+	return null;
+}
+
 // get the repo owner/name from git remote.
 export function getRepoSlug() {
 	const url = exec("git", ["remote", "get-url", "origin"]);
