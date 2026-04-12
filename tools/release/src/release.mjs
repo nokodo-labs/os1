@@ -20,6 +20,8 @@
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import semver from "semver";
 import {
 	parseCommitRange,
@@ -260,7 +262,7 @@ function handleReleasePR(branch, repoSlug) {
 	// generate changelog (budget for PR body header/footer)
 	const changelog = renderChangelog(commits, repoSlug, {
 		compareFrom: lastTag || "",
-		compareTo: tagName,
+		compareTo: branch,
 		maxLength: 60000,
 	});
 
@@ -370,14 +372,14 @@ function createComponentPRs(
 		const componentCommits = parseCommitRange(lastTag, "HEAD", [pkg.path]);
 		const componentChangelog = renderChangelog(componentCommits, repoSlug, {
 			compareFrom: lastTag || "",
-			compareTo: tagName,
+			compareTo: branch,
 			maxLength: 50000,
 		});
 
 		const componentBody = [
 			isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 			"",
-			`> **component** \`${pkg.name}\` **version** \`${nextVersion}\``,
+			`> **component** \`${pkg.name}\` **version** \`${nextVersion}\` | **${componentCommits.length}** commits`,
 			"",
 			componentChangelog,
 			"",
@@ -536,7 +538,7 @@ function writeOutputs(outputs) {
 
 // only run main when executed directly (not when imported for tests).
 const isDirectRun =
-	import.meta.url === `file:///${process.argv[1].replace(/\\/g, "/")}`;
+	process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isDirectRun) {
 	try {
 		main();

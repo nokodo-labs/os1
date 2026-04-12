@@ -23,7 +23,7 @@ custom release and versioning tooling for the nokodo AI monorepo. replaces relea
 - `src/changelog.mjs` - conventional commit parsing, bump recommendation, markdown changelog rendering. also has a CLI entry point used by `promotion.yml`
 - `src/version.mjs` - read/write version in `package.json` and `pyproject.toml` files
 - `src/github.mjs` - GitHub operations via `gh` CLI (releases, PRs, labels)
-- `src/release.mjs` - main orchestrator entry point. creates/updates release PRs on push, creates tags and GitHub releases on merged PR
+- `src/release.mjs` - main orchestrator entry point. creates/updates release PRs on push, detects merged release PRs via GitHub API, creates tags and GitHub releases on merge
 
 ## how it works
 
