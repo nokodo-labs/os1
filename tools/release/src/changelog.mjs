@@ -2,13 +2,13 @@
 // parses conventional commits and renders categorized markdown.
 
 import { CommitParser } from "conventional-commits-parser";
-import { CHANGELOG_SECTIONS, SECTION_ORDER } from "./config.mjs";
+import { BREAKING_KEYWORDS, CHANGELOG_SECTIONS, SECTION_ORDER } from "./config.mjs";
 import { getCommits, shortHash } from "./git.mjs";
 
 const parser = new CommitParser({
 	headerPattern: /^(\w*)(?:\(([^)]*)\))?!?:\s(.*)$/,
 	headerCorrespondence: ["type", "scope", "subject"],
-	noteKeywords: ["BREAKING CHANGE", "BREAKING-CHANGE"],
+	noteKeywords: BREAKING_KEYWORDS,
 });
 
 // build a type -> section lookup from config.
@@ -57,10 +57,8 @@ export function parseCommitRange(from, to = "HEAD", paths = []) {
 			section,
 			author: author || null,
 			pr: extractPRNumber(message),
-			breaking: commit.notes.some(
-				(n) =>
-					n.title === "BREAKING CHANGE" ||
-					n.title === "BREAKING-CHANGE",
+			breaking: commit.notes.some((n) =>
+				BREAKING_KEYWORDS.includes(n.title),
 			),
 		});
 	}

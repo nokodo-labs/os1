@@ -300,3 +300,89 @@ describe("pyproject.toml version parsing", () => {
 		assert.equal(parsePyprojectVersion(content), null);
 	});
 });
+
+// -- extractVersionFromTitle tests --
+
+import { extractVersionFromTitle } from "../src/release.mjs";
+
+describe("extractVersionFromTitle", () => {
+	it("should extract version from prerelease PR title", () => {
+		assert.equal(
+			extractVersionFromTitle(
+				"chore(release): prerelease OS1 v0.1.0-rc.0",
+			),
+			"0.1.0-rc.0",
+		);
+	});
+
+	it("should extract version from stable release PR title", () => {
+		assert.equal(
+			extractVersionFromTitle("chore(release): release OS1 v1.2.3"),
+			"1.2.3",
+		);
+	});
+
+	it("should extract version from component PR title", () => {
+		assert.equal(
+			extractVersionFromTitle(
+				"chore(release): prerelease frontend v0.1.0-rc.0",
+			),
+			"0.1.0-rc.0",
+		);
+	});
+
+	it("should extract higher RC numbers", () => {
+		assert.equal(
+			extractVersionFromTitle(
+				"chore(release): prerelease OS1 v2.0.0-rc.15",
+			),
+			"2.0.0-rc.15",
+		);
+	});
+
+	it("should NOT match title without version", () => {
+		assert.equal(
+			extractVersionFromTitle("chore(release): bump dependencies"),
+			null,
+		);
+	});
+
+	it("should NOT match title with version in the middle", () => {
+		assert.equal(extractVersionFromTitle("update v1.2.3 to latest"), null);
+	});
+
+	it("should NOT match partial version", () => {
+		assert.equal(
+			extractVersionFromTitle("chore(release): release OS1 v1.2"),
+			null,
+		);
+	});
+
+	it("should NOT match empty or null input", () => {
+		assert.equal(extractVersionFromTitle(""), null);
+		assert.equal(extractVersionFromTitle(null), null);
+		assert.equal(extractVersionFromTitle(undefined), null);
+	});
+
+	it("should match alpha/beta prerelease tags", () => {
+		assert.equal(
+			extractVersionFromTitle(
+				"chore(release): release OS1 v1.0.0-alpha.1",
+			),
+			"1.0.0-alpha.1",
+		);
+		assert.equal(
+			extractVersionFromTitle(
+				"chore(release): release OS1 v1.0.0-beta.3",
+			),
+			"1.0.0-beta.3",
+		);
+	});
+
+	it("should handle trailing whitespace", () => {
+		assert.equal(
+			extractVersionFromTitle("chore(release): release OS1 v1.2.3  "),
+			"1.2.3",
+		);
+	});
+});

@@ -6,13 +6,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+	BREAKING_KEYWORDS,
 	BUMP_TYPES,
 	CHANGELOG_SECTIONS,
 	PACKAGES,
 	PRERELEASE_ID,
 	PRERELEASE_LABELS,
 	RELEASE_LABELS,
-	RELEASE_TAGGED_LABEL,
 	SECTION_ORDER,
 } from "../src/config.mjs";
 
@@ -149,7 +149,6 @@ describe("labels", () => {
 	it("should have required base labels", () => {
 		assert.ok(RELEASE_LABELS.includes("bot"));
 		assert.ok(RELEASE_LABELS.includes("release"));
-		assert.ok(RELEASE_LABELS.includes("release: pending"));
 	});
 
 	it("should have prerelease label in PRERELEASE_LABELS", () => {
@@ -158,8 +157,9 @@ describe("labels", () => {
 		assert.ok(PRERELEASE_LABELS.includes("release"));
 	});
 
-	it("should have tagged label defined", () => {
-		assert.equal(RELEASE_TAGGED_LABEL, "release: tagged");
+	it("should not have detection labels", () => {
+		assert.ok(!RELEASE_LABELS.includes("release: pending"));
+		assert.ok(!PRERELEASE_LABELS.includes("release: pending"));
 	});
 });
 
@@ -172,5 +172,10 @@ describe("constants", () => {
 		assert.ok(BUMP_TYPES.includes("feat"));
 		assert.ok(BUMP_TYPES.includes("fix"));
 		assert.ok(BUMP_TYPES.includes("perf"));
+	});
+
+	it("should have breaking change keywords", () => {
+		assert.ok(BREAKING_KEYWORDS.includes("BREAKING CHANGE"));
+		assert.ok(BREAKING_KEYWORDS.includes("BREAKING-CHANGE"));
 	});
 });

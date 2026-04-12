@@ -1,14 +1,16 @@
 // release orchestrator - main entry point.
-// creates/updates release PRs with version bumps, changelogs, and tags.
+// runs on every push to dev/stable (via main.yml -> release.yml).
 //
-// flow:
-//   1. determine commits since last tag
-//   2. compute next version (RC for dev, stable for stable)
-//   3. create/update release PR with version bumps and changelog
+// auto-detects which mode to run:
 //
-// when a release PR is merged (detected by checking if HEAD is a merge of a release branch):
-//   1. create git tag(s)
-//   2. create GitHub release
+// create-pr mode (default):
+//   analyze commits since last tag, compute next version, create/update
+//   a release PR targeting the current branch.
+//
+// tag-release mode (on merged release PR):
+//   when a release PR is merged, the next push detects it via GitHub API.
+//   the version is extracted from the PR title. if no tag exists yet for
+//   that version, tags are created and a GitHub release is published.
 //
 // environment variables:
 //   GITHUB_TOKEN - required for GitHub API
@@ -41,10 +43,10 @@ import {
 	closeComponentPRs,
 	createRelease,
 	findMergedReleasePR,
-	swapReleaseLabel,
+	releaseExists,
 	upsertReleasePR,
 } from "./github.mjs";
-import { readVersion, updateAllVersions, writeVersion } from "./version.mjs";
+import { writeVersion } from "./version.mjs";
 
 function git(...args) {
 	return execFileSync("git", args, {
@@ -125,25 +127,13 @@ function getComponentTagMap(version) {
 	return map;
 }
 
-// check if the current HEAD was merged from a release PR.
-// returns the PR number if it was, null otherwise.
-function getReleasePRMerge(branch, repoSlug) {
-	const pr = findMergedReleasePR(repoSlug, branch);
-	if (!pr) return null;
-
-	// compare the merge commit SHA to the current HEAD
-	const headSha = git("rev-parse", "HEAD");
-	const mergeSha = pr.mergeCommit?.oid;
-	if (mergeSha && headSha === mergeSha) return pr.number;
-
-	// fallback: check commit message
-	try {
-		const msg = git("log", "-1", "--format=%s", "HEAD");
-		if (msg.includes(`release/${branch}`)) return pr.number;
-	} catch {
-		// ignore
-	}
-	return null;
+// extract the version string from a release PR title.
+// supports titles like "chore(release): prerelease OS1 v0.1.0-rc.0"
+// or "chore(release): release OS1 v1.2.3".
+// returns the version string if found, null otherwise.
+export function extractVersionFromTitle(title) {
+	const match = title?.match(/\bv(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\s*$/);
+	return match ? match[1] : null;
 }
 
 // main release logic.
@@ -169,17 +159,27 @@ function main() {
 	console.log(`release process for branch: ${branch}`);
 	console.log(`repository: ${repoSlug}`);
 
-	// check if this is a merged release PR
-	const mergedPRNumber = getReleasePRMerge(branch, repoSlug);
-	if (mergedPRNumber) {
-		console.log(
-			`detected merged release PR #${mergedPRNumber}, creating tags and GitHub release...`,
-		);
-		handleMergedReleasePR(branch, repoSlug, mergedPRNumber);
-		return;
+	// detect if a release PR was merged by querying GitHub API.
+	// the version is extracted from the PR title, and tag existence
+	// is the idempotency guard (prevents re-processing).
+	const mergedPR = findMergedReleasePR(repoSlug, branch);
+	if (mergedPR) {
+		const version = extractVersionFromTitle(mergedPR.title);
+		if (version && !tagExists(`v${version}`)) {
+			console.log(
+				`found merged release PR #${mergedPR.number}: v${version}, creating tags and GitHub release...`,
+			);
+			handleTagRelease(branch, repoSlug, version);
+			return;
+		}
+		if (version) {
+			console.log(
+				`merged release PR #${mergedPR.number} already tagged (v${version}), skipping.`,
+			);
+		}
 	}
 
-	// regular push - create/update release PR
+	// no unprocessed merge - create/update release PR
 	handleReleasePR(branch, repoSlug);
 }
 
@@ -275,7 +275,7 @@ function handleReleasePR(branch, repoSlug) {
 	const prBody = [
 		isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 		"",
-		`> **version** \`${nextVersion}\` ${isPrerelease ? "*(release candidate)*" : ""}`,
+		`> **version** \`${nextVersion}\` ${isPrerelease ? "*(release candidate)*" : ""} | **${commits.length}** commits`,
 		"",
 		changelog,
 		"",
@@ -284,10 +284,9 @@ function handleReleasePR(branch, repoSlug) {
 		`- merging will create tag [\`${tagName}\`](${repoUrl}/releases/tag/${tagName}) and a GitHub ${isPrerelease ? "pre-release" : "release"}`,
 	].join("\n");
 
-	// create the release head branch and push version changes
+	// create the release head branch (no version file changes on global release)
 	const headBranch = `release/${branch}`;
 	try {
-		// create or reset the release branch from current branch
 		try {
 			git("branch", "-D", headBranch);
 		} catch {
@@ -295,26 +294,17 @@ function handleReleasePR(branch, repoSlug) {
 		}
 		git("checkout", "-b", headBranch);
 
-		// update version files
-		const changedFiles = updateAllVersions(nextVersion);
-		console.log(`updated version files: ${changedFiles.length} files`);
+		// placeholder commit so the PR branch differs from base.
+		// version is extracted from PR title on merge, not from this commit.
+		git(
+			"commit",
+			"--allow-empty",
+			"-m",
+			`chore(release): prepare OS1 v${nextVersion}`,
+			"--no-verify",
+		);
 
-		if (changedFiles.length > 0) {
-			for (const f of changedFiles) {
-				git("add", f);
-			}
-			git(
-				"commit",
-				"-m",
-				`chore(release): bump version to ${nextVersion}`,
-				"--no-verify",
-			);
-		}
-
-		// push the branch
 		git("push", "origin", headBranch, "--force");
-
-		// switch back
 		git("checkout", branch);
 	} catch (err) {
 		console.error(`failed to create release branch: ${err.message}`);
@@ -353,7 +343,7 @@ function handleReleasePR(branch, repoSlug) {
 	});
 }
 
-// create separate tracking PRs for each component with version files.
+// create separate tracking PRs for each component.
 function createComponentPRs(
 	branch,
 	repoSlug,
@@ -363,11 +353,7 @@ function createComponentPRs(
 	lastTag,
 ) {
 	const repoUrl = `https://github.com/${repoSlug}`;
-	const componentPkgs = PACKAGES.filter(
-		(p) =>
-			p.componentTag &&
-			(p.releaseType === "node" || p.releaseType === "python"),
-	);
+	const componentPkgs = PACKAGES.filter((p) => p.componentTag);
 
 	for (const pkg of componentPkgs) {
 		const componentBranch = `release--${pkg.name}/${branch}`;
@@ -409,31 +395,38 @@ function createComponentPRs(
 			}
 			git("checkout", "-b", componentBranch);
 
-			// bump only this component's version file
+			// bump this component's version file (if it has one)
 			const versionFile = writeVersion(pkg, nextVersion);
 			if (versionFile) {
 				git("add", versionFile);
+				// skip if version file didn't actually change
+				try {
+					git("diff", "--cached", "--quiet");
+					console.log(
+						`no version changes for ${pkg.name}, skipping component PR`,
+					);
+					git("checkout", branch);
+					continue;
+				} catch {
+					// exit 1 = there are staged changes, proceed
+				}
 			}
 
-			// check if there are staged changes; skip if no diff
-			try {
-				git("diff", "--cached", "--quiet");
-				// exit 0 = no staged changes, skip this component
-				console.log(
-					`no version changes for ${pkg.name}, skipping component PR`,
-				);
-				git("checkout", branch);
-				continue;
-			} catch {
-				// exit 1 = there are staged changes, proceed
-			}
-
-			git(
-				"commit",
-				"-m",
-				`chore(release): bump ${pkg.name} version to ${nextVersion}`,
-				"--no-verify",
-			);
+			const commitArgs = versionFile
+				? [
+						"commit",
+						"-m",
+						`chore(release): bump ${pkg.name} version to ${nextVersion}`,
+						"--no-verify",
+					]
+				: [
+						"commit",
+						"--allow-empty",
+						"-m",
+						`chore(release): ${pkg.name} ${nextVersion}`,
+						"--no-verify",
+					];
+			git(...commitArgs);
 
 			git("push", "origin", componentBranch, "--force");
 			git("checkout", branch);
@@ -458,23 +451,20 @@ function createComponentPRs(
 	}
 }
 
-// handle a merged release PR: create tags and GitHub release.
-function handleMergedReleasePR(branch, repoSlug, prNumber) {
-	// try packages with version files until one succeeds
-	const versionPkg = PACKAGES.find(
-		(p) => p.releaseType === "node" || p.releaseType === "python",
-	);
-	const version = versionPkg ? readVersion(versionPkg) : null;
-
-	if (!version) {
-		console.error("could not read version from package files after merge");
-		process.exit(1);
-	}
-
+// handle a merged release: create tags and GitHub release.
+// version comes from the merged release PR title.
+function handleTagRelease(branch, repoSlug, version) {
 	const tagName = `v${version}`;
 	const isPrerelease = branch === "dev";
 
 	console.log(`creating release for version ${version} (tag: ${tagName})`);
+
+	// check if a GitHub release already exists (defensive)
+	if (releaseExists(repoSlug, tagName)) {
+		console.log(`GitHub release ${tagName} already exists, skipping.`);
+		writeOutputs({ release_created: false });
+		return;
+	}
 
 	// generate changelog BEFORE creating tags (so getLatestTag finds the previous one)
 	const lastStableTag = getSemverTags().find(
@@ -517,17 +507,10 @@ function handleMergedReleasePR(branch, repoSlug, prNumber) {
 		`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
 	);
 
-	// swap release: pending -> release: tagged
-	if (prNumber) {
-		swapReleaseLabel(repoSlug, prNumber);
-	}
-
 	// close component tracking PRs (their changes are included in the root PR)
-	const componentNames = PACKAGES.filter(
-		(p) =>
-			p.componentTag &&
-			(p.releaseType === "node" || p.releaseType === "python"),
-	).map((p) => p.name);
+	const componentNames = PACKAGES.filter((p) => p.componentTag).map(
+		(p) => p.name,
+	);
 	closeComponentPRs(repoSlug, branch, componentNames);
 
 	writeOutputs({
@@ -551,9 +534,14 @@ function writeOutputs(outputs) {
 	}
 }
 
-try {
-	main();
-} catch (err) {
-	console.error("release failed:", err);
-	process.exit(1);
+// only run main when executed directly (not when imported for tests).
+const isDirectRun =
+	import.meta.url === `file:///${process.argv[1].replace(/\\/g, "/")}`;
+if (isDirectRun) {
+	try {
+		main();
+	} catch (err) {
+		console.error("release failed:", err);
+		process.exit(1);
+	}
 }

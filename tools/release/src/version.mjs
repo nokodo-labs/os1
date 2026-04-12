@@ -2,7 +2,6 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PACKAGES } from "./config.mjs";
 
 // get the repo root directory (2 levels up from src/).
 function repoRoot() {
@@ -73,30 +72,4 @@ export function writeVersion(pkg, version) {
 	}
 
 	return null;
-}
-
-// update all packages to the given version. returns list of changed file paths.
-export function updateAllVersions(version) {
-	const changed = [];
-	for (const pkg of PACKAGES) {
-		const path = writeVersion(pkg, version);
-		if (path) changed.push(path);
-	}
-	return changed;
-}
-
-// get paths of all version files (for git add).
-export function getVersionFilePaths() {
-	const root = repoRoot();
-	const paths = [];
-	for (const pkg of PACKAGES) {
-		const dir = pkg.versionDir || pkg.path;
-		const pkgPath = dir === "." ? root : join(root, dir);
-		if (pkg.releaseType === "node") {
-			paths.push(join(pkgPath, "package.json"));
-		} else if (pkg.releaseType === "python") {
-			paths.push(join(pkgPath, "pyproject.toml"));
-		}
-	}
-	return paths;
 }

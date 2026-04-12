@@ -50,23 +50,6 @@ export function getLatestTag() {
 	return null;
 }
 
-// get the latest tag on a specific branch (any tag, not just ancestors of HEAD).
-export function getLatestTagOnBranch(branch) {
-	assertSafeRef(branch);
-	const tags = getSemverTags();
-	if (tags.length === 0) return null;
-
-	for (const tag of tags) {
-		try {
-			exec("git", ["merge-base", "--is-ancestor", tag, branch]);
-			return tag;
-		} catch {
-			continue;
-		}
-	}
-	return null;
-}
-
 // get raw commit messages between two refs (exclusive from, inclusive to).
 // returns array of { hash, message, author } objects.
 // paths: optional array of file/dir paths to restrict commits to.
@@ -135,16 +118,4 @@ export function getRepoSlug() {
 	// handle both HTTPS and SSH URLs (including custom host aliases like github.com-*)
 	const match = url.match(/github\.com[^:/]*[:/](.+?)(?:\.git)?$/);
 	return match ? match[1] : null;
-}
-
-// get commit count between two refs.
-export function getCommitCount(from, to = "HEAD") {
-	assertSafeRef(from);
-	assertSafeRef(to);
-	const range = from ? `${from}..${to}` : to;
-	try {
-		return parseInt(exec("git", ["rev-list", "--count", range]), 10);
-	} catch {
-		return 0;
-	}
 }

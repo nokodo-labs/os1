@@ -83,9 +83,9 @@ export function upsertReleasePR(
 	const head = headBranch || `release/${branch}`;
 	const existing = findReleasePR(repoSlug, branch, head);
 
-	// ensure labels exist before creating/editing the PR (include tagged label for later swap)
+	// ensure labels exist before creating/editing the PR
 	if (labels.length > 0) {
-		ensureLabels(repoSlug, [...labels, "release: tagged"]);
+		ensureLabels(repoSlug, labels);
 	}
 
 	if (existing) {
@@ -165,8 +165,6 @@ function ensureLabels(repoSlug, labels) {
 		bot: "000000",
 		release: "0e8a16",
 		prerelease: "fbca04",
-		"release: pending": "c2e0c6",
-		"release: tagged": "0e8a16",
 		backend: "3572A5",
 		api: "3572A5",
 		frontend: "f1e05a",
@@ -193,7 +191,35 @@ function ensureLabels(repoSlug, labels) {
 	}
 }
 
-// check if a release already exists for a tag.
+// find a merged release PR for the given branch.
+// returns { number, title } or null.
+export function findMergedReleasePR(repoSlug, branch) {
+	const head = `release/${branch}`;
+	try {
+		const raw = gh([
+			"pr",
+			"list",
+			"--repo",
+			repoSlug,
+			"--head",
+			head,
+			"--base",
+			branch,
+			"--state",
+			"merged",
+			"--json",
+			"number,title",
+			"--limit",
+			"5",
+		]);
+		const prs = raw ? JSON.parse(raw) : [];
+		return prs.length > 0 ? prs[0] : null;
+	} catch {
+		return null;
+	}
+}
+
+// check if a GitHub release exists for a tag.
 export function releaseExists(repoSlug, tagName) {
 	try {
 		gh([
@@ -208,51 +234,6 @@ export function releaseExists(repoSlug, tagName) {
 		return true;
 	} catch {
 		return false;
-	}
-}
-
-// swap release: pending -> release: tagged on a merged PR.
-export function swapReleaseLabel(repoSlug, prNumber) {
-	try {
-		gh([
-			"pr",
-			"edit",
-			String(prNumber),
-			"--repo",
-			repoSlug,
-			"--remove-label",
-			"release: pending",
-			"--add-label",
-			"release: tagged",
-		]);
-	} catch {
-		// best effort
-	}
-}
-
-// find the most recently merged release PR on a branch.
-export function findMergedReleasePR(repoSlug, branch) {
-	try {
-		const raw = gh([
-			"pr",
-			"list",
-			"--repo",
-			repoSlug,
-			"--head",
-			`release/${branch}`,
-			"--base",
-			branch,
-			"--state",
-			"merged",
-			"--json",
-			"number,mergeCommit",
-			"--limit",
-			"1",
-		]);
-		const prs = raw ? JSON.parse(raw) : [];
-		return prs.length > 0 ? prs[0] : null;
-	} catch {
-		return null;
 	}
 }
 

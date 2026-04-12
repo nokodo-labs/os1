@@ -73,16 +73,9 @@ export const PACKAGES = [
 // commit types that trigger a version bump.
 export const BUMP_TYPES = ["feat", "fix", "perf", "refactor", "revert"];
 
-// commit types that trigger a breaking change bump regardless.
+// keywords that indicate a breaking change in commit footers.
 export const BREAKING_KEYWORDS = ["BREAKING CHANGE", "BREAKING-CHANGE"];
 
 // labels applied to release PRs.
-export const RELEASE_LABELS = ["bot", "release", "release: pending"];
-export const PRERELEASE_LABELS = [
-	"bot",
-	"release",
-	"prerelease",
-	"release: pending",
-];
-// label swapped in after release is tagged.
-export const RELEASE_TAGGED_LABEL = "release: tagged";
+export const RELEASE_LABELS = ["bot", "release"];
+export const PRERELEASE_LABELS = ["bot", "release", "prerelease"];
