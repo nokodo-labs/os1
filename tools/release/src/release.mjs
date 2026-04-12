@@ -603,11 +603,7 @@ function handleTagRelease(branch, repoSlug, version, prNumber) {
 		);
 	}
 
-	// remove release:pending label now that processing is complete
 	if (prNumber) {
-		removePRLabel(repoSlug, prNumber, "release:pending");
-		console.log(`removed release:pending label from PR #${prNumber}`);
-
 		// leave a comment on the merged PR
 		const repoUrl = `https://github.com/${repoSlug}`;
 		addPRComment(
@@ -618,6 +614,11 @@ function handleTagRelease(branch, repoSlug, version, prNumber) {
 
 		// delete the release branch
 		deleteBranch(repoSlug, `release/${branch}`);
+
+		// remove release:pending label last - if anything above threw, the next
+		// run will find this PR again and retry (all prior ops are idempotent).
+		removePRLabel(repoSlug, prNumber, "release:pending");
+		console.log(`removed release:pending label from PR #${prNumber}`);
 	}
 
 	writeOutputs({
@@ -679,11 +680,7 @@ function handleComponentTagRelease(branch, repoSlug, pkg, version, prNumber) {
 		);
 	}
 
-	// remove release:pending label now that processing is complete
 	if (prNumber) {
-		removePRLabel(repoSlug, prNumber, "release:pending");
-		console.log(`removed release:pending label from PR #${prNumber}`);
-
 		// leave a comment on the merged PR
 		const repoUrl = `https://github.com/${repoSlug}`;
 		addPRComment(
@@ -694,6 +691,11 @@ function handleComponentTagRelease(branch, repoSlug, pkg, version, prNumber) {
 
 		// delete the component release branch
 		deleteBranch(repoSlug, `release--${pkg.name}/${branch}`);
+
+		// remove release:pending label last - if anything above threw, the next
+		// run will find this PR again and retry (all prior ops are idempotent).
+		removePRLabel(repoSlug, prNumber, "release:pending");
+		console.log(`removed release:pending label from PR #${prNumber}`);
 	}
 
 	return {
