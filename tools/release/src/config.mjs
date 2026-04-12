@@ -38,7 +38,7 @@ export const SECTION_ORDER = [
 // - releaseType: determines how version files are updated
 // - componentTag: whether to create a separate component tag
 export const PACKAGES = [
-	{ path: ".", name: "os1", releaseType: "simple", componentTag: false },
+	{ path: ".", name: "os1", releaseType: "version", componentTag: false },
 	{
 		path: "backend/nokodo_ai",
 		name: "library",
@@ -50,7 +50,7 @@ export const PACKAGES = [
 	{
 		path: "backend/api",
 		name: "api",
-		releaseType: "none",
+		releaseType: "python-init",
 		componentTag: true,
 		extraLabels: ["api"],
 	},
@@ -77,5 +77,11 @@ export const BUMP_TYPES = ["feat", "fix", "perf", "refactor", "revert"];
 export const BREAKING_KEYWORDS = ["BREAKING CHANGE", "BREAKING-CHANGE"];
 
 // labels applied to release PRs.
-export const RELEASE_LABELS = ["bot", "release"];
-export const PRERELEASE_LABELS = ["bot", "release", "prerelease"];
+// release:pending is added on creation and removed after tagging+releasing.
+export const RELEASE_LABELS = ["bot", "release", "release:pending"];
+export const PRERELEASE_LABELS = [
+	"bot",
+	"release",
+	"release:pending",
+	"prerelease",
+];

@@ -69,8 +69,8 @@ export function findReleasePR(repoSlug, branch, headBranch) {
 		]);
 		const prs = raw ? JSON.parse(raw) : [];
 		if (prs.length > 0) return prs[0];
-	} catch {
-		// no PR found
+	} catch (err) {
+		if (err?.status !== 1) throw err;
 	}
 	return null;
 }
@@ -109,21 +109,17 @@ export function upsertReleasePR(
 			},
 		);
 
-		// sync labels on existing PR
+		// sync labels on existing PR - release:pending is critical for detection
 		if (labels.length > 0) {
-			try {
-				gh([
-					"pr",
-					"edit",
-					String(existing.number),
-					"--repo",
-					repoSlug,
-					"--add-label",
-					labels.join(","),
-				]);
-			} catch {
-				// best effort - labels might already be applied
-			}
+			gh([
+				"pr",
+				"edit",
+				String(existing.number),
+				"--repo",
+				repoSlug,
+				"--add-label",
+				labels.join(","),
+			]);
 		}
 
 		console.log(`updated release PR #${existing.number}`);
@@ -164,6 +160,7 @@ function ensureLabels(repoSlug, labels) {
 	const LABEL_COLORS = {
 		bot: "000000",
 		release: "0e8a16",
+		"release:pending": "c2e0c6",
 		prerelease: "fbca04",
 		backend: "3572A5",
 		api: "3572A5",
@@ -172,51 +169,53 @@ function ensureLabels(repoSlug, labels) {
 	};
 
 	for (const label of labels) {
-		try {
-			gh([
-				"label",
-				"create",
-				label,
-				"--repo",
-				repoSlug,
-				"--color",
-				LABEL_COLORS[label] || "ededed",
-				"--description",
-				"managed by release tooling",
-				"--force",
-			]);
-		} catch {
-			// label may already exist
-		}
+		gh([
+			"label",
+			"create",
+			label,
+			"--repo",
+			repoSlug,
+			"--color",
+			LABEL_COLORS[label] || "ededed",
+			"--description",
+			"managed by release tooling",
+			"--force",
+		]);
 	}
 }
 
-// find a merged release PR for the given branch.
-// returns { number, title } or null.
-export function findMergedReleasePR(repoSlug, branch) {
-	const head = `release/${branch}`;
-	try {
-		const raw = gh([
-			"pr",
-			"list",
-			"--repo",
-			repoSlug,
-			"--head",
-			head,
-			"--base",
-			branch,
-			"--state",
-			"merged",
-			"--json",
-			"number,title",
-			"--limit",
-			"5",
-		]);
-		const prs = raw ? JSON.parse(raw) : [];
-		return prs.length > 0 ? prs[0] : null;
-	} catch {
-		return null;
-	}
+// find merged release PRs that haven't been processed yet.
+// uses the release:pending label to identify unprocessed PRs.
+// returns an array of { number, title }.
+export function findPendingReleasePRs(repoSlug, branch) {
+	const raw = gh([
+		"pr",
+		"list",
+		"--repo",
+		repoSlug,
+		"--base",
+		branch,
+		"--state",
+		"merged",
+		"--label",
+		"release:pending",
+		"--json",
+		"number,title",
+	]);
+	return raw ? JSON.parse(raw) : [];
+}
+
+// remove a label from a PR.
+export function removePRLabel(repoSlug, prNumber, label) {
+	gh([
+		"pr",
+		"edit",
+		String(prNumber),
+		"--repo",
+		repoSlug,
+		"--remove-label",
+		label,
+	]);
 }
 
 // check if a GitHub release exists for a tag.
@@ -232,7 +231,8 @@ export function releaseExists(repoSlug, tagName) {
 			"tagName",
 		]);
 		return true;
-	} catch {
+	} catch (err) {
+		if (err?.status !== 1) throw err;
 		return false;
 	}
 }
@@ -298,8 +298,9 @@ export function closeComponentPRs(
 							prs[0].number,
 							`🏷️ released as [\`${tag}\`](${repoUrl}/releases/tag/${tag})`,
 						);
-					} catch {
-						// best effort
+					} catch (err) {
+						// comment is non-critical, but only swallow expected errors
+						if (err?.status !== 1) throw err;
 					}
 				}
 				gh([
@@ -312,8 +313,9 @@ export function closeComponentPRs(
 				]);
 				console.log(`closed component PR #${prs[0].number} (${name})`);
 			}
-		} catch {
-			// best effort - branch may already be deleted
+		} catch (err) {
+			// PR or branch may already be deleted/closed
+			if (err?.status !== 1) throw err;
 		}
 	}
 }

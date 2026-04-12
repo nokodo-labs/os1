@@ -21,7 +21,8 @@ export function getSemverTags() {
 	let raw;
 	try {
 		raw = exec("git", ["tag", "--list", "v*"]);
-	} catch {
+	} catch (err) {
+		if (err?.status !== 1) throw err;
 		return [];
 	}
 	if (!raw) return [];
@@ -43,8 +44,9 @@ export function getLatestTag() {
 		try {
 			exec("git", ["merge-base", "--is-ancestor", tag, "HEAD"]);
 			return tag;
-		} catch {
-			// tag is not an ancestor of HEAD, try next
+		} catch (err) {
+			// exit 1 = not an ancestor, try next tag
+			if (err?.status !== 1) throw err;
 		}
 	}
 	return null;
@@ -70,7 +72,9 @@ export function getCommits(from, to = "HEAD", paths = []) {
 		if (paths.length > 0)
 			args.push("--", ...paths.map((p) => `:(top)${p}`));
 		raw = exec("git", args);
-	} catch {
+	} catch (err) {
+		// exit 128 = bad ref (e.g. tag doesn't exist yet), exit 1 = empty range
+		if (err?.status !== 1 && err?.status !== 128) throw err;
 		return [];
 	}
 	if (!raw) return [];
@@ -101,7 +105,9 @@ export function tagExists(tag) {
 	try {
 		exec("git", ["rev-parse", "--verify", `refs/tags/${tag}`]);
 		return true;
-	} catch {
+	} catch (err) {
+		// exit 1/128 = ref doesn't exist
+		if (err?.status !== 1 && err?.status !== 128) throw err;
 		return false;
 	}
 }
@@ -120,7 +126,8 @@ export function getComponentSemverTags(name) {
 	let raw;
 	try {
 		raw = exec("git", ["tag", "--list", `${prefix}*`]);
-	} catch {
+	} catch (err) {
+		if (err?.status !== 1) throw err;
 		return [];
 	}
 	if (!raw) return [];
@@ -147,8 +154,9 @@ export function getLatestComponentTag(name) {
 		try {
 			exec("git", ["merge-base", "--is-ancestor", tag, "HEAD"]);
 			return tag;
-		} catch {
-			// not reachable from HEAD
+		} catch (err) {
+			// exit 1 = not an ancestor, try next tag
+			if (err?.status !== 1) throw err;
 		}
 	}
 	return null;

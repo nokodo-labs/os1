@@ -45,8 +45,9 @@ import {
 import {
 	closeComponentPRs,
 	createRelease,
-	findMergedReleasePR,
+	findPendingReleasePRs,
 	releaseExists,
+	removePRLabel,
 	upsertReleasePR,
 } from "./github.mjs";
 import { writeVersion } from "./version.mjs";
@@ -162,24 +163,31 @@ function main() {
 	console.log(`release process for branch: ${branch}`);
 	console.log(`repository: ${repoSlug}`);
 
-	// detect if a release PR was merged by querying GitHub API.
-	// the version is extracted from the PR title, and tag existence
-	// is the idempotency guard (prevents re-processing).
-	const mergedPR = findMergedReleasePR(repoSlug, branch);
-	if (mergedPR) {
-		const version = extractVersionFromTitle(mergedPR.title);
-		if (version && !tagExists(`v${version}`)) {
+	// find merged release PRs that still have the release:pending label.
+	// tag + release existence determines what work remains.
+	const pendingPRs = findPendingReleasePRs(repoSlug, branch);
+	for (const pr of pendingPRs) {
+		const version = extractVersionFromTitle(pr.title);
+		if (!version) continue;
+
+		const tagged = tagExists(`v${version}`);
+		const released = releaseExists(repoSlug, `v${version}`);
+
+		if (tagged && released) {
+			// fully processed - clean up stale label
 			console.log(
-				`found merged release PR #${mergedPR.number}: v${version}, creating tags and GitHub release...`,
+				`PR #${pr.number} (v${version}) fully released, removing pending label.`,
 			);
-			handleTagRelease(branch, repoSlug, version);
-			return;
+			removePRLabel(repoSlug, pr.number, "release:pending");
+			continue;
 		}
-		if (version) {
-			console.log(
-				`merged release PR #${mergedPR.number} already tagged (v${version}), skipping.`,
-			);
-		}
+
+		// either tag or release (or both) is missing - process it
+		console.log(
+			`found pending release PR #${pr.number}: v${version} (tag: ${tagged ? "yes" : "no"}, release: ${released ? "yes" : "no"})`,
+		);
+		handleTagRelease(branch, repoSlug, version, pr.number);
+		return;
 	}
 
 	// no unprocessed merge - create/update release PR
@@ -275,6 +283,9 @@ function handleReleasePR(branch, repoSlug) {
 		: `chore(release): release OS1 v${nextVersion}`;
 
 	const repoUrl = `https://github.com/${repoSlug}`;
+	const componentNames = PACKAGES.filter((p) => p.componentTag)
+		.map((p) => `\`${p.name}\``)
+		.join(", ");
 	const prBody = [
 		isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 		"",
@@ -283,11 +294,12 @@ function handleReleasePR(branch, repoSlug) {
 		changelog,
 		"",
 		"---",
-		`- 🤖 *this PR was created by the [release automation](${repoUrl}/actions)*`,
-		`- merging will create tag [\`${tagName}\`](${repoUrl}/releases/tag/${tagName}) and a GitHub ${isPrerelease ? "pre-release" : "release"}`,
+		`- 🔀 **merging** this PR will create tag [\`${tagName}\`](${repoUrl}/releases/tag/${tagName}) and publish a GitHub ${isPrerelease ? "pre-release" : "release"}`,
+		`- 📦 **components**: ${componentNames}`,
+		`- 🤖 *created by [release automation](${repoUrl}/actions)*`,
 	].join("\n");
 
-	// create the release head branch (no version file changes on global release)
+	// create the release head branch
 	const headBranch = `release/${branch}`;
 	try {
 		try {
@@ -297,15 +309,26 @@ function handleReleasePR(branch, repoSlug) {
 		}
 		git("checkout", "-b", headBranch);
 
-		// placeholder commit so the PR branch differs from base.
-		// version is extracted from PR title on merge, not from this commit.
-		git(
-			"commit",
-			"--allow-empty",
-			"-m",
-			`chore(release): prepare OS1 v${nextVersion}`,
-			"--no-verify",
-		);
+		// write the root version file so the PR has a real diff
+		const rootPkg = PACKAGES.find((p) => p.path === ".");
+		const versionFile = writeVersion(rootPkg, nextVersion);
+		if (versionFile) {
+			git("add", versionFile);
+			git(
+				"commit",
+				"-m",
+				`chore(release): prepare OS1 v${nextVersion}`,
+				"--no-verify",
+			);
+		} else {
+			git(
+				"commit",
+				"--allow-empty",
+				"-m",
+				`chore(release): prepare OS1 v${nextVersion}`,
+				"--no-verify",
+			);
+		}
 
 		git("push", "origin", headBranch, "--force");
 		git("checkout", branch);
@@ -320,7 +343,7 @@ function handleReleasePR(branch, repoSlug) {
 	}
 
 	// create/update the PR
-	upsertReleasePR(repoSlug, {
+	const rootPR = upsertReleasePR(repoSlug, {
 		branch,
 		title: prTitle,
 		body: prBody,
@@ -329,7 +352,14 @@ function handleReleasePR(branch, repoSlug) {
 	});
 
 	// create/update per-component PRs
-	createComponentPRs(branch, repoSlug, nextVersion, tagName, isPrerelease);
+	createComponentPRs(
+		branch,
+		repoSlug,
+		nextVersion,
+		tagName,
+		isPrerelease,
+		rootPR,
+	);
 
 	writeOutputs({
 		release_created: false, // pr created, not release yet
@@ -346,6 +376,7 @@ function createComponentPRs(
 	nextVersion,
 	tagName,
 	isPrerelease,
+	rootPR,
 ) {
 	const repoUrl = `https://github.com/${repoSlug}`;
 	const componentPkgs = PACKAGES.filter((p) => p.componentTag);
@@ -376,6 +407,9 @@ function createComponentPRs(
 		const prevReleaseLink = lastComponentTag
 			? `- 📦 previous release: [\`${lastComponentTag}\`](${repoUrl}/releases/tag/${lastComponentTag})`
 			: "- 📦 *first release for this component*";
+		const rootPRLink = rootPR?.number
+			? `- 🔗 part of release PR #${rootPR.number}`
+			: "";
 
 		const componentBody = [
 			isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
@@ -385,9 +419,13 @@ function createComponentPRs(
 			componentChangelog,
 			"",
 			"---",
+			`- 🔀 **do not merge** - this is a tracking PR. the root release PR triggers the actual release`,
 			prevReleaseLink,
-			`- 🤖 *this PR was created by the [release automation](${repoUrl}/actions)*`,
-		].join("\n");
+			rootPRLink,
+			`- 🤖 *created by [release automation](${repoUrl}/actions)*`,
+		]
+			.filter(Boolean)
+			.join("\n");
 
 		try {
 			// create or reset the component branch
@@ -456,18 +494,11 @@ function createComponentPRs(
 
 // handle a merged release: create tags and GitHub release.
 // version comes from the merged release PR title.
-function handleTagRelease(branch, repoSlug, version) {
+function handleTagRelease(branch, repoSlug, version, prNumber) {
 	const tagName = `v${version}`;
 	const isPrerelease = branch === "dev";
 
 	console.log(`creating release for version ${version} (tag: ${tagName})`);
-
-	// check if a GitHub release already exists (defensive)
-	if (releaseExists(repoSlug, tagName)) {
-		console.log(`GitHub release ${tagName} already exists, skipping.`);
-		writeOutputs({ release_created: false });
-		return;
-	}
 
 	// generate changelog BEFORE creating tags (so getLatestTag finds the previous one)
 	const lastStableTag = getSemverTags().find(
@@ -483,10 +514,12 @@ function handleTagRelease(branch, repoSlug, version) {
 		compareTo: tagName,
 	});
 
-	// create root tag
+	// create root tag if missing
 	if (!tagExists(tagName)) {
 		git("tag", "-a", tagName, "-m", `release ${tagName}`);
 		console.log(`created tag: ${tagName}`);
+	} else {
+		console.log(`tag ${tagName} already exists, skipping tag creation`);
 	}
 
 	// create component tags
@@ -502,13 +535,25 @@ function handleTagRelease(branch, repoSlug, version) {
 	git("push", "origin", "--tags");
 	console.log("pushed tags to origin");
 
-	// create GitHub release
-	createRelease(repoSlug, tagName, changelog, {
-		prerelease: isPrerelease,
-	});
-	console.log(
-		`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
-	);
+	// create GitHub release if missing
+	if (!releaseExists(repoSlug, tagName)) {
+		createRelease(repoSlug, tagName, changelog, {
+			prerelease: isPrerelease,
+		});
+		console.log(
+			`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
+		);
+	} else {
+		console.log(
+			`GitHub release ${tagName} already exists, skipping release creation`,
+		);
+	}
+
+	// remove release:pending label now that processing is complete
+	if (prNumber) {
+		removePRLabel(repoSlug, prNumber, "release:pending");
+		console.log(`removed release:pending label from PR #${prNumber}`);
+	}
 
 	// close component tracking PRs with release comments
 	const componentPkgs = PACKAGES.filter((p) => p.componentTag);

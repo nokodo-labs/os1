@@ -33,7 +33,29 @@ export function readVersion(pkg) {
 		return match ? match[1] : null;
 	}
 
-	// 'simple' or 'none' type - no version file, use git tags only
+	if (pkg.releaseType === "version") {
+		const vPath = join(pkgPath, "VERSION");
+		try {
+			return readFileSync(vPath, "utf-8").trim() || null;
+		} catch (err) {
+			if (err?.code === "ENOENT") return null;
+			throw err;
+		}
+	}
+
+	if (pkg.releaseType === "python-init") {
+		const initPath = join(pkgPath, "__init__.py");
+		try {
+			const content = readFileSync(initPath, "utf-8");
+			const match = content.match(/^__version__\s*=\s*"([^"]+)"/m);
+			return match ? match[1] : null;
+		} catch (err) {
+			if (err?.code === "ENOENT") return null;
+			throw err;
+		}
+	}
+
+	// 'simple' type - no version file, use git tags only
 	return null;
 }
 
@@ -69,6 +91,46 @@ export function writeVersion(pkg, version) {
 			content.slice(versionIdx + versionMatch[0].length);
 		writeFileSync(tomlPath, content, "utf-8");
 		return tomlPath;
+	}
+
+	if (pkg.releaseType === "version") {
+		const vPath = join(pkgPath, "VERSION");
+		writeFileSync(vPath, version + "\n", "utf-8");
+		return vPath;
+	}
+
+	if (pkg.releaseType === "python-init") {
+		const initPath = join(pkgPath, "__init__.py");
+		let content;
+		try {
+			content = readFileSync(initPath, "utf-8");
+		} catch (err) {
+			if (err?.code === "ENOENT") content = "";
+			else throw err;
+		}
+		const versionLine = `__version__ = "${version}"`;
+		if (content.match(/^__version__\s*=\s*"[^"]*"/m)) {
+			content = content.replace(
+				/^__version__\s*=\s*"[^"]*"/m,
+				versionLine,
+			);
+		} else {
+			// prepend after docstring if present, otherwise at top
+			const docstringEnd = content.match(/^("""[\s\S]*?"""\n?)/m);
+			if (docstringEnd) {
+				const idx = docstringEnd.index + docstringEnd[0].length;
+				content =
+					content.slice(0, idx) +
+					"\n" +
+					versionLine +
+					"\n" +
+					content.slice(idx);
+			} else {
+				content = versionLine + "\n" + content;
+			}
+		}
+		writeFileSync(initPath, content, "utf-8");
+		return initPath;
 	}
 
 	return null;

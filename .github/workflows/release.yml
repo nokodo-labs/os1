@@ -14,6 +14,11 @@ on:
       component_tags:
         value: ${{ jobs.release.outputs.component_tags }}
   workflow_dispatch:
+    inputs:
+      release_as:
+        description: "manual version override (e.g. 1.2.3 or 1.0.0-rc.0). bypasses auto-computed version."
+        required: false
+        type: string
 
 jobs:
   release:
@@ -59,4 +64,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.ref_name }}
+          RELEASE_AS: ${{ inputs.release_as }}
         run: node src/release.mjs
+
+  # when triggered manually (outside main CI), run docker-publish
+  # so released versions get their container images tagged.
+  docker-publish:
+    name: publish Docker images
+    needs: release
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.release.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/docker-publish.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      release_version: ${{ needs.release.outputs.version }}
+      component_tags: ${{ needs.release.outputs.component_tags }}

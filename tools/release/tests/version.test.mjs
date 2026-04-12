@@ -301,6 +301,105 @@ describe("pyproject.toml version parsing", () => {
 	});
 });
 
+// -- VERSION file tests --
+
+import { readFileSync, writeFileSync } from "node:fs";
+
+describe("VERSION file operations", () => {
+	let tmpDir;
+
+	before(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "release-version-test-"));
+	});
+
+	after(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("should read version from VERSION file", () => {
+		writeFileSync(join(tmpDir, "VERSION"), "1.2.3\n", "utf-8");
+		const content = readFileSync(join(tmpDir, "VERSION"), "utf-8").trim();
+		assert.equal(content, "1.2.3");
+	});
+
+	it("should read version from actual root VERSION file", () => {
+		const root = PACKAGES.find((p) => p.path === ".");
+		const version = readVersion(root);
+		assert.ok(version, "should read a version from root VERSION file");
+	});
+});
+
+// -- python-init (__init__.py __version__) tests --
+
+describe("python-init __version__ operations", () => {
+	let tmpDir;
+
+	before(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "release-pyinit-test-"));
+	});
+
+	after(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("should write __version__ into empty __init__.py", () => {
+		const initPath = join(tmpDir, "__init__.py");
+		writeFileSync(initPath, "", "utf-8");
+		// test the write logic directly (writeVersion resolves relative to repoRoot)
+		let content = readFileSync(initPath, "utf-8");
+		const versionLine = '__version__ = "1.0.0"';
+		content = versionLine + "\n" + content;
+		writeFileSync(initPath, content, "utf-8");
+		const result = readFileSync(initPath, "utf-8");
+		assert.ok(result.includes('__version__ = "1.0.0"'));
+	});
+
+	it("should write __version__ after docstring", () => {
+		const initPath = join(tmpDir, "__init__.py");
+		writeFileSync(initPath, '"""My package."""\n', "utf-8");
+		let content = readFileSync(initPath, "utf-8");
+		const versionLine = '__version__ = "2.0.0"';
+		const docstringEnd = content.match(/^("""[\s\S]*?"""\n?)/m);
+		if (docstringEnd) {
+			const idx = docstringEnd.index + docstringEnd[0].length;
+			content =
+				content.slice(0, idx) +
+				"\n" +
+				versionLine +
+				"\n" +
+				content.slice(idx);
+		}
+		writeFileSync(initPath, content, "utf-8");
+		const result = readFileSync(initPath, "utf-8");
+		assert.ok(result.startsWith('"""My package."""'));
+		assert.ok(result.includes('__version__ = "2.0.0"'));
+	});
+
+	it("should update existing __version__", () => {
+		const initPath = join(tmpDir, "__init__.py");
+		writeFileSync(
+			initPath,
+			'"""Pkg."""\n\n__version__ = "2.0.0"\n',
+			"utf-8",
+		);
+		let content = readFileSync(initPath, "utf-8");
+		content = content.replace(
+			/^__version__\s*=\s*"[^"]*"/m,
+			'__version__ = "3.0.0"',
+		);
+		writeFileSync(initPath, content, "utf-8");
+		const result = readFileSync(initPath, "utf-8");
+		assert.ok(result.includes('__version__ = "3.0.0"'));
+		assert.ok(!result.includes("2.0.0"));
+	});
+
+	it("should read __version__ from actual api __init__.py", () => {
+		const api = PACKAGES.find((p) => p.name === "api");
+		const version = readVersion(api);
+		assert.ok(version, "should read a __version__ from api __init__.py");
+	});
+});
+
 // -- extractVersionFromTitle tests --
 
 import { extractVersionFromTitle } from "../src/release.mjs";

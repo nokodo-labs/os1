@@ -94,7 +94,14 @@ describe("PACKAGES", () => {
 	});
 
 	it("should have valid releaseType values", () => {
-		const valid = ["simple", "node", "python", "none"];
+		const valid = [
+			"simple",
+			"node",
+			"python",
+			"python-init",
+			"none",
+			"version",
+		];
 		for (const pkg of PACKAGES) {
 			assert.ok(
 				valid.includes(pkg.releaseType),
@@ -113,7 +120,7 @@ describe("PACKAGES", () => {
 		}
 	});
 
-	it("should have version files for node/python packages", () => {
+	it("should have version files for node/python/version packages", () => {
 		for (const pkg of PACKAGES) {
 			const dir = pkg.versionDir || pkg.path;
 			const pkgPath = dir === "." ? repoRoot : join(repoRoot, dir);
@@ -126,6 +133,16 @@ describe("PACKAGES", () => {
 				assert.ok(
 					existsSync(join(pkgPath, "pyproject.toml")),
 					`missing pyproject.toml for ${pkg.name} at ${pkgPath}`,
+				);
+			} else if (pkg.releaseType === "version") {
+				assert.ok(
+					existsSync(join(pkgPath, "VERSION")),
+					`missing VERSION for ${pkg.name} at ${pkgPath}`,
+				);
+			} else if (pkg.releaseType === "python-init") {
+				assert.ok(
+					existsSync(join(pkgPath, "__init__.py")),
+					`missing __init__.py for ${pkg.name} at ${pkgPath}`,
 				);
 			}
 		}
@@ -157,9 +174,16 @@ describe("labels", () => {
 		assert.ok(PRERELEASE_LABELS.includes("release"));
 	});
 
-	it("should not have detection labels", () => {
+	it("should have pending label for merge detection", () => {
+		assert.ok(RELEASE_LABELS.includes("release:pending"));
+		assert.ok(PRERELEASE_LABELS.includes("release:pending"));
+	});
+
+	it("should not have release-please style labels", () => {
 		assert.ok(!RELEASE_LABELS.includes("release: pending"));
+		assert.ok(!RELEASE_LABELS.includes("release: released"));
 		assert.ok(!PRERELEASE_LABELS.includes("release: pending"));
+		assert.ok(!PRERELEASE_LABELS.includes("release: released"));
 	});
 });
 
