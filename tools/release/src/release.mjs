@@ -391,6 +391,17 @@ function createComponentPRs(branch, repoSlug, isPrerelease, rootPR) {
 			? highestComponentTag.slice(prefix.length)
 			: null;
 
+		// for stable releases, find the last non-prerelease component tag
+		// so changelog diffs against the previous full release, not an RC.
+		const lastStableComponentTag = !isPrerelease
+			? componentTags.find(
+					(t) => !semver.prerelease(t.slice(prefix.length)),
+				) || null
+			: null;
+		const changelogBase = isPrerelease
+			? lastComponentTag
+			: lastStableComponentTag;
+
 		const componentCommits = parseCommitRange(lastComponentTag, "HEAD", [
 			pkg.path,
 		]);
@@ -422,12 +433,12 @@ function createComponentPRs(branch, repoSlug, isPrerelease, rootPR) {
 
 			if (branch === "dev") {
 				// find last stable component version for RC escalation
-				const lastStableComponentTag = componentTags.find((t) => {
+				const stableTag = componentTags.find((t) => {
 					const ver = t.slice(prefix.length);
 					return !semver.prerelease(ver);
 				});
-				const stableVersion = lastStableComponentTag
-					? semver.clean(lastStableComponentTag.slice(prefix.length))
+				const stableVersion = stableTag
+					? semver.clean(stableTag.slice(prefix.length))
 					: "0.0.0";
 				nextVersion = computeNextRC(
 					currentVersion,
@@ -456,14 +467,18 @@ function createComponentPRs(branch, repoSlug, isPrerelease, rootPR) {
 			? `chore(release): prerelease ${pkg.name} v${nextVersion}`
 			: `chore(release): release ${pkg.name} v${nextVersion}`;
 
-		const componentChangelog = renderChangelog(componentCommits, repoSlug, {
-			compareFrom: lastComponentTag || "",
+		// changelog diffs from changelogBase (last stable tag on stable, last any tag on dev)
+		const changelogCommits = parseCommitRange(changelogBase, "HEAD", [
+			pkg.path,
+		]);
+		const componentChangelog = renderChangelog(changelogCommits, repoSlug, {
+			compareFrom: changelogBase || "",
 			compareTo: branch,
 			maxLength: 50000,
 		});
 
-		const prevReleaseLink = lastComponentTag
-			? `- 📦 previous release: [\`${lastComponentTag}\`](${repoUrl}/releases/tag/${lastComponentTag})`
+		const prevReleaseLink = changelogBase
+			? `- 📦 previous release: [\`${changelogBase}\`](${repoUrl}/releases/tag/${changelogBase})`
 			: "- 📦 *first release for this component*";
 		const rootPRLink = rootPR?.number
 			? `- 🔗 root release PR #${rootPR.number}`
@@ -472,7 +487,7 @@ function createComponentPRs(branch, repoSlug, isPrerelease, rootPR) {
 		const componentBody = [
 			isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 			"",
-			`> **component** \`${pkg.name}\` **version** \`${nextVersion}\` | **${componentCommits.length}** commits`,
+			`> **component** \`${pkg.name}\` **version** \`${nextVersion}\` | **${changelogCommits.length}** commits`,
 			"",
 			componentChangelog,
 			"",
