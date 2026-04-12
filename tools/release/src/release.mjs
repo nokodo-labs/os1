@@ -35,6 +35,7 @@ import {
 	RELEASE_LABELS,
 } from "./config.mjs";
 import {
+	getComponentSemverTags,
 	getHighestTag,
 	getLatestComponentTag,
 	getLatestTag,
@@ -43,7 +44,6 @@ import {
 	tagExists,
 } from "./git.mjs";
 import {
-	closeComponentPRs,
 	createRelease,
 	findPendingReleasePRs,
 	releaseExists,
@@ -61,7 +61,9 @@ function git(...args) {
 
 // compute the next RC version for the dev branch.
 // compares against the last stable tag to detect bump escalation.
-function computeNextRC(currentVersion, bumpType) {
+// stableVersion: explicit stable version for escalation check (used by components).
+//                when null, falls back to root tag lookup.
+function computeNextRC(currentVersion, bumpType, stableVersion = null) {
 	if (!currentVersion) {
 		// no previous version at all, start at 0.0.1-rc.0
 		return `0.0.1-${PRERELEASE_ID}.0`;
@@ -73,9 +75,13 @@ function computeNextRC(currentVersion, bumpType) {
 		// already in an RC series - check if bump level escalates the base
 		const currentBase = `${semver.major(currentVersion)}.${semver.minor(currentVersion)}.${semver.patch(currentVersion)}`;
 
-		// find the last stable tag to compare against
-		const lastStable = getSemverTags().find((t) => !semver.prerelease(t));
-		const stableVersion = lastStable ? semver.clean(lastStable) : "0.0.0";
+		// find the last stable version to compare against
+		if (stableVersion === null) {
+			const lastStable = getSemverTags().find(
+				(t) => !semver.prerelease(t),
+			);
+			stableVersion = lastStable ? semver.clean(lastStable) : "0.0.0";
+		}
 		const escalatedBase = semver.inc(stableVersion, bumpType);
 
 		if (semver.gt(escalatedBase, currentBase)) {
@@ -109,35 +115,15 @@ function computeNextStable(currentVersion, bumpType) {
 	return semver.inc(currentVersion, bumpType);
 }
 
-// generate component tags for a given root version.
-function getComponentTags(version) {
-	const tags = [];
-	for (const pkg of PACKAGES) {
-		if (pkg.componentTag) {
-			tags.push(`${pkg.name}-v${version}`);
-		}
-	}
-	return tags;
-}
-
-// generate a map of component name -> version string for docker tagging.
-function getComponentTagMap(version) {
-	const map = {};
-	for (const pkg of PACKAGES) {
-		if (pkg.componentTag) {
-			map[pkg.name] = version;
-		}
-	}
-	return map;
-}
-
-// extract the version string from a release PR title.
+// extract the version string and package name from a release PR title.
 // supports titles like "chore(release): prerelease OS1 v0.1.0-rc.0"
-// or "chore(release): release OS1 v1.2.3".
-// returns the version string if found, null otherwise.
-export function extractVersionFromTitle(title) {
-	const match = title?.match(/\bv(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\s*$/);
-	return match ? match[1] : null;
+// or "chore(release): release api v1.2.3".
+// returns { name, version } if found, null otherwise.
+export function extractReleaseFromTitle(title) {
+	const match = title?.match(
+		/\b(\S+)\s+v(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\s*$/,
+	);
+	return match ? { name: match[1], version: match[2] } : null;
 }
 
 // main release logic.
@@ -165,32 +151,59 @@ function main() {
 
 	// find merged release PRs that still have the release:pending label.
 	// tag + release existence determines what work remains.
+	// processes all pending PRs (root and component) in a single run.
 	const pendingPRs = findPendingReleasePRs(repoSlug, branch);
-	for (const pr of pendingPRs) {
-		const version = extractVersionFromTitle(pr.title);
-		if (!version) continue;
+	const componentTags = {};
+	let anyReleased = false;
 
-		const tagged = tagExists(`v${version}`);
-		const released = releaseExists(repoSlug, `v${version}`);
+	for (const pr of pendingPRs) {
+		const release = extractReleaseFromTitle(pr.title);
+		if (!release) continue;
+
+		const { name, version } = release;
+		const pkg = PACKAGES.find((p) => p.name === name);
+		const isRoot = !pkg || !pkg.componentTag;
+		const tagName = isRoot ? `v${version}` : `${name}-v${version}`;
+
+		const tagged = tagExists(tagName);
+		const released = releaseExists(repoSlug, tagName);
 
 		if (tagged && released) {
-			// fully processed - clean up stale label
 			console.log(
-				`PR #${pr.number} (v${version}) fully released, removing pending label.`,
+				`PR #${pr.number} (${tagName}) fully released, removing pending label.`,
 			);
 			removePRLabel(repoSlug, pr.number, "release:pending");
 			continue;
 		}
 
-		// either tag or release (or both) is missing - process it
 		console.log(
-			`found pending release PR #${pr.number}: v${version} (tag: ${tagged ? "yes" : "no"}, release: ${released ? "yes" : "no"})`,
+			`found pending release PR #${pr.number}: ${tagName} (tag: ${tagged ? "yes" : "no"}, release: ${released ? "yes" : "no"})`,
 		);
-		handleTagRelease(branch, repoSlug, version, pr.number);
+
+		if (isRoot) {
+			handleTagRelease(branch, repoSlug, version, pr.number);
+		} else {
+			const result = handleComponentTagRelease(
+				branch,
+				repoSlug,
+				pkg,
+				version,
+				pr.number,
+			);
+			Object.assign(componentTags, result.componentTags);
+		}
+		anyReleased = true;
+	}
+
+	if (anyReleased) {
+		writeOutputs({
+			release_created: true,
+			component_tags: JSON.stringify(componentTags),
+		});
 		return;
 	}
 
-	// no unprocessed merge - create/update release PR
+	// no unprocessed merge - create/update release PRs
 	handleReleasePR(branch, repoSlug);
 }
 
@@ -283,9 +296,6 @@ function handleReleasePR(branch, repoSlug) {
 		: `chore(release): release OS1 v${nextVersion}`;
 
 	const repoUrl = `https://github.com/${repoSlug}`;
-	const componentNames = PACKAGES.filter((p) => p.componentTag)
-		.map((p) => `\`${p.name}\``)
-		.join(", ");
 	const prBody = [
 		isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 		"",
@@ -295,7 +305,7 @@ function handleReleasePR(branch, repoSlug) {
 		"",
 		"---",
 		`- 🔀 **merging** this PR will create tag [\`${tagName}\`](${repoUrl}/releases/tag/${tagName}) and publish a GitHub ${isPrerelease ? "pre-release" : "release"}`,
-		`- 📦 **components**: ${componentNames}`,
+		`- 📦 components release independently via their own PRs`,
 		`- 🤖 *created by [release automation](${repoUrl}/actions)*`,
 	].join("\n");
 
@@ -351,15 +361,8 @@ function handleReleasePR(branch, repoSlug) {
 		headBranch,
 	});
 
-	// create/update per-component PRs
-	createComponentPRs(
-		branch,
-		repoSlug,
-		nextVersion,
-		tagName,
-		isPrerelease,
-		rootPR,
-	);
+	// create/update per-component PRs (each with independent version)
+	createComponentPRs(branch, repoSlug, isPrerelease, rootPR);
 
 	writeOutputs({
 		release_created: false, // pr created, not release yet
@@ -369,21 +372,80 @@ function handleReleasePR(branch, repoSlug) {
 	});
 }
 
-// create separate tracking PRs for each component.
-function createComponentPRs(
-	branch,
-	repoSlug,
-	nextVersion,
-	tagName,
-	isPrerelease,
-	rootPR,
-) {
+// create independent release PRs for each component.
+// each component computes its own version from its own commit history.
+function createComponentPRs(branch, repoSlug, isPrerelease, rootPR) {
 	const repoUrl = `https://github.com/${repoSlug}`;
 	const componentPkgs = PACKAGES.filter((p) => p.componentTag);
 
 	for (const pkg of componentPkgs) {
-		const componentBranch = `release--${pkg.name}/${branch}`;
+		// compute component version independently
+		const prefix = `${pkg.name}-v`;
+		const lastComponentTag = getLatestComponentTag(pkg.name);
+		const componentTags = getComponentSemverTags(pkg.name);
+		const highestComponentTag =
+			componentTags.length > 0 ? componentTags[0] : null;
+		const currentVersion = highestComponentTag
+			? highestComponentTag.slice(prefix.length)
+			: null;
+
+		const componentCommits = parseCommitRange(lastComponentTag, "HEAD", [
+			pkg.path,
+		]);
+
+		let nextVersion;
+		if (componentCommits.length === 0) {
+			// check promotion case: stable branch with prerelease component tag
+			if (
+				branch === "stable" &&
+				currentVersion &&
+				semver.prerelease(currentVersion)
+			) {
+				nextVersion = computeNextStable(currentVersion, "patch");
+				console.log(
+					`promoting ${pkg.name} RC ${currentVersion} to stable ${nextVersion}`,
+				);
+			} else {
+				console.log(`no releasable commits for ${pkg.name}, skipping.`);
+				continue;
+			}
+		} else {
+			const bumpType = recommendBump(componentCommits);
+			if (!bumpType) {
+				console.log(
+					`no version-bumping commits for ${pkg.name}, skipping.`,
+				);
+				continue;
+			}
+
+			if (branch === "dev") {
+				// find last stable component version for RC escalation
+				const lastStableComponentTag = componentTags.find((t) => {
+					const ver = t.slice(prefix.length);
+					return !semver.prerelease(ver);
+				});
+				const stableVersion = lastStableComponentTag
+					? semver.clean(lastStableComponentTag.slice(prefix.length))
+					: "0.0.0";
+				nextVersion = computeNextRC(
+					currentVersion,
+					bumpType,
+					stableVersion,
+				);
+			} else {
+				nextVersion = computeNextStable(currentVersion, bumpType);
+			}
+		}
+
 		const componentTag = `${pkg.name}-v${nextVersion}`;
+		if (tagExists(componentTag)) {
+			console.log(
+				`component tag ${componentTag} already exists, skipping.`,
+			);
+			continue;
+		}
+
+		const componentBranch = `release--${pkg.name}/${branch}`;
 		const componentLabels = [
 			...(isPrerelease ? PRERELEASE_LABELS : RELEASE_LABELS),
 			...(pkg.extraLabels || []),
@@ -392,23 +454,17 @@ function createComponentPRs(
 			? `chore(release): prerelease ${pkg.name} v${nextVersion}`
 			: `chore(release): release ${pkg.name} v${nextVersion}`;
 
-		// generate component-scoped changelog using the component's own last tag
-		const lastComponentTag = getLatestComponentTag(pkg.name);
-		const componentCommits = parseCommitRange(lastComponentTag, "HEAD", [
-			pkg.path,
-		]);
 		const componentChangelog = renderChangelog(componentCommits, repoSlug, {
 			compareFrom: lastComponentTag || "",
 			compareTo: branch,
 			maxLength: 50000,
 		});
 
-		// link to previous release if one exists, otherwise note first release
 		const prevReleaseLink = lastComponentTag
 			? `- 📦 previous release: [\`${lastComponentTag}\`](${repoUrl}/releases/tag/${lastComponentTag})`
 			: "- 📦 *first release for this component*";
 		const rootPRLink = rootPR?.number
-			? `- 🔗 part of release PR #${rootPR.number}`
+			? `- 🔗 root release PR #${rootPR.number}`
 			: "";
 
 		const componentBody = [
@@ -419,7 +475,7 @@ function createComponentPRs(
 			componentChangelog,
 			"",
 			"---",
-			`- 🔀 **do not merge** - this is a tracking PR. the root release PR triggers the actual release`,
+			`- 🔀 **merging** this PR will create tag [\`${componentTag}\`](${repoUrl}/releases/tag/${componentTag}) and publish a GitHub ${isPrerelease ? "pre-release" : "release"}`,
 			prevReleaseLink,
 			rootPRLink,
 			`- 🤖 *created by [release automation](${repoUrl}/actions)*`,
@@ -492,13 +548,15 @@ function createComponentPRs(
 	}
 }
 
-// handle a merged release: create tags and GitHub release.
-// version comes from the merged release PR title.
+// handle a merged root release PR: create root tag and GitHub release.
+// components are released independently via their own PRs.
 function handleTagRelease(branch, repoSlug, version, prNumber) {
 	const tagName = `v${version}`;
 	const isPrerelease = branch === "dev";
 
-	console.log(`creating release for version ${version} (tag: ${tagName})`);
+	console.log(
+		`creating root release for version ${version} (tag: ${tagName})`,
+	);
 
 	// generate changelog BEFORE creating tags (so getLatestTag finds the previous one)
 	const lastStableTag = getSemverTags().find(
@@ -522,16 +580,7 @@ function handleTagRelease(branch, repoSlug, version, prNumber) {
 		console.log(`tag ${tagName} already exists, skipping tag creation`);
 	}
 
-	// create component tags
-	const componentTags = getComponentTags(version);
-	for (const ct of componentTags) {
-		if (!tagExists(ct)) {
-			git("tag", "-a", ct, "-m", `release ${ct}`);
-			console.log(`created component tag: ${ct}`);
-		}
-	}
-
-	// push all tags
+	// push tags
 	git("push", "origin", "--tags");
 	console.log("pushed tags to origin");
 
@@ -555,21 +604,67 @@ function handleTagRelease(branch, repoSlug, version, prNumber) {
 		console.log(`removed release:pending label from PR #${prNumber}`);
 	}
 
-	// close component tracking PRs with release comments
-	const componentPkgs = PACKAGES.filter((p) => p.componentTag);
-	const componentNames = componentPkgs.map((p) => p.name);
-	const componentTagMap = {};
-	for (const pkg of componentPkgs) {
-		componentTagMap[pkg.name] = `${pkg.name}-v${version}`;
-	}
-	closeComponentPRs(repoSlug, branch, componentNames, componentTagMap);
-
 	writeOutputs({
 		release_created: true,
 		tag_name: tagName,
 		version,
-		component_tags: JSON.stringify(getComponentTagMap(version)),
 	});
+}
+
+// handle a merged component release PR: create component tag and GitHub release.
+function handleComponentTagRelease(branch, repoSlug, pkg, version, prNumber) {
+	const tagName = `${pkg.name}-v${version}`;
+	const isPrerelease = branch === "dev";
+
+	console.log(
+		`creating ${pkg.name} release for version ${version} (tag: ${tagName})`,
+	);
+
+	// generate changelog from component-scoped commits
+	const lastComponentTag = getLatestComponentTag(pkg.name);
+	const commits = parseCommitRange(lastComponentTag, "HEAD", [pkg.path]);
+	const changelog = renderChangelog(commits, repoSlug, {
+		compareFrom: lastComponentTag || "",
+		compareTo: tagName,
+	});
+
+	// create component tag if missing
+	if (!tagExists(tagName)) {
+		git("tag", "-a", tagName, "-m", `release ${tagName}`);
+		console.log(`created component tag: ${tagName}`);
+	} else {
+		console.log(`tag ${tagName} already exists, skipping tag creation`);
+	}
+
+	// push tags
+	git("push", "origin", "--tags");
+	console.log("pushed tags to origin");
+
+	// create GitHub release if missing
+	if (!releaseExists(repoSlug, tagName)) {
+		createRelease(repoSlug, tagName, changelog, {
+			prerelease: isPrerelease,
+		});
+		console.log(
+			`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
+		);
+	} else {
+		console.log(
+			`GitHub release ${tagName} already exists, skipping release creation`,
+		);
+	}
+
+	// remove release:pending label now that processing is complete
+	if (prNumber) {
+		removePRLabel(repoSlug, prNumber, "release:pending");
+		console.log(`removed release:pending label from PR #${prNumber}`);
+	}
+
+	return {
+		tag_name: tagName,
+		version,
+		componentTags: { [pkg.name]: version },
+	};
 }
 
 function writeOutputs(outputs) {

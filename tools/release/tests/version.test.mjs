@@ -400,88 +400,104 @@ describe("python-init __version__ operations", () => {
 	});
 });
 
-// -- extractVersionFromTitle tests --
+// -- extractReleaseFromTitle tests --
 
-import { extractVersionFromTitle } from "../src/release.mjs";
+import { extractReleaseFromTitle } from "../src/release.mjs";
 
-describe("extractVersionFromTitle", () => {
-	it("should extract version from prerelease PR title", () => {
-		assert.equal(
-			extractVersionFromTitle(
+describe("extractReleaseFromTitle", () => {
+	it("should extract name and version from prerelease PR title", () => {
+		assert.deepEqual(
+			extractReleaseFromTitle(
 				"chore(release): prerelease OS1 v0.1.0-rc.0",
 			),
-			"0.1.0-rc.0",
+			{ name: "OS1", version: "0.1.0-rc.0" },
 		);
 	});
 
-	it("should extract version from stable release PR title", () => {
-		assert.equal(
-			extractVersionFromTitle("chore(release): release OS1 v1.2.3"),
-			"1.2.3",
+	it("should extract name and version from stable release PR title", () => {
+		assert.deepEqual(
+			extractReleaseFromTitle("chore(release): release OS1 v1.2.3"),
+			{ name: "OS1", version: "1.2.3" },
 		);
 	});
 
-	it("should extract version from component PR title", () => {
-		assert.equal(
-			extractVersionFromTitle(
+	it("should extract component name and version from component PR title", () => {
+		assert.deepEqual(
+			extractReleaseFromTitle(
 				"chore(release): prerelease frontend v0.1.0-rc.0",
 			),
-			"0.1.0-rc.0",
+			{ name: "frontend", version: "0.1.0-rc.0" },
 		);
 	});
 
 	it("should extract higher RC numbers", () => {
-		assert.equal(
-			extractVersionFromTitle(
+		assert.deepEqual(
+			extractReleaseFromTitle(
 				"chore(release): prerelease OS1 v2.0.0-rc.15",
 			),
-			"2.0.0-rc.15",
+			{ name: "OS1", version: "2.0.0-rc.15" },
 		);
 	});
 
 	it("should NOT match title without version", () => {
 		assert.equal(
-			extractVersionFromTitle("chore(release): bump dependencies"),
+			extractReleaseFromTitle("chore(release): bump dependencies"),
 			null,
 		);
 	});
 
 	it("should NOT match title with version in the middle", () => {
-		assert.equal(extractVersionFromTitle("update v1.2.3 to latest"), null);
+		assert.equal(extractReleaseFromTitle("update v1.2.3 to latest"), null);
 	});
 
 	it("should NOT match partial version", () => {
 		assert.equal(
-			extractVersionFromTitle("chore(release): release OS1 v1.2"),
+			extractReleaseFromTitle("chore(release): release OS1 v1.2"),
 			null,
 		);
 	});
 
 	it("should NOT match empty or null input", () => {
-		assert.equal(extractVersionFromTitle(""), null);
-		assert.equal(extractVersionFromTitle(null), null);
-		assert.equal(extractVersionFromTitle(undefined), null);
+		assert.equal(extractReleaseFromTitle(""), null);
+		assert.equal(extractReleaseFromTitle(null), null);
+		assert.equal(extractReleaseFromTitle(undefined), null);
 	});
 
 	it("should match alpha/beta prerelease tags", () => {
-		assert.equal(
-			extractVersionFromTitle(
+		assert.deepEqual(
+			extractReleaseFromTitle(
 				"chore(release): release OS1 v1.0.0-alpha.1",
 			),
-			"1.0.0-alpha.1",
+			{ name: "OS1", version: "1.0.0-alpha.1" },
 		);
-		assert.equal(
-			extractVersionFromTitle(
+		assert.deepEqual(
+			extractReleaseFromTitle(
 				"chore(release): release OS1 v1.0.0-beta.3",
 			),
-			"1.0.0-beta.3",
+			{ name: "OS1", version: "1.0.0-beta.3" },
 		);
 	});
 
 	it("should handle trailing whitespace", () => {
-		assert.equal(
-			extractVersionFromTitle("chore(release): release OS1 v1.2.3  "),
-			"1.2.3",
+		assert.deepEqual(
+			extractReleaseFromTitle("chore(release): release OS1 v1.2.3  "),
+			{ name: "OS1", version: "1.2.3" },
+		);
+	});
+
+	it("should extract api component name", () => {
+		assert.deepEqual(
+			extractReleaseFromTitle(
+				"chore(release): prerelease api v0.2.0-rc.0",
+			),
+			{ name: "api", version: "0.2.0-rc.0" },
+		);
+	});
+
+	it("should extract library component name", () => {
+		assert.deepEqual(
+			extractReleaseFromTitle("chore(release): release library v1.0.0"),
+			{ name: "library", version: "1.0.0" },
 		);
 	});
 });
