@@ -637,11 +637,20 @@ function handleComponentTagRelease(branch, repoSlug, pkg, version, prNumber) {
 		`creating ${pkg.name} release for version ${version} (tag: ${tagName})`,
 	);
 
-	// generate changelog from component-scoped commits
-	const lastComponentTag = getLatestComponentTag(pkg.name);
-	const commits = parseCommitRange(lastComponentTag, "HEAD", [pkg.path]);
+	// generate changelog from component-scoped commits.
+	// for stable releases, compare against the last non-prerelease component tag
+	// to avoid including RC commits that were already in a prerelease changelog.
+	const allComponentTags = getComponentSemverTags(pkg.name);
+	const lastStableComponentTag =
+		allComponentTags.find(
+			(t) => !semver.prerelease(t.slice(`${pkg.name}-v`.length)),
+		) || null;
+	const prevComponentTag = isPrerelease
+		? getLatestComponentTag(pkg.name)
+		: lastStableComponentTag;
+	const commits = parseCommitRange(prevComponentTag, "HEAD", [pkg.path]);
 	const changelog = renderChangelog(commits, repoSlug, {
-		compareFrom: lastComponentTag || "",
+		compareFrom: prevComponentTag || "",
 		compareTo: tagName,
 	});
 
