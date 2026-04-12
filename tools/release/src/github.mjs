@@ -22,10 +22,10 @@ function gh(args, opts = {}) {
 export function createRelease(
 	repoSlug,
 	tagName,
+	title,
 	body,
-	{ prerelease = false } = {},
+	{ prerelease = false, latest = false } = {},
 ) {
-	const name = prerelease ? `🚀 ${tagName} (pre-release)` : `🚀 ${tagName}`;
 	const args = [
 		"release",
 		"create",
@@ -33,12 +33,13 @@ export function createRelease(
 		"--repo",
 		repoSlug,
 		"--title",
-		name,
+		title,
 		"--notes-file",
 		"-",
 	];
 	if (prerelease) args.push("--prerelease");
-	else args.push("--latest");
+	if (latest) args.push("--latest");
+	else args.push("--latest=false");
 
 	execFileSync("gh", args, {
 		encoding: "utf-8",
@@ -216,6 +217,22 @@ export function removePRLabel(repoSlug, prNumber, label) {
 		"--remove-label",
 		label,
 	]);
+}
+
+// delete a remote branch.
+export function deleteBranch(repoSlug, branchName) {
+	try {
+		gh([
+			"api",
+			"-X",
+			"DELETE",
+			`repos/${repoSlug}/git/refs/heads/${branchName}`,
+		]);
+		console.log(`deleted branch: ${branchName}`);
+	} catch (err) {
+		// branch may already be deleted
+		if (err?.status !== 1) throw err;
+	}
 }
 
 // check if a GitHub release exists for a tag.

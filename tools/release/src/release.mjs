@@ -44,7 +44,9 @@ import {
 	tagExists,
 } from "./git.mjs";
 import {
+	addPRComment,
 	createRelease,
+	deleteBranch,
 	findPendingReleasePRs,
 	releaseExists,
 	removePRLabel,
@@ -586,8 +588,11 @@ function handleTagRelease(branch, repoSlug, version, prNumber) {
 
 	// create GitHub release if missing
 	if (!releaseExists(repoSlug, tagName)) {
-		createRelease(repoSlug, tagName, changelog, {
+		const repoUrl = `https://github.com/${repoSlug}`;
+		const footer = `\n\n---\n🤖 *released by [release automation](${repoUrl}/actions)*`;
+		createRelease(repoSlug, tagName, `v${version}`, changelog + footer, {
 			prerelease: isPrerelease,
+			latest: !isPrerelease,
 		});
 		console.log(
 			`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
@@ -602,6 +607,17 @@ function handleTagRelease(branch, repoSlug, version, prNumber) {
 	if (prNumber) {
 		removePRLabel(repoSlug, prNumber, "release:pending");
 		console.log(`removed release:pending label from PR #${prNumber}`);
+
+		// leave a comment on the merged PR
+		const repoUrl = `https://github.com/${repoSlug}`;
+		addPRComment(
+			repoSlug,
+			prNumber,
+			`🏷️ released as [\`${tagName}\`](${repoUrl}/releases/tag/${tagName})`,
+		);
+
+		// delete the release branch
+		deleteBranch(repoSlug, `release/${branch}`);
 	}
 
 	writeOutputs({
@@ -642,9 +658,18 @@ function handleComponentTagRelease(branch, repoSlug, pkg, version, prNumber) {
 
 	// create GitHub release if missing
 	if (!releaseExists(repoSlug, tagName)) {
-		createRelease(repoSlug, tagName, changelog, {
-			prerelease: isPrerelease,
-		});
+		const repoUrl = `https://github.com/${repoSlug}`;
+		const footer = `\n\n---\n\u{1F916} *released by [release automation](${repoUrl}/actions)*`;
+		createRelease(
+			repoSlug,
+			tagName,
+			`${pkg.name}: v${version}`,
+			changelog + footer,
+			{
+				prerelease: isPrerelease,
+				latest: false,
+			},
+		);
 		console.log(
 			`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
 		);
@@ -658,6 +683,17 @@ function handleComponentTagRelease(branch, repoSlug, pkg, version, prNumber) {
 	if (prNumber) {
 		removePRLabel(repoSlug, prNumber, "release:pending");
 		console.log(`removed release:pending label from PR #${prNumber}`);
+
+		// leave a comment on the merged PR
+		const repoUrl = `https://github.com/${repoSlug}`;
+		addPRComment(
+			repoSlug,
+			prNumber,
+			`🏷️ released as [\`${tagName}\`](${repoUrl}/releases/tag/${tagName})`,
+		);
+
+		// delete the component release branch
+		deleteBranch(repoSlug, `release--${pkg.name}/${branch}`);
 	}
 
 	return {
