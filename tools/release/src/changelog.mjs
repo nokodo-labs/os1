@@ -2,7 +2,11 @@
 // parses conventional commits and renders categorized markdown.
 
 import { CommitParser } from "conventional-commits-parser";
-import { BREAKING_KEYWORDS, CHANGELOG_SECTIONS, SECTION_ORDER } from "./config.mjs";
+import {
+	BREAKING_KEYWORDS,
+	CHANGELOG_SECTIONS,
+	SECTION_ORDER,
+} from "./config.mjs";
 import { getCommits, shortHash } from "./git.mjs";
 
 const parser = new CommitParser({
@@ -73,10 +77,10 @@ export function recommendBump(parsedCommits) {
 	for (const commit of parsedCommits) {
 		if (commit.breaking) return "major";
 
-		if (commit.type === "feat") {
+		if (commit.type === "feat" || commit.type === "feature") {
 			if (level !== "major") level = "minor";
 		} else if (
-			["fix", "perf", "refactor", "revert"].includes(commit.type)
+			["fix", "perf", "refactor", "refac", "revert"].includes(commit.type)
 		) {
 			if (!level) level = "patch";
 		}

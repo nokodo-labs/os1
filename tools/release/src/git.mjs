@@ -5,7 +5,11 @@ import { execFileSync } from "node:child_process";
 import semver from "semver";
 
 function exec(cmd, args = [], opts = {}) {
-	return execFileSync(cmd, args, { encoding: "utf-8", ...opts }).trim();
+	return execFileSync(cmd, args, {
+		encoding: "utf-8",
+		stdio: ["pipe", "pipe", "pipe"],
+		...opts,
+	}).trim();
 }
 
 // ref name validation - prevents injection via crafted ref names.

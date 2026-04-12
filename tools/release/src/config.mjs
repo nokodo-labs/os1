@@ -7,9 +7,11 @@ export const PRERELEASE_ID = "rc";
 // order determines display order in release notes.
 export const CHANGELOG_SECTIONS = [
 	{ type: "feat", section: "✨ new features" },
+	{ type: "feature", section: "✨ new features" },
 	{ type: "fix", section: "🐛 bug fixes" },
 	{ type: "perf", section: "🔧 improvements" },
 	{ type: "refactor", section: "🔧 improvements" },
+	{ type: "refac", section: "🔧 improvements" },
 	{ type: "chore", section: "🧹 miscellaneous" },
 	{ type: "style", section: "🧹 miscellaneous" },
 	{ type: "deps", section: "🧹 miscellaneous" },
@@ -71,7 +73,15 @@ export const PACKAGES = [
 ];
 
 // commit types that trigger a version bump.
-export const BUMP_TYPES = ["feat", "fix", "perf", "refactor", "revert"];
+export const BUMP_TYPES = [
+	"feat",
+	"feature",
+	"fix",
+	"perf",
+	"refactor",
+	"refac",
+	"revert",
+];
 
 // keywords that indicate a breaking change in commit footers.
 export const BREAKING_KEYWORDS = ["BREAKING CHANGE", "BREAKING-CHANGE"];
