@@ -142,11 +142,11 @@ jobs:
           echo "TAGS_FRONTEND=$TAGS_FRONTEND" >> $GITHUB_OUTPUT
           echo "TAGS_CONSOLE=$TAGS_CONSOLE" >> $GITHUB_OUTPUT
 
-  # -- parallel build + push with BuildKit layer caching --
-  build-and-push:
-    name: build ${{ matrix.component }}
+  # -- parallel per-arch builds (3 components x 2 arches = 6 jobs) --
+  build:
+    name: build ${{ matrix.component.name }} (${{ matrix.arch.name }})
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch.runner }}
     permissions:
       packages: write
       contents: read
@@ -154,25 +154,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - component: backend
+        component:
+          - name: backend
             context: backend
             dockerfile: .docker/Dockerfile.backend
-            tags-key: tags-backend
-          - component: frontend
+          - name: frontend
             context: frontend
             dockerfile: .docker/Dockerfile.frontend
-            tags-key: tags-frontend
-          - component: console
+          - name: console
             context: console
             dockerfile: .docker/Dockerfile.console
-            tags-key: tags-console
+        arch:
+          - name: amd64
+            runner: ubuntu-latest
+            platform: linux/amd64
+          - name: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: set up QEMU (multi-arch)
-        uses: docker/setup-qemu-action@v3
 
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -184,28 +185,80 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.dockerfile }}
+          platforms: ${{ matrix.arch.platform }}
+          build-args: |
+            ${{ matrix.component.name == 'backend' && format('PYTHON_VERSION={0}', needs.prepare.outputs.python-version) || '' }}
+          outputs: type=image,name=${{ needs.prepare.outputs.registry }}/os1-${{ matrix.component.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.name }}
+
+      - name: export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.component.name }}-${{ matrix.arch.name }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # -- merge per-arch digests into multi-arch manifests --
+  merge-manifests:
+    name: merge ${{ matrix.component }} manifests
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, frontend, console]
+
+    steps:
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-${{ matrix.component }}-*
+          merge-multiple: true
+
       - name: resolve tags
         id: resolve_tags
         run: |
-          # map matrix key to the matching prepare output
-          case "${{ matrix.tags-key }}" in
-            tags-backend)  TAGS='${{ needs.prepare.outputs.tags-backend }}' ;;
-            tags-frontend) TAGS='${{ needs.prepare.outputs.tags-frontend }}' ;;
-            tags-console)  TAGS='${{ needs.prepare.outputs.tags-console }}' ;;
+          case "${{ matrix.component }}" in
+            backend)  TAGS='${{ needs.prepare.outputs.tags-backend }}' ;;
+            frontend) TAGS='${{ needs.prepare.outputs.tags-frontend }}' ;;
+            console)  TAGS='${{ needs.prepare.outputs.tags-console }}' ;;
           esac
-          # convert JSON array to newline-delimited list for build-push-action
-          TAGS_CSV=$(echo "$TAGS" | jq -r '.[]' | paste -sd ',')
-          echo "tags=$TAGS_CSV" >> $GITHUB_OUTPUT
+          TAG_ARGS=$(echo "$TAGS" | jq -r '.[] | "-t " + .' | paste -sd ' ')
+          echo "tag_args=$TAG_ARGS" >> $GITHUB_OUTPUT
 
-      - name: build and push ${{ matrix.component }}
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.resolve_tags.outputs.tags }}
-          build-args: |
-            ${{ matrix.component == 'backend' && format('PYTHON_VERSION={0}', needs.prepare.outputs.python-version) || '' }}
-          cache-from: type=gha,scope=${{ matrix.component }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      - name: create and push multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          IMAGE="${{ needs.prepare.outputs.registry }}/os1-${{ matrix.component }}"
+          docker buildx imagetools create \
+            ${{ steps.resolve_tags.outputs.tag_args }} \
+            $(printf "$IMAGE@sha256:%s " *)
