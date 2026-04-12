@@ -425,3 +425,140 @@ def test_deep_merge_nested_none_filled() -> None:
 	overlay = {"outer": {"inner": "filled"}}
 	result = deep_merge(base, overlay, overwrite=False)
 	assert result["outer"]["inner"] == "filled"
+
+
+# -- process_schema list recursion --------------------------------------------
+
+
+def test_process_schema_recurses_into_anyof_list() -> None:
+	"""process_schema must apply transformations inside anyOf list elements."""
+	from nokodo_ai.utils.json_schema import process_schema
+
+	schema: dict[str, object] = {
+		"anyOf": [
+			{
+				"type": "object",
+				"properties": {
+					"name": {"type": "string"},
+				},
+			},
+			{
+				"type": "object",
+				"properties": {
+					"value": {"type": "integer"},
+				},
+			},
+		],
+	}
+
+	result = process_schema(
+		schema,
+		make_all_required=True,
+		set_additionalproperties_field=True,
+		process_defaults=False,
+		process_examples=False,
+		process_enums=False,
+	)
+
+	assert isinstance(result, dict)
+	any_of = result["anyOf"]
+	assert isinstance(any_of, list)
+	for branch in any_of:
+		assert isinstance(branch, dict)
+		assert branch.get("additionalProperties") is False
+		assert "required" in branch
+
+
+def test_process_schema_recurses_into_oneof_list() -> None:
+	"""process_schema must apply transformations inside oneOf list elements."""
+	from nokodo_ai.utils.json_schema import process_schema
+
+	schema: dict[str, object] = {
+		"oneOf": [
+			{
+				"type": "object",
+				"properties": {
+					"a": {"type": "string"},
+				},
+			},
+		],
+	}
+
+	result = process_schema(
+		schema,
+		make_all_required=True,
+		set_additionalproperties_field=True,
+		process_defaults=False,
+		process_examples=False,
+		process_enums=False,
+	)
+
+	assert isinstance(result, dict)
+	one_of = result["oneOf"]
+	assert isinstance(one_of, list)
+	assert one_of[0].get("additionalProperties") is False
+	assert one_of[0].get("required") == ["a"]
+
+
+def test_process_schema_recurses_into_allof_list() -> None:
+	"""process_schema must apply transformations inside allOf list elements."""
+	from nokodo_ai.utils.json_schema import process_schema
+
+	schema: dict[str, object] = {
+		"allOf": [
+			{
+				"type": "object",
+				"properties": {
+					"x": {"type": "number"},
+					"y": {"type": "number"},
+				},
+			},
+		],
+	}
+
+	result = process_schema(
+		schema,
+		make_all_required=True,
+		set_additionalproperties_field=True,
+		process_defaults=False,
+		process_examples=False,
+		process_enums=False,
+	)
+
+	assert isinstance(result, dict)
+	all_of = result["allOf"]
+	assert isinstance(all_of, list)
+	assert all_of[0].get("additionalProperties") is False
+	assert sorted(all_of[0].get("required", [])) == ["x", "y"]
+
+
+def test_process_schema_recurses_into_prefixitems_list() -> None:
+	"""process_schema must apply transformations inside prefixItems elements."""
+	from nokodo_ai.utils.json_schema import process_schema
+
+	schema: dict[str, object] = {
+		"type": "array",
+		"prefixItems": [
+			{
+				"type": "object",
+				"properties": {
+					"label": {"type": "string"},
+				},
+			},
+		],
+	}
+
+	result = process_schema(
+		schema,
+		make_all_required=True,
+		set_additionalproperties_field=True,
+		process_defaults=False,
+		process_examples=False,
+		process_enums=False,
+	)
+
+	assert isinstance(result, dict)
+	prefix = result["prefixItems"]
+	assert isinstance(prefix, list)
+	assert prefix[0].get("additionalProperties") is False
+	assert prefix[0].get("required") == ["label"]

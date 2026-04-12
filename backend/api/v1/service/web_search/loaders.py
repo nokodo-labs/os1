@@ -16,7 +16,7 @@ import httpx
 
 from api.settings import settings
 from api.tavily import TavilyClient
-from api.v1.service.web_search import WebSearchError
+from api.v1.service.web_search.models import WebSearchError
 
 
 logger = logging.getLogger(__name__)

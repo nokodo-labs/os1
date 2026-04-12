@@ -443,7 +443,7 @@
 					<HomeSuggestions
 						query={inputValue}
 						onAction={handleSuggestionAction}
-						bind:keyHandler={suggestionsKeyHandler}
+						onKeyHandler={(h) => (suggestionsKeyHandler = h)}
 					/>
 				</div>
 

@@ -9,7 +9,7 @@ AI platform with agentic coding support, beautiful UI, and comprehensive tooling
 - **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, PostgreSQL 17
 - **Frontend**: Svelte 5, TypeScript, Vite, Vercel AI SDK, shadcn-svelte, TailwindCSS
 - **Console**: Svelte 5, TypeScript, Vite, shadcn-svelte, TailwindCSS
-- **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, Release Please
+- **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, custom release tooling
 
 ## AI agent behavior
 

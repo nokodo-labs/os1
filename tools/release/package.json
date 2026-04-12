@@ -1,0 +1,16 @@
+{
+	"name": "@nokodo/release",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "custom release tooling for the OS1 monorepo",
+	"scripts": {
+		"release": "node src/release.mjs",
+		"changelog": "node src/changelog.mjs",
+		"test": "node --test tests/"
+	},
+	"dependencies": {
+		"conventional-commits-parser": "^6.0.0",
+		"semver": "^7.7.0"
+	}
+}

@@ -63,6 +63,10 @@ def _register_test_storage_backends(
 @pytest.fixture(scope="session", autouse=True)
 def _api_test_env_defaults() -> Generator[None]:
 	"""Make api tests self-contained (no external OpenAI/vector DB required)."""
+	from api.boot_settings import boot_settings
+
+	boot_settings.TESTING = True
+
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")

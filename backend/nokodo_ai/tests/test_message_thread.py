@@ -1,5 +1,7 @@
 """tests for SDK message and thread models."""
 
+from time import monotonic
+
 import pytest
 
 from nokodo_ai import (
@@ -40,6 +42,82 @@ def test_assistant_message_with_tool_calls() -> None:
 def test_tool_call_default_id_is_set() -> None:
 	tool_call = ToolCall(name="get_weather")
 	assert tool_call.id != ""
+
+
+# -- ToolCall monotonic timing ------------------------------------------------
+
+
+def test_tool_call_created_at_monotonic_is_set() -> None:
+	"""created_at_monotonic should be populated by default using monotonic clock."""
+	before = monotonic()
+	tc = ToolCall(name="test")
+	after = monotonic()
+	assert before <= tc.created_at_monotonic <= after
+
+
+def test_tool_call_created_at_monotonic_excluded_from_dump() -> None:
+	"""created_at_monotonic must never appear in serialized output (DB/API)."""
+	tc = ToolCall(name="test")
+	dumped = tc.model_dump()
+	assert "created_at_monotonic" not in dumped
+
+	dumped_json = tc.model_dump(mode="json")
+	assert "created_at_monotonic" not in dumped_json
+
+
+def test_tool_call_created_at_monotonic_survives_model_copy() -> None:
+	"""model_copy (used in delta merge for new tool calls) preserves monotonic."""
+	tc = ToolCall(name="test")
+	copied = tc.model_copy(deep=True)
+	assert copied.created_at_monotonic == tc.created_at_monotonic
+
+
+def test_tool_call_model_validate_sets_monotonic_even_without_input() -> None:
+	"""when deserializing from DB/API data (no monotonic field), a fresh
+	monotonic value must still be generated."""
+	before = monotonic()
+	tc = ToolCall.model_validate({"name": "from_db", "id": "tc_1"})
+	after = monotonic()
+	assert before <= tc.created_at_monotonic <= after
+
+
+# -- assistant merge preserves earliest monotonic -----------------------------
+
+
+def test_assistant_merge_preserves_earliest_tool_call_monotonic() -> None:
+	"""delta merge must keep the smallest created_at_monotonic across chunks."""
+	base = AssistantMessage.from_text("")
+	early_mono = monotonic() - 100.0
+	late_mono = monotonic()
+
+	base.tool_calls = [
+		ToolCall(id="tc1", name="t", arguments="{", created_at_monotonic=late_mono)
+	]
+	delta = AssistantMessage.from_text("")
+	delta.tool_calls = [
+		ToolCall(id="tc1", name="t", arguments="}", created_at_monotonic=early_mono)
+	]
+
+	base.merge(delta)
+	assert base.tool_calls[0].created_at_monotonic == early_mono
+
+
+def test_assistant_merge_does_not_overwrite_earlier_monotonic() -> None:
+	"""if base already has the earlier monotonic, delta should not overwrite it."""
+	early_mono = monotonic() - 100.0
+	late_mono = monotonic()
+
+	base = AssistantMessage.from_text("")
+	base.tool_calls = [
+		ToolCall(id="tc1", name="t", arguments="{", created_at_monotonic=early_mono)
+	]
+	delta = AssistantMessage.from_text("")
+	delta.tool_calls = [
+		ToolCall(id="tc1", name="t", arguments="}", created_at_monotonic=late_mono)
+	]
+
+	base.merge(delta)
+	assert base.tool_calls[0].created_at_monotonic == early_mono
 
 
 def test_tool_message_creation() -> None:

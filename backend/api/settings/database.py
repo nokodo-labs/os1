@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from pydantic_settings import PydanticBaseSettingsSource
 from sqlalchemy import select
 
+from api.boot_settings import boot_settings
 from api.database import async_session_local
 from api.models.setting import SettingsDocument
 
@@ -31,6 +32,8 @@ def _is_write_locked(schema: type[BaseModel], field_name: str) -> bool:
 
 def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any]]:
 	"""synchronously load settings overrides from database."""
+	if boot_settings.TESTING:
+		return {}
 
 	async def fetch() -> dict[str, dict[str, Any]]:
 		try:

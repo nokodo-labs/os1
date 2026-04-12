@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.settings import SearchAgent
+from api.settings import settings
 from api.v1.service.chat.context import AppContext
 from api.v1.service.web_search import WebSearchError, search_web
 from api.v1.service.web_search.loaders import fetch_url
@@ -31,22 +31,18 @@ class AgenticWebSearchInput(BaseModel):
 	query: str = Field(
 		...,
 		description=(
-			"the search query. be specific and self-contained - include all "
-			"context needed to find the answer without additional conversation "
-			"history."
+			"the search query sent to an AI search agent. unlike a simple "
+			"search engine, you can ask compound, multi-part, "
+			"or nuanced questions and will get a synthesized answer "
+			"from all search results."
+			"refer to your context for curent date and time, and ALWAYS keep "
+			"your queries UNBIASED and NEUTRAL for best results."
 		),
 	)
-	limit: int = Field(
-		default=5,
-		description="maximum number of source citations to include in the result",
-		ge=1,
-		le=10,
-	)
-	search_agent: SearchAgent | None = Field(
+	limit: int | None = Field(
 		default=None,
-		description=(
-			"which AI search agent to use. None = use the app default from settings."
-		),
+		description="maximum number of search results to use. none=no limit.",
+		ge=1,
 	)
 
 
@@ -59,10 +55,10 @@ class AgenticWebSearchTool(Tool[AppContext]):
 	name: str = Field(default="agentic_web_search")
 	description: str = Field(
 		default=(
-			"perform an AI-powered web search using an agentic search engine. "
-			"returns a synthesized summary with source citations. use when the "
-			"user asks about current events, real-time data, or anything beyond "
-			"your training cutoff."
+			"perform an AI-powered web search using an AI agent. "
+			"returns a summary with source citations. use when the "
+			"user asks about current events, real-time data, or anything you "
+			"can't confidently answer with your knowledge alone."
 		),
 	)
 	parameters: JSONObject = Field(
@@ -77,32 +73,28 @@ class AgenticWebSearchTool(Tool[AppContext]):
 	) -> ToolMessage:
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
-		ctx = __app_context__
-		tool_call_id = __agent_context__.tool_call_id
-		thread_id = str(ctx.thread_id) if ctx.thread_id else None
 		inp = AgenticWebSearchInput.model_validate(kwargs)
 
 		# emit searching event with query
-		await ctx.event_emitter(
-			Event(
-				scope=EventScope.THREAD if thread_id else EventScope.USER,
-				scope_id=thread_id or str(ctx.user_id),
-				type=EventType.TOOL_PROGRESS,
-				data={
-					"tool_call_id": tool_call_id,
-					"tool_name": self.name,
-					"message": "searching the web",
-					"payload": {"queries": [inp.query]},
-				},
-				user_id=str(ctx.user_id),
-				thread_id=thread_id,
+		if __app_context__.thread_id:
+			await __app_context__.event_emitter(
+				Event(
+					scope=EventScope.THREAD,
+					scope_id=__app_context__.thread_id,
+					type=EventType.TOOL_PROGRESS,
+					data={
+						"tool_call_id": __agent_context__.tool_call_id,
+						"tool_name": self.name,
+						"message": "searching the web",
+						"payload": {"queries": [inp.query]},
+					},
+					user_id=__app_context__.user_id,
+					thread_id=__app_context__.thread_id,
+				)
 			)
-		)
 
 		try:
-			result = await search_web(
-				inp.query, limit=inp.limit, search_agent=inp.search_agent
-			)
+			result = await search_web(inp.query, limit=inp.limit)
 		except WebSearchError:
 			logger.exception("agentic web search failed for query: %s", inp.query)
 			return self.error(
@@ -111,31 +103,40 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			)
 
 		# emit results event with sources
-		sources = [{"url": c.url, "title": c.title} for c in result.citations]
-		await ctx.event_emitter(
-			Event(
-				scope=EventScope.THREAD if thread_id else EventScope.USER,
-				scope_id=thread_id or str(ctx.user_id),
-				type=EventType.TOOL_PROGRESS,
-				data={
-					"tool_call_id": tool_call_id,
-					"tool_name": self.name,
-					"message": f"found {len(sources)} sources",
-					"payload": {"sources": sources},
-				},
-				user_id=str(ctx.user_id),
-				thread_id=thread_id,
+		sources = [{"url": c.source_id, "title": c.title} for c in result.citations]
+		if __app_context__.thread_id:
+			await __app_context__.event_emitter(
+				Event(
+					scope=EventScope.THREAD,
+					scope_id=__app_context__.thread_id,
+					type=EventType.TOOL_PROGRESS,
+					data={
+						"tool_call_id": __agent_context__.tool_call_id,
+						"tool_name": self.name,
+						"message": f"found {len(sources)} sources",
+						"payload": {"sources": sources},
+					},
+					user_id=__app_context__.user_id,
+					thread_id=__app_context__.thread_id,
+				)
 			)
-		)
 
 		parts = [result.summary]
 		if result.citations:
 			parts.append("\nsources:")
 			for i, c in enumerate(result.citations, 1):
-				label = c.title or c.url
-				parts.append(f"{i}. {label} - {c.url}")
+				label = c.title or c.source_id
+				parts.append(f"{i}. {label} - {c.source_id}")
 
-		return self.success("\n".join(parts), __agent_context__)
+		output = "\n".join(parts)
+		max_chars = settings.web_search.max_chars
+		if len(output) > max_chars:
+			output = (
+				output[:max_chars]
+				+ f"\n\n[truncated - showing first {max_chars} chars]"
+			)
+
+		return self.success(output, __agent_context__)
 
 
 # - fetch URL tool
@@ -206,8 +207,7 @@ class FetchUrlTool(Tool[AppContext]):
 			)
 
 		domain = parsed.netloc or "unknown"
-		# truncate very large pages to avoid token overflow
-		max_chars = 50_000
+		max_chars = settings.web_search.web_loaders.max_chars
 		if len(content) > max_chars:
 			content = (
 				content[:max_chars]

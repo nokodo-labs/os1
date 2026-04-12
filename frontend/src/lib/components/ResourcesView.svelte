@@ -74,7 +74,7 @@
 		const [sortBy, sortDir] = sort.split(':') as [string, string]
 		const items = [...filtered]
 		items.sort((a, b) => {
-			let cmp = 0
+			let cmp: number
 			if (sortBy === 'title') {
 				cmp = (a.title || '').localeCompare(b.title || '')
 			} else if (sortBy === 'created_at') {

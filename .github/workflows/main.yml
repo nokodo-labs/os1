@@ -2,7 +2,7 @@ name: main CI/CD pipeline
 
 on:
   pull_request:
-    branches: [dev, stable]
+    branches: [dev]
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [dev, stable]
@@ -15,7 +15,7 @@ jobs:
     # case 1: PR from non-core branch → core branch (dev/stable): Run CI
     # case 2: PR from core branch (dev/stable) → any branch: Skip (same repo only)
     # case 3: Push to core branch → Run CI + CD
-    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name != github.repository || (github.head_ref != 'dev' && github.head_ref != 'stable'))) }}
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name != github.repository || (github.head_ref != 'dev' && github.head_ref != 'stable' && !startsWith(github.head_ref, 'release/')))) }}
     permissions:
       contents: read
       pull-requests: read
@@ -24,7 +24,11 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       console: ${{ steps.changes.outputs.console }}
       docker: ${{ steps.changes.outputs.docker }}
-      github_actions: ${{ steps.changes.outputs.github_actions }}
+      docker_ci_workflow: ${{ steps.changes.outputs.docker_ci_workflow }}
+      backend_ci_workflow: ${{ steps.changes.outputs.backend_ci_workflow }}
+      frontend_ci_workflow: ${{ steps.changes.outputs.frontend_ci_workflow }}
+      console_ci_workflow: ${{ steps.changes.outputs.console_ci_workflow }}
+      shared_workflows: ${{ steps.changes.outputs.shared_workflows }}
       docs: ${{ steps.changes.outputs.docs }}
     steps:
       - name: checkout
@@ -45,12 +49,24 @@ jobs:
               - 'console/**'
             docker:
               - '.docker/**'
-            github_actions:
-              - '.github/workflows/**'
+            docker_ci_workflow:
+              - '.github/workflows/docker-publish.yml'
+            backend_ci_workflow:
+              - '.github/workflows/backend-ci.yml'
+            frontend_ci_workflow:
+              - '.github/workflows/frontend-ci.yml'
+              - '.github/workflows/deploy-frontend-pages.yml'
+            console_ci_workflow:
+              - '.github/workflows/console-ci.yml'
+            shared_workflows:
+              - '.github/workflows/main.yml'
+              - '.github/workflows/release.yml'
+              - '.github/workflows/promotion.yml'
+              - '.github/workflows/docker-publish.yml'
             docs:
               - 'docs/**'
             release:
-              - 'tools/release_please/**'
+              - 'tools/release/**'
 
   ci-carryover:
     name: carryover CI gate
@@ -68,24 +84,12 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-          BACKEND_CHANGED: ${{ needs.detect-changes.outputs.backend }}
-          FRONTEND_CHANGED: ${{ needs.detect-changes.outputs.frontend }}
-          CONSOLE_CHANGED: ${{ needs.detect-changes.outputs.console }}
-          GITHUB_ACTIONS_CHANGED: ${{ needs.detect-changes.outputs.github_actions }}
         run: |
           set -euo pipefail
 
           force_backend=false
           force_frontend=false
           force_console=false
-
-          # if workflows changed, the component jobs will run anyway.
-          if [ "${GITHUB_ACTIONS_CHANGED}" = "true" ]; then
-            echo "force_backend=false" >> "$GITHUB_OUTPUT"
-            echo "force_frontend=false" >> "$GITHUB_OUTPUT"
-            echo "force_console=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           # GitHub intentionally restricts access to the Actions API for `pull_request` workflows
           # coming from forks, and returns 404 even with correct requests.
@@ -145,19 +149,21 @@ jobs:
             esac
           }
 
+          # if the previous run ran a component CI and it failed, force re-run
+          # regardless of what triggered the current run.
           backend_prev=$(job_conclusion "backend CI")
           frontend_prev=$(job_conclusion "frontend CI")
           console_prev=$(job_conclusion "console CI")
 
-          if [ "${BACKEND_CHANGED}" != "true" ] && is_failed_conclusion "${backend_prev}"; then
+          if is_failed_conclusion "${backend_prev}"; then
             force_backend=true
           fi
 
-          if [ "${FRONTEND_CHANGED}" != "true" ] && is_failed_conclusion "${frontend_prev}"; then
+          if is_failed_conclusion "${frontend_prev}"; then
             force_frontend=true
           fi
 
-          if [ "${CONSOLE_CHANGED}" != "true" ] && is_failed_conclusion "${console_prev}"; then
+          if is_failed_conclusion "${console_prev}"; then
             force_console=true
           fi
 
@@ -168,7 +174,7 @@ jobs:
   backend-ci:
     name: backend CI
     needs: [detect-changes, ci-carryover]
-    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.github_actions == 'true' || needs.ci-carryover.outputs.force_backend == 'true'
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.backend_ci_workflow == 'true' || needs.ci-carryover.outputs.force_backend == 'true'
     uses: ./.github/workflows/backend-ci.yml
     with:
       run_tests: true
@@ -178,7 +184,7 @@ jobs:
   frontend-ci:
     name: frontend CI
     needs: [detect-changes, ci-carryover]
-    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.github_actions == 'true' || needs.ci-carryover.outputs.force_frontend == 'true'
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.frontend_ci_workflow == 'true' || needs.ci-carryover.outputs.force_frontend == 'true'
     uses: ./.github/workflows/frontend-ci.yml
     with:
       run_tests: true
@@ -188,7 +194,7 @@ jobs:
   console-ci:
     name: console CI
     needs: [detect-changes, ci-carryover]
-    if: needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.github_actions == 'true' || needs.ci-carryover.outputs.force_console == 'true'
+    if: needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.console_ci_workflow == 'true' || needs.ci-carryover.outputs.force_console == 'true'
     uses: ./.github/workflows/console-ci.yml
     with:
       run_tests: true
@@ -209,14 +215,14 @@ jobs:
   promotion:
     name: code promotion
     needs: [detect-changes, backend-ci, frontend-ci, console-ci]
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name == 'dev' && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.github_actions == 'true' || needs.detect-changes.outputs.docs == 'true') && ((needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (needs.console-ci.result == 'success' || needs.console-ci.result == 'skipped')) }}
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name == 'dev' && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.docs == 'true') && ((needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (needs.console-ci.result == 'success' || needs.console-ci.result == 'skipped')) }}
     uses: ./.github/workflows/promotion.yml
     secrets: inherit
 
   pages-deploy:
     name: deploy frontend to GitHub Pages
     needs: [detect-changes, frontend-ci]
-    if: ${{ !cancelled() && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.github_actions == 'true') && github.event_name == 'push' && github.ref_name == 'stable' }}
+    if: ${{ !cancelled() && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.frontend_ci_workflow == 'true') && github.event_name == 'push' && github.ref_name == 'stable' }}
     uses: ./.github/workflows/deploy-frontend-pages.yml
     permissions:
       contents: read
@@ -233,8 +239,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-    if: ${{ !cancelled() && (needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (needs.console-ci.result == 'success' || needs.console-ci.result == 'skipped') && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && ((needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.github_actions == 'true') || needs.release.outputs.version != '') }}
+    if: ${{ !cancelled() && (needs.backend-ci.result == 'success' || needs.backend-ci.result == 'skipped') && (needs.frontend-ci.result == 'success' || needs.frontend-ci.result == 'skipped') && (needs.console-ci.result == 'success' || needs.console-ci.result == 'skipped') && github.event_name == 'push' && github.ref_type == 'branch' && (github.ref_name == 'dev' || github.ref_name == 'stable') && (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.console == 'true' || needs.detect-changes.outputs.docker == 'true' || needs.detect-changes.outputs.docker_ci_workflow == 'true' || needs.release.outputs.release_created == 'true') }}
     uses: ./.github/workflows/docker-publish.yml
     secrets: inherit
     with:
       release_version: ${{ needs.release.outputs.version }}
+      component_tags: ${{ needs.release.outputs.component_tags }}

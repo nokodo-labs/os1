@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from time import time
+from time import monotonic, time
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, TypeAdapter
@@ -105,7 +105,12 @@ class ToolCall(Base):
 	name: str
 	arguments: JSONValue = Field(default_factory=dict)
 	created_at: float = Field(default_factory=time)
+	"""wall-clock epoch of the earliest streaming delta for this tool call."""
 	updated_at: float = Field(default_factory=time)
+	"""wall-clock epoch of the latest streaming delta for this tool call."""
+	created_at_monotonic: float = Field(default_factory=monotonic, exclude=True)
+	"""monotonic counterpart of created_at. in-memory only, never persisted.
+	used for safe elapsed-time arithmetic resistant to system clock changes."""
 	metadata: JSONObject | None = None
 
 
@@ -247,9 +252,11 @@ class AssistantMessage(BaseMessage, _HasTextContentHelpers):
 				# update name if provided (usually comes in first chunk)
 				if delta_tc.name:
 					existing_tc.name = delta_tc.name
-				# preserve the earliest created_at
+				# preserve the earliest created_at / created_at_monotonic
 				if delta_tc.created_at < existing_tc.created_at:
 					existing_tc.created_at = delta_tc.created_at
+				if delta_tc.created_at_monotonic < existing_tc.created_at_monotonic:
+					existing_tc.created_at_monotonic = delta_tc.created_at_monotonic
 				# always bump updated_at to the latest delta
 				existing_tc.updated_at = now
 			else:

@@ -22,6 +22,7 @@ from qdrant_client.models import (
 	PointIdsList,
 	PointStruct,
 	Prefetch,
+	Range,
 	ScoredPoint,
 	SparseVectorParams,
 	VectorParams,
@@ -346,17 +347,19 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		"""convert a FieldMatch or FieldMatchAny to a Qdrant FieldCondition."""
 		if isinstance(match, FieldMatchAny):
 			return FieldCondition(key=match.key, match=MatchAny(any=match.values))
-		# FieldMatch
-		val: str | int | bool
+		# FieldMatch - MatchValue only accepts str | int | bool, not float.
+		# for integral floats, coerce to int. for non-integral floats, use a
+		# Range condition (gte=lte) to do exact numeric matching.
 		if isinstance(match.value, float):
-			val = (
-				int(match.value)
-				if match.value == int(match.value)
-				else str(match.value)
+			if match.value == int(match.value):
+				return FieldCondition(
+					key=match.key, match=MatchValue(value=int(match.value))
+				)
+			return FieldCondition(
+				key=match.key,
+				range=Range(gte=match.value, lte=match.value),
 			)
-		else:
-			val = match.value
-		return FieldCondition(key=match.key, match=MatchValue(value=val))
+		return FieldCondition(key=match.key, match=MatchValue(value=match.value))
 
 	@classmethod
 	def _to_qdrant_filter(cls, cf: ChunkFilter) -> Filter:
