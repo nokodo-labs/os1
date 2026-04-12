@@ -26,15 +26,23 @@ on:
         default: ""
 
 jobs:
-  build-and-push:
-    name: build and push container images
+  # -- shared setup: compute tags, registry, python version --
+  prepare:
+    name: prepare build metadata
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
+    outputs:
+      registry: ${{ steps.set_registry.outputs.BASE }}
+      python-version: ${{ steps.set_python_version.outputs.PYTHON_VERSION }}
+      # JSON arrays consumed by docker/metadata-action in the matrix job
+      tags-backend: ${{ steps.build_tags.outputs.TAGS_BACKEND }}
+      tags-frontend: ${{ steps.build_tags.outputs.TAGS_FRONTEND }}
+      tags-console: ${{ steps.build_tags.outputs.TAGS_CONSOLE }}
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          sparse-checkout: backend/.python-version
+          sparse-checkout-cone-mode: false
 
       - name: set Python version
         id: set_python_version
@@ -49,17 +57,115 @@ jobs:
             exit 1
           fi
 
-      - name: set branch and commit info
-        id: set_branch_info
+      - name: set base image registry
+        id: set_registry
         run: |
+          BASE=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
+          echo "BASE=$BASE" >> $GITHUB_OUTPUT
+
+      - name: build per-component tag lists
+        id: build_tags
+        run: |
+          BASE="${{ steps.set_registry.outputs.BASE }}"
+          RELEASE_VERSION="${{ inputs.release_version }}"
+
+          # -- branch / commit info --
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "BRANCH_NAME=manual" >> $GITHUB_OUTPUT
-            echo "COMMIT_SHA=manual" >> $GITHUB_OUTPUT
+            BRANCH_NAME="manual"
+            COMMIT_SHA="manual"
           else
-            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            BRANCH_NAME="${{ github.ref_name }}"
             short_sha="${{ github.sha }}"
-            echo "COMMIT_SHA=${short_sha:0:7}" >> $GITHUB_OUTPUT
+            COMMIT_SHA="${short_sha:0:7}"
           fi
+
+          # -- common suffixes --
+          SUFFIXES=""
+          if [ "$COMMIT_SHA" != "manual" ]; then
+            SUFFIXES="$SUFFIXES $COMMIT_SHA"
+          fi
+          if [ "$BRANCH_NAME" = "production" ]; then
+            SUFFIXES="$SUFFIXES latest"
+          elif [ "$BRANCH_NAME" = "dev" ]; then
+            SUFFIXES="$SUFFIXES dev"
+          fi
+          if [ -n "$RELEASE_VERSION" ]; then
+            SUFFIXES="$SUFFIXES $RELEASE_VERSION"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SUFFIXES="$SUFFIXES ${{ github.event.inputs.release_tag }}"
+          fi
+
+          # -- per-component version suffixes --
+          COMPONENT_TAGS='${{ inputs.component_tags }}'
+          BACKEND_EXTRA=""
+          FRONTEND_EXTRA=""
+          CONSOLE_EXTRA=""
+          if [ -n "$COMPONENT_TAGS" ] && [ "$COMPONENT_TAGS" != "{}" ]; then
+            LIBRARY_VER=$(echo "$COMPONENT_TAGS" | jq -r '.library // empty')
+            API_VER=$(echo "$COMPONENT_TAGS" | jq -r '.api // empty')
+            FRONTEND_VER=$(echo "$COMPONENT_TAGS" | jq -r '.frontend // empty')
+            CONSOLE_VER=$(echo "$COMPONENT_TAGS" | jq -r '.console // empty')
+            if [ -n "$LIBRARY_VER" ]; then BACKEND_EXTRA="library-v$LIBRARY_VER"; fi
+            if [ -n "$API_VER" ]; then BACKEND_EXTRA="$BACKEND_EXTRA api-v$API_VER"; fi
+            if [ -n "$FRONTEND_VER" ]; then FRONTEND_EXTRA="frontend-v$FRONTEND_VER"; fi
+            if [ -n "$CONSOLE_VER" ]; then CONSOLE_EXTRA="console-v$CONSOLE_VER"; fi
+          fi
+
+          # helper: convert space-separated suffixes into a JSON array of full image tags
+          to_json_tags() {
+            local image="$1"; shift
+            local tags=""
+            for s in "$@"; do
+              [ -z "$s" ] && continue
+              tags="${tags:+$tags,}\"${image}:${s}\""
+            done
+            echo "[$tags]"
+          }
+
+          TAGS_BACKEND=$(to_json_tags "$BASE/os1-backend" $SUFFIXES $BACKEND_EXTRA)
+          TAGS_FRONTEND=$(to_json_tags "$BASE/os1-frontend" $SUFFIXES $FRONTEND_EXTRA)
+          TAGS_CONSOLE=$(to_json_tags "$BASE/os1-console" $SUFFIXES $CONSOLE_EXTRA)
+
+          echo "backend tags: $TAGS_BACKEND"
+          echo "frontend tags: $TAGS_FRONTEND"
+          echo "console tags: $TAGS_CONSOLE"
+
+          echo "TAGS_BACKEND=$TAGS_BACKEND" >> $GITHUB_OUTPUT
+          echo "TAGS_FRONTEND=$TAGS_FRONTEND" >> $GITHUB_OUTPUT
+          echo "TAGS_CONSOLE=$TAGS_CONSOLE" >> $GITHUB_OUTPUT
+
+  # -- parallel build + push with BuildKit layer caching --
+  build-and-push:
+    name: build ${{ matrix.component }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: backend
+            dockerfile: .docker/Dockerfile.backend
+            tags-key: tags-backend
+          - component: frontend
+            context: frontend
+            dockerfile: .docker/Dockerfile.frontend
+            tags-key: tags-frontend
+          - component: console
+            context: console
+            dockerfile: .docker/Dockerfile.console
+            tags-key: tags-console
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: log in to GHCR
         uses: docker/login-action@v4
@@ -68,132 +174,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: set base image registry
-        id: set_registry
+      - name: resolve tags
+        id: resolve_tags
         run: |
-          BASE=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[A-Z]' '[a-z]')
-          echo "BASE=$BASE" >> $GITHUB_OUTPUT
+          # map matrix key to the matching prepare output
+          case "${{ matrix.tags-key }}" in
+            tags-backend)  TAGS='${{ needs.prepare.outputs.tags-backend }}' ;;
+            tags-frontend) TAGS='${{ needs.prepare.outputs.tags-frontend }}' ;;
+            tags-console)  TAGS='${{ needs.prepare.outputs.tags-console }}' ;;
+          esac
+          # convert JSON array to newline-delimited list for build-push-action
+          TAGS_CSV=$(echo "$TAGS" | jq -r '.[]' | paste -sd ',')
+          echo "tags=$TAGS_CSV" >> $GITHUB_OUTPUT
 
-      - name: determine tags suffix list
-        id: determine_tags
-        run: |
-          BRANCH_NAME="${{ steps.set_branch_info.outputs.BRANCH_NAME }}"
-          COMMIT_SHA="${{ steps.set_branch_info.outputs.COMMIT_SHA }}"
-          RELEASE_VERSION="${{ inputs.release_version }}"
-
-          # build a space-separated list of tag suffixes (applied to each service image)
-          SUFFIXES=""
-
-          if [ "$COMMIT_SHA" != "manual" ]; then
-            SUFFIXES="$SUFFIXES $COMMIT_SHA"
-          fi
-
-          if [ "$BRANCH_NAME" = "production" ]; then
-            SUFFIXES="$SUFFIXES latest"
-          elif [ "$BRANCH_NAME" = "dev" ]; then
-            SUFFIXES="$SUFFIXES dev"
-          fi
-
-          if [ -n "$RELEASE_VERSION" ]; then
-            SUFFIXES="$SUFFIXES $RELEASE_VERSION"
-            echo "adding release tag: $RELEASE_VERSION"
-          fi
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            SUFFIXES="$SUFFIXES ${{ github.event.inputs.release_tag }}"
-          fi
-
-          echo "tag suffixes: $SUFFIXES"
-          echo "SUFFIXES=$SUFFIXES" >> $GITHUB_OUTPUT
-
-          # build per-service component version suffixes from release component_tags
-          COMPONENT_TAGS='${{ inputs.component_tags }}'
-          BACKEND_SUFFIXES=""
-          FRONTEND_SUFFIXES=""
-          CONSOLE_SUFFIXES=""
-          if [ -n "$COMPONENT_TAGS" ] && [ "$COMPONENT_TAGS" != "{}" ]; then
-            LIBRARY_VER=$(echo "$COMPONENT_TAGS" | jq -r '.library // empty')
-            API_VER=$(echo "$COMPONENT_TAGS" | jq -r '.api // empty')
-            FRONTEND_VER=$(echo "$COMPONENT_TAGS" | jq -r '.frontend // empty')
-            CONSOLE_VER=$(echo "$COMPONENT_TAGS" | jq -r '.console // empty')
-            if [ -n "$LIBRARY_VER" ]; then BACKEND_SUFFIXES="library-v$LIBRARY_VER"; fi
-            if [ -n "$API_VER" ]; then BACKEND_SUFFIXES="$BACKEND_SUFFIXES api-v$API_VER"; fi
-            if [ -n "$FRONTEND_VER" ]; then FRONTEND_SUFFIXES="frontend-v$FRONTEND_VER"; fi
-            if [ -n "$CONSOLE_VER" ]; then CONSOLE_SUFFIXES="console-v$CONSOLE_VER"; fi
-          fi
-          echo "BACKEND_SUFFIXES=$BACKEND_SUFFIXES" >> $GITHUB_OUTPUT
-          echo "FRONTEND_SUFFIXES=$FRONTEND_SUFFIXES" >> $GITHUB_OUTPUT
-          echo "CONSOLE_SUFFIXES=$CONSOLE_SUFFIXES" >> $GITHUB_OUTPUT
-
-      # --- backend ---
-
-      - name: build backend
-        run: |
-          docker build backend \
-            --file .docker/Dockerfile.backend \
-            --tag os1-backend \
-            --build-arg PYTHON_VERSION=${{ steps.set_python_version.outputs.PYTHON_VERSION }}
-
-      - name: push backend
-        run: |
-          BASE="${{ steps.set_registry.outputs.BASE }}"
-          for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
-            tag="$BASE/os1-backend:$suffix"
-            echo "pushing $tag"
-            docker tag os1-backend "$tag"
-            docker push "$tag"
-          done
-          for suffix in ${{ steps.determine_tags.outputs.BACKEND_SUFFIXES }}; do
-            tag="$BASE/os1-backend:$suffix"
-            echo "pushing component tag $tag"
-            docker tag os1-backend "$tag"
-            docker push "$tag"
-          done
-
-      # --- frontend ---
-
-      - name: build frontend
-        run: |
-          docker build frontend \
-            --file .docker/Dockerfile.frontend \
-            --tag os1-frontend
-
-      - name: push frontend
-        run: |
-          BASE="${{ steps.set_registry.outputs.BASE }}"
-          for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
-            tag="$BASE/os1-frontend:$suffix"
-            echo "pushing $tag"
-            docker tag os1-frontend "$tag"
-            docker push "$tag"
-          done
-          for suffix in ${{ steps.determine_tags.outputs.FRONTEND_SUFFIXES }}; do
-            tag="$BASE/os1-frontend:$suffix"
-            echo "pushing component tag $tag"
-            docker tag os1-frontend "$tag"
-            docker push "$tag"
-          done
-
-      # --- console ---
-
-      - name: build console
-        run: |
-          docker build console \
-            --file .docker/Dockerfile.console \
-            --tag os1-console
-
-      - name: push console
-        run: |
-          BASE="${{ steps.set_registry.outputs.BASE }}"
-          for suffix in ${{ steps.determine_tags.outputs.SUFFIXES }}; do
-            tag="$BASE/os1-console:$suffix"
-            echo "pushing $tag"
-            docker tag os1-console "$tag"
-            docker push "$tag"
-          done
-          for suffix in ${{ steps.determine_tags.outputs.CONSOLE_SUFFIXES }}; do
-            tag="$BASE/os1-console:$suffix"
-            echo "pushing component tag $tag"
-            docker tag os1-console "$tag"
-            docker push "$tag"
-          done
+      - name: build and push ${{ matrix.component }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.resolve_tags.outputs.tags }}
+          build-args: |
+            ${{ matrix.component == 'backend' && format('PYTHON_VERSION={0}', needs.prepare.outputs.python-version) || '' }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
