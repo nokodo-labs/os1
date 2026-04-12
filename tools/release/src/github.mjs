@@ -237,8 +237,36 @@ export function releaseExists(repoSlug, tagName) {
 	}
 }
 
+// add a comment to a PR.
+export function addPRComment(repoSlug, prNumber, body) {
+	execFileSync(
+		"gh",
+		[
+			"pr",
+			"comment",
+			String(prNumber),
+			"--repo",
+			repoSlug,
+			"--body-file",
+			"-",
+		],
+		{
+			encoding: "utf-8",
+			input: body,
+			env: ghEnv(),
+		},
+	);
+}
+
 // close component PRs and delete their branches after root PR merge.
-export function closeComponentPRs(repoSlug, branch, componentNames) {
+// componentTags: optional map of { name: tagString } for release comments.
+export function closeComponentPRs(
+	repoSlug,
+	branch,
+	componentNames,
+	componentTags = {},
+) {
+	const repoUrl = `https://github.com/${repoSlug}`;
 	for (const name of componentNames) {
 		const headBranch = `release--${name}/${branch}`;
 		try {
@@ -261,6 +289,19 @@ export function closeComponentPRs(repoSlug, branch, componentNames) {
 			]);
 			const prs = raw ? JSON.parse(raw) : [];
 			if (prs.length > 0) {
+				// add release comment before closing
+				const tag = componentTags[name];
+				if (tag) {
+					try {
+						addPRComment(
+							repoSlug,
+							prs[0].number,
+							`🏷️ released as [\`${tag}\`](${repoUrl}/releases/tag/${tag})`,
+						);
+					} catch {
+						// best effort
+					}
+				}
 				gh([
 					"pr",
 					"close",

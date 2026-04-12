@@ -67,7 +67,8 @@ export function getCommits(from, to = "HEAD", paths = []) {
 			`--format=%H${SEP}%aN${SEP}%B${REC}`,
 			"--no-merges",
 		];
-		if (paths.length > 0) args.push("--", ...paths);
+		if (paths.length > 0)
+			args.push("--", ...paths.map((p) => `:(top)${p}`));
 		raw = exec("git", args);
 	} catch {
 		return [];

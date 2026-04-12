@@ -372,6 +372,11 @@ function createComponentPRs(
 			maxLength: 50000,
 		});
 
+		// link to previous release if one exists, otherwise note first release
+		const prevReleaseLink = lastComponentTag
+			? `- 📦 previous release: [\`${lastComponentTag}\`](${repoUrl}/releases/tag/${lastComponentTag})`
+			: "- 📦 *first release for this component*";
+
 		const componentBody = [
 			isPrerelease ? "## 🚀 pre-release" : "## 🚀 release",
 			"",
@@ -380,7 +385,7 @@ function createComponentPRs(
 			componentChangelog,
 			"",
 			"---",
-			`- 📦 component tag: [\`${componentTag}\`](${repoUrl}/releases/tag/${componentTag})`,
+			prevReleaseLink,
 			`- 🤖 *this PR was created by the [release automation](${repoUrl}/actions)*`,
 		].join("\n");
 
@@ -505,11 +510,14 @@ function handleTagRelease(branch, repoSlug, version) {
 		`created GitHub ${isPrerelease ? "pre-release" : "release"}: ${tagName}`,
 	);
 
-	// close component tracking PRs (their changes are included in the root PR)
-	const componentNames = PACKAGES.filter((p) => p.componentTag).map(
-		(p) => p.name,
-	);
-	closeComponentPRs(repoSlug, branch, componentNames);
+	// close component tracking PRs with release comments
+	const componentPkgs = PACKAGES.filter((p) => p.componentTag);
+	const componentNames = componentPkgs.map((p) => p.name);
+	const componentTagMap = {};
+	for (const pkg of componentPkgs) {
+		componentTagMap[pkg.name] = `${pkg.name}-v${version}`;
+	}
+	closeComponentPRs(repoSlug, branch, componentNames, componentTagMap);
 
 	writeOutputs({
 		release_created: true,
