@@ -558,6 +558,7 @@ async def delete_thread(
 	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
+	permanent: bool = False,
 ) -> None:
 	thread = await _load_thread(
 		thread_id,
@@ -572,12 +573,18 @@ async def delete_thread(
 			detail="forbidden",
 		)
 
+	if permanent and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+
 	owner_id = str(thread.owner_id)
 
-	if settings.soft_delete.threads:
-		thread.soft_delete()
-	else:
+	if permanent or not settings.soft_delete.threads:
 		await session.delete(thread)
+	else:
+		thread.soft_delete()
 	await session.flush()
 
 	# emit thread.deleted event

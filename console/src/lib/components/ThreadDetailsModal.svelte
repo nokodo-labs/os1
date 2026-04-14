@@ -8,7 +8,7 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadFlowView from '$lib/components/thread-flow/ThreadFlowView.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import { ChevronDown, Download, FileJson, FileText, GitBranch, X } from '@lucide/svelte'
+	import { ChevronDown, Download, FileJson, FileText, GitBranch, Trash2, X } from '@lucide/svelte'
 	import { Dialog, DropdownMenu } from 'bits-ui'
 	import { tick } from 'svelte'
 
@@ -34,6 +34,9 @@
 	let messagesEl = $state<HTMLDivElement | null>(null)
 	let activeTab = $state<ViewTab>('tree')
 	let allMessagesLoaded = $state(false)
+	let isWipeConfirming = $state(false)
+	let isWiping = $state(false)
+	let wipeError = $state<string | null>(null)
 
 	const messagePageSize = 60
 
@@ -46,6 +49,25 @@
 	function close() {
 		open = false
 		onClose?.()
+	}
+
+	async function wipeThread() {
+		if (!threadId) return
+		isWiping = true
+		wipeError = null
+		try {
+			unwrap(
+				await api.DELETE('/v1/threads/{thread_id}', {
+					params: { path: { thread_id: threadId }, query: { permanent: true } },
+				})
+			)
+			close()
+		} catch (e: unknown) {
+			wipeError = errorMessage(e) || 'wipe failed'
+		} finally {
+			isWiping = false
+			isWipeConfirming = false
+		}
 	}
 
 	function downloadBlob(content: string, filename: string, mime: string) {
@@ -354,6 +376,48 @@
 					<div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 						<!-- left panel: metadata -->
 						<div class="w-full shrink-0 space-y-3 overflow-y-auto lg:w-72">
+							<!-- wipe action -->
+							<div
+								class="rounded-xl border border-red-900/40 bg-red-950/20 p-3 text-sm"
+							>
+								<div class="mb-2 font-medium text-red-300">danger zone</div>
+								{#if !isWipeConfirming}
+									<button
+										class="inline-flex items-center gap-1.5 rounded-lg border border-red-800 bg-red-900/30 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-900/60 hover:text-red-100"
+										onclick={() => (isWipeConfirming = true)}
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+										wipe thread
+									</button>
+								{:else}
+									<p class="mb-2 text-xs text-red-300">
+										This permanently deletes the thread and all its messages.
+										Cannot be undone.
+									</p>
+									{#if wipeError}
+										<p class="mb-2 text-xs text-red-400">{wipeError}</p>
+									{/if}
+									<div class="flex gap-2">
+										<button
+											class="inline-flex items-center gap-1.5 rounded-lg border border-red-700 bg-red-800/50 px-3 py-1.5 text-xs text-red-200 transition-colors hover:bg-red-700/70 disabled:opacity-50"
+											disabled={isWiping}
+											onclick={wipeThread}
+										>
+											{isWiping ? 'wiping...' : 'confirm wipe'}
+										</button>
+										<button
+											class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800"
+											disabled={isWiping}
+											onclick={() => {
+												isWipeConfirming = false
+												wipeError = null
+											}}
+										>
+											cancel
+										</button>
+									</div>
+								{/if}
+							</div>
 							<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm">
 								<div class="font-medium">{thread.title ?? '(untitled)'}</div>
 								<div class="mt-2 space-y-1 text-xs text-zinc-400">

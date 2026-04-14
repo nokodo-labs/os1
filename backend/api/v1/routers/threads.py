@@ -252,13 +252,18 @@ async def generate_thread_metadata(
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_thread(
 	thread_id: TypeID,
+	permanent: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> None:
-	"""delete a thread."""
+	"""delete a thread. pass permanent=true (admin only) to hard-delete."""
 	await thread_service.delete_thread(
-		thread_id, db, principal=principal, origin_session_id=x_session_id
+		thread_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+		permanent=permanent,
 	)
 
 
