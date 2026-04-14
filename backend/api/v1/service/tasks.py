@@ -43,6 +43,7 @@ async def create_task(
 	data = task_in.model_dump(by_alias=True)
 	if not principal.is_admin:
 		data["user_id"] = principal.user.id
+	data["status"] = TaskStatus.PENDING
 	task = Task(**data)
 	session.add(task)
 	await session.commit()

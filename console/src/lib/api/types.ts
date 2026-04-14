@@ -10511,7 +10511,9 @@ export interface operations {
     };
     delete_thread_v1_threads__thread_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                permanent?: boolean;
+            };
             header?: {
                 "x-session-id"?: string | null;
             };

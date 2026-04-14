@@ -22,7 +22,6 @@ class ProviderBase(MetadataModel):
 	additional_headers: dict[str, str] | None = None
 	status: ProviderStatus = ProviderStatus.ENABLED
 	is_autofetch_enabled: bool = True
-	last_synced_at: datetime | None = None
 
 
 class ProviderCreate(ProviderBase):
@@ -43,13 +42,13 @@ class ProviderUpdate(MetadataUpdateModel):
 	additional_headers: dict[str, str] | None = None
 	status: ProviderStatus | None = None
 	is_autofetch_enabled: bool | None = None
-	last_synced_at: datetime | None = None
 
 
 class Provider(ProviderBase, TimestampedModel):
 	"""response schema."""
 
 	id: str
+	last_synced_at: datetime | None = None
 
 	@field_validator("name", mode="before")
 	@classmethod

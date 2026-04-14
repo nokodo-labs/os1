@@ -90,7 +90,6 @@ class ReminderUpdate(MetadataUpdateModel):
 	remind_at: datetime | None = None
 	recurrence: str | None = None
 	status: ReminderStatus | None = None
-	completed_at: datetime | None = None
 	list_id: TypeID | None = None
 	parent_id: TypeID | None = None
 	position: float | None = None
