@@ -544,8 +544,8 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 
 		case 'memory_create': {
 			if (isFailed) return { title: 'could not save memory' }
-			if (isActive) return { title: 'saving to memory' }
-			return { title: 'saved a memory' }
+			if (isActive) return { title: 'creating a memory' }
+			return { title: 'created a memory' }
 		}
 
 		case 'note_get': {

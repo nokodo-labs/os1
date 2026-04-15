@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ToolExecution } from '$lib/tools'
+	import MemoryCreateGroup from './MemoryCreateGroup.svelte'
 	import ToolStep from './ToolStep.svelte'
 
 	interface Props {
@@ -7,12 +8,42 @@
 	}
 
 	let { executions }: Props = $props()
+
+	// collapse consecutive memory_create steps into grouped segments
+	type Segment =
+		| { type: 'single'; execution: ToolExecution }
+		| { type: 'memory_create_group'; executions: ToolExecution[] }
+
+	let segments = $derived.by(() => {
+		const result: Segment[] = []
+		for (const exec of executions) {
+			if (exec.toolCall.name === 'memory_create') {
+				const last = result.at(-1)
+				if (last?.type === 'memory_create_group') {
+					last.executions.push(exec)
+				} else {
+					result.push({ type: 'memory_create_group', executions: [exec] })
+				}
+			} else {
+				result.push({ type: 'single', execution: exec })
+			}
+		}
+		return result
+	})
 </script>
 
 <div class="tool-group">
-	{#each executions as execution (execution.toolCall.id)}
+	{#each segments as segment, i (segment.type === 'single' ? segment.execution.toolCall.id : `memory-group-${i}`)}
 		<div class="tool-step-wrapper">
-			<ToolStep {execution} />
+			{#if segment.type === 'memory_create_group'}
+				{#if segment.executions.length === 1}
+					<ToolStep execution={segment.executions[0]} />
+				{:else}
+					<MemoryCreateGroup executions={segment.executions} />
+				{/if}
+			{:else}
+				<ToolStep execution={segment.execution} />
+			{/if}
 		</div>
 	{/each}
 </div>
