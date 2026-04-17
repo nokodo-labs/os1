@@ -232,6 +232,10 @@ export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	ctx.optimisticUserMessage = null
 	ctx.streamingAssistant = null
 	ctx.streamingAssistantParentId = null
+	// close any pending/running tool executions directly - incrementing
+	// activeRun above causes the finally-block safety net in handleSendMessage/
+	// handleRegenerateMessage to skip cleanup, so we must do it here.
+	ctx.toolTracker.closeAllActive()
 	ctx.rebuildRunBlocks()
 
 	// cancel signal to backend - authenticated request with proper error handling.

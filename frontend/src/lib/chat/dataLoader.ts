@@ -256,6 +256,12 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		Array.from(ctx.messageTree.values()).map((m) => m.id),
 		ctx
 	)
+	// safety net: any tool calls still pending/running after load are
+	// orphans from an interrupted run. close them as errored so we don't
+	// render permanent shimmer. if a matching run is still active, the
+	// subsequent resume stream (via subscribeToChatEvents catch-up) will
+	// overwrite their status back to completed via registerResult.
+	ctx.toolTracker.closeAllActive()
 	ctx.rebuildRunBlocks()
 	return true
 }

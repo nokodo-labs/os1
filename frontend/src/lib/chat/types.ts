@@ -174,10 +174,6 @@ export interface ChatContext {
 
 	// realtime
 	readonly typingUsers: SvelteSet<string>
-	readonly activeAgentRuns: SvelteMap<
-		string,
-		{ threadId: string; runId: string; agentId: string }
-	>
 
 	// derived
 	readonly isTemporaryChat: boolean

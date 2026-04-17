@@ -38,6 +38,7 @@
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
@@ -744,9 +745,10 @@
 										{:else if chat.streamingAssistant?.isError}
 											<button
 												type="button"
-												class="text-foreground/70 hover:text-foreground/95 rounded-xl bg-transparent px-3 py-1.5 text-sm transition-colors"
+												class="border-destructive/30 text-destructive hover:bg-destructive/10 flex items-center gap-1.5 rounded-xl border bg-transparent px-3 py-1.5 text-sm font-medium transition-colors"
 												onclick={() => chat.handleRegenerateMessage()}
 											>
+												<ArrowPath class="size-3.5" strokeWidth="2.5" />
 												retry
 											</button>
 										{/if}

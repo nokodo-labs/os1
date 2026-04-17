@@ -356,6 +356,14 @@ export async function resumeCreateAndRun(
 	ctx.runAbortController?.abort()
 	ctx.runAbortController = new AbortController()
 
+	// connect the new abort controller to the existing stream so
+	// cancellation (stop generation, page cleanup) actually closes the
+	// underlying fetch even though the stream was created with a
+	// different signal on the home page.
+	ctx.runAbortController.signal.addEventListener('abort', () => {
+		void stream.return(undefined)
+	})
+
 	// consume the thread_created event
 	const first = await stream.next()
 	if (first.done || !first.value) {

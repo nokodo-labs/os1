@@ -14,7 +14,7 @@ import { ToolExecutionTracker } from '$lib/tools'
 import { tick } from 'svelte'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { loadOlderMessages, loadTree } from './dataLoader'
-import { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions'
+import { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
 import {
 	buildAgentLookup,
 	buildMessageChildren,
@@ -107,12 +107,6 @@ export function createChatState(): ChatState {
 
 	// typing indicators (other users typing in this thread)
 	const typingUsers = new SvelteSet<string>()
-
-	// active agent runs
-	const activeAgentRuns = new SvelteMap<
-		string,
-		{ threadId: string; runId: string; agentId: string }
-	>()
 
 	// abort controller for streaming
 	let runAbortController: AbortController | null = null
@@ -223,6 +217,9 @@ export function createChatState(): ChatState {
 		// cannot corrupt the next thread's skip counter
 		messageSkip = 0
 		hasMoreMessages = true
+		// abort any active stream so the backend run is cancelled
+		runAbortController?.abort()
+		runAbortController = null
 		// clear run state to prevent leaking to other chats
 		optimisticUserMessage = null
 		streamingAssistant = null
@@ -449,9 +446,6 @@ export function createChatState(): ChatState {
 		// realtime
 		get typingUsers() {
 			return typingUsers
-		},
-		get activeAgentRuns() {
-			return activeAgentRuns
 		},
 
 		// derived

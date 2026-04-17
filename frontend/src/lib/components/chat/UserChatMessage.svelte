@@ -237,9 +237,10 @@
 <div
 	bind:this={messageRef}
 	class="flex animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2"
-	class:ml-auto={align === 'right'}
-	class:items-end={align === 'right'}
-	class:items-start={align === 'left'}
+	class:ml-auto={align === 'right' && !isEditing}
+	class:items-end={align === 'right' && !isEditing}
+	class:items-start={align === 'left' && !isEditing}
+	class:items-stretch={isEditing}
 	class:w-full={isEditing}
 	style:max-width={!isEditing ? '80%' : undefined}
 	onmouseenter={handleMouseEnter}
@@ -270,6 +271,7 @@
 	{#if content.trim().length > 0 || isEditing}
 		<div
 			class="bubble-wrapper"
+			class:w-full={isEditing}
 			class:imessage-right={!isEditing &&
 				showTail &&
 				tailStyle === 'imessage' &&
@@ -291,6 +293,7 @@
 				class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
 				class:px-5={isEditing}
 				class:py-3={isEditing}
+				class:w-full={isEditing}
 				style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
 			>
 				{#if isEditing}
@@ -360,7 +363,7 @@
 					</div>
 				{:else}
 					<div
-						class="text-foreground leading-relaxed wrap-break-word break-all whitespace-pre-wrap"
+						class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap"
 					>
 						{content}
 					</div>

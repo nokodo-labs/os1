@@ -1,15 +1,22 @@
 /**
  * real-time event subscriptions - single unified listener that dispatches
- * tool, message, typing, and run events by prefix for performance.
+ * tool, message, typing, attachment, and citation events by prefix.
+ *
+ * run lifecycle events (runs.active / run.started / run.completed / run.error
+ * / run.failed) are NOT handled here - they are owned by the global
+ * `activeRunsStore`, which tracks runs across all threads regardless of which
+ * chat page is mounted. this module reacts to that store via `$effect.root`
+ * to pick up any run for the current thread and resume its SSE stream.
  */
 
-import { isOwnEvent } from '$lib/api/sessionId'
 import { resumeRunStream } from '$lib/api/streaming/chatStream'
+import { isOwnEvent } from '$lib/api/sessionId'
 import {
 	eventStreamClient,
 	type StreamEvent,
 	type StreamMessage,
 } from '$lib/api/streaming/eventStream.svelte'
+import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap } from 'svelte/reactivity'
 import { buildMessageChildren, type ApiMessage } from './helpers'
@@ -17,16 +24,11 @@ import { consumeStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
 import type { ApiCitation, ChatContext } from './types'
 
-/** lightweight pointer for a run signal received over WS */
-interface RunSignal {
-	thread_id: string
-	run_id: string
-	agent_id: string
-}
-
 /**
  * subscribe to all real-time chat events for a thread through a single
  * event stream listener. dispatches by event type prefix for performance.
+ * also watches the global `activeRunsStore` to auto-resume any run for this
+ * thread (whether it started before or after this chat page mounted).
  * returns an unsubscribe function that cleans up all internal state.
  */
 export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () => void {
@@ -34,9 +36,11 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 	const typingTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
 	// abort controllers for resume streams, keyed by run_id
 	const resumeAborts = new SvelteMap<string, AbortController>()
+	// run ids we've already kicked off a resume for - prevents duplicate
+	// resumes when the store re-emits (e.g. run.started after runs.active).
+	const attemptedResumes = new Set<string>()
 
 	ctx.typingUsers.clear()
-	ctx.activeAgentRuns.clear()
 
 	// tool events
 
@@ -142,7 +146,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	// run events (run started/completed + active runs catchup)
+	// run resumption (driven by the global activeRunsStore)
 
 	/** attempt to resume a run's SSE stream and feed it into consumeStream */
 	function tryResumeRun(runId: string, agentId: string): void {
@@ -150,6 +154,9 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		if (ctx.isGenerating) return
 		// skip if already resuming this run
 		if (resumeAborts.has(runId)) return
+		// skip duplicates (store re-emits, etc.)
+		if (attemptedResumes.has(runId)) return
+		attemptedResumes.add(runId)
 
 		const ac = new AbortController()
 		resumeAborts.set(runId, ac)
@@ -176,8 +183,19 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		})
 
 		consumeStream(stream, { runId: runGen, threadId, parentId: null }, ctx)
-			.catch(() => {
-				// aborted or network error - expected on navigate-away
+			.catch((err: unknown) => {
+				// intentional abort (navigate away, run completed/errored) - ignore
+				if (ac.signal.aborted) return
+				if (ctx.activeRun !== runGen) return
+				// real error reached us: surface it in the ghost assistant bubble
+				const errorMessage =
+					err instanceof Error && err.message
+						? err.message
+						: 'lost connection to the run'
+				if (ctx.streamingAssistant?.messageId === `resume-${runId}`) {
+					ctx.streamingAssistant.isError = true
+					ctx.streamingAssistant.errorMessage = errorMessage
+				}
 			})
 			.finally(() => {
 				resumeAborts.delete(runId)
@@ -188,53 +206,16 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			})
 	}
 
-	function handleRunEvent(ev: StreamMessage): void {
-		// handle active runs signal (single message with list of run pointers)
-		if (ev.type === 'runs.active') {
-			const runs = ((ev as Record<string, unknown>).data ?? []) as RunSignal[]
-			for (const run of runs) {
-				if (run.thread_id !== threadId) continue
-				if (run.run_id && run.agent_id) {
-					ctx.activeAgentRuns.set(run.run_id, {
-						threadId,
-						runId: run.run_id,
-						agentId: run.agent_id,
-					})
-					tryResumeRun(run.run_id, run.agent_id)
-				}
-			}
-			return
+	/** abort a resume stream when its run is removed from the global store. */
+	function dropResumeForRun(runId: string): void {
+		const ac = resumeAborts.get(runId)
+		if (ac) {
+			ac.abort()
+			resumeAborts.delete(runId)
 		}
-
-		// handle run.started
-		if (ev.type === 'run.started') {
-			const data = ((ev as Record<string, unknown>).data ?? {}) as RunSignal
-			if (data.thread_id !== threadId) return
-			if (!data.run_id || !data.agent_id) return
-			ctx.activeAgentRuns.set(data.run_id, {
-				threadId,
-				runId: data.run_id,
-				agentId: data.agent_id,
-			})
-			tryResumeRun(data.run_id, data.agent_id)
-			return
-		}
-
-		// handle run.completed
-		if (ev.type === 'run.completed') {
-			const data = ((ev as Record<string, unknown>).data ?? {}) as RunSignal
-			if (data.thread_id !== threadId) return
-			if (!data.run_id) return
-			ctx.activeAgentRuns.delete(data.run_id)
-			// close any tool calls still pending/running - the run is over
+		// clear ghost streaming assistant if it belonged to this run
+		if (ctx.streamingAssistant?.messageId === `resume-${runId}`) {
 			ctx.toolTracker.closeAllActive()
-			// abort any active resume for this run (if SSE hasn't ended yet)
-			const runAc = resumeAborts.get(data.run_id)
-			if (runAc) {
-				runAc.abort()
-				resumeAborts.delete(data.run_id)
-			}
-			return
 		}
 	}
 
@@ -266,7 +247,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	// single unified listener
+	// single unified listener (no run.* handling - see activeRunsStore)
 
 	const unsub = eventStreamClient.subscribe((msg) => {
 		if (!msg || typeof msg !== 'object') return
@@ -283,17 +264,29 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleAttachmentEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('citation.')) {
 			handleCitationEvent(ev as StreamEvent)
-		} else if (
-			ev.type === 'runs.active' ||
-			ev.type === 'run.started' ||
-			ev.type === 'run.completed'
-		) {
-			handleRunEvent(ev as StreamMessage)
 		}
+	})
+
+	// reactive bridge to the global run store: any run for this thread that
+	// exists in the store (now or in the future) is auto-resumed. this works
+	// whether the run started before this page mounted (runs.active catch-up
+	// from ws connect) or after (run.started broadcast).
+	const disposeRunWatcher = $effect.root(() => {
+		$effect(() => {
+			for (const run of activeRunsStore.runs.values()) {
+				if (run.threadId !== threadId) continue
+				tryResumeRun(run.runId, run.agentId)
+			}
+			// drop any resume whose run no longer exists in the global store
+			for (const runId of resumeAborts.keys()) {
+				if (!activeRunsStore.runs.has(runId)) dropResumeForRun(runId)
+			}
+		})
 	})
 
 	return () => {
 		unsub()
+		disposeRunWatcher()
 		// cleanup typing timers
 		for (const t of typingTimers.values()) clearTimeout(t)
 		typingTimers.clear()
@@ -301,7 +294,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		// cleanup resume aborts
 		for (const ac of resumeAborts.values()) ac.abort()
 		resumeAborts.clear()
-		ctx.activeAgentRuns.clear()
+		attemptedResumes.clear()
 	}
 }
 

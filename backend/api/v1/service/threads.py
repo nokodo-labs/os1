@@ -123,7 +123,7 @@ async def generate_thread_metadata(
 	async with session_scope(session) as session:
 		# auth: caller must have admin-level access on the thread
 		await require_thread_access(
-			str(thread_id),
+			thread_id,
 			session,
 			principal,
 			required_level=AccessLevel.ADMIN,
@@ -943,9 +943,12 @@ async def create_message(
 	if message_in.type == MessageType.USER and sender_user_id is None:
 		data["sender_user_id"] = principal.user.id
 	parent_id = data.pop("parent_id", None)
-	if parent_id is None:
+	# only default to current_message_id when the caller did NOT explicitly
+	# set parent_id. an explicit null means "create a root message" (e.g.
+	# sibling of the first message when editing).
+	if parent_id is None and "parent_id" not in message_in.model_fields_set:
 		parent_id = thread.current_message_id
-	else:
+	elif parent_id is not None:
 		parent = await session.get(Message, parent_id)
 		if not parent or parent.thread_id != thread_id:
 			raise HTTPException(

@@ -80,7 +80,7 @@ export {
 } from './userActions'
 
 // event subscriptions
-export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions'
+export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
 
 // thread actions
 export { deleteThread, updateThread } from './threadActions'
