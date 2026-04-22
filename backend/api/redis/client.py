@@ -1,0 +1,104 @@
+"""singleton redis / valkey client.
+
+the client is connected at app startup and closed at shutdown. redis is a
+hard dependency: connection failures during boot abort startup so the
+problem surfaces immediately rather than silently breaking cross-worker
+features (steering bus, run sse fanout) at runtime.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Awaitable
+from typing import Final, cast
+
+import redis.asyncio as redis_async
+from redis.asyncio import Redis
+
+from api.boot_settings import boot_settings
+
+
+logger = logging.getLogger(__name__)
+
+
+# small, predictable pool. the api is mostly bound by db / model latency,
+# and redis ops are sub-ms; we don't need a large pool.
+_DEFAULT_MAX_CONNECTIONS: Final[int] = 32
+
+# redis ops should be near-instant on healthy infra. surface stalls quickly
+# rather than letting requests hang.
+_DEFAULT_SOCKET_TIMEOUT_S: Final[float] = 2.0
+_DEFAULT_SOCKET_CONNECT_TIMEOUT_S: Final[float] = 2.0
+
+
+class RedisClient:
+	"""lifecycle-managed redis connection holder.
+
+	minimal by design - higher-level primitives (pub/sub, streams, locks)
+	live in dedicated modules so the client stays a thin connection manager.
+	"""
+
+	def __init__(self) -> None:
+		self._conn: Redis | None = None
+		self._url: str | None = None
+
+	@property
+	def url(self) -> str | None:
+		"""the configured redis url, if any."""
+		return self._url
+
+	async def connect(
+		self,
+		url: str | None = None,
+		max_connections: int = _DEFAULT_MAX_CONNECTIONS,
+	) -> None:
+		"""open the connection pool and verify reachability.
+
+		idempotent: a second call is a no-op while connected. raises on
+		connection failure - redis is required and there is no fallback.
+		"""
+		if self._conn is not None:
+			return
+		target_url = url or boot_settings.REDIS_URL
+		conn = redis_async.from_url(
+			target_url,
+			max_connections=max_connections,
+			socket_timeout=_DEFAULT_SOCKET_TIMEOUT_S,
+			socket_connect_timeout=_DEFAULT_SOCKET_CONNECT_TIMEOUT_S,
+			decode_responses=False,
+			health_check_interval=30,
+			client_name=boot_settings.REDIS_CLIENT_NAME,
+		)
+		# TODO(observability): once OpenTelemetry is wired up, add
+		# opentelemetry-instrumentation-redis to instrument every op
+		# with spans + metrics.
+		# redis-py types ``ping`` as a union of sync/async to share the
+		# class hierarchy; the async client always returns an awaitable.
+		await cast("Awaitable[bool]", conn.ping())
+		self._conn = conn
+		self._url = target_url
+		logger.info("redis connected at %s", target_url)
+
+	async def aclose(self) -> None:
+		"""close the connection pool. idempotent."""
+		if self._conn is None:
+			return
+		conn = self._conn
+		self._conn = None
+		self._url = None
+		await conn.aclose()
+
+	def get(self) -> Redis:
+		"""return the live redis connection.
+
+		raises ``RuntimeError`` if called before ``connect()`` or after
+		``aclose()``.
+		"""
+		if self._conn is None:
+			raise RuntimeError(
+				"redis client is not connected; call connect() during app startup"
+			)
+		return self._conn
+
+
+redis_client = RedisClient()
