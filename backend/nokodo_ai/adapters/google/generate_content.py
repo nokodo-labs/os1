@@ -442,6 +442,17 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			)
 		return self._generate_once(messages, model=model, tools=tools, params=params)
 
+	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
+		"""google genai does not expose per-request IDs or a cancel endpoint.
+
+		closing the HTTP stream (which happens automatically when the
+		asyncio task is cancelled) is the only way to stop generation.
+
+		:param latest_message: unused - google has no cancel API.
+		:returns: always False.
+		"""
+		return False
+
 	async def _generate_once(
 		self,
 		messages: list[Message],

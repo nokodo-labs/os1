@@ -19,6 +19,12 @@ class ChatModelDelta(Base):
 
 	- message represents a chunk of data (usually partial assistant output)
 	- done is a sentinel indicating the stream for this response is complete
+
+	the provider's run/response id (when the provider exposes one) is
+	carried inside ``message.metadata`` under the namespaced provider data
+	key - same channel used for tool call ids - and read with
+	``nokodo_ai.utils.provider_meta.get_provider_run_id``. callers that
+	want to cancel server-side use it with ``ChatModel.cancel_generation``.
 	"""
 
 	message: AssistantMessage = Field(default_factory=AssistantMessage)

@@ -28,6 +28,7 @@ from ...messages import (
 from ...tool import ToolDefinition
 from ...types import JSONObject
 from ...utils.provider_meta import (
+	RunIdTracker,
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
@@ -307,8 +308,16 @@ async def _openai_stream_to_assistant_messages(
 	tc_created_at: dict[str, float] = {}
 	tc_metadata: dict[str, JSONObject] = {}
 
+	run_tracker = RunIdTracker("openai.chat_completions")
+
 	async for chunk in stream:
 		now = time()
+
+		chunk_id = getattr(chunk, "id", None)
+		if chunk_id:
+			meta_chunk = run_tracker.observe(chunk_id)
+			if meta_chunk is not None:
+				yield meta_chunk
 
 		if chunk.usage is not None:
 			usage = _openai_usage_to_usage(chunk.usage)

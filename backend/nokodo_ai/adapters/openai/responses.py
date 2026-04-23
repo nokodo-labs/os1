@@ -26,7 +26,9 @@ from ...messages import (
 from ...tool import ToolDefinition
 from ...types import JSONObject
 from ...utils.provider_meta import (
+	RunIdTracker,
 	get_provider_tool_call_id,
+	get_provider_value,
 	provider_tool_call_metadata,
 )
 from ...utils.validators import warn_known_model
@@ -37,6 +39,7 @@ from .types import (
 	OpenAIEasyInputMessageParam,
 	OpenAIReasoning,
 	OpenAIResponseCompletedEvent,
+	OpenAIResponseCreatedEvent,
 	OpenAIResponseFunctionCallArgumentsDeltaEvent,
 	OpenAIResponseFunctionCallArgumentsDoneEvent,
 	OpenAIResponseFunctionCallOutput,
@@ -228,8 +231,18 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		tc_metadata: dict[str, JSONObject] = {}
 		tc_names: dict[str, str] = {}
 
+		run_tracker = RunIdTracker("openai.responses")
+
 		async for event in stream:
 			now = time()
+
+			# --- response.created: surface the provider run id so the
+			# cancel path can find it in metadata.
+			if isinstance(event, OpenAIResponseCreatedEvent):
+				meta_chunk = run_tracker.observe(event.response.id)
+				if meta_chunk is not None:
+					yield meta_chunk
+				continue
 
 			# --- text delta ---
 			if isinstance(event, OpenAIResponseTextDeltaEvent):
@@ -303,6 +316,29 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 						total_tokens=response_usage.total_tokens,
 					)
 					yield AssistantMessage(usage=usage)
+
+	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
+		"""cancel an in-flight /v1/responses generation server-side.
+
+		extracts the response id from the accumulated message's metadata,
+		then calls ``POST /v1/responses/{id}/cancel``.
+
+		:param latest_message: the accumulated ``AssistantMessage`` from
+			streaming deltas.
+		:returns: True if the provider acknowledged the cancel.
+		"""
+		run_id = get_provider_value(
+			metadata=latest_message.metadata,
+			provider="openai.responses",
+			key="run_id",
+		)
+		if not isinstance(run_id, str) or not run_id:
+			return False
+		try:
+			await self._client.responses.cancel(run_id)
+		except Exception:
+			return False
+		return True
 
 
 def _content_part_to_responses(

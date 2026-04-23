@@ -90,3 +90,16 @@ class BaseChatAdapter(BaseAdapter, Base, ABC):
 				...
 		"""
 		raise NotImplementedError("generate() not implemented in base class")
+
+	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
+		"""cancel a server-side generation given the accumulated message.
+
+		the adapter extracts its own provider run id from the message's
+		metadata and uses it to issue a provider-side cancel.
+
+		:param latest_message: the accumulated ``AssistantMessage`` built
+			from streaming deltas so far.
+		:returns: True if the provider acknowledged the cancel, False
+			otherwise (unsupported, already finished, no run_id found, etc).
+		"""
+		return False

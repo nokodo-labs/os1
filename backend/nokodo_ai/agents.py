@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -13,7 +14,7 @@ from pydantic import Field, SkipValidation, ValidationError
 from .base import Base
 from .chat_models import ChatModel
 from .context import AgentContext
-from .deltas import AgentDelta
+from .deltas import AgentDelta, ChatModelDelta
 from .filters import Filter
 from .hooks import Hook
 from .messages import (
@@ -32,6 +33,12 @@ from .utils.dicts import deep_merge
 logger = logging.getLogger(__name__)
 
 AgentProducedMessages = list[AssistantMessage | ToolMessage]
+
+
+# strong references to fire-and-forget cancel tasks so the event loop does
+# not GC them before they have a chance to call the provider cancel API.
+# python 3.12+ keeps only weak references from asyncio.create_task().
+_cancel_tasks: set[asyncio.Task[None]] = set()
 
 
 class Agent[AppContextT = None](Base):
@@ -146,14 +153,25 @@ class Agent[AppContextT = None](Base):
 				or a specific tool name
 			stream: if True, yields messages as they are produced
 
+		note on out-of-band injection: to inject user messages into a running
+		agent loop (e.g. run-steering), add a ``SteeringFilter`` to
+		``self.filters`` before calling ``run``. filters run at every iteration
+		boundary and can drain external inboxes into the thread.
+
 		returns:
 			list of messages produced during this run (non-streaming), or
 			an async iterator yielding messages as they are produced (streaming)
 		"""
 		if stream:
-			return self._run_stream(thread, app_context, tool_choice=tool_choice)
+			return self._run_stream(
+				thread,
+				app_context,
+				tool_choice=tool_choice,
+			)
 		return await self._run_sync(
-			thread=thread, app_context=app_context, tool_choice=tool_choice
+			thread=thread,
+			app_context=app_context,
+			tool_choice=tool_choice,
 		)
 
 	async def _run_sync(
@@ -166,7 +184,8 @@ class Agent[AppContextT = None](Base):
 		produced: AgentProducedMessages = []
 
 		for iteration in range(self.max_iterations):
-			# apply filters to thread messages (pre-processing)
+			# apply filters to thread messages (pre-processing). filters can
+			# also inject messages from external sources (see SteeringFilter).
 			filtered_thread = thread
 			for filter_ in self.filters:
 				filtered_thread = await filter_.process(filtered_thread, app_context)
@@ -225,7 +244,8 @@ class Agent[AppContextT = None](Base):
 		chunk_index = 0
 
 		for iteration in range(self.max_iterations):
-			# apply filters to thread (pre-processing)
+			# apply filters to thread (pre-processing). filters can also inject
+			# messages from external sources (see SteeringFilter).
 			filtered_thread = thread
 			for filter_ in self.filters:
 				filtered_thread = await filter_.process(filtered_thread, app_context)
@@ -234,9 +254,8 @@ class Agent[AppContextT = None](Base):
 
 			# stream from chat model and accumulate full message
 			assistant_message = AssistantMessage()
-			async for chat_delta in self.chat_model.generate(
+			async for chat_delta in self._stream_with_cancel(
 				filtered_thread,
-				stream=True,
 				tools=self.tool_definitions,
 				tool_choice=current_tool_choice,
 			):
@@ -279,9 +298,8 @@ class Agent[AppContextT = None](Base):
 
 		# max iterations reached - final call without tools
 		final_message = AssistantMessage()
-		async for chat_delta in self.chat_model.generate(
+		async for chat_delta in self._stream_with_cancel(
 			thread,
-			stream=True,
 			tools=self.tool_definitions,
 			tool_choice="none",
 		):
@@ -300,6 +318,61 @@ class Agent[AppContextT = None](Base):
 			)
 
 		yield AgentDelta.done_sentinel(chunk_index=chunk_index)
+
+	async def _stream_with_cancel(
+		self,
+		thread: Thread,
+		tools: list[ToolDefinition],
+		tool_choice: Literal["auto", "none", "required"] | str | None,
+	) -> AsyncIterator[ChatModelDelta]:
+		"""stream chat model deltas; notify provider on any non-natural exit.
+
+		accumulates the ``AssistantMessage`` from streaming deltas. when the
+		loop exits without observing a final ``done`` delta - cancellation,
+		downstream exception, ``aclose`` from the consumer, or any other
+		unclean termination - passes the accumulated message to
+		``ChatModel.cancel_generation`` fire-and-forget so the adapter can
+		extract its provider run id and stop the generation server-side.
+
+		when the provider stream ends naturally (last delta has ``done=True``)
+		no cancel notification is issued - the run completed on its own.
+
+		:param thread: the conversation thread.
+		:param tools: tool definitions available for this call.
+		:param tool_choice: tool selection strategy.
+		"""
+		accumulated = AssistantMessage()
+		completed_naturally = False
+		try:
+			async for chat_delta in self.chat_model.generate(
+				thread,
+				stream=True,
+				tools=tools,
+				tool_choice=tool_choice,
+			):
+				accumulated = accumulated.merge(chat_delta.message)
+				yield chat_delta
+				if chat_delta.done:
+					completed_naturally = True
+		finally:
+			if not completed_naturally:
+				# fire-and-forget: don't block whatever caused the early exit
+				# (cancel, exception, aclose) on a slow provider cancel call.
+				cancel_task = asyncio.create_task(
+					self._safe_cancel_generation(accumulated),
+					name="chat_model_cancel_generation",
+				)
+				# strong-ref pattern - python 3.12+ may GC unreferenced tasks
+				# before they run. keep the ref until done.
+				_cancel_tasks.add(cancel_task)
+				cancel_task.add_done_callback(_cancel_tasks.discard)
+
+	async def _safe_cancel_generation(self, latest_message: AssistantMessage) -> None:
+		"""best-effort cancel; swallows exceptions."""
+		try:
+			await self.chat_model.cancel_generation(latest_message)
+		except Exception:
+			logger.debug("provider cancel_generation raised", exc_info=True)
 
 	async def _execute_tools(
 		self,

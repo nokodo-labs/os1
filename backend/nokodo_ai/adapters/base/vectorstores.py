@@ -114,9 +114,8 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@abstractmethod
 	async def add(
 		self,
-		collection: str,
+		collection_name: str,
 		chunks: list[Chunk],
-		*,
 		sparse: bool = False,
 	) -> None:
 		"""store chunks in the vectorstore.
@@ -126,7 +125,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		from chunk.content alongside the dense vectors.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			chunks: data chunks with id, content, embedding, and metadata
 			sparse: also index chunk.content for BM25 sparse retrieval
 		"""
@@ -135,8 +134,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@abstractmethod
 	async def search(
 		self,
-		collection: str,
-		*,
+		collection_name: str,
 		query: list[float] | None = None,
 		text_query: str | None = None,
 		limit: int = 10,
@@ -156,7 +154,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		set normalize=False to return raw scores from the backend.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			query: dense embedding vector for similarity search
 			text_query: text query for BM25 sparse matching
 			limit: maximum number of results to return
@@ -173,27 +171,27 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@overload
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str],
 	) -> None: ...
 
 	@overload
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: ChunkFilter,
 	) -> None: ...
 
 	@abstractmethod
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str] | ChunkFilter,
 	) -> None:
 		"""remove chunks by their string ids or by filter.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			target: identifiers of chunks to remove, or a filter to match
 		"""
 		...
@@ -201,16 +199,15 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@overload
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str],
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None: ...
 
 	@overload
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: ChunkFilter,
 		*,
 		payload: dict[str, object] | None = None,
@@ -219,9 +216,8 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@abstractmethod
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str] | ChunkFilter,
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None:
 		"""update matching chunks in place.
@@ -237,8 +233,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@abstractmethod
 	async def ensure_collection(
 		self,
-		collection: str,
-		*,
+		collection_name: str,
 		vector_size: int,
 		sparse: bool = False,
 		indexes: Index | None = None,
@@ -246,7 +241,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		"""ensure a collection exists with the desired vector configuration.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			vector_size: dimensionality of dense vectors
 			sparse: also configure BM25 sparse vector support
 			indexes: field_name -> field_type mapping for scalar field

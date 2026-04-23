@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Literal, overload
+from typing import ClassVar, Literal, overload
 
 from qdrant_client.models import (
 	Condition,
@@ -63,6 +63,10 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 
 	type: Literal["qdrant.vectorstore"] = "qdrant.vectorstore"
 
+	# process-local cache of known-existing collection names to avoid
+	# redundant RPC round-trips on every delete/update call
+	_known_collections: ClassVar[set[str]] = set()
+
 	def _to_point_id(self, id_: str) -> uuid.UUID:
 		"""convert an external string id into a Qdrant-compatible point id."""
 		try:
@@ -70,10 +74,18 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		except ValueError:
 			return uuid.uuid5(uuid.NAMESPACE_URL, f"nokodo:{id_}")
 
+	async def _collection_exists(self, collection_name: str) -> bool:
+		"""check collection existence with a process-local cache."""
+		if collection_name in self._known_collections:
+			return True
+		exists = await self._client.collection_exists(collection_name=collection_name)
+		if exists:
+			self._known_collections.add(collection_name)
+		return exists
+
 	async def ensure_collection(
 		self,
-		collection: str,
-		*,
+		collection_name: str,
 		vector_size: int,
 		sparse: bool = False,
 		indexes: Index | None = None,
@@ -85,11 +97,11 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		indexes are applied every time (idempotent) so fields added later
 		are automatically indexed on existing collections.
 		"""
-		exists = await self._client.collection_exists(collection_name=collection)
+		exists = await self._collection_exists(collection_name)
 		if not exists:
 			if sparse:
 				await self._client.create_collection(
-					collection_name=collection,
+					collection_name=collection_name,
 					vectors_config={
 						"dense": VectorParams(
 							size=vector_size,
@@ -102,24 +114,25 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				)
 			else:
 				await self._client.create_collection(
-					collection_name=collection,
+					collection_name=collection_name,
 					vectors_config=VectorParams(
 						size=vector_size,
 						distance=Distance.COSINE,
 					),
 				)
+			self._known_collections.add(collection_name)
 		# always apply indexes (idempotent - no-op if field already indexed)
 		if indexes:
 			for field_name, field_type in indexes.items():
 				await self._client.create_payload_index(
-					collection_name=collection,
+					collection_name=collection_name,
 					field_name=field_name,
 					field_schema=PayloadSchemaType(field_type),
 				)
 
 	async def add(
 		self,
-		collection: str,
+		collection_name: str,
 		chunks: list[Chunk],
 		*,
 		sparse: bool = False,
@@ -149,12 +162,11 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 						vector=chunk.embedding,
 					)
 				)
-		await self._client.upsert(collection_name=collection, points=points)
+		await self._client.upsert(collection_name=collection_name, points=points)
 
 	async def search(
 		self,
-		collection: str,
-		*,
+		collection_name: str,
 		query: list[float] | None = None,
 		text_query: str | None = None,
 		limit: int = 10,
@@ -167,7 +179,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		qf = self._to_qdrant_filter(query_filter) if query_filter else None
 		if query is not None and text_query is not None:
 			return await self._search_hybrid(
-				collection,
+				collection_name,
 				query=query,
 				text_query=text_query,
 				limit=limit,
@@ -178,7 +190,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 			)
 		if query is not None:
 			return await self._search_dense(
-				collection,
+				collection_name,
 				query=query,
 				limit=limit,
 				offset=offset,
@@ -187,7 +199,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 			)
 		if text_query is not None:
 			return await self._search_sparse(
-				collection,
+				collection_name,
 				text_query=text_query,
 				limit=limit,
 				offset=offset,
@@ -199,24 +211,24 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	@overload
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str],
 	) -> None: ...
 
 	@overload
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: ChunkFilter,
 	) -> None: ...
 
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str] | ChunkFilter,
 	) -> None:
 		"""remove chunks by their string ids or by filter."""
-		exists = await self._client.collection_exists(collection_name=collection)
+		exists = await self._collection_exists(collection_name)
 		if not exists:
 			return
 		if isinstance(target, list):
@@ -226,18 +238,18 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				self._to_point_id(id_) for id_ in target
 			]
 			await self._client.delete(
-				collection_name=collection,
+				collection_name=collection_name,
 				points_selector=PointIdsList(points=point_ids),
 			)
 		else:
 			await self._client.delete(
-				collection_name=collection,
+				collection_name=collection_name,
 				points_selector=FilterSelector(filter=self._to_qdrant_filter(target)),
 			)
 
 	async def _search_dense(
 		self,
-		collection: str,
+		collection_name: str,
 		*,
 		query: list[float],
 		limit: int,
@@ -247,7 +259,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	) -> list[ChunkSearchResult]:
 		"""dense cosine similarity search."""
 		response = await self._client.query_points(
-			collection_name=collection,
+			collection_name=collection_name,
 			query=query,
 			limit=limit,
 			offset=offset,
@@ -267,7 +279,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 
 	async def _search_sparse(
 		self,
-		collection: str,
+		collection_name: str,
 		*,
 		text_query: str,
 		limit: int,
@@ -277,7 +289,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	) -> list[ChunkSearchResult]:
 		"""BM25 sparse text search."""
 		response = await self._client.query_points(
-			collection_name=collection,
+			collection_name=collection_name,
 			query=Document(text=text_query, model="Qdrant/bm25"),
 			using="bm25",
 			limit=limit,
@@ -291,7 +303,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 
 	async def _search_hybrid(
 		self,
-		collection: str,
+		collection_name: str,
 		*,
 		query: list[float],
 		text_query: str,
@@ -307,7 +319,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		# candidates for the fusion algorithm to work well.
 		prefetch_n = max(limit * 3, 30)
 		response = await self._client.query_points(
-			collection_name=collection,
+			collection_name=collection_name,
 			prefetch=[
 				Prefetch(
 					query=query,
@@ -373,7 +385,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str] | ChunkFilter,
 		*,
 		payload: dict[str, object] | None = None,
@@ -381,7 +393,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		"""update matching chunks in place."""
 		if payload is None:
 			return
-		exists = await self._client.collection_exists(collection_name=collection)
+		exists = await self._collection_exists(collection_name)
 		if not exists:
 			if isinstance(target, list) and target:
 				raise ValueError(
@@ -393,7 +405,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				return
 			point_ids = [self._to_point_id(id_) for id_ in target]
 			found = await self._client.retrieve(
-				collection_name=collection,
+				collection_name=collection_name,
 				ids=point_ids,
 				with_payload=False,
 				with_vectors=False,
@@ -405,13 +417,13 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				]
 				raise ValueError(f"chunks not found: {missing}")
 			await self._client.set_payload(
-				collection_name=collection,
+				collection_name=collection_name,
 				payload=payload,
 				points=PointIdsList(points=point_ids),  # type: ignore[arg-type]
 			)
 		else:
 			await self._client.set_payload(
-				collection_name=collection,
+				collection_name=collection_name,
 				payload=payload,
 				points=FilterSelector(filter=self._to_qdrant_filter(target)),
 			)

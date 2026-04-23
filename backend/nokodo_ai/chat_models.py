@@ -110,3 +110,18 @@ class ChatModel(ChatGenerationParams, AdapterEnabledBase[ChatAdapter]):
 			tools=tools,
 			params=effective_params,
 		)
+
+	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
+		"""ask the adapter to cancel an in-flight generation server-side.
+
+		callers should also close their stream context; this method only
+		handles provider-side termination to stop generating tokens that
+		will not be consumed.
+
+		:param latest_message: the accumulated ``AssistantMessage`` built
+			from streaming deltas. the adapter extracts whatever
+			provider-specific id it needs from the message metadata.
+		:returns: True if the provider acknowledged the cancel, False
+			otherwise (unsupported or already finished).
+		"""
+		return await self.adapter.cancel_generation(latest_message)

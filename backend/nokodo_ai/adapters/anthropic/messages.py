@@ -26,6 +26,7 @@ from ...messages import (
 from ...tool import ToolDefinition
 from ...utils.json_schema import process_schema
 from ...utils.provider_meta import (
+	RunIdTracker,
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
@@ -40,6 +41,7 @@ from .types import (
 	AnthropicRawContentBlockDeltaEvent,
 	AnthropicRawContentBlockStartEvent,
 	AnthropicRawContentBlockStopEvent,
+	AnthropicRawMessageStartEvent,
 	AnthropicTextBlock,
 	AnthropicTextBlockParam,
 	AnthropicTextDelta,
@@ -120,6 +122,17 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 				messages, model=model, tools=tools, params=params
 			)
 		return self._generate_once(messages, model=model, tools=tools, params=params)
+
+	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
+		"""anthropic has no server-side cancel endpoint.
+
+		closing the HTTP stream (which happens automatically when the
+		asyncio task is cancelled) is the only way to stop generation.
+
+		:param latest_message: unused - anthropic has no cancel API.
+		:returns: always False.
+		"""
+		return False
 
 	async def _generate_once(
 		self,
@@ -281,8 +294,18 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		tc_names: dict[str, str] = {}
 		tc_created_at: dict[str, float] = {}
 
+		run_tracker = RunIdTracker("anthropic.messages")
+
 		async for event in stream:
 			now = time()
+
+			# --- message_start: surface the provider message id for
+			# consistent metadata across all adapters.
+			if isinstance(event, AnthropicRawMessageStartEvent):
+				meta_chunk = run_tracker.observe(event.message.id)
+				if meta_chunk is not None:
+					yield meta_chunk
+				continue
 
 			if isinstance(event, AnthropicRawContentBlockStartEvent):
 				block = event.content_block

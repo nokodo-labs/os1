@@ -14,16 +14,8 @@ from nokodo_ai import (
 	UserMessage,
 	tool,
 )
-from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter
-from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
-from nokodo_ai.adapters.ollama import OllamaChatAdapter, OllamaEmbeddingsAdapter
-from nokodo_ai.adapters.openai import (
-	OpenAIChatCompletionsAdapter,
-	OpenAIEmbeddingsAdapter,
-	OpenAIResponsesAdapter,
-)
 from nokodo_ai.context import AgentContext
 from nokodo_ai.tool import ToolDefinition
 
@@ -40,6 +32,7 @@ def test_chat_model_resolves_openai_model() -> None:
 			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 
@@ -50,6 +43,7 @@ def test_chat_model_adapter_shorthand_resolves_to_full_type() -> None:
 		"gpt-4o",
 		adapter={"type": "openai", "api_key": "test"},
 	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 	assert chat_model.adapter.type.startswith("openai.")
@@ -62,6 +56,7 @@ def test_chat_model_resolves_openai_explicit() -> None:
 			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 
@@ -73,6 +68,7 @@ def test_chat_model_resolves_openai_responses_api() -> None:
 			"adapter": {"type": "openai.responses", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIResponsesAdapter)
 
@@ -84,6 +80,7 @@ def test_chat_model_resolves_anthropic() -> None:
 			"adapter": {"type": "anthropic.messages", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
 	assert isinstance(chat_model.adapter, AnthropicMessagesAdapter)
 
@@ -92,6 +89,7 @@ def test_chat_model_resolves_ollama() -> None:
 	chat_model = ChatModel.model_validate(
 		{"model_name": "llama3.2", "adapter": {"type": "ollama.chat"}}
 	)
+	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
 	assert isinstance(chat_model.adapter, OllamaChatAdapter)
 
@@ -103,6 +101,7 @@ def test_chat_model_resolves_google() -> None:
 			"adapter": {"type": "google.generate_content", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
 
 	assert isinstance(chat_model.adapter, GoogleGenerateContentAdapter)
 
@@ -129,6 +128,7 @@ def test_embedding_resolves_openai() -> None:
 			"adapter": {"type": "openai.embedding", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
 
 	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
 
@@ -137,6 +137,7 @@ def test_embedding_resolves_ollama() -> None:
 	embedder = EmbeddingModel.model_validate(
 		{"model_name": "nomic-embed-text", "adapter": {"type": "ollama.embedding"}}
 	)
+	from nokodo_ai.adapters.ollama import OllamaEmbeddingsAdapter
 
 	assert isinstance(embedder.adapter, OllamaEmbeddingsAdapter)
 

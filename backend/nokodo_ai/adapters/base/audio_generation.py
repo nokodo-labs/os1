@@ -141,6 +141,4 @@ class BaseAudioAdapter(BaseAdapter, Base, ABC):
 		"""
 		result = await self._create(prompt, model, params=params)
 		clip = result.clips[0] if result.clips else None
-		yield AudioProgressEvent(
-			step=1, total_steps=1, progress=1.0, partial_audio=clip
-		)
+		yield AudioProgressEvent(step=1, total_steps=1, progress=1.0, partial_audio=clip)
