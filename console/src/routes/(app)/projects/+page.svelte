@@ -3,14 +3,12 @@
 	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type Note = Schemas['Note']
-	type SearchResultItem = Schemas['SearchResultItem']
+	type Project = Schemas['Project']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import NoteDetailsModal from '$lib/components/NoteDetailsModal.svelte'
+	import ProjectDetailsModal from '$lib/components/ProjectDetailsModal.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
-
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
@@ -19,93 +17,65 @@
 		ChevronLeft,
 		ChevronRight,
 		Clock,
-		FileText,
+		FolderKanban,
 		Hash,
+		MessageSquare,
 		RefreshCw,
 		Search,
-		Tag,
 		User,
 		X,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
-	type SortKey = 'updated_at' | 'created_at' | 'title'
+	type SortKey = 'updated_at' | 'created_at' | 'name'
 	type SortDir = 'asc' | 'desc'
 
-	const sortOptions: Array<{ value: SortKey; label: string }> = [
-		{ value: 'updated_at', label: 'updated at' },
-		{ value: 'created_at', label: 'created at' },
-		{ value: 'title', label: 'title' },
+	const sortOptions: { value: SortKey; label: string }[] = [
+		{ value: 'updated_at', label: 'last updated' },
+		{ value: 'created_at', label: 'created' },
+		{ value: 'name', label: 'name' },
 	]
 
-	function defaultSortDir(sort: SortKey): SortDir {
-		if (sort === 'title') return 'asc'
-		return 'desc'
+	function defaultSortDir(key: SortKey): SortDir {
+		return key === 'name' ? 'asc' : 'desc'
 	}
 
-	const DEFAULT_SORT: SortKey = 'updated_at'
 	const SORT_PARAM = 'sort'
-	const SORT_DIR_PARAM = 'sort_dir'
+	const SORT_DIR_PARAM = 'dir'
 	const USER_PARAM = 'user'
+	const DEFAULT_SORT: SortKey = 'updated_at'
 
 	let sortKey = $state<SortKey>(DEFAULT_SORT)
-	let sortDir = $state<SortDir>(defaultSortDir(DEFAULT_SORT))
+	let sortDir = $state<SortDir>('desc')
 	let ownerIdFilter = $state<string | null>(null)
 	let pageIndex = $state(0)
-	let limit = $state(50)
+	const limit = 50
 	let refreshToken = $state(0)
 
-	let notes = $state<Note[]>([])
-	let searchQuery = $state('')
+	let projects = $state<Project[]>([])
 	let isLoading = $state(false)
-	let hasNext = $state(false)
 	let error = $state<string | null>(null)
+	let hasNext = $state(false)
 
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchQuery = $state('')
+	let searchResults = $state<Project[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
 
-	$effect(() => {
-		const q = searchQuery.trim()
-		clearTimeout(_searchTimer)
-		if (!q) {
-			searchResults = []
-			searchError = null
-			return
-		}
-		isSearching = true
-		_searchTimer = setTimeout(() => {
-			api.GET('/v1/notes/search', { params: { query: { q } } })
-				.then((r) => unwrap(r))
-				.then((page) => {
-					searchResults = page.items
-				})
-				.catch((e: unknown) => {
-					searchError = e instanceof Error ? e.message : 'search failed'
-					searchResults = []
-				})
-				.finally(() => {
-					isSearching = false
-				})
-		}, 300)
-		return () => clearTimeout(_searchTimer)
-	})
-
 	let isUserDetailsOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
-
-	let isNoteDetailsOpen = $state(false)
-	let selectedNote = $state<Note | null>(null)
+	let isProjectDetailsOpen = $state(false)
+	let selectedProjectId = $state<string | null>(null)
 
 	function openUser(userId: string) {
 		selectedUserId = userId
 		isUserDetailsOpen = true
 	}
 
-	function openNote(note: Note) {
-		selectedNote = note
-		isNoteDetailsOpen = true
+	function openProject(projectId: string) {
+		selectedProjectId = projectId
+		isProjectDetailsOpen = true
 	}
 
 	function refresh() {
@@ -151,25 +121,21 @@
 
 	$effect(() => {
 		if (!browser) return
-
 		const sp = page.url.searchParams
 		const sort = sp.get(SORT_PARAM)
 		const nextSort =
-			sort && sortOptions.some((o) => o.value === (sort as SortKey))
-				? (sort as SortKey)
-				: DEFAULT_SORT
+			sort && sortOptions.some((o) => o.value === sort) ? (sort as SortKey) : DEFAULT_SORT
 		const dir = sp.get(SORT_DIR_PARAM)
 		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
-		const nextOwner = user?.trim() || null
 
-		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== nextOwner) {
+		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== user) {
 			pageIndex = 0
 		}
 
 		sortKey = nextSort
 		sortDir = nextDir
-		ownerIdFilter = nextOwner
+		ownerIdFilter = user?.trim() || null
 	})
 
 	$effect(() => {
@@ -180,10 +146,9 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/notes', {
+		api.GET('/v1/projects', {
 			params: {
 				query: {
-					user_id: ownerIdFilter ?? undefined,
 					skip,
 					limit,
 					sort_by: sortKey,
@@ -193,25 +158,46 @@
 		})
 			.then((r) => unwrap(r))
 			.then((result) => {
-				notes = result
+				projects = result
 				hasNext = result.length === limit
 			})
 			.catch((e: unknown) => {
-				error = e instanceof Error ? e.message : 'failed to load notes'
-				notes = []
+				error = e instanceof Error ? e.message : 'failed to load projects'
+				projects = []
 				hasNext = false
 			})
 			.finally(() => {
 				isLoading = false
 			})
 	})
+
+	$effect(() => {
+		const q = searchQuery.trim()
+		clearTimeout(_searchTimer)
+		if (!q) {
+			searchResults = []
+			searchError = null
+			return
+		}
+		isSearching = true
+		_searchTimer = setTimeout(() => {
+			const lower = q.toLowerCase()
+			searchResults = projects.filter(
+				(p) =>
+					p.name.toLowerCase().includes(lower) ||
+					(p.description ?? '').toLowerCase().includes(lower)
+			)
+			isSearching = false
+		}, 200)
+		return () => clearTimeout(_searchTimer)
+	})
 </script>
 
 <div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
-			<h2 class="text-2xl font-bold tracking-tight">notes</h2>
-			<p class="text-zinc-400">all notes in the system.</p>
+			<h2 class="text-2xl font-bold tracking-tight">projects</h2>
+			<p class="text-zinc-400">all projects in the system.</p>
 		</div>
 		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
 			<div class="relative w-full sm:w-auto sm:flex-1">
@@ -220,7 +206,7 @@
 				/>
 				<Input
 					type="search"
-					placeholder="search notes..."
+					placeholder="search projects..."
 					bind:value={searchQuery}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
@@ -262,7 +248,7 @@
 						disabled={isLoading}
 					>
 						<X class="mr-2 h-4 w-4" />
-						user: {ownerIdFilter}
+						owner: {ownerIdFilter}
 					</Button>
 				{/if}
 				<Button
@@ -301,7 +287,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{notes.length > 0 ? ` \u00b7 ${notes.length} items` : ''}
+					page {pageIndex + 1}{projects.length > 0
+						? ` \u00b7 ${projects.length} items`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -318,7 +306,6 @@
 		</div>
 		<div class="flex flex-col space-y-2">
 			{#if searchQuery.trim()}
-				<!-- search results mode -->
 				{#if isSearching}
 					<div
 						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -338,7 +325,7 @@
 						no results found
 					</div>
 				{:else}
-					{#each searchResults as r (r.id)}
+					{#each searchResults as p (p.id)}
 						<div
 							class="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700"
 						>
@@ -347,12 +334,12 @@
 							>
 								<div class="min-w-0 flex-1 space-y-1">
 									<div class="flex items-center gap-2">
-										<FileText class="h-4 w-4 text-zinc-500" />
-										<span class="truncate font-medium">{r.title}</span>
+										<FolderKanban class="h-4 w-4 text-yellow-400" />
+										<span class="truncate font-medium">{p.name}</span>
 									</div>
-									{#if r.preview}
+									{#if p.description}
 										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
+											{p.description}
 										</div>
 									{/if}
 									<div class="flex items-center gap-2 text-xs text-zinc-400">
@@ -360,22 +347,16 @@
 											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
 										>
 											<Hash class="h-3.5 w-3.5" />
-											{r.id}
+											{p.id}
 										</span>
 									</div>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}
 				{/if}
 			{:else}
-				<!-- normal paginated list mode -->
-				{#if isLoading && notes.length === 0}
+				{#if isLoading && projects.length === 0}
 					<div
 						class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 					>
@@ -383,43 +364,48 @@
 					</div>
 				{/if}
 
-				{#if notes.length === 0 && !isLoading}
+				{#if projects.length === 0 && !isLoading}
 					<div
 						class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 					>
-						no notes found
+						no projects found
 					</div>
 				{/if}
 
-				{#each notes as n (n.id)}
+				{#each projects as p (p.id)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
-						onclick={() => openNote(n)}
+						onclick={() => openProject(p.id)}
 					>
 						<div class="flex min-w-0 flex-1 items-center gap-4">
 							<div
-								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400"
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-400"
 							>
-								<FileText class="h-5 w-5" />
+								<FolderKanban class="h-5 w-5" />
 							</div>
 							<div class="min-w-0 flex-1 space-y-1">
 								<div class="flex flex-wrap items-center gap-2">
 									<span class="truncate text-base font-medium text-zinc-100"
-										>{n.title}</span
+										>{p.name}</span
 									>
-									{#if n.deleted_at}
+									{#if (p.thread_ids ?? []).length > 0}
 										<span
-											class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase"
+											class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-emerald-400"
 										>
-											deleted
+											<MessageSquare class="h-3 w-3" />
+											{(p.thread_ids ?? []).length} thread{(
+												p.thread_ids ?? []
+											).length === 1
+												? ''
+												: 's'}
 										</span>
 									{/if}
 								</div>
-								{#if n.content}
+								{#if p.description}
 									<div class="line-clamp-2 text-sm text-zinc-400">
-										{n.content}
+										{p.description}
 									</div>
 								{/if}
 								<div
@@ -429,7 +415,7 @@
 										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
 									>
 										<Hash class="h-3 w-3" />
-										{n.id}
+										{p.id}
 									</span>
 									<span class="inline-flex items-center gap-1">
 										<User class="h-3.5 w-3.5" />
@@ -438,33 +424,19 @@
 											class="underline underline-offset-4 hover:text-zinc-200"
 											onclick={(e) => {
 												e.stopPropagation()
-												openUser(n.user_id)
+												openUser(p.owner_id)
 											}}
 										>
-											{n.user_id}
+											{p.owner_id}
 										</button>
 									</span>
-									{#if (n.labels ?? []).length > 0}
-										{#each n.labels ?? [] as label (label)}
-											<span
-												class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
-											>
-												<Tag class="h-3 w-3" />
-												{label}
-											</span>
-										{/each}
-									{/if}
 								</div>
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
 							<div class="flex items-center gap-1.5 whitespace-nowrap">
 								<Clock class="h-3.5 w-3.5" />
-								{new Date(n.updated_at).toLocaleString()}
-							</div>
-							<div class="mt-1 flex items-center gap-1.5 whitespace-nowrap">
-								<Clock class="h-3.5 w-3.5" />
-								{new Date(n.created_at).toLocaleString()}
+								{new Date(p.updated_at).toLocaleString()}
 							</div>
 						</div>
 					</div>
@@ -475,16 +447,15 @@
 </div>
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
-<NoteDetailsModal
-	bind:open={isNoteDetailsOpen}
-	note={selectedNote}
+<ProjectDetailsModal
+	bind:open={isProjectDetailsOpen}
+	projectId={selectedProjectId}
 	onViewUser={(userId) => openUser(userId)}
-	onUpdated={(n) => {
-		notes = notes.map((x) => (x.id === n.id ? n : x))
-		selectedNote = n
+	onUpdated={(updated) => {
+		projects = projects.map((p) => (p.id === updated.id ? updated : p))
 	}}
 	onDeleted={(id) => {
-		notes = notes.filter((n) => n.id !== id)
-		isNoteDetailsOpen = false
+		projects = projects.filter((p) => p.id !== id)
+		isProjectDetailsOpen = false
 	}}
 />

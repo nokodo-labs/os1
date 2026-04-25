@@ -3,6 +3,8 @@
 
 	type File = Schemas['File']
 
+	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
+	import AclModal from '$lib/components/AclModal.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Calendar,
@@ -37,20 +39,127 @@
 	let confirmDelete = $state(false)
 	let isDeleting = $state(false)
 	let deleteError = $state<string | null>(null)
+	let showAclModal = $state(false)
+	let isPreviewLoading = $state(false)
+	let previewUrl = $state<string | null>(null)
+	let previewText = $state<string | null>(null)
+	let previewError = $state<string | null>(null)
+	let previewLoadToken = 0
+	let currentPreviewObjectUrl: string | null = null
 
 	function close() {
 		open = false
 		confirmDelete = false
 		downloadError = null
 		deleteError = null
+		clearPreview()
 	}
+
+	function clearPreview() {
+		if (currentPreviewObjectUrl) {
+			URL.revokeObjectURL(currentPreviewObjectUrl)
+			currentPreviewObjectUrl = null
+		}
+		previewUrl = null
+		previewText = null
+		previewError = null
+		isPreviewLoading = false
+	}
+
+	function previewKind(target: File): 'image' | 'text' | 'pdf' | 'audio' | 'video' | null {
+		const mime = (target.mime_type ?? '').toLowerCase()
+		const name = (target.filename ?? '').toLowerCase()
+		if (mime.startsWith('image/')) return 'image'
+		if (mime.startsWith('audio/')) return 'audio'
+		if (mime.startsWith('video/')) return 'video'
+		if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
+		if (
+			mime.startsWith('text/') ||
+			mime.includes('json') ||
+			mime.includes('xml') ||
+			name.endsWith('.md') ||
+			name.endsWith('.csv') ||
+			name.endsWith('.json') ||
+			name.endsWith('.txt') ||
+			name.endsWith('.yaml') ||
+			name.endsWith('.yml')
+		) {
+			return 'text'
+		}
+		return null
+	}
+
+	async function loadPreview(target: File) {
+		const kind = previewKind(target)
+		clearPreview()
+		if (!kind) return
+
+		const token = ++previewLoadToken
+		isPreviewLoading = true
+		try {
+			const urlResult = unwrap(
+				await api.GET('/v1/files/{file_id}/url', {
+					params: { path: { file_id: target.id } },
+				})
+			)
+
+			if (token !== previewLoadToken) return
+
+			if (urlResult.url) {
+				if (kind === 'text') {
+					const response = await fetch(urlResult.url)
+					if (!response.ok) throw new Error(`server returned ${response.status}`)
+					previewText = await response.text()
+				} else {
+					previewUrl = urlResult.url
+				}
+				return
+			}
+
+			const headers = await getAuthHeaders()
+			const response = await fetch(`${getApiBaseUrl()}/v1/files/${target.id}/content`, {
+				headers,
+			})
+			if (!response.ok) throw new Error(`server returned ${response.status}`)
+
+			if (token !== previewLoadToken) return
+
+			if (kind === 'text') {
+				previewText = await response.text()
+			} else {
+				const objectUrl = URL.createObjectURL(await response.blob())
+				currentPreviewObjectUrl = objectUrl
+				previewUrl = objectUrl
+			}
+		} catch (e) {
+			if (token === previewLoadToken) {
+				previewError = e instanceof Error ? e.message : 'preview failed'
+			}
+		} finally {
+			if (token === previewLoadToken) isPreviewLoading = false
+		}
+	}
+
+	$effect(() => {
+		const currentFile = file
+		if (!open || !currentFile) {
+			previewLoadToken += 1
+			clearPreview()
+			return
+		}
+
+		loadPreview(currentFile)
+		return () => {
+			previewLoadToken += 1
+			clearPreview()
+		}
+	})
 
 	async function download() {
 		if (!file) return
 		isDownloading = true
 		downloadError = null
 		try {
-			// try presigned URL first (S3); fall back to streaming content endpoint (local)
 			const r = await api.GET('/v1/files/{file_id}/url', {
 				params: { path: { file_id: file.id } },
 			})
@@ -59,7 +168,6 @@
 				window.open(url, '_blank', 'noopener,noreferrer')
 				return
 			}
-			// local storage - fetch content via auth and trigger blob download
 			const headers = await getAuthHeaders()
 			const res = await fetch(
 				`${getApiBaseUrl()}/v1/files/${file.id}/content?download=true`,
@@ -164,7 +272,6 @@
 		<Dialog.Content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
-			<!-- header -->
 			<div
 				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
 			>
@@ -183,7 +290,15 @@
 						>
 					</div>
 				</div>
-				<div class="flex shrink-0 items-center gap-2">
+				<div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+					{#if file}
+						<AccessRulesButton
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => (showAclModal = true)}
+						/>
+					{/if}
 					<Button
 						variant="outline"
 						size="sm"
@@ -192,7 +307,7 @@
 						disabled={isDownloading || !file}
 					>
 						<Download class="h-3.5 w-3.5" />
-						{isDownloading ? 'getting url…' : 'download'}
+						{isDownloading ? 'getting url...' : 'download'}
 					</Button>
 					<Button variant="ghost" size="icon" class="shrink-0 rounded-xl" onclick={close}>
 						<X class="h-4 w-4" />
@@ -202,6 +317,7 @@
 
 			{#if file}
 				{@const si = storageInfo(file.storage_backend, file.storage_key)}
+				{@const currentPreviewKind = previewKind(file)}
 				<div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
 					{#if downloadError}
 						<div
@@ -218,6 +334,58 @@
 							<Trash2 class="h-4 w-4 shrink-0" />
 							deleted {new Date(file.deleted_at).toLocaleString()}
 						</div>
+					{/if}
+
+					{#if currentPreviewKind}
+						<section class="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
+							<div class="mb-3 flex items-center justify-between gap-3">
+								<div>
+									<h3 class="text-sm font-semibold text-zinc-200">preview</h3>
+									<p class="text-xs text-zinc-500">{currentPreviewKind}</p>
+								</div>
+								<CheckCircle2 class="h-4 w-4 text-emerald-400" />
+							</div>
+
+							{#if isPreviewLoading}
+								<div
+									class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-6 text-center text-sm text-zinc-500"
+								>
+									loading preview...
+								</div>
+							{:else if previewError}
+								<div
+									class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-xs text-red-300"
+								>
+									{previewError}
+								</div>
+							{:else if currentPreviewKind === 'text'}
+								<pre
+									class="max-h-96 overflow-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs whitespace-pre-wrap text-zinc-300">{previewText ??
+										''}</pre>
+							{:else if previewUrl && currentPreviewKind === 'image'}
+								<img
+									src={previewUrl}
+									alt="file preview"
+									class="max-h-96 w-full rounded-xl border border-zinc-800 bg-zinc-950 object-contain"
+								/>
+							{:else if previewUrl && currentPreviewKind === 'pdf'}
+								<iframe
+									src={previewUrl}
+									title="file preview"
+									class="h-96 w-full rounded-xl border border-zinc-800 bg-zinc-950"
+								></iframe>
+							{:else if previewUrl && currentPreviewKind === 'audio'}
+								<audio controls src={previewUrl} class="w-full"></audio>
+							{:else if previewUrl && currentPreviewKind === 'video'}
+								<video
+									controls
+									src={previewUrl}
+									class="max-h-96 w-full rounded-xl border border-zinc-800 bg-black"
+								>
+									<track kind="captions" />
+								</video>
+							{/if}
+						</section>
 					{/if}
 
 					<!-- identity -->
@@ -243,12 +411,19 @@
 								>
 							</div>
 							{#if file.project_ids && file.project_ids.length > 0}
-								<div class="flex flex-col border-b border-zinc-800/60 transition-colors">
+								<div
+									class="flex flex-col border-b border-zinc-800/60 transition-colors"
+								>
 									{#each file.project_ids as pid (pid)}
 										<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
 											<Package class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-											<span class="w-24 shrink-0 text-xs text-zinc-500">project</span>
-											<span class="min-w-0 truncate font-mono text-xs text-zinc-300">{pid}</span>
+											<span class="w-24 shrink-0 text-xs text-zinc-500"
+												>project</span
+											>
+											<span
+												class="min-w-0 truncate font-mono text-xs text-zinc-300"
+												>{pid}</span
+											>
 										</div>
 									{/each}
 								</div>
@@ -452,7 +627,7 @@
 									disabled={isDeleting}
 									onclick={deleteFile}
 								>
-									{isDeleting ? 'deleting…' : 'yes, delete'}
+									{isDeleting ? 'deleting...' : 'yes, delete'}
 								</Button>
 								<Button
 									variant="outline"
@@ -481,3 +656,12 @@
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
+
+{#if file}
+	<AclModal
+		bind:open={showAclModal}
+		resourceType="file"
+		resourceId={file.id}
+		title="file access rules"
+	/>
+{/if}

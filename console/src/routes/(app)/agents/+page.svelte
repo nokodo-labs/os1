@@ -9,11 +9,13 @@
 	type Prompt = Schemas['Prompt']
 	type Provider = Schemas['Provider']
 
+	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
 	import AclModal from '$lib/components/AclModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import ModelParamsEditor from '$lib/components/ModelParamsEditor.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PromptVariablesLegend from '$lib/components/PromptVariablesLegend.svelte'
+	import SearchableModelPicker from '$lib/components/SearchableModelPicker.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Card,
@@ -25,19 +27,34 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
+	import { Switch } from '$lib/components/ui/switch'
 	import {
 		ArrowDown,
 		ArrowUp,
+		Bell,
 		BookOpen,
 		Bot,
+		Brain,
+		CalendarDays,
+		Code2,
+		Database,
+		Eye,
 		FileText,
+		Filter as FilterIcon,
+		FolderOpen,
+		Globe2,
+		Image as ImageIcon,
+		MessageSquare,
+		Paperclip,
 		Pencil,
 		Plus,
-		Search,
-		Shield,
-		Trash2,
-		X,
 		RefreshCw,
+		Save,
+		Search,
+		Sparkles,
+		Trash2,
+		Wrench,
+		X,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
@@ -71,6 +88,7 @@ user: {{ user_name }}.
 	let providers = $state<Provider[]>([])
 	let availableToolPlugins = $state<PluginInfo[]>([])
 	let availableFilterPlugins = $state<PluginInfo[]>([])
+	let availableHookPlugins = $state<PluginInfo[]>([])
 	let legendPrompts = $state<Prompt[]>([])
 
 	let showModal = $state(false)
@@ -90,9 +108,21 @@ user: {{ user_name }}.
 	let formSystemPrompt = $state('')
 	let formModelId = $state<string>('')
 	let formPluginIds = $state<string[]>([])
-	let formProfileImageUrl = $state('')
-	let formProfileImageFileId = $state('')
+	let formProfileImageValue = $state('')
 	let configParams = $state<Record<string, unknown>>({})
+	let formSteeringEnabled = $state(true)
+	// preserve feature keys this ui does not edit yet.
+	let originalFeatures = $state<Record<string, unknown>>({})
+
+	type Section = 'overview' | 'model' | 'prompt' | 'plugins' | 'config'
+	let activeSection = $state<Section>('overview')
+	const sections: Array<{ value: Section; label: string }> = [
+		{ value: 'overview', label: 'overview' },
+		{ value: 'model', label: 'model' },
+		{ value: 'prompt', label: 'prompt' },
+		{ value: 'plugins', label: 'plugins' },
+		{ value: 'config', label: 'config' },
+	]
 
 	let selectedModelType = $derived.by(() => {
 		if (!formModelId) return null
@@ -107,6 +137,30 @@ user: {{ user_name }}.
 	})
 
 	const chatModels = $derived(models.filter((m) => m.model_type === 'chat_model'))
+	const pluginGroups = $derived.by(() =>
+		[
+			{
+				label: 'tools',
+				description: 'actions an agent can call while it is working.',
+				plugins: availableToolPlugins,
+			},
+			{
+				label: 'filters',
+				description: 'context processors that shape messages before the model runs.',
+				plugins: availableFilterPlugins,
+			},
+			{
+				label: 'hooks',
+				description: 'post-processing hooks that run around agent activity.',
+				plugins: availableHookPlugins,
+			},
+		].filter((group) => group.plugins.length > 0)
+	)
+
+	const profileImagePreviewSrc = $derived.by(() => {
+		const value = formProfileImageValue.trim()
+		return profileImageInputKind(value) === 'url' ? value : ''
+	})
 
 	const filteredAgents = $derived.by(() => {
 		let result = agents
@@ -147,6 +201,56 @@ user: {{ user_name }}.
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
 	}
 
+	function profileImageInputKind(value: string): 'empty' | 'url' | 'file' {
+		const normalized = value.trim()
+		if (!normalized) return 'empty'
+		if (/^(https?:\/\/|data:image\/|blob:|\/)/i.test(normalized)) return 'url'
+		return 'file'
+	}
+
+	function profileImageModeLabel(value: string): string {
+		switch (profileImageInputKind(value)) {
+			case 'url':
+				return 'url'
+			case 'file':
+				return 'file id'
+			default:
+				return 'empty'
+		}
+	}
+
+	function pluginDisplayName(plugin: PluginInfo): string {
+		return (plugin.name || plugin.id).replaceAll('_', ' ')
+	}
+
+	function pluginDescription(plugin: PluginInfo): string {
+		const description = plugin.description?.trim()
+		if (description) return description
+		if (plugin.type === 'tool') return 'lets the agent call an action during a run.'
+		if (plugin.type === 'filter') return 'shapes conversation context before model calls.'
+		return 'runs additional processing around agent activity.'
+	}
+
+	function pluginIconKind(plugin: PluginInfo): string {
+		const id = plugin.id.toLowerCase()
+		if (id.includes('memory')) return 'memory'
+		if (id.includes('note')) return 'note'
+		if (id.includes('reminder')) return 'reminder'
+		if (id.includes('file')) return 'file'
+		if (id.includes('search') || id.includes('url')) return 'web'
+		if (id.includes('image')) return 'image'
+		if (id.includes('code')) return 'code'
+		if (id.includes('reveal')) return 'reveal'
+		if (id.includes('attachment')) return 'attachment'
+		if (id.includes('notification')) return 'notification'
+		if (id.includes('think')) return 'think'
+		if (id.includes('chat_context')) return 'chat'
+		if (id.includes('timestamp')) return 'time'
+		if (plugin.type === 'filter') return 'filter'
+		if (plugin.type === 'hook') return 'hook'
+		return 'tool'
+	}
+
 	async function fetchData() {
 		isFetching = true
 		error = null
@@ -157,6 +261,7 @@ user: {{ user_name }}.
 				providersData,
 				toolPluginsData,
 				filterPluginsData,
+				hookPluginsData,
 				promptsData,
 			] = await Promise.all([
 				api.GET('/v1/agents').then((r) => unwrap(r)),
@@ -173,6 +278,11 @@ user: {{ user_name }}.
 					})
 					.then((r) => unwrap(r)),
 				api
+					.GET('/v1/plugins/available', {
+						params: { query: { plugin_type: 'hook' } },
+					})
+					.then((r) => unwrap(r)),
+				api
 					.GET('/v1/prompts', { params: { query: { limit: 200 } } })
 					.then((r) => unwrap(r)),
 			])
@@ -181,9 +291,10 @@ user: {{ user_name }}.
 			providers = providersData
 			availableToolPlugins = toolPluginsData
 			availableFilterPlugins = filterPluginsData
+			availableHookPlugins = hookPluginsData
 			legendPrompts = promptsData
 		} catch (e) {
-			console.error('Failed to load agents/models/plugins', e)
+			console.error('failed to load agents/models/plugins', e)
 			error = 'failed to load agents'
 		} finally {
 			isFetching = false
@@ -202,10 +313,12 @@ user: {{ user_name }}.
 		formSystemPrompt = ''
 		formModelId = ''
 		formPluginIds = []
-		formProfileImageUrl = ''
-		formProfileImageFileId = ''
+		formProfileImageValue = ''
 		configParams = {}
+		formSteeringEnabled = true
+		originalFeatures = {}
 		submitError = null
+		activeSection = 'overview'
 		showModal = true
 	}
 
@@ -217,13 +330,18 @@ user: {{ user_name }}.
 		formSystemPrompt = agent.system_prompt ?? ''
 		formModelId = agent.model_id ?? ''
 		formPluginIds = agent.plugin_ids ?? []
-		formProfileImageUrl = agent.profile_image_url ?? ''
-		formProfileImageFileId = agent.profile_image_file_id ?? ''
-		const agentConfig = (agent.config ?? {}) as Record<string, Record<string, unknown>>
+		formProfileImageValue = agent.profile_image_file_id ?? agent.profile_image_url ?? ''
+		const agentConfig = (agent.config ?? {}) as Record<string, unknown>
 		const agentModel = models.find((m) => m.id === agent.model_id)
 		const mt = agentModel?.model_type ?? 'chat_model'
-		configParams = agentConfig[mt] ?? {}
+		configParams = (agentConfig[mt] ?? {}) as Record<string, unknown>
+		const features = (agentConfig.features ?? {}) as Record<string, unknown> & {
+			steering?: { enabled?: boolean }
+		}
+		formSteeringEnabled = features.steering?.enabled ?? true
+		originalFeatures = { ...features }
 		submitError = null
+		activeSection = 'overview'
 		showModal = true
 	}
 
@@ -243,8 +361,7 @@ user: {{ user_name }}.
 		submitError = null
 		const reader = new FileReader()
 		reader.onload = () => {
-			formProfileImageUrl = typeof reader.result === 'string' ? reader.result : ''
-			formProfileImageFileId = ''
+			formProfileImageValue = typeof reader.result === 'string' ? reader.result : ''
 		}
 		reader.onerror = () => {
 			submitError = 'failed to read svg file'
@@ -302,11 +419,25 @@ user: {{ user_name }}.
 			showModal = false
 			await fetchData()
 		} catch (err: unknown) {
-			console.error('Failed to delete agent', err)
+			console.error('failed to delete agent', err)
 			submitError = err instanceof Error ? err.message : 'failed to delete agent'
 		} finally {
 			isLoading = false
 		}
+	}
+
+	function buildConfigPayload(): Record<string, unknown> {
+		const config: Record<string, unknown> = {}
+		if (selectedModelType && Object.keys(configParams).length > 0) {
+			config[selectedModelType] = configParams
+		}
+		// merge over originalFeatures so unknown/future feature keys round-trip
+		// untouched while we only update the knobs the UI exposes.
+		config.features = {
+			...originalFeatures,
+			steering: { enabled: formSteeringEnabled },
+		}
+		return config
 	}
 
 	async function handleSubmit(e: Event) {
@@ -315,22 +446,14 @@ user: {{ user_name }}.
 		submitError = null
 
 		try {
-			const normalizedProfileImageFileId = formProfileImageFileId.trim()
-			const normalizedProfileImageUrl = formProfileImageUrl.trim()
-			const profile_image_file_id = normalizedProfileImageFileId
-				? normalizedProfileImageFileId
-				: null
-			const profile_image_url = profile_image_file_id
-				? null
-				: normalizedProfileImageUrl
-					? normalizedProfileImageUrl
-					: null
+			const normalizedProfileImage = formProfileImageValue.trim()
+			const profileImageKind = profileImageInputKind(normalizedProfileImage)
+			const profile_image_file_id =
+				profileImageKind === 'file' ? normalizedProfileImage : null
+			const profile_image_url = profileImageKind === 'url' ? normalizedProfileImage : null
 
 			if (modalMode === 'create') {
-				const config =
-					selectedModelType && Object.keys(configParams).length > 0
-						? { [selectedModelType]: configParams }
-						: {}
+				const config = buildConfigPayload()
 				const payload: AgentCreate = {
 					name: formName.trim(),
 					description: formDescription.trim() ? formDescription.trim() : null,
@@ -343,10 +466,7 @@ user: {{ user_name }}.
 				}
 				unwrap(await api.POST('/v1/agents', { body: payload }))
 			} else if (editingId) {
-				const config =
-					selectedModelType && Object.keys(configParams).length > 0
-						? { [selectedModelType]: configParams }
-						: {}
+				const config = buildConfigPayload()
 				const payload: AgentUpdate = {
 					name: formName.trim(),
 					description: formDescription.trim() ? formDescription.trim() : null,
@@ -369,7 +489,7 @@ user: {{ user_name }}.
 			await fetchData()
 		} catch (err: unknown) {
 			console.error(
-				modalMode === 'create' ? 'Failed to create agent' : 'Failed to save agent',
+				modalMode === 'create' ? 'failed to create agent' : 'failed to save agent',
 				err
 			)
 			submitError = formatSubmitError(err)
@@ -443,107 +563,101 @@ user: {{ user_name }}.
 		</div>
 	</div>
 
-		<div class="flex flex-col gap-6">
-			{#if isFetching}
-				<div class="flex flex-col items-center justify-center gap-4 py-16">
-					<NokodoLoader expanded={true} />
-				</div>
-			{:else if error}
-				<div
-					class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
-				>
-					<p>{error}</p>
-					<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
-				</div>
-			{:else}
-				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-					{#each filteredAgents as agent (agent.id)}
-						<Card
-							class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
-						>
-							<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
-								<div class="flex items-start justify-between gap-4">
-									<div class="flex min-w-0 flex-1 items-start gap-3">
-										<div
-											class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400"
-										>
-											<Bot class="h-4 w-4" />
-										</div>
-										<div class="min-w-0 flex-1">
-											<CardTitle class="truncate text-base">{agent.name}</CardTitle>
-											{#if agent.description}
-												<CardDescription class="mt-1 line-clamp-2 text-xs">
-													{agent.description}
-												</CardDescription>
-											{/if}
-										</div>
+	<div class="flex flex-col gap-6">
+		{#if isFetching}
+			<div class="flex flex-col items-center justify-center gap-4 py-16">
+				<NokodoLoader expanded={true} />
+			</div>
+		{:else if error}
+			<div
+				class="rounded-2xl border border-red-900/50 bg-red-900/10 p-6 text-center text-red-400"
+			>
+				<p>{error}</p>
+				<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
+			</div>
+		{:else}
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				{#each filteredAgents as agent (agent.id)}
+					<Card
+						class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+					>
+						<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
+							<div class="flex items-start justify-between gap-4">
+								<div class="flex min-w-0 flex-1 items-start gap-3">
+									<div
+										class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400"
+									>
+										<Bot class="h-4 w-4" />
 									</div>
-									<div class="flex shrink-0 gap-1">
-										<Button
-											variant="ghost"
-											size="icon"
-											class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
-											onclick={() => openAclModal(agent.id)}
-											title="access rules"
+									<div class="min-w-0 flex-1">
+										<CardTitle class="truncate text-base"
+											>{agent.name}</CardTitle
 										>
-											<Shield class="h-3.5 w-3.5" />
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon"
-											class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
-											onclick={() => openEditModal(agent)}
-											title="edit agent"
-										>
-											<Pencil class="h-3.5 w-3.5" />
-										</Button>
+										{#if agent.description}
+											<CardDescription class="mt-1 line-clamp-2 text-xs">
+												{agent.description}
+											</CardDescription>
+										{/if}
 									</div>
 								</div>
-							</CardHeader>
-							<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
-								<div class="flex flex-col gap-2 text-xs text-zinc-500">
+								<div class="flex shrink-0 gap-1">
+									<AccessRulesButton
+										variant="ghost"
+										size="icon"
+										class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
+										onclick={() => openAclModal(agent.id)}
+									/>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
+										onclick={() => openEditModal(agent)}
+										title="edit agent"
+									>
+										<Pencil class="h-3.5 w-3.5" />
+									</Button>
+								</div>
+							</div>
+						</CardHeader>
+						<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
+							<div class="flex flex-col gap-2 text-xs text-zinc-500">
+								<div class="flex items-center justify-between gap-2">
+									<span class="shrink-0 font-medium text-zinc-600">model</span>
+									<span class="truncate font-medium text-zinc-300">
+										{getModelLabel(agent.model_id)}
+									</span>
+								</div>
+								{#if agent.plugin_ids && agent.plugin_ids.length > 0}
 									<div class="flex items-center justify-between gap-2">
-										<span class="shrink-0 font-medium tracking-wider text-zinc-600 uppercase"
-											>model</span
+										<span class="shrink-0 font-medium text-zinc-600"
+											>plugins</span
 										>
-										<span class="truncate font-medium text-zinc-300">
-											{getModelLabel(agent.model_id)}
+										<span
+											class="inline-flex items-center rounded-md bg-zinc-800/50 px-2 py-0.5 font-medium text-zinc-300"
+										>
+											{agent.plugin_ids.length}
 										</span>
 									</div>
-									{#if agent.plugin_ids && agent.plugin_ids.length > 0}
-										<div class="flex items-center justify-between gap-2">
-											<span class="shrink-0 font-medium tracking-wider text-zinc-600 uppercase"
-												>plugins</span
-											>
-											<span
-												class="inline-flex items-center rounded-md bg-zinc-800/50 px-2 py-0.5 font-medium text-zinc-300"
-											>
-												{agent.plugin_ids.length}
-											</span>
-										</div>
-									{/if}
-								</div>
-							</CardContent>
-						</Card>
-					{/each}
+								{/if}
+							</div>
+						</CardContent>
+					</Card>
+				{/each}
 
-					{#if filteredAgents.length === 0 && agents.length > 0}
-						<div
-							class="col-span-full rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
-						>
-							no agents match your search
-						</div>
-					{/if}
+				{#if filteredAgents.length === 0 && agents.length > 0}
+					<div
+						class="col-span-full rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
+					>
+						no agents match your search
+					</div>
+				{/if}
 
-					{#if agents.length === 0}
-						<EmptyState
-							message="no agents yet."
-							hint="create an agent to get started."
-						/>
-					{/if}
-				</div>
-			{/if}
-		</div>
+				{#if agents.length === 0}
+					<EmptyState message="no agents yet." hint="create an agent to get started." />
+				{/if}
+			</div>
+		{/if}
+	</div>
 </div>
 
 <Dialog.Root
@@ -555,7 +669,7 @@ user: {{ user_name }}.
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
-			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
+			class="fixed top-1/2 left-1/2 z-50 flex h-[min(760px,calc(100vh-2rem))] w-[min(960px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
 				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
@@ -564,224 +678,311 @@ user: {{ user_name }}.
 					<Dialog.Title class="text-lg font-semibold">
 						{modalMode === 'create' ? 'create agent' : 'edit agent'}
 					</Dialog.Title>
-					<Dialog.Description class="text-sm text-zinc-400">
-						define prompting + attach a model (optional).
-					</Dialog.Description>
 				</div>
 				<Button variant="ghost" size="icon" class="rounded-xl" onclick={closeModal}>
 					<X class="h-4 w-4" />
 				</Button>
 			</div>
 			<form onsubmit={handleSubmit} class="flex min-h-0 flex-1 flex-col">
-				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-					{#if submitError}
-						<div class="rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
-							{submitError}
-						</div>
-					{/if}
-
-					{#if modalMode === 'edit' && editingId}
-						<div class="space-y-1">
-							<Label class="text-xs text-zinc-500">id</Label>
-							<p class="font-mono text-xs text-zinc-400 select-all">{editingId}</p>
-						</div>
-					{/if}
-
-					<div class="space-y-2">
-						<Label for="name">name</Label>
-						<Input
-							id="name"
-							bind:value={formName}
-							required
-							placeholder="e.g. nokodo coder"
-							class="rounded-xl"
-						/>
+				{#if submitError}
+					<div class="mx-6 mt-4 rounded-lg bg-red-900/20 p-3 text-sm text-red-400">
+						{submitError}
 					</div>
+				{/if}
 
-					<div class="space-y-2">
-						<Label for="profile_image_url">profile image url (optional)</Label>
-						<Input
-							id="profile_image_url"
-							bind:value={formProfileImageUrl}
-							placeholder="https://... or data:image/svg+xml;base64,..."
-							class="rounded-xl"
-						/>
-						<p class="text-xs text-zinc-500">
-							use a direct url, or upload an svg below to embed it as a data url.
-						</p>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="profile_image_svg">upload svg (optional)</Label>
-						<Input
-							id="profile_image_svg"
-							type="file"
-							accept="image/svg+xml,.svg"
-							onchange={handleSvgFileChange}
-							class="rounded-xl"
-						/>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="profile_image_file_id">profile image file id (optional)</Label>
-						<Input
-							id="profile_image_file_id"
-							bind:value={formProfileImageFileId}
-							placeholder="file_..."
-							class="rounded-xl"
-						/>
-						<p class="text-xs text-zinc-500">if set, this overrides the url field.</p>
-					</div>
-
-					{#if formProfileImageUrl.trim()}
-						<div
-							class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3"
-						>
-							<img
-								src={formProfileImageUrl}
-								alt="agent profile preview"
-								class="h-10 w-10 rounded-lg bg-zinc-800 object-contain"
-							/>
-							<div class="text-xs text-zinc-500">preview</div>
-						</div>
-					{/if}
-
-					<div class="space-y-2">
-						<Label for="model">model (optional)</Label>
-						<Select
-							value={formModelId}
-							onValueChange={(v: string) => (formModelId = v)}
-						>
-							<SelectTrigger class="rounded-xl">
-								<span class="truncate text-left">
-									{formModelId ? getModelLabel(formModelId) : 'none'}
-								</span>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="">none</SelectItem>
-								{#each chatModels as model (model.id)}
-									<SelectItem value={model.id}>{modelFullLabel(model)}</SelectItem
-									>
-								{/each}
-							</SelectContent>
-						</Select>
-					</div>
-
-					{#if selectedModelType}
-						<div class="border-t border-zinc-800 pt-4">
-							<ModelParamsEditor
-								modelType={selectedModelType}
-								bind:params={configParams}
-							/>
-						</div>
-					{/if}
-
-					<div class="space-y-2">
-						<Label for="description">description (optional)</Label>
-						<textarea
-							id="description"
-							bind:value={formDescription}
-							rows={3}
-							placeholder="what does this agent do?"
-							class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-						></textarea>
-					</div>
-
-					<div class="space-y-2">
-						<div class="flex items-center justify-between">
-							<Label for="system_prompt">system prompt (optional)</Label>
-							<div class="flex items-center gap-1">
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
-									onclick={() => (formSystemPrompt = TEMPLATE_SYSTEM_PROMPT)}
-								>
-									<FileText class="h-3.5 w-3.5" />
-									use template
-								</Button>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
-									onclick={() => (showVariablesLegend = true)}
-								>
-									<BookOpen class="h-3.5 w-3.5" />
-									variables
-								</Button>
-							</div>
-						</div>
-						<textarea
-							id="system_prompt"
-							bind:value={formSystemPrompt}
-							rows={6}
-							placeholder="you are ..."
-							class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm"
-						></textarea>
-					</div>
-
-					{#if availableToolPlugins.length > 0}
-						<div class="space-y-2">
-							<Label>tools</Label>
-							<div
-								class="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+				<div class="grid min-h-0 flex-1 grid-cols-1 sm:grid-cols-[180px_1fr]">
+					<nav
+						class="flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-800 px-3 py-3 sm:flex-col sm:gap-1 sm:overflow-x-visible sm:border-r sm:border-b-0 sm:py-4"
+						aria-label="agent sections"
+					>
+						{#each sections as s (s.value)}
+							<button
+								type="button"
+								onclick={() => (activeSection = s.value)}
+								class="shrink-0 rounded-lg px-3 py-1.5 text-left text-sm transition-colors {activeSection ===
+								s.value
+									? 'bg-zinc-800 text-zinc-100'
+									: 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'}"
+								aria-current={activeSection === s.value ? 'page' : undefined}
 							>
-								{#each availableToolPlugins as tool (tool.id)}
-									<label
-										class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800"
-									>
-										<input
-											type="checkbox"
-											checked={formPluginIds.includes(tool.id)}
-											onchange={() => togglePlugin(tool.id)}
-											class="h-4 w-4 rounded border-zinc-700 bg-zinc-900"
-										/>
-										<span class="text-sm">{tool.name}</span>
-										{#if tool.is_native}
-											<span
-												class="rounded bg-zinc-700 px-1 text-xs text-zinc-400"
-												>native</span
-											>
-										{/if}
-									</label>
-								{/each}
-							</div>
-						</div>
-					{/if}
+								{s.label}
+							</button>
+						{/each}
+					</nav>
 
-					{#if availableFilterPlugins.length > 0}
-						<div class="space-y-2">
-							<Label>filters</Label>
-							<div
-								class="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3"
-							>
-								{#each availableFilterPlugins as filter (filter.id)}
-									<label
-										class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800"
-									>
-										<input
-											type="checkbox"
-											checked={formPluginIds.includes(filter.id)}
-											onchange={() => togglePlugin(filter.id)}
-											class="h-4 w-4 rounded border-zinc-700 bg-zinc-900"
-										/>
-										<span class="text-sm">{filter.name}</span>
-										{#if filter.is_native}
-											<span
-												class="rounded bg-zinc-700 px-1 text-xs text-zinc-400"
-												>native</span
-											>
-										{/if}
-									</label>
-								{/each}
+					<div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+						{#if activeSection === 'overview'}
+							{#if modalMode === 'edit' && editingId}
+								<div class="space-y-1">
+									<Label class="text-xs text-zinc-500">id</Label>
+									<p class="font-mono text-xs text-zinc-400 select-all">
+										{editingId}
+									</p>
+								</div>
+							{/if}
+
+							<div class="space-y-2">
+								<Label for="name">name</Label>
+								<Input
+									id="name"
+									bind:value={formName}
+									required
+									placeholder="e.g. nokodo coder"
+									class="rounded-xl"
+								/>
 							</div>
-						</div>
-					{/if}
+
+							<div class="space-y-2">
+								<Label for="description">description (optional)</Label>
+								<textarea
+									id="description"
+									bind:value={formDescription}
+									rows={3}
+									placeholder="what does this agent do?"
+									class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+								></textarea>
+							</div>
+
+							<div class="space-y-2">
+								<Label for="profile_image">profile image (optional)</Label>
+								<div class="flex flex-col gap-2 sm:flex-row">
+									<Input
+										id="profile_image"
+										bind:value={formProfileImageValue}
+										placeholder="https://..., data:image..., or file id"
+										class="min-w-0 rounded-xl"
+									/>
+									<input
+										id="profile_image_upload"
+										type="file"
+										accept="image/svg+xml,.svg"
+										onchange={handleSvgFileChange}
+										class="sr-only"
+									/>
+									<Label
+										for="profile_image_upload"
+										class="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-zinc-800 px-3 text-sm text-zinc-300 hover:bg-zinc-900"
+									>
+										upload svg
+									</Label>
+								</div>
+								<p class="text-xs text-zinc-500">
+									current mode: {profileImageModeLabel(formProfileImageValue)}.
+								</p>
+							</div>
+
+							{#if profileImagePreviewSrc}
+								<div
+									class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3"
+								>
+									<img
+										src={profileImagePreviewSrc}
+										alt="agent profile preview"
+										class="h-10 w-10 rounded-lg bg-zinc-800 object-contain"
+									/>
+									<div class="text-xs text-zinc-500">preview</div>
+								</div>
+							{/if}
+						{:else if activeSection === 'model'}
+							<div class="space-y-2">
+								<Label for="model">model (optional)</Label>
+								<SearchableModelPicker
+									items={chatModels.map((m) => ({
+										value: m.id,
+										label: m.display_name || m.name || m.id,
+										sublabel: modelFullLabel(m).replace(
+											`${m.display_name || m.name || m.id} · `,
+											''
+										),
+									}))}
+									value={formModelId}
+									placeholder="none"
+									searchPlaceholder="search models..."
+									allowClear={true}
+									clearLabel="none"
+									emptyLabel="no models match your search"
+									onChange={(v) => (formModelId = v)}
+								/>
+							</div>
+
+							{#if selectedModelType}
+								<div class="border-t border-zinc-800 pt-4">
+									<ModelParamsEditor
+										modelType={selectedModelType}
+										bind:params={configParams}
+									/>
+								</div>
+							{:else}
+								<p class="text-xs text-zinc-500">
+									select a model to configure parameters.
+								</p>
+							{/if}
+						{:else if activeSection === 'prompt'}
+							<div class="space-y-2">
+								<div class="flex items-center justify-between">
+									<Label for="system_prompt">system prompt (optional)</Label>
+									<div class="flex items-center gap-1">
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+											onclick={() =>
+												(formSystemPrompt = TEMPLATE_SYSTEM_PROMPT)}
+										>
+											<FileText class="h-3.5 w-3.5" />
+											use template
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											class="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+											onclick={() => (showVariablesLegend = true)}
+										>
+											<BookOpen class="h-3.5 w-3.5" />
+											variables
+										</Button>
+									</div>
+								</div>
+								<textarea
+									id="system_prompt"
+									bind:value={formSystemPrompt}
+									rows={14}
+									placeholder="you are ..."
+									class="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm"
+								></textarea>
+							</div>
+						{:else if activeSection === 'plugins'}
+							{#each pluginGroups as group (group.label)}
+								<section class="space-y-3">
+									<header class="space-y-1">
+										<h3 class="text-xs font-semibold text-zinc-500">
+											{group.label}
+										</h3>
+										<p class="text-xs text-zinc-500">{group.description}</p>
+									</header>
+									<div class="grid gap-3 lg:grid-cols-2">
+										{#each group.plugins as plugin (plugin.id)}
+											{@const iconKind = pluginIconKind(plugin)}
+											<div
+												class="rounded-xl border p-4 transition-colors {formPluginIds.includes(
+													plugin.id
+												)
+													? 'border-violet-500/50 bg-violet-500/10'
+													: 'border-zinc-800 bg-zinc-950/40'}"
+											>
+												<div class="flex items-start justify-between gap-3">
+													<div class="flex min-w-0 gap-3">
+														<div
+															class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-300"
+														>
+															{#if iconKind === 'memory'}
+																<Database class="h-4 w-4" />
+															{:else if iconKind === 'note'}
+																<FileText class="h-4 w-4" />
+															{:else if iconKind === 'reminder'}
+																<CalendarDays class="h-4 w-4" />
+															{:else if iconKind === 'file'}
+																<FolderOpen class="h-4 w-4" />
+															{:else if iconKind === 'web'}
+																<Globe2 class="h-4 w-4" />
+															{:else if iconKind === 'image'}
+																<ImageIcon class="h-4 w-4" />
+															{:else if iconKind === 'code'}
+																<Code2 class="h-4 w-4" />
+															{:else if iconKind === 'reveal'}
+																<Eye class="h-4 w-4" />
+															{:else if iconKind === 'attachment'}
+																<Paperclip class="h-4 w-4" />
+															{:else if iconKind === 'notification'}
+																<Bell class="h-4 w-4" />
+															{:else if iconKind === 'think'}
+																<Brain class="h-4 w-4" />
+															{:else if iconKind === 'chat'}
+																<MessageSquare class="h-4 w-4" />
+															{:else if iconKind === 'time'}
+																<CalendarDays class="h-4 w-4" />
+															{:else if iconKind === 'filter'}
+																<FilterIcon class="h-4 w-4" />
+															{:else if iconKind === 'hook'}
+																<Sparkles class="h-4 w-4" />
+															{:else}
+																<Wrench class="h-4 w-4" />
+															{/if}
+														</div>
+														<div class="min-w-0 space-y-1">
+															<div
+																class="flex flex-wrap items-center gap-2"
+															>
+																<div
+																	class="text-sm font-medium wrap-anywhere text-zinc-100"
+																>
+																	{pluginDisplayName(plugin)}
+																</div>
+																{#if plugin.is_native}
+																	<span
+																		class="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
+																	>
+																		native
+																	</span>
+																{/if}
+															</div>
+															<p
+																class="text-xs leading-5 wrap-anywhere text-zinc-500"
+															>
+																{pluginDescription(plugin)}
+															</p>
+														</div>
+													</div>
+													<Switch
+														checked={formPluginIds.includes(plugin.id)}
+														onCheckedChange={() =>
+															togglePlugin(plugin.id)}
+													/>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</section>
+							{/each}
+
+							{#if pluginGroups.length === 0}
+								<p class="text-xs text-zinc-500">no plugins are registered.</p>
+							{/if}
+						{:else if activeSection === 'config'}
+							<section class="space-y-3">
+								<header class="space-y-1">
+									<h3 class="text-xs font-semibold text-zinc-500">features</h3>
+									<p class="text-xs text-zinc-500">
+										toggle high-level capabilities for this agent.
+									</p>
+								</header>
+								<div class="rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+									<div class="flex items-start justify-between gap-4">
+										<div class="space-y-1">
+											<Label for="steering-toggle">steering</Label>
+											<p class="text-xs text-zinc-500">
+												allow users to interrupt and steer this agent
+												mid-run via the chat input. when off, the agent runs
+												to completion without interruption.
+											</p>
+										</div>
+										<Switch
+											id="steering-toggle"
+											bind:checked={formSteeringEnabled}
+										/>
+									</div>
+								</div>
+							</section>
+						{/if}
+					</div>
 				</div>
-				<div class="flex shrink-0 justify-between gap-2 border-t border-zinc-800 px-6 py-4">
-					<div class="flex gap-2">
+
+				<div
+					class="flex shrink-0 flex-col gap-3 border-t border-zinc-800 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="flex flex-col gap-2 sm:flex-row">
 						{#if modalMode === 'edit' && editingId}
 							<Button
 								type="button"
@@ -793,40 +994,28 @@ user: {{ user_name }}.
 								<Trash2 class="h-4 w-4" />
 								delete
 							</Button>
-							<Button
+							<AccessRulesButton
 								type="button"
-								variant="outline"
-								class="gap-2 rounded-xl"
 								disabled={isLoading}
 								onclick={() => {
 									showModal = false
 									openAclModal(editingId!)
 								}}
-							>
-								<Shield class="h-4 w-4" />
-								access rules
-							</Button>
+							/>
 						{/if}
 					</div>
-					<div class="flex gap-2">
-						<Button
-							type="button"
-							variant="outline"
-							class="rounded-xl"
-							disabled={isLoading}
-							onclick={closeModal}
-						>
-							cancel
-						</Button>
+					<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
 						<Button
 							type="submit"
-							class="rounded-xl"
+							class="gap-2 rounded-xl"
 							disabled={isLoading || !formName.trim()}
 						>
 							{#if isLoading}
-								{modalMode === 'create' ? 'creating…' : 'saving…'}
+								<RefreshCw class="h-4 w-4 animate-spin" />
+								saving...
 							{:else}
-								{modalMode === 'create' ? 'create agent' : 'save changes'}
+								<Save class="h-4 w-4" />
+								save
 							{/if}
 						</Button>
 					</div>

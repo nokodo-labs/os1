@@ -18,16 +18,16 @@
 		Archive,
 		ArrowDown,
 		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
 		Hash,
 		MessageSquare,
+		RefreshCw,
 		Search,
 		Timer,
 		Trash2,
 		User,
-		RefreshCw,
 		X,
-		ChevronLeft,
-		ChevronRight,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
@@ -321,7 +321,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{threads.length > 0 ? ` \u00b7 ${threads.length} items` : ''}
+					page {pageIndex + 1}{threads.length > 0
+						? ` \u00b7 ${threads.length} items`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -425,7 +427,9 @@
 						}}
 					>
 						<div class="flex min-w-0 flex-1 items-center gap-4">
-							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"
+							>
 								<MessageSquare class="h-5 w-5" />
 							</div>
 							<div class="min-w-0 flex-1 space-y-1">
@@ -458,8 +462,12 @@
 										</span>
 									{/if}
 								</div>
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										<Hash class="h-3 w-3" />
 										{t.id}
 									</span>

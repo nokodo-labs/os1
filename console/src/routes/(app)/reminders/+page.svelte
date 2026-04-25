@@ -5,11 +5,11 @@
 	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
 	type SearchResultItem = Schemas['SearchResultItem']
 
+	import { auth } from '$lib/auth.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListDetailsModal from '$lib/components/ReminderListDetailsModal.svelte'
-	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
-	import { auth } from '$lib/auth.svelte'
 	import { Button } from '$lib/components/ui/button'
+	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
@@ -21,9 +21,9 @@
 		Clock,
 		Hash,
 		ListChecks,
+		RefreshCw,
 		Search,
 		User,
-		RefreshCw,
 	} from '@lucide/svelte'
 
 	type ListSortKey = 'updated_at' | 'created_at' | 'name' | 'position'
@@ -121,19 +121,22 @@
 		error = null
 
 		Promise.all([
-			api.GET('/v1/reminders/lists', {
-				params: {
-					query: {
-						include_counts: true,
-						sort_by: sortKey,
-						sort_dir: sortDir,
-						limit: 200,
+			api
+				.GET('/v1/reminders/lists', {
+					params: {
+						query: {
+							include_counts: true,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							limit: 200,
+						},
 					},
-				},
-			}).then((r) => unwrap(r)),
-			api.GET('/v1/reminders/counts', {})
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/reminders/counts', {})
 				.then((r) => r.data)
-				.catch(() => undefined)
+				.catch(() => undefined),
 		])
 			.then(([listsResult, defaultCounts]) => {
 				const mergedLists = [...listsResult]
@@ -314,30 +317,32 @@
 
 				{#each lists as list (list.id)}
 					<div
-					role="button"
-					tabindex="0"
-					class="flex w-full items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
-					onclick={(e: MouseEvent) => {
-						if (
-							(e.target as HTMLElement).closest('button:not([data-row-click])') ==
-							null
-						) {
-							openList(list.id)
-						}
-					}}
-					onkeydown={(e: KeyboardEvent) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault()
-							openList(list.id)
-						}
-					}}
-				>
-					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
-							<ListChecks class="h-5 w-5" />
-						</div>
-						<div class="min-w-0 flex-1 space-y-1">
-							<div class="flex flex-wrap items-center gap-2">
+						role="button"
+						tabindex="0"
+						class="flex w-full items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						onclick={(e: MouseEvent) => {
+							if (
+								(e.target as HTMLElement).closest('button:not([data-row-click])') ==
+								null
+							) {
+								openList(list.id)
+							}
+						}}
+						onkeydown={(e: KeyboardEvent) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault()
+								openList(list.id)
+							}
+						}}
+					>
+						<div class="flex min-w-0 flex-1 items-center gap-4">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-400"
+							>
+								<ListChecks class="h-5 w-5" />
+							</div>
+							<div class="min-w-0 flex-1 space-y-1">
+								<div class="flex flex-wrap items-center gap-2">
 									{#if list.color}
 										<span
 											class="inline-block h-3 w-3 rounded-full"
@@ -351,8 +356,12 @@
 										{list.description}
 									</div>
 								{/if}
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										<Hash class="h-3 w-3" />
 										{list.id}
 									</span>
@@ -369,15 +378,21 @@
 											{list.owner_id}
 										</button>
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
 										<ListChecks class="h-3 w-3" />
 										total {list.total_count}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase"
+									>
 										<Circle class="h-3 w-3" />
 										pending {list.pending_count}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-emerald-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-emerald-400 uppercase"
+									>
 										<CircleCheck class="h-3 w-3" />
 										completed {list.completed_count}
 									</span>

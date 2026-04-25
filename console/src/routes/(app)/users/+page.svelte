@@ -15,17 +15,17 @@
 	import {
 		ArrowDown,
 		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
 		Circle,
 		Clock,
 		Hash,
 		Mail,
 		Plus,
+		RefreshCw,
 		Search,
 		Shield,
 		User as UserIcon,
-		RefreshCw,
-		ChevronLeft,
-		ChevronRight,
 		XCircle,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
@@ -221,7 +221,10 @@
 				</Button>
 			</div>
 			<div class="flex w-full items-center gap-2 sm:w-auto">
-				<Button onclick={() => (isCreateUserOpen = true)} class="flex-1 gap-2 rounded-xl sm:flex-none">
+				<Button
+					onclick={() => (isCreateUserOpen = true)}
+					class="flex-1 gap-2 rounded-xl sm:flex-none"
+				>
 					<Plus class="h-4 w-4" />
 					add user
 				</Button>
@@ -307,7 +310,9 @@
 					}}
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+						<div
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500/15 text-orange-400"
+						>
 							<UserIcon class="h-5 w-5" />
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
@@ -317,20 +322,28 @@
 								</span>
 								{#if (u as Record<string, unknown>).is_online}
 									<span class="relative flex h-2.5 w-2.5 shrink-0" title="online">
-										<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-										<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+										<span
+											class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
+										></span>
+										<span
+											class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+										></span>
 									</span>
 								{:else}
 									<div class="h-2 w-2 rounded-full bg-zinc-700/50"></div>
 								{/if}
 								{#if u.is_superuser}
-									<span class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase"
+									>
 										<Shield class="h-3 w-3" />
 										superuser
 									</span>
 								{/if}
 								{#if u.is_active === false}
-									<span class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase"
+									>
 										<XCircle class="h-3 w-3" />
 										inactive
 									</span>
@@ -346,7 +359,9 @@
 										@{(u as Record<string, unknown>).username}
 									</span>
 								{/if}
-								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<span
+									class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+								>
 									<Hash class="h-3 w-3" />
 									{u.id}
 								</span>

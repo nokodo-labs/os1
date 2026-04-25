@@ -10,7 +10,18 @@
 	import RoleDetailsModal from '$lib/components/RoleDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, ListOrdered, Plus, Shield, RefreshCw, ChevronLeft, ChevronRight } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
+		Clock,
+		Hash,
+		ListOrdered,
+		Plus,
+		RefreshCw,
+		Shield,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'priority' | 'name' | 'created_at' | 'updated_at'
@@ -328,12 +339,16 @@
 					}}
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+						<div
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400"
+						>
 							<Shield class="h-5 w-5" />
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
 							<div class="flex flex-wrap items-center gap-2">
-								<span class="truncate text-base font-medium text-zinc-100">{role.name}</span>
+								<span class="truncate text-base font-medium text-zinc-100"
+									>{role.name}</span
+								>
 							</div>
 							{#if role.description}
 								<div class="line-clamp-1 text-sm text-zinc-400">
@@ -341,11 +356,15 @@
 								</div>
 							{/if}
 							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<span
+									class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+								>
 									<Hash class="h-3 w-3" />
 									{role.id}
 								</span>
-								<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+								>
 									<ListOrdered class="h-3 w-3" />
 									priority {role.priority ?? 0}
 								</span>
@@ -383,7 +402,7 @@
 								</Button>
 							</div>
 						{/if}
-						<div class="flex flex-col items-end shrink-0 text-xs text-zinc-500">
+						<div class="flex shrink-0 flex-col items-end text-xs text-zinc-500">
 							<div class="flex items-center gap-1.5 whitespace-nowrap">
 								<Clock class="h-3.5 w-3.5" />
 								{new Date(role.updated_at).toLocaleString()}

@@ -1,24 +1,38 @@
-/**
- * Copy text to clipboard. Uses Clipboard API when available (secure context),
- * falls back to execCommand for environments where the API is blocked (e.g.
- * inside a focus-trapped dialog).
- *
- * Returns true on success, false on failure.
- */
 export async function copyToClipboard(text: string): Promise<boolean> {
 	try {
 		if (navigator.clipboard && window.isSecureContext) {
 			await navigator.clipboard.writeText(text)
-		} else {
-			const el = document.createElement('textarea')
-			el.value = text
-			el.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none'
-			document.body.appendChild(el)
-			el.select()
-			document.execCommand('copy')
-			el.remove()
+			return true
 		}
-		return true
+
+		const textarea = document.createElement('textarea')
+		textarea.value = text
+		textarea.setAttribute('readonly', '')
+		textarea.style.cssText = [
+			'position:fixed',
+			'top:-9999px',
+			'left:-9999px',
+			'width:1px',
+			'height:1px',
+			'padding:0',
+			'border:0',
+			'opacity:0',
+		].join(';')
+
+		const selection = document.getSelection()
+		const selectedRange = selection?.rangeCount ? selection.getRangeAt(0) : null
+		document.body.appendChild(textarea)
+		textarea.focus()
+		textarea.select()
+		const copied = document.execCommand('copy')
+		textarea.remove()
+
+		if (selectedRange && selection) {
+			selection.removeAllRanges()
+			selection.addRange(selectedRange)
+		}
+
+		return copied
 	} catch {
 		return false
 	}

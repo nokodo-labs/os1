@@ -11,7 +11,19 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, Search, User, Users, RefreshCw, X, ChevronLeft, ChevronRight } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
+		Clock,
+		Hash,
+		RefreshCw,
+		Search,
+		User,
+		Users,
+		X,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'name'
@@ -318,12 +330,16 @@
 					}}
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+						<div
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-300"
+						>
 							<Users class="h-5 w-5" />
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
 							<div class="flex flex-wrap items-center gap-2">
-								<span class="truncate text-base font-medium text-zinc-100">{g.name}</span>
+								<span class="truncate text-base font-medium text-zinc-100"
+									>{g.name}</span
+								>
 							</div>
 							{#if g.description}
 								<div class="line-clamp-1 text-sm text-zinc-400">
@@ -331,7 +347,9 @@
 								</div>
 							{/if}
 							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<span
+									class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+								>
 									<Hash class="h-3 w-3" />
 									{g.id}
 								</span>
@@ -348,7 +366,9 @@
 										{g.owner_id}
 									</button>
 								</span>
-								<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+								>
 									<Users class="h-3 w-3" />
 									{g.memberships.length}
 									{g.memberships.length === 1 ? 'member' : 'members'}

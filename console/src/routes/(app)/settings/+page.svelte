@@ -15,6 +15,7 @@
 	import SettingsBranding from '$lib/components/settings/SettingsBranding.svelte'
 	import SettingsCodeInterpreter from '$lib/components/settings/SettingsCodeInterpreter.svelte'
 	import SettingsDefaultPermissions from '$lib/components/settings/SettingsDefaultPermissions.svelte'
+	import SettingsIntegrations from '$lib/components/settings/SettingsIntegrations.svelte'
 	import SettingsLimits from '$lib/components/settings/SettingsLimits.svelte'
 	import SettingsMedia from '$lib/components/settings/SettingsMedia.svelte'
 	import SettingsSecurity from '$lib/components/settings/SettingsSecurity.svelte'
@@ -22,7 +23,25 @@
 	import SettingsUI from '$lib/components/settings/SettingsUI.svelte'
 	import SettingsWebSearch from '$lib/components/settings/SettingsWebSearch.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import { RefreshCw, RotateCcw, Save } from '@lucide/svelte'
+	import {
+		Brain,
+		Code2,
+		Database,
+		Gauge,
+		Globe,
+		Image as ImageIcon,
+		Paintbrush,
+		Palette,
+		Plug,
+		RefreshCw,
+		RotateCcw,
+		Save,
+		Search,
+		Shield,
+		Trash2,
+		Users,
+	} from '@lucide/svelte'
+	import type { Component } from 'svelte'
 	import { onMount } from 'svelte'
 
 	type ThemeMode = 'light' | 'dark' | 'system'
@@ -34,26 +53,156 @@
 	let saveError = $state<string | null>(null)
 	let saveSuccess = $state<string | null>(null)
 
-	let scrollContainer = $state<HTMLElement | null>(null)
-	let showScrollTop = $state(false)
+	type SettingsSectionId =
+		| 'section-ui'
+		| 'section-ai'
+		| 'section-branding'
+		| 'section-media'
+		| 'section-assets'
+		| 'section-limits'
+		| 'section-soft-delete'
+		| 'section-web-search'
+		| 'section-code-interpreter'
+		| 'section-security'
+		| 'section-permissions'
+		| 'section-integrations'
 
-	const sections = [
-		{ id: 'section-ui', label: 'ui' },
-		{ id: 'section-ai', label: 'ai' },
-		{ id: 'section-branding', label: 'branding' },
-		{ id: 'section-media', label: 'media' },
-		{ id: 'section-assets', label: 'assets' },
-		{ id: 'section-limits', label: 'limits' },
-		{ id: 'section-soft-delete', label: 'soft delete' },
-		{ id: 'section-web-search', label: 'web search' },
-		{ id: 'section-code-interpreter', label: 'code interpreter' },
-		{ id: 'section-security', label: 'security' },
-		{ id: 'section-permissions', label: 'permissions' },
+	let activeSection = $state<SettingsSectionId>('section-ui')
+	let settingsSearch = $state('')
+
+	type SettingsSection = {
+		id: SettingsSectionId
+		label: string
+		keywords: string
+		icon: Component
+		color: string
+		activeBg: string
+	}
+
+	const sections: SettingsSection[] = [
+		{
+			id: 'section-ui',
+			label: 'UI',
+			keywords:
+				'theme color scheme light dark system background sidebar collapsed animated galaxy veil silk fog clouds grainient iridescence auth pages',
+			icon: Palette,
+			color: 'text-violet-400',
+			activeBg: 'bg-violet-500/10',
+		},
+		{
+			id: 'section-ai',
+			label: 'AI',
+			keywords:
+				'agents default memory retrieval consolidation similarity threshold top-k chat context recent relevant pinned past chats context window mode turns pre-build embed filters task models thread metadata titles tags autocomplete summarization memory post-processing deduplication attachment decay image audio video reveal windowing token-aware truncation model limits max messages trigger ratio token budget summary batch size headroom tool result media generation image model steps video audio',
+			icon: Brain,
+			color: 'text-indigo-400',
+			activeBg: 'bg-indigo-500/10',
+		},
+		{
+			id: 'section-branding',
+			label: 'branding',
+			keywords:
+				'site name display name browser tab emails app version primary color accent color hex analytics key support email admin email logo url sidebar favicon url public frontend origin oidc cdn origin console origin pwa manifest',
+			icon: Paintbrush,
+			color: 'text-fuchsia-400',
+			activeBg: 'bg-fuchsia-500/10',
+		},
+		{
+			id: 'section-media',
+			label: 'media',
+			keywords:
+				'base url favicon apple touch icon ios home screen sidebar logo splash logo loading screen cdn url overrides frontend media assets',
+			icon: ImageIcon,
+			color: 'text-rose-400',
+			activeBg: 'bg-rose-500/10',
+		},
+		{
+			id: 'section-assets',
+			label: 'assets',
+			keywords:
+				'default embedding model vector database provider qdrant chroma pinecone weaviate milvus pgvector redis opensearch endpoint grpc api key collection name template sparse vectors bm25 normalize scores fusion algorithm reciprocal rank distribution vector size dimensions batch size rerank strategy native external top-k storage backend local s3 root path bucket region access key secret key presigned url ttl multipart threshold chunk size max retries retry mode',
+			icon: Database,
+			color: 'text-cyan-400',
+			activeBg: 'bg-cyan-500/10',
+		},
+		{
+			id: 'section-limits',
+			label: 'limits',
+			keywords:
+				'max threads per user cap messages per thread file size upload rate limit requests per minute authenticated',
+			icon: Gauge,
+			color: 'text-amber-400',
+			activeBg: 'bg-amber-500/10',
+		},
+		{
+			id: 'section-soft-delete',
+			label: 'soft delete',
+			keywords:
+				'deleting marks deleted permanently removing database threads notes files retention restore cleanup',
+			icon: Trash2,
+			color: 'text-red-400',
+			activeBg: 'bg-red-500/10',
+		},
+		{
+			id: 'section-web-search',
+			label: 'web search',
+			keywords:
+				'search engine agent native perplexity sonar blacklisted domains exclude searxng google instance url max results concurrent requests timeout web loader tavily playwright user agent extract depth api key temperature recency filter return images',
+			icon: Globe,
+			color: 'text-emerald-400',
+			activeBg: 'bg-emerald-500/10',
+		},
+		{
+			id: 'section-code-interpreter',
+			label: 'code interpreter',
+			keywords:
+				'sandbox engine code execution enabled e2b api key template pre-installed packages python numpy pandas matplotlib timeout',
+			icon: Code2,
+			color: 'text-sky-400',
+			activeBg: 'bg-sky-500/10',
+		},
+		{
+			id: 'section-security',
+			label: 'security',
+			keywords:
+				'authentication session secret key jwt algorithm oauth cors origins access token expire refresh token session timeout idle allowed email domains register signup admins users manage auto-apply roles cookie secure require email verification oidc openid connect sso issuer client id client secret redirect uri scopes disable password login',
+			icon: Shield,
+			color: 'text-orange-400',
+			activeBg: 'bg-orange-500/10',
+		},
+		{
+			id: 'section-permissions',
+			label: 'permissions',
+			keywords:
+				'default permissions global defaults role explicit rule resource access thread project file note group reminder list action',
+			icon: Users,
+			color: 'text-teal-400',
+			activeBg: 'bg-teal-500/10',
+		},
+		{
+			id: 'section-integrations',
+			label: 'integrations',
+			keywords:
+				'open webui import deployments jwt chats memories enable allowed deployment id slug label origin url external services connections',
+			icon: Plug,
+			color: 'text-purple-400',
+			activeBg: 'bg-purple-500/10',
+		},
 	]
 
-	function scrollToSection(id: string) {
-		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-	}
+	const filteredSections = $derived.by(() => {
+		const query = settingsSearch.trim().toLowerCase()
+		if (!query) return sections
+		return sections.filter((section) =>
+			`${section.label} ${section.keywords}`.toLowerCase().includes(query)
+		)
+	})
+
+	$effect(() => {
+		if (filteredSections.length === 0) return
+		if (filteredSections.some((section) => section.id === activeSection)) return
+		activeSection = filteredSections[0].id
+	})
 
 	let response = $state<SettingsResponse | null>(null)
 
@@ -2186,7 +2335,12 @@
 			<p class="text-zinc-400">manage backend settings (admin only).</p>
 		</div>
 		<div class="flex items-center gap-2">
-			<Button variant="secondary" class="rounded-xl" onclick={fetchSettings} disabled={isFetching || isSaving}>
+			<Button
+				variant="secondary"
+				class="rounded-xl"
+				onclick={fetchSettings}
+				disabled={isFetching || isSaving}
+			>
 				<RefreshCw class="mr-1.5 h-4 w-4" />
 				reload
 			</Button>
@@ -2199,19 +2353,19 @@
 				<RotateCcw class="mr-1.5 h-4 w-4" />
 				reset
 			</Button>
-			<Button class="rounded-xl" onclick={save} disabled={!response || isFetching || isSaving || !hasChanges}>
+			<Button
+				class="rounded-xl"
+				onclick={save}
+				disabled={!response || isFetching || isSaving || !hasChanges}
+			>
 				<Save class="mr-1.5 h-4 w-4" />
-				{isSaving ? 'saving…' : 'save'}
+				{isSaving ? 'saving...' : 'save'}
 			</Button>
 		</div>
 	</div>
 
-	<div
-		bind:this={scrollContainer}
-		class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
-		onscroll={() => (showScrollTop = (scrollContainer?.scrollTop ?? 0) > 200)}
-	>
-		<div class="mx-auto flex w-full max-w-full min-h-0 min-w-0 flex-col gap-6">
+	<div class="min-h-0 min-w-0 flex-1 overflow-hidden">
+		<div class="mx-auto flex h-full min-h-0 w-full max-w-full min-w-0 flex-col gap-6">
 			{#if error}
 				<div
 					class="rounded-lg border border-red-900/40 bg-red-950/40 p-4 text-sm text-red-200"
@@ -2239,242 +2393,327 @@
 					<NokodoLoader className="opacity-70" />
 				</div>
 			{:else if response}
-				<div class="min-w-0 space-y-6">
-					<!-- nav legend -->
-					<nav
-						class="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-950/90 px-3 py-2 backdrop-blur"
-					>
-						{#each sections as s (s.id)}
-							<button
-								type="button"
-								onclick={() => scrollToSection(s.id)}
-								class="rounded-lg px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-							>
-								{s.label}
-							</button>
-						{/each}
-					</nav>
+				<div
+					class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]"
+				>
+					<aside class="min-h-0 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-3">
+						<div
+							class="mb-3 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+						>
+							<Search class="h-4 w-4 shrink-0 text-zinc-500" />
+							<input
+								bind:value={settingsSearch}
+								placeholder="search settings..."
+								class="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+							/>
+						</div>
+						<nav class="flex max-h-[45vh] flex-col gap-1 overflow-y-auto lg:max-h-none">
+							{#each filteredSections as section (section.id)}
+								<button
+									type="button"
+									onclick={() => (activeSection = section.id)}
+									class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm transition-colors {activeSection ===
+									section.id
+										? `${section.activeBg} text-zinc-100`
+										: 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'}"
+								>
+									<section.icon
+										class="h-4 w-4 shrink-0 {activeSection === section.id
+											? section.color
+											: ''}"
+									/>
+									{section.label}
+								</button>
+							{:else}
+								<div
+									class="rounded-xl border border-dashed border-zinc-800 p-4 text-sm text-zinc-500"
+								>
+									no sections match
+								</div>
+							{/each}
+						</nav>
+					</aside>
 
-					<section id="section-ui">
-						<SettingsUI
-							bind:defaultTheme={uiDefaultTheme}
-							bind:defaultBackground={uiDefaultBackground}
-							bind:authPagesBackground={uiAuthPagesBackground}
-							bind:sidebarCollapsed={uiSidebarCollapsed}
-						/>
-					</section>
-
-					<section id="section-ai">
-						<SettingsAI
-							bind:defaultAgentIds={aiDefaultAgentIds}
-							bind:memoryEnable={aiMemoryEnable}
-							bind:memorySimilarityThreshold={aiMemorySimilarityThreshold}
-							bind:memoryTopK={aiMemoryTopK}
-							bind:chatContextEnabled={aiChatContextEnabled}
-							bind:chatContextMode={aiChatContextMode}
-							bind:chatContextTopK={aiChatContextTopK}
-							bind:chatContextSimilarityThreshold={aiChatContextSimilarityThreshold}
-							bind:retrievalPreBuild={aiRetrievalPreBuild}
-							bind:retrievalTurns={aiRetrievalTurns}
-							bind:taskDefaultModelId={aiTaskDefaultModelId}
-							bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
-							bind:taskInputAutocompleteModelId={aiTaskInputAutocompleteModelId}
-							bind:taskSummarizationModelId={aiTaskSummarizationModelId}
-							bind:taskMemoryPostProcessingModelId={aiTaskMemoryPostProcessingModelId}
-							bind:mediaImagesEnabled={aiMediaImagesEnabled}
-							bind:mediaImagesModel={aiMediaImagesModel}
-							bind:mediaImagesDefaultSize={aiMediaImagesDefaultSize}
-							bind:mediaImagesDefaultSteps={aiMediaImagesDefaultSteps}
-							bind:mediaImagesDefaultN={aiMediaImagesDefaultN}
-							bind:mediaImagesMaxN={aiMediaImagesMaxN}
-							bind:mediaVideosEnabled={aiMediaVideosEnabled}
-							bind:mediaAudioEnabled={aiMediaAudioEnabled}
-							bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
-							bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
-							bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
-							bind:attachmentRevealDecayTurns={aiAttachmentRevealDecayTurns}
-							bind:windowingEnabled={aiWindowingEnabled}
-							bind:windowingMaxMessages={aiWindowingMaxMessages}
-							bind:windowingTriggerRatio={aiWindowingTriggerRatio}
-							bind:windowingHardRatio={aiWindowingHardRatio}
-							bind:windowingSummaryBatchSize={aiWindowingSummaryBatchSize}
-							bind:windowingMaxSummariesBeforeCondense={
-								aiWindowingMaxSummariesBeforeCondense
-							}
-							bind:windowingToolResultMaxShare={aiWindowingToolResultMaxShare}
-							bind:windowingToolResultHardCap={aiWindowingToolResultHardCap}
-							bind:windowingToolResultsCombinedMaxShare={
-								aiWindowingToolResultsCombinedMaxShare
-							}
-							bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
-							{agents}
-							{models}
-							{providers}
-							{isFetchingAgents}
-							{isFetchingModels}
-							{agentsError}
-							{modelsError}
-						/>
-					</section>
-
-					<section id="section-branding">
-						<SettingsBranding
-							bind:siteName={brandingSiteName}
-							bind:logoUrl={brandingLogoUrl}
-							bind:faviconUrl={brandingFaviconUrl}
-							bind:primaryColor={brandingPrimaryColor}
-							bind:supportEmail={brandingSupportEmail}
-							bind:adminEmail={brandingAdminEmail}
-							bind:publicFrontendOrigin={brandingPublicFrontendOrigin}
-							bind:publicCdnOrigin={brandingPublicCdnOrigin}
-							bind:publicConsoleOrigin={brandingPublicConsoleOrigin}
-							bind:pwaManifestUrl={brandingPwaManifestUrl}
-							appVersion={brandingAppVersion}
-							analyticsKeyConfigured={brandingAnalyticsKeyConfigured}
-						/>
-					</section>
-
-					<section id="section-media">
-						<SettingsMedia
-							bind:baseUrl={mediaBaseUrl}
-							bind:faviconUrl={mediaFaviconUrl}
-							bind:appleTouchIconUrl={mediaAppleTouchIconUrl}
-							bind:sidebarLogoUrl={mediaSidebarLogoUrl}
-							bind:splashLogoUrl={mediaSplashLogoUrl}
-						/>
-					</section>
-
-					<section id="section-assets">
-						<SettingsAssets
-							bind:defaultEmbeddingModelId={assetsDefaultEmbeddingModelId}
-							bind:vectorDatabaseProvider={assetsVectorDatabaseProvider}
-							bind:vectorDatabaseUrl={assetsVectorDatabaseUrl}
-							bind:vectorDatabaseQdrantUseGrpc={assetsVectorDatabaseQdrantUseGrpc}
-							bind:vectorDatabaseQdrantApiKey={assetsVectorDatabaseQdrantApiKey}
-							bind:vectorDatabaseChromaApiKey={assetsVectorDatabaseChromaApiKey}
-							bind:vectorDatabasePineconeApiKey={assetsVectorDatabasePineconeApiKey}
-							bind:vectorDatabaseWeaviateApiKey={assetsVectorDatabaseWeaviateApiKey}
-							bind:vectorDatabaseMilvusToken={assetsVectorDatabaseMilvusToken}
-							bind:vectorDatabaseRedisPassword={assetsVectorDatabaseRedisPassword}
-							bind:vectorDatabaseOpensearchApiKey={
-								assetsVectorDatabaseOpensearchApiKey
-							}
-							bind:vectorCollectionTemplate={assetsVectorCollectionTemplate}
-							bind:vectorSparseEnabled={assetsVectorSparseEnabled}
-							bind:vectorFusionAlgorithm={assetsVectorFusionAlgorithm}
-							bind:vectorNormalizeScores={assetsVectorNormalizeScores}
-							bind:embeddingsVectorSize={assetsEmbeddingsVectorSize}
-							bind:embeddingsBatchSize={assetsEmbeddingsBatchSize}
-							bind:rerankDefaultStrategy={assetsRerankDefaultStrategy}
-							bind:rerankTopK={assetsRerankTopK}
-							bind:storageBackend={assetsStorageBackend}
-							bind:storageLocalRootPath={assetsStorageLocalRootPath}
-							bind:storageS3EndpointUrl={assetsStorageS3EndpointUrl}
-							bind:storageS3Bucket={assetsStorageS3Bucket}
-							bind:storageS3Region={assetsStorageS3Region}
-							bind:storageS3AccessKeyId={assetsStorageS3AccessKeyId}
-							bind:storageS3SecretAccessKey={assetsStorageS3SecretAccessKey}
-							bind:storageS3Prefix={assetsStorageS3Prefix}
-							bind:storageS3PresignedUrlTtl={assetsStorageS3PresignedUrlTtl}
-							bind:storageS3MultipartThreshold={assetsStorageS3MultipartThreshold}
-							bind:storageS3MultipartChunkSize={assetsStorageS3MultipartChunkSize}
-							bind:storageS3MaxRetries={assetsStorageS3MaxRetries}
-							bind:storageS3RetryMode={assetsStorageS3RetryMode}
-							{models}
-							{providers}
-							{isFetchingModels}
-							{modelsError}
-						/>
-					</section>
-
-					<section id="section-limits">
-						<SettingsLimits
-							bind:maxThreadsPerUser={limitsMaxThreadsPerUser}
-							bind:maxMessagesPerThread={limitsMaxMessagesPerThread}
-							bind:maxFileSizeMb={limitsMaxFileSizeMb}
-							bind:rateLimitRequestsPerMinute={limitsRateLimitRequestsPerMinute}
-						/>
-					</section>
-
-					<section id="section-soft-delete">
-						<SettingsSoftDelete
-							bind:threads={softDeleteThreads}
-							bind:notes={softDeleteNotes}
-							bind:files={softDeleteFiles}
-						/>
-					</section>
-
-					<section id="section-web-search">
-						<SettingsWebSearch
-							bind:searchAgent={webSearchSearchAgent}
-							bind:blacklistedDomains={webSearchBlacklistedDomains}
-							bind:engineEngine={webSearchEngineEngine}
-							bind:searxngInstanceUrl={webSearchSearxngInstanceUrl}
-							bind:searxngMaxResults={webSearchSearxngMaxResults}
-							bind:searxngMaxConcurrentRequests={
-								webSearchSearxngMaxConcurrentRequests
-							}
-							bind:searxngTimeoutSeconds={webSearchSearxngTimeoutSeconds}
-							bind:webLoaderEngine={webSearchWebLoaderEngine}
-							bind:webLoaderTimeoutSeconds={webSearchWebLoaderTimeoutSeconds}
-							bind:webLoaderUserAgent={webSearchWebLoaderUserAgent}
-							bind:tavilyExtractDepth={webSearchTavilyExtractDepth}
-							bind:tavilyApiKey={webSearchTavilyApiKey}
-							bind:tavilyMaxConcurrentRequests={webSearchTavilyMaxConcurrentRequests}
-							bind:perplexityApiKey={webSearchPerplexityApiKey}
-							bind:perplexityModel={webSearchPerplexityModel}
-							bind:perplexitySearchContextUsage={
-								webSearchPerplexitySearchContextUsage
-							}
-							bind:perplexityTemperature={webSearchPerplexityTemperature}
-							bind:perplexityReturnImages={webSearchPerplexityReturnImages}
-							bind:perplexitySearchRecencyFilter={
-								webSearchPerplexitySearchRecencyFilter
-							}
-							bind:perplexityMaxConcurrentRequests={
-								webSearchPerplexityMaxConcurrentRequests
-							}
-						/>
-					</section>
-
-					<section id="section-code-interpreter">
-						<SettingsCodeInterpreter
-							bind:enabled={codeInterpreterEnabled}
-							bind:engine={codeInterpreterEngine}
-							bind:e2bApiKey={codeInterpreterE2bApiKey}
-							bind:e2bTemplate={codeInterpreterE2bTemplate}
-							bind:e2bAvailablePackages={codeInterpreterE2bAvailablePackages}
-							bind:timeout={codeInterpreterTimeout}
-						/>
-					</section>
-
-					<section id="section-security">
-						<SettingsSecurity
-							bind:accessTokenExpireMinutes={securityAccessTokenExpireMinutes}
-							bind:refreshTokenExpireDays={securityRefreshTokenExpireDays}
-							bind:authCookieSecure={securityAuthCookieSecure}
-							bind:sessionTimeoutMinutes={securitySessionTimeoutMinutes}
-							bind:requireEmailVerification={securityRequireEmailVerification}
-							bind:allowedEmailDomains={securityAllowedEmailDomains}
-							bind:allowSignups={securityAllowSignups}
-							bind:autoSignupRoleIds={securityAutoSignupRoleIds}
-							bind:oidcEnabled={securityOidcEnabled}
-							bind:oidcIssuerUrl={securityOidcIssuerUrl}
-							bind:oidcClientId={securityOidcClientId}
-							bind:oidcClientSecret={securityOidcClientSecret}
-							bind:oidcRedirectUri={securityOidcRedirectUri}
-							bind:oidcScopes={securityOidcScopes}
-							bind:oidcOnly={securityOidcOnly}
-							secretKeyConfigured={securitySecretKeyConfigured}
-							jwtAlgorithm={securityJwtAlgorithm}
-							enableOauth={securityEnableOauth}
-							corsOrigins={securityCorsOrigins}
-						/>
-					</section>
-
-					<section id="section-permissions">
-						<SettingsDefaultPermissions bind:value={defaultPermissions} />
-					</section>
+					<div class="min-h-0 min-w-0 overflow-y-auto pr-1">
+						<div class="min-w-0">
+							{#if activeSection === 'section-ui'}
+								<section>
+									<SettingsUI
+										bind:defaultTheme={uiDefaultTheme}
+										bind:defaultBackground={uiDefaultBackground}
+										bind:authPagesBackground={uiAuthPagesBackground}
+										bind:sidebarCollapsed={uiSidebarCollapsed}
+									/>
+								</section>
+							{:else if activeSection === 'section-ai'}
+								<section>
+									<SettingsAI
+										bind:defaultAgentIds={aiDefaultAgentIds}
+										bind:memoryEnable={aiMemoryEnable}
+										bind:memorySimilarityThreshold={aiMemorySimilarityThreshold}
+										bind:memoryTopK={aiMemoryTopK}
+										bind:chatContextEnabled={aiChatContextEnabled}
+										bind:chatContextMode={aiChatContextMode}
+										bind:chatContextTopK={aiChatContextTopK}
+										bind:chatContextSimilarityThreshold={
+											aiChatContextSimilarityThreshold
+										}
+										bind:retrievalPreBuild={aiRetrievalPreBuild}
+										bind:retrievalTurns={aiRetrievalTurns}
+										bind:taskDefaultModelId={aiTaskDefaultModelId}
+										bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
+										bind:taskInputAutocompleteModelId={
+											aiTaskInputAutocompleteModelId
+										}
+										bind:taskSummarizationModelId={aiTaskSummarizationModelId}
+										bind:taskMemoryPostProcessingModelId={
+											aiTaskMemoryPostProcessingModelId
+										}
+										bind:mediaImagesEnabled={aiMediaImagesEnabled}
+										bind:mediaImagesModel={aiMediaImagesModel}
+										bind:mediaImagesDefaultSize={aiMediaImagesDefaultSize}
+										bind:mediaImagesDefaultSteps={aiMediaImagesDefaultSteps}
+										bind:mediaImagesDefaultN={aiMediaImagesDefaultN}
+										bind:mediaImagesMaxN={aiMediaImagesMaxN}
+										bind:mediaVideosEnabled={aiMediaVideosEnabled}
+										bind:mediaAudioEnabled={aiMediaAudioEnabled}
+										bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
+										bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
+										bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
+										bind:attachmentRevealDecayTurns={
+											aiAttachmentRevealDecayTurns
+										}
+										bind:windowingEnabled={aiWindowingEnabled}
+										bind:windowingMaxMessages={aiWindowingMaxMessages}
+										bind:windowingTriggerRatio={aiWindowingTriggerRatio}
+										bind:windowingHardRatio={aiWindowingHardRatio}
+										bind:windowingSummaryBatchSize={aiWindowingSummaryBatchSize}
+										bind:windowingMaxSummariesBeforeCondense={
+											aiWindowingMaxSummariesBeforeCondense
+										}
+										bind:windowingToolResultMaxShare={
+											aiWindowingToolResultMaxShare
+										}
+										bind:windowingToolResultHardCap={
+											aiWindowingToolResultHardCap
+										}
+										bind:windowingToolResultsCombinedMaxShare={
+											aiWindowingToolResultsCombinedMaxShare
+										}
+										bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
+										{agents}
+										{models}
+										{providers}
+										{isFetchingAgents}
+										{isFetchingModels}
+										{agentsError}
+										{modelsError}
+									/>
+								</section>
+							{:else if activeSection === 'section-branding'}
+								<section>
+									<SettingsBranding
+										bind:siteName={brandingSiteName}
+										bind:logoUrl={brandingLogoUrl}
+										bind:faviconUrl={brandingFaviconUrl}
+										bind:primaryColor={brandingPrimaryColor}
+										bind:supportEmail={brandingSupportEmail}
+										bind:adminEmail={brandingAdminEmail}
+										bind:publicFrontendOrigin={brandingPublicFrontendOrigin}
+										bind:publicCdnOrigin={brandingPublicCdnOrigin}
+										bind:publicConsoleOrigin={brandingPublicConsoleOrigin}
+										bind:pwaManifestUrl={brandingPwaManifestUrl}
+										appVersion={brandingAppVersion}
+										analyticsKeyConfigured={brandingAnalyticsKeyConfigured}
+									/>
+								</section>
+							{:else if activeSection === 'section-media'}
+								<section>
+									<SettingsMedia
+										bind:baseUrl={mediaBaseUrl}
+										bind:faviconUrl={mediaFaviconUrl}
+										bind:appleTouchIconUrl={mediaAppleTouchIconUrl}
+										bind:sidebarLogoUrl={mediaSidebarLogoUrl}
+										bind:splashLogoUrl={mediaSplashLogoUrl}
+									/>
+								</section>
+							{:else if activeSection === 'section-assets'}
+								<section>
+									<SettingsAssets
+										bind:defaultEmbeddingModelId={assetsDefaultEmbeddingModelId}
+										bind:vectorDatabaseProvider={assetsVectorDatabaseProvider}
+										bind:vectorDatabaseUrl={assetsVectorDatabaseUrl}
+										bind:vectorDatabaseQdrantUseGrpc={
+											assetsVectorDatabaseQdrantUseGrpc
+										}
+										bind:vectorDatabaseQdrantApiKey={
+											assetsVectorDatabaseQdrantApiKey
+										}
+										bind:vectorDatabaseChromaApiKey={
+											assetsVectorDatabaseChromaApiKey
+										}
+										bind:vectorDatabasePineconeApiKey={
+											assetsVectorDatabasePineconeApiKey
+										}
+										bind:vectorDatabaseWeaviateApiKey={
+											assetsVectorDatabaseWeaviateApiKey
+										}
+										bind:vectorDatabaseMilvusToken={
+											assetsVectorDatabaseMilvusToken
+										}
+										bind:vectorDatabaseRedisPassword={
+											assetsVectorDatabaseRedisPassword
+										}
+										bind:vectorDatabaseOpensearchApiKey={
+											assetsVectorDatabaseOpensearchApiKey
+										}
+										bind:vectorCollectionTemplate={
+											assetsVectorCollectionTemplate
+										}
+										bind:vectorSparseEnabled={assetsVectorSparseEnabled}
+										bind:vectorFusionAlgorithm={assetsVectorFusionAlgorithm}
+										bind:vectorNormalizeScores={assetsVectorNormalizeScores}
+										bind:embeddingsVectorSize={assetsEmbeddingsVectorSize}
+										bind:embeddingsBatchSize={assetsEmbeddingsBatchSize}
+										bind:rerankDefaultStrategy={assetsRerankDefaultStrategy}
+										bind:rerankTopK={assetsRerankTopK}
+										bind:storageBackend={assetsStorageBackend}
+										bind:storageLocalRootPath={assetsStorageLocalRootPath}
+										bind:storageS3EndpointUrl={assetsStorageS3EndpointUrl}
+										bind:storageS3Bucket={assetsStorageS3Bucket}
+										bind:storageS3Region={assetsStorageS3Region}
+										bind:storageS3AccessKeyId={assetsStorageS3AccessKeyId}
+										bind:storageS3SecretAccessKey={
+											assetsStorageS3SecretAccessKey
+										}
+										bind:storageS3Prefix={assetsStorageS3Prefix}
+										bind:storageS3PresignedUrlTtl={
+											assetsStorageS3PresignedUrlTtl
+										}
+										bind:storageS3MultipartThreshold={
+											assetsStorageS3MultipartThreshold
+										}
+										bind:storageS3MultipartChunkSize={
+											assetsStorageS3MultipartChunkSize
+										}
+										bind:storageS3MaxRetries={assetsStorageS3MaxRetries}
+										bind:storageS3RetryMode={assetsStorageS3RetryMode}
+										{models}
+										{providers}
+										{isFetchingModels}
+										{modelsError}
+									/>
+								</section>
+							{:else if activeSection === 'section-limits'}
+								<section>
+									<SettingsLimits
+										bind:maxThreadsPerUser={limitsMaxThreadsPerUser}
+										bind:maxMessagesPerThread={limitsMaxMessagesPerThread}
+										bind:maxFileSizeMb={limitsMaxFileSizeMb}
+										bind:rateLimitRequestsPerMinute={
+											limitsRateLimitRequestsPerMinute
+										}
+									/>
+								</section>
+							{:else if activeSection === 'section-soft-delete'}
+								<section>
+									<SettingsSoftDelete
+										bind:threads={softDeleteThreads}
+										bind:notes={softDeleteNotes}
+										bind:files={softDeleteFiles}
+									/>
+								</section>
+							{:else if activeSection === 'section-web-search'}
+								<section>
+									<SettingsWebSearch
+										bind:searchAgent={webSearchSearchAgent}
+										bind:blacklistedDomains={webSearchBlacklistedDomains}
+										bind:engineEngine={webSearchEngineEngine}
+										bind:searxngInstanceUrl={webSearchSearxngInstanceUrl}
+										bind:searxngMaxResults={webSearchSearxngMaxResults}
+										bind:searxngMaxConcurrentRequests={
+											webSearchSearxngMaxConcurrentRequests
+										}
+										bind:searxngTimeoutSeconds={webSearchSearxngTimeoutSeconds}
+										bind:webLoaderEngine={webSearchWebLoaderEngine}
+										bind:webLoaderTimeoutSeconds={
+											webSearchWebLoaderTimeoutSeconds
+										}
+										bind:webLoaderUserAgent={webSearchWebLoaderUserAgent}
+										bind:tavilyExtractDepth={webSearchTavilyExtractDepth}
+										bind:tavilyApiKey={webSearchTavilyApiKey}
+										bind:tavilyMaxConcurrentRequests={
+											webSearchTavilyMaxConcurrentRequests
+										}
+										bind:perplexityApiKey={webSearchPerplexityApiKey}
+										bind:perplexityModel={webSearchPerplexityModel}
+										bind:perplexitySearchContextUsage={
+											webSearchPerplexitySearchContextUsage
+										}
+										bind:perplexityTemperature={webSearchPerplexityTemperature}
+										bind:perplexityReturnImages={
+											webSearchPerplexityReturnImages
+										}
+										bind:perplexitySearchRecencyFilter={
+											webSearchPerplexitySearchRecencyFilter
+										}
+										bind:perplexityMaxConcurrentRequests={
+											webSearchPerplexityMaxConcurrentRequests
+										}
+									/>
+								</section>
+							{:else if activeSection === 'section-code-interpreter'}
+								<section>
+									<SettingsCodeInterpreter
+										bind:enabled={codeInterpreterEnabled}
+										bind:engine={codeInterpreterEngine}
+										bind:e2bApiKey={codeInterpreterE2bApiKey}
+										bind:e2bTemplate={codeInterpreterE2bTemplate}
+										bind:e2bAvailablePackages={
+											codeInterpreterE2bAvailablePackages
+										}
+										bind:timeout={codeInterpreterTimeout}
+									/>
+								</section>
+							{:else if activeSection === 'section-security'}
+								<section>
+									<SettingsSecurity
+										bind:accessTokenExpireMinutes={
+											securityAccessTokenExpireMinutes
+										}
+										bind:refreshTokenExpireDays={securityRefreshTokenExpireDays}
+										bind:authCookieSecure={securityAuthCookieSecure}
+										bind:sessionTimeoutMinutes={securitySessionTimeoutMinutes}
+										bind:requireEmailVerification={
+											securityRequireEmailVerification
+										}
+										bind:allowedEmailDomains={securityAllowedEmailDomains}
+										bind:allowSignups={securityAllowSignups}
+										bind:autoSignupRoleIds={securityAutoSignupRoleIds}
+										bind:oidcEnabled={securityOidcEnabled}
+										bind:oidcIssuerUrl={securityOidcIssuerUrl}
+										bind:oidcClientId={securityOidcClientId}
+										bind:oidcClientSecret={securityOidcClientSecret}
+										bind:oidcRedirectUri={securityOidcRedirectUri}
+										bind:oidcScopes={securityOidcScopes}
+										bind:oidcOnly={securityOidcOnly}
+										secretKeyConfigured={securitySecretKeyConfigured}
+										jwtAlgorithm={securityJwtAlgorithm}
+										enableOauth={securityEnableOauth}
+										corsOrigins={securityCorsOrigins}
+									/>
+								</section>
+							{:else if activeSection === 'section-permissions'}
+								<section>
+									<SettingsDefaultPermissions bind:value={defaultPermissions} />
+								</section>
+							{:else if activeSection === 'section-integrations'}
+								<section>
+									<SettingsIntegrations />
+								</section>
+							{/if}
+						</div>
+					</div>
 				</div>
 			{:else}
 				<div class="rounded-lg border border-zinc-800 p-8 text-zinc-400">
@@ -2483,27 +2722,4 @@
 			{/if}
 		</div>
 	</div>
-
-	{#if showScrollTop}
-		<button
-			type="button"
-			onclick={() => scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })}
-			class="fixed right-6 bottom-6 z-50 flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-300 shadow-lg transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-			aria-label="scroll to top"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="16"
-				height="16"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="m18 15-6-6-6 6" />
-			</svg>
-		</button>
-	{/if}
 </div>

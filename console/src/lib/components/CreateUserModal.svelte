@@ -7,7 +7,7 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Switch } from '$lib/components/ui/switch'
-	import { X, Save } from '@lucide/svelte'
+	import { Save, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type Props = {
@@ -165,16 +165,6 @@
 			</div>
 
 			<div class="flex shrink-0 justify-end gap-2 border-t border-zinc-800 px-6 py-4">
-				<Button
-					type="button"
-					variant="outline"
-					class="rounded-xl"
-					onclick={close}
-					disabled={isCreating}
-				>
-					<X class="mr-1.5 h-4 w-4" />
-					cancel
-				</Button>
 				<Button type="button" class="rounded-xl" onclick={submit} disabled={isCreating}>
 					<Save class="mr-1.5 h-4 w-4" />
 					{isCreating ? 'creating...' : 'create'}

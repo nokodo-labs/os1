@@ -5,6 +5,8 @@
 	type GroupMemberRole = Schemas['GroupMemberRole']
 	type UserRecord = Schemas['User']
 
+	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
+	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -85,6 +87,7 @@
 	// user modal
 	let isUserModalOpen = $state(false)
 	let selectedUserId = $state<string | null>(null)
+	let showAclModal = $state(false)
 
 	function openUser(userId: string) {
 		selectedUserId = userId
@@ -266,7 +269,6 @@
 		<Dialog.Content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
-			<!-- header -->
 			<div
 				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
 			>
@@ -285,9 +287,19 @@
 						>
 					</div>
 				</div>
-				<Button variant="ghost" size="icon" class="shrink-0 rounded-xl" onclick={close}>
-					<X class="h-4 w-4" />
-				</Button>
+				<div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+					{#if groupId}
+						<AccessRulesButton
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => (showAclModal = true)}
+						/>
+					{/if}
+					<Button variant="ghost" size="icon" class="shrink-0 rounded-xl" onclick={close}>
+						<X class="h-4 w-4" />
+					</Button>
+				</div>
 			</div>
 
 			<div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
@@ -602,3 +614,12 @@
 </Dialog.Root>
 
 <UserDetailsModal bind:open={isUserModalOpen} userId={selectedUserId} />
+
+{#if groupId}
+	<AclModal
+		bind:open={showAclModal}
+		resourceType="group"
+		resourceId={groupId}
+		title="group access rules"
+	/>
+{/if}

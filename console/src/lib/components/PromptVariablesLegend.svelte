@@ -278,7 +278,8 @@
 	}
 
 	async function copyText(text: string, key: string) {
-		await copyToClipboard(text)
+		const copied = await copyToClipboard(text)
+		if (!copied) return
 		copiedVar = key
 		clearTimeout(copyTimeout)
 		copyTimeout = setTimeout(() => {

@@ -5,6 +5,8 @@
 	type Message = Schemas['Message']
 	type Thread = Schemas['Thread']
 
+	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
+	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadFlowView from '$lib/components/thread-flow/ThreadFlowView.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -37,6 +39,7 @@
 	let isWipeConfirming = $state(false)
 	let isWiping = $state(false)
 	let wipeError = $state<string | null>(null)
+	let showAclModal = $state(false)
 
 	const messagePageSize = 60
 
@@ -298,7 +301,6 @@
 		<Dialog.Content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
-			<!-- header -->
 			<div
 				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
 			>
@@ -308,8 +310,15 @@
 						{threadId ?? ''}
 					</Dialog.Description>
 				</div>
-				<div class="flex items-center gap-2">
-					<!-- export dropdown -->
+				<div class="flex flex-wrap items-center justify-end gap-2">
+					{#if threadId}
+						<AccessRulesButton
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => (showAclModal = true)}
+						/>
+					{/if}
 					{#if thread && messages.length > 0}
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger
@@ -589,3 +598,12 @@
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
+
+{#if threadId}
+	<AclModal
+		bind:open={showAclModal}
+		resourceType="thread"
+		resourceId={threadId}
+		title="thread access rules"
+	/>
+{/if}
