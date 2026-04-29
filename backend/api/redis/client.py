@@ -36,10 +36,19 @@ class RedisClient:
 
 	minimal by design - higher-level primitives (pub/sub, streams, locks)
 	live in dedicated modules so the client stays a thin connection manager.
+
+	exposes two pools:
+
+	- ``get()`` - request-response commands, with ``socket_timeout`` for
+		fast failure on stalled ops.
+	- ``get_pubsub()`` - long-lived blocking readers (pub/sub). no
+		``socket_timeout`` because ``listen()`` blocks until a message
+		arrives; a 2s ceiling would kill it.
 	"""
 
 	def __init__(self) -> None:
 		self._conn: Redis | None = None
+		self._pubsub_conn: Redis | None = None
 		self._url: str | None = None
 
 	@property
@@ -69,6 +78,15 @@ class RedisClient:
 			health_check_interval=30,
 			client_name=boot_settings.REDIS_CLIENT_NAME,
 		)
+		# separate pool for pub/sub: no socket_timeout so listen() can
+		# block indefinitely waiting for messages.
+		pubsub_conn = redis_async.from_url(
+			target_url,
+			max_connections=max_connections,
+			socket_connect_timeout=_DEFAULT_SOCKET_CONNECT_TIMEOUT_S,
+			decode_responses=False,
+			client_name=boot_settings.REDIS_CLIENT_NAME,
+		)
 		# TODO(observability): once OpenTelemetry is wired up, add
 		# opentelemetry-instrumentation-redis to instrument every op
 		# with spans + metrics.
@@ -76,6 +94,7 @@ class RedisClient:
 		# class hierarchy; the async client always returns an awaitable.
 		await cast("Awaitable[bool]", conn.ping())
 		self._conn = conn
+		self._pubsub_conn = pubsub_conn
 		self._url = target_url
 		logger.info("redis connected at %s", target_url)
 
@@ -84,9 +103,13 @@ class RedisClient:
 		if self._conn is None:
 			return
 		conn = self._conn
+		pubsub_conn = self._pubsub_conn
 		self._conn = None
+		self._pubsub_conn = None
 		self._url = None
 		await conn.aclose()
+		if pubsub_conn is not None:
+			await pubsub_conn.aclose()
 
 	def get(self) -> Redis:
 		"""return the live redis connection.
@@ -99,6 +122,14 @@ class RedisClient:
 				"redis client is not connected; call connect() during app startup"
 			)
 		return self._conn
+
+	def get_pubsub(self) -> Redis:
+		"""return a redis client for pub/sub use (no socket_timeout)."""
+		if self._pubsub_conn is None:
+			raise RuntimeError(
+				"redis client is not connected; call connect() during app startup"
+			)
+		return self._pubsub_conn
 
 
 redis_client = RedisClient()

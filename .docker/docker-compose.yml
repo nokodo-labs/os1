@@ -31,6 +31,20 @@ services:
       - qdrant_data:/qdrant/storage
     profiles: ["deps", "local"]
 
+  valkey:
+    image: valkey/valkey:9-alpine
+    container_name: os1-valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "no", "--save", ""]
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    profiles: ["deps", "local"]
+
   minio:
     image: minio/minio:latest
     container_name: os1-minio
@@ -71,12 +85,15 @@ services:
       NOKODO__ASSETS__STORAGE__S3__ENDPOINT_URL: http://minio:9000
       NOKODO__ASSETS__STORAGE__S3__ACCESS_KEY_ID: minioadmin
       NOKODO__ASSETS__STORAGE__S3__SECRET_ACCESS_KEY: minioadmin
+      REDIS_URL: redis://valkey:6379/0
     depends_on:
       db:
         condition: service_healthy
       qdrant:
         condition: service_started
       minio:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
     volumes:
       - ../backend:/app

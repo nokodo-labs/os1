@@ -60,9 +60,10 @@ class RedisCache:
 		if raw is None:
 			return None
 		try:
-			return json.loads(raw)
+			decoded: object = json.loads(raw)
 		except (json.JSONDecodeError, TypeError):
 			return None
+		return decoded
 
 	async def set(
 		self,

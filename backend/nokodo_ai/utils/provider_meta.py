@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 def provider_tool_call_metadata(
-	*,
 	provider: str,
 	tool_call_id: str,
 	**extra: JSONValue,
@@ -78,7 +77,6 @@ def get_provider_run_id(
 
 
 def get_provider_value(
-	*,
 	metadata: JSONObject | None,
 	provider: str,
 	key: str,
@@ -96,7 +94,6 @@ def get_provider_value(
 
 
 def get_provider_tool_call_id(
-	*,
 	metadata: JSONObject | None,
 	provider: str,
 	fallback_id: str | None = None,

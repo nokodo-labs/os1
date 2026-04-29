@@ -22,7 +22,6 @@ intentionally NOT included here:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -61,20 +60,12 @@ class PubSubChannel:
 		envelopes. unsubscribes and closes the redis pubsub connection on
 		cancellation or generator close.
 		"""
-		conn = redis_client.get()
+		conn = redis_client.get_pubsub()
 		pubsub = conn.pubsub()
 		try:
 			await pubsub.subscribe(self._channel)
-			while True:
-				msg = await pubsub.get_message(
-					ignore_subscribe_messages=True, timeout=None
-				)
-				if msg is None:
-					# get_message with timeout=None occasionally returns None
-					# on transient disconnect. back off briefly so we don't
-					# hot-loop while the underlying connection recovers (the
-					# health-check interval will reconnect within ~30s).
-					await asyncio.sleep(0.1)
+			async for msg in pubsub.listen():
+				if msg["type"] != "message":
 					continue
 				data = msg.get("data")
 				if not isinstance(data, (bytes, bytearray)):
