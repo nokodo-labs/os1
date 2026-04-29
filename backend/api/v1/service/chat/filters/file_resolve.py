@@ -30,6 +30,7 @@ from nokodo_ai.messages import (
 	UserMessage as SDKUserMessage,
 )
 from nokodo_ai.threads import Thread as SDKThread
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -41,13 +42,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _extract_file_id(part: ImageContent | FileContent) -> str | None:
+def _extract_file_id(part: ImageContent | FileContent) -> TypeID | None:
 	"""extract file_id from part metadata, if present."""
 	meta = part.metadata
 	if not meta or not isinstance(meta, dict):
 		return None
 	fid = meta.get("file_id")
-	return str(fid) if fid else None
+	return TypeID(str(fid)) if fid else None
 
 
 def _needs_resolution(part: ImageContent | FileContent) -> bool:

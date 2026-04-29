@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from typing import ClassVar, Literal, overload
+from typing import Literal, overload
 
+from pydantic import PrivateAttr
 from qdrant_client.models import (
 	Condition,
 	Distance,
@@ -65,7 +66,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 
 	# process-local cache of known-existing collection names to avoid
 	# redundant RPC round-trips on every delete/update call
-	_known_collections: ClassVar[set[str]] = set()
+	_known_collections: set[str] = PrivateAttr(default_factory=set)
 
 	def _to_point_id(self, id_: str) -> uuid.UUID:
 		"""convert an external string id into a Qdrant-compatible point id."""
@@ -134,7 +135,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		self,
 		collection_name: str,
 		chunks: list[Chunk],
-		*,
 		sparse: bool = False,
 	) -> None:
 		"""store chunks with dense and optionally sparse (BM25) vectors."""
@@ -387,7 +387,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		self,
 		collection_name: str,
 		target: list[str] | ChunkFilter,
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None:
 		"""update matching chunks in place."""

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from starlette.types import Message, Receive, Scope, Send
 
 from api.middleware._utils import append_header, get_client_ip, get_header
 
@@ -44,7 +45,7 @@ def test_get_client_ip_from_socket_client() -> None:
 
 
 def test_get_client_ip_unknown_when_no_info() -> None:
-	scope = {"headers": []}
+	scope: dict[str, object] = {"headers": []}
 	assert get_client_ip(scope) == "unknown"
 
 
@@ -107,7 +108,7 @@ async def test_rate_limiter_returns_429_when_exceeded() -> None:
 
 	# mock redis to return a count above the limit
 	mock_conn = AsyncMock()
-	mock_conn.incr = AsyncMock(return_value=9999)
+	mock_conn.incrby = AsyncMock(return_value=9999)
 	mock_conn.expire = AsyncMock()
 
 	try:
@@ -158,7 +159,7 @@ async def test_rate_limiter_uses_x_user_id_header() -> None:
 	boot_settings.TESTING = False
 
 	mock_conn = AsyncMock()
-	mock_conn.incr = AsyncMock(return_value=1)
+	mock_conn.incrby = AsyncMock(return_value=1)
 	mock_conn.expire = AsyncMock()
 
 	try:
@@ -173,7 +174,7 @@ async def test_rate_limiter_uses_x_user_id_header() -> None:
 					headers={"X-User-Id": "user_abc"},
 				)
 				# verify the redis key contains the user id
-				call_args = mock_conn.incr.call_args
+				call_args = mock_conn.incrby.call_args
 				assert call_args is not None
 				key = call_args[0][0]
 				assert "user_abc" in key
@@ -189,11 +190,17 @@ async def test_rate_limiter_websocket_passthrough() -> None:
 
 	called = False
 
-	async def inner_app(scope: dict, receive: object, send: object) -> None:
+	async def inner_app(scope: Scope, receive: Receive, send: Send) -> None:
 		nonlocal called
 		called = True
 
+	async def receive() -> Message:
+		return {"type": "websocket.disconnect"}
+
+	async def send(message: Message) -> None:
+		return None
+
 	mw = RateLimitMiddleware(inner_app)
-	scope = {"type": "websocket", "path": "/ws"}
-	await mw(scope, AsyncMock(), AsyncMock())
+	scope: Scope = {"type": "websocket", "path": "/ws"}
+	await mw(scope, receive, send)
 	assert called is True

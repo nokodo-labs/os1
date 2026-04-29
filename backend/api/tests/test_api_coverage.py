@@ -465,7 +465,7 @@ async def test_authorization_require_thread_access() -> None:  # type: ignore[ar
 
 	with pytest.raises(HTTPException) as exc:
 		await authorization.require_thread_access(
-			"thread",
+			TypeID("thread"),
 			fake_session_none,  # type: ignore[arg-type]
 			principal,  # type: ignore[arg-type]
 		)

@@ -198,7 +198,7 @@ class TestOldestMessageId:
 class TestRebuildFromExisting:
 	def test_rebuilds_citations_from_assistant_metadata(self) -> None:
 		entries: list[Citation] = []
-		citation_data = {
+		citation_data: JSONObject = {
 			"index": 1,
 			"source_type": "url",
 			"source_id": "https://example.com",
@@ -228,7 +228,7 @@ class TestRebuildFromExisting:
 	def test_does_not_overwrite_existing_entries(self) -> None:
 		existing = _citation(1, source_id="https://original.com")
 		entries: list[Citation] = [existing]
-		citation_data = {
+		citation_data: JSONObject = {
 			"index": 1,
 			"source_type": "url",
 			"source_id": "https://overwrite-attempt.com",
@@ -1015,11 +1015,16 @@ class TestCitationIndexFilterProcess:
 	async def test_rebuilds_then_assigns_new(self) -> None:
 		f = CitationIndexFilter()
 		ctx = _mock_app_ctx()
-		existing_citation = {
+		existing_citation: JSONObject = {
 			"index": 1,
 			"source_type": "url",
 			"source_id": "https://old.com",
 			"title": "Old",
+		}
+		new_source: JSONObject = {
+			"source_type": "note",
+			"source_id": "note_1",
+			"title": "New Note",
 		}
 		thread = Thread(
 			messages=[
@@ -1027,13 +1032,7 @@ class TestCitationIndexFilterProcess:
 				_assistant_msg(nci=2, citations=[existing_citation]),
 				_tool_msg(
 					output="new fetched page",
-					citable_sources=[
-						{
-							"source_type": "note",
-							"source_id": "note_1",
-							"title": "New Note",
-						},
-					],
+					citable_sources=[new_source],
 				),
 			]
 		)

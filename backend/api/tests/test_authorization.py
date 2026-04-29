@@ -13,7 +13,7 @@ from api.models.user import User
 from api.permissions import DefaultResourceAccess
 from api.v1.service import authorization
 from api.v1.service.auth import Principal
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest.mark.asyncio
@@ -101,7 +101,7 @@ async def test_require_thread_access_hidden_forbidden(db_session: AsyncSession) 
 
 	with pytest.raises(HTTPException) as exc:
 		await authorization.require_thread_access(
-			"thread",
+			TypeID("thread"),
 			db_session,
 			principal=principal,
 			include_hidden=True,

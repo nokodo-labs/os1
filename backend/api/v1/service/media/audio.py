@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class AudioResult:
 	"""result of an audio generation request."""
 
-	file_id: str
+	file_id: TypeID | None = None
 	url: str | None = None
 	b64_data: str | None = None
 	mime_type: str = "audio/mp3"
@@ -140,9 +140,9 @@ async def generate_audio(
 			file.metadata_ = {**file.metadata_, **gen_meta}
 			await session.flush()
 
-			file_id = str(file.id)
+			file_id = file.id
 		else:
-			file_id = ""
+			file_id = None
 
 		results.append(
 			AudioResult(

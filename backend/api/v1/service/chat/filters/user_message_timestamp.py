@@ -8,7 +8,7 @@ from pydantic import Field
 
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
-from nokodo_ai.messages import TextContent
+from nokodo_ai.messages import Message, TextContent, UserContentPart
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
 
@@ -28,7 +28,7 @@ class UserMessageTimestampFilter(Filter):
 		thread: SDKThread,
 		app_context: AppContext | None,
 	) -> SDKThread:
-		new_messages = []
+		new_messages: list[Message] = []
 		for msg in thread.messages:
 			if not isinstance(msg, SDKUserMessage):
 				new_messages.append(msg)
@@ -45,7 +45,7 @@ class UserMessageTimestampFilter(Filter):
 
 			prefix = f"[{timestamp}] "
 
-			new_content = []
+			new_content: list[UserContentPart] = []
 			prefixed = False
 			for part in msg.content:
 				if not prefixed and isinstance(part, TextContent):

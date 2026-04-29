@@ -21,6 +21,7 @@ from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
 
 
 class RevealAttachmentInput(BaseModel):
@@ -28,7 +29,7 @@ class RevealAttachmentInput(BaseModel):
 
 	model_config = ConfigDict(extra="forbid")
 
-	file_ids: list[str] = Field(
+	file_ids: list[TypeID] = Field(
 		...,
 		min_length=1,
 		description=(
@@ -71,26 +72,17 @@ class RevealAttachmentTool(Tool[AppContext]):
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
-		raw_ids = kwargs.get("file_ids")
-		if not isinstance(raw_ids, list) or not raw_ids:
+		inp = RevealAttachmentInput.model_validate(kwargs)
+		if not inp.file_ids:
 			return self.error(
 				json.dumps({"error": "file_ids must be a non-empty list"}),
 				__agent_context__,
 			)
 
-		file_ids = [str(fid) for fid in raw_ids if fid]
-		if not file_ids:
-			return self.error(
-				json.dumps({"error": "no valid file ids provided"}),
-				__agent_context__,
-			)
-
 		# emit attachment.revealed events for frontend + persistence
 		if __app_context__ is not None:
-			thread_id = (
-				str(__app_context__.thread_id) if __app_context__.thread_id else None
-			)
-			for fid in file_ids:
+			thread_id = __app_context__.thread_id
+			for fid in inp.file_ids:
 				event = Event(
 					scope=EventScope.THREAD,
 					scope_id=thread_id,
@@ -101,6 +93,6 @@ class RevealAttachmentTool(Tool[AppContext]):
 				await __app_context__.event_emitter(event)
 
 		return self.success(
-			json.dumps({"revealed": file_ids}),
+			json.dumps({"revealed": inp.file_ids}),
 			__agent_context__,
 		)

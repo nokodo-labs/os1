@@ -27,6 +27,18 @@ def _user(text: str, created_at: str | None = None) -> UserMessage:
 	return UserMessage.from_text(text).model_copy(update={"metadata": meta})
 
 
+def _result_user(thread: Thread, index: int = 0) -> UserMessage:
+	message = thread.messages[index]
+	assert isinstance(message, UserMessage)
+	return message
+
+
+def _result_assistant(thread: Thread, index: int = 1) -> AssistantMessage:
+	message = thread.messages[index]
+	assert isinstance(message, AssistantMessage)
+	return message
+
+
 class TestTimestampPrepend:
 	"""basic prepend behavior."""
 
@@ -37,7 +49,7 @@ class TestTimestampPrepend:
 
 		result = await _make_filter().process(thread, None)
 
-		text = result.messages[0].text
+		text = _result_user(result).text
 		assert text == "[2025-06-15 10:30 UTC] hello"
 
 	@pytest.mark.asyncio
@@ -47,7 +59,7 @@ class TestTimestampPrepend:
 
 		result = await _make_filter().process(thread, None)
 
-		assert result.messages[0].text == "[2024-12-31 23:59 UTC] hi"
+		assert _result_user(result).text == "[2024-12-31 23:59 UTC] hi"
 
 	@pytest.mark.asyncio
 	async def test_converts_non_utc_to_local_representation(self) -> None:
@@ -57,7 +69,7 @@ class TestTimestampPrepend:
 		result = await _make_filter().process(thread, None)
 
 		# strftime uses the tz-aware datetime as-is (15:00 in +05:00)
-		assert "[2025-03-10 15:00 UTC]" in result.messages[0].text
+		assert "[2025-03-10 15:00 UTC]" in _result_user(result).text
 
 
 class TestSkipWithoutTimestamp:
@@ -70,7 +82,7 @@ class TestSkipWithoutTimestamp:
 
 		result = await _make_filter().process(thread, None)
 
-		assert result.messages[0].text == "no timestamp"
+		assert _result_user(result).text == "no timestamp"
 
 	@pytest.mark.asyncio
 	async def test_non_string_created_at_skips(self) -> None:
@@ -81,7 +93,7 @@ class TestSkipWithoutTimestamp:
 
 		result = await _make_filter().process(thread, None)
 
-		assert result.messages[0].text == "bad meta"
+		assert _result_user(result).text == "bad meta"
 
 
 class TestNonUserMessagesUntouched:
@@ -95,7 +107,7 @@ class TestNonUserMessagesUntouched:
 
 		result = await _make_filter().process(thread, None)
 
-		assert result.messages[1].text == "response"
+		assert _result_assistant(result).text == "response"
 
 
 class TestImageOnlyMessage:
@@ -104,14 +116,14 @@ class TestImageOnlyMessage:
 	@pytest.mark.asyncio
 	async def test_image_only_gets_text_part_prepended(self) -> None:
 		msg = UserMessage(
-			content=[ImageContent(image_url="https://example.com/img.png")],
+			content=[ImageContent(url="https://example.com/img.png")],
 			metadata={"created_at": "2025-07-01T12:00:00+00:00"},
 		)
 		thread = Thread(messages=[msg])
 
 		result = await _make_filter().process(thread, None)
 
-		parts = result.messages[0].content
+		parts = _result_user(result).content
 		assert len(parts) == 2
 		assert isinstance(parts[0], TextContent)
 		assert parts[0].text == "[2025-07-01 12:00 UTC]"
@@ -133,10 +145,10 @@ class TestNoAccumulation:
 		f = _make_filter()
 
 		first_pass = await f.process(thread, None)
-		first_text = first_pass.messages[0].text
+		first_text = _result_user(first_pass).text
 
 		second_pass = await f.process(first_pass, None)
-		second_text = second_pass.messages[0].text
+		second_text = _result_user(second_pass).text
 
 		assert first_text == "[2025-05-20 08:15 UTC] hello world"
 		assert second_text == first_text, (
@@ -152,7 +164,7 @@ class TestNoAccumulation:
 		for i in range(5):
 			thread = await f.process(thread, None)
 
-		text = thread.messages[0].text
+		text = _result_user(thread).text
 		assert text == "[2025-01-01 00:00 UTC] stable", (
 			f"after 5 passes, text drifted: {text!r}"
 		)

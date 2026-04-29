@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import Any, TypedDict
 
 from api.settings import settings
 
@@ -71,7 +71,13 @@ def get_manifest_response() -> tuple[bytes, str]:
 # well-known CDN paths relative to {cdn}/static/os1
 _STATIC = "static/os1"
 
-_ICONS = [
+class IconSpec(TypedDict):
+	file: str
+	sizes: str | None
+	purpose: str
+
+
+_ICONS: list[IconSpec] = [
 	{"file": "icon-1024-maskable.png", "sizes": "1024x1024", "purpose": "maskable"},
 	{"file": "icon-512-maskable.png", "sizes": "512x512", "purpose": "maskable"},
 	{"file": "favicon.svg", "sizes": None, "purpose": "any maskable"},

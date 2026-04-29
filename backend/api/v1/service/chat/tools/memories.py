@@ -147,11 +147,11 @@ class MemoryCreateTool(Tool[AppContext]):
 			return self.error("app context is required", __agent_context__)
 		ai = __app_context__.principal.user.prefs.ai
 		if ai is not None and ai.memories_enabled is False:
-			out = {
+			disabled_out = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(disabled_out), __agent_context__)
 		inp = MemoryCreateInput.model_validate(kwargs)
 
 		# return immediately - persist + vectorize in a background task

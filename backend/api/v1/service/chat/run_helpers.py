@@ -23,6 +23,7 @@ from api.v1.service.events import event_connections
 from api.v1.service.prompt_runtime import render_agent_instructions
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
+from nokodo_ai.types.json import JSONValue
 from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID
 
@@ -136,7 +137,10 @@ async def load_sdk_thread(
 		# downstream filters can rebuild the citation index without a
 		# separate ORM lookup.
 		if m.type == "assistant" and m.citations:
-			enriched["citations"] = m.citations
+			citation_payload: list[JSONValue] = []
+			for citation in m.citations:
+				citation_payload.append(citation)
+			enriched["citations"] = citation_payload
 		sdk_messages.append(sdk.model_copy(update={"metadata": enriched}))
 
 	sdk_thread = SDKThread(

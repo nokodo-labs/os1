@@ -17,7 +17,7 @@ what they prove:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 
 import pytest
@@ -57,7 +57,7 @@ class _FakeAgent:
 		run_id_override: TypeID,
 		ready_event: asyncio.Event,
 		**_kwargs: object,
-	) -> AsyncIterator[bytes]:
+	) -> AsyncGenerator[bytes]:
 		return self._gen(thread_id, agent_id, principal, run_id_override, ready_event)
 
 	async def _gen(
@@ -67,13 +67,13 @@ class _FakeAgent:
 		principal: object,
 		run_id: TypeID,
 		ready_event: asyncio.Event,
-	) -> AsyncIterator[bytes]:
+	) -> AsyncGenerator[bytes]:
 		self.run_id = run_id
 		await run_status_store.start_run(
 			run_id=run_id,
 			thread_id=thread_id,
 			agent_id=agent_id,
-			user_id=getattr(principal, "user_id", "test-user"),
+			user_id=getattr(principal, "user_id", TypeID("test-user")),
 		)
 		# mirror real run_agent: self-attach the current task so cancel_run
 		# works from the very first instant the run is visible.
@@ -84,7 +84,7 @@ class _FakeAgent:
 		self.started.set()
 
 		# publish an initial frame so subscribers see something on connect
-		await self._publish(b"event: delta\ndata: {\"i\":0}\n\n")
+		await self._publish(b'event: delta\ndata: {"i":0}\n\n')
 
 		# loop publishing one frame per advance signal
 		while not self.finish.is_set():
@@ -107,7 +107,7 @@ class _FakeAgent:
 				break
 			self.advance.clear()
 			await self._publish(
-				f"event: delta\ndata: {{\"i\":{self.frames_published}}}\n\n".encode()
+				f'event: delta\ndata: {{"i":{self.frames_published}}}\n\n'.encode()
 			)
 
 		await run_status_store.complete_run(run_id)
@@ -170,7 +170,7 @@ async def test_run_outlives_subscriber_disconnect(
 	# first subscriber gets the initial frame, then disconnects
 	stream1 = runs_service.subscribe_run_stream(run_id)
 	first = await asyncio.wait_for(stream1.__anext__(), timeout=2.0)
-	assert b"\"i\":0" in first
+	assert b'"i":0' in first
 	await stream1.aclose()
 
 	# producer publishes 2 more frames while NOBODY is subscribed
@@ -185,9 +185,9 @@ async def test_run_outlives_subscriber_disconnect(
 	collected: list[bytes] = []
 	for _ in range(3):
 		collected.append(await asyncio.wait_for(stream2.__anext__(), timeout=2.0))
-	assert any(b"\"i\":0" in f for f in collected)
-	assert any(b"\"i\":1" in f for f in collected)
-	assert any(b"\"i\":2" in f for f in collected)
+	assert any(b'"i":0' in f for f in collected)
+	assert any(b'"i":1' in f for f in collected)
+	assert any(b'"i":2' in f for f in collected)
 
 	# finish the run cleanly
 	fake.finish.set()
@@ -233,7 +233,7 @@ async def test_multiple_concurrent_subscribers_get_same_frames(
 	a1 = await asyncio.wait_for(stream_a.__anext__(), timeout=2.0)
 	b1 = await asyncio.wait_for(stream_b.__anext__(), timeout=2.0)
 	assert a1 == b1
-	assert b"\"i\":1" in a1
+	assert b'"i":1' in a1
 
 	fake.finish.set()
 	async for _ in stream_a:

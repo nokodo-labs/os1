@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,7 +100,7 @@ async def _run_producer(
 		await run_status_store.fail_run(run_id, reason="producer exited unexpectedly")
 
 
-async def subscribe_run_stream(run_id: TypeID) -> AsyncIterator[bytes]:
+async def subscribe_run_stream(run_id: TypeID) -> AsyncGenerator[bytes]:
 	"""subscribe to a run's SSE stream and replay catchup + live frames.
 
 	this is the ONE SSE delivery path used by both the initiator (POST /v1/runs)

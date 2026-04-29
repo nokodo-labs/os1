@@ -189,7 +189,7 @@ async def delete_agent(
 
 
 async def set_agent_access_rules(
-	agent_id: str,
+	agent_id: TypeID,
 	rules: list[AccessRuleCreate],
 	session: AsyncSession,
 	*,
@@ -200,7 +200,7 @@ async def set_agent_access_rules(
 	updated_rules = await access_rules_service.set_access_rules_unchecked(
 		ResourceType.AGENT, agent_id, rules, session
 	)
-	agent = await _get_agent(TypeID(agent_id), session)
+	agent = await _get_agent(agent_id, session)
 	agent_data = AgentSchema.model_validate(agent).model_dump(mode="json")
 	event = Event(
 		scope=EventScope.USER,

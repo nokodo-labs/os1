@@ -82,7 +82,7 @@ REVEAL_TOOL_NAME = "reveal_attachment"
 class TrackedAttachment:
 	"""a native attachment found in the thread."""
 
-	file_id: str
+	file_id: TypeID
 	message_index: int
 	part_index: int
 	turn: int
@@ -96,7 +96,7 @@ class TrackedAttachment:
 class RevealRecord:
 	"""a reveal_attachment tool call found in the thread."""
 
-	file_ids: list[str] = field(default_factory=list)
+	file_ids: list[TypeID] = field(default_factory=list)
 	turn: int = 0
 
 
@@ -210,10 +210,10 @@ def _find_attachments(
 	return attachments
 
 
-def _extract_file_id(part: ImageContent | FileContent) -> str | None:
+def _extract_file_id(part: ImageContent | FileContent) -> TypeID | None:
 	"""extract file_id from content part metadata."""
 	if part.metadata and "file_id" in part.metadata:
-		return str(part.metadata["file_id"])
+		return TypeID(str(part.metadata["file_id"]))
 	return None
 
 
@@ -253,7 +253,7 @@ def _find_reveals(
 		revealed = output.get("revealed")
 		if not isinstance(revealed, list):
 			continue
-		file_ids = [str(fid) for fid in revealed if fid]
+		file_ids = [TypeID(str(fid)) for fid in revealed if fid]
 		if file_ids:
 			reveals.append(
 				RevealRecord(
@@ -285,7 +285,6 @@ def _get_decay_threshold(
 
 def _build_attachment_entry(
 	att: TrackedAttachment,
-	*,
 	status: str,
 ) -> dict[str, object]:
 	"""build a JSON entry for an attachment in the inventory manifest."""
@@ -385,7 +384,7 @@ def _extract_message_ids(thread: SDKThread) -> list[TypeID]:
 async def _load_attachment_events(
 	app_context: AppContext,
 	thread: SDKThread,
-) -> dict[str, str]:
+) -> dict[TypeID, str]:
 	"""load the latest attachment event state for the message window.
 
 	delegates to thread_service.list_events_for_message_ids with
@@ -414,16 +413,19 @@ async def _load_attachment_events(
 	)
 
 	# latest event per file_id wins (service returns ASC, so iterate reversed)
-	states: dict[str, str] = {}
+	states: dict[TypeID, str] = {}
 	for ev in reversed(events):
 		data = ev.data or {}
 		file_id = data.get("file_id")
-		if not file_id or file_id in states:
+		if not file_id:
+			continue
+		fid = TypeID(str(file_id))
+		if fid in states:
 			continue
 		if ev.type == EventType.ATTACHMENT_REVEALED:
-			states[file_id] = "active"
+			states[fid] = "active"
 		elif ev.type == EventType.ATTACHMENT_DECAYED:
-			states[file_id] = "reference"
+			states[fid] = "reference"
 
 	return states
 
@@ -501,14 +503,14 @@ class AttachmentDecayFilter(Filter):
 		event_states = await _load_attachment_events(app_context, thread)
 
 		# deduplicate attachments by file_id (keep earliest occurrence)
-		seen_file_ids: dict[str, TrackedAttachment] = {}
+		seen_file_ids: dict[TypeID, TrackedAttachment] = {}
 		for att in all_attachments:
 			if att.file_id not in seen_file_ids:
 				seen_file_ids[att.file_id] = att
 
 		# compute decay state for each unique attachment
 		attachment_entries: list[dict[str, object]] = []
-		decayed_file_ids: set[str] = set()
+		decayed_file_ids: set[TypeID] = set()
 
 		for file_id, att in seen_file_ids.items():
 			ev_state = event_states.get(file_id)

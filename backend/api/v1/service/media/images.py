@@ -38,7 +38,7 @@ class MediaError(Exception):
 class ImageResult:
 	"""result of an image generation request."""
 
-	file_id: str
+	file_id: TypeID | None = None
 	url: str | None = None
 	b64_data: str | None = None
 	mime_type: str = "image/png"
@@ -162,9 +162,9 @@ async def generate_image(
 			file.metadata_ = {**file.metadata_, **gen_meta}
 			await session.flush()
 
-			file_id = str(file.id)
+			file_id = file.id
 		else:
-			file_id = ""
+			file_id = None
 
 		results.append(
 			ImageResult(

@@ -201,8 +201,10 @@ async def test_threads_autocomplete_isolates_other_user(
 	db_session.add(thread_b)
 	await db_session.commit()
 
+	title = thread_b.title
+	assert title is not None
 	results = await threads_service._autocomplete_threads(
-		thread_b.title, db_session, principal=_principal(u_a)
+		title, db_session, principal=_principal(u_a)
 	)
 	assert not any(str(r.id) == str(thread_b.id) for r in results), (
 		"cross-user thread appeared in pg_trgm autocomplete"
@@ -227,8 +229,10 @@ async def test_threads_autocomplete_returns_own_thread(
 	db_session.add(thread_a)
 	await db_session.commit()
 
+	title = thread_a.title
+	assert title is not None
 	results = await threads_service._autocomplete_threads(
-		thread_a.title, db_session, principal=_principal(u_a)
+		title, db_session, principal=_principal(u_a)
 	)
 	ids = [str(r.id) for r in results]
 	assert str(thread_a.id) in ids, "user's own thread not returned by autocomplete"
@@ -260,8 +264,10 @@ async def test_threads_autocomplete_granted_user_sees_thread(
 	db_session.add(rule)
 	await db_session.commit()
 
+	title = thread_a.title
+	assert title is not None
 	results = await threads_service._autocomplete_threads(
-		thread_a.title, db_session, principal=_principal(u_b)
+		title, db_session, principal=_principal(u_b)
 	)
 	ids = [str(r.id) for r in results]
 	assert str(thread_a.id) in ids, "grantee could not find explicitly shared thread"
@@ -285,8 +291,10 @@ async def test_threads_autocomplete_temporary_threads_excluded(
 	db_session.add(tmp_thread)
 	await db_session.commit()
 
+	title = tmp_thread.title
+	assert title is not None
 	results = await threads_service._autocomplete_threads(
-		tmp_thread.title, db_session, principal=_principal(u)
+		title, db_session, principal=_principal(u)
 	)
 	assert not any(str(r.id) == str(tmp_thread.id) for r in results), (
 		"temporary thread appeared in autocomplete"

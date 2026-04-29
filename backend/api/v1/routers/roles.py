@@ -38,7 +38,7 @@ async def read_roles(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		user_id=str(user_id) if user_id else None,
+		user_id=user_id,
 	)
 
 
@@ -109,5 +109,5 @@ async def set_role_members(
 ) -> list[User]:
 	"""replace the entire member list for a role with the given user IDs."""
 	return await roles_service.set_role_members(
-		role_id, [str(uid) for uid in body], db, principal=principal
+		role_id, body, db, principal=principal
 	)

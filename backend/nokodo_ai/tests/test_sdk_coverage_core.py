@@ -30,6 +30,7 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.threads import Thread
+from nokodo_ai.types.json import JSONValue
 from nokodo_ai.utils.dicts import deep_merge
 from nokodo_ai.utils.json_schema import schema_from_callable
 from nokodo_ai.utils.validators import (
@@ -434,7 +435,7 @@ def test_process_schema_recurses_into_anyof_list() -> None:
 	"""process_schema must apply transformations inside anyOf list elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"anyOf": [
 			{
 				"type": "object",
@@ -473,7 +474,7 @@ def test_process_schema_recurses_into_oneof_list() -> None:
 	"""process_schema must apply transformations inside oneOf list elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"oneOf": [
 			{
 				"type": "object",
@@ -496,15 +497,17 @@ def test_process_schema_recurses_into_oneof_list() -> None:
 	assert isinstance(result, dict)
 	one_of = result["oneOf"]
 	assert isinstance(one_of, list)
-	assert one_of[0].get("additionalProperties") is False
-	assert one_of[0].get("required") == ["a"]
+	first = one_of[0]
+	assert isinstance(first, dict)
+	assert first.get("additionalProperties") is False
+	assert first.get("required") == ["a"]
 
 
 def test_process_schema_recurses_into_allof_list() -> None:
 	"""process_schema must apply transformations inside allOf list elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"allOf": [
 			{
 				"type": "object",
@@ -528,15 +531,23 @@ def test_process_schema_recurses_into_allof_list() -> None:
 	assert isinstance(result, dict)
 	all_of = result["allOf"]
 	assert isinstance(all_of, list)
-	assert all_of[0].get("additionalProperties") is False
-	assert sorted(all_of[0].get("required", [])) == ["x", "y"]
+	first = all_of[0]
+	assert isinstance(first, dict)
+	required = first.get("required", [])
+	assert isinstance(required, list)
+	required_strings: list[str] = []
+	for item in required:
+		assert isinstance(item, str)
+		required_strings.append(item)
+	assert first.get("additionalProperties") is False
+	assert sorted(required_strings) == ["x", "y"]
 
 
 def test_process_schema_recurses_into_prefixitems_list() -> None:
 	"""process_schema must apply transformations inside prefixItems elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"type": "array",
 		"prefixItems": [
 			{
@@ -560,5 +571,7 @@ def test_process_schema_recurses_into_prefixitems_list() -> None:
 	assert isinstance(result, dict)
 	prefix = result["prefixItems"]
 	assert isinstance(prefix, list)
-	assert prefix[0].get("additionalProperties") is False
-	assert prefix[0].get("required") == ["label"]
+	first = prefix[0]
+	assert isinstance(first, dict)
+	assert first.get("additionalProperties") is False
+	assert first.get("required") == ["label"]

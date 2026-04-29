@@ -2,8 +2,6 @@
 
 AI platform with agentic coding support, beautiful UI, and comprehensive tooling.
 
-**PROJECT STATUS**: greenfield / early prototype. no commits have reached the dev branch yet. working branch is `prototype`.
-
 ## tech stack
 
 - **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, PostgreSQL 17

@@ -52,7 +52,7 @@ class CodeInterpreterInput(BaseModel):
 		...,
 		description="the Python code to execute in the sandbox.",
 	)
-	file_ids: list[str] = Field(
+	file_ids: list[TypeID] = Field(
 		default_factory=list,
 		description=(
 			"list of file IDs to upload into the sandbox before "
@@ -88,7 +88,6 @@ def _truncate_field(text: str, *, max_lines: int = _TRUNCATION_LINES) -> str:
 async def _store_output_files(
 	inline_images: list[FileEntry],
 	files: list[FileEntry],
-	*,
 	session: AsyncSession,
 	owner_id: TypeID,
 	project_ids: list[TypeID] | None = None,
@@ -158,8 +157,7 @@ async def _store_output_files(
 
 async def _upload_input_files(
 	client: E2BClient,
-	file_ids: list[str],
-	*,
+	file_ids: list[TypeID],
 	session: AsyncSession,
 ) -> list[str]:
 	"""download files from storage and upload them to the sandbox.
@@ -181,7 +179,7 @@ async def _upload_input_files(
 			async for chunk in stream:
 				chunks.append(chunk)
 			raw = b"".join(chunks)
-			filename = file.filename or file_id
+			filename = file.filename or str(file_id)
 			await client.upload_file(f"/home/user/{filename}", raw)
 			uploaded.append(filename)
 		except Exception:

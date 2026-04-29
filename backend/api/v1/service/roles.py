@@ -17,27 +17,27 @@ from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 from api.v1.service.sorting import SortDir, apply_sort
+from nokodo_ai.utils.typeid import TypeID
 
 
-async def _role_member_ids(role_id: str, session: AsyncSession) -> list[str]:
+async def _role_member_ids(role_id: TypeID, session: AsyncSession) -> list[TypeID]:
 	"""return all user IDs assigned to a role."""
 	result = await session.execute(
 		select(user_role_association.c.user_id).where(
 			user_role_association.c.role_id == role_id,
 		)
 	)
-	return [str(uid) for uid in result.scalars().all()]
+	return [TypeID(str(uid)) for uid in result.scalars().all()]
 
 
 async def list_roles(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: str = "priority",
 	sort_dir: SortDir = "desc",
-	user_id: str | None = None,
+	user_id: TypeID | None = None,
 ) -> list[Role]:
 	"""list all roles (requires roles:read permission)."""
 	require_permission(principal, "roles:read")
@@ -68,9 +68,8 @@ async def list_roles(
 
 
 async def get_role(
-	role_id: str,
+	role_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Role:
 	"""get a single role by id (requires roles:read permission)."""
@@ -87,7 +86,6 @@ async def get_role(
 async def create_role(
 	role_in: RoleCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Role:
 	"""create a new role (requires roles:manage permission)."""
@@ -114,10 +112,9 @@ async def create_role(
 
 
 async def update_role(
-	role_id: str,
+	role_id: TypeID,
 	role_in: RoleUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Role:
 	"""update an existing role (requires roles:manage permission)."""
@@ -144,9 +141,8 @@ async def update_role(
 
 
 async def delete_role(
-	role_id: str,
+	role_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	"""delete a role (requires roles:manage permission)."""
@@ -178,9 +174,8 @@ async def delete_role(
 
 
 async def list_role_members(
-	role_id: str,
+	role_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
@@ -209,10 +204,9 @@ async def list_role_members(
 
 
 async def set_role_members(
-	role_id: str,
-	user_ids: list[str],
+	role_id: TypeID,
+	user_ids: list[TypeID],
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[User]:
 	"""replace the entire member list for a role (requires roles:manage)."""

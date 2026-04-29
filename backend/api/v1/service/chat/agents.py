@@ -631,11 +631,6 @@ async def run_agent(
 					extra={"message_id": str(message_id)},
 				)
 
-		def _advance_parent_after_steering(message_id: TypeID) -> None:
-			nonlocal persist_parent_override, streaming_parent_id
-			streaming_parent_id = message_id
-			persist_parent_override = message_id
-
 		if persist:
 			emitter = build_event_emitter(
 				message_id_provider=_message_id_provider,
@@ -697,9 +692,15 @@ async def run_agent(
 					text=ctx.retrieval.query_text, session=session
 				)
 
+		streaming_parent_id: TypeID | None = initial_parent_id
+
+		def _advance_parent_after_steering(message_id: TypeID) -> None:
+			nonlocal persist_parent_override, streaming_parent_id
+			streaming_parent_id = message_id
+			persist_parent_override = message_id
+
 		worker_task: asyncio.Task[object] | None = None
 		steering_subscriber: asyncio.Task[None] | None = None
-		streaming_parent_id: TypeID | None = initial_parent_id
 		try:
 			if persist:
 				worker_task = create_background_task(

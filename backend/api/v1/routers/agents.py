@@ -114,7 +114,7 @@ async def list_agent_access_rules(
 
 @router.put("/{agent_id}/access-rules", response_model=list[AccessRuleResponse])
 async def set_agent_access_rules(
-	agent_id: str,
+	agent_id: TypeID,
 	rules: list[AccessRuleCreate],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

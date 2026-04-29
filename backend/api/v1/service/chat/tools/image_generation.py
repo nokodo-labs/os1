@@ -28,6 +28,7 @@ from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ImageContent, ToolAttachment, ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class GenerateImageInput(BaseModel):
 			"edits to make. be specific and descriptive for best results."
 		),
 	)
-	file_id: str | None = Field(
+	file_id: TypeID | None = Field(
 		default=None,
 		description=(
 			"file ID of an existing image to edit. "
@@ -89,7 +90,7 @@ def _build_attachments(results: Sequence[ImageResult]) -> list[ToolAttachment]:
 
 
 async def _load_file_bytes(
-	file_id: str, session: AsyncSession, *, principal: Principal
+	file_id: TypeID, session: AsyncSession, principal: Principal
 ) -> bytes | None:
 	"""load raw bytes for a stored file (access-checked)."""
 	b64 = await resolve_file_data(file_id, session, principal=principal)
@@ -148,9 +149,7 @@ class GenerateImageTool(Tool[AppContext]):
 				n=inp.n,
 				size=inp.size,
 				agent_id=__app_context__.agent_id,
-				thread_id=str(__app_context__.thread_id)
-				if __app_context__.thread_id
-				else None,
+				thread_id=__app_context__.thread_id,
 			)
 		except MediaError:
 			logger.exception("image generation failed")

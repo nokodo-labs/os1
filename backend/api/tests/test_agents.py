@@ -11,7 +11,7 @@ from api.models.access_rule import AccessRule
 from api.models.model import ModelType
 from api.models.user import User
 from api.permissions import AccessLevel
-from api.schemas.agent import AgentCreate, AgentUpdate
+from api.schemas.agent import AgentConfig, AgentCreate, AgentUpdate
 from api.schemas.model import ModelCreate
 from api.schemas.provider import ProviderCreate
 from api.v1.service import agents as agent_service
@@ -47,7 +47,7 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		description="Test Agent",
 		system_prompt="You are a test agent.",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 	)
 	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
@@ -67,7 +67,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-1",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -76,7 +76,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-2",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -97,7 +97,7 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-get",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -117,7 +117,7 @@ async def test_update_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-update",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -142,7 +142,7 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-delete",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -162,7 +162,7 @@ async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-invalid-model",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 		model_id=new_typeid("model"),  # valid format but doesn't exist
 	)
 	with pytest.raises(HTTPException) as exc:
@@ -178,7 +178,7 @@ async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None
 		AgentCreate(
 			name="agent-update-model",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -204,7 +204,7 @@ async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-no-model",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 		model_id=None,
 	)
 	agent = await agent_service.create_agent(agent_in, db_session, principal=principal)
@@ -216,7 +216,7 @@ async def test_agent_hidden_without_access_rule(db_session: AsyncSession) -> Non
 	"""non-admin cannot get an agent unless an access rule grants access."""
 	admin = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
-		AgentCreate(name="hidden-agent", plugin_ids=[], config={}),
+		AgentCreate(name="hidden-agent", plugin_ids=[], config=AgentConfig()),
 		db_session,
 		principal=admin,
 	)
@@ -250,7 +250,7 @@ async def test_create_agent_with_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-with-model",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 		model_id=model.id,
 	)
 	agent = await agent_service.create_agent(agent_in, db_session, principal=principal)
@@ -285,12 +285,12 @@ async def test_list_agents_filters_by_access_rules(
 	"""non-admin sees only agents with a matching access rule."""
 	admin_principal = await _principal(db_session, is_admin=True)
 	accessible = await agent_service.create_agent(
-		AgentCreate(name="list-accessible", plugin_ids=[], config={}),
+		AgentCreate(name="list-accessible", plugin_ids=[], config=AgentConfig()),
 		db_session,
 		principal=admin_principal,
 	)
 	await agent_service.create_agent(
-		AgentCreate(name="list-hidden", plugin_ids=[], config={}),
+		AgentCreate(name="list-hidden", plugin_ids=[], config=AgentConfig()),
 		db_session,
 		principal=admin_principal,
 	)

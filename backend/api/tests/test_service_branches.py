@@ -14,7 +14,7 @@ from api.models.notification import Notification
 from api.models.task import Task, TaskStatus, TaskType
 from api.models.thread import Thread
 from api.models.user import User
-from api.schemas.agent import AgentCreate
+from api.schemas.agent import AgentConfig, AgentCreate
 from api.schemas.message import MessageCreate
 from api.schemas.task import TaskUpdate
 from api.schemas.user import UserCreate
@@ -113,7 +113,7 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 				description=None,
 				system_prompt=None,
 				plugin_ids=[],
-				config={},
+				config=AgentConfig(),
 			),
 			session=db_session,
 			principal=admin,

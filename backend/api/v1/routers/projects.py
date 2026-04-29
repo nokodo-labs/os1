@@ -111,7 +111,7 @@ async def delete_project(
 
 @router.get("/{project_id}/access-rules", response_model=list[AccessRuleResponse])
 async def list_project_access_rules(
-	project_id: str,
+	project_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessRule]:
@@ -123,7 +123,7 @@ async def list_project_access_rules(
 
 @router.put("/{project_id}/access-rules", response_model=list[AccessRuleResponse])
 async def set_project_access_rules(
-	project_id: str,
+	project_id: TypeID,
 	rules: list[AccessRuleCreate],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

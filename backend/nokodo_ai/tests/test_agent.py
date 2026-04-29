@@ -24,6 +24,7 @@ from nokodo_ai.filters import Filter
 from nokodo_ai.hooks import Hook
 from nokodo_ai.messages import Message
 from nokodo_ai.tool import ToolDefinition
+from nokodo_ai.types.json import JSONObject
 
 
 class _QueuedChatAdapter(BaseChatAdapter):
@@ -577,7 +578,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	"""
 	from nokodo_ai.messages import PROVIDER_DATA_KEY
 
-	provider_meta = {
+	provider_meta: JSONObject = {
 		PROVIDER_DATA_KEY: {
 			"anthropic.messages": {"tool_call_id": "toolu_01ABC"},
 		}

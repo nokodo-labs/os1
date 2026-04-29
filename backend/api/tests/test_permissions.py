@@ -36,7 +36,7 @@ from api.schemas.role import RoleCreate, RoleUpdate
 from api.v1.service import authorization
 from api.v1.service import roles as roles_service
 from api.v1.service.auth import Principal, get_current_principal
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 # DefaultPermissions model tests
@@ -515,8 +515,8 @@ class TestResourceAccessPredicateWithDefaults:
 		user: User,
 		*,
 		resource_defaults: DefaultResourceAccess | None = None,
-		group_ids: tuple[str, ...] = (),
-		role_ids: tuple[str, ...] = (),
+		group_ids: tuple[TypeID, ...] = (),
+		role_ids: tuple[TypeID, ...] = (),
 	) -> Principal:
 		return Principal(
 			user=user,
@@ -651,7 +651,7 @@ class TestGetEffectiveAccessLevel:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		assert level is None
 
@@ -683,8 +683,8 @@ class TestGetEffectiveAccessLevel:
 			db_session,
 			principal,
 			ResourceType.THREAD,
-			str(thread.id),
-			owner_id=str(user.id),
+			thread.id,
+			owner_id=user.id,
 		)
 		assert level == AccessLevel.ADMIN
 
@@ -725,7 +725,7 @@ class TestGetEffectiveAccessLevel:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		# explicit rule (editor) wins over role default (reader)
 		assert level == AccessLevel.EDITOR
@@ -764,7 +764,7 @@ class TestGetEffectiveAccessLevel:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		assert level == AccessLevel.EDITOR
 
@@ -797,7 +797,7 @@ class TestGetEffectiveAccessLevel:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		assert level == AccessLevel.ADMIN
 
@@ -835,7 +835,7 @@ class TestGetEffectiveAccessLevel:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		assert level == AccessLevel.READER
 
@@ -872,13 +872,13 @@ class TestGetEffectiveAccessLevel:
 
 		principal = Principal(
 			user=user,
-			group_ids=(str(group.id),),
+			group_ids=(group.id,),
 			role_ids=(),
 			permissions=frozenset(),
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		assert level == AccessLevel.EDITOR
 
@@ -1019,7 +1019,7 @@ class TestRequireResourceAccess:
 		)
 		with pytest.raises(HTTPException) as exc:
 			await authorization.require_resource_access(
-				str(thread.id),
+				thread.id,
 				db_session,
 				principal,
 				ResourceType.THREAD,
@@ -1050,7 +1050,7 @@ class TestRequireResourceAccess:
 			global_action_permissions=frozenset(),
 		)
 		await authorization.require_resource_access(
-			str(thread.id),
+			thread.id,
 			db_session,
 			principal,
 			ResourceType.THREAD,
@@ -1140,7 +1140,7 @@ class TestRolesService:
 			),
 		)
 		updated = await roles_service.update_role(
-			str(role.id),
+			role.id,
 			RoleUpdate(default_permissions=new_dp),
 			db_session,
 			principal=principal,
@@ -1176,7 +1176,7 @@ class TestRolesService:
 		roles = await roles_service.list_roles(db_session, principal=principal)
 		assert any(r.name == "deletable" for r in roles)
 
-		await roles_service.delete_role(str(role.id), db_session, principal=principal)
+		await roles_service.delete_role(role.id, db_session, principal=principal)
 		roles = await roles_service.list_roles(db_session, principal=principal)
 		assert all(r.name != "deletable" for r in roles)
 
@@ -1284,7 +1284,7 @@ class TestAccessRuleWithRole:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal_no_role, ResourceType.THREAD, str(thread.id)
+			db_session, principal_no_role, ResourceType.THREAD, thread.id
 		)
 		assert level is None
 
@@ -1292,12 +1292,12 @@ class TestAccessRuleWithRole:
 		principal_with_role = Principal(
 			user=user,
 			group_ids=(),
-			role_ids=(str(role.id),),
+			role_ids=(role.id,),
 			permissions=frozenset(),
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal_with_role, ResourceType.THREAD, str(thread.id)
+			db_session, principal_with_role, ResourceType.THREAD, thread.id
 		)
 		assert level == AccessLevel.EDITOR
 
@@ -1401,7 +1401,7 @@ class TestEdgeCases:
 			global_action_permissions=frozenset(),
 		)
 		level = await authorization.get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, str(thread.id)
+			db_session, principal, ResourceType.THREAD, thread.id
 		)
 		assert level == AccessLevel.ADMIN
 

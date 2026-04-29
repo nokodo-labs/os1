@@ -137,7 +137,7 @@ async def read_user_counts(
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
 	"""get counts of all resources owned by user."""
-	return await user_service.get_user_counts(str(user_id), db, principal=principal)
+	return await user_service.get_user_counts(user_id, db, principal=principal)
 
 
 @router.patch("/{user_id}", response_model=UserSchema)

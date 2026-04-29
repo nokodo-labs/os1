@@ -52,14 +52,14 @@ async def test_send_to_user_and_broadcast_exception_paths() -> None:
 	ws_ok, _ = _make_websocket(fail_send=False)
 	ws_fail, _ = _make_websocket(fail_send=True)
 
-	await manager.connect("u", ws_ok)
-	await manager.connect("u", ws_fail)
+	await manager.connect(TypeID("u"), ws_ok)
+	await manager.connect(TypeID("u"), ws_fail)
 
-	await manager.send_to_user("u", {"a": 1})
+	await manager.send_to_user(TypeID("u"), {"a": 1})
 	await manager.broadcast({"b": 2})
 
-	await manager.disconnect("u", ws_ok)
-	await manager.disconnect("u", ws_fail)
+	await manager.disconnect(TypeID("u"), ws_ok)
+	await manager.disconnect(TypeID("u"), ws_fail)
 
 
 @pytest.mark.asyncio
@@ -68,9 +68,9 @@ async def test_broadcast_event_routes() -> None:
 	seen_broadcast: list[dict[str, object]] = []
 
 	class _Manager(ConnectionManager):
-		async def send_to_user(self, user_id: str, data: dict[str, object]) -> None:
+		async def send_to_user(self, user_id: TypeID, data: dict[str, object]) -> None:
 			_ = data
-			seen_send.append(user_id)
+			seen_send.append(str(user_id))
 
 		async def broadcast(self, data: dict[str, object]) -> None:
 			seen_broadcast.append(data)

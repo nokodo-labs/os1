@@ -30,7 +30,7 @@ class FileGetInput(BaseModel):
 
 	model_config = ConfigDict(extra="forbid")
 
-	file_id: str | None = Field(
+	file_id: TypeID | None = Field(
 		default=None,
 		description=(
 			"ID of a specific file to fetch. when omitted, lists recent files instead."
@@ -57,7 +57,7 @@ class FileEditInput(BaseModel):
 
 	model_config = ConfigDict(extra="forbid")
 
-	file_id: str = Field(..., description="ID of the file to rename")
+	file_id: TypeID = Field(..., description="ID of the file to rename")
 	filename: str | None = Field(
 		default=None,
 		description="new display filename",
@@ -94,7 +94,7 @@ class FileGetTool(Tool[AppContext]):
 			# direct fetch by ID
 			try:
 				f = await file_service.get_file(
-					TypeID(inp.file_id),
+					inp.file_id,
 					__app_context__.session,
 					principal=__app_context__.principal,
 				)
@@ -171,7 +171,7 @@ class FileEditTool(Tool[AppContext]):
 		inp = FileEditInput.model_validate(kwargs)
 		try:
 			f = await file_service.update_file(
-				TypeID(inp.file_id),
+				inp.file_id,
 				FileUpdate(filename=inp.filename),
 				__app_context__.session,
 				principal=__app_context__.principal,
