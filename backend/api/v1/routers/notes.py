@@ -8,11 +8,18 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
+from api.models.access_rule import AccessRule
 from api.models.note import Note
+from api.permissions import ResourceType
+from api.schemas.access_rule import (
+	AccessRuleCreate,
+	AccessRuleResponse,
+)
 from api.schemas.note import Note as NoteSchema
 from api.schemas.note import NoteCreate, NoteUpdate
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
+from api.v1.service import access_rules as access_rules_service
 from api.v1.service import notes as note_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
@@ -149,3 +156,35 @@ async def enhance_note(
 ) -> Note:
 	"""enhance a note using AI. stub - returns the note unchanged until implemented."""
 	return await note_service.get_note(note_id, db, principal=principal)
+
+
+# access rules
+
+
+@router.get("/{note_id}/access-rules", response_model=list[AccessRuleResponse])
+async def list_note_access_rules(
+	note_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessRule]:
+	"""list access rules for a note."""
+	return await access_rules_service.list_access_rules(
+		ResourceType.NOTE, note_id, db, principal=principal
+	)
+
+
+@router.put("/{note_id}/access-rules", response_model=list[AccessRuleResponse])
+async def set_note_access_rules(
+	note_id: TypeID,
+	rules: list[AccessRuleCreate],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessRule]:
+	"""replace access rules for a note."""
+	return await access_rules_service.set_access_rules(
+		ResourceType.NOTE,
+		note_id,
+		rules,
+		db,
+		principal=principal,
+	)

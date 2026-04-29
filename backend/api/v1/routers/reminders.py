@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
+from api.models.access_rule import AccessRule
 from api.models.reminder import Reminder, ReminderList, ReminderStatus
+from api.permissions import ResourceType
+from api.schemas.access_rule import (
+	AccessRuleCreate,
+	AccessRuleResponse,
+)
 from api.schemas.reminder import (
 	Reminder as ReminderSchema,
 )
@@ -24,6 +30,7 @@ from api.schemas.reminder import (
 	ReminderList as ReminderListSchema,
 )
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.v1.service import access_rules as access_rules_service
 from api.v1.service import reminders as reminder_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
@@ -289,4 +296,42 @@ async def move_reminder(
 		principal=principal,
 		position=position,
 		origin_session_id=x_session_id,
+	)
+
+
+# access rules
+
+
+@router.get(
+	"/lists/{list_id}/access-rules",
+	response_model=list[AccessRuleResponse],
+)
+async def list_reminder_list_access_rules(
+	list_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessRule]:
+	"""list access rules for a reminder list."""
+	return await access_rules_service.list_access_rules(
+		ResourceType.REMINDER_LIST, list_id, db, principal=principal
+	)
+
+
+@router.put(
+	"/lists/{list_id}/access-rules",
+	response_model=list[AccessRuleResponse],
+)
+async def set_reminder_list_access_rules(
+	list_id: TypeID,
+	rules: list[AccessRuleCreate],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessRule]:
+	"""replace access rules for a reminder list."""
+	return await access_rules_service.set_access_rules(
+		ResourceType.REMINDER_LIST,
+		list_id,
+		rules,
+		db,
+		principal=principal,
 	)

@@ -8,11 +8,18 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
+from api.models.access_rule import AccessRule
 from api.models.memory import Memory
+from api.permissions import ResourceType
+from api.schemas.access_rule import (
+	AccessRuleCreate,
+	AccessRuleResponse,
+)
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import MemoryCreate, MemoryUpdate
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
+from api.v1.service import access_rules as access_rules_service
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
@@ -163,3 +170,35 @@ async def revectorize_memories(
 	require_admin(principal)
 	count = await memory_service.vectorize_all_memories(db)
 	return {"vectorized": count}
+
+
+# ---- access rules ----
+
+
+@router.get("/{memory_id}/access-rules", response_model=list[AccessRuleResponse])
+async def list_memory_access_rules(
+	memory_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessRule]:
+	"""list access rules for a memory."""
+	return await access_rules_service.list_access_rules(
+		ResourceType.MEMORY, memory_id, db, principal=principal
+	)
+
+
+@router.put("/{memory_id}/access-rules", response_model=list[AccessRuleResponse])
+async def set_memory_access_rules(
+	memory_id: TypeID,
+	rules: list[AccessRuleCreate],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[AccessRule]:
+	"""replace access rules for a memory."""
+	return await access_rules_service.set_access_rules(
+		ResourceType.MEMORY,
+		memory_id,
+		rules,
+		db,
+		principal=principal,
+	)
