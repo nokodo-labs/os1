@@ -52,7 +52,7 @@
     - never expose model details (don’t surface “gpt/claude/etc” as user-facing concepts).
     - progressive disclosure: simple by default; power features appear only when needed.
 
-## dev environment tips
+## dev environment rules
 
 - always cd into /frontend when working on frontend code.
 - ALWAYS code as if autogen API types were up to date with the backend, even if they might not yet be.

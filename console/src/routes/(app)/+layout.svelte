@@ -44,9 +44,29 @@
 		sidebarOpen = false
 	})
 
+	type NavRoute =
+		| '/dashboard'
+		| '/providers'
+		| '/models'
+		| '/agents'
+		| '/plugins'
+		| '/playground'
+		| '/prompts'
+		| '/threads'
+		| '/projects'
+		| '/notes'
+		| '/reminders'
+		| '/files'
+		| '/memories'
+		| '/vectors'
+		| '/users'
+		| '/groups'
+		| '/roles'
+		| '/settings'
+
 	type NavItem = {
 		href: string
-		match: string
+		match: NavRoute
 		label: string
 		icon: Component
 		// always-on icon color (per-resource accent)
@@ -250,7 +270,7 @@
 			{#each navItems as item (item.href)}
 				{@const active = isActive(item)}
 				<a
-					href={item.href}
+					href={resolve(item.match)}
 					class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors {active
 						? `${item.activeBg} text-white`
 						: 'text-zinc-300 hover:bg-zinc-900'}"

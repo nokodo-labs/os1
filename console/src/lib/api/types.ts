@@ -1204,6 +1204,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/memories/{memory_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_memory_access_rules_v1_memories__memory_id__access_rules_get"];
+        put: operations["set_memory_access_rules_v1_memories__memory_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/notes": {
         parameters: {
             query?: never;
@@ -1310,6 +1326,22 @@ export interface paths {
          * @description enhance a note using AI. stub - returns the note unchanged until implemented.
          */
         post: operations["enhance_note_v1_notes__note_id__enhance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/notes/{note_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_note_access_rules_v1_notes__note_id__access_rules_get"];
+        put: operations["set_note_access_rules_v1_notes__note_id__access_rules_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1709,6 +1741,22 @@ export interface paths {
          */
         get: operations["get_reminder_list_counts_v1_reminders_lists__list_id__counts_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminders/lists/{list_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_get"];
+        put: operations["set_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -14691,6 +14739,44 @@ export interface operations {
             };
         };
     };
+    list_memory_access_rules_v1_memories__memory_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { memory_id: string };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+        };
+    };
+    set_memory_access_rules_v1_memories__memory_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { memory_id: string };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+        };
+    };
     list_notes_v1_notes_get: {
         parameters: {
             query?: {
@@ -15457,6 +15543,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_note_access_rules_v1_notes__note_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { note_id: string };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+        };
+    };
+    set_note_access_rules_v1_notes__note_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { note_id: string };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
         };
@@ -19714,6 +19838,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { list_id: string };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+        };
+    };
+    set_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { list_id: string };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
         };

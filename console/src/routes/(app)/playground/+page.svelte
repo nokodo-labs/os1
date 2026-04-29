@@ -285,7 +285,7 @@
 			<div
 				class="flex shrink-0 flex-wrap items-end gap-4 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4"
 			>
-				<div class="min-w-[240px] flex-1 space-y-1.5">
+				<div class="min-w-60 flex-1 space-y-1.5">
 					<Label class="text-xs font-medium text-zinc-400">agent</Label>
 					<Select
 						value={selectedAgentId}
