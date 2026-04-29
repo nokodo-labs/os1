@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -13,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
+from api.redis import on_invalidation
 from api.settings import settings
 from nokodo_ai.adapters.audio import resolve_audio_adapter
 from nokodo_ai.adapters.base.chat import ChatGenerationParams
@@ -30,6 +32,22 @@ from nokodo_ai.video_models import VideoModel
 
 
 logger = logging.getLogger(__name__)
+
+
+# process-local cache for task chat models.
+# key: task name, value: (chat_model, expiry_timestamp)
+_task_model_cache: dict[str, tuple[ChatModel, float]] = {}
+_TASK_MODEL_TTL_S = 300.0
+
+
+def reset_task_model_cache() -> None:
+	"""clear the task model cache (call when model/provider settings change)."""
+	_task_model_cache.clear()
+
+
+# self-register for cross-worker invalidation. main.py only starts the
+# subscriber; modules own their own reset hook registration.
+on_invalidation("task_models", reset_task_model_cache)
 
 
 def build_sdk_adapter_config(
@@ -252,8 +270,16 @@ async def resolve_task_chat_model(
 ) -> ChatModel:
 	"""resolve the chat model for a background task from settings.
 
-	resolution: per-task model_id → default_model_id → error.
+	resolution: per-task model_id -> default_model_id -> error.
+	uses a process-local cache to avoid repeated DB lookups (task models
+	rarely change).
 	"""
+	now = time.monotonic()
+	cached = _task_model_cache.get(task)
+	if cached is not None:
+		chat_model, expiry = cached
+		if now < expiry:
+			return chat_model
 
 	task_settings = settings.ai.tasks
 
@@ -287,7 +313,9 @@ async def resolve_task_chat_model(
 	if model is None:
 		raise ValueError(f"task model not found: {model_id_str}")
 
-	return build_chat_model(model)
+	chat_model = build_chat_model(model)
+	_task_model_cache[task] = (chat_model, now + _TASK_MODEL_TTL_S)
+	return chat_model
 
 
 def build_image_model(model: Model) -> ImageModel:

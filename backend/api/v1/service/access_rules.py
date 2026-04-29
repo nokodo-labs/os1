@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.permissions import ResourceType
+from api.redis import cache
 from api.schemas.access_rule import AccessRuleCreate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
@@ -107,7 +108,6 @@ async def list_access_rules(
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[AccessRule]:
 	"""list access rules for a resource (requires admin access).
@@ -155,7 +155,6 @@ async def set_access_rules(
 	resource_id: TypeID,
 	rules: list[AccessRuleCreate],
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[AccessRule]:
 	"""
@@ -243,5 +242,8 @@ async def _set_rules_impl(
 
 	# sync acl metadata to qdrant (no-op if resource has no chunks)
 	await sync_resource_vector_acl(resource_id, resource_type, session)
+
+	# bust the cached accessible-user-ids for this resource
+	await cache.invalidate_tag(f"resource:{resource_type.value}:{resource_id}")
 
 	return await _list_rules_for_resource(resource_type, resource_id, session)

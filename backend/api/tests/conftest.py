@@ -815,6 +815,26 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop]:
 	loop.close()
 
 
+@pytest_asyncio.fixture(scope="function", loop_scope="function", autouse=True)
+async def _api_test_redis_lifecycle() -> AsyncGenerator[None]:
+	"""Connect the singleton redis client for each test.
+
+	Uses function scope so every test runs against a redis client whose
+	connection pool is bound to that test's running loop. Tests use the
+	same redis (valkey) instance the dev stack starts on ``REDIS_URL``
+	(default ``redis://127.0.0.1:6380/0``). CI ensures a valkey container
+	is available. There is no in-process fallback - if connection fails,
+	tests fail fast.
+	"""
+	from api.redis import redis_client
+
+	await redis_client.connect()
+	try:
+		yield
+	finally:
+		await redis_client.aclose()
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession]:
 	# Import models/Base at runtime so coverage sees them.

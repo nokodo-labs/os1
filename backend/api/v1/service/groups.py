@@ -16,6 +16,7 @@ from api.schemas.group import GroupCreate, GroupMembershipCreate, GroupUpdate
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	invalidate_accessible_users_for_subject,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
@@ -26,7 +27,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 async def list_groups(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
@@ -65,9 +65,8 @@ async def list_groups(
 
 
 async def get_group(
-	group_id: str,
+	group_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Group:
 	"""get a group by id (requires reader access)."""
@@ -95,7 +94,6 @@ async def get_group(
 async def create_group(
 	group_in: GroupCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Group:
@@ -136,10 +134,9 @@ async def create_group(
 
 
 async def update_group(
-	group_id: str,
+	group_id: TypeID,
 	group_in: GroupUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Group:
@@ -177,9 +174,8 @@ async def update_group(
 
 
 async def delete_group(
-	group_id: str,
+	group_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -192,6 +188,10 @@ async def delete_group(
 		required_level=AccessLevel.ADMIN,
 	)
 	group = await _load_group(group_id, session)
+	# invalidate BEFORE publish_event commits - the CASCADE delete of
+	# access rules means the rows are gone after commit and the query
+	# inside invalidate_accessible_users_for_subject would find nothing.
+	await invalidate_accessible_users_for_subject("group", group_id, session)
 	await session.delete(group)
 	event = Event(
 		scope=EventScope.USER,
@@ -207,14 +207,13 @@ async def delete_group(
 	)
 
 
-# ---- membership management ----
+# membership management
 
 
 async def add_member(
-	group_id: str,
+	group_id: TypeID,
 	member_in: GroupMembershipCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> GroupMembership:
@@ -261,14 +260,18 @@ async def add_member(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	# group membership affects accessible_users for every resource that has
+	# an access rule referencing this group. invalidate exactly those.
+	await invalidate_accessible_users_for_subject(
+		subject_kind="group", subject_id=group_id, session=session
+	)
 	return membership
 
 
 async def remove_member(
-	group_id: str,
+	group_id: TypeID,
 	user_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -308,12 +311,15 @@ async def remove_member(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_accessible_users_for_subject(
+		subject_kind="group", subject_id=group_id, session=session
+	)
 
 
-# ---- internal helpers ----
+# internal helpers
 
 
-async def _load_group(group_id: str, session: AsyncSession) -> Group:
+async def _load_group(group_id: TypeID, session: AsyncSession) -> Group:
 	result = await session.execute(
 		select(Group)
 		.where(Group.id == group_id)

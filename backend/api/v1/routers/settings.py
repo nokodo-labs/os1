@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.user import User
+from api.redis import publish_invalidation
 from api.service.pwa_manifest import invalidate_cache as invalidate_manifest_cache
 from api.settings import Settings, settings
 from api.v1.schemas.settings import (
@@ -63,6 +64,10 @@ async def update_settings(
 		settings.reload()
 		invalidate_manifest_cache()
 		await vectorstores_service.reset_runtime_state()
+
+		# notify all workers to clear process-local caches
+		await publish_invalidation("embedding_model")
+		await publish_invalidation("task_models")
 	except svc.VersionConflictError as e:
 		raise HTTPException(
 			status.HTTP_409_CONFLICT,

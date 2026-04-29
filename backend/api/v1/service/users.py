@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +24,7 @@ from api.schemas.user import UserCreate, UserUpdate
 from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import invalidate_accessible_users_for_subject
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID
@@ -29,7 +32,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 async def list_users(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
@@ -59,7 +61,6 @@ async def list_users(
 async def get_user(
 	user_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> User:
 	if not principal.is_admin and user_id != principal.user.id:
@@ -83,7 +84,6 @@ async def get_user(
 async def get_user_counts(
 	user_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> dict[str, int]:
 	# ensure actor has permission
@@ -123,7 +123,6 @@ async def get_user_counts(
 async def create_user(
 	user_in: UserCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal | None = None,
 ) -> User:
 	user_count = await session.scalar(select(func.count()).select_from(User))
@@ -212,12 +211,14 @@ async def create_user(
 	await session.flush()
 
 	if actor is None:
-		role_ids = settings.security.auto_signup_role_ids
+		role_ids = settings.security.auto_signup_role_ids or []
 		if role_ids:
 			await session.execute(
 				insert(user_role_association),
 				[{"user_id": str(user.id), "role_id": str(rid)} for rid in role_ids],
 			)
+	else:
+		role_ids = []
 
 	try:
 		await session.commit()
@@ -242,6 +243,17 @@ async def create_user(
 		else:
 			raise exc
 	await session.refresh(user)
+	# auto-signup roles may grant access to existing resources via
+	# AccessRule.subject_role_id; bust those caches so the new user
+	# becomes visible to recipients without waiting for the TTL.
+	# fan out concurrently - each subject invalidation is independent.
+	if role_ids:
+		await asyncio.gather(
+			*(
+				invalidate_accessible_users_for_subject("role", TypeID(rid), session)
+				for rid in role_ids
+			)
+		)
 	return user
 
 
@@ -249,7 +261,6 @@ async def update_user(
 	user_id: TypeID,
 	user_in: UserUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> User:
@@ -285,6 +296,21 @@ async def update_user(
 			)
 
 	user = await get_user(user_id, session, principal=principal)
+
+	# capture pre-mutation role membership so we can compute the symmetric
+	# difference and invalidate only the affected role subjects.
+	old_role_ids: set[TypeID] = set()
+	if principal.is_admin and user_in.role_ids is not None:
+		old_role_ids = {
+			TypeID(row[0])
+			for row in (
+				await session.execute(
+					select(user_role_association.c.role_id).where(
+						user_role_association.c.user_id == str(user.id)
+					)
+				)
+			).all()
+		}
 
 	if user_in.preferences is not None:
 		user.preferences = user_in.preferences.model_dump(
@@ -356,6 +382,30 @@ async def update_user(
 			detail=f"invalid reference: {exc.orig}",
 		) from None
 	await session.refresh(user)
+
+	# precise cache invalidation: only the subjects whose effective access
+	# could have changed. avoids a coarse 'invalidate everything' tag.
+	if principal.is_admin:
+		if user_in.is_active is not None:
+			# direct user-rule grants for this user can flip in/out of the
+			# accessible_users list. invalidate per-subject:user.
+			await invalidate_accessible_users_for_subject(
+				subject_kind="user", subject_id=user.id, session=session
+			)
+		if user_in.role_ids is not None:
+			new_role_ids = set(user_in.role_ids)
+			changed = old_role_ids ^ new_role_ids
+			if changed:
+				await asyncio.gather(
+					*(
+						invalidate_accessible_users_for_subject(
+							subject_kind="role",
+							subject_id=changed_role_id,
+							session=session,
+						)
+						for changed_role_id in changed
+					)
+				)
 
 	# emit user.preferences_updated event when preferences changed
 	if user_in.preferences is not None:

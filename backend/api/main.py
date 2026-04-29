@@ -1,5 +1,6 @@
 """main fastapi application entry point."""
 
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -18,11 +19,13 @@ from api.exceptions import (
 from api.logging import configure_logging, get_logger
 from api.middleware import (
 	APIVersionHeaderMiddleware,
+	RateLimitMiddleware,
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
 )
 from api.openapi import DEFAULT_RESPONSES
+from api.redis import redis_client, start_invalidation_subscriber
 from api.routers import system as system_router
 from api.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.settings import settings
@@ -50,11 +53,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		boot_settings.ENV,
 	)
 
-	# startup: skip db init during tests
 	if not boot_settings.TESTING:
 		await init_db()
 
-	# register the configured storage backend
+	if not boot_settings.TESTING:
+		await redis_client.connect()
+
+	# start the cross-worker cache invalidation subscriber. handlers are
+	# self-registered at import time by the modules that own resettable
+	# state (imported transitively through the router tree).
+	invalidation_task: asyncio.Task[None] | None = None
+	if not boot_settings.TESTING:
+		invalidation_task = await start_invalidation_subscriber()
+
 	storage_cfg = settings.assets.storage
 	if storage_cfg.backend == "s3":
 		s3 = S3StorageBackend(
@@ -82,7 +93,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 	# shutdown
 	logger.info("shutting down")
+	if invalidation_task is not None:
+		invalidation_task.cancel()
 	await close_storage()
+	if not boot_settings.TESTING:
+		await redis_client.aclose()
 
 
 app = FastAPI(
@@ -107,7 +122,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # 2. api version header
 app.add_middleware(APIVersionHeaderMiddleware, version="v1")
 
-# 1. cors (closest to app)
+# 1. cors
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=settings.security.cors_origins,
@@ -118,6 +133,9 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
+
+# 0. rate limiting (closest to app - after cors handles preflight)
+app.add_middleware(RateLimitMiddleware)
 
 # exception handlers
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

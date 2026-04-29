@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, exists, literal, or_, select, true, union
@@ -26,6 +28,7 @@ from api.models.task import Task
 from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import ResourceType
+from api.redis import cache
 from api.settings import settings
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID
@@ -139,7 +142,6 @@ def _false() -> ColumnElement[bool]:
 def resource_access_predicate(
 	principal: Principal,
 	resource_type: ResourceType,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 	include_deleted: bool = False,
 ) -> ColumnElement[bool]:
@@ -244,15 +246,75 @@ async def list_accessible_user_ids(
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	session: AsyncSession,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 ) -> list[TypeID]:
 	"""return all user IDs that have at least *required_level* access to a resource.
 
-	resolves the same grant paths as ``resource_access_predicate`` but inverted:
-	owner, superusers, explicit user/group/role access rules, role resource
-	defaults, and global defaults.
+	results are cached in redis for 5 minutes and tagged by resource for
+	invalidation on access rule changes. the long TTL is safe because
+	every mutation path that affects the result set (access_rules service,
+	role membership, group membership) busts the tag explicitly. the TTL
+	is only a safety net for entries that never get explicitly invalidated
+	(e.g. after a deleted resource).
 	"""
+	cache_key = (
+		f"accessible_users:{resource_type.value}:{resource_id}:{required_level.value}"
+	)
+
+	cached = await cache.get(cache_key)
+	if cached is not None and isinstance(cached, list):
+		return [TypeID(uid) for uid in cached]
+
+	result = await _list_accessible_user_ids_uncached(
+		resource_type, resource_id, session, required_level=required_level
+	)
+	await cache.set(
+		cache_key,
+		[str(uid) for uid in result],
+		ttl=300,
+		tags=[f"resource:{resource_type.value}:{resource_id}"],
+	)
+	return result
+
+
+async def invalidate_accessible_users_for_subject(
+	subject_kind: Literal["user", "group", "role"],
+	subject_id: TypeID,
+	session: AsyncSession,
+) -> None:
+	"""invalidate the ``accessible_users`` cache for every resource that has
+	an access rule referencing the given subject.
+
+	called from membership / role mutations so the cache stays accurate
+	without resorting to a coarse "invalidate everything" tag. exactly one
+	round trip to postgres + one tag invalidation per affected resource.
+	"""
+	subject_col = {
+		"user": AccessRule.subject_user_id,
+		"group": AccessRule.subject_group_id,
+		"role": AccessRule.subject_role_id,
+	}[subject_kind]
+	fk_cols = [(cfg.rule_fk, rtype) for rtype, cfg in RESOURCE_CONFIG.items()]
+	stmt = select(*[col for col, _ in fk_cols]).where(subject_col == str(subject_id))
+	rows = (await session.execute(stmt)).all()
+	tags: list[str] = []
+	for row in rows:
+		for value, (_col, rtype) in zip(row, fk_cols, strict=True):
+			if value is not None:
+				tags.append(f"resource:{rtype.value}:{value}")
+	# fan out the tag invalidations concurrently - each is an independent
+	# redis round trip and there is no ordering requirement between them.
+	if tags:
+		await asyncio.gather(*(cache.invalidate_tag(tag) for tag in tags))
+
+
+async def _list_accessible_user_ids_uncached(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> list[TypeID]:
+	"""uncached implementation of list_accessible_user_ids."""
 	config = RESOURCE_CONFIG[resource_type]
 	allowed_levels = _allowed_levels(required_level)
 
@@ -339,10 +401,9 @@ def _role_grants_default(
 	return level is not None and _level_satisfies(level, required_level)
 
 
-# backwards-compatible aliases
+# resource-specific convenience wrappers
 def thread_access_predicate(
 	principal: Principal,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 	include_hidden: bool = False,
 ) -> ColumnElement[bool]:
@@ -357,7 +418,6 @@ def thread_access_predicate(
 
 def project_access_predicate(
 	principal: Principal,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 ) -> ColumnElement[bool]:
 	"""return a SQL predicate limiting projects to those accessible to principal."""
@@ -373,7 +433,6 @@ async def get_effective_access_level(
 	principal: Principal,
 	resource_type: ResourceType,
 	resource_id: TypeID,
-	*,
 	owner_id: TypeID | None = None,
 ) -> AccessLevel | None:
 	"""
@@ -412,7 +471,6 @@ def resolve_effective_level(
 	principal: Principal,
 	resource_type: ResourceType,
 	rules: list[AccessRule],
-	*,
 	owner_id: TypeID | None = None,
 ) -> AccessLevel | None:
 	"""compute effective level from already-fetched rules (pure, no DB).
@@ -455,7 +513,6 @@ async def require_resource_access(
 	session: AsyncSession,
 	principal: Principal,
 	resource_type: ResourceType,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 	include_deleted: bool = False,
 	owner_id: TypeID | None = None,
@@ -506,12 +563,11 @@ async def require_resource_access(
 		)
 
 
-# backwards-compatible helpers
+# resource-specific require helpers
 async def require_thread_access(
 	thread_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 	include_hidden: bool = False,
 ) -> None:
@@ -536,7 +592,6 @@ async def require_project_access(
 	project_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	required_level: AccessLevel = AccessLevel.READER,
 ) -> None:
 	"""check that principal has required access level on a project."""

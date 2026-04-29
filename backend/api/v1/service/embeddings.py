@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
+from api.redis import on_invalidation
 from api.settings import settings
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.utils.typeid import TypeID
@@ -29,6 +30,12 @@ def reset_embedding_model_cache() -> None:
 	"""invalidate the cached embedding model (e.g. after settings change)."""
 	global _cached_embedding_model
 	_cached_embedding_model = None
+
+
+# self-register for cross-worker invalidation when the embedding settings
+# change. main.py only needs to start the subscriber; modules own their
+# own reset hook registration.
+on_invalidation("embedding_model", reset_embedding_model_cache)
 
 
 async def _get_embedding_model(session: AsyncSession) -> EmbeddingModel:
