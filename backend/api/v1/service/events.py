@@ -97,6 +97,10 @@ _EVENT_ROUTING: dict[str, tuple[ResourceType, str]] = {
 	# run events (route via thread)
 	EventType.RUN_STARTED: (ResourceType.THREAD, "thread_id"),
 	EventType.RUN_COMPLETED: (ResourceType.THREAD, "thread_id"),
+	EventType.RUN_ERROR: (ResourceType.THREAD, "thread_id"),
+	EventType.RUN_STEERING_QUEUED: (ResourceType.THREAD, "thread_id"),
+	EventType.RUN_STEERING_INJECTED: (ResourceType.THREAD, "thread_id"),
+	EventType.RUN_STEERING_DROPPED: (ResourceType.THREAD, "thread_id"),
 	# tool events (route via thread)
 	EventType.TOOL_PROGRESS: (ResourceType.THREAD, "thread_id"),
 	EventType.TOOL_CUSTOM: (ResourceType.THREAD, "thread_id"),

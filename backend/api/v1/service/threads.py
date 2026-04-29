@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, literal, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -74,6 +75,11 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+
+def _message_event_data(message: Message) -> dict[str, object]:
+	"""serialize a message event payload using the public API field names."""
+	return MessageOut.model_validate(message).model_dump(mode="json", by_alias=True)
 
 
 def _ensure_admin_for_hidden(include_hidden: bool, principal: Principal) -> None:
@@ -910,7 +916,16 @@ async def switch_branch(
 		origin_session_id=origin_session_id,
 	)
 
-	await session.commit()
+	try:
+		await session.commit()
+	except IntegrityError as exc:
+		# fk race: leaf_id was deleted by another tx between our select and
+		# this commit. surface as 409 instead of 500.
+		await session.rollback()
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail="branch state changed concurrently; please retry",
+		) from exc
 	return thread
 
 
@@ -984,9 +999,7 @@ async def create_message(
 	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
 
 	# emit message.created event with full message payload
-	message_data = MessageOut.model_validate(message).model_dump(
-		mode="json",
-	)
+	message_data = _message_event_data(message)
 	await event_service.publish_event(
 		session,
 		event=Event(
@@ -1060,7 +1073,7 @@ async def update_user_message(
 	await session.commit()
 	await session.refresh(message)
 
-	message_data = MessageOut.model_validate(message).model_dump(mode="json")
+	message_data = _message_event_data(message)
 	await event_service.publish_event(
 		session,
 		event=Event(

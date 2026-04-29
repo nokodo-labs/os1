@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
@@ -11,7 +12,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
-from api.models.message import MessageType
+from api.models.message import Message, MessageType
 from api.models.project import Project
 from api.models.thread import Thread
 from api.models.user import User
@@ -33,6 +34,36 @@ def _principal(user: User) -> Principal:
 			settings.default_permissions.action_permissions
 		),
 	)
+
+
+def test_message_event_data_uses_public_metadata_alias() -> None:
+	"""message WS payloads must match the OpenAPI message shape."""
+	now = datetime.now(UTC)
+	run_id = str(new_typeid("run"))
+	message = Message(
+		id=TypeID(new_typeid("msg")),
+		thread_id=TypeID(new_typeid("thread")),
+		parent_id=None,
+		task_id=None,
+		sender_agent_id=TypeID(new_typeid("agent")),
+		sender_user_id=None,
+		type=MessageType.ASSISTANT,
+		content=[{"type": "text", "text": "done [1]"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={"run_id": run_id},
+		created_at=now,
+		updated_at=now,
+	)
+
+	data = thread_service._message_event_data(message)
+
+	assert data["metadata_"] == {"run_id": run_id}
+	assert "metadata" not in data
 
 
 @pytest.mark.asyncio

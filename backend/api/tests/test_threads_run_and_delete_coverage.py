@@ -38,7 +38,10 @@ async def test_thread_run_stream_headers(
 	) -> AsyncGenerator[bytes]:
 		return _stream()
 
-	monkeypatch.setattr("api.v1.service.runs.chat_run_agent", _stream)
+	monkeypatch.setattr(
+		"api.v1.routers.runs.runs_service.start_thread_run",
+		_fake_start_thread_run,
+	)
 
 	resp = await client.post(
 		"/v1/runs",

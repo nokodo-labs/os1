@@ -69,11 +69,17 @@ async def broadcast_run_event(
 	*,
 	thread_id: TypeID,
 	agent_id: TypeID,
-	run_id: str,
+	run_id: TypeID,
 	started: bool,
+	error: bool = False,
 ) -> None:
-	"""broadcast run.started / run.completed to all users with access to a thread."""
-	msg_type = EventType.RUN_STARTED if started else EventType.RUN_COMPLETED
+	"""broadcast run.started / run.completed / run.error to all users with access."""
+	if started:
+		msg_type = EventType.RUN_STARTED
+	elif error:
+		msg_type = EventType.RUN_ERROR
+	else:
+		msg_type = EventType.RUN_COMPLETED
 	payload: dict[str, object] = {
 		"type": msg_type,
 		"data": {
@@ -95,7 +101,6 @@ async def broadcast_run_event(
 async def load_sdk_thread(
 	thread_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	parent_id: TypeID | None = None,
 ) -> tuple[SDKThread, TypeID | None]:
@@ -145,7 +150,6 @@ async def load_sdk_thread(
 async def inject_system_instructions(
 	agent_orm: AgentORM,
 	thread: SDKThread,
-	*,
 	session: AsyncSession,
 	principal: Principal | None = None,
 	client_context: ClientContext | None = None,

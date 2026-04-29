@@ -79,13 +79,13 @@ async def resolve_run_input(
 async def create_run_user_message(
 	thread_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	resolved_input: list[UserContentPart],
 	parent_id: TypeID | None,
 	run_id: TypeID,
 	origin_session_id: str | None = None,
 	attachment_actions: Mapping[str, str] | None = None,
+	extra_metadata: JSONObject | None = None,
 ) -> MessageORM:
 	"""create a user message for a run and emit attachment action events.
 
@@ -94,16 +94,24 @@ async def create_run_user_message(
 	- validating and converting SDK content parts to API ContentParts
 	- persisting the message via thread_service
 	- converting attachment actions into lifecycle events for the message
+
+	``extra_metadata`` lets callers (e.g. the steering endpoint) merge
+	additional fields like ``steering_state`` and ``client_steering_id``
+	into the persisted message metadata.
 	"""
 	msg_content: list[ContentPart] = [
 		ContentPartAdapter.validate_python(p.model_dump()) for p in resolved_input
 	]
 
+	metadata: JSONObject = {"run_id": run_id}
+	if extra_metadata:
+		metadata.update(extra_metadata)
+
 	user_msg = await thread_service.create_message(
 		thread_id,
 		MessageCreate(
 			content=msg_content,
-			metadata_={"run_id": run_id},
+			metadata_=metadata,
 			parent_id=parent_id,
 		),
 		session,

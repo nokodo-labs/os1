@@ -22,7 +22,9 @@ from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate, MessageUpdate
-from api.schemas.runs import ThreadCreateAndRunRequest
+from api.schemas.runs import (
+	ThreadCreateAndRunRequest,
+)
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.thread import (
@@ -48,9 +50,7 @@ from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import (
 	get_effective_access_level,
 	require_admin,
-	require_thread_access,
 )
-from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
@@ -479,31 +479,6 @@ async def get_thread_access_level(
 			detail="thread not found",
 		)
 	return level
-
-
-@router.post("/{thread_id}/runs/{run_id}/cancel")
-async def cancel_run(
-	thread_id: TypeID,
-	run_id: str,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-	"""cancel an active agent run on a thread."""
-	await require_thread_access(
-		thread_id,
-		db,
-		principal,
-		required_level=AccessLevel.EDITOR,
-	)
-	# verify run belongs to this thread
-	rs = await run_status_store.get_run(run_id)
-	if rs is None or rs.thread_id != str(thread_id):
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="run not found",
-		)
-	await run_status_store.fail_run(run_id)
-	return {"status": "cancelled"}
 
 
 @router.post(

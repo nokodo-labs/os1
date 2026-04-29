@@ -15,6 +15,7 @@ from api.database import async_session_local
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
 from api.models.event import Event
+from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
 from api.schemas.message import MessageCreate
@@ -44,6 +45,11 @@ from api.v1.service.chat.run_helpers import (
 	sse_event,
 )
 from api.v1.service.chat.run_status import run_status_store
+from api.v1.service.chat.steering import (
+	broadcast_steering_event,
+	persist_steering_state,
+	prepare_steering,
+)
 from api.v1.service.chat.tools import resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
@@ -63,6 +69,216 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 logger = logging.getLogger(__name__)
+
+
+# sentinel used to signal the persistence worker to drain and exit. a plain
+# object() is unambiguous and avoids the previous "tuple with empty
+# AssistantMessage" hack which made the queue type harder to read.
+_PERSIST_STOP: object = object()
+
+
+async def _resolve_run_thread(
+	agent: AgentORM,
+	session: AsyncSession,
+	principal: Principal,
+	thread_id: TypeID | None,
+	initial_parent_id: TypeID | None,
+	resolved_input: list,
+	client_context: ClientContext | None,
+	persist: bool,
+) -> tuple[SDKThread, TypeID | None]:
+	"""resolve the SDKThread and head id used to seed the agent run.
+
+	unifies the persist and ephemeral paths:
+
+	- persist=True: load the thread from the DB starting at ``initial_parent_id``,
+		inject system instructions, return the thread + the resolved head id
+		(which becomes ``initial_parent_id`` for downstream message persistence).
+	- persist=False with thread_id: load the thread for context only, append
+		any ephemeral user input, inject system instructions, return.
+	- persist=False without thread_id: synthesize a thread from the resolved
+		input alone.
+
+	returns ``(thread, head_id)``. ``head_id`` is non-None only when persisting.
+	"""
+	if persist:
+		assert thread_id is not None  # persist=True requires a thread_id
+		sdk_thread, head_id = await load_sdk_thread(
+			thread_id,
+			session,
+			principal=principal,
+			parent_id=initial_parent_id,
+		)
+		resolved_head: TypeID | None = (
+			initial_parent_id
+			if initial_parent_id is not None
+			else (TypeID(str(head_id)) if head_id else None)
+		)
+		thread = await inject_system_instructions(
+			agent,
+			sdk_thread,
+			session=session,
+			principal=principal,
+			client_context=client_context,
+		)
+		return thread, resolved_head
+
+	# ephemeral: no persistence; load thread context if thread_id provided
+	if thread_id is not None:
+		try:
+			sdk_thread, _ = await load_sdk_thread(
+				thread_id,
+				session,
+				principal=principal,
+			)
+		except HTTPException:
+			raise
+		except Exception:
+			logger.exception(
+				"failed to load thread context for ephemeral run",
+				extra={"thread_id": str(thread_id)},
+			)
+			raise HTTPException(
+				status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+				detail="failed to load thread context",
+			)
+	else:
+		sdk_thread = SDKThread(messages=[])
+
+	if resolved_input:
+		sdk_thread = sdk_thread.model_copy(
+			update={
+				"messages": [
+					*sdk_thread.messages,
+					SDKUserMessage(content=resolved_input),
+				]
+			}
+		)
+
+	try:
+		thread = await inject_system_instructions(
+			agent,
+			sdk_thread,
+			session=session,
+			principal=principal,
+			client_context=client_context,
+		)
+	except Exception:
+		logger.exception("failed to inject system instructions")
+		thread = sdk_thread
+
+	return thread, None
+
+
+async def _finalize_partial_assistant_on_cancel(
+	run_id: TypeID,
+	agent_id: TypeID,
+	current_assistant_id: TypeID | None,
+	chat_deltas: list[SDKAssistantMessage],
+	persist: bool,
+	message_queue: asyncio.Queue,
+) -> None:
+	"""persist whatever assistant content streamed before the cancel hit.
+
+	called from the cancel handler so subscribers, the in-memory RunStatus
+	messages, and (when persisting) the DB all reflect the partial result
+	the user already saw on screen. partial messages are flagged via
+	``metadata.partial_reason='cancelled'`` so DB consumers can distinguish
+	them from complete ones.
+	"""
+	if current_assistant_id is None or not chat_deltas:
+		return
+	partial = SDKAssistantMessage()
+	for dm in chat_deltas:
+		partial = partial.merge(dm)
+	partial_content: list[dict[str, object]] = []
+	for part in partial.content or []:
+		if isinstance(part, TextContent):
+			partial_content.append({"type": "text", "text": part.text})
+	partial_tc = (
+		[tc.model_dump(mode="json") for tc in partial.tool_calls]
+		if partial.tool_calls
+		else []
+	)
+	try:
+		await run_status_store.add_message(
+			run_id,
+			message_id=current_assistant_id,
+			message_type="assistant",
+			content=partial_content,
+			sender_agent_id=agent_id,
+			tool_calls=partial_tc,
+		)
+		if persist:
+			partial.metadata = {
+				**(partial.metadata or {}),
+				"partial": True,
+				"partial_reason": "cancelled",
+			}
+			await message_queue.put((current_assistant_id, partial))
+	except Exception:
+		logger.exception(
+			"failed to finalize partial assistant message on cancel",
+			extra={"run_id": run_id, "message_id": current_assistant_id},
+		)
+
+
+def _schedule_terminate_broadcast(
+	thread_id: TypeID | None,
+	agent_id: TypeID,
+	run_id: TypeID,
+	error: bool,
+	dropped_steering: list[TypeID] | None = None,
+) -> None:
+	"""fire a run.completed/run.error broadcast for a thread-bound run.
+
+	if ``dropped_steering`` ids are supplied, also fires a
+	``run.steering.dropped`` broadcast and persists the metadata flip on
+	each affected message.
+
+	no-op for ephemeral runs (no thread to fan out to).
+	"""
+	if thread_id is None:
+		return
+	create_background_task(
+		broadcast_run_event(
+			thread_id=thread_id,
+			agent_id=agent_id,
+			run_id=run_id,
+			started=False,
+			error=error,
+		),
+		name="broadcast_run_error" if error else "broadcast_run_completed",
+	)
+	if dropped_steering:
+		create_background_task(
+			_broadcast_dropped_steering(
+				thread_id=thread_id,
+				agent_id=agent_id,
+				run_id=run_id,
+				dropped=dropped_steering,
+			),
+			name="broadcast_steering_dropped",
+		)
+
+
+async def _broadcast_dropped_steering(
+	thread_id: TypeID,
+	agent_id: TypeID,
+	run_id: TypeID,
+	dropped: list[TypeID],
+) -> None:
+	"""broadcast run.steering.dropped and persist the metadata flip."""
+	if not dropped:
+		return
+	await persist_steering_state(dropped, "dropped", only_if_current="queued")
+	await broadcast_steering_event(
+		event_type=EventType.RUN_STEERING_DROPPED,
+		thread_id=thread_id,
+		agent_id=agent_id,
+		run_id=run_id,
+		message_ids=dropped,
+	)
 
 
 async def _load_agent(
@@ -106,7 +322,6 @@ async def _load_agent(
 
 
 def build_agent(
-	*,
 	chat_model: ChatModel,
 	tools: list[Tool[AppContext]] | None = None,
 	filters: list[SDKFilter[AppContext]] | None = None,
@@ -193,13 +408,14 @@ async def run_agent(
 	thread_id: TypeID | None,
 	agent_id: TypeID,
 	principal: Principal,
-	*,
 	input: RunInput | None = None,
 	parent_id: TypeID | None = None,
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
 	persist: bool = True,
 	tool_choice: ToolChoice | None = None,
+	run_id_override: TypeID | None = None,
+	ready_event: asyncio.Event | None = None,
 ) -> AsyncIterator[bytes]:
 	"""stream a thread run as sse events.
 
@@ -210,13 +426,21 @@ async def run_agent(
 	no thread, messages, or metadata are written to the database.
 	``thread_id`` may be None in this case; ``input`` must be provided.
 
+	when ``run_id_override`` is provided, the caller has already allocated the
+	run id (used for background-task execution where the caller needs
+	the id before this generator starts publishing).
+
+	when ``ready_event`` is provided, it is set immediately after the run is
+	registered in the run_status_store. callers driving this generator as a
+	background task can wait on this event before subscribing to the store,
+	guaranteeing they will not miss any frames.
+
 	Each SSE ``delta`` event includes:
 	- run_id: stable ID for this run
 	- message_id: stable ID for the currently streaming message
 	- delta: the raw AgentDelta payload (Pydantic JSON)
 	"""
-	run_id = new_typeid("run")
-	run_id_str = str(run_id)
+	run_id = run_id_override if run_id_override is not None else new_typeid("run")
 
 	async with async_session_local() as session:
 		initial_parent_id: TypeID | None = None
@@ -224,54 +448,69 @@ async def run_agent(
 		# resolve structured input to content parts
 		resolved_input = await resolve_run_input(input, session) if input else []
 
-		if persist:
-			assert thread_id is not None  # persist=True requires a thread_id
-			# register run in status store + broadcast run.started
-			await run_status_store.start_run(
-				run_id=run_id_str,
-				thread_id=str(thread_id),
-				agent_id=str(agent_id),
-				user_id=principal.user_id,
-			)
+		# register run in status store + (when on a thread) broadcast
+		# run.started. ``persist`` only gates DB writes (messages, metadata);
+		# every run lives in the registry so it is cancellable, observable,
+		# and resumable regardless of whether we persist its outputs.
+		await run_status_store.start_run(
+			run_id=run_id,
+			agent_id=agent_id,
+			user_id=principal.user_id,
+			thread_id=thread_id,
+		)
+		# self-attach the producer task so cancel_run works from the very
+		# first microsecond the run is visible. when this generator is
+		# being driven by a background task (the normal path), current_task()
+		# IS that producer; when it is driven inline by an HTTP request
+		# (legacy / tests), there is no producer to cancel and the attach
+		# becomes a no-op via cancel_run's task.done() guard.
+		current = asyncio.current_task()
+		if current is not None:
+			await run_status_store.attach_task(run_id, current)
+		if ready_event is not None:
+			ready_event.set()
+		if thread_id is not None:
 			create_background_task(
 				broadcast_run_event(
 					thread_id=thread_id,
 					agent_id=agent_id,
-					run_id=run_id_str,
+					run_id=run_id,
 					started=True,
 				),
 				name="broadcast_run_started",
 			)
-			if resolved_input:
-				user_msg = await create_run_user_message(
-					thread_id,
-					session,
-					principal=principal,
-					resolved_input=resolved_input,
-					parent_id=parent_id,
-					run_id=run_id,
-					origin_session_id=origin_session_id,
-					attachment_actions=(input.attachment_actions if input else None),
-				)
-				user_msg_data = message_to_sse_data(user_msg)
-				frame = sse_event(event="message_created", data=user_msg_data)
-				await run_status_store.publish(run_id_str, frame)
-				yield frame
-				initial_parent_id = TypeID(str(user_msg.id))
-				user_content = user_msg_data.get("content")
-				await run_status_store.add_message(
-					run_id_str,
-					message_id=str(user_msg.id),
-					message_type="user",
-					content=user_content if isinstance(user_content, list) else [],
-					parent_id=str(user_msg.parent_id) if user_msg.parent_id else None,
-					sender_agent_id=None,
-					created_at=(
-						user_msg.created_at.isoformat() if user_msg.created_at else None
-					),
-				)
-			else:
-				initial_parent_id = parent_id
+
+		if persist and resolved_input:
+			assert thread_id is not None  # persist=True requires a thread_id
+			user_msg = await create_run_user_message(
+				thread_id,
+				session,
+				principal=principal,
+				resolved_input=resolved_input,
+				parent_id=parent_id,
+				run_id=run_id,
+				origin_session_id=origin_session_id,
+				attachment_actions=(input.attachment_actions if input else None),
+			)
+			user_msg_data = message_to_sse_data(user_msg)
+			frame = sse_event(event="message_created", data=user_msg_data)
+			await run_status_store.publish(run_id, frame)
+			yield frame
+			initial_parent_id = user_msg.id
+			user_content = user_msg_data.get("content")
+			await run_status_store.add_message(
+				run_id,
+				message_id=user_msg.id,
+				message_type="user",
+				content=user_content if isinstance(user_content, list) else [],
+				parent_id=user_msg.parent_id,
+				sender_agent_id=None,
+				created_at=(
+					user_msg.created_at.isoformat() if user_msg.created_at else None
+				),
+			)
+		else:
+			initial_parent_id = parent_id
 
 		try:
 			agent = await _load_agent(agent_id, session, principal)
@@ -281,31 +520,33 @@ async def run_agent(
 			logger.exception("failed to load agent")
 			err = sse_event(event="error", data={"message": "failed to load agent"})
 			done = sse_event(event="done", data={})
-			if persist:
-				await run_status_store.publish(run_id_str, err)
-				await run_status_store.publish(run_id_str, done)
+			await run_status_store.publish(run_id, err)
+			await run_status_store.publish(run_id, done)
 			yield err
 			yield done
 			return
 
-		# --- background persistence + event correlation state (persist only) ---
-		message_queue: asyncio.Queue[tuple[str, SDKMessage]] = asyncio.Queue()
+		# background persistence + event correlation state (persist only)
+		message_queue: asyncio.Queue[tuple[str, SDKMessage] | object] = asyncio.Queue()
 		message_persisted: dict[str, asyncio.Event] = {}
 		active_message_id_for_events: str | None = None
+		persist_parent_override: TypeID | None = None
 
 		# capture model_id for message metadata before the worker starts.
 		# this lets downstream consumers (e.g. windowing) know which model
 		# produced each assistant message without re-loading the agent.
 		_model_id_for_persist: str | None = str(agent.model.id) if agent.model else None
 
-		async def _persist_message_worker(*, parent_id: TypeID | None) -> None:
+		async def _persist_message_worker(parent_id: TypeID | None) -> None:
+			nonlocal persist_parent_override
 			assert thread_id is not None  # only runs when persist=True
 			last_parent_id = parent_id
 			while True:
 				item = await message_queue.get()
-				if item[0] == "__STOP__":
+				if item is _PERSIST_STOP:
 					message_queue.task_done()
 					return
+				assert isinstance(item, tuple)
 				message_id_str, sdk_msg = item
 				try:
 					async with async_session_local() as bg_session:
@@ -330,6 +571,9 @@ async def run_agent(
 						create_in.metadata["run_id"] = run_id
 						if _model_id_for_persist:
 							create_in.metadata["model_id"] = _model_id_for_persist
+						if persist_parent_override is not None:
+							last_parent_id = persist_parent_override
+							persist_parent_override = None
 						create_in.parent_id = last_parent_id
 						persisted = await thread_service.create_message(
 							thread_id=thread_id,
@@ -371,6 +615,27 @@ async def run_agent(
 		def _message_id_provider() -> str | None:
 			return active_message_id_for_events
 
+		async def _wait_for_persisted_parent(
+			message_id: TypeID | None,
+		) -> None:
+			if message_id is None:
+				return
+			evt = message_persisted.get(message_id)
+			if evt is None:
+				return
+			try:
+				await asyncio.wait_for(evt.wait(), timeout=15)
+			except TimeoutError:
+				logger.warning(
+					"timed out waiting for steering parent persistence",
+					extra={"message_id": str(message_id)},
+				)
+
+		def _advance_parent_after_steering(message_id: TypeID) -> None:
+			nonlocal persist_parent_override, streaming_parent_id
+			streaming_parent_id = message_id
+			persist_parent_override = message_id
+
 		if persist:
 			emitter = build_event_emitter(
 				message_id_provider=_message_id_provider,
@@ -400,72 +665,26 @@ async def run_agent(
 				event="error", data={"message": "failed to initialize agent"}
 			)
 			done = sse_event(event="done", data={})
-			if persist:
-				await run_status_store.publish(run_id_str, err)
-				await run_status_store.publish(run_id_str, done)
+			await run_status_store.publish(run_id, err)
+			await run_status_store.publish(run_id, done)
 			yield err
 			yield done
 			return
 
 		if persist:
 			assert thread_id is not None  # persist=True requires a thread_id
-			sdk_thread, head_id = await load_sdk_thread(
-				thread_id,
-				session,
-				principal=principal,
-				parent_id=initial_parent_id,
-			)
-			if initial_parent_id is None:
-				initial_parent_id = TypeID(str(head_id)) if head_id else None
-			thread = await inject_system_instructions(
-				agent,
-				sdk_thread,
-				session=session,
-				principal=principal,
-				client_context=client_context,
-			)
-		else:
-			# ephemeral: no persistence; load thread context if thread_id provided
-			if thread_id is not None:
-				try:
-					sdk_thread, _ = await load_sdk_thread(
-						thread_id,
-						session,
-						principal=principal,
-					)
-				except HTTPException:
-					raise
-				except Exception:
-					logger.exception(
-						"failed to load thread context for ephemeral run",
-						extra={"thread_id": str(thread_id)},
-					)
-					raise HTTPException(
-						status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-						detail="failed to load thread context",
-					)
-			else:
-				sdk_thread = SDKThread(messages=[])
-			if resolved_input:
-				sdk_thread = sdk_thread.model_copy(
-					update={
-						"messages": [
-							*sdk_thread.messages,
-							SDKUserMessage(content=resolved_input),
-						]
-					}
-				)
-			try:
-				thread = await inject_system_instructions(
-					agent,
-					sdk_thread,
-					session=session,
-					principal=principal,
-					client_context=client_context,
-				)
-			except Exception:
-				logger.exception("failed to inject system instructions")
-				thread = sdk_thread
+		thread, resolved_head = await _resolve_run_thread(
+			agent,
+			session,
+			principal,
+			thread_id=thread_id,
+			initial_parent_id=initial_parent_id,
+			resolved_input=resolved_input,
+			client_context=client_context,
+			persist=persist,
+		)
+		if persist and resolved_head is not None:
+			initial_parent_id = resolved_head
 
 		# build retrieval context explicitly before the agent/filter loop.
 		# filters read from ctx.retrieval rather than computing their own.
@@ -479,6 +698,8 @@ async def run_agent(
 				)
 
 		worker_task: asyncio.Task[object] | None = None
+		steering_subscriber: asyncio.Task[None] | None = None
+		streaming_parent_id: TypeID | None = initial_parent_id
 		try:
 			if persist:
 				worker_task = create_background_task(
@@ -486,35 +707,42 @@ async def run_agent(
 					name="message_persist_worker",
 				)
 
-			stream = await sdk_agent.run(
+			run_agent_instance, steering_subscriber = await prepare_steering(
+				run_id=run_id,
+				sdk_agent=sdk_agent,
+				agent_config=agent.parsed_config,
+				thread_id=thread_id,
+				agent_id=agent_id,
+				parent_id_provider=lambda: streaming_parent_id,
+				wait_for_parent_persisted=_wait_for_persisted_parent,
+				on_parent_advanced=_advance_parent_after_steering,
+			)
+
+			stream = await run_agent_instance.run(
 				thread,
 				app_context=ctx,
 				tool_choice=tool_choice or "auto",
 				stream=True,
 			)
 
-			def _alloc_message_id() -> str:
-				message_id_str = str(TypeID(new_typeid("msg")))
-				message_persisted[message_id_str] = asyncio.Event()
-				return message_id_str
-
-			streaming_parent_id: str | None = (
-				str(initial_parent_id) if initial_parent_id else None
-			)
+			def _alloc_message_id() -> TypeID:
+				message_id = TypeID(new_typeid("msg"))
+				message_persisted[message_id] = asyncio.Event()
+				return message_id
 
 			def _delta_envelope(
-				*,
-				message_id: str | None,
+				message_id: TypeID | None,
 				delta: AgentDelta,
 			) -> dict[str, object]:
 				return {
-					"run_id": str(run_id),
+					"run_id": run_id,
+					"agent_id": agent_id,
 					"message_id": message_id,
 					"parent_id": streaming_parent_id,
 					"delta": delta.model_dump(mode="json"),
 				}
 
-			current_assistant_id: str | None = None
+			current_assistant_id: TypeID | None = None
 			# deferred merge: collect deltas, merge once on completion
 			_chat_deltas: list[SDKAssistantMessage] = []
 			# incremental tracking for run status (avoids per-token merge)
@@ -522,7 +750,7 @@ async def run_agent(
 			_streaming_tc: list[dict[str, object]] = []
 
 			async for delta in stream:
-				message_id: str | None = None
+				message_id: TypeID | None = None
 
 				if delta.chat is not None:
 					if current_assistant_id is None:
@@ -570,68 +798,66 @@ async def run_agent(
 							tc_update = _streaming_tc
 
 						await run_status_store.update_streaming(
-							run_id_str,
+							run_id,
 							message_id=current_assistant_id,
 							content=_streaming_text,
 							tool_calls=tc_update,
 						)
 
 					if delta.chat.done:
+						# deferred merge - build full message only on completion
+						assistant_accum = SDKAssistantMessage()
+						for dm in _chat_deltas:
+							assistant_accum = assistant_accum.merge(dm)
+						content_parts: list[dict[str, object]] = []
+						for part in assistant_accum.content or []:
+							if isinstance(part, TextContent):
+								content_parts.append(
+									{"type": "text", "text": part.text}
+								)
+						tc_data = (
+							[
+								tc.model_dump(mode="json")
+								for tc in assistant_accum.tool_calls
+							]
+							if assistant_accum.tool_calls
+							else []
+						)
+						await run_status_store.add_message(
+							run_id,
+							message_id=current_assistant_id,
+							message_type="assistant",
+							content=content_parts,
+							sender_agent_id=agent_id,
+							tool_calls=tc_data,
+						)
 						if persist:
-							# deferred merge - build full message only on completion
-							assistant_accum = SDKAssistantMessage()
-							for dm in _chat_deltas:
-								assistant_accum = assistant_accum.merge(dm)
 							active_message_id_for_events = current_assistant_id
 							await message_queue.put(
 								(current_assistant_id, assistant_accum)
 							)
-							content_parts: list[dict[str, object]] = []
-							for part in assistant_accum.content or []:
-								if isinstance(part, TextContent):
-									content_parts.append(
-										{"type": "text", "text": part.text}
-									)
-							tc_data = (
-								[
-									tc.model_dump(mode="json")
-									for tc in assistant_accum.tool_calls
-								]
-								if assistant_accum.tool_calls
-								else []
-							)
-							await run_status_store.add_message(
-								run_id_str,
-								message_id=current_assistant_id,
-								message_type="assistant",
-								content=content_parts,
-								sender_agent_id=str(agent_id),
-								tool_calls=tc_data,
-							)
 						current_assistant_id = None
 
 				if delta.tool is not None:
-					tool_message_id = (
-						_alloc_message_id() if persist else str(new_typeid("msg"))
-					)
+					tool_message_id = _alloc_message_id()
 					message_id = tool_message_id
 					if delta.tool.metadata is None:
 						delta.tool.metadata = {}
 					delta.tool.metadata["message_id"] = tool_message_id
+					tool_content: list[dict[str, object]] = []
+					if hasattr(delta.tool, "tool_output"):
+						output = delta.tool.tool_output or ""
+						tool_content = [{"type": "text", "text": output}]
+					for att in delta.tool.attachments:
+						tool_content.append(att.model_dump(mode="json"))
+					await run_status_store.add_message(
+						run_id,
+						message_id=tool_message_id,
+						message_type="tool",
+						content=tool_content,
+					)
 					if persist:
 						await message_queue.put((tool_message_id, delta.tool))
-						tool_content: list[dict[str, object]] = []
-						if hasattr(delta.tool, "tool_output"):
-							output = delta.tool.tool_output or ""
-							tool_content = [{"type": "text", "text": output}]
-						for att in delta.tool.attachments:
-							tool_content.append(att.model_dump(mode="json"))
-						await run_status_store.add_message(
-							run_id_str,
-							message_id=tool_message_id,
-							message_type="tool",
-							content=tool_content,
-						)
 
 				if delta.done:
 					message_id = None
@@ -640,8 +866,7 @@ async def run_agent(
 					event="delta",
 					data=_delta_envelope(message_id=message_id, delta=delta),
 				)
-				if persist:
-					await run_status_store.publish(run_id_str, frame)
+				await run_status_store.publish(run_id, frame)
 				yield frame
 
 				if delta.chat is not None and delta.chat.done and message_id:
@@ -649,55 +874,61 @@ async def run_agent(
 				if delta.tool is not None and message_id:
 					streaming_parent_id = message_id
 
-		except GeneratorExit:
-			await safe_rollback(session)
-			if persist:
-				assert thread_id is not None
-				await run_status_store.fail_run(run_id_str)
-				create_background_task(
-					broadcast_run_event(
-						thread_id=thread_id,
-						agent_id=agent_id,
-						run_id=run_id_str,
-						started=False,
-					),
-					name="broadcast_run_completed",
+		except (GeneratorExit, asyncio.CancelledError):
+			# explicit cancellation (cancel_run endpoint, task.cancel(), or
+			# producer driver torn down). this is the only path where the run
+			# does NOT complete naturally - finalize whatever assistant content
+			# we have so far so subscribers, RunStatus.messages, and the DB all
+			# reflect the partial result the user already saw streaming.
+			#
+			# shield the cleanup so a second cancel (re-entrant
+			# task.cancel(), shutdown signal) cannot interrupt it midway and
+			# leave the run pinned in the store with subscribers waiting on
+			# a sentinel that never arrives.
+			async def _cancel_cleanup() -> None:
+				await _finalize_partial_assistant_on_cancel(
+					run_id=run_id,
+					agent_id=agent_id,
+					current_assistant_id=current_assistant_id,
+					chat_deltas=_chat_deltas,
+					persist=persist,
+					message_queue=message_queue,
 				)
-			return
+				await safe_rollback(session)
+				rs_terminated = await run_status_store.fail_run(
+					run_id, reason="cancelled"
+				)
+				dropped = rs_terminated.in_flight_steering() if rs_terminated else []
+				_schedule_terminate_broadcast(
+					thread_id, agent_id, run_id, error=True, dropped_steering=dropped
+				)
+
+			await asyncio.shield(_cancel_cleanup())
+			raise
 		except Exception:
 			logger.exception("error during agent streaming")
 			await safe_rollback(session)
-			if persist:
-				assert thread_id is not None
-				await run_status_store.fail_run(run_id_str)
-				create_background_task(
-					broadcast_run_event(
-						thread_id=thread_id,
-						agent_id=agent_id,
-						run_id=run_id_str,
-						started=False,
-					),
-					name="broadcast_run_completed",
-				)
+			rs_terminated = await run_status_store.fail_run(
+				run_id, reason="generation failed"
+			)
+			dropped = rs_terminated.in_flight_steering() if rs_terminated else []
+			_schedule_terminate_broadcast(
+				thread_id, agent_id, run_id, error=True, dropped_steering=dropped
+			)
 			yield sse_event(event="error", data={"message": "generation failed"})
 			yield sse_event(event="done", data={})
 			return
 		finally:
 			if persist and worker_task is not None and not worker_task.done():
-				await message_queue.put(("__STOP__", SDKAssistantMessage()))
+				await message_queue.put(_PERSIST_STOP)
+			if steering_subscriber is not None and not steering_subscriber.done():
+				steering_subscriber.cancel()
 
-		if persist:
-			assert thread_id is not None
-			await run_status_store.complete_run(run_id_str)
-			create_background_task(
-				broadcast_run_event(
-					thread_id=thread_id,
-					agent_id=agent_id,
-					run_id=run_id_str,
-					started=False,
-				),
-				name="broadcast_run_completed",
-			)
+		rs_terminated = await run_status_store.complete_run(run_id)
+		dropped = rs_terminated.in_flight_steering() if rs_terminated else []
+		_schedule_terminate_broadcast(
+			thread_id, agent_id, run_id, error=False, dropped_steering=dropped
+		)
 
 		yield sse_event(event="done", data={})
 

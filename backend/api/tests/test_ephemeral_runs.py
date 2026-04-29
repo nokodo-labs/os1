@@ -69,13 +69,20 @@ async def test_ephemeral_run_streams_and_returns_sse(
 	headers = user_auth["headers"]
 	assert isinstance(headers, dict)
 
-	async def _fake_run_agent(
+	async def _fake_start_ephemeral(
 		*_args: object, **_kwargs: object
 	) -> AsyncGenerator[bytes]:
 		"""yield a single done frame."""
-		yield b"event: done\ndata: {}\n\n"
 
-	monkeypatch.setattr("api.v1.routers.runs.chat_run_agent", _fake_run_agent)
+		async def _gen() -> AsyncGenerator[bytes]:
+			yield b"event: done\ndata: {}\n\n"
+
+		return _gen()
+
+	monkeypatch.setattr(
+		"api.v1.routers.runs.runs_service.start_ephemeral_run",
+		_fake_start_ephemeral,
+	)
 
 	resp = await client.post(
 		"/v1/runs",

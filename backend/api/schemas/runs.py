@@ -281,10 +281,35 @@ class ThreadRunResponse(BaseModel):
 class ActiveRunOut(BaseModel):
 	"""lightweight snapshot of an in-memory active run."""
 
-	run_id: str
-	thread_id: str
-	agent_id: str
-	user_id: str
-	state: str
+	run_id: TypeID
+	thread_id: TypeID | None = None
+	agent_id: TypeID
+	user_id: TypeID
+	state: Literal["running", "completed", "error"]
 	started_at: datetime
 	updated_at: datetime
+
+
+class SteerRunRequest(BaseModel):
+	"""inject a user message into a running agent loop.
+
+	the message is persisted immediately and queued for delivery at the
+	next iteration boundary of the SDK loop.
+	"""
+
+	input: RunInput
+	parent_id: TypeID | None = Field(
+		default=None,
+		description="parent message id for the persisted user message. "
+		"defaults to the current branch tip if omitted.",
+	)
+
+
+class SteerRunResponse(BaseModel):
+	"""response from a successful steering enqueue."""
+
+	message_id: TypeID
+	state: Literal["queued", "dropped"] = Field(
+		description="'queued' if the run accepted the message, 'dropped' if "
+		"the run terminated before the message could be enqueued.",
+	)

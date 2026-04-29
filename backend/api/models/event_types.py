@@ -35,6 +35,12 @@ class EventType(StrEnum):
 	# agent run lifecycle
 	RUN_STARTED = "run.started"
 	RUN_COMPLETED = "run.completed"
+	RUN_ERROR = "run.error"
+
+	# in-flight steering: a user injects an extra message into a run
+	RUN_STEERING_QUEUED = "run.steering.queued"
+	RUN_STEERING_INJECTED = "run.steering.injected"
+	RUN_STEERING_DROPPED = "run.steering.dropped"
 
 	# notification events
 	NOTIFICATION_CUSTOM = "notification.custom"
@@ -140,6 +146,10 @@ TYPING_EVENTS = {
 RUN_EVENTS = {
 	EventType.RUN_STARTED,
 	EventType.RUN_COMPLETED,
+	EventType.RUN_ERROR,
+	EventType.RUN_STEERING_QUEUED,
+	EventType.RUN_STEERING_INJECTED,
+	EventType.RUN_STEERING_DROPPED,
 }
 
 SETTINGS_EVENTS = {
