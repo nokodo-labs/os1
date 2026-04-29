@@ -171,6 +171,10 @@ export class ToolExecutionTracker {
 			exec.arguments = { ...event.data.toolCallArgs, ...exec.arguments }
 		}
 
+		if (exec.result || exec.status === 'completed' || exec.status === 'error') {
+			return
+		}
+
 		// update status
 		switch (event.type) {
 			case 'tool.progress':
@@ -259,12 +263,12 @@ export class ToolExecutionTracker {
 		return false
 	}
 
-	/** mark all pending/running tool calls as error (e.g. when a run ends). */
+	/** close pending/running tool calls without inventing a failure state. */
 	closeAllActive(): void {
 		for (const exec of this.executions.values()) {
 			if (exec.status === 'pending' || exec.status === 'running') {
-				exec.status = 'error'
-				exec.error = 'tool execution was interrupted'
+				exec.status = 'completed'
+				exec.error = undefined
 				exec.completedAt = new SvelteDate()
 			}
 		}

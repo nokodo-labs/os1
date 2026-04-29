@@ -5,7 +5,6 @@
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Bell from '$lib/components/icons/Bell.svelte'
 	import Brain from '$lib/components/icons/Brain.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
@@ -74,7 +73,6 @@
 	// collapsible body
 	let hasBody = $derived(
 		name === 'agentic_web_search' ||
-			name === 'memory_recall' ||
 			name === 'code_interpreter' ||
 			name === 'fetch_url' ||
 			(isDone && summary.resourceId != null)
@@ -136,16 +134,6 @@
 		{:else}
 			<Sparkles class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{/if}
-
-		<!-- completion badge -->
-		{#if isDone}
-			<div
-				class="absolute -right-0.5 -bottom-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-green-500/90"
-				in:fade={{ duration: 120 }}
-			>
-				<Check class="h-2 w-2 text-white" strokeWidth="3" />
-			</div>
-		{/if}
 	</div>
 
 	<!-- text column -->
@@ -167,7 +155,7 @@
 						>"{summary.subtitle}"</span
 					>
 				{/if}
-				{#if name === 'think' && thinkDisplay && !isDone}
+				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
 				{/if}
 				<ChevronRight
@@ -188,7 +176,7 @@
 						>"{summary.subtitle}"</span
 					>
 				{/if}
-				{#if name === 'think' && thinkDisplay && !isDone}
+				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
 				{/if}
 			</div>

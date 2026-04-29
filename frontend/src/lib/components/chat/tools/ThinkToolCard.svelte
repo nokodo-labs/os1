@@ -1,7 +1,6 @@
 <script lang="ts">
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Brain from '$lib/components/icons/Brain.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import { type ToolExecution } from '$lib/tools'
 	import { onDestroy } from 'svelte'
 	import { fade } from 'svelte/transition'
@@ -78,7 +77,6 @@
 			<span class="text-foreground/50 tabular-nums">{elapsed.toFixed(1)}s</span>
 		{:else if isDone}
 			<span>thought for {displayElapsed}s</span>
-			<Check class="h-3 w-3 text-green-400" />
 		{:else if isError}
 			<span class="text-red-400">thinking failed</span>
 		{/if}
@@ -99,14 +97,6 @@
 						? 'text-foreground/70'
 						: 'text-foreground/60'}"
 			/>
-			{#if isDone}
-				<div
-					class="absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-green-500/90"
-					in:fade={{ duration: 150 }}
-				>
-					<Check class="text-foreground h-2.5 w-2.5" strokeWidth="3" />
-				</div>
-			{/if}
 		</div>
 
 		<div class="flex items-center gap-2 text-sm">

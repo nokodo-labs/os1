@@ -313,6 +313,14 @@ function parseToolArguments(args: unknown): Record<string, unknown> {
  */
 export function parseToolResult(message: ApiMessage): ToolResult | null {
 	if (message.type !== 'tool') return null
+	const metadata = (message.metadata_ ?? undefined) as Record<string, unknown> | undefined
+	const metadataToolCallId =
+		metadata && typeof metadata.tool_call_id === 'string' ? metadata.tool_call_id : null
+	const toolCallId =
+		typeof message.tool_call_id === 'string' && message.tool_call_id
+			? message.tool_call_id
+			: metadataToolCallId
+	if (!toolCallId) return null
 
 	const content = message.content ?? []
 	const textPart = content.find((p) => p?.type === 'text')
@@ -322,11 +330,11 @@ export function parseToolResult(message: ApiMessage): ToolResult | null {
 	const attachmentParts = content.filter((p) => p && p.type !== 'text')
 
 	return {
-		toolCallId: (message.tool_call_id as string | undefined) ?? '',
+		toolCallId,
 		output,
 		isError: (message.is_error as boolean | undefined) ?? false,
 		contentParts: attachmentParts.length > 0 ? attachmentParts : undefined,
-		metadata: (message.metadata_ ?? undefined) as Record<string, unknown> | undefined,
+		metadata,
 	}
 }
 
@@ -490,6 +498,25 @@ export function getThinkElapsed(execution: ToolExecution): string | null {
 	return (ms / 1000).toFixed(1)
 }
 
+export function getThinkTitle(execution: ToolExecution): string | null {
+	const title = readNonEmptyString(execution.toolCall.arguments.title)
+	if (title) return title
+
+	const thoughts = execution.toolCall.arguments.thoughts
+	if (Array.isArray(thoughts)) {
+		for (const thought of thoughts) {
+			if (!isRecord(thought)) continue
+			const summary = readNonEmptyString(thought.summary)
+			if (summary) return summary
+		}
+	}
+
+	return (
+		extractStreamingStringField(execution.rawArguments, 'title') ??
+		extractStreamingStringField(execution.rawArguments, 'summary')
+	)
+}
+
 export function getToolSummary(execution: ToolExecution): ToolSummary {
 	const name = execution.toolCall.name
 	const args = execution.toolCall.arguments
@@ -502,7 +529,9 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 	switch (name) {
 		case 'think': {
 			const elapsed = getThinkElapsed(execution)
+			const thinkTitle = getThinkTitle(execution)
 			if (isFailed) return { title: 'thinking failed' }
+			if (thinkTitle) return { title: thinkTitle }
 			if (status === 'completed' && elapsed !== null) {
 				return { title: `thought for ${elapsed}s` }
 			}
@@ -749,6 +778,30 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			}
 			return { title: displayName }
 		}
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readNonEmptyString(value: unknown): string | null {
+	if (typeof value !== 'string') return null
+	const trimmed = value.trim()
+	return trimmed.length > 0 ? trimmed : null
+}
+
+function extractStreamingStringField(raw: string | undefined, field: string): string | null {
+	if (!raw) return null
+	const fieldPattern = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	const match = new RegExp(`"${fieldPattern}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(raw)
+	const encoded = match?.[1]
+	if (!encoded) return null
+	try {
+		const decoded: unknown = JSON.parse(`"${encoded}"`)
+		return readNonEmptyString(decoded)
+	} catch {
+		return readNonEmptyString(encoded)
 	}
 }
 
