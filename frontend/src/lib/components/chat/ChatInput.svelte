@@ -179,10 +179,12 @@
 	function handleKeyDown(event: KeyboardEvent) {
 		if (onKeyDown?.(event)) return
 		// on touch devices, enter inserts a newline (users need it for multiline).
-		// on desktop, bare enter sends the message.
+		// on desktop, bare enter sends the message. while a run is active,
+		// submit still works - upstream routes it through steering (enqueue
+		// into the running loop) instead of starting a new run.
 		if (event.key === 'Enter' && !event.shiftKey && !isComposing && !device.isTouch) {
 			event.preventDefault()
-			if (!isGenerating) handleSubmit()
+			handleSubmit()
 		}
 	}
 
@@ -281,7 +283,7 @@
 					<textarea
 						bind:this={textarea}
 						bind:value
-						{placeholder}
+						placeholder={isGenerating ? 'enqueue a message' : placeholder}
 						{disabled}
 						oninput={handleInput}
 						onkeydown={handleKeyDown}
@@ -301,27 +303,27 @@
 						<button
 							type="button"
 							aria-label="stop generating"
-							class="rounded-circle bg-foreground text-background hover:bg-foreground/90 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95"
+							class="rounded-circle bg-foreground/15 text-foreground hover:bg-foreground/25 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95"
 							onclick={onStop}
 						>
 							<Stop class="h-5 w-5" />
 						</button>
-					{:else}
-						<button
-							type="submit"
-							aria-label="send message"
-							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
-								(value.trim() === '' && pendingAttachments.length === 0) ||
-								disabled
-							)
-								? 'hover:brightness-110'
-								: 'bg-foreground/10 text-foreground/35'}"
-							disabled={(value.trim() === '' && pendingAttachments.length === 0) ||
-								disabled}
-						>
-							<ArrowUp class="h-5 w-5" strokeWidth="2" />
-						</button>
 					{/if}
+					<button
+						type="submit"
+						aria-label={isGenerating ? 'enqueue message' : 'send message'}
+						title={isGenerating ? 'enqueue into the running agent' : undefined}
+						class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+							(value.trim() === '' && pendingAttachments.length === 0) ||
+							disabled
+						)
+							? 'hover:brightness-110'
+							: 'bg-foreground/10 text-foreground/35'}"
+						disabled={(value.trim() === '' && pendingAttachments.length === 0) ||
+							disabled}
+					>
+						<ArrowUp class="h-5 w-5" strokeWidth="2" />
+					</button>
 				</div>
 			</div>
 		</div>

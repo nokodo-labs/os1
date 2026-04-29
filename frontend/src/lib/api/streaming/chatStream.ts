@@ -62,6 +62,7 @@ export interface ToolResultDelta {
 /** delta event envelope (faithfully forwards backend AgentDelta). */
 export interface AgentDeltaEnvelope {
 	run_id: string
+	agent_id?: string | null
 	message_id: string | null
 	parent_id: string | null
 	delta: unknown
@@ -189,6 +190,16 @@ async function streamSseFrames(opts: {
 	return response.body.getReader()
 }
 
+/** error thrown when an SSE stream request fails with a non-2xx status. */
+export class StreamHttpError extends Error {
+	status: number
+	constructor(status: number, message?: string) {
+		super(message ?? `stream request failed: ${status}`)
+		this.name = 'StreamHttpError'
+		this.status = status
+	}
+}
+
 async function streamSseGet(opts: {
 	url: string
 	signal?: AbortSignal
@@ -218,7 +229,7 @@ async function streamSseGet(opts: {
 	}
 
 	if (!response.ok || !response.body) {
-		throw new Error(`resume stream failed: ${response.status}`)
+		throw new StreamHttpError(response.status, `resume stream failed: ${response.status}`)
 	}
 
 	return response.body.getReader()

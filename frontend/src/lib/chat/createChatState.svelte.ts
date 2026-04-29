@@ -12,7 +12,7 @@ import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { ToolExecutionTracker } from '$lib/tools'
 import { tick } from 'svelte'
-import { SvelteMap, SvelteSet } from 'svelte/reactivity'
+import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { loadOlderMessages, loadTree } from './dataLoader'
 import { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
 import {
@@ -21,13 +21,19 @@ import {
 	buildRunBlocks,
 	computeIsAtBottom,
 	computeThreadAttachments,
-	type ApiMessage,
 	type RunBlock,
 	type StreamingAssistantState,
 } from './helpers'
+import { dropSteering as dropSteeringApi } from './steering'
 import { resumeCreateAndRun } from './streamProcessor'
 import { findRunUserMessage, switchBranch } from './treeNavigation'
-import type { ApiCitation, ChatState, OptimisticUserMessage } from './types'
+import type {
+	ApiCitation,
+	ApiMessage,
+	ChatState,
+	OptimisticUserMessage,
+	QueuedSteeringMessage,
+} from './types'
 import {
 	deleteUserMessage,
 	handleRegenerateMessage,
@@ -48,6 +54,8 @@ export function createChatState(): ChatState {
 	let isGenerating = $state(false)
 	let activeRun = 0
 	let optimisticUserMessage = $state<OptimisticUserMessage | null>(null)
+	const queuedSteeringById = new SvelteMap<string, QueuedSteeringMessage>()
+	const steeringParentOverrides = new SvelteMap<string, string>()
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
 	let viewingStreamingBranch = $state(true)
@@ -58,6 +66,8 @@ export function createChatState(): ChatState {
 	// thread state (activeThread in chatStore is the source of truth)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
+	let targetThreadId = $state<string | null>(null)
+	let threadLoadToken = 0
 
 	// message paging (latest-first from backend)
 	let messageSkip = $state(0)
@@ -135,8 +145,16 @@ export function createChatState(): ChatState {
 		return branch
 	})
 
+	const queuedSteeringMessages = $derived.by(() =>
+		Array.from(queuedSteeringById.values()).sort(
+			(a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+		)
+	)
+
 	const hasRenderableMessages = $derived(
-		runBlocks.some((b) => b.items.length > 0) || optimisticUserMessage !== null
+		runBlocks.some((b) => b.items.length > 0) ||
+			optimisticUserMessage !== null ||
+			queuedSteeringMessages.length > 0
 	)
 
 	const agentNameById = $derived(buildAgentLookup(agents.list, (a) => a.name))
@@ -164,6 +182,92 @@ export function createChatState(): ChatState {
 		for (const tr of result.toolResults) toolTracker.registerResult(tr)
 
 		runBlocks = result.blocks
+	}
+
+	function stageQueuedSteeringMessage(message: QueuedSteeringMessage): void {
+		queuedSteeringById.set(message.id, message)
+	}
+
+	function removeQueuedSteeringMessage(messageId: string): void {
+		queuedSteeringById.delete(messageId)
+	}
+
+	function injectedMessage(
+		messageId: string,
+		message: ApiMessage,
+		options?: { runId?: string; parentId?: string | null; createdAt?: string | null }
+	): ApiMessage {
+		const meta = (message.metadata_ ?? {}) as Record<string, unknown>
+		const runId = options?.runId ?? (typeof meta.run_id === 'string' ? meta.run_id : null)
+		const metadata: Record<string, unknown> = { ...meta, steering_state: 'injected' }
+		if (runId) metadata.run_id = runId
+		return {
+			...message,
+			parent_id: options?.parentId ?? message.parent_id,
+			created_at: options?.createdAt ?? message.created_at,
+			updated_at: options?.createdAt ?? message.updated_at,
+			metadata_: metadata,
+			id: messageId,
+		}
+	}
+
+	function queuedMessageFallback(
+		messageId: string,
+		message: QueuedSteeringMessage
+	): ApiMessage | null {
+		const activeThread = chatStore.activeThread
+		if (!activeThread) return null
+		const content =
+			message.content && message.content.length > 0
+				? message.content
+				: message.text.trim()
+					? ([{ type: 'text', text: message.text.trim() }] as ApiMessage['content'])
+					: []
+		const createdAt = new SvelteDate(message.createdAt).toISOString()
+		return {
+			id: messageId,
+			thread_id: activeThread.id,
+			parent_id: null,
+			type: 'user',
+			content,
+			tool_calls: [],
+			metadata_: { steering_state: 'queued', run_id: message.runId },
+			sender_agent_id: null,
+			sender_user_id: currentUserId,
+			created_at: createdAt,
+			updated_at: createdAt,
+		} satisfies ApiMessage
+	}
+
+	function injectQueuedSteeringMessage(
+		messageId: string,
+		message?: ApiMessage,
+		options?: { runId?: string; parentId?: string | null; createdAt?: string | null }
+	): boolean {
+		const queued = queuedSteeringById.get(messageId)
+		const source =
+			message ??
+			queued?.message ??
+			messageTree.get(messageId) ??
+			(queued ? queuedMessageFallback(messageId, queued) : null)
+		if (!source) return false
+		const injected = injectedMessage(messageId, source, options)
+		queuedSteeringById.delete(messageId)
+		messageTree.set(messageId, injected)
+		currentLeafId = messageId
+		return true
+	}
+
+	function setSteeringParentOverride(runId: string, parentId: string): void {
+		steeringParentOverrides.set(runId, parentId)
+	}
+
+	function consumeSteeringParentOverride(runId: string | null): string | null {
+		if (!runId) return null
+		const parentId = steeringParentOverrides.get(runId)
+		if (!parentId) return null
+		steeringParentOverrides.delete(runId)
+		return parentId
 	}
 
 	// scroll management
@@ -207,7 +311,19 @@ export function createChatState(): ChatState {
 		chatStore.activeThread = t
 	}
 
+	function beginThreadLoad(threadId: string): number {
+		targetThreadId = threadId
+		threadLoadToken += 1
+		return threadLoadToken
+	}
+
+	function isThreadLoadCurrent(threadId: string, token: number): boolean {
+		return targetThreadId === threadId && threadLoadToken === token
+	}
+
 	function clearThread() {
+		targetThreadId = null
+		threadLoadToken += 1
 		chatStore.activeThread = null
 		messageTree.clear()
 		currentLeafId = null
@@ -220,8 +336,24 @@ export function createChatState(): ChatState {
 		// abort any active stream so the backend run is cancelled
 		runAbortController?.abort()
 		runAbortController = null
+		// invalidate the run generation: any in-flight stream consumer that
+		// hasn't yet observed the abort will see runId !== activeRun on its
+		// next iteration and bail before writing more state. without this,
+		// a still-running consumeStream from the previous thread will keep
+		// poisoning the new thread's messageTree / currentLeafId / streaming
+		// assistant for the brief window between abort() and stream exit.
+		activeRun += 1
+		runCitationAccumulator = []
+		citationTargetMessageId = null
+		// reset generation state so the resume mechanism can re-fire on the
+		// next thread we land on (tryResumeRun bails when isGenerating is
+		// already true, and the previous resume's finally may not have run
+		// yet by the time we re-mount on the same chat).
+		isGenerating = false
 		// clear run state to prevent leaking to other chats
 		optimisticUserMessage = null
+		queuedSteeringById.clear()
+		steeringParentOverrides.clear()
 		streamingAssistant = null
 		streamingAssistantParentId = null
 		viewingStreamingBranch = true
@@ -236,8 +368,6 @@ export function createChatState(): ChatState {
 		pendingActions.clear()
 		attachmentStates.clear()
 		citationSources.clear()
-		runCitationAccumulator = []
-		citationTargetMessageId = null
 	}
 
 	// unified state object
@@ -312,6 +442,14 @@ export function createChatState(): ChatState {
 		set optimisticUserMessage(v) {
 			optimisticUserMessage = v
 		},
+		get queuedSteeringMessages() {
+			return queuedSteeringMessages
+		},
+		stageQueuedSteeringMessage,
+		removeQueuedSteeringMessage,
+		injectQueuedSteeringMessage,
+		setSteeringParentOverride,
+		consumeSteeringParentOverride,
 		get lastRunInput() {
 			return lastRunInput
 		},
@@ -515,6 +653,11 @@ export function createChatState(): ChatState {
 		},
 
 		// coordinator methods
+		get threadLoadToken() {
+			return threadLoadToken
+		},
+		beginThreadLoad,
+		isThreadLoadCurrent,
 		incrementActiveRun() {
 			runCitationAccumulator = []
 			citationTargetMessageId = null
@@ -543,6 +686,15 @@ export function createChatState(): ChatState {
 		resumeCreateAndRun: (stream, threadId) => resumeCreateAndRun(stream, threadId, state),
 		requestDeleteUserMessage: (messageId) => requestDeleteUserMessage(messageId, state),
 		deleteUserMessage: (messageId) => deleteUserMessage(messageId, state),
+		dropSteering: async (runId, messageId) => {
+			if (!state.thread) return
+			try {
+				await dropSteeringApi(runId, messageId)
+				state.removeQueuedSteeringMessage(messageId)
+			} catch (e) {
+				console.error('failed to drop steering message', e)
+			}
+		},
 		switchBranch: (messageId, direction) => switchBranch(messageId, direction, state),
 		findRunUserMessage: (block) => findRunUserMessage(block, state),
 		subscribeToChatEvents: (threadId) => subscribeToChatEvents(threadId, state),

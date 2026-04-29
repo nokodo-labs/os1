@@ -270,6 +270,18 @@ export function getRunId(msg: Pick<ApiMessage, 'metadata_' | 'id'>): string {
 }
 
 /**
+ * extract the agent id that produced a response message, if known.
+ */
+export function getMessageAgentId(
+	msg: Pick<ApiMessage, 'sender_agent_id' | 'metadata_'>
+): string | null {
+	if (typeof msg.sender_agent_id === 'string' && msg.sender_agent_id) return msg.sender_agent_id
+	return msg.metadata_ && typeof msg.metadata_.agent_id === 'string'
+		? msg.metadata_.agent_id
+		: null
+}
+
+/**
  * parse message created_at to Date.
  */
 export function getMessageCreatedAt(msg: ApiMessage): Date {
@@ -380,32 +392,63 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 	const { messages, userId, streamingAssistant, optimisticUserMessage, viewingStreamingBranch } =
 		input
 
-	const sorted = messages.slice().sort((a, b) => {
-		return getMessageCreatedAt(a).getTime() - getMessageCreatedAt(b).getTime()
-	})
-
 	const blocks: RunBlock[] = []
-	const byRun = new Map<string, RunBlock>()
-	const seenToolCalls = new Map<string, Set<string>>()
 	const collectedToolCalls: ToolCall[] = []
 	const collectedToolResults: ToolResult[] = []
+	type ActiveBlock = {
+		block: RunBlock
+		sourceRunId: string
+		sourceAgentId: string | null
+		seenToolCalls: Set<string>
+	}
+	let activeBlock: ActiveBlock | null = null
 
-	const ensureBlock = (runId: string, startedAt: Date, title: string): RunBlock => {
-		const existing = byRun.get(runId)
-		if (existing) return existing
+	const createBlock = (
+		sourceRunId: string,
+		sourceAgentId: string | null,
+		startedAt: Date,
+		title: string,
+		anchorId: string
+	): ActiveBlock => {
 		const block: RunBlock = {
-			runId,
+			runId: `${sourceRunId}:${anchorId}`,
+			agentId: sourceAgentId,
 			startedAt,
 			title,
 			items: [],
 			responseRootId: null,
 		}
-		byRun.set(runId, block)
 		blocks.push(block)
-		return block
+		return { block, sourceRunId, sourceAgentId, seenToolCalls: new Set() }
 	}
 
-	for (const msg of sorted) {
+	const hasResponseItems = (block: RunBlock): boolean =>
+		block.items.some((item) => item.kind !== 'user' && item.kind !== 'optimistic_user')
+
+	const ensureResponseBlock = (
+		sourceRunId: string,
+		sourceAgentId: string | null,
+		msg: ApiMessage
+	): ActiveBlock => {
+		if (activeBlock && activeBlock.sourceRunId === sourceRunId) {
+			if (!hasResponseItems(activeBlock.block)) {
+				activeBlock.sourceAgentId = sourceAgentId
+				activeBlock.block.agentId = sourceAgentId
+				return activeBlock
+			}
+			if (activeBlock.sourceAgentId === sourceAgentId) return activeBlock
+		}
+		activeBlock = createBlock(
+			sourceRunId,
+			sourceAgentId,
+			getMessageCreatedAt(msg),
+			'assistant',
+			msg.id
+		)
+		return activeBlock
+	}
+
+	for (const msg of messages) {
 		if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
 
 		// tool results don't contribute visible items to blocks - handle early
@@ -413,23 +456,43 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		if (msg.type === 'tool') {
 			const result = parseToolResult(msg)
 			if (result) collectedToolResults.push(result)
+			const sourceRunId = getRunId(msg)
+			const sourceAgentId =
+				activeBlock && activeBlock.sourceRunId === sourceRunId
+					? activeBlock.sourceAgentId
+					: null
+			const blockState = ensureResponseBlock(sourceRunId, sourceAgentId, msg)
+			if (blockState.block.responseRootId === null) {
+				blockState.block.responseRootId = msg.id
+			}
 			continue
 		}
 
-		const runId = getRunId(msg)
-		const block = ensureBlock(runId, getMessageCreatedAt(msg), 'assistant')
-		let seen = seenToolCalls.get(runId)
-		if (!seen) {
-			seen = new Set()
-			seenToolCalls.set(runId, seen)
-		}
+		const sourceRunId = getRunId(msg)
 
 		if (msg.type === 'user') {
+			if (
+				!activeBlock ||
+				activeBlock.sourceRunId !== sourceRunId ||
+				hasResponseItems(activeBlock.block)
+			) {
+				activeBlock = createBlock(
+					sourceRunId,
+					null,
+					getMessageCreatedAt(msg),
+					'assistant',
+					msg.id
+				)
+			}
 			const align: 'left' | 'right' =
 				userId && msg.sender_user_id && msg.sender_user_id !== userId ? 'left' : 'right'
-			block.items.push({ kind: 'user', message: msg, align })
+			activeBlock.block.items.push({ kind: 'user', message: msg, align })
 			continue
 		}
+
+		const sourceAgentId = getMessageAgentId(msg)
+		const blockState = ensureResponseBlock(sourceRunId, sourceAgentId, msg)
+		const block = blockState.block
 
 		if (block.responseRootId === null) {
 			block.responseRootId = msg.id
@@ -440,8 +503,8 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			if (text.length > 0) block.items.push({ kind: 'assistant', message: msg })
 			for (const tc of parseToolCalls(msg)) {
 				collectedToolCalls.push(tc)
-				if (!seen.has(tc.id)) {
-					seen.add(tc.id)
+				if (!blockState.seenToolCalls.has(tc.id)) {
+					blockState.seenToolCalls.add(tc.id)
 					block.items.push({ kind: 'tool', toolCallId: tc.id })
 				}
 			}
@@ -450,11 +513,38 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 	}
 
 	if (streamingAssistant && viewingStreamingBranch) {
-		const runId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
-		const block = ensureBlock(runId, streamingAssistant.timestamp, 'assistant')
+		const sourceRunId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
+		const sourceAgentId = streamingAssistant.senderAgentId
+		if (
+			!activeBlock ||
+			activeBlock.sourceRunId !== sourceRunId ||
+			(hasResponseItems(activeBlock.block) && activeBlock.sourceAgentId !== sourceAgentId)
+		) {
+			activeBlock = createBlock(
+				sourceRunId,
+				sourceAgentId,
+				streamingAssistant.timestamp,
+				'assistant',
+				streamingAssistant.messageId
+			)
+		} else if (!hasResponseItems(activeBlock.block)) {
+			activeBlock.sourceAgentId = sourceAgentId
+			activeBlock.block.agentId = sourceAgentId
+		}
+		const block = activeBlock.block
 
 		if (optimisticUserMessage) {
-			block.items.push({
+			if (hasResponseItems(block)) {
+				activeBlock = createBlock(
+					sourceRunId,
+					sourceAgentId,
+					optimisticUserMessage.timestamp,
+					'pending',
+					`optimistic-${optimisticUserMessage.timestamp.getTime()}`
+				)
+			}
+			const targetBlock = activeBlock.block
+			targetBlock.items.push({
 				kind: 'optimistic_user',
 				text: optimisticUserMessage.text,
 				attachments: optimisticUserMessage.attachments,
@@ -462,26 +552,29 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			})
 		}
 
-		if (block.responseRootId === null) {
-			block.responseRootId = streamingAssistant.messageId
+		const targetBlockState = activeBlock
+		const targetBlock = targetBlockState.block
+		if (targetBlock.responseRootId === null) {
+			targetBlock.responseRootId = streamingAssistant.messageId
 		}
 
-		let seen = seenToolCalls.get(runId)
-		if (!seen) {
-			seen = new Set()
-			seenToolCalls.set(runId, seen)
-		}
-		block.items.push({ kind: 'streaming_assistant' })
+		targetBlock.items.push({ kind: 'streaming_assistant' })
 		for (const tc of streamingAssistant.toolCalls) {
 			collectedToolCalls.push(tc)
-			if (!seen.has(tc.id)) {
-				seen.add(tc.id)
-				block.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
+			if (!targetBlockState.seenToolCalls.has(tc.id)) {
+				targetBlockState.seenToolCalls.add(tc.id)
+				targetBlock.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
 			}
 		}
 	} else if (optimisticUserMessage && viewingStreamingBranch) {
 		const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
-		const block = ensureBlock(runId, optimisticUserMessage.timestamp, 'pending')
+		const block = createBlock(
+			runId,
+			null,
+			optimisticUserMessage.timestamp,
+			'pending',
+			`optimistic-${optimisticUserMessage.timestamp.getTime()}`
+		).block
 		block.items.push({
 			kind: 'optimistic_user',
 			text: optimisticUserMessage.text,
@@ -490,7 +583,11 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		})
 	}
 
-	return { blocks, toolCalls: collectedToolCalls, toolResults: collectedToolResults }
+	return {
+		blocks: blocks.filter((block) => block.items.length > 0),
+		toolCalls: collectedToolCalls,
+		toolResults: collectedToolResults,
+	}
 }
 
 // run block queries

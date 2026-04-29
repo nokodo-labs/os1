@@ -8,6 +8,7 @@ export {
 	resumeRunStream,
 	runChatStream,
 	runCreateAndRunStream,
+	StreamHttpError,
 	type ChatStreamDelta,
 	type ChatStreamOptions,
 	type ContentPart,

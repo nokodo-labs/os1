@@ -33,6 +33,7 @@
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import RegenerateMenu from '$lib/components/chat/RegenerateMenu.svelte'
+	import SteeringQueue from '$lib/components/chat/SteeringQueue.svelte'
 	import { ToolGroup } from '$lib/components/chat/tools'
 	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
@@ -499,6 +500,14 @@
 									{@const siblings =
 										chat.messageChildren.get(item.message.parent_id ?? null) ??
 										[]}
+									{@const meta = (item.message.metadata_ ?? {}) as Record<
+										string,
+										unknown
+									>}
+									{@const viewTransitionName =
+										meta.steering_state === 'injected'
+											? `steering-message-${item.message.id}`
+											: undefined}
 									<UserChatMessage
 										content={contentPartsToText(item.message.content)}
 										contentParts={item.message.content}
@@ -511,6 +520,7 @@
 										onNext={() => chat.switchBranch(item.message.id, 'next')}
 										tailStyle={bubbleTailStyle}
 										{showTail}
+										{viewTransitionName}
 										onEditSave={item.align === 'right'
 											? (c) => chat.handleSaveEditMessage(item.message.id, c)
 											: undefined}
@@ -570,10 +580,9 @@
 									chat.citationSources
 								)}
 								{@const rootId = block.responseRootId}
+								{@const rootMessage = rootId ? chat.messageTree.get(rootId) : null}
 								{@const blockParentId =
-									(rootId
-										? chat.messageTree.get(rootId)?.parent_id
-										: undefined) ??
+									rootMessage?.parent_id ??
 									(isStreamingBlock ? chat.streamingAssistantParentId : null) ??
 									null}
 								{@const assistantSiblings =
@@ -590,6 +599,7 @@
 										: 0)}
 								{@const displayAgent =
 									firstAssistant?.sender_agent_id ??
+									block.agentId ??
 									chat.streamingAssistant?.senderAgentId ??
 									null}
 
@@ -608,9 +618,11 @@
 										: 'default'}
 									timestamp={firstAssistant
 										? getMessageCreatedAt(firstAssistant)
-										: isStreamingBlock
-											? (chat.streamingAssistant?.timestamp ?? new Date())
-											: undefined}
+										: rootMessage
+											? getMessageCreatedAt(rootMessage)
+											: isStreamingBlock
+												? (chat.streamingAssistant?.timestamp ?? new Date())
+												: undefined}
 									isStreaming={Boolean(isStreamingBlock) &&
 										!chat.streamingAssistant?.isError}
 									isRunActive={chat.isGenerating}
@@ -808,6 +820,10 @@
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 		>
 			<div class="transition-all duration-500 ease-in-out">
+				<SteeringQueue
+					messages={chat.queuedSteeringMessages}
+					onDrop={(runId, messageId) => chat.dropSteering(runId, messageId)}
+				/>
 				<ChatInput
 					bind:value={chat.inputValue}
 					onSubmit={chat.handleSendMessage}

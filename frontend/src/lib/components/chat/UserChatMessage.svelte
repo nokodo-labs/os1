@@ -33,6 +33,7 @@
 		onNext?: () => void
 		tailStyle?: BubbleTailStyle
 		showTail?: boolean
+		viewTransitionName?: string
 		onEditSave?: (newContent: string) => Promise<void>
 		onEditSaveAsCopy?: (newContent: string) => Promise<void>
 	}
@@ -51,6 +52,7 @@
 		onNext,
 		tailStyle = 'none',
 		showTail = false,
+		viewTransitionName,
 		onEditSave,
 		onEditSaveAsCopy,
 	}: Props = $props()
@@ -294,6 +296,7 @@
 				class:px-5={isEditing}
 				class:py-3={isEditing}
 				class:w-full={isEditing}
+				style:view-transition-name={viewTransitionName}
 				style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
 			>
 				{#if isEditing}
@@ -423,10 +426,12 @@
 	@keyframes messageSlideIn {
 		from {
 			opacity: 0;
-			transform: translateY(10px) scale(0.95);
+			filter: blur(2px);
+			transform: translateY(34px) scale(0.92);
 		}
 		to {
 			opacity: 1;
+			filter: blur(0);
 			transform: translateY(0) scale(1);
 		}
 	}

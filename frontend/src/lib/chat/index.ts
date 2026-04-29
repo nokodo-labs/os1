@@ -9,6 +9,8 @@ export type {
 	ChatContext,
 	ChatState,
 	OptimisticUserMessage,
+	QueuedSteeringMessage,
+	SteeringState,
 	StreamDeltaContext,
 	ThreadAttachment,
 } from './types'

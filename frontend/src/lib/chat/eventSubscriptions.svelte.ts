@@ -9,8 +9,8 @@
  * to pick up any run for the current thread and resume its SSE stream.
  */
 
-import { resumeRunStream } from '$lib/api/streaming/chatStream'
 import { isOwnEvent } from '$lib/api/sessionId'
+import { resumeRunStream, StreamHttpError } from '$lib/api/streaming/chatStream'
 import {
 	eventStreamClient,
 	type StreamEvent,
@@ -18,8 +18,9 @@ import {
 } from '$lib/api/streaming/eventStream.svelte'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
-import { SvelteDate, SvelteMap } from 'svelte/reactivity'
+import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { buildMessageChildren, type ApiMessage } from './helpers'
+import { getMessageSteeringRunId, getMessageSteeringState, type SteeringState } from './steering'
 import { consumeStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
 import type { ApiCitation, ChatContext } from './types'
@@ -38,7 +39,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 	const resumeAborts = new SvelteMap<string, AbortController>()
 	// run ids we've already kicked off a resume for - prevents duplicate
 	// resumes when the store re-emits (e.g. run.started after runs.active).
-	const attemptedResumes = new Set<string>()
+	const attemptedResumes = new SvelteSet<string>()
 
 	ctx.typingUsers.clear()
 
@@ -59,32 +60,89 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 
 	// message events (cross-device sync)
 
+	function seedMessageCitations(msg: ApiMessage): void {
+		if (msg.type === 'assistant' && msg.citations?.length) {
+			ctx.citationSources.set(msg.id, msg.citations)
+		}
+	}
+
 	function handleMessageEvent(ev: StreamEvent): void {
 		if (ev.thread_id !== threadId) return
-		if (isOwnEvent(ev)) return
-
 		const data = (ev.data ?? {}) as Record<string, unknown>
+		const ownEvent = isOwnEvent(ev)
 
 		if (ev.type === 'message.created') {
 			if (data.id && typeof data.id === 'string') {
 				const newMsg = data as unknown as ApiMessage
+				const steeringState = getMessageSteeringState(newMsg)
+				if (newMsg.type === 'user' && steeringState === 'queued') {
+					const stashed = pendingSteeringStates.get(newMsg.id)
+					if (stashed?.state === 'dropped') {
+						pendingSteeringStates.delete(newMsg.id)
+						ctx.removeQueuedSteeringMessage(newMsg.id)
+						return
+					}
+					if (stashed?.state === 'injected') {
+						if (
+							ctx.injectQueuedSteeringMessage(newMsg.id, newMsg, {
+								runId: stashed.runId,
+								parentId: stashed.parentId,
+								createdAt: stashed.createdAt,
+							})
+						) {
+							ctx.setSteeringParentOverride(stashed.runId, newMsg.id)
+							attachActiveAssistantAfterSteering(stashed.runId, newMsg.id)
+							ctx.rebuildRunBlocks()
+						}
+						pendingSteeringStates.delete(newMsg.id)
+						return
+					}
+					const runId = getMessageSteeringRunId(newMsg)
+					if (runId) {
+						ctx.stageQueuedSteeringMessage({
+							id: newMsg.id,
+							runId,
+							content: newMsg.content,
+							text: '',
+							attachments: [],
+							createdAt: new SvelteDate(newMsg.created_at),
+							message: newMsg,
+						})
+					}
+					return
+				}
+				if (newMsg.type === 'user' && steeringState === 'dropped') return
+				if (ownEvent) return
 				// defense-in-depth: if this is a user message that matches the
 				// optimistic message, clear it to prevent double rendering
 				if (newMsg.type === 'user' && ctx.optimisticUserMessage) {
 					ctx.optimisticUserMessage = null
 				}
 				ctx.messageTree.set(newMsg.id, newMsg)
+				seedMessageCitations(newMsg)
+				// if a steering event arrived before this message.created,
+				// re-apply the stashed state now that the message is known.
+				const stashed = pendingSteeringStates.get(newMsg.id)
+				if (stashed) {
+					applySteeringState(newMsg.id, stashed.state)
+					pendingSteeringStates.delete(newMsg.id)
+				}
 				// if the new message extends the current branch, move leaf
 				if (newMsg.parent_id === ctx.currentLeafId) {
 					ctx.currentLeafId = newMsg.id
 				}
 				ctx.rebuildRunBlocks()
 			}
+		} else if (ownEvent) {
+			return
 		} else if (ev.type === 'message.updated') {
 			const msgId = (data.id as string) ?? ev.message_id
 			if (msgId && ctx.messageTree.has(msgId)) {
-				const existing = ctx.messageTree.get(msgId)!
-				ctx.messageTree.set(msgId, { ...existing, ...data } as ApiMessage)
+				const existing = ctx.messageTree.get(msgId)
+				if (!existing) return
+				const updated = { ...existing, ...data } as ApiMessage
+				ctx.messageTree.set(msgId, updated)
+				seedMessageCitations(updated)
 				ctx.rebuildRunBlocks()
 			}
 		} else if (ev.type === 'message.deleted') {
@@ -182,16 +240,24 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			signal: ac.signal,
 		})
 
-		consumeStream(stream, { runId: runGen, threadId, parentId: null }, ctx)
+		consumeStream(stream, { runId: runGen, threadId, parentId: null, agentId }, ctx)
 			.catch((err: unknown) => {
 				// intentional abort (navigate away, run completed/errored) - ignore
 				if (ac.signal.aborted) return
 				if (ctx.activeRun !== runGen) return
+				// 404 = run already finished between store snapshot and our request.
+				// not a real error - just clear the placeholder and move on.
+				if (err instanceof StreamHttpError && err.status === 404) {
+					if (ctx.streamingAssistant?.messageId === `resume-${runId}`) {
+						ctx.streamingAssistant = null
+						ctx.streamingAssistantParentId = null
+						ctx.rebuildRunBlocks()
+					}
+					return
+				}
 				// real error reached us: surface it in the ghost assistant bubble
 				const errorMessage =
-					err instanceof Error && err.message
-						? err.message
-						: 'lost connection to the run'
+					err instanceof Error && err.message ? err.message : 'lost connection to the run'
 				if (ctx.streamingAssistant?.messageId === `resume-${runId}`) {
 					ctx.streamingAssistant.isError = true
 					ctx.streamingAssistant.errorMessage = errorMessage
@@ -213,9 +279,14 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			ac.abort()
 			resumeAborts.delete(runId)
 		}
-		// clear ghost streaming assistant if it belonged to this run
+		// clear ghost streaming assistant if it belonged to this run.
+		// the run is gone from the global store, so any partial bubble we built
+		// from replayed sse_log frames would be a stale ghost otherwise.
 		if (ctx.streamingAssistant?.messageId === `resume-${runId}`) {
 			ctx.toolTracker.closeAllActive()
+			ctx.streamingAssistant = null
+			ctx.streamingAssistantParentId = null
+			ctx.rebuildRunBlocks()
 		}
 	}
 
@@ -247,7 +318,127 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	// single unified listener (no run.* handling - see activeRunsStore)
+	type PendingSteeringState = {
+		state: SteeringState
+		runId: string
+		parentId: string | null
+		createdAt: string | null
+	}
+
+	const pendingSteeringStates = new SvelteMap<string, PendingSteeringState>()
+
+	function applySteeringState(messageId: string, state: SteeringState): boolean {
+		const existing = ctx.messageTree.get(messageId)
+		if (!existing) return false
+		const prevMeta = (existing.metadata_ ?? {}) as Record<string, unknown>
+		ctx.messageTree.set(messageId, {
+			...existing,
+			metadata_: { ...prevMeta, steering_state: state },
+		} as ApiMessage)
+		return true
+	}
+
+	function attachActiveAssistantAfterSteering(runId: string, messageId: string): boolean {
+		const active = ctx.streamingAssistant
+		if (!active || active.runId !== runId) return false
+		const existing = ctx.messageTree.get(active.messageId)
+		if (!existing) return false
+		ctx.messageTree.set(active.messageId, { ...existing, parent_id: messageId })
+		ctx.streamingAssistantParentId = messageId
+		if (ctx.viewingStreamingBranch) ctx.currentLeafId = active.messageId
+		return true
+	}
+
+	function injectSteeringMessage(
+		messageId: string,
+		runId: string,
+		parentId: string | null,
+		createdAt: string | null
+	): boolean {
+		let injected = false
+		const apply = () => {
+			injected = ctx.injectQueuedSteeringMessage(messageId, undefined, {
+				runId,
+				parentId,
+				createdAt,
+			})
+			if (!injected) return
+			ctx.setSteeringParentOverride(runId, messageId)
+			attachActiveAssistantAfterSteering(runId, messageId)
+			ctx.rebuildRunBlocks()
+		}
+
+		const hasQueuedBubble = ctx.queuedSteeringMessages.some((msg) => msg.id === messageId)
+		const start = document.startViewTransition
+		if (hasQueuedBubble && start) {
+			start.call(document, apply)
+		} else {
+			apply()
+		}
+		return injected
+	}
+
+	function handleSteeringEvent(ev: StreamEvent): void {
+		const data = (ev.data ?? {}) as Record<string, unknown>
+		const eventThreadId =
+			typeof ev.thread_id === 'string'
+				? ev.thread_id
+				: typeof data.thread_id === 'string'
+					? data.thread_id
+					: null
+		if (eventThreadId !== threadId) return
+		const messageIds = (data.message_ids as string[] | undefined) ?? []
+		if (messageIds.length === 0) return
+		const runId = typeof data.run_id === 'string' ? data.run_id : null
+		if (!runId) return
+		const eventParentId = typeof data.parent_id === 'string' ? data.parent_id : null
+		let nextState: SteeringState
+		if (ev.type === 'run.steering.queued') nextState = 'queued'
+		else if (ev.type === 'run.steering.injected') nextState = 'injected'
+		else if (ev.type === 'run.steering.dropped') nextState = 'dropped'
+		else return
+		let touched = false
+		let nextInjectedParentId = eventParentId ?? ctx.currentLeafId
+		for (const mid of messageIds) {
+			if (nextState === 'queued') {
+				pendingSteeringStates.set(mid, {
+					state: nextState,
+					runId,
+					parentId: null,
+					createdAt: ev.created_at ?? null,
+				})
+				continue
+			}
+			if (nextState === 'dropped') {
+				ctx.removeQueuedSteeringMessage(mid)
+				if (applySteeringState(mid, nextState)) touched = true
+				pendingSteeringStates.set(mid, {
+					state: nextState,
+					runId,
+					parentId: null,
+					createdAt: ev.created_at ?? null,
+				})
+				continue
+			}
+
+			const parentId = nextInjectedParentId
+			const injected = injectSteeringMessage(mid, runId, parentId, ev.created_at ?? null)
+			if (injected) {
+				nextInjectedParentId = mid
+				pendingSteeringStates.delete(mid)
+			} else {
+				pendingSteeringStates.set(mid, {
+					state: nextState,
+					runId,
+					parentId,
+					createdAt: ev.created_at ?? null,
+				})
+			}
+		}
+		if (touched) ctx.rebuildRunBlocks()
+	}
+
+	// single unified listener (no run.* lifecycle handling - see activeRunsStore)
 
 	const unsub = eventStreamClient.subscribe((msg) => {
 		if (!msg || typeof msg !== 'object') return
@@ -264,6 +455,8 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleAttachmentEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('citation.')) {
 			handleCitationEvent(ev as StreamEvent)
+		} else if (ev.type.startsWith('run.steering.')) {
+			handleSteeringEvent(ev as StreamEvent)
 		}
 	})
 
@@ -273,6 +466,11 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 	// from ws connect) or after (run.started broadcast).
 	const disposeRunWatcher = $effect.root(() => {
 		$effect(() => {
+			// also depend on isGenerating: tryResumeRun bails while a previous
+			// resume is still wrapping up. when its finally clears isGenerating
+			// we want this effect to re-fire and try again, otherwise the
+			// placeholder bubble never appears on rapid navigate-away/back.
+			void ctx.isGenerating
 			for (const run of activeRunsStore.runs.values()) {
 				if (run.threadId !== threadId) continue
 				tryResumeRun(run.runId, run.agentId)

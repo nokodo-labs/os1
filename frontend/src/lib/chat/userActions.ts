@@ -6,6 +6,9 @@ import { api } from '$lib/api/client'
 import type { RunInput } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { deriveToolChoice, type RunModifiers } from '$lib/chat/attachments'
+import { steerRun } from '$lib/chat/steering'
+import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
+import { agents } from '$lib/stores/agents.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
@@ -49,6 +52,48 @@ export async function handleSendMessage(
 	}
 
 	const displayText = trimmed || modifiers?.attachments.map((a) => a.filename).join(', ') || ''
+
+	// steering: queued messages stay outside the thread until the backend
+	// broadcasts that the running agent has injected them.
+	const activeRuns = activeRunsStore.getRunsForThread(ctx.thread.id)
+	if (activeRuns.length > 0) {
+		const targetRun = activeRuns[activeRuns.length - 1]
+		// gate: if the run's agent has steering disabled, fall through to
+		// starting a new run (concurrent runs) instead of attempting to steer.
+		// the backend exposes config as a free-form dict; the structured
+		// shape is documented in api/schemas/agent_config.py (regenerate
+		// types after the schema is migrated to AgentConfig).
+		const targetAgent = agents.get(targetRun.agentId)
+		const features = (
+			targetAgent?.config as { features?: { steering?: { enabled?: boolean } } } | undefined
+		)?.features
+		const steeringEnabled = features?.steering?.enabled !== false
+		if (!steeringEnabled) {
+			// fall through - skip the steering branch
+		} else {
+			ctx.lastRunInput = displayText
+			ctx.inputValue = ''
+			try {
+				const queued = await steerRun(targetRun.runId, runInput, ctx.currentLeafId)
+				if (queued.state === 'queued') {
+					ctx.stageQueuedSteeringMessage({
+						id: queued.messageId,
+						runId: targetRun.runId,
+						content: [],
+						text: displayText,
+						attachments: modifiers?.attachments ?? [],
+						createdAt: new SvelteDate(),
+						message: null,
+					})
+				}
+			} catch (e) {
+				console.error('failed to steer run', e)
+				// restore input so the user can retry.
+				ctx.inputValue = displayText
+			}
+			return
+		}
+	}
 
 	if (!selectedAgent) {
 		ctx.lastRunInput = displayText
@@ -122,6 +167,9 @@ export async function handleSendMessage(
 		ctx.rebuildRunBlocks()
 		syncCacheAfterRun(ctx)
 	} catch (e) {
+		// intentional abort (e.g. clearThread on navigate-away) - run is over,
+		// no error UI needed. backend will broadcast run.completed.
+		if (e instanceof DOMException && e.name === 'AbortError') return
 		console.error('failed to run thread', e)
 		if (runId === ctx.activeRun && ctx.streamingAssistant) {
 			ctx.streamingAssistant = {
@@ -201,6 +249,8 @@ export async function handleRegenerateMessage(
 		ctx.rebuildRunBlocks()
 		syncCacheAfterRun(ctx)
 	} catch (e) {
+		// intentional abort (e.g. clearThread on navigate-away) - run is over.
+		if (e instanceof DOMException && e.name === 'AbortError') return
 		console.error('failed to retry run', e)
 		if (runId === ctx.activeRun && ctx.streamingAssistant) {
 			ctx.streamingAssistant = {
@@ -222,7 +272,6 @@ export async function handleRegenerateMessage(
 export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	// capture run info before resetting state
 	const runId = ctx.streamingAssistant?.runId
-	const threadId = ctx.thread?.id
 
 	ctx.runAbortController?.abort()
 	ctx.activeRun++
@@ -241,10 +290,10 @@ export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	// cancel signal to backend - authenticated request with proper error handling.
 	// the SSE stream handles the run-stopped signal; this HTTP call provides
 	// the error contract for status codes and potential retry.
-	if (runId && threadId) {
+	if (runId) {
 		try {
-			const { error } = await api.POST('/v1/threads/{thread_id}/runs/{run_id}/cancel', {
-				params: { path: { thread_id: threadId, run_id: runId } },
+			const { error } = await api.POST('/v1/runs/{run_id}/cancel', {
+				params: { path: { run_id: runId } },
 			})
 			if (error) {
 				console.error('cancel run failed', error)

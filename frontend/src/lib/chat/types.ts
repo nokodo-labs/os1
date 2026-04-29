@@ -80,6 +80,18 @@ export interface OptimisticUserMessage {
 	timestamp: Date
 }
 
+export type SteeringState = 'queued' | 'injected' | 'dropped'
+
+export interface QueuedSteeringMessage {
+	id: string
+	runId: string
+	content: ApiMessage['content']
+	text: string
+	attachments: PendingAttachment[]
+	createdAt: Date
+	message: ApiMessage | null
+}
+
 /** allowed tool_choice values that can be forced by the user */
 export type ToolChoiceValue = 'web_search' | 'think' | 'generate_image'
 
@@ -95,6 +107,7 @@ export type RunItem =
 
 export interface RunBlock {
 	runId: string
+	agentId: string | null
 	title: string
 	startedAt: Date
 	items: RunItem[]
@@ -137,9 +150,19 @@ export interface ChatContext {
 	streamingLeafId: string | null
 	viewingStreamingBranch: boolean
 	optimisticUserMessage: OptimisticUserMessage | null
+	readonly queuedSteeringMessages: QueuedSteeringMessage[]
 	lastRunInput: string
 	inputValue: string
 	runAbortController: AbortController | null
+	stageQueuedSteeringMessage(message: QueuedSteeringMessage): void
+	removeQueuedSteeringMessage(messageId: string): void
+	injectQueuedSteeringMessage(
+		messageId: string,
+		message?: ApiMessage,
+		options?: { runId?: string; parentId?: string | null; createdAt?: string | null }
+	): boolean
+	setSteeringParentOverride(runId: string, parentId: string): void
+	consumeSteeringParentOverride(runId: string | null): string | null
 
 	// paging
 	messageSkip: number
@@ -180,6 +203,9 @@ export interface ChatContext {
 	readonly currentUserId: string | null
 
 	// coordinator-owned methods
+	readonly threadLoadToken: number
+	beginThreadLoad(threadId: string): number
+	isThreadLoadCurrent(threadId: string, token: number): boolean
 	incrementActiveRun(): number
 	rebuildRunBlocks(): void
 	queueScrollToBottom(behavior?: 'auto' | 'smooth'): Promise<void>
@@ -234,6 +260,7 @@ export interface ChatState extends ChatContext {
 	): Promise<{ resolvedThreadId: string } | void>
 	requestDeleteUserMessage(messageId: string): void
 	deleteUserMessage(messageId: string): Promise<boolean>
+	dropSteering(runId: string, messageId: string): Promise<void>
 	switchBranch(messageId: string, direction: 'prev' | 'next'): Promise<void>
 	findRunUserMessage(block: RunBlock): string | null
 	subscribeToChatEvents(threadId: string): () => void
@@ -244,6 +271,7 @@ export interface ChatState extends ChatContext {
 export interface StreamDeltaContext {
 	runId: number
 	threadId: string
+	agentId: string | null
 	getAssistantParentId(): string | null
 	setAssistantParentId(id: string | null): void
 }

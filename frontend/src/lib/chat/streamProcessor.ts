@@ -17,6 +17,7 @@ import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
 import { sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
+import { getMessageSteeringRunId, getMessageSteeringState } from './steering'
 import type { ChatContext, StreamDeltaContext } from './types'
 
 /**
@@ -35,6 +36,23 @@ export function processDelta(
 			return 'done'
 		case 'message_created': {
 			const msg = delta.data as unknown as ApiMessage
+			const steeringState = getMessageSteeringState(msg)
+			if (msg.type === 'user' && steeringState === 'queued') {
+				const runId = getMessageSteeringRunId(msg)
+				if (runId) {
+					ctx.stageQueuedSteeringMessage({
+						id: msg.id,
+						runId,
+						content: msg.content,
+						text: '',
+						attachments: [],
+						createdAt: new SvelteDate(msg.created_at),
+						message: msg,
+					})
+				}
+				return 'continue'
+			}
+			if (msg.type === 'user' && steeringState === 'dropped') return 'continue'
 			if (msg.type === 'user') {
 				ctx.optimisticUserMessage = null
 			}
@@ -51,6 +69,9 @@ export function processDelta(
 			const env = delta.data
 			const d = env.delta as Record<string, unknown>
 			const messageId = env.message_id
+			const runId = typeof env.run_id === 'string' ? env.run_id : null
+			const envelopeAgentId = typeof env.agent_id === 'string' ? env.agent_id : null
+			const senderAgentId = envelopeAgentId ?? sctx.agentId ?? selectedAgent.id
 
 			// agent done sentinel
 			if (d && d.done === true) return 'done'
@@ -97,7 +118,11 @@ export function processDelta(
 						content: contentParts.length > 0 ? contentParts : [],
 						tool_calls: [],
 						tool_call_id: toolCallId,
-						metadata_: toolCallId ? { tool_call_id: toolCallId } : undefined,
+						is_error: isError,
+						metadata_: {
+							...(toolCallId ? { tool_call_id: toolCallId } : {}),
+							...(runId ? { run_id: runId } : {}),
+						},
 						sender_agent_id: null,
 						sender_user_id: null,
 						created_at: now,
@@ -128,13 +153,12 @@ export function processDelta(
 					// resolve inline [n] widgets. the sources pill filters to cited only.
 					ctx.flushCitationsToMessage(messageId)
 					hapticFeedback()
-					const runId = typeof env.run_id === 'string' ? env.run_id : null
 					ctx.streamingAssistant = {
 						runId,
 						messageId,
 						content: '',
 						timestamp: new SvelteDate(),
-						senderAgentId: selectedAgent.id,
+						senderAgentId,
 						toolCalls: [],
 						isError: false,
 						errorMessage: null,
@@ -142,7 +166,9 @@ export function processDelta(
 					if (!ctx.messageTree.has(messageId)) {
 						const now = new SvelteDate().toISOString()
 						const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
-						const resolvedParent = deltaParent ?? sctx.getAssistantParentId()
+						const steeringParent = ctx.consumeSteeringParentOverride(runId)
+						const resolvedParent =
+							steeringParent ?? deltaParent ?? sctx.getAssistantParentId()
 						if (resolvedParent) {
 							sctx.setAssistantParentId(resolvedParent)
 							ctx.streamingAssistantParentId = resolvedParent
@@ -156,7 +182,7 @@ export function processDelta(
 							content: [],
 							tool_calls: [],
 							metadata_: runId ? { run_id: runId } : undefined,
-							sender_agent_id: selectedAgent.id,
+							sender_agent_id: senderAgentId,
 							sender_user_id: null,
 							created_at: now,
 							updated_at: now,
@@ -195,8 +221,10 @@ export function processDelta(
 				if (isDone) {
 					const content = streaming.content.trim()
 					const now = new SvelteDate().toISOString()
+					const existingMessage = ctx.messageTree.get(streaming.messageId)
 					const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
-					const resolvedParent = deltaParent ?? sctx.getAssistantParentId()
+					const resolvedParent =
+						existingMessage?.parent_id ?? deltaParent ?? sctx.getAssistantParentId()
 					const streamCitations = ctx.citationSources.get(streaming.messageId)
 					const citedIndices = new Set(
 						[...content.matchAll(/\[\^?(\d+)\]/g)].map((m) => Number(m[1]))
@@ -279,7 +307,7 @@ export function processDelta(
  */
 export async function consumeStream(
 	stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
-	opts: { runId: number; threadId: string; parentId: string | null },
+	opts: { runId: number; threadId: string; parentId: string | null; agentId?: string | null },
 	ctx: ChatContext
 ): Promise<void> {
 	let assistantParentId = opts.parentId
@@ -288,6 +316,7 @@ export async function consumeStream(
 	const sctx: StreamDeltaContext = {
 		runId: opts.runId,
 		threadId: opts.threadId,
+		agentId: opts.agentId ?? null,
 		getAssistantParentId: () => assistantParentId,
 		setAssistantParentId: (id: string | null) => {
 			assistantParentId = id
@@ -337,7 +366,11 @@ export async function runThreadStream(
 		signal: ctx.runAbortController.signal,
 	})
 
-	await consumeStream(stream, { runId: opts.runId, threadId: opts.threadId, parentId }, ctx)
+	await consumeStream(
+		stream,
+		{ runId: opts.runId, threadId: opts.threadId, parentId, agentId: opts.agentId },
+		ctx
+	)
 }
 
 /**
@@ -371,6 +404,15 @@ export async function resumeCreateAndRun(
 	}
 	if (first.value.event !== 'thread_created') {
 		throw new Error(`expected thread_created, got ${first.value.event}`)
+	}
+
+	// guard: user may have navigated away (clearThread nulls activeThread
+	// and bumps activeRun) while we awaited thread_created. without this,
+	// the synchronous block below would clobber a different active thread
+	// and start streaming the wrong run's deltas into another chat page.
+	if (chatStore.activeThread?.id !== expectedThreadId) {
+		void stream.return(undefined)
+		return
 	}
 
 	const threadData = first.value.data
@@ -410,7 +452,7 @@ export async function resumeCreateAndRun(
 		const chatStream = stream as unknown as AsyncGenerator<ChatStreamDelta, void, unknown>
 		await consumeStream(
 			chatStream,
-			{ runId, threadId: resolvedId, parentId: ctx.currentLeafId },
+			{ runId, threadId: resolvedId, parentId: ctx.currentLeafId, agentId: selectedAgent.id },
 			ctx
 		)
 		if (runId !== ctx.activeRun) return

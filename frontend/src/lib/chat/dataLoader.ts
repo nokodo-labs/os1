@@ -4,13 +4,23 @@
 
 import { api } from '$lib/api/client'
 import type { components } from '$lib/api/types'
-import { chat as chatStore } from '$lib/stores/chat.svelte'
+import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
 import { tick } from 'svelte'
 import { getMessageCreatedAt, type ApiMessage } from './helpers'
+import { getMessageSteeringRunId, getMessageSteeringState } from './steering'
 import type { ChatContext } from './types'
 
 type ApiEvent = components['schemas']['Event']
+const INITIAL_MESSAGE_LIMIT = 120
+
+function mergeMessages(...groups: ApiMessage[][]): ApiMessage[] {
+	const byId = new Map<string, ApiMessage>()
+	for (const group of groups) {
+		for (const msg of group) byId.set(msg.id, msg)
+	}
+	return Array.from(byId.values())
+}
 
 /** replay parsed events into the chat context (tool tracker + attachment states) */
 function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
@@ -44,9 +54,11 @@ function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
 export async function fetchEventsForThread(
 	threadId: string,
 	msgIds: string[],
-	ctx: ChatContext
+	ctx: ChatContext,
+	isCurrent: () => boolean = () => true
 ): Promise<void> {
 	if (msgIds.length === 0) return
+	if (!isCurrent()) return
 
 	// check if the events cache covers all requested message IDs
 	const cached = chatStore.threadCache.getCachedEvents(threadId)
@@ -54,6 +66,7 @@ export async function fetchEventsForThread(
 		const allCovered = msgIds.every((id) => cached.messageIds.has(id))
 		if (allCovered) {
 			// replay from cache - skip the API entirely
+			if (!isCurrent()) return
 			replayEvents(cached.events, ctx)
 			for (const id of msgIds) ctx.fetchedToolEventMessageIds.add(id)
 			return
@@ -84,6 +97,7 @@ export async function fetchEventsForThread(
 					body: { message_ids: batch },
 				}
 			)
+			if (!isCurrent()) return
 			if (!error && data) {
 				const events = data as ApiEvent[]
 				replayEvents(events, ctx)
@@ -105,6 +119,23 @@ export async function fetchEventsForThread(
 /** add messages to the tree and register any tool calls/results */
 export function ingestMessages(msgs: ApiMessage[], ctx: ChatContext): void {
 	for (const msg of msgs) {
+		const steeringState = getMessageSteeringState(msg)
+		if (msg.type === 'user' && steeringState === 'queued') {
+			const runId = getMessageSteeringRunId(msg)
+			if (runId) {
+				ctx.stageQueuedSteeringMessage({
+					id: msg.id,
+					runId,
+					content: msg.content,
+					text: '',
+					attachments: [],
+					createdAt: getMessageCreatedAt(msg),
+					message: msg,
+				})
+			}
+			continue
+		}
+		if (msg.type === 'user' && steeringState === 'dropped') continue
 		ctx.messageTree.set(msg.id, msg)
 		if (msg.type === 'assistant') {
 			for (const tc of parseToolCalls(msg)) ctx.toolTracker.registerToolCall(tc)
@@ -150,7 +181,8 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 		await fetchEventsForThread(
 			threadId,
 			page.map((m) => m.id),
-			ctx
+			ctx,
+			() => threadId === ctx.thread?.id
 		)
 
 		await tick()
@@ -163,24 +195,38 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 	}
 }
 
-/** load the full message tree for a thread (with cache-first strategy) */
+/** load the selected branch plus the latest paginated message page for a thread. */
 export async function loadTree(threadId: string, ctx: ChatContext): Promise<boolean> {
+	const loadToken = ctx.beginThreadLoad(threadId)
+	const isCurrent = () => ctx.isThreadLoadCurrent(threadId, loadToken)
+
 	// try cache first for instant load
 	const cachedThread = chatStore.threadCache.get(threadId)
-	const cachedMessages = chatStore.threadCache.getCachedMessages(threadId)
+	const cachedMessages = chatStore.threadCache.getCachedMessageSnapshot(threadId)
+	const cachedLeaf = cachedThread?.current_message_id ?? null
+	const cacheHasSelectedLeaf =
+		cachedLeaf === null || chatStore.threadCache.hasCachedMessage(threadId, cachedLeaf)
 
-	let threadData: typeof cachedThread
+	let threadData: Thread
 	let messagesPage: ApiMessage[]
+	let pageSize: number
+	let complete: boolean
 
-	if (cachedThread && cachedMessages) {
+	if (cachedThread && cachedMessages && cacheHasSelectedLeaf) {
 		// use cached data for instant render
 		threadData = cachedThread
-		messagesPage = cachedMessages
+		messagesPage = cachedMessages.messages
+		pageSize = cachedMessages.pageSize
+		complete = cachedMessages.complete
 	} else {
-		// fetch from API
+		// fetch from api. capture timestamp before the request so any
+		// message.* event arriving during the fetch will invalidate this
+		// (potentially partial) result via setMessages's race guard.
+		const fetchStartedAt = Date.now()
 		const { data, error: threadError } = await api.GET('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 		})
+		if (!isCurrent()) return false
 		if (threadError) {
 			console.error('failed to load thread', threadError)
 			ctx.thread = null
@@ -202,10 +248,22 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		}
 		threadData = data
 
-		const { data: msgData, error: msgError } = await api.GET(
-			'/v1/threads/{thread_id}/messages',
-			{ params: { path: { thread_id: threadId }, query: { skip: 0, limit: 120 } } }
-		)
+		const [messagesRes, branchRes] = await Promise.all([
+			api.GET('/v1/threads/{thread_id}/messages', {
+				params: {
+					path: { thread_id: threadId },
+					query: { skip: 0, limit: INITIAL_MESSAGE_LIMIT },
+				},
+			}),
+			threadData.current_message_id
+				? api.GET('/v1/threads/{thread_id}/branch', {
+						params: { path: { thread_id: threadId } },
+					})
+				: Promise.resolve({ data: [] as ApiMessage[], error: undefined }),
+		])
+		if (!isCurrent()) return false
+
+		const { data: msgData, error: msgError } = messagesRes
 		if (msgError) {
 			console.error('failed to load messages', msgError)
 			ctx.currentLeafId = null
@@ -213,12 +271,32 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 			ctx.hasMoreMessages = true
 			return false
 		}
-		messagesPage = (msgData ?? []) as ApiMessage[]
 
-		// cache for future instant loads
+		if (branchRes.error) {
+			console.error('failed to load current branch', branchRes.error)
+		}
+
+		const latestPage = (msgData ?? []) as ApiMessage[]
+		const selectedBranch = ((branchRes.data ?? []) as ApiMessage[]).filter(
+			(msg) => msg.thread_id === threadId
+		)
+		messagesPage = mergeMessages(latestPage, selectedBranch)
+		pageSize = latestPage.length
+		complete = latestPage.length < INITIAL_MESSAGE_LIMIT
+
+		// cache for future instant loads (race guard: dropped if a
+		// message.* event arrived since fetchStartedAt).
 		chatStore.threadCache.set(threadData)
-		chatStore.threadCache.setMessages(threadId, messagesPage, messagesPage.length < 120)
+		chatStore.threadCache.setMessages(
+			threadId,
+			messagesPage,
+			complete,
+			fetchStartedAt,
+			pageSize
+		)
 	}
+
+	if (!isCurrent()) return false
 
 	ctx.thread = threadData
 	chatStore.activeThread = threadData
@@ -227,9 +305,8 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	void chatStore.markThreadRead(threadId)
 
 	ctx.messageTree.clear()
-	ctx.messageSkip = messagesPage.length
-	// more messages exist if we got a full page (limit is 120)
-	ctx.hasMoreMessages = messagesPage.length >= 120
+	ctx.messageSkip = pageSize
+	ctx.hasMoreMessages = !complete
 	ingestMessages(messagesPage, ctx)
 
 	const preferredLeaf = threadData.current_message_id
@@ -254,8 +331,10 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	await fetchEventsForThread(
 		threadId,
 		Array.from(ctx.messageTree.values()).map((m) => m.id),
-		ctx
+		ctx,
+		isCurrent
 	)
+	if (!isCurrent()) return false
 	// safety net: any tool calls still pending/running after load are
 	// orphans from an interrupted run. close them as errored so we don't
 	// render permanent shimmer. if a matching run is still active, the
@@ -277,7 +356,13 @@ export function syncCacheAfterRun(ctx: ChatContext): void {
 	chatStore.threadCache.set(updatedThread)
 	// write all in-memory messages back to cache
 	const allMessages = Array.from(ctx.messageTree.values())
-	chatStore.threadCache.setMessages(ctx.thread.id, allMessages, !ctx.hasMoreMessages)
+	chatStore.threadCache.setMessages(
+		ctx.thread.id,
+		allMessages,
+		!ctx.hasMoreMessages,
+		undefined,
+		ctx.messageSkip
+	)
 	// register new message IDs as covered so events cache stays valid.
 	// events from the run arrived via SSE (already processed by toolTracker),
 	// so we just mark the message IDs as covered without invalidating.

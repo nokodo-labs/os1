@@ -31,6 +31,10 @@ interface MessageCacheEntry {
 	messages: ApiMessage[]
 	fetchedAt: number
 	complete: boolean
+	/** number of messages covered by the paginated latest-page cursor */
+	pageSize: number
+	/** thread.last_activity_at observed when this message snapshot was written */
+	threadLastActivityAt: string | null
 }
 
 type ApiEvent = components['schemas']['Event']
@@ -49,6 +53,14 @@ class ThreadCache {
 	readonly #messageCache = new SvelteMap<string, MessageCacheEntry>()
 	readonly #eventCache = new SvelteMap<string, EventCacheEntry>()
 	readonly #prefetchInFlight = new SvelteSet<string>()
+	/**
+	 * per-thread local message-event timestamp. bumped whenever a
+	 * message.* event arrives via WS. used by setMessages to detect
+	 * stale fetches: if a write started before the latest activity,
+	 * the data is potentially missing messages that arrived during
+	 * the fetch (race between prefetch/loadTree and run streaming).
+	 */
+	readonly #lastMessageEventAt = new SvelteMap<string, number>()
 
 	#isFresh(fetchedAt: number): boolean {
 		return Date.now() - fetchedAt < CACHE_TTL_MS
@@ -61,17 +73,82 @@ class ThreadCache {
 	}
 
 	getCachedMessages(threadId: string): ApiMessage[] | null {
+		return this.getCachedMessageSnapshot(threadId)?.messages ?? null
+	}
+
+	getCachedMessageSnapshot(
+		threadId: string
+	): { messages: ApiMessage[]; complete: boolean; pageSize: number } | null {
 		const entry = this.#messageCache.get(threadId)
 		if (!entry || !this.#isFresh(entry.fetchedAt)) return null
-		return entry.messages
+
+		const threadActivity = this.#threadActivityKey(threadId)
+		if (
+			entry.threadLastActivityAt !== null &&
+			threadActivity !== null &&
+			entry.threadLastActivityAt !== threadActivity
+		) {
+			this.#messageCache.delete(threadId)
+			return null
+		}
+
+		return {
+			messages: entry.messages,
+			complete: entry.complete,
+			pageSize: entry.pageSize,
+		}
+	}
+
+	hasCachedMessage(threadId: string, messageId: string): boolean {
+		const entry = this.getCachedMessageSnapshot(threadId)
+		return entry?.messages.some((m) => m.id === messageId) ?? false
 	}
 
 	set(thread: Thread): void {
 		this.#threadCache.set(thread.id, { thread, fetchedAt: Date.now() })
 	}
 
-	setMessages(threadId: string, messages: ApiMessage[], complete: boolean = false): void {
-		this.#messageCache.set(threadId, { messages, fetchedAt: Date.now(), complete })
+	setMessages(
+		threadId: string,
+		messages: ApiMessage[],
+		complete: boolean = false,
+		fetchStartedAt?: number,
+		pageSize: number = messages.length
+	): boolean {
+		// race guard: if any message activity happened since this fetch
+		// started, the result may be missing messages that arrived during
+		// the fetch. drop the write so the next read goes back to the API.
+		if (fetchStartedAt !== undefined) {
+			const lastActivity = this.#lastMessageEventAt.get(threadId) ?? 0
+			if (lastActivity >= fetchStartedAt) {
+				this.#messageCache.delete(threadId)
+				return false
+			}
+		}
+		this.#messageCache.set(threadId, {
+			messages,
+			fetchedAt: Date.now(),
+			complete,
+			pageSize,
+			threadLastActivityAt: this.#threadActivityKey(threadId),
+		})
+		return true
+	}
+
+	#threadActivityKey(threadId: string): string | null {
+		const activity = this.#threadCache.get(threadId)?.thread.last_activity_at
+		return typeof activity === 'string' ? activity : null
+	}
+
+	/**
+	 * mark that something changed server-side for this thread. callers
+	 * should invoke this whenever a message.* event arrives, regardless
+	 * of whether a cache entry exists. setMessages reads this to discard
+	 * stale fetches that started before the activity.
+	 */
+	markActivity(threadId: string, at: number = Date.now()): void {
+		const prev = this.#lastMessageEventAt.get(threadId) ?? 0
+		if (at > prev) this.#lastMessageEventAt.set(threadId, at)
 	}
 
 	invalidate(threadId: string): void {
@@ -158,6 +235,8 @@ class ThreadCache {
 		this.#messageCache.set(threadId, {
 			...entry,
 			messages: [...entry.messages, message],
+			fetchedAt: Date.now(),
+			pageSize: entry.pageSize + 1,
 		})
 	}
 
@@ -169,7 +248,7 @@ class ThreadCache {
 		if (idx === -1) return
 		const updated = [...entry.messages]
 		updated[idx] = { ...updated[idx], ...patch }
-		this.#messageCache.set(threadId, { ...entry, messages: updated })
+		this.#messageCache.set(threadId, { ...entry, messages: updated, fetchedAt: Date.now() })
 	}
 
 	/** remove messages by id from the cached array. */
@@ -179,7 +258,13 @@ class ThreadCache {
 		const idSet = new Set(messageIds)
 		const filtered = entry.messages.filter((m) => !idSet.has(m.id))
 		if (filtered.length === entry.messages.length) return
-		this.#messageCache.set(threadId, { ...entry, messages: filtered })
+		const removedCount = entry.messages.length - filtered.length
+		this.#messageCache.set(threadId, {
+			...entry,
+			messages: filtered,
+			fetchedAt: Date.now(),
+			pageSize: Math.max(0, entry.pageSize - removedCount),
+		})
 	}
 
 	clear(): void {
@@ -187,6 +272,7 @@ class ThreadCache {
 		this.#messageCache.clear()
 		this.#eventCache.clear()
 		this.#prefetchInFlight.clear()
+		this.#lastMessageEventAt.clear()
 	}
 
 	isPrefetching(threadId: string): boolean {
@@ -198,6 +284,7 @@ class ThreadCache {
 		if (this.#prefetchInFlight.has(threadId)) return
 
 		this.#prefetchInFlight.add(threadId)
+		const startedAt = Date.now()
 		try {
 			const [threadRes, messagesRes] = await Promise.all([
 				api.GET('/v1/threads/{thread_id}', {
@@ -213,7 +300,12 @@ class ThreadCache {
 
 			if (threadRes.data) this.set(threadRes.data)
 			if (messagesRes.data) {
-				this.setMessages(threadId, messagesRes.data, messagesRes.data.length < 120)
+				this.setMessages(
+					threadId,
+					messagesRes.data,
+					messagesRes.data.length < 120,
+					startedAt
+				)
 			}
 		} catch (err) {
 			if (dev) console.warn('[ThreadCache] prefetch failed:', threadId, err)
@@ -245,6 +337,7 @@ class ThreadCache {
 			if (cached) return { messages: cached, fromCache: true }
 		}
 
+		const startedAt = Date.now()
 		const { data, error } = await api.GET('/v1/threads/{thread_id}/messages', {
 			params: {
 				path: { thread_id: threadId },
@@ -253,7 +346,7 @@ class ThreadCache {
 		})
 
 		if (error || !data) return { messages: [], fromCache: false }
-		if (skip === 0) this.setMessages(threadId, data, data.length < limit)
+		if (skip === 0) this.setMessages(threadId, data, data.length < limit, startedAt)
 		return { messages: data, fromCache: false }
 	}
 }
@@ -353,6 +446,9 @@ class ChatStore {
 		} else if (message.type === 'message.created') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (!threadId) return
+			// bump activity FIRST so any in-flight prefetch/loadTree that
+			// started before this event will discard its (now stale) result.
+			this.threadCache.markActivity(threadId)
 			// add to cached messages if we have data with an id
 			if (data.id && typeof data.id === 'string') {
 				this.threadCache.addMessage(threadId, data as unknown as ApiMessage)
@@ -369,10 +465,12 @@ class ChatStore {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			const msgId = (data.id as string) ?? (message.message_id as string)
 			if (!threadId || !msgId) return
+			this.threadCache.markActivity(threadId)
 			this.threadCache.updateMessage(threadId, msgId, data as Partial<ApiMessage>)
 		} else if (message.type === 'message.deleted') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (!threadId) return
+			this.threadCache.markActivity(threadId)
 			const deletedIds = data.deleted_ids as string[] | undefined
 			const msgId = (data.message_id as string) ?? (message.message_id as string)
 			if (deletedIds) {
