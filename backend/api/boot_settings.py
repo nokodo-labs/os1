@@ -59,5 +59,16 @@ class BootSettings(BaseSettings):
 			raise ValueError(f"unsupported DATABASE_URL scheme: {scheme}")
 		return v
 
+	REDIS_URL: str = Field(
+		default="redis://127.0.0.1:6380/0",
+		description="Redis / Valkey URL used for cross-worker pub/sub and "
+		"shared state.",
+	)
+	REDIS_CLIENT_NAME: str = Field(
+		default="nokodo_ai",
+		description="value sent to redis CLIENT SETNAME on connect; "
+		"visible in CLIENT LIST for attribution on shared infra.",
+	)
+
 
 boot_settings = BootSettings()

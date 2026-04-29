@@ -18,12 +18,26 @@ from redis.exceptions import RedisError
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from api.redis.client import redis_client
+from api.boot_settings import boot_settings
+from api.redis import redis_client
+from api.settings import settings
 
 from ._utils import get_client_ip, get_header
 
 
 _EXEMPT_PATHS = frozenset({"/health", "/", "/v1/docs", "/v1/redoc", "/v1/openapi.json"})
+
+# methods that do not count (preflight / metadata)
+_EXEMPT_METHODS = frozenset({"OPTIONS", "HEAD"})
+
+# heavier write methods consume extra quota units
+_METHOD_WEIGHT: dict[str, int] = {
+	"POST": 5,
+	"PUT": 4,
+	"PATCH": 3,
+	"DELETE": 3,
+}
+_DEFAULT_WEIGHT = 1
 
 
 class RateLimitMiddleware:
@@ -40,12 +54,11 @@ class RateLimitMiddleware:
 			return
 
 		path: str = scope.get("path", "")
-		if path in _EXEMPT_PATHS:
+		method: str = scope.get("method", "GET").upper()
+
+		if path in _EXEMPT_PATHS or method in _EXEMPT_METHODS:
 			await self.app(scope, receive, send)
 			return
-
-		# skip rate limiting in test mode
-		from api.boot_settings import boot_settings
 
 		if boot_settings.TESTING:
 			await self.app(scope, receive, send)
@@ -57,17 +70,15 @@ class RateLimitMiddleware:
 
 		try:
 			conn = redis_client.get()
-			rkey = f"rl:{identity}:{minute_bucket}"
-			count = await conn.incr(rkey)
-			if count == 1:
+			rkey = f"nokodo_ai:rl:{identity}:{minute_bucket}"
+			weight = _METHOD_WEIGHT.get(method, _DEFAULT_WEIGHT)
+			count = await conn.incrby(rkey, weight)
+			if count == weight:
 				await conn.expire(rkey, 120)
 		except (RedisError, OSError, RuntimeError):
 			# redis down - fail open to avoid blocking all traffic
 			await self.app(scope, receive, send)
 			return
-
-		# late import to avoid circular dependency at module load
-		from api.settings import settings
 
 		limit = settings.limits.rate_limit_requests_per_minute
 		if count > limit:

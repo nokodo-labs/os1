@@ -1279,6 +1279,7 @@ api = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "redis" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1326,6 +1327,7 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'api'", specifier = ">=1.0.1" },
     { name = "python-multipart", marker = "extra == 'api'", specifier = ">=0.0.12" },
     { name = "qdrant-client", specifier = ">=1.12.0" },
+    { name = "redis", marker = "extra == 'api'", specifier = ">=6.4.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.3" },
     { name = "sqlalchemy", marker = "extra == 'api'", specifier = ">=2.0.35" },
     { name = "types-aiobotocore", extras = ["s3"], marker = "extra == 'dev'", specifier = ">=2.13.0" },
@@ -1900,6 +1902,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/30/dd/f8a8261b83946af3cd65943c93c4f83e044f01184e8525404989d22a81a5/qdrant_client-1.17.1.tar.gz", hash = "sha256:22f990bbd63485ed97ba551a4c498181fcb723f71dcab5d6e4e43fe1050a2bc0", size = 344979, upload-time = "2026-03-13T17:13:44.678Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/68/69/77d1a971c4b933e8c79403e99bcbb790463da5e48333cc4fd5d412c63c98/qdrant_client-1.17.1-py3-none-any.whl", hash = "sha256:6cda4064adfeaf211c751f3fbc00edbbdb499850918c7aff4855a9a759d56cbd", size = 389947, upload-time = "2026-03-13T17:13:43.156Z" },
+]
+
+[[package]]
+name = "redis"
+version = "7.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/7f/3759b1d0d72b7c92f0d70ffd9dc962b7b7b5ee74e135f9d7d8ab06b8a318/redis-7.4.0.tar.gz", hash = "sha256:64a6ea7bf567ad43c964d2c30d82853f8df927c5c9017766c55a1d1ed95d18ad", size = 4943913, upload-time = "2026-03-24T09:14:37.53Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/3a/95deec7db1eb53979973ebd156f3369a72732208d1391cd2e5d127062a32/redis-7.4.0-py3-none-any.whl", hash = "sha256:a9c74a5c893a5ef8455a5adb793a31bb70feb821c86eccb62eebef5a19c429ec", size = 409772, upload-time = "2026-03-24T09:14:35.968Z" },
 ]
 
 [[package]]
