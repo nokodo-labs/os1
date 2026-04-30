@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -13,7 +13,11 @@ from api.schemas.common import (
 	ORMModel,
 	TimestampedModel,
 )
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type RoleSortBy = CommonSortBy | Literal["priority", "name"]
 
 
 class RoleBase(MetadataModel):

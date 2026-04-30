@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.models.role import Role
 from api.models.user import User
-from api.schemas import SortDir
 from api.schemas.role import Role as RoleSchema
-from api.schemas.role import RoleCreate, RoleUpdate
+from api.schemas.role import RoleCreate, RoleSortBy, RoleUpdate
+from api.schemas.sorting import SortDir
 from api.schemas.user import User as UserSchema
 from api.v1.service import roles as roles_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 async def read_roles(
 	skip: int = 0,
 	limit: int = 100,
-	sort_by: str = "priority",
+	sort_by: RoleSortBy = "priority",
 	sort_dir: SortDir = "desc",
 	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),

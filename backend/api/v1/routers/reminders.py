@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,8 +19,10 @@ from api.schemas.reminder import (
 from api.schemas.reminder import (
 	ReminderCreate,
 	ReminderListCreate,
+	ReminderListSortBy,
 	ReminderListUpdate,
 	ReminderListWithCounts,
+	ReminderSortBy,
 	ReminderUpdate,
 	ReminderWithSubtasks,
 )
@@ -30,20 +30,16 @@ from api.schemas.reminder import (
 	ReminderList as ReminderListSchema,
 )
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import reminders as reminder_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
-from api.v1.service.sorting import SortDir
 from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
-
-ReminderSortBy = Literal["position", "due_at", "created_at", "updated_at", "title"]
-ListSortBy = Literal["position", "name", "created_at", "updated_at"]
-
 
 # --- ReminderList endpoints ---
 
@@ -70,7 +66,7 @@ async def list_reminder_lists(
 	include_counts: bool = False,
 	skip: int = 0,
 	limit: int = 50,
-	sort_by: ListSortBy = "position",
+	sort_by: ReminderListSortBy = "position",
 	sort_dir: SortDir = "asc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

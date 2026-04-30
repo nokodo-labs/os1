@@ -6,15 +6,13 @@ plus endpoints to list all available plugins including native ones.
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.plugin import Plugin
 from api.schemas.plugin import Plugin as PluginSchema
-from api.schemas.plugin import PluginCreate, PluginInfo, PluginUpdate
+from api.schemas.plugin import PluginCreate, PluginInfo, PluginTypeFilter, PluginUpdate
 from api.v1.service import plugins as plugin_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
@@ -24,9 +22,6 @@ router = APIRouter(
 	prefix="/plugins",
 	tags=["plugins"],
 )
-
-
-PluginTypeFilter = Literal["tool", "filter", "hook"] | None
 
 
 @router.get("/available", response_model=list[PluginInfo])

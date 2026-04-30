@@ -15,6 +15,7 @@ from api.schemas.group import (
 	GroupCreate,
 	GroupMembershipCreate,
 	GroupMembershipResponse,
+	GroupSortBy,
 	GroupUpdate,
 )
 from api.schemas.sorting import SortDir
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 async def read_groups(
 	skip: int = 0,
 	limit: int = 100,
-	sort_by: str = "updated_at",
+	sort_by: GroupSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),

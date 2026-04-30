@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Base64Bytes
 
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type MemorySortBy = CommonSortBy | Literal[
+	"category",
+	"content_length",
+	"last_accessed_at",
+	"confidence",
+]
 
 
 class MemoryBase(MetadataModel):

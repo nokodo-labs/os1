@@ -17,6 +17,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 PluginTypeStr = Literal["tool", "filter", "hook"]
+type PluginTypeFilter = PluginTypeStr | None
 
 
 class PluginBase(MetadataModel):

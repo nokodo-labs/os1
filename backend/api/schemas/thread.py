@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -14,7 +14,14 @@ from api.schemas.common import (
 	TimestampedModel,
 )
 from api.schemas.project import Project as ProjectSchema
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type ThreadSortBy = CommonSortBy | Literal[
+	"last_activity_at",
+	"title",
+]
 
 
 def _populate_project_ids(data: Any) -> Any:

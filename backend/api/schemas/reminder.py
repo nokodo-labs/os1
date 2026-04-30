@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
 from api.models.reminder import ReminderStatus
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
+
+
+type ReminderSortBy = Literal[
+	"position",
+	"due_at",
+	"created_at",
+	"updated_at",
+	"title",
+]
+type ReminderListSortBy = Literal["position", "name", "created_at", "updated_at"]
 
 
 # --- ReminderList schemas ---

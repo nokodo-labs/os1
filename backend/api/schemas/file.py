@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -13,7 +14,11 @@ from api.schemas.common import (
 	ORMModel,
 	TimestampedModel,
 )
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type FileSortBy = CommonSortBy | Literal["filename", "size_bytes"]
 
 
 class FileBase(MetadataModel):

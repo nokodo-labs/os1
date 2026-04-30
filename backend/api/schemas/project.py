@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type ProjectSortBy = CommonSortBy | Literal["name"]
 
 
 class ProjectBase(MetadataModel):

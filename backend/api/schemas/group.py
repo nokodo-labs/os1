@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from api.models.group import GroupMemberRole
 from api.schemas.common import (
 	MetadataModel,
@@ -9,7 +11,11 @@ from api.schemas.common import (
 	ORMModel,
 	TimestampedModel,
 )
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type GroupSortBy = CommonSortBy | Literal["name"]
 
 
 class GroupBase(MetadataModel):

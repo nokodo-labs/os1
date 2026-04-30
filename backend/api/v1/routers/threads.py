@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
@@ -33,6 +31,7 @@ from api.schemas.thread import (
 from api.schemas.thread import (
 	ThreadCreate,
 	ThreadMetadataGenerateRequest,
+	ThreadSortBy,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
 	ThreadUpdate,
@@ -57,12 +56,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/threads", tags=["threads"])
-
-
-ThreadSortBy = Literal[
-	"last_activity_at",
-	"title",
-]
 
 
 @router.post("", response_model=ThreadSchema, status_code=status.HTTP_201_CREATED)
@@ -124,7 +117,7 @@ async def list_threads(
 	owner_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 20,
-	sort_by: CommonSortBy | ThreadSortBy = "updated_at",
+	sort_by: ThreadSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	include_hidden: bool = False,
 	is_archived: bool | None = None,

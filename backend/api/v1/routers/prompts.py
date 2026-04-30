@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.prompt import Prompt
 from api.schemas.prompt import Prompt as PromptSchema
-from api.schemas.prompt import PromptCreate, PromptUpdate
-from api.schemas.sorting import CommonSortBy, SortDir
+from api.schemas.prompt import PromptCreate, PromptSortBy, PromptUpdate
+from api.schemas.sorting import SortDir
 from api.v1.service import prompts as prompt_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
@@ -21,9 +19,6 @@ router = APIRouter(
 	prefix="/prompts",
 	tags=["prompts"],
 )
-
-
-PromptSortBy = Literal["command"]
 
 
 @router.post("", response_model=PromptSchema, status_code=status.HTTP_201_CREATED)
@@ -40,7 +35,7 @@ async def create_prompt(
 async def list_prompts(
 	skip: int = 0,
 	limit: int = 50,
-	sort_by: CommonSortBy | PromptSortBy = "command",
+	sort_by: PromptSortBy = "command",
 	sort_dir: SortDir = "asc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

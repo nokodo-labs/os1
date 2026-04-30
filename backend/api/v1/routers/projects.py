@@ -14,7 +14,7 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 )
 from api.schemas.project import Project as ProjectSchema
-from api.schemas.project import ProjectCreate, ProjectUpdate
+from api.schemas.project import ProjectCreate, ProjectSortBy, ProjectUpdate
 from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import projects as project_service
@@ -46,7 +46,7 @@ async def create_project(
 async def list_projects(
 	skip: int = 0,
 	limit: int = 50,
-	sort_by: str = "updated_at",
+	sort_by: ProjectSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

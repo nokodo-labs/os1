@@ -2,14 +2,23 @@
 
 import re
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from api.schemas.common import TimestampedModel
 from api.schemas.preferences import UserPreferences
 from api.schemas.privacy import UserPrivacy
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type UserSortBy = CommonSortBy | Literal[
+	"email",
+	"display_name",
+	"is_active",
+	"is_superuser",
+]
 
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._]{1,28}[a-zA-Z0-9]$")

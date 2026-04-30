@@ -17,7 +17,7 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 )
 from api.schemas.file import File as FileSchema
-from api.schemas.file import FileCreate, FileUpdate
+from api.schemas.file import FileCreate, FileSortBy, FileUpdate
 from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import files as file_service
@@ -85,7 +85,7 @@ async def list_files(
 	project_id: TypeID | None = None,
 	skip: int = 0,
 	limit: int = 50,
-	sort_by: str = "created_at",
+	sort_by: FileSortBy = "created_at",
 	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

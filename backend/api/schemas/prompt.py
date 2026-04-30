@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import Field, field_validator
 
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.sorting import CommonSortBy
+
+
+type PromptSortBy = CommonSortBy | Literal["command"]
 
 
 _COMMAND_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$"

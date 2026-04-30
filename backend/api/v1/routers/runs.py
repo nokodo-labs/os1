@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
+from api.local_tasks import create_background_task
 from api.models.access_rule import AccessLevel
 from api.models.event_types import EventType
 from api.schemas.runs import (
@@ -17,7 +18,6 @@ from api.schemas.runs import (
 	SteerRunRequest,
 	SteerRunResponse,
 )
-from api.tasks import create_background_task
 from api.v1.service import runs as runs_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_thread_access

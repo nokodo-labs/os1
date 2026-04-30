@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.user import User
 from api.schemas.friendship import UserSearchResult
-from api.schemas.sorting import CommonSortBy, SortDir
+from api.schemas.sorting import SortDir
 from api.schemas.user import User as UserSchema
-from api.schemas.user import UserCreate, UserPermissions, UserUpdate
+from api.schemas.user import UserCreate, UserPermissions, UserSortBy, UserUpdate
 from api.v1.routers import friends as friends_router
 from api.v1.service import friends as friends_service
 from api.v1.service import users as user_service
@@ -30,14 +28,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 router.include_router(friends_router.router)
 
 
-UserSortBy = Literal[
-	"email",
-	"display_name",
-	"is_active",
-	"is_superuser",
-]
-
-
 def _user_with_online(user: User, active_ids: set[str]) -> UserSchema:
 	"""serialize a User ORM model with the computed is_online flag."""
 	schema = UserSchema.model_validate(user)
@@ -49,7 +39,7 @@ def _user_with_online(user: User, active_ids: set[str]) -> UserSchema:
 async def read_users(
 	skip: int = 0,
 	limit: int = 100,
-	sort_by: CommonSortBy | UserSortBy = "updated_at",
+	sort_by: UserSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),

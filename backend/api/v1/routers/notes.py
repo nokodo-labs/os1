@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,9 +14,9 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 )
 from api.schemas.note import Note as NoteSchema
-from api.schemas.note import NoteCreate, NoteUpdate
+from api.schemas.note import NoteCreate, NoteSortBy, NoteUpdate
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
-from api.schemas.sorting import CommonSortBy, SortDir
+from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import notes as note_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -28,9 +26,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/notes", tags=["notes"])
-
-
-NoteSortBy = Literal["title"]
 
 
 @router.post("", response_model=NoteSchema, status_code=status.HTTP_201_CREATED)
@@ -55,7 +50,7 @@ async def list_notes(
 	labels: list[str] | None = Query(default=None),
 	skip: int = 0,
 	limit: int = 50,
-	sort_by: CommonSortBy | NoteSortBy = "updated_at",
+	sort_by: NoteSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
