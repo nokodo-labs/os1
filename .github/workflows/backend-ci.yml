@@ -74,6 +74,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      valkey:
+        image: valkey/valkey:8
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
