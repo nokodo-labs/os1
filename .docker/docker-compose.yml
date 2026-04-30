@@ -1,5 +1,15 @@
 name: os1
 
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-production
+  ENV: production
+  DEBUG: "false"
+  JSON_LOGS: "true"
+  NOKODO__SECURITY__SECRET_KEY: change-this-in-production
+  NOKODO__SECURITY__CORS_ORIGINS: "https://app.yourdomain.com"
+  NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "https://app.yourdomain.com"
+  NOKODO__CACHE__REDIS__URL: redis://valkey:6379/0
+
 services:
   db:
     image: postgres:17-alpine
@@ -8,7 +18,7 @@ services:
     environment:
       POSTGRES_USER: nokodo-ai-admin
       POSTGRES_PASSWORD: nokodo-ai
-      POSTGRES_DB: nokodo-ai-dev
+      POSTGRES_DB: nokodo-ai-production
     ports:
       - "5432:5432"
     volumes:
@@ -18,7 +28,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles: ["deps", "local"]
 
   qdrant:
     image: qdrant/qdrant:v1.17.1
@@ -29,115 +38,97 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    profiles: ["deps", "local"]
 
   valkey:
     image: valkey/valkey:9-alpine
     container_name: os1-valkey
     restart: unless-stopped
-    command: ["valkey-server", "--appendonly", "no", "--save", ""]
-    ports:
-      - "6380:6379"
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes:
+      - valkey_data:/data
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
-    profiles: ["deps", "local"]
-
-  minio:
-    image: minio/minio:latest
-    container_name: os1-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    profiles: ["deps", "local"]
 
   backend:
-    build:
-      context: ../backend
-      dockerfile: ../.docker/Dockerfile.backend
+    image: ghcr.io/nokodo-labs/os1-backend:latest
     container_name: os1-backend
     restart: unless-stopped
     ports:
       - "1383:1383"
-    environment:
-      DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-dev
-      ENV: dev
-      DEBUG: "true"
-      NOKODO__SECURITY__SECRET_KEY: dev-secret-key-change-in-production
-      NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888,http://localhost:8383,http://localhost:3000"
-      NOKODO__SECURITY__AUTH_COOKIE_SECURE: "false"
-      NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
-      NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN: "http://localhost:8383"
-      NOKODO__ASSETS__STORAGE__S3__ENDPOINT_URL: http://minio:9000
-      NOKODO__ASSETS__STORAGE__S3__ACCESS_KEY_ID: minioadmin
-      NOKODO__ASSETS__STORAGE__S3__SECRET_ACCESS_KEY: minioadmin
-      REDIS_URL: redis://valkey:6379/0
+    environment: *backend-env
     depends_on:
       db:
         condition: service_healthy
       qdrant:
         condition: service_started
-      minio:
-        condition: service_healthy
       valkey:
         condition: service_healthy
     volumes:
-      - ../backend:/app
-      - ../backend/data:/app/data
-      - /app/__pycache__
-    command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload
-    profiles: ["local"]
+      - backend_data:/app/data
+
+  backend-worker:
+    image: ghcr.io/nokodo-labs/os1-backend:latest
+    container_name: os1-backend-worker
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      backend:
+        condition: service_started
+      valkey:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+    command: taskiq worker api.taskiq:broker api.tasks.registry --workers 1 --max-async-tasks 25
+
+  backend-scheduler:
+    image: ghcr.io/nokodo-labs/os1-backend:latest
+    container_name: os1-backend-scheduler
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      backend:
+        condition: service_started
+      valkey:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+    command: taskiq scheduler api.taskiq:scheduler api.tasks.registry
 
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: ../.docker/Dockerfile.frontend
+    image: ghcr.io/nokodo-labs/os1-frontend:latest
     container_name: os1-frontend
     restart: unless-stopped
     ports:
       - "888:80"
     environment:
-      API_ORIGIN: ${API_ORIGIN:-http://localhost:1383}
+      API_ORIGIN: ${API_ORIGIN:-}
     depends_on:
       backend:
         condition: service_started
-    profiles: ["local"]
 
   console:
-    build:
-      context: ../console
-      dockerfile: ../.docker/Dockerfile.console
+    image: ghcr.io/nokodo-labs/os1-console:latest
     container_name: os1-console
     restart: unless-stopped
     ports:
       - "8383:80"
     environment:
-      API_ORIGIN: ${API_ORIGIN:-http://localhost:1383}
+      API_ORIGIN: ${API_ORIGIN:-}
     depends_on:
       backend:
         condition: service_started
-    profiles: ["local"]
 
 volumes:
   postgres_data:
     driver: local
   qdrant_data:
     driver: local
-  minio_data:
+  valkey_data:
+    driver: local
+  backend_data:
     driver: local
 
 networks:

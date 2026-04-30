@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from enum import StrEnum
-from functools import cache
+from functools import cache as functools_cache
 from typing import Any, Final, Literal, Self, cast
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
@@ -156,6 +156,10 @@ class AITaskSettings(BaseModel):
 	thread_metadata_model_id: str | None = Field(
 		default=None,
 		description="model for thread metadata generation (title, tags)",
+	)
+	thread_maintenance_model_id: str | None = Field(
+		default=None,
+		description="model for inactive thread metadata and summary maintenance",
 	)
 	input_autocomplete_model_id: str | None = Field(
 		default=None,
@@ -494,7 +498,7 @@ class LimitsSettings(BaseModel):
 	)
 	max_file_size_mb: int = Field(default=50, ge=1, description="max file size mb")
 	rate_limit_requests_per_minute: int = Field(
-		default=60, ge=1, description="rate limit/min"
+		default=1500, ge=1, description="rate limit/min"
 	)
 
 
@@ -1149,6 +1153,67 @@ class WebSearchSettings(BaseModel):
 	)
 
 
+class OpenWebUIDeployment(BaseModel):
+	"""an admin-allowlisted Open WebUI deployment users can import from."""
+
+	name: str = Field(
+		min_length=1,
+		max_length=128,
+		description="human-friendly name shown to users",
+	)
+	description: str = Field(
+		min_length=1,
+		max_length=512,
+		description="short description shown to users",
+	)
+	origin: HttpUrl = Field(description="base origin of the Open WebUI instance")
+
+	@model_validator(mode="before")
+	@classmethod
+	def _migrate_label(cls, value: object) -> object:
+		if not isinstance(value, dict):
+			return value
+		if "name" not in value and isinstance(value.get("label"), str):
+			value = dict(value)
+			value["name"] = value["label"]
+		if "description" not in value:
+			value = dict(value)
+			value["description"] = "Open WebUI import source"
+		return value
+
+
+class OpenWebUIIntegrationSettings(BaseModel):
+	"""Open WebUI import integration."""
+
+	enabled: bool = Field(default=True, description="enable Open WebUI import")
+	deployments: list[OpenWebUIDeployment] = Field(
+		default_factory=list,
+		description="admin-allowlisted Open WebUI deployments users can import from",
+	)
+
+	@field_validator("deployments")
+	@classmethod
+	def _unique_origins(
+		cls, deployments: list[OpenWebUIDeployment]
+	) -> list[OpenWebUIDeployment]:
+		seen: set[str] = set()
+		for deployment in deployments:
+			origin = str(deployment.origin).rstrip("/").lower()
+			if origin in seen:
+				raise ValueError("Open WebUI deployment origins must be unique")
+			seen.add(origin)
+		return deployments
+
+
+class IntegrationsSettings(BaseModel):
+	"""third-party integration configuration."""
+
+	open_webui: OpenWebUIIntegrationSettings = Field(
+		default_factory=OpenWebUIIntegrationSettings,
+		description="Open WebUI integration",
+	)
+
+
 class SoftDeleteSettings(BaseModel):
 	"""per-resource soft-delete toggles.
 
@@ -1159,6 +1224,73 @@ class SoftDeleteSettings(BaseModel):
 	threads: bool = Field(default=True, description="soft-delete threads")
 	notes: bool = Field(default=True, description="soft-delete notes")
 	files: bool = Field(default=True, description="soft-delete files")
+
+
+class CacheRedisSettings(BaseModel):
+	"""Redis / Valkey cache and runtime topology."""
+
+	url: str = settings_field(
+		default="redis://127.0.0.1:6380/0",
+		private=True,
+		write_locked=True,
+		description=(
+			"Redis / Valkey URL used for cross-worker pub/sub and shared state."
+		),
+	)
+	client_name: str = settings_field(
+		default="nokodo_ai",
+		write_locked=True,
+		description="value sent to redis CLIENT SETNAME for attribution.",
+	)
+
+
+class CacheSettings(BaseModel):
+	"""cache subsystem configuration."""
+
+	redis: CacheRedisSettings = Field(
+		default_factory=CacheRedisSettings,
+		json_schema_extra={"write_locked": True},
+		frozen=True,
+		description="Redis / Valkey cache and pub/sub settings",
+	)
+
+
+class TaskiqSettings(BaseModel):
+	"""TaskIQ execution and scheduling topology."""
+
+	queue_name: str = settings_field(
+		default="nokodo-ai",
+		write_locked=True,
+		description="TaskIQ queue name used by API, worker, and scheduler processes.",
+	)
+	result_ttl_seconds: int = settings_field(
+		default=60 * 60 * 24,
+		ge=1,
+		write_locked=True,
+		description="seconds to keep TaskIQ result backend entries.",
+	)
+	max_connections: int = settings_field(
+		default=32,
+		ge=1,
+		write_locked=True,
+		description="maximum Redis connections used by TaskIQ components.",
+	)
+	schedule_prefix: str = settings_field(
+		default="nokodo-ai:schedules",
+		write_locked=True,
+		description="Redis key prefix for dynamic TaskIQ schedules.",
+	)
+
+
+class TasksSettings(BaseModel):
+	"""task execution settings."""
+
+	taskiq: TaskiqSettings = Field(
+		default_factory=TaskiqSettings,
+		json_schema_extra={"write_locked": True},
+		frozen=True,
+		description="TaskIQ execution and scheduling settings",
+	)
 
 
 # default permissions section
@@ -1259,9 +1391,21 @@ class Settings(BaseSettings):
 	default_permissions: DefaultPermissionsSettings = Field(
 		default_factory=DefaultPermissionsSettings
 	)
+	integrations: IntegrationsSettings = Field(
+		default_factory=IntegrationsSettings,
+		description="third-party integration settings",
+	)
+	cache: CacheSettings = Field(
+		default_factory=CacheSettings,
+		description="cache and Redis settings",
+	)
+	tasks: TasksSettings = Field(
+		default_factory=TasksSettings,
+		description="task execution settings",
+	)
 
 	@staticmethod
-	@cache
+	@functools_cache
 	def _build_custom_exclude(
 		schema: type[BaseModel], exclude_flags: tuple[FieldFlag, ...]
 	) -> dict[str, Any]:

@@ -60,6 +60,28 @@ Fields marked **private** are never returned by non-admin API responses.
 
 ---
 
+### Cache (`NOKODO__CACHE__*`)
+
+These settings are write-locked because API, worker, and scheduler processes must agree on them at startup.
+
+| Variable                                        | Type   | Default                    | Flags                 | Description                                                        |
+| ----------------------------------------------- | ------ | -------------------------- | --------------------- | ------------------------------------------------------------------ |
+| `NOKODO__CACHE__REDIS__URL`                     | string | `redis://127.0.0.1:6380/0` | private, write-locked | Redis / Valkey URL for pub/sub, task streams, and shared state.    |
+| `NOKODO__CACHE__REDIS__CLIENT_NAME`             | string | `nokodo_ai`                | write-locked          | Name sent to Redis `CLIENT SETNAME`.                               |
+
+### Tasks (`NOKODO__TASKS__*`)
+
+These settings are write-locked because API, worker, and scheduler processes must agree on them at startup.
+
+| Variable                                        | Type   | Default                    | Flags        | Description                                        |
+| ----------------------------------------------- | ------ | -------------------------- | ------------ | -------------------------------------------------- |
+| `NOKODO__TASKS__TASKIQ__QUEUE_NAME`             | string | `nokodo-ai`                | write-locked | TaskIQ queue shared by API, worker, and scheduler. |
+| `NOKODO__TASKS__TASKIQ__RESULT_TTL_SECONDS`     | int    | `86400`                    | write-locked | Seconds to retain TaskIQ result backend entries.   |
+| `NOKODO__TASKS__TASKIQ__MAX_CONNECTIONS`        | int    | `32`                       | write-locked | Maximum Redis connections used by TaskIQ.          |
+| `NOKODO__TASKS__TASKIQ__SCHEDULE_PREFIX`        | string | `nokodo-ai:schedules`      | write-locked | Redis key prefix for dynamic TaskIQ schedules.     |
+
+---
+
 ### Security (`NOKODO__SECURITY__*`)
 
 | Variable                                        | Type      | Default                                                      | Flags                 | Description                                                                                                                                         |
@@ -180,6 +202,7 @@ Well-known filenames appended to `base_url`: `favicon.ico`, `apple-touch-icon.pn
 | ------------------------------------------------ | ------ | ------- | --------------------------------------------------------------------------- |
 | `NOKODO__AI__TASKS__DEFAULT_MODEL_ID`            | string | `null`  | Fallback model ID for all background AI tasks.                              |
 | `NOKODO__AI__TASKS__THREAD_METADATA_MODEL_ID`    | string | `null`  | Model for thread title/tag generation. Falls back to `DEFAULT_MODEL_ID`.    |
+| `NOKODO__AI__TASKS__THREAD_MAINTENANCE_MODEL_ID` | string | `null`  | Model for inactive thread metadata/summary. Falls back to `DEFAULT_MODEL_ID`. |
 | `NOKODO__AI__TASKS__INPUT_AUTOCOMPLETE_MODEL_ID` | string | `null`  | Model for input autocomplete suggestions. Falls back to `DEFAULT_MODEL_ID`. |
 
 #### Attachment decay (`NOKODO__AI__ATTACHMENTS__*`)

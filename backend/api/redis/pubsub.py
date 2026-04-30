@@ -98,3 +98,8 @@ def make_run_channel(run_id: str, suffix: str) -> PubSubChannel:
 	keeps key namespacing in one place; callers don't hand-craft keys.
 	"""
 	return PubSubChannel(f"nokodo_ai:run:{run_id}:{suffix}")
+
+
+def make_task_channel(task_id: str, suffix: str) -> PubSubChannel:
+	"""build a per-task channel name with a stable prefix."""
+	return PubSubChannel(f"nokodo_ai:task:{task_id}:{suffix}")

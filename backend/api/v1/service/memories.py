@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Coroutine
+from typing import Literal
 
 from fastapi import HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +29,10 @@ from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.chat.models import (
+	resolve_task_chat_model,
+	run_chat_model_json_schema,
+)
 from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
@@ -34,11 +41,52 @@ from api.v1.service.vectorize import (
 	remove_vectorized_resource,
 	vectorize_resource,
 )
+from nokodo_ai.messages import SystemMessage, UserMessage
+from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+_POST_PROCESSING_PROMPT = """\
+you are a memory maintenance agent. you receive:
+1. the latest conversation context
+2. existing memories that are relevant to that context
+
+your job is to determine what maintenance actions to take on the
+memory collection. you CANNOT create new memories - only update
+or delete existing ones.
+
+actions:
+- UPDATE: modify an existing memory when information has changed,
+  or consolidate closely related memories into one.
+- DELETE: remove a memory when it is an exact duplicate, directly
+  contradicted by conversation, or was consolidated into another.
+
+rules:
+- only use memory IDs from the provided relevant memories list.
+- keep memories granular - prefer separate facts over combined ones.
+- only consolidate when memories are inseparable or exact duplicates.
+- if no maintenance is needed, return an empty actions list.
+"""
+
+
+class _MemoryPostProcessingAction(BaseModel):
+	"""a single memory maintenance action."""
+
+	action: Literal["update", "delete"]
+	id: str = Field(description="memory id to act on")
+	new_content: str | None = Field(
+		default=None,
+		description="updated content; required for update, omit for delete",
+	)
+
+
+class _MemoryPostProcessingResponse(BaseModel):
+	"""structured response from the post-processing model."""
+
+	actions: list[_MemoryPostProcessingAction] = Field(default_factory=list)
 
 
 async def _get_memory(
@@ -496,3 +544,87 @@ async def query_relevant_memories(
 
 	# preserve relevance order from vector search.
 	return [by_id[rid] for rid in resource_ids if rid in by_id]
+
+
+async def post_process_relevant_memories(
+	query_text: str,
+	session: AsyncSession,
+	principal: Principal,
+	max_related_memories: int = 10,
+) -> JSONObject:
+	"""update/delete memories relevant to the latest conversation context."""
+	query = query_text.strip()
+	if not query:
+		return {"skipped": True, "reason": "empty query"}
+
+	memories = await query_relevant_memories(
+		query,
+		session,
+		principal=principal,
+		limit=max_related_memories,
+	)
+	if not memories:
+		return {"skipped": True, "reason": "no relevant memories"}
+
+	try:
+		chat_model = await resolve_task_chat_model(session, "memory_post_processing")
+	except ValueError:
+		logger.debug("memory post-processing skipped: no task model configured")
+		return {"skipped": True, "reason": "no model"}
+
+	memory_entries: list[dict[str, str]] = []
+	for memory in memories:
+		memory_entries.append(
+			{
+				"id": str(memory.id),
+				"content": memory.content,
+				"updated_at": memory.updated_at.isoformat()
+				if memory.updated_at
+				else "",
+			}
+		)
+
+	raw = await run_chat_model_json_schema(
+		chat_model,
+		thread=SDKThread(
+			messages=[
+				SystemMessage.from_text(_POST_PROCESSING_PROMPT),
+				UserMessage.from_text(
+					"conversation context:\n"
+					f"{query}\n\nrelevant memories:\n"
+					f"{json.dumps(memory_entries, ensure_ascii=False)}"
+				),
+			]
+		),
+		json_schema=_MemoryPostProcessingResponse.model_json_schema(),
+	)
+	result = _MemoryPostProcessingResponse.model_validate(raw)
+	if not result.actions:
+		return {"actions": 0, "updated": 0, "deleted": 0}
+
+	memory_ids = {str(memory.id) for memory in memories}
+	updated = 0
+	deleted = 0
+	for action in result.actions:
+		if action.id not in memory_ids:
+			logger.warning(
+				"post-processing: unknown memory id %s for user %s",
+				action.id,
+				principal.user_id,
+			)
+			continue
+		memory_id = TypeID(action.id)
+		if action.action == "update" and action.new_content:
+			await update_memory(
+				memory_id,
+				MemoryUpdate(content=action.new_content),
+				session,
+				principal,
+			)
+			updated += 1
+		elif action.action == "delete":
+			await delete_memory(memory_id, session, principal)
+			deleted += 1
+
+	await session.commit()
+	return {"actions": len(result.actions), "updated": updated, "deleted": deleted}

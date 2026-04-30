@@ -9,8 +9,9 @@ fields are included.
 from __future__ import annotations
 
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.permissions import (
 	ActionPermission,
@@ -472,6 +473,10 @@ class AITaskSettingsPatch(BaseModel):
 		default=None,
 		description="model for thread metadata generation (title, tags)",
 	)
+	thread_maintenance_model_id: str | None = Field(
+		default=None,
+		description="model for inactive thread metadata and summary maintenance",
+	)
 	input_autocomplete_model_id: str | None = Field(
 		default=None,
 		description="model for input autocomplete suggestions",
@@ -833,6 +838,70 @@ class WebSearchSettingsPatch(BaseModel):
 	perplexity: PerplexitySettingsPatch | None = None
 
 
+class OpenWebUIDeploymentPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	name: str = Field(min_length=1, max_length=128)
+	description: str = Field(min_length=1, max_length=512)
+	origin: str = Field(min_length=1, description="Open WebUI base origin url")
+
+	@field_validator("origin")
+	@classmethod
+	def _validate_origin(cls, value: str) -> str:
+		parsed = urlparse(value)
+		if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+			raise ValueError("origin must be an http(s) url")
+		return value.rstrip("/")
+
+
+class OpenWebUIIntegrationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | None = None
+	deployments: list[OpenWebUIDeploymentPatch] | None = None
+
+	@field_validator("deployments")
+	@classmethod
+	def _unique_origins(
+		cls, deployments: list[OpenWebUIDeploymentPatch] | None
+	) -> list[OpenWebUIDeploymentPatch] | None:
+		if deployments is None:
+			return None
+		seen: set[str] = set()
+		for deployment in deployments:
+			origin = deployment.origin.rstrip("/").lower()
+			if origin in seen:
+				raise ValueError("Open WebUI deployment origins must be unique")
+			seen.add(origin)
+		return deployments
+
+
+class IntegrationsSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	open_webui: OpenWebUIIntegrationSettingsPatch | None = None
+
+
+class CacheRedisSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+
+class CacheSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	redis: CacheRedisSettingsPatch | None = None
+
+
+class TaskiqSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+
+class TasksSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	taskiq: TaskiqSettingsPatch | None = None
+
+
 class SettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -847,6 +916,9 @@ class SettingsPatch(BaseModel):
 	web_search: WebSearchSettingsPatch | None = None
 	code_interpreter: CodeInterpreterSettingsPatch | None = None
 	default_permissions: DefaultPermissionsSettingsPatch | None = None
+	integrations: IntegrationsSettingsPatch | None = None
+	cache: CacheSettingsPatch | None = None
+	tasks: TasksSettingsPatch | None = None
 
 
 class SettingsVersions(BaseModel):
@@ -863,6 +935,9 @@ class SettingsVersions(BaseModel):
 	web_search: int = 0
 	code_interpreter: int = 0
 	default_permissions: int = 0
+	integrations: int = 0
+	cache: int = 0
+	tasks: int = 0
 
 
 class SettingsUpdateRequest(BaseModel):

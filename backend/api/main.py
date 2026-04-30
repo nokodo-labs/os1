@@ -33,6 +33,7 @@ from api.storage import close_all as close_storage
 from api.storage import register as register_storage
 from api.storage.local import LocalStorageBackend
 from api.storage.s3 import S3StorageBackend
+from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
 
 
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 	if not boot_settings.TESTING:
 		await redis_client.connect()
+		await startup_taskiq()
 
 	# start the cross-worker cache invalidation subscriber. handlers are
 	# self-registered at import time by the modules that own resettable
@@ -97,6 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		invalidation_task.cancel()
 	await close_storage()
 	if not boot_settings.TESTING:
+		await shutdown_taskiq()
 		await redis_client.aclose()
 
 

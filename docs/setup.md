@@ -147,8 +147,8 @@ CI/CD automatically builds and publishes docker images to GitHub Container Regis
 
 ```bash
 cd .docker
-docker compose -f docker-compose.production.yml pull
-docker compose -f docker-compose.production.yml up -d
+docker compose pull
+docker compose up -d
 ```
 
 ### environment configuration
@@ -165,10 +165,10 @@ CORS_ORIGINS='["https://yourdomain.com"]'
 
 ### deployment steps
 
-1. configure environment - update `.env` files and `.docker/docker-compose.production.yml`
-2. pull images - `docker compose -f docker-compose.production.yml pull`
-3. start services - `docker compose -f docker-compose.production.yml up -d`
-4. verify - `docker compose -f docker-compose.production.yml logs -f`
+1. configure environment - update `.env` files and `.docker/docker-compose.yml`
+2. pull images - `docker compose pull`
+3. start services - `docker compose up -d`
+4. verify - `docker compose logs -f`
 
 ## environment variables
 

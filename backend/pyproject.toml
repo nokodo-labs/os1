@@ -27,9 +27,11 @@ api = [
     "argon2-cffi>=23.1.0",
     "python-dotenv>=1.0.1",
     "jinja2>=3.1.4",
-	"httpx>=0.27.2",
-	"aiobotocore>=2.13.0",
-	"redis>=6.4.0",
+    "httpx>=0.27.2",
+    "aiobotocore>=2.13.0",
+    "redis>=6.4.0",
+    "taskiq>=0.12.2",
+    "taskiq-redis>=1.2.2",
 ]
 
 dev = [

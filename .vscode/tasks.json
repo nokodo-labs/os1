@@ -311,7 +311,7 @@
 		{
 			"label": "Docker: ensure dev deps",
 			"type": "shell",
-			"command": "docker compose --profile deps up -d",
+			"command": "docker compose -f docker-compose.local.yml --profile deps up -d",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
@@ -326,7 +326,7 @@
 		{
 			"label": "Docker: build all",
 			"type": "shell",
-			"command": "docker compose build",
+			"command": "docker compose -f docker-compose.local.yml build",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
@@ -339,7 +339,7 @@
 		{
 			"label": "Docker: up",
 			"type": "shell",
-			"command": "docker compose --profile local up -d",
+			"command": "docker compose -f docker-compose.local.yml --profile local up -d",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
@@ -352,7 +352,7 @@
 		{
 			"label": "Docker: down",
 			"type": "shell",
-			"command": "docker compose down",
+			"command": "docker compose -f docker-compose.local.yml down",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},
@@ -364,7 +364,7 @@
 		{
 			"label": "Docker: dev mode",
 			"type": "shell",
-			"command": "docker compose --profile local up -d --build",
+			"command": "docker compose -f docker-compose.local.yml --profile local up -d --build",
 			"options": {
 				"cwd": "${workspaceFolder}/.docker"
 			},

@@ -15,7 +15,7 @@ from typing import Final, cast
 import redis.asyncio as redis_async
 from redis.asyncio import Redis
 
-from api.boot_settings import boot_settings
+from api.settings import settings
 
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ class RedisClient:
 		"""
 		if self._conn is not None:
 			return
-		target_url = url or boot_settings.REDIS_URL
+		target_url = url or settings.cache.redis.url
 		conn = redis_async.from_url(
 			target_url,
 			max_connections=max_connections,
@@ -76,7 +76,7 @@ class RedisClient:
 			socket_connect_timeout=_DEFAULT_SOCKET_CONNECT_TIMEOUT_S,
 			decode_responses=False,
 			health_check_interval=30,
-			client_name=boot_settings.REDIS_CLIENT_NAME,
+			client_name=settings.cache.redis.client_name,
 		)
 		# separate pool for pub/sub: no socket_timeout so listen() can
 		# block indefinitely waiting for messages.
@@ -85,7 +85,7 @@ class RedisClient:
 			max_connections=max_connections,
 			socket_connect_timeout=_DEFAULT_SOCKET_CONNECT_TIMEOUT_S,
 			decode_responses=False,
-			client_name=boot_settings.REDIS_CLIENT_NAME,
+			client_name=settings.cache.redis.client_name,
 		)
 		# TODO(observability): once OpenTelemetry is wired up, add
 		# opentelemetry-instrumentation-redis to instrument every op

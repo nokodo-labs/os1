@@ -1,21 +1,13 @@
-"""shared background task utilities.
+"""shared in-process background task utilities.
 
-centralizes fire-and-forget asyncio task management. all background
+centralizes fire-and-forget asyncio task management. all local background
 tasks in the application should use create_background_task() so that:
 
 1. strong references are kept (prevents GC in python 3.13+)
 2. exceptions are always logged
-3. when TaskIQ is adopted, this is the single swap point
 
-## TaskIQ migration plan
-
-``create_background_task`` is the swap point: it MAY be re-routed to a
-TaskIQ broker so work runs on a remote worker. callers that need
-strict in-process execution (e.g. SSE producers that must publish into
-the local ``run_status_store``, agent runs that must stay snappy and
-share local state with subscribers) MUST use
-``create_inline_background_task`` instead. that function is contractually
-in-process forever and will never route through a broker.
+TaskIQ execution is explicit and lives in durable task modules. arbitrary
+coroutine helpers stay local because they are not serializable worker jobs.
 """
 
 from __future__ import annotations
@@ -42,11 +34,6 @@ def create_background_task[T](
 	will not be garbage-collected before completion. exceptions are
 	logged automatically via a done callback.
 
-	NOTE: when TaskIQ is wired in, this function may route work to a
-	remote worker. callers that REQUIRE in-process execution (shared
-	memory state, low latency, no serialization) must use
-	``create_inline_background_task`` instead.
-
 	args:
 		coro: the coroutine to schedule.
 		name: human-readable label for log messages.
@@ -67,8 +54,7 @@ def create_inline_background_task[T](
 	use this for work that must share in-process state with the caller
 	(e.g. publishing into the local run_status_store, driving SSE producers
 	that subscribers in the same process consume) or that must stay snappy
-	(no broker hop, no serialization). this contract holds even after the
-	TaskIQ migration of ``create_background_task``.
+	(no broker hop, no serialization).
 
 	args:
 		coro: the coroutine to schedule.

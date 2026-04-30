@@ -1,11 +1,11 @@
 # Docker Configuration
 
-Two compose entrypoints support both local DX and production-style runs.
+Two compose entrypoints support public image-based deployments and local DX.
 
 ## Files
 
--   `docker-compose.yml` – DX-friendly stack with Compose profiles. Use `deps` for infrastructure only (Postgres, etc.) or `local` to build/run the full stack from source.
--   `docker-compose.production.yml` – user-facing stack that pulls prebuilt images from GHCR for staging/production parity.
+- `docker-compose.yml` - public deployment stack. Pulls `:latest` images from GHCR and uses named volumes, so it can run without the source tree.
+- `docker-compose.local.yml` - DX-friendly stack with Compose profiles. Use `deps` for infrastructure only or `local` to build/run the full stack from source.
 
 ## Usage
 
@@ -13,15 +13,15 @@ Two compose entrypoints support both local DX and production-style runs.
 cd .docker
 
 # dependencies only (for local backend/frontend processes)
-docker compose --profile deps up -d
+docker compose -f docker-compose.local.yml --profile deps up -d
 
 # full local stack built from the repo
-docker compose --profile local up -d
-docker compose down
+docker compose -f docker-compose.local.yml --profile local up -d --build
+docker compose -f docker-compose.local.yml down
 
-# production-style run (registry images)
-docker compose -f docker-compose.production.yml up -d
-docker compose -f docker-compose.production.yml down
+# public image-based deployment stack
+docker compose up -d
+docker compose down
 ```
 
 See [../docs/setup.md](../docs/setup.md) for the complete instructions.

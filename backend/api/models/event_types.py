@@ -60,6 +60,7 @@ class EventType(StrEnum):
 	TASK_UPDATED = "task.updated"
 	TASK_COMPLETED = "task.completed"
 	TASK_FAILED = "task.failed"
+	TASK_CANCELLED = "task.cancelled"
 
 	# project events
 	PROJECT_CREATED = "project.created"
@@ -233,6 +234,7 @@ TASK_EVENTS = {
 	EventType.TASK_UPDATED,
 	EventType.TASK_COMPLETED,
 	EventType.TASK_FAILED,
+	EventType.TASK_CANCELLED,
 }
 
 ATTACHMENT_EVENTS = {
