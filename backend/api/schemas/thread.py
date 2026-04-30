@@ -18,10 +18,13 @@ from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
 
 
-type ThreadSortBy = CommonSortBy | Literal[
-	"last_activity_at",
-	"title",
-]
+type ThreadSortBy = (
+	CommonSortBy
+	| Literal[
+		"last_activity_at",
+		"title",
+	]
+)
 
 
 def _populate_project_ids(data: Any) -> Any:

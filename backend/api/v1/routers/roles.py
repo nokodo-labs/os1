@@ -108,6 +108,4 @@ async def set_role_members(
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
 	"""replace the entire member list for a role with the given user IDs."""
-	return await roles_service.set_role_members(
-		role_id, body, db, principal=principal
-	)
+	return await roles_service.set_role_members(role_id, body, db, principal=principal)

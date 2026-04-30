@@ -71,6 +71,7 @@ def get_manifest_response() -> tuple[bytes, str]:
 # well-known CDN paths relative to {cdn}/static/os1
 _STATIC = "static/os1"
 
+
 class IconSpec(TypedDict):
 	file: str
 	sizes: str | None

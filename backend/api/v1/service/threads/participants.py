@@ -213,5 +213,3 @@ async def get_unread_counts(
 
 	result = await session.execute(stmt)
 	return {TypeID(row.thread_id): row.cnt for row in result if row.cnt > 0}
-
-

@@ -59,4 +59,5 @@ class BootSettings(BaseSettings):
 			raise ValueError(f"unsupported DATABASE_URL scheme: {scheme}")
 		return v
 
+
 boot_settings = BootSettings()

@@ -15,12 +15,15 @@ from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
-type TaskSortBy = CommonSortBy | Literal[
-	"status",
-	"task_type",
-	"stage",
-	"last_event_at",
-]
+type TaskSortBy = (
+	CommonSortBy
+	| Literal[
+		"status",
+		"task_type",
+		"stage",
+		"last_event_at",
+	]
+)
 type TaskStateFilter = Literal["active", "ended"]
 
 

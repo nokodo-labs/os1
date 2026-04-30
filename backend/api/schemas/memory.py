@@ -12,12 +12,15 @@ from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
 
 
-type MemorySortBy = CommonSortBy | Literal[
-	"category",
-	"content_length",
-	"last_accessed_at",
-	"confidence",
-]
+type MemorySortBy = (
+	CommonSortBy
+	| Literal[
+		"category",
+		"content_length",
+		"last_accessed_at",
+		"confidence",
+	]
+)
 
 
 class MemoryBase(MetadataModel):

@@ -229,9 +229,7 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	fake_prompt = SimpleNamespace(id="1", command="/a", content="hi")
 	admin = _FakePrincipal(is_admin=True)
 
-	async def fake_create(
-		prompt_in: object, db: object, principal: object
-	) -> object:
+	async def fake_create(prompt_in: object, db: object, principal: object) -> object:
 		return fake_prompt
 
 	async def fake_list(

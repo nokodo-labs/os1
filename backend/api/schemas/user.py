@@ -13,12 +13,15 @@ from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
 
 
-type UserSortBy = CommonSortBy | Literal[
-	"email",
-	"display_name",
-	"is_active",
-	"is_superuser",
-]
+type UserSortBy = (
+	CommonSortBy
+	| Literal[
+		"email",
+		"display_name",
+		"is_active",
+		"is_superuser",
+	]
+)
 
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._]{1,28}[a-zA-Z0-9]$")
