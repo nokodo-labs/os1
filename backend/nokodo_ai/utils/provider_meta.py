@@ -39,7 +39,7 @@ def provider_tool_call_metadata(
 	}
 
 
-def provider_run_metadata(*, provider: str, run_id: str) -> JSONObject:
+def provider_run_metadata(provider: str, run_id: str) -> JSONObject:
 	"""build metadata dict carrying a provider-issued run/response id.
 
 	lives under the same namespaced channel as tool call ids. adapters

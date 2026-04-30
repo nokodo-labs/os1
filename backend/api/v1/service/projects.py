@@ -60,7 +60,6 @@ async def load_projects(
 	project_ids: list[TypeID],
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	required_level: AccessLevel = AccessLevel.EDITOR,
 ) -> list[Project]:
 	"""load projects with access control; raise 404 for any missing ids."""
@@ -88,7 +87,6 @@ async def load_projects(
 async def create_project(
 	project_in: ProjectCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Project:
@@ -119,7 +117,6 @@ async def create_project(
 
 async def list_projects(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 50,
@@ -150,7 +147,6 @@ async def list_projects(
 async def get_project(
 	project_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Project:
 	"""get a project by id (requires reader access)."""
@@ -168,7 +164,6 @@ async def update_project(
 	project_id: TypeID,
 	project_in: ProjectUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Project:
@@ -205,7 +200,6 @@ async def update_project(
 async def delete_project(
 	project_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:

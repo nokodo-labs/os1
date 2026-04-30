@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 async def search_stream(
 	q: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	types: list[SearchResultType] | None = None,
 	limit: int = 10,

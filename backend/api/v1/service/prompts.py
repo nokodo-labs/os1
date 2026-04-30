@@ -22,7 +22,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 async def _ensure_unique_command(
 	session: AsyncSession,
-	*,
 	command: str,
 	exclude_prompt_id: TypeID | None = None,
 ) -> None:
@@ -40,7 +39,6 @@ async def _ensure_unique_command(
 
 async def _validate_prompt_template(
 	session: AsyncSession,
-	*,
 	prompt_id: TypeID | None,
 	command: str,
 	content: str,
@@ -60,7 +58,6 @@ async def _validate_prompt_template(
 
 async def _validate_all_prompts(
 	session: AsyncSession,
-	*,
 	prompt_map_override: dict[str, str] | None = None,
 ) -> None:
 	"""validate that every prompt in the DB has valid references.
@@ -103,7 +100,6 @@ async def _get_prompt(prompt_id: TypeID, session: AsyncSession) -> Prompt:
 async def create_prompt(
 	prompt_in: PromptCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Prompt:
 	require_permission(principal, "prompts:manage")
@@ -125,7 +121,6 @@ async def create_prompt(
 
 async def list_prompts(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 50,
@@ -155,7 +150,6 @@ async def list_prompts(
 async def get_prompt(
 	prompt_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Prompt:
 	require_permission(principal, "prompts:read")
@@ -166,7 +160,6 @@ async def update_prompt(
 	prompt_id: TypeID,
 	prompt_in: PromptUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Prompt:
 	require_permission(principal, "prompts:manage")
@@ -215,7 +208,6 @@ async def update_prompt(
 async def delete_prompt(
 	prompt_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	require_permission(principal, "prompts:manage")

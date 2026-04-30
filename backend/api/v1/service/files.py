@@ -114,7 +114,6 @@ async def _stream_upload(upload: UploadFile) -> AsyncIterator[bytes]:
 
 async def _emit_file_event(
 	session: AsyncSession,
-	*,
 	event_type: EventType,
 	file_id: TypeID,
 	user_id: TypeID,
@@ -144,7 +143,6 @@ async def _emit_file_event(
 
 async def store_file(
 	session: AsyncSession,
-	*,
 	data: bytes | AsyncIterator[bytes],
 	owner_id: TypeID,
 	filename: str | None = None,
@@ -237,7 +235,6 @@ async def read_content(
 async def resolve_file_data(
 	file_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> str | None:
 	"""resolve a file record to base64-encoded data (access-checked).
@@ -319,7 +316,6 @@ async def delete_content(file: File) -> None:
 async def create_file(
 	file_in: FileCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> File:
@@ -357,7 +353,6 @@ async def create_file(
 async def upload_file(
 	upload: UploadFile,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	project_ids: list[TypeID] | None = None,
 	source: FileSource = FileSource.UPLOAD,
@@ -400,7 +395,6 @@ async def upload_file(
 async def get_file_content(
 	file_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> tuple[AsyncIterator[bytes], MimeType | None, str | None, int | None]:
 	"""stream file content from storage (access-checked).
@@ -428,7 +422,6 @@ async def get_file_content(
 async def get_file_url(
 	file_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	expires_in: int | None = None,
 ) -> str | None:
@@ -447,7 +440,6 @@ async def get_file_url(
 
 async def list_files(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	project_id: TypeID | None = None,
 	skip: int = 0,
@@ -490,7 +482,6 @@ async def list_files(
 async def get_file(
 	file_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> File:
 	"""get a file by id (requires reader access)."""
@@ -519,7 +510,6 @@ async def update_file(
 	file_id: TypeID,
 	file_in: FileUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> File:
@@ -571,7 +561,6 @@ async def update_file(
 async def delete_file(
 	file_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:

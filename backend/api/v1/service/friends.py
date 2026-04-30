@@ -28,7 +28,6 @@ from api.v1.service.authorization import require_permission
 async def send_friend_request(
 	addressee_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Friendship:
@@ -101,7 +100,6 @@ async def send_friend_request(
 async def accept_friend_request(
 	friendship_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Friendship:
@@ -123,7 +121,6 @@ async def accept_friend_request(
 async def decline_friend_request(
 	friendship_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Friendship:
@@ -161,7 +158,6 @@ async def decline_friend_request(
 async def remove_friend(
 	friend_user_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -201,7 +197,6 @@ async def remove_friend(
 
 async def list_friends(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[tuple[User, str]]:
 	"""list all accepted friends of the current user.
@@ -236,7 +231,6 @@ async def list_friends(
 
 async def list_incoming_requests(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[Friendship]:
 	"""list pending friend requests sent TO the current user."""
@@ -255,7 +249,6 @@ async def list_incoming_requests(
 
 async def list_outgoing_requests(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[Friendship]:
 	"""list pending friend requests sent BY the current user."""
@@ -275,7 +268,6 @@ async def list_outgoing_requests(
 async def search_users(
 	query: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 20,
 ) -> list[User]:

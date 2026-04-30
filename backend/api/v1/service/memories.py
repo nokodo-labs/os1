@@ -63,7 +63,6 @@ async def create_memory(
 	memory_in: MemoryCreate,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> Memory:
 	require_permission(principal, "memories:create")
@@ -145,7 +144,6 @@ async def update_memory(
 	memory_in: MemoryUpdate,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> Memory:
 	"""update a memory and sync with vectorstore if content changed."""
@@ -180,7 +178,6 @@ async def delete_memory(
 	memory_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a memory and remove from the search index."""
@@ -209,7 +206,6 @@ async def delete_memory(
 async def delete_all_memories(
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> None:
 	"""delete all memories for the current user and remove from search index."""
@@ -300,7 +296,6 @@ async def vectorize_all_memories(session: AsyncSession) -> int:
 async def _autocomplete_memories(
 	q: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 5,
 ) -> list[SearchResultItem]:
@@ -335,7 +330,6 @@ async def _autocomplete_memories(
 async def _hybrid_search_memories(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
@@ -396,7 +390,6 @@ async def _hybrid_search_memories(
 async def search_memories(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,
@@ -448,7 +441,6 @@ async def search_memories(
 async def query_relevant_memories(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	score_threshold: float = 0.0,

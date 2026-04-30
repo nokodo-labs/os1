@@ -33,7 +33,6 @@ async def _get_provider(
 async def create_provider(
 	provider_in: ProviderCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Provider:
 	require_permission(principal, "providers:manage")
@@ -63,7 +62,6 @@ async def create_provider(
 
 async def list_providers(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[Provider]:
 	require_permission(principal, "providers:manage")
@@ -74,7 +72,6 @@ async def list_providers(
 async def get_provider(
 	provider_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Provider:
 	return await _get_provider(provider_id, session, principal)
@@ -84,7 +81,6 @@ async def update_provider(
 	provider_id: str,
 	provider_in: ProviderUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Provider:
 	provider = await _get_provider(provider_id, session, principal)

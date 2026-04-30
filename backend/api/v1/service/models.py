@@ -105,7 +105,6 @@ def _normalize_base_url(provider: Provider) -> str | None:
 
 
 def _merge_headers(
-	*,
 	base: dict[str, str],
 	additional: dict | None,
 ) -> dict[str, str]:
@@ -306,7 +305,6 @@ def _parse_google_models_payload(
 
 async def _fetch_openai_compatible_models(
 	client: httpx.AsyncClient,
-	*,
 	base_url: str,
 	headers: dict[str, str],
 ) -> list[FetchedModel]:
@@ -318,7 +316,6 @@ async def _fetch_openai_compatible_models(
 
 async def _fetch_anthropic_models(
 	client: httpx.AsyncClient,
-	*,
 	base_url: str,
 	headers: dict[str, str],
 ) -> list[FetchedModel]:
@@ -341,7 +338,6 @@ async def _fetch_anthropic_models(
 
 async def _fetch_google_models(
 	client: httpx.AsyncClient,
-	*,
 	base_url: str,
 	headers: dict[str, str],
 ) -> list[FetchedModel]:
@@ -375,7 +371,6 @@ def _is_valid_autofetch_provider(provider: Provider) -> bool:
 
 async def _sync_autofetched_models(
 	session: AsyncSession,
-	*,
 	provider_id: str | None,
 ) -> None:
 	stmt = select(Provider).where(
@@ -618,7 +613,6 @@ def _check_valid_adapter(
 async def create_model(
 	model_in: ModelCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Model:
 	require_permission(principal, "models:manage")
@@ -649,7 +643,6 @@ async def create_model(
 
 async def list_models(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	provider_id: str | None = None,
 ) -> list[Model]:
@@ -671,7 +664,6 @@ async def list_models(
 async def get_model(
 	model_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Model:
 	return await _get_model(model_id, session, principal)
@@ -681,7 +673,6 @@ async def update_model(
 	model_id: str,
 	model_in: ModelUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Model:
 	model = await _get_model(model_id, session, principal)
@@ -703,7 +694,6 @@ async def update_model(
 async def delete_model(
 	model_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	model = await _get_model(model_id, session, principal)

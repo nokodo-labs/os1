@@ -87,7 +87,6 @@ _REMINDER_SORT_COLUMNS = {
 async def create_reminder_list(
 	data: ReminderListCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> ReminderList:
@@ -129,7 +128,6 @@ async def create_reminder_list(
 
 async def list_reminder_lists(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_counts: bool = False,
 	skip: int = 0,
@@ -212,7 +210,6 @@ async def list_reminder_lists(
 
 async def get_list_counts(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	list_id: TypeID | None = None,
 ) -> dict[str, int]:
@@ -247,7 +244,6 @@ async def get_list_counts(
 async def get_reminder_list(
 	list_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> ReminderList:
 	"""get a reminder list by id."""
@@ -276,7 +272,6 @@ async def update_reminder_list(
 	list_id: TypeID,
 	data: ReminderListUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> ReminderList:
@@ -325,7 +320,6 @@ async def update_reminder_list(
 async def delete_reminder_list(
 	list_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -354,7 +348,6 @@ async def delete_reminder_list(
 async def create_reminder(
 	data: ReminderCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Reminder:
@@ -396,7 +389,6 @@ async def create_reminder(
 
 async def list_reminders(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	list_id: TypeID | None = None,
 	status_filter: ReminderStatus | None = None,
@@ -438,7 +430,6 @@ async def list_reminders(
 async def get_reminder(
 	reminder_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	with_subtasks: bool = False,
 ) -> Reminder:
@@ -483,7 +474,6 @@ async def update_reminder(
 	reminder_id: TypeID,
 	data: ReminderUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Reminder:
@@ -544,7 +534,6 @@ async def update_reminder(
 async def complete_reminder(
 	reminder_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	cascade: bool = False,
 	origin_session_id: str | None = None,
@@ -596,7 +585,6 @@ async def complete_reminder(
 async def delete_reminder(
 	reminder_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -629,7 +617,6 @@ async def move_reminder(
 	reminder_id: TypeID,
 	target_list_id: TypeID | None,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	position: float | None = None,
 	origin_session_id: str | None = None,
@@ -757,7 +744,6 @@ async def vectorize_all_reminders(session: AsyncSession) -> int:
 async def _autocomplete_reminders(
 	q: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 5,
 ) -> list[SearchResultItem]:
@@ -801,7 +787,6 @@ async def _autocomplete_reminders(
 async def _hybrid_search_reminders(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
@@ -870,7 +855,6 @@ async def _hybrid_search_reminders(
 async def search_reminders(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,

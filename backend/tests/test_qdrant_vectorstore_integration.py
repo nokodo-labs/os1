@@ -12,7 +12,7 @@ from nokodo_ai.adapters.base.vectorstores import Chunk
 from nokodo_ai.adapters.qdrant.vectorstores import QdrantVectorstoreAdapter
 
 
-def _toy_embed(text: str, *, dim: int = 64) -> list[float]:
+def _toy_embed(text: str, dim: int = 64) -> list[float]:
 	"""small deterministic embedding for local integration tests.
 
 	keeps tests self-contained (no external embedding API keys).

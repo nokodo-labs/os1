@@ -80,7 +80,6 @@ async def create_note(
 	note_in: NoteCreate,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> Note:
 	require_permission(principal, "notes:create")
@@ -187,7 +186,6 @@ async def update_note(
 	note_in: NoteUpdate,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> Note:
 	note = await _get_note(note_id, session, principal)
@@ -242,7 +240,6 @@ async def delete_note(
 	note_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	origin_session_id: str | None = None,
 ) -> None:
 	note = await _get_note(note_id, session, principal)
@@ -344,7 +341,6 @@ async def vectorize_all_notes(session: AsyncSession) -> int:
 async def _autocomplete_notes(
 	q: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 5,
 ) -> list[SearchResultItem]:
@@ -381,7 +377,6 @@ async def _autocomplete_notes(
 async def _hybrid_search_notes(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	search_params: SearchParams | None = None,
@@ -449,7 +444,6 @@ async def _hybrid_search_notes(
 async def search_notes(
 	query_text: str,
 	db: AsyncSession,
-	*,
 	principal: Principal,
 	limit: int = 10,
 	cursor: str | None = None,

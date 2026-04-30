@@ -41,7 +41,6 @@ async def _get_notification(
 
 async def list_user_notifications(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	user_id: TypeID,
 	only_unread: bool = False,
@@ -66,7 +65,6 @@ async def list_user_notifications(
 
 async def send_agent_notification(
 	session: AsyncSession,
-	*,
 	title: str,
 	body: str,
 	agent_id: TypeID | None = None,
@@ -130,7 +128,6 @@ async def send_agent_notification(
 async def mark_notification_read(
 	notification_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Notification:
 	notification = await _get_notification(notification_id, session, principal)
@@ -143,7 +140,6 @@ async def mark_notification_read(
 async def dismiss_notification(
 	notification_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Notification:
 	notification = await _get_notification(notification_id, session, principal)
@@ -156,7 +152,6 @@ async def dismiss_notification(
 
 async def mark_all_notifications_read(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	user_id: str,
 ) -> int:
@@ -188,7 +183,6 @@ async def mark_all_notifications_read(
 async def delete_notification(
 	notification_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	"""Delete a notification."""

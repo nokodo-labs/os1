@@ -121,7 +121,6 @@ def _db_plugin_to_info(plugin: Plugin) -> PluginInfo:
 async def _ensure_name_available(
 	name: str,
 	session: AsyncSession,
-	*,
 	exclude_id: TypeID | None = None,
 ) -> None:
 	if _is_native_name(name):
@@ -145,7 +144,6 @@ async def _ensure_name_available(
 async def create_plugin(
 	plugin_in: PluginCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Plugin:
 	require_permission(principal, "plugins:manage")
@@ -170,7 +168,6 @@ async def create_plugin(
 @overload
 async def list_plugins(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[False] = ...,
 	plugin_type: PluginTypeFilter = ...,
@@ -182,7 +179,6 @@ async def list_plugins(
 @overload
 async def list_plugins(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[True],
 	plugin_type: PluginTypeFilter = ...,
@@ -193,7 +189,6 @@ async def list_plugins(
 
 async def list_plugins(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: bool = False,
 	plugin_type: PluginTypeFilter = None,
@@ -233,7 +228,6 @@ async def list_plugins(
 async def get_plugin(
 	plugin_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[False] = ...,
 ) -> Plugin: ...
@@ -243,7 +237,6 @@ async def get_plugin(
 async def get_plugin(
 	plugin_id: TypeID | str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[True],
 ) -> PluginInfo: ...
@@ -252,7 +245,6 @@ async def get_plugin(
 async def get_plugin(
 	plugin_id: TypeID | str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: bool = False,
 ) -> Plugin | PluginInfo:
@@ -279,7 +271,6 @@ async def update_plugin(
 	plugin_id: TypeID,
 	plugin_in: PluginUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Plugin:
 	require_permission(principal, "plugins:manage")
@@ -305,7 +296,6 @@ async def update_plugin(
 async def delete_plugin(
 	plugin_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	require_permission(principal, "plugins:manage")
