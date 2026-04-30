@@ -6,6 +6,7 @@
 		Bot,
 		Box,
 		Brain,
+		Activity,
 		Database,
 		FileText,
 		FlaskConical,
@@ -56,6 +57,7 @@
 		| '/projects'
 		| '/notes'
 		| '/reminders'
+		| '/tasks'
 		| '/files'
 		| '/memories'
 		| '/vectors'
@@ -163,6 +165,14 @@
 			icon: ListChecks,
 			color: 'text-sky-400',
 			activeBg: 'bg-sky-500/15',
+		},
+		{
+			href: '/tasks',
+			match: '/tasks',
+			label: 'tasks',
+			icon: Activity,
+			color: 'text-lime-400',
+			activeBg: 'bg-lime-500/15',
 		},
 		{
 			href: resolve('/files'),
