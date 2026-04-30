@@ -8,6 +8,7 @@ from api.v1.routers import (
 	events,
 	files,
 	groups,
+	integrations,
 	memories,
 	models,
 	notes,
@@ -54,3 +55,4 @@ api_router.include_router(openai.router)
 api_router.include_router(plugins.router)
 api_router.include_router(settings.router)
 api_router.include_router(vectorstores.router)
+api_router.include_router(integrations.router)
