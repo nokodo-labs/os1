@@ -9,8 +9,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.database import async_session_local
+from api.local_tasks import create_background_task
 from api.schemas.memory import MemoryCreate
-from api.tasks import create_background_task
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext

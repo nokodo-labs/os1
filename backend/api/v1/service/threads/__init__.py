@@ -1,10 +1,8 @@
 """thread service facade."""
 
 from api.models.thread import Thread
+from api.schemas.thread import ThreadUpdate
 from api.v1.service.threads.core import (
-	_ensure_admin_for_hidden,
-	_load_thread,
-	_message_event_data,
 	create_thread,
 	delete_thread,
 	get_thread,
@@ -48,9 +46,7 @@ from api.v1.service.threads.search import (
 __all__ = [
 	"THREAD_SPEC",
 	"Thread",
-	"_ensure_admin_for_hidden",
-	"_load_thread",
-	"_message_event_data",
+	"ThreadUpdate",
 	"create_message",
 	"create_thread",
 	"delete_thread",

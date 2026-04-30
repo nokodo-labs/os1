@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
-from api.v1.service import threads as thread_service
+from api.v1.service.threads import metadata as thread_metadata_service
 
 
 @pytest.mark.asyncio
@@ -28,12 +28,12 @@ async def test_generate_thread_metadata_fills_missing(
 		return {"title": "🔧 fix login", "tags": ["auth", "bug"]}
 
 	monkeypatch.setattr(
-		thread_service,
+		thread_metadata_service,
 		"resolve_task_chat_model",
 		fake_resolve_task_chat_model,
 	)
 	monkeypatch.setattr(
-		thread_service,
+		thread_metadata_service,
 		"run_chat_model_json_schema",
 		fake_run_chat_model_json_schema,
 	)
@@ -84,12 +84,12 @@ async def test_generate_thread_metadata_does_not_replace_when_fill_missing(
 		return {"title": "🧠 new title", "tags": ["new"]}
 
 	monkeypatch.setattr(
-		thread_service,
+		thread_metadata_service,
 		"resolve_task_chat_model",
 		fake_resolve_task_chat_model,
 	)
 	monkeypatch.setattr(
-		thread_service,
+		thread_metadata_service,
 		"run_chat_model_json_schema",
 		fake_run_chat_model_json_schema,
 	)
@@ -147,12 +147,12 @@ async def test_generate_thread_metadata_replaces_when_replace_true(
 		return {"title": "🧠 new title", "tags": ["new"]}
 
 	monkeypatch.setattr(
-		thread_service,
+		thread_metadata_service,
 		"resolve_task_chat_model",
 		fake_resolve_task_chat_model,
 	)
 	monkeypatch.setattr(
-		thread_service,
+		thread_metadata_service,
 		"run_chat_model_json_schema",
 		fake_run_chat_model_json_schema,
 	)

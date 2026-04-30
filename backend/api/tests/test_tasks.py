@@ -2,13 +2,18 @@ import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+from taskiq.brokers.inmemory_broker import InMemoryBroker
+from taskiq.schedule_sources import LabelScheduleSource
 
 from api.models.task import TaskStatus, TaskType
 from api.schemas.task import TaskCreate, TaskUpdate
 from api.schemas.user import UserCreate
+from api.taskiq import broker
 from api.v1.service import tasks as task_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
+from api.v1.tasks.threads import THREAD_INACTIVITY_SWEEP_TASK
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -26,7 +31,6 @@ async def test_create_task(
 	payload = {
 		"user_id": user["id"],
 		"task_type": "custom",
-		"status": "pending",
 		"stage": "initialization",
 	}
 	response = await client.post("/v1/tasks", json=payload, headers=headers)
@@ -34,7 +38,7 @@ async def test_create_task(
 	data = response.json()
 	assert data["user_id"] == user["id"]
 	assert data["task_type"] == "custom"
-	assert data["status"] == "pending"
+	assert data["status"] == "running"
 	assert "id" in data
 
 
@@ -53,7 +57,6 @@ async def test_list_tasks(
 	payload = {
 		"user_id": user["id"],
 		"task_type": "custom",
-		"status": "pending",
 	}
 	await client.post("/v1/tasks", json=payload, headers=headers)
 
@@ -81,7 +84,6 @@ async def test_list_tasks_sorting(
 		json={
 			"user_id": user["id"],
 			"task_type": "custom",
-			"status": "pending",
 			"stage": "b",
 		},
 	)
@@ -92,7 +94,6 @@ async def test_list_tasks_sorting(
 		json={
 			"user_id": user["id"],
 			"task_type": "custom",
-			"status": "pending",
 			"stage": "a",
 		},
 	)
@@ -123,25 +124,28 @@ async def test_list_tasks_filter(
 	task1 = {
 		"user_id": user["id"],
 		"task_type": "custom",
-		"status": "pending",
 	}
 	task2 = {
 		"user_id": user["id"],
 		"task_type": "custom",
-		"status": "complete",
 	}
 	await client.post("/v1/tasks", json=task1, headers=headers)
-	await client.post("/v1/tasks", json=task2, headers=headers)
+	created_completed = await client.post("/v1/tasks", json=task2, headers=headers)
+	await client.patch(
+		f"/v1/tasks/{created_completed.json()['id']}",
+		json={"status": "complete"},
+		headers=headers,
+	)
 
 	# Filter by status
 	response = await client.get(
 		"/v1/tasks",
-		params={"status_filter": "pending"},
+		params={"status_filter": "running"},
 		headers=headers,
 	)
 	assert response.status_code == 200
 	data = response.json()
-	assert all(t["status"] == "pending" for t in data)
+	assert all(t["status"] == "running" for t in data)
 
 	# Filter by user_id
 	response = await client.get(
@@ -169,7 +173,6 @@ async def test_update_task(
 	payload = {
 		"user_id": user["id"],
 		"task_type": "custom",
-		"status": "pending",
 	}
 	create_res = await client.post("/v1/tasks", json=payload, headers=headers)
 	task_id = create_res.json()["id"]
@@ -220,12 +223,74 @@ async def test_service_create_task(db_session: AsyncSession) -> None:
 	task_in = TaskCreate(
 		user_id=user.id,
 		task_type=TaskType.CUSTOM,
-		status=TaskStatus.PENDING,
 		stage="init",
 	)
 	task = await task_service.create_task(task_in, db_session, principal=principal)
 	assert task.user_id == user.id
-	assert task.status == TaskStatus.PENDING
+	assert task.status == TaskStatus.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_start_task_executes_registered_runner_through_taskiq(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="taskiq_start@example.com",
+			username="taskiq_start",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	runner_name = "tests.taskiq.execution"
+	original_runners = dict(task_service._task_runners)
+	in_memory_broker = InMemoryBroker(await_inplace=True)
+	in_memory_entrypoint = in_memory_broker.task(
+		task_name=task_service.execute_started_task_entrypoint.task_name
+	)(task_service.execute_started_task_entrypoint.original_func)
+	monkeypatch.setattr(
+		task_service, "execute_started_task_entrypoint", in_memory_entrypoint
+	)
+
+	@task_service.register_task_runner(runner_name)
+	async def _runner(ctx: task_service.TaskContext) -> JSONObject:
+		await ctx.update(progress=55, stage="worked")
+		return {"ok": True, "runtime": ctx.runtime.get("value")}
+
+	await in_memory_broker.startup()
+	try:
+		task = await task_service.start_task(
+			db_session,
+			principal=principal,
+			task_type=TaskType.CUSTOM,
+			task_name=runner_name,
+			runtime={"value": "from taskiq"},
+		)
+		await db_session.refresh(task)
+		assert task.status == TaskStatus.COMPLETED
+		assert task.progress == 100
+		assert task.result == {"ok": True, "runtime": "from taskiq"}
+	finally:
+		await in_memory_broker.shutdown()
+		task_service._task_runners.clear()
+		task_service._task_runners.update(original_runners)
+
+
+@pytest.mark.asyncio
+async def test_task_registry_exposes_static_schedules() -> None:
+	from api.tasks import registry as task_registry_module
+
+	assert task_registry_module is not None
+
+	source = LabelScheduleSource(broker)
+	await source.startup()
+	schedules = await source.get_schedules()
+	task_names = {schedule.task_name for schedule in schedules}
+	assert "reminders.dispatch_due_notifications" in task_names
+	assert THREAD_INACTIVITY_SWEEP_TASK in task_names
 
 
 @pytest.mark.asyncio
@@ -246,7 +311,6 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 		task_in = TaskCreate(
 			user_id=user.id,
 			task_type=TaskType.CUSTOM,
-			status=TaskStatus.PENDING,
 		)
 		await task_service.create_task(task_in, db_session, principal=principal)
 
@@ -261,7 +325,7 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 	tasks_pending = await task_service.list_tasks(
 		db_session,
 		user_id=user.id,
-		status_filter=TaskStatus.PENDING,
+		status_filter=TaskStatus.RUNNING,
 		principal=principal,
 	)
 	assert len(tasks_pending) >= 3
@@ -282,12 +346,11 @@ async def test_task_update_no_changes_does_not_touch_last_event(
 	principal = Principal(user=user, group_ids=(), permissions=frozenset())
 
 	task = await task_service.create_task(
-		TaskCreate(
-			user_id=user.id, task_type=TaskType.CUSTOM, status=TaskStatus.PENDING
-		),
+		TaskCreate(user_id=user.id, task_type=TaskType.CUSTOM),
 		db_session,
 		principal=principal,
 	)
+	last_event_at = task.last_event_at
 
 	unchanged = await task_service.update_task(
 		task.id,
@@ -295,12 +358,12 @@ async def test_task_update_no_changes_does_not_touch_last_event(
 		db_session,
 		principal=principal,
 	)
-	assert unchanged.last_event_at is None
+	assert unchanged.last_event_at == last_event_at
 
 	filtered = await task_service.list_tasks(
 		db_session,
 		principal=principal,
-		status_filter=TaskStatus.PENDING,
+		status_filter=TaskStatus.RUNNING,
 	)
 	assert filtered
 
@@ -321,7 +384,6 @@ async def test_service_update_task(db_session: AsyncSession) -> None:
 	task_in = TaskCreate(
 		user_id=user.id,
 		task_type=TaskType.CUSTOM,
-		status=TaskStatus.PENDING,
 	)
 	task = await task_service.create_task(task_in, db_session, principal=principal)
 
@@ -374,7 +436,6 @@ async def test_service_update_task_no_changes(db_session: AsyncSession) -> None:
 	task_in = TaskCreate(
 		user_id=user.id,
 		task_type=TaskType.CUSTOM,
-		status=TaskStatus.PENDING,
 	)
 	task = await task_service.create_task(task_in, db_session, principal=principal)
 

@@ -22,6 +22,8 @@ from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
+from api.v1.service.threads import core as thread_core_service
+from api.v1.service.threads.core import _load_thread, _message_event_data
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -60,7 +62,7 @@ def test_message_event_data_uses_public_metadata_alias() -> None:
 		updated_at=now,
 	)
 
-	data = thread_service._message_event_data(message)
+	data = _message_event_data(message)
 
 	assert data["metadata_"] == {"run_id": run_id}
 	assert "metadata" not in data
@@ -760,7 +762,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		principal=principal,
 	)
 
-	orig = thread_service._load_thread
+	orig = thread_core_service._load_thread
 	called = False
 	seen_principal: Principal | None = None
 
@@ -791,7 +793,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 			include_hidden,
 		)
 
-	thread_service._load_thread = _tracking
+	thread_core_service._load_thread = _tracking
 	try:
 		updated = await thread_service.update_thread(
 			thread.id,
@@ -800,7 +802,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 			principal=principal,
 		)
 	finally:
-		thread_service._load_thread = orig
+		thread_core_service._load_thread = orig
 	assert called
 	assert seen_principal is None
 	assert updated.owner_id == new_owner.id
@@ -809,7 +811,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 @pytest.mark.asyncio
 async def test_load_thread_unrestricted_missing(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException):
-		await thread_service._load_thread(
+		await _load_thread(
 			TypeID(new_typeid("thread")),
 			db_session,
 			None,

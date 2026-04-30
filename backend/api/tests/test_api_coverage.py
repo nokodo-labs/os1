@@ -37,8 +37,8 @@ from api.v1.routers import threads as threads_router
 from api.v1.service import authorization, prompt_runtime
 from api.v1.service import chat as chat_service
 from api.v1.service import prompts as prompt_service
-from api.v1.service import threads as thread_service
 from api.v1.service.chat import agents as chat_runner
+from api.v1.service.threads.core import _ensure_admin_for_hidden
 from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
@@ -989,7 +989,7 @@ async def test_chat_runner_load_agent_no_model(monkeypatch: pytest.MonkeyPatch) 
 
 def test_threads_helper_admin_guard() -> None:
 	with pytest.raises(HTTPException):
-		thread_service._ensure_admin_for_hidden(True, _FakePrincipal(is_admin=False))  # type: ignore[arg-type]
+		_ensure_admin_for_hidden(True, _FakePrincipal(is_admin=False))  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

@@ -19,27 +19,25 @@ from typing import TYPE_CHECKING
 
 from pydantic import Field, PrivateAttr
 
+from api.database import async_session_local
 from api.settings import settings as app_settings
-from api.tasks import create_background_task
 from api.v1.service import thread_summaries as summary_service
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.chat.summarization import condense_summaries, summarize_messages
 from api.v1.service.chat.windowing import (
 	apply_context_windowing,
 	enforce_combined_tool_budget,
 )
+from api.v1.tasks.threads import (
+	start_condense_summaries_task,
+	start_summarize_messages_task,
+)
 from nokodo_ai.threads import Thread as SDKThread
-from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 logger = logging.getLogger(__name__)
-
-# tracks thread IDs with an active background summarization task
-# to prevent duplicate work from concurrent requests.
-_active_summarizations: set[TypeID] = set()
 
 
 class ContextWindowingFilter(Filter):
@@ -101,28 +99,29 @@ class ContextWindowingFilter(Filter):
 			session=app_context.session,
 		)
 
-		# schedule background summarization if needed (with dedup guard)
+		# schedule durable summarization if needed. the task starter deduplicates
+		# active work by thread/message range so concurrent requests do not pile up.
 		if (
 			windowing.needs_summarization
 			and windowing.summarize_messages
-			and thread_id not in _active_summarizations
+			and windowing.start_message_id is not None
+			and windowing.end_message_id is not None
 		):
-			_active_summarizations.add(thread_id)
-
-			async def _summarize_and_release() -> None:
-				try:
-					await summarize_messages(
+			try:
+				async with async_session_local() as task_session:
+					await start_summarize_messages_task(
+						task_session,
+						app_context.principal,
 						thread_id=thread_id,
-						messages=windowing.summarize_messages,
 						start_message_id=windowing.start_message_id,
 						end_message_id=windowing.end_message_id,
 					)
-				finally:
-					_active_summarizations.discard(thread_id)
-
-			create_background_task(
-				_summarize_and_release(),
-				name="summarize_messages",
+			except Exception:
+				logger.exception("failed to enqueue summarization task")
+		elif windowing.needs_summarization and windowing.summarize_messages:
+			logger.warning(
+				"skipping summarization task because message ids are unavailable",
+				extra={"thread_id": str(thread_id)},
 			)
 
 		# schedule condensation if too many summaries exist
@@ -131,10 +130,15 @@ class ContextWindowingFilter(Filter):
 		)
 		threshold = app_settings.ai.windowing.max_summaries_before_condense
 		if summary_count >= threshold:
-			create_background_task(
-				condense_summaries(thread_id=thread_id),
-				name="condense_summaries",
-			)
+			try:
+				async with async_session_local() as task_session:
+					await start_condense_summaries_task(
+						task_session,
+						app_context.principal,
+						thread_id=thread_id,
+					)
+			except Exception:
+				logger.exception("failed to enqueue summary condensation task")
 
 		# apply Layer 2 guard on the windowed result
 		return enforce_combined_tool_budget(

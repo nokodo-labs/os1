@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import session_scope
 from api.models.thread_summary import SummaryType
 from api.v1.service import thread_summaries as summary_service
+from api.v1.service import threads as thread_service
 from api.v1.service.chat.models import resolve_task_chat_model
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
@@ -100,7 +101,6 @@ def _placeholder_summary(
 
 
 async def summarize_messages(
-	*,
 	thread_id: TypeID,
 	messages: list[SDKMessage],
 	start_message_id: TypeID | None = None,
@@ -149,8 +149,48 @@ async def summarize_messages(
 		return summary.id
 
 
+async def summarize_thread_message_range(
+	thread_id: TypeID,
+	start_message_id: TypeID,
+	end_message_id: TypeID,
+	session: AsyncSession | None = None,
+) -> TypeID:
+	"""summarize a persisted branch range by message ids."""
+	async with session_scope(session) as session:
+		branch = await thread_service.walk_message_branch(session, end_message_id)
+		ids = [str(message.id) for message in branch]
+		try:
+			start_index = ids.index(str(start_message_id))
+			end_index = ids.index(str(end_message_id))
+		except ValueError as exc:
+			raise ValueError("message range is not on the active branch") from exc
+		if start_index > end_index:
+			raise ValueError("start message must come before end message")
+
+		messages: list[SDKMessage] = []
+		for message in branch[start_index : end_index + 1]:
+			sdk = message.to_sdk()
+			messages.append(
+				sdk.model_copy(
+					update={
+						"metadata": {
+							**(sdk.metadata or {}),
+							"message_id": str(message.id),
+							"created_at": message.created_at.isoformat(),
+						}
+					}
+				)
+			)
+		return await summarize_messages(
+			thread_id=thread_id,
+			messages=messages,
+			start_message_id=start_message_id,
+			end_message_id=end_message_id,
+			session=session,
+		)
+
+
 async def condense_summaries(
-	*,
 	thread_id: TypeID,
 	session: AsyncSession | None = None,
 ) -> TypeID | None:

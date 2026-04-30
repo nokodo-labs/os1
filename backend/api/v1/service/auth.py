@@ -271,6 +271,25 @@ async def get_current_principal(
 	)
 
 
+async def load_principal_for_user(user_id: TypeID, session: AsyncSession) -> Principal:
+	"""load a principal outside FastAPI dependency injection."""
+	result = await session.execute(
+		select(User).options(selectinload(User.roles)).where(User.id == user_id)
+	)
+	user = result.scalar_one_or_none()
+	if user is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="User not found",
+		)
+	if not user.is_active:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="inactive user",
+		)
+	return await get_current_principal(user=user, session=session)
+
+
 async def get_optional_principal(
 	user: Annotated[User | None, Depends(get_optional_user)],
 	session: Annotated[AsyncSession, Depends(get_db)],

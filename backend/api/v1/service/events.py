@@ -22,11 +22,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
+from api.local_tasks import create_background_task
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.schemas.event import EventCreate
-from api.tasks import create_background_task
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import list_accessible_user_ids, require_permission
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -101,6 +101,12 @@ _EVENT_ROUTING: dict[str, tuple[ResourceType, str]] = {
 	EventType.RUN_STEERING_QUEUED: (ResourceType.THREAD, "thread_id"),
 	EventType.RUN_STEERING_INJECTED: (ResourceType.THREAD, "thread_id"),
 	EventType.RUN_STEERING_DROPPED: (ResourceType.THREAD, "thread_id"),
+	# task events
+	EventType.TASK_CREATED: (ResourceType.TASK, "task_id"),
+	EventType.TASK_UPDATED: (ResourceType.TASK, "task_id"),
+	EventType.TASK_COMPLETED: (ResourceType.TASK, "task_id"),
+	EventType.TASK_FAILED: (ResourceType.TASK, "task_id"),
+	EventType.TASK_CANCELLED: (ResourceType.TASK, "task_id"),
 	# tool events (route via thread)
 	EventType.TOOL_PROGRESS: (ResourceType.THREAD, "thread_id"),
 	EventType.TOOL_CUSTOM: (ResourceType.THREAD, "thread_id"),
@@ -127,6 +133,8 @@ def _resolve_routing(event: Event) -> tuple[ResourceType, TypeID] | None:
 	# fallback: thread-scoped resources can use event.thread_id
 	if not resource_id and resource_type == ResourceType.THREAD and event.thread_id:
 		resource_id = event.thread_id
+	if not resource_id and resource_type == ResourceType.TASK and event.task_id:
+		resource_id = event.task_id
 	if not resource_id:
 		return None
 	return (resource_type, resource_id)

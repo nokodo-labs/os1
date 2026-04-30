@@ -24,9 +24,9 @@ from api.permissions import DefaultResourceAccess
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import notes as notes_service
 from api.v1.service import reminders as reminders_service
-from api.v1.service import threads as threads_service
 from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.auth import Principal
+from api.v1.service.threads.search import _autocomplete_threads, _hybrid_search_threads
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID
@@ -203,7 +203,7 @@ async def test_threads_autocomplete_isolates_other_user(
 
 	title = thread_b.title
 	assert title is not None
-	results = await threads_service._autocomplete_threads(
+	results = await _autocomplete_threads(
 		title, db_session, principal=_principal(u_a)
 	)
 	assert not any(str(r.id) == str(thread_b.id) for r in results), (
@@ -231,7 +231,7 @@ async def test_threads_autocomplete_returns_own_thread(
 
 	title = thread_a.title
 	assert title is not None
-	results = await threads_service._autocomplete_threads(
+	results = await _autocomplete_threads(
 		title, db_session, principal=_principal(u_a)
 	)
 	ids = [str(r.id) for r in results]
@@ -266,7 +266,7 @@ async def test_threads_autocomplete_granted_user_sees_thread(
 
 	title = thread_a.title
 	assert title is not None
-	results = await threads_service._autocomplete_threads(
+	results = await _autocomplete_threads(
 		title, db_session, principal=_principal(u_b)
 	)
 	ids = [str(r.id) for r in results]
@@ -293,7 +293,7 @@ async def test_threads_autocomplete_temporary_threads_excluded(
 
 	title = tmp_thread.title
 	assert title is not None
-	results = await threads_service._autocomplete_threads(
+	results = await _autocomplete_threads(
 		title, db_session, principal=_principal(u)
 	)
 	assert not any(str(r.id) == str(tmp_thread.id) for r in results), (
@@ -412,7 +412,7 @@ async def test_threads_hybrid_postgres_postfilter_blocks_cross_user(
 		_fake_search_fn(str(thread_b.id)),
 	)
 
-	results = await threads_service._hybrid_search_threads(
+	results = await _hybrid_search_threads(
 		"leaked", db_session, principal=_principal(u_a), search_params=_SPARSE
 	)
 	assert not any(str(r.id) == str(thread_b.id) for r in results), (
@@ -512,7 +512,7 @@ async def test_threads_hybrid_grantee_can_see_shared_thread(
 		_fake_search_fn(str(thread_a.id)),
 	)
 
-	results = await threads_service._hybrid_search_threads(
+	results = await _hybrid_search_threads(
 		"granted", db_session, principal=_principal(u_b), search_params=_SPARSE
 	)
 	ids = [str(r.id) for r in results]

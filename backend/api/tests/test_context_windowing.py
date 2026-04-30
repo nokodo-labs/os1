@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, _patch, patch
 
 import pytest
 
-from api.tasks import _on_task_done
+from api.local_tasks import _on_task_done
 from api.v1.service.chat.filters.context_windowing import (
 	ContextWindowingFilter,
 )
@@ -115,6 +115,7 @@ def _mock_ctx(
 	ctx.thread_id = thread_id
 	ctx.context_window = context_window
 	ctx.session = AsyncMock()
+	ctx.principal = MagicMock()
 	return ctx
 
 
@@ -140,7 +141,7 @@ class TestOnTaskDone:
 		exc = RuntimeError("boom")
 		task.exception.return_value = exc
 
-		with patch("api.tasks.logger") as mock_log:
+		with patch("api.local_tasks.logger") as mock_log:
 			_on_task_done(task, "test_task")
 			mock_log.exception.assert_called_once()
 			assert "test_task" in mock_log.exception.call_args[0][1]
@@ -417,7 +418,7 @@ class TestContextWindowingFilter:
 
 	@pytest.mark.asyncio()
 	async def test_schedules_summarization_when_needed(self) -> None:
-		"""when windowing says summarization is needed, schedules a background task."""
+		"""when windowing says summarization is needed, enqueues a durable task."""
 		f = ContextWindowingFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
@@ -438,28 +439,19 @@ class TestContextWindowingFilter:
 				"api.v1.service.chat.filters.context_windowing.summary_service"
 			) as mock_svc,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.summarize_messages",
-				new_callable=AsyncMock,
-			),
-			patch(
 				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
 				return_value=thread,
 			),
 			patch(
-				"api.v1.service.chat.filters.context_windowing.create_background_task",
-			) as mock_bg,
-			patch(
-				"api.v1.service.chat.filters.context_windowing._active_summarizations",
-				set(),
-			),
+				"api.v1.service.chat.filters.context_windowing.start_summarize_messages_task",
+				new_callable=AsyncMock,
+			) as mock_start_summary,
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			mock_bg.side_effect = lambda coro, **kw: coro.close()
 
 			await f.process(thread, ctx)
 
-			# should have created a background task for summarization
-			assert mock_bg.call_count >= 1
+			mock_start_summary.assert_awaited_once()
 
 	@pytest.mark.asyncio()
 	async def test_schedules_condensation_when_threshold_met(self) -> None:
@@ -484,10 +476,6 @@ class TestContextWindowingFilter:
 				"api.v1.service.chat.filters.context_windowing.summary_service"
 			) as mock_svc,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.condense_summaries",
-				new_callable=AsyncMock,
-			),
-			patch(
 				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
 				return_value=thread,
 			),
@@ -495,22 +483,20 @@ class TestContextWindowingFilter:
 				"api.v1.service.chat.filters.context_windowing.app_settings"
 			) as mock_settings,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.create_background_task",
-			) as mock_bg,
+				"api.v1.service.chat.filters.context_windowing.start_condense_summaries_task",
+				new_callable=AsyncMock,
+			) as mock_start_condense,
 		):
 			mock_settings.ai.windowing.max_summaries_before_condense = threshold_val
 			mock_svc.count_active_summaries = AsyncMock(return_value=threshold_val)
-			mock_bg.side_effect = lambda coro, **kw: coro.close()
 
 			await f.process(thread, ctx)
 
-			# should have created a condensation task
-			assert mock_bg.call_count >= 1
+			mock_start_condense.assert_awaited_once()
 
 	@pytest.mark.asyncio()
-	async def test_skips_summarization_when_already_active(self) -> None:
-		"""when a summarization task is already active for the thread,
-		skips scheduling."""
+	async def test_skips_summarization_when_message_ids_missing(self) -> None:
+		"""summarization is skipped when persisted message ids are unavailable."""
 		f = ContextWindowingFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
@@ -519,11 +505,8 @@ class TestContextWindowingFilter:
 		mock_wr.thread = thread
 		mock_wr.needs_summarization = True
 		mock_wr.summarize_messages = [_user("old msg")]
-		mock_wr.start_message_id = "msg_start"
-		mock_wr.end_message_id = "msg_end"
-
-		# pre-populate _active_summarizations with the thread id
-		active = {_TID}
+		mock_wr.start_message_id = None
+		mock_wr.end_message_id = None
 
 		with (
 			patch(
@@ -538,20 +521,15 @@ class TestContextWindowingFilter:
 				return_value=thread,
 			),
 			patch(
-				"api.v1.service.chat.filters.context_windowing.create_background_task",
-			) as mock_bg,
-			patch(
-				"api.v1.service.chat.filters.context_windowing._active_summarizations",
-				active,
-			),
+				"api.v1.service.chat.filters.context_windowing.start_summarize_messages_task",
+				new_callable=AsyncMock,
+			) as mock_start_summary,
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			mock_bg.return_value = MagicMock()
 
 			await f.process(thread, ctx)
 
-			# no background task should have been created for summarization
-			mock_bg.assert_not_called()
+			mock_start_summary.assert_not_awaited()
 
 
 # -- condensation size cap --

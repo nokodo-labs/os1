@@ -81,11 +81,13 @@ def test_settings_field_flags_and_private_dump() -> None:
 	assert "secret_key" in full["security"]
 	assert "analytics_key" in full["branding"]
 	assert "api_key" in full["assets"]["vector_database"]["qdrant"]
+	assert "url" in full["cache"]["redis"]
 
 	public = settings.custom_dump(exclude_private=True)
 	assert "secret_key" not in public["security"]
 	assert "analytics_key" not in public["branding"]
 	assert "api_key" not in public["assets"]["vector_database"]["qdrant"]
+	assert "url" not in public["cache"]["redis"]
 
 	# exercise both branches of the cors_origins validator
 	security_from_list = SecuritySettings.model_validate({"cors_origins": ["http://x"]})
@@ -186,6 +188,22 @@ async def test_db_settings_source_loads_overrides_sync_and_excludes_write_locked
 				"app_version": "0.9.9",
 				"analytics_key": "secret",
 			},
+			version=1,
+		)
+	)
+	db_session.add(
+		SettingsDocument(
+			namespace="cache",
+			data={
+				"redis": {"url": "redis://example.invalid/0"},
+			},
+			version=1,
+		)
+	)
+	db_session.add(
+		SettingsDocument(
+			namespace="tasks",
+			data={"taskiq": {"queue_name": "wrong"}},
 			version=1,
 		)
 	)

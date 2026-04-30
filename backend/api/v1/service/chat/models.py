@@ -286,6 +286,8 @@ async def resolve_task_chat_model(
 	model_id_str: str | None = None
 	if task == "thread_metadata":
 		model_id_str = task_settings.thread_metadata_model_id
+	elif task == "thread_maintenance":
+		model_id_str = task_settings.thread_maintenance_model_id
 	elif task == "input_autocomplete":
 		model_id_str = task_settings.input_autocomplete_model_id
 	elif task == "summarization":

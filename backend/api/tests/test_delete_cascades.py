@@ -63,7 +63,7 @@ async def test_soft_delete_thread_does_not_delete_messages(
 	assert int(count_before or 0) == 1
 
 	with patch(
-		"api.v1.service.threads.remove_vectorized_resource",
+		"api.v1.service.threads.core.remove_vectorized_resource",
 		new=AsyncMock(),
 	):
 		await thread_service.delete_thread(

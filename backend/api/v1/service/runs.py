@@ -16,11 +16,11 @@ from collections.abc import AsyncGenerator, AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.local_tasks import create_inline_background_task
 from api.models.access_rule import AccessLevel
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadCreate
-from api.tasks import create_inline_background_task
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_thread_access

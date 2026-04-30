@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
+from api.local_tasks import create_background_task, create_inline_background_task
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent
 from api.models.event_types import EventType
@@ -32,7 +33,6 @@ from api.permissions import ResourceType
 from api.redis import make_run_channel
 from api.schemas.agent import AgentConfig
 from api.schemas.runs import RunInput
-from api.tasks import create_background_task, create_inline_background_task
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	list_accessible_user_ids,

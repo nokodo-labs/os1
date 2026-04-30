@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.database import async_session_local
+from api.local_tasks import create_background_task
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
 from api.models.event import Event
@@ -21,7 +22,6 @@ from api.permissions import ResourceType
 from api.schemas.message import MessageCreate
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.settings import settings as app_settings
-from api.tasks import create_background_task
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
@@ -54,6 +54,7 @@ from api.v1.service.chat.tools import resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
 from api.v1.service.events import build_event_emitter
+from api.v1.tasks.threads import start_thread_maintenance_task
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
 from nokodo_ai import Hook as SDKHook
@@ -935,21 +936,18 @@ async def run_agent(
 
 	if persist:
 		assert thread_id is not None  # persist=True requires a thread_id
-
-		async def _metadata_after_persist() -> None:
-			if worker_task is not None:
-				try:
-					await asyncio.wait_for(asyncio.shield(worker_task), timeout=30)
-				except (TimeoutError, Exception):
-					logger.warning(
-						"persist worker did not finish cleanly before metadata gen"
-					)
-			await thread_service.generate_thread_metadata(
-				thread_id=thread_id,
+		if worker_task is not None:
+			try:
+				await asyncio.wait_for(asyncio.shield(worker_task), timeout=30)
+			except (TimeoutError, Exception):
+				logger.warning(
+					"persist worker did not finish cleanly before metadata gen"
+				)
+		async with async_session_local() as task_session:
+			await start_thread_maintenance_task(
+				task_session,
 				principal=principal,
+				thread_id=thread_id,
+				stage="starting maintenance",
+				origin_session_id=origin_session_id,
 			)
-
-		create_background_task(
-			_metadata_after_persist(),
-			name="generate_thread_metadata",
-		)
