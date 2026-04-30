@@ -41,7 +41,7 @@
 	</button>
 {/snippet}
 
-<div class="min-h-0 w-full flex-1">
+<div class="settings-section-content min-h-0 w-full flex-1">
 	<div class="mx-auto max-w-2xl py-6">
 		<header
 			class="flex items-center gap-4"
@@ -61,3 +61,17 @@
 		{@render children()}
 	</div>
 </div>
+
+<style>
+	.settings-section-content {
+		--radius-container-base: 1.25rem;
+	}
+
+	.settings-section-content :global(.rounded-container.liquid-glass > div:first-child:not(.flex)),
+	.settings-section-content
+		:global(.rounded-container.liquid-glass > div:first-child.flex > div:last-child) {
+		font-size: 1rem;
+		line-height: 1.5rem;
+		font-weight: 650;
+	}
+</style>

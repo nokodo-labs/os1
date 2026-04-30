@@ -14,8 +14,13 @@
 	import { Plus, RefreshCw, Save, Trash } from '@lucide/svelte'
 
 	type SettingsResponse = Schemas['SettingsResponse']
-	type Deployment = { id: string; label: string; origin: string }
-	type DeploymentInput = { id?: unknown; label?: unknown; origin?: unknown }
+	type Deployment = { name: string; description: string; origin: string }
+	type DeploymentInput = {
+		name?: unknown
+		description?: unknown
+		label?: unknown
+		origin?: unknown
+	}
 	type IntegrationsSettings = {
 		open_webui?: {
 			enabled?: boolean
@@ -69,8 +74,8 @@
 		const owui = data.data?.integrations?.open_webui
 		enabled = owui?.enabled ?? true
 		deployments = (owui?.deployments ?? []).map((deployment: DeploymentInput) => ({
-			id: String(deployment.id ?? ''),
-			label: String(deployment.label ?? ''),
+			name: String(deployment.name ?? deployment.label ?? ''),
+			description: String(deployment.description ?? ''),
 			origin: String(deployment.origin ?? ''),
 		}))
 		expectedVersion = Number(data.versions?.integrations ?? 0)
@@ -79,7 +84,7 @@
 	}
 
 	function addDeployment() {
-		deployments = [...deployments, { id: '', label: '', origin: '' }]
+		deployments = [...deployments, { name: '', description: '', origin: '' }]
 	}
 
 	function removeDeployment(idx: number) {
@@ -87,23 +92,22 @@
 	}
 
 	function validate(): string | null {
-		const ids = new Set<string>()
+		const origins: string[] = []
 		for (const [i, d] of deployments.entries()) {
-			if (!d.id || !d.label || !d.origin) {
-				return `deployment #${i + 1}: id, label, and origin are required`
+			if (!d.name || !d.description || !d.origin) {
+				return `deployment #${i + 1}: name, description, and origin are required`
 			}
-			if (!/^[a-z0-9][a-z0-9_-]*$/.test(d.id)) {
-				return `deployment #${i + 1}: id must be lowercase alphanumeric (-, _ allowed)`
-			}
-			if (ids.has(d.id)) {
-				return `deployment #${i + 1}: duplicate id "${d.id}"`
-			}
-			ids.add(d.id)
+			let normalizedOrigin: string
 			try {
-				new URL(d.origin)
+				const url = new URL(d.origin)
+				normalizedOrigin = url.origin.toLowerCase()
 			} catch {
 				return `deployment #${i + 1}: origin must be a valid URL`
 			}
+			if (origins.includes(normalizedOrigin)) {
+				return `deployment #${i + 1}: duplicate origin "${d.origin}"`
+			}
+			origins.push(normalizedOrigin)
 		}
 		return null
 	}
@@ -123,8 +127,8 @@
 					open_webui: {
 						enabled,
 						deployments: deployments.map((d) => ({
-							id: d.id,
-							label: d.label,
+							name: d.name,
+							description: d.description,
 							origin: d.origin,
 						})),
 					},
@@ -161,8 +165,8 @@
 	<CardHeader>
 		<CardTitle>integrations</CardTitle>
 		<CardDescription>
-			open webui import deployments. users will be able to pick from this list and provide
-			their own JWT to import all chats and memories.
+			Open WebUI import deployments. users will be able to pick from this list and provide
+			their own key to import all chats and memories.
 		</CardDescription>
 	</CardHeader>
 	<CardContent class="space-y-5">
@@ -181,7 +185,7 @@
 
 		<div class="flex items-center justify-between gap-4">
 			<div class="space-y-1">
-				<Label>enable open webui import</Label>
+				<Label>enable Open WebUI import</Label>
 				<p class="text-xs text-zinc-500">
 					when off, users cannot trigger imports regardless of configured deployments.
 				</p>
@@ -191,7 +195,7 @@
 
 		<div class="space-y-3">
 			<div class="flex items-center justify-between">
-				<Label>allowed open webui deployments</Label>
+				<Label>allowed Open WebUI deployments</Label>
 				<Button
 					size="sm"
 					variant="secondary"
@@ -208,23 +212,14 @@
 			{/if}
 			{#each deployments as dep, idx (idx)}
 				<div class="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-					<div class="grid gap-3 md:grid-cols-3">
+					<div class="grid gap-3 md:grid-cols-2">
 						<div class="space-y-1">
-							<Label for={`owui-id-${idx}`}>id (slug)</Label>
+							<Label for={`owui-name-${idx}`}>name</Label>
 							<Input
-								id={`owui-id-${idx}`}
+								id={`owui-name-${idx}`}
 								class="rounded-lg"
-								placeholder="prod-owui"
-								bind:value={dep.id}
-							/>
-						</div>
-						<div class="space-y-1">
-							<Label for={`owui-label-${idx}`}>label</Label>
-							<Input
-								id={`owui-label-${idx}`}
-								class="rounded-lg"
-								placeholder="prod Open WebUI"
-								bind:value={dep.label}
+								placeholder="workspace Open WebUI"
+								bind:value={dep.name}
 							/>
 						</div>
 						<div class="space-y-1">
@@ -234,6 +229,15 @@
 								class="rounded-lg"
 								placeholder="https://owui.example.com"
 								bind:value={dep.origin}
+							/>
+						</div>
+						<div class="space-y-1 md:col-span-2">
+							<Label for={`owui-description-${idx}`}>description</Label>
+							<Input
+								id={`owui-description-${idx}`}
+								class="rounded-lg"
+								placeholder="company-hosted Open WebUI workspace"
+								bind:value={dep.description}
 							/>
 						</div>
 					</div>

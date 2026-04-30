@@ -3,7 +3,6 @@
 	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
 	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
@@ -14,11 +13,6 @@
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
-	import { slide } from 'svelte/transition'
-
-	let owuiExpanded = $state(false)
-	let owuiHost = $state('')
-	let owuiJwt = $state('')
 
 	interface DataAction {
 		label: string
@@ -142,7 +136,7 @@
 <SettingsSectionLayout
 	icon={Wrench}
 	label="advanced"
-	description="data management, imports, and danger zone"
+	description="data management, experiments, and danger zone"
 >
 	<div class="space-y-4">
 		<!-- experimental features -->
@@ -318,97 +312,6 @@
 					</button>
 				{/each}
 			</div>
-		</div>
-
-		<!-- open webui import -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted">
-			<button
-				type="button"
-				class="flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-5 text-left"
-				onclick={() => (owuiExpanded = !owuiExpanded)}
-			>
-				<div>
-					<div class="text-foreground text-sm font-semibold">open webui import</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						import data from an open webui instance.
-					</div>
-				</div>
-				<ChevronDown
-					class="text-foreground/50 h-4.5 w-4.5 transition-transform duration-200 {owuiExpanded
-						? 'rotate-180'
-						: ''}"
-				/>
-			</button>
-
-			{#if owuiExpanded}
-				<div
-					class="border-foreground/14 border-t px-5 pt-4 pb-5"
-					transition:slide={{ duration: 200 }}
-				>
-					<form class="space-y-3" onsubmit={(e) => e.preventDefault()} autocomplete="off">
-						<div>
-							<label
-								class="text-foreground/50 mb-1.5 block text-xs font-medium"
-								for="owui-host">host URL</label
-							>
-							<input
-								id="owui-host"
-								type="url"
-								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
-								placeholder="https://your-open-webui.example.com"
-								bind:value={owuiHost}
-							/>
-						</div>
-						<div>
-							<label
-								class="text-foreground/50 mb-1.5 block text-xs font-medium"
-								for="owui-jwt">JWT token</label
-							>
-							<input
-								id="owui-jwt"
-								type="password"
-								autocomplete="off"
-								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
-								placeholder="paste your open webui JWT here"
-								bind:value={owuiJwt}
-							/>
-						</div>
-
-						<div class="flex gap-2 pt-1">
-							<button
-								type="button"
-								disabled
-								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/50 flex-1 border px-3 py-2 text-sm transition-colors disabled:opacity-50"
-							>
-								import all chats
-							</button>
-							<button
-								type="button"
-								disabled
-								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/50 flex-1 border px-3 py-2 text-sm transition-colors disabled:opacity-50"
-							>
-								import all memories
-							</button>
-						</div>
-						<p class="text-foreground/45 text-xs">coming soon</p>
-					</form>
-
-					<div class="border-foreground/14 mt-5 border-t pt-4">
-						<div class="text-foreground/50 text-xs font-medium">
-							more imports coming soon
-						</div>
-						<div class="mt-2 flex flex-wrap gap-2">
-							{#each ['ChatGPT', 'Claude', 'Gemini', 'LibreChat'] as platform (platform)}
-								<span
-									class="rounded-pill border-foreground/14 bg-foreground/3 text-foreground/45 border px-3 py-1 text-xs"
-								>
-									{platform}
-								</span>
-							{/each}
-						</div>
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		<!-- danger zone -->

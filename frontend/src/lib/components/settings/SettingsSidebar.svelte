@@ -5,6 +5,7 @@
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
+	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
 	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
@@ -37,32 +38,10 @@
 		| 'accessibility'
 		| 'ai'
 		| 'security'
+		| 'integrations'
 		| 'advanced'
 		| 'about'
 		| 'debug'
-
-	type SettingsRouteId =
-		| '/settings/appearance'
-		| '/settings/notifications'
-		| '/settings/privacy'
-		| '/settings/accessibility'
-		| '/settings/ai'
-		| '/settings/security'
-		| '/settings/advanced'
-		| '/settings/about'
-		| '/settings/debug'
-
-	const settingsRouteBySection = {
-		appearance: '/settings/appearance',
-		notifications: '/settings/notifications',
-		privacy: '/settings/privacy',
-		accessibility: '/settings/accessibility',
-		ai: '/settings/ai',
-		security: '/settings/security',
-		advanced: '/settings/advanced',
-		about: '/settings/about',
-		debug: '/settings/debug',
-	} as const satisfies Record<SettingsSectionId, SettingsRouteId>
 
 	const sections: SettingsSection[] = [
 		{
@@ -102,10 +81,16 @@
 			description: 'passwords, email, and authentication',
 		},
 		{
+			id: 'integrations',
+			label: 'integrations',
+			icon: GlobeAlt,
+			description: 'imports and connected apps',
+		},
+		{
 			id: 'advanced',
 			label: 'advanced',
 			icon: Wrench,
-			description: 'data management and imports',
+			description: 'data management and experiments',
 		},
 		{
 			id: 'about',
@@ -131,7 +116,38 @@
 	})
 
 	function selectSection(sectionId: SettingsSectionId) {
-		void goto(resolve(settingsRouteBySection[sectionId]), { keepFocus: true, noScroll: true })
+		switch (sectionId) {
+			case 'appearance':
+				void goto(resolve('/settings/appearance'), { keepFocus: true, noScroll: true })
+				break
+			case 'notifications':
+				void goto(resolve('/settings/notifications'), { keepFocus: true, noScroll: true })
+				break
+			case 'privacy':
+				void goto(resolve('/settings/privacy'), { keepFocus: true, noScroll: true })
+				break
+			case 'accessibility':
+				void goto(resolve('/settings/accessibility'), { keepFocus: true, noScroll: true })
+				break
+			case 'ai':
+				void goto(resolve('/settings/ai'), { keepFocus: true, noScroll: true })
+				break
+			case 'security':
+				void goto(resolve('/settings/security'), { keepFocus: true, noScroll: true })
+				break
+			case 'integrations':
+				void goto(resolve('/settings/integrations'), { keepFocus: true, noScroll: true })
+				break
+			case 'advanced':
+				void goto(resolve('/settings/advanced'), { keepFocus: true, noScroll: true })
+				break
+			case 'about':
+				void goto(resolve('/settings/about'), { keepFocus: true, noScroll: true })
+				break
+			case 'debug':
+				void goto(resolve('/settings/debug'), { keepFocus: true, noScroll: true })
+				break
+		}
 	}
 
 	function prefetchSection(sectionId: string): void {

@@ -183,7 +183,7 @@
 			id: 'section-integrations',
 			label: 'integrations',
 			keywords:
-				'open webui import deployments jwt chats memories enable allowed deployment id slug label origin url external services connections',
+				'Open WebUI import deployments jwt chats memories enable allowed deployment name description origin url external services connections',
 			icon: Plug,
 			color: 'text-purple-400',
 			activeBg: 'bg-purple-500/10',
