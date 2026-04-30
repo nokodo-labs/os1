@@ -768,7 +768,6 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		thread_id: TypeID,
 		session: AsyncSession,
 		principal: Principal | None = None,
-		*,
 		required_level: AccessLevel = AccessLevel.READER,
 		include_hidden: bool = False,
 	) -> thread_service.Thread:
@@ -776,12 +775,20 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		nonlocal seen_principal
 		called = True
 		seen_principal = principal
+		if principal is None:
+			return await orig(
+				thread_id,
+				session,
+				None,
+				required_level,
+				include_hidden,
+			)
 		return await orig(
 			thread_id,
 			session,
-			principal,  # type: ignore[arg-type]
-			required_level=required_level,
-			include_hidden=include_hidden,
+			principal,
+			required_level,
+			include_hidden,
 		)
 
 	thread_service._load_thread = _tracking

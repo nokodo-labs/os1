@@ -52,7 +52,6 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 class _FakePrincipal:
 	def __init__(
 		self,
-		*,
 		is_admin: bool = False,
 		user_id: str = "user",
 		groups: list[str] | None = None,
@@ -153,7 +152,6 @@ async def test_openai_router_uses_chat_model(monkeypatch: pytest.MonkeyPatch) ->
 		async def generate(
 			self,
 			messages: list[object],
-			*,
 			stream: bool,
 			params: object | None = None,
 		) -> object:
@@ -197,7 +195,6 @@ async def test_openai_router_handles_all_roles(monkeypatch: pytest.MonkeyPatch) 
 		async def generate(
 			self,
 			messages: list[object],
-			*,
 			stream: bool,
 			params: object | None = None,
 		) -> object:
@@ -233,13 +230,12 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	admin = _FakePrincipal(is_admin=True)
 
 	async def fake_create(
-		prompt_in: object, db: object, *, principal: object
+		prompt_in: object, db: object, principal: object
 	) -> object:
 		return fake_prompt
 
 	async def fake_list(
 		db: object,
-		*,
 		principal: object,
 		skip: int = 0,
 		limit: int = 50,
@@ -248,15 +244,15 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	) -> list[object]:
 		return [fake_prompt]
 
-	async def fake_get(prompt_id: object, db: object, *, principal: object) -> object:
+	async def fake_get(prompt_id: object, db: object, principal: object) -> object:
 		return fake_prompt
 
 	async def fake_update(
-		prompt_id: object, prompt_in: object, db: object, *, principal: object
+		prompt_id: object, prompt_in: object, db: object, principal: object
 	) -> object:
 		return fake_prompt
 
-	async def fake_delete(prompt_id: object, db: object, *, principal: object) -> None:
+	async def fake_delete(prompt_id: object, db: object, principal: object) -> None:
 		fake_delete.called = prompt_id  # type: ignore[attr-defined]
 
 	monkeypatch.setattr(prompts_router.prompt_service, "create_prompt", fake_create)
@@ -618,14 +614,13 @@ async def test_prompts_service_update_and_delete(
 		return prompt_obj
 
 	async def fake_unique(
-		session: object, *, command: object, exclude_prompt_id: object = None
+		session: object, command: object, exclude_prompt_id: object = None
 	) -> None:
 		calls["unique"] = (command, exclude_prompt_id)
 		# type: ignore[arg-type]
 
 	async def fake_validate(
 		session: object,
-		*,
 		prompt_id: object,
 		command: object,
 		content: object,  # type: ignore[arg-type]
@@ -682,7 +677,6 @@ async def test_chat_service_conversions() -> None:
 		def __init__(
 			self,
 			adapter_type: str,
-			*,
 			base_url: str | None = None,
 			encrypted_api_key: str | None = None,
 		):
@@ -788,7 +782,7 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 		"max_iterations": 7,
 	}
 
-	async def _resolve_tools(*, tool_ids: list[str]) -> list[object]:
+	async def _resolve_tools(tool_ids: list[str]) -> list[object]:
 		assert tool_ids == []
 		return []
 
@@ -896,7 +890,6 @@ async def test_chat_service_agent_resolution_paths() -> None:
 		def __init__(
 			self,
 			adapter_type: str,
-			*,
 			base_url: str | None = None,
 			encrypted_api_key: str | None = None,
 		):

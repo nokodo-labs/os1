@@ -241,9 +241,9 @@ async def generate_thread_metadata(
 	"""
 	request = req or ThreadMetadataGenerateRequest()
 	return await thread_service.generate_thread_metadata(
-		db,
 		thread_id=thread_id,
 		principal=principal,
+		session=db,
 		replace=request.replace,
 		origin_session_id=x_session_id,
 	)

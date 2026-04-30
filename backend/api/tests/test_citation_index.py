@@ -47,7 +47,6 @@ def _citation(
 
 def _tool_msg(
 	output: str = "some output",
-	*,
 	citable_sources: list[JSONValue] | None = None,
 	assigned: bool = False,
 ) -> ToolMessage:
@@ -61,7 +60,6 @@ def _tool_msg(
 
 def _assistant_msg(
 	text: str = "hello",
-	*,
 	nci: int | None = None,
 	citations: list[JSONValue] | None = None,
 	message_id: str | None = None,

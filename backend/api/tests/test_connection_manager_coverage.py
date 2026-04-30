@@ -13,7 +13,6 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _make_websocket(
-	*,
 	fail_send: bool,
 ) -> tuple[WebSocket, list[dict[str, object]]]:
 	sent: list[dict[str, object]] = []

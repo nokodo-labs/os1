@@ -23,7 +23,6 @@ from nokodo_ai.utils.typeid import new_typeid
 
 async def _principal(
 	session: AsyncSession,
-	*,
 	is_admin: bool,
 ) -> Principal:
 	uid = new_typeid("user")

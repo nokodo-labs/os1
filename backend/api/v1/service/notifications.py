@@ -67,8 +67,8 @@ async def send_agent_notification(
 	session: AsyncSession,
 	title: str,
 	body: str,
-	agent_id: TypeID | None = None,
 	user_ids: list[TypeID],
+	agent_id: TypeID | None = None,
 ) -> list[Notification]:
 	"""Send notification(s) triggered by an agent.
 

@@ -51,7 +51,7 @@ async def fetch_url(url: str) -> str:
 	)
 
 
-async def _fetch_native(url: str, *, timeout: int, user_agent: str) -> str:
+async def _fetch_native(url: str, timeout: int, user_agent: str) -> str:
 	"""fetch page content directly via httpx."""
 	headers = {"User-Agent": user_agent, "Accept": "text/html,*/*"}
 	async with httpx.AsyncClient(timeout=float(timeout), follow_redirects=True) as http:

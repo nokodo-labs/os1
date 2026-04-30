@@ -10,7 +10,6 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _make_message(
-	*,
 	msg_type: object,
 	content: list[dict[str, object]] | None = None,
 ) -> Message:

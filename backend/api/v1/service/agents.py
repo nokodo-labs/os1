@@ -63,7 +63,6 @@ async def _get_agent(
 async def create_agent(
 	agent_in: AgentCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Agent:
@@ -92,7 +91,6 @@ async def create_agent(
 
 async def list_agents(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[Agent]:
 	"""list agents visible to principal.
@@ -114,7 +112,6 @@ async def list_agents(
 async def get_agent(
 	agent_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Agent:
 	"""get a single agent."""
@@ -132,7 +129,6 @@ async def update_agent(
 	agent_id: TypeID,
 	agent_in: AgentUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Agent:
@@ -167,7 +163,6 @@ async def update_agent(
 async def delete_agent(
 	agent_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
@@ -192,7 +187,6 @@ async def set_agent_access_rules(
 	agent_id: TypeID,
 	rules: list[AccessRuleCreate],
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list:
 	"""replace access rules for an agent and notify affected users."""

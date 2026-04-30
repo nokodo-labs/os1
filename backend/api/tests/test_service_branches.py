@@ -32,7 +32,7 @@ from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
-def _user(is_admin: bool = False, *, active: bool = True) -> User:
+def _user(is_admin: bool = False, active: bool = True) -> User:
 	uid = new_typeid("user")
 	return User(
 		email=f"u-{uid}@example.com",
@@ -45,7 +45,6 @@ def _user(is_admin: bool = False, *, active: bool = True) -> User:
 
 async def _principal(
 	user: User,
-	*,
 	session: AsyncSession | None = None,
 ) -> Principal:
 	if session is not None and user.id is None:

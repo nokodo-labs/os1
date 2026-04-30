@@ -73,7 +73,7 @@ def _find_sandbox_id(thread: SDKThread) -> str | None:
 	return None
 
 
-def _truncate_field(text: str, *, max_lines: int = _TRUNCATION_LINES) -> str:
+def _truncate_field(text: str, max_lines: int = _TRUNCATION_LINES) -> str:
 	"""truncate text keeping the first and last N lines."""
 	lines = text.splitlines()
 	total = len(lines)
@@ -104,7 +104,7 @@ async def _store_output_files(
 	attachments: list[ImageContent | FileContent] = []
 
 	async def _store(
-		entry: FileEntry, *, as_image: bool
+		entry: FileEntry, as_image: bool
 	) -> ImageContent | FileContent | None:
 		try:
 			stored = await store_file(

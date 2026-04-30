@@ -39,7 +39,7 @@ def _uid() -> str:
 	return uuid4().hex[:8]
 
 
-def _user(suffix: str, *, superuser: bool = False) -> User:
+def _user(suffix: str, superuser: bool = False) -> User:
 	return User(
 		email=f"{suffix}@iso.test",
 		username=f"iso_{suffix}",

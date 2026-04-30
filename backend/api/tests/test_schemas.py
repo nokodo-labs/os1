@@ -21,7 +21,7 @@ from api.schemas.thread import ThreadSummary
 from nokodo_ai.utils.typeid import new_typeid
 
 
-def _stamp_project(project: ProjectModel, *, project_id: str) -> ProjectModel:
+def _stamp_project(project: ProjectModel, project_id: str) -> ProjectModel:
 	project.id = project_id
 	project.metadata_ = {}
 	project.created_at = datetime.now(tz=UTC)
@@ -29,7 +29,7 @@ def _stamp_project(project: ProjectModel, *, project_id: str) -> ProjectModel:
 	return project
 
 
-def _stamp_thread(thread: ThreadModel, *, thread_id: str) -> ThreadModel:
+def _stamp_thread(thread: ThreadModel, thread_id: str) -> ThreadModel:
 	thread.id = thread_id
 	thread.metadata_ = {}
 	thread.tags = []
