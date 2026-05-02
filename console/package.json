@@ -15,7 +15,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
-		"generate:api-types": "openapi-typescript http://localhost:1383/v1/openapi.json -o src/lib/api/types.ts && node -e \"var f='src/lib/api/types.ts',s=require('fs');s.writeFileSync(f,'// @ts-nocheck\\n'+s.readFileSync(f,'utf8'))\""
+		"generate:api-types": "uv run --project ../backend python ../tools/export-openapi.py .openapi-schema.json && openapi-typescript .openapi-schema.json -o src/lib/api/types.ts && node -e \"var f='src/lib/api/types.ts',s=require('fs');s.writeFileSync(f,'// @ts-nocheck\\n'+s.readFileSync(f,'utf8'));try{s.unlinkSync('.openapi-schema.json')}catch(e){}\""
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

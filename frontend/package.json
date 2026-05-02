@@ -16,7 +16,7 @@
 		"test:watch": "vitest",
 		"test:ui": "vitest --ui",
 		"test:coverage": "vitest run --coverage",
-		"generate:api-types": "openapi-typescript http://localhost:1383/v1/openapi.json -o src/lib/api/types.ts && node -e \"var f='src/lib/api/types.ts',s=require('fs');s.writeFileSync(f,'// @ts-nocheck\\n'+s.readFileSync(f,'utf8'))\""
+		"generate:api-types": "uv run --project ../backend python ../tools/export-openapi.py .openapi-schema.json && openapi-typescript .openapi-schema.json -o src/lib/api/types.ts && node -e \"var f='src/lib/api/types.ts',s=require('fs');s.writeFileSync(f,'// @ts-nocheck\\n'+s.readFileSync(f,'utf8'));try{s.unlinkSync('.openapi-schema.json')}catch(e){}\""
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -49,6 +49,9 @@
 		"vitest": "^4.1.3"
 	},
 	"dependencies": {
+		"@dayflow/core": "^3.5.2",
+		"@dayflow/plugin-drag": "^1.4.2",
+		"@dayflow/svelte": "^3.5.2",
 		"@floating-ui/dom": "^1.7.6",
 		"@internationalized/date": "^3.12.0",
 		"@tiptap/core": "^3.22.3",
