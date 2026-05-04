@@ -99,14 +99,17 @@ to run backend tests manually instead:
 
 ## database migrations
 
-migrations are handled by Alembic and are located in `backend/api/migrations`.
-the backend is configured to **automatically run `uv run alembic upgrade head` on startup** using the same configuration the CLI uses.
+migrations live in `backend/api/migrations`; applied automatically on startup.
 
-- **manual**: you can still run Alembic manually if needed:
-    ```bash
-    cd backend
-    alembic -c api/migrations/alembic.ini upgrade head
-    ```
+to create a new migration, use the **`backend: autogen migration` VS Code task** or:
+
+```bash
+uv run --project backend python tools/autogen-migration.py --message "description"
+```
+
+creates a temp DB, upgrades to `head`, autogenerates against the model diff, saves to `temp/alembic-autogen/`. review, edit, move to `backend/api/migrations/versions/`.
+
+never run bare `alembic revision --autogenerate` against the live dev DB - local drift causes false positives.
 
 ## M2M relationships
 

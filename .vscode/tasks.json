@@ -75,6 +75,21 @@
 			},
 			"problemMatcher": []
 		},
+		{
+			"label": "backend: autogen migration",
+			"type": "shell",
+			"command": "uv run --project backend python tools/autogen-migration.py",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"dependsOn": "Docker: ensure dev deps",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
 
 		// ═══════════════════════════════════════
 		// frontend
