@@ -1,6 +1,14 @@
 """Pydantic schemas."""
 
 from api.schemas.agent import Agent, AgentCreate
+from api.schemas.calendar import (
+	Calendar,
+	CalendarCreate,
+	CalendarEvent,
+	CalendarEventCreate,
+	CalendarEventUpdate,
+	CalendarUpdate,
+)
 from api.schemas.event import Event, EventCreate
 from api.schemas.group import Group, GroupCreate, GroupUpdate
 from api.schemas.memory import Memory, MemoryCreate
@@ -33,6 +41,12 @@ __all__ = [
 	"HomepagePreferences",
 	"Agent",
 	"AgentCreate",
+	"Calendar",
+	"CalendarCreate",
+	"CalendarEvent",
+	"CalendarEventCreate",
+	"CalendarEventUpdate",
+	"CalendarUpdate",
 	"Event",
 	"EventCreate",
 	"Group",

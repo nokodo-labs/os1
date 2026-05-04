@@ -1,4 +1,4 @@
-"""Event model."""
+"""event model."""
 
 from __future__ import annotations
 
@@ -20,16 +20,18 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
+	from api.models.calendar import Calendar, CalendarEvent
 	from api.models.message import Message
 	from api.models.notification import Notification
 	from api.models.project import Project
+	from api.models.reminder import Reminder, ReminderList
 	from api.models.task import Task
 	from api.models.thread import Thread
 	from api.models.user import User
 
 
 class EventScope(StrEnum):
-	"""Domain scopes for events."""
+	"""domain scopes for events."""
 
 	SYSTEM = "system"
 	USER = "user"
@@ -41,7 +43,7 @@ class EventScope(StrEnum):
 
 
 class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
-	"""Universal event record powering live updates and replay."""
+	"""universal event record powering live updates and replay."""
 
 	__tablename__ = "events"
 	__typeid_prefix__ = "event"
@@ -77,6 +79,26 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		String(TYPEID_LENGTH),
 		ForeignKey("projects.id", ondelete="SET NULL"),
 	)
+	calendar_id: Mapped[TypeID | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("calendars.id", ondelete="SET NULL"),
+		index=True,
+	)
+	calendar_event_id: Mapped[TypeID | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("calendar_events.id", ondelete="SET NULL"),
+		index=True,
+	)
+	reminder_list_id: Mapped[TypeID | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("reminder_lists.id", ondelete="SET NULL"),
+		index=True,
+	)
+	reminder_id: Mapped[TypeID | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("reminders.id", ondelete="SET NULL"),
+		index=True,
+	)
 
 	user: Mapped[User | None] = relationship("User")
 	thread: Mapped[Thread | None] = relationship(
@@ -93,6 +115,22 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	project: Mapped[Project | None] = relationship(
 		"Project",
+		back_populates="events",
+	)
+	calendar: Mapped[Calendar | None] = relationship(
+		"Calendar",
+		back_populates="activity_events",
+	)
+	calendar_event: Mapped[CalendarEvent | None] = relationship(
+		"CalendarEvent",
+		back_populates="events",
+	)
+	reminder_list: Mapped[ReminderList | None] = relationship(
+		"ReminderList",
+		back_populates="events",
+	)
+	reminder: Mapped[Reminder | None] = relationship(
+		"Reminder",
 		back_populates="events",
 	)
 	notifications: Mapped[list[Notification]] = relationship(

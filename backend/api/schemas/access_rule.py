@@ -57,6 +57,7 @@ class AccessRuleResponse(MetadataModel, TimestampedModel, ORMModel):
 	prompt_id: TypeID | None = None
 	group_id: TypeID | None = None
 	reminder_list_id: TypeID | None = None
+	calendar_id: TypeID | None = None
 
 
 class AccessRulesUpdate(ORMModel):

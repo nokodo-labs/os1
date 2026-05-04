@@ -68,6 +68,8 @@ class ActionPermission(StrEnum):
 	NOTES_CREATE = "notes:create"
 	GROUPS_CREATE = "groups:create"
 	REMINDERS_CREATE = "reminders:create"
+	# grants creation of calendars and calendar events.
+	CALENDAR_CREATE = "calendar:create"
 	MEMORIES_CREATE = "memories:create"
 	TASKS_CREATE = "tasks:create"
 	AGENTS_CREATE = "agents:create"
@@ -103,6 +105,7 @@ class ResourceType(StrEnum):
 	MEMORY = "memory"
 	TASK = "task"
 	FILE = "file"
+	CALENDAR = "calendar"
 	PLUGIN = "plugin"
 	PROMPT = "prompt"
 	GROUP = "group"
@@ -141,6 +144,7 @@ DEFAULT_ACCESS_RESOURCE_TYPES: frozenset[ResourceType] = frozenset(
 		ResourceType.THREAD,
 		ResourceType.PROJECT,
 		ResourceType.FILE,
+		ResourceType.CALENDAR,
 		ResourceType.NOTE,
 		ResourceType.GROUP,
 		ResourceType.REMINDER_LIST,
@@ -166,6 +170,7 @@ class DefaultResourceAccess(BaseModel):
 	thread: AccessLevel | None = None
 	project: AccessLevel | None = None
 	file: AccessLevel | None = None
+	calendar: AccessLevel | None = None
 	note: AccessLevel | None = None
 	group: AccessLevel | None = None
 	reminder_list: AccessLevel | None = None

@@ -6,6 +6,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from api.v1.service.chat.tools.audio_generation import GenerateAudioTool
+from api.v1.service.chat.tools.calendar import (
+	CalendarEventGetTool,
+	CalendarEventWriteTool,
+)
 from api.v1.service.chat.tools.code_interpreter import CodeInterpreterTool
 from api.v1.service.chat.tools.files import FileEditTool, FileGetTool
 from api.v1.service.chat.tools.image_generation import GenerateImageTool
@@ -45,6 +49,8 @@ _TOOLS: list[Tool[AppContext]] = [
 	NoteWriteTool(),
 	ReminderGetTool(),
 	ReminderWriteTool(),
+	CalendarEventGetTool(),
+	CalendarEventWriteTool(),
 	FileGetTool(),
 	FileEditTool(),
 	AgenticWebSearchTool(),
@@ -84,6 +90,8 @@ async def resolve_tools(
 
 __all__ = [
 	"AgenticWebSearchTool",
+	"CalendarEventGetTool",
+	"CalendarEventWriteTool",
 	"CodeInterpreterTool",
 	"FetchUrlTool",
 	"FileEditTool",

@@ -45,6 +45,8 @@ class EventType(StrEnum):
 	# notification events
 	NOTIFICATION_CUSTOM = "notification.custom"
 	NOTIFICATION_AGENT = "notification.agent"
+	NOTIFICATION_REMINDER_ALERT = "notification.reminder_alert"
+	NOTIFICATION_CALENDAR_EVENT_ALERT = "notification.calendar_event_alert"
 
 	# reminder events
 	REMINDER_CREATED = "reminder.created"
@@ -54,6 +56,14 @@ class EventType(StrEnum):
 	REMINDER_LIST_CREATED = "reminder_list.created"
 	REMINDER_LIST_UPDATED = "reminder_list.updated"
 	REMINDER_LIST_DELETED = "reminder_list.deleted"
+
+	# calendar events
+	CALENDAR_CREATED = "calendar.created"
+	CALENDAR_UPDATED = "calendar.updated"
+	CALENDAR_DELETED = "calendar.deleted"
+	CALENDAR_EVENT_CREATED = "calendar.event.created"
+	CALENDAR_EVENT_UPDATED = "calendar.event.updated"
+	CALENDAR_EVENT_DELETED = "calendar.event.deleted"
 
 	# task events
 	TASK_CREATED = "task.created"
@@ -164,6 +174,8 @@ USER_EVENTS = {
 NOTIFICATION_EVENTS = {
 	EventType.NOTIFICATION_CUSTOM,
 	EventType.NOTIFICATION_AGENT,
+	EventType.NOTIFICATION_REMINDER_ALERT,
+	EventType.NOTIFICATION_CALENDAR_EVENT_ALERT,
 }
 
 TOOL_EVENTS = {
@@ -227,6 +239,15 @@ REMINDER_EVENTS = {
 	EventType.REMINDER_LIST_CREATED,
 	EventType.REMINDER_LIST_UPDATED,
 	EventType.REMINDER_LIST_DELETED,
+}
+
+CALENDAR_EVENTS = {
+	EventType.CALENDAR_CREATED,
+	EventType.CALENDAR_UPDATED,
+	EventType.CALENDAR_DELETED,
+	EventType.CALENDAR_EVENT_CREATED,
+	EventType.CALENDAR_EVENT_UPDATED,
+	EventType.CALENDAR_EVENT_DELETED,
 }
 
 TASK_EVENTS = {

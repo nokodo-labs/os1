@@ -1,4 +1,4 @@
-"""Project model."""
+"""project model."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
 from api.models.many_to_many import (
+	calendar_project_association,
 	file_project_association,
 	note_project_association,
 	reminder_list_project_association,
@@ -24,6 +25,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
+	from api.models.calendar import Calendar
 	from api.models.event import Event
 	from api.models.file import File
 	from api.models.note import Note
@@ -33,7 +35,7 @@ if TYPE_CHECKING:
 
 
 class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
-	"""Project model for organizing resources."""
+	"""project model for organizing resources."""
 
 	__tablename__ = "projects"
 	__typeid_prefix__ = "proj"
@@ -74,5 +76,10 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	reminder_lists: Mapped[list[ReminderList]] = relationship(
 		"ReminderList",
 		secondary=reminder_list_project_association,
+		back_populates="projects",
+	)
+	calendars: Mapped[list[Calendar]] = relationship(
+		"Calendar",
+		secondary=calendar_project_association,
 		back_populates="projects",
 	)

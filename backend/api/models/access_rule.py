@@ -19,6 +19,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 if TYPE_CHECKING:
 	from api.models.agent import Agent
+	from api.models.calendar import Calendar
 	from api.models.file import File
 	from api.models.group import Group
 	from api.models.memory import Memory
@@ -135,6 +136,11 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 		ForeignKey("reminder_lists.id", ondelete="CASCADE"),
 		index=True,
 	)
+	calendar_id: Mapped[str | None] = mapped_column(
+		String(TYPEID_LENGTH),
+		ForeignKey("calendars.id", ondelete="CASCADE"),
+		index=True,
+	)
 
 	thread: Mapped[Thread | None] = relationship(
 		"Thread", back_populates="access_rules"
@@ -164,15 +170,21 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 		"ReminderList",
 		back_populates="access_rules",
 	)
+	calendar: Mapped[Calendar | None] = relationship(
+		"Calendar",
+		back_populates="access_rules",
+	)
 
 	# subject relationships
 	subject_user: Mapped[User | None] = relationship(
 		"User",
 		foreign_keys="AccessRule.subject_user_id",
+		back_populates="access_rules",
 	)
 	subject_group: Mapped[Group | None] = relationship(
 		"Group",
 		foreign_keys="AccessRule.subject_group_id",
+		back_populates="access_rules",
 	)
 	subject_role: Mapped[Role | None] = relationship(
 		"Role",
@@ -196,6 +208,7 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 			"prompt_id",
 			"group_id",
 			"reminder_list_id",
+			"calendar_id",
 			name="uq_access_rule_subject_resource",
 		),
 		CheckConstraint(

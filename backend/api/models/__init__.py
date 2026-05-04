@@ -3,6 +3,7 @@
 from api.models.access_rule import AccessRule
 from api.models.agent import Agent
 from api.models.block import Block
+from api.models.calendar import Calendar, CalendarEvent, CalendarEventOverride
 from api.models.event import Event
 from api.models.file import File
 from api.models.friendship import Friendship, FriendshipEvent
@@ -16,7 +17,7 @@ from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
 from api.models.provider import Provider
-from api.models.reminder import Reminder, ReminderList
+from api.models.reminder import Reminder, ReminderList, ReminderOverride
 from api.models.role import Role
 from api.models.setting import SettingsDocument
 from api.models.task import Task
@@ -32,6 +33,9 @@ __all__ = [
 	"AccessRule",
 	"Agent",
 	"Block",
+	"Calendar",
+	"CalendarEvent",
+	"CalendarEventOverride",
 	"Event",
 	"File",
 	"Friendship",
@@ -48,6 +52,7 @@ __all__ = [
 	"Prompt",
 	"Reminder",
 	"ReminderList",
+	"ReminderOverride",
 	"Role",
 	"SettingsDocument",
 	"Task",

@@ -17,15 +17,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.note import Note
-from api.models.reminder import Reminder
+from api.models.reminder import Reminder, ReminderList
 from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import DefaultResourceAccess
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import notes as notes_service
-from api.v1.service import reminders as reminders_service
 from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.auth import Principal
+from api.v1.service.reminders.search import (
+	_autocomplete_reminders,
+	_hybrid_search_reminders,
+)
 from api.v1.service.threads.search import _autocomplete_threads, _hybrid_search_threads
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
 from nokodo_ai.utils.security import hash_password
@@ -55,6 +58,14 @@ def _principal(user: User) -> Principal:
 		group_ids=(),
 		permissions=frozenset(),
 		role_resource_defaults=DefaultResourceAccess(),
+	)
+
+
+def _reminder_list(owner: User, suffix: str) -> ReminderList:
+	return ReminderList(
+		owner_id=TypeID(owner.id),
+		name=f"list_{suffix}",
+		color="#22c55e",
 	)
 
 
@@ -308,11 +319,19 @@ async def test_reminders_autocomplete_isolates_other_user(
 	db_session.add_all([u_a, u_b])
 	await db_session.flush()
 
-	rem_b = Reminder(owner_id=str(u_b.id), title=f"private_reminder_{s}")
+	list_b = _reminder_list(u_b, f"ra_{s}_b")
+	db_session.add(list_b)
+	await db_session.flush()
+
+	rem_b = Reminder(
+		owner_id=TypeID(u_b.id),
+		list_id=list_b.id,
+		title=f"private_reminder_{s}",
+	)
 	db_session.add(rem_b)
 	await db_session.commit()
 
-	results = await reminders_service._autocomplete_reminders(
+	results = await _autocomplete_reminders(
 		rem_b.title, db_session, principal=_principal(u_a)
 	)
 	assert not any(str(r.id) == str(rem_b.id) for r in results), (
@@ -330,11 +349,19 @@ async def test_reminders_autocomplete_returns_own_reminder(
 	db_session.add(u_a)
 	await db_session.flush()
 
-	rem_a = Reminder(owner_id=str(u_a.id), title=f"my_unique_reminder_{s}")
+	list_a = _reminder_list(u_a, f"ra_own_{s}")
+	db_session.add(list_a)
+	await db_session.flush()
+
+	rem_a = Reminder(
+		owner_id=TypeID(u_a.id),
+		list_id=list_a.id,
+		title=f"my_unique_reminder_{s}",
+	)
 	db_session.add(rem_a)
 	await db_session.commit()
 
-	results = await reminders_service._autocomplete_reminders(
+	results = await _autocomplete_reminders(
 		rem_a.title, db_session, principal=_principal(u_a)
 	)
 	ids = [str(r.id) for r in results]
@@ -423,7 +450,15 @@ async def test_reminders_hybrid_postgres_postfilter_blocks_cross_user(
 	db_session.add_all([u_a, u_b])
 	await db_session.flush()
 
-	rem_b = Reminder(owner_id=str(u_b.id), title=f"leaked_reminder_{s}")
+	list_b = _reminder_list(u_b, f"rh_{s}_b")
+	db_session.add(list_b)
+	await db_session.flush()
+
+	rem_b = Reminder(
+		owner_id=TypeID(u_b.id),
+		list_id=list_b.id,
+		title=f"leaked_reminder_{s}",
+	)
 	db_session.add(rem_b)
 	await db_session.commit()
 
@@ -433,7 +468,7 @@ async def test_reminders_hybrid_postgres_postfilter_blocks_cross_user(
 		_fake_search_fn(str(rem_b.id)),
 	)
 
-	results = await reminders_service._hybrid_search_reminders(
+	results = await _hybrid_search_reminders(
 		"leaked", db_session, principal=_principal(u_a), search_params=_SPARSE
 	)
 	assert not any(str(r.id) == str(rem_b.id) for r in results), (

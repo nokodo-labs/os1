@@ -28,6 +28,7 @@ _GLOBAL_TYPES = [
 	SearchResultType.NOTE,
 	SearchResultType.THREAD,
 	SearchResultType.REMINDER,
+	SearchResultType.CALENDAR_EVENT,
 ]
 
 

@@ -188,6 +188,7 @@ class TestActionPermission:
 			"reminders",
 			"memories",
 			"tasks",
+			"calendar",
 			"agents",
 			"models",
 			"providers",

@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.models.reminder import ReminderStatus
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.scheduled_item import Recurrence
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -22,7 +23,19 @@ type ReminderSortBy = Literal[
 type ReminderListSortBy = Literal["position", "name", "created_at", "updated_at"]
 
 
-# --- ReminderList schemas ---
+class ReminderListItemFilters(BaseModel):
+	"""filters for listing reminders in a list."""
+
+	status_filter: ReminderStatus | None = None
+
+
+class ScheduledReminderListFilters(BaseModel):
+	"""filters for listing scheduled reminders."""
+
+	status_filter: ReminderStatus | None = ReminderStatus.PENDING
+
+
+# ReminderList schemas
 
 
 class ReminderListBase(MetadataModel):
@@ -33,7 +46,8 @@ class ReminderListBase(MetadataModel):
 	color: str | None = Field(default=None, max_length=7)
 	icon: str | None = Field(default=None, max_length=50)
 	position: float = 0.0
-	project_ids: list[TypeID] = []
+	is_default: bool = False
+	project_ids: list[TypeID] = Field(default_factory=list)
 
 
 class ReminderListCreate(ReminderListBase):
@@ -50,6 +64,7 @@ class ReminderListUpdate(MetadataUpdateModel):
 	color: str | None = None
 	icon: str | None = None
 	position: float | None = None
+	is_default: bool | None = None
 	project_ids: list[TypeID] | None = None
 
 
@@ -68,7 +83,7 @@ class ReminderListWithCounts(ReminderList):
 	completed_count: int = 0
 
 
-# --- Reminder schemas ---
+# Reminder schemas
 
 
 class ReminderBase(MetadataModel):
@@ -78,9 +93,8 @@ class ReminderBase(MetadataModel):
 	description: str | None = None
 	due_at: datetime | None = None
 	remind_at: datetime | None = None
-	recurrence: str | None = Field(default=None, max_length=255)
+	recurrence: Recurrence | None = None
 	status: ReminderStatus = ReminderStatus.PENDING
-	list_id: TypeID | None = None
 	parent_id: TypeID | None = None
 	source_thread_id: TypeID | None = None
 	position: float = 0.0
@@ -89,7 +103,7 @@ class ReminderBase(MetadataModel):
 class ReminderCreate(ReminderBase):
 	"""schema for creating a reminder."""
 
-	pass
+	list_id: TypeID | None = None
 
 
 class ReminderUpdate(MetadataUpdateModel):
@@ -99,7 +113,7 @@ class ReminderUpdate(MetadataUpdateModel):
 	description: str | None = None
 	due_at: datetime | None = None
 	remind_at: datetime | None = None
-	recurrence: str | None = None
+	recurrence: Recurrence | None = None
 	status: ReminderStatus | None = None
 	list_id: TypeID | None = None
 	parent_id: TypeID | None = None
@@ -111,7 +125,10 @@ class Reminder(ReminderBase, TimestampedModel):
 
 	id: TypeID
 	owner_id: TypeID
+	list_id: TypeID
 	completed_at: datetime | None = None
+	recurrence_until: datetime | None = None
+	series_origin_id: TypeID | None = None
 
 
 class ReminderWithSubtasks(Reminder):

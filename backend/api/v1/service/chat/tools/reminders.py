@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.reminder import ReminderStatus
 from api.schemas.reminder import ReminderCreate, ReminderUpdate
+from api.schemas.scheduled_item import Recurrence
 from api.v1.service import reminders as reminder_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -81,6 +82,12 @@ class ReminderWriteInput(BaseModel):
 	remind_at: datetime | None = Field(
 		default=None,
 		description="notification time in ISO 8601 format",
+	)
+	recurrence: Recurrence | None = Field(
+		default=None,
+		description=(
+			"optional structured recurrence with rrule, rdate, exdate, and timezone"
+		),
 	)
 	status: Literal["pending", "completed"] | None = Field(
 		default=None,
@@ -209,7 +216,7 @@ class ReminderWriteTool(Tool[AppContext]):
 			rid = TypeID(inp.reminder_id)
 			# use the dedicated complete endpoint when only completing
 			if inp.status == "completed" and not any(
-				[inp.title, inp.description, inp.due_at, inp.remind_at]
+				[inp.title, inp.description, inp.due_at, inp.remind_at, inp.recurrence]
 			):
 				try:
 					reminder = await reminder_service.complete_reminder(
@@ -235,6 +242,8 @@ class ReminderWriteTool(Tool[AppContext]):
 				update_kwargs["due_at"] = inp.due_at
 			if inp.remind_at is not None:
 				update_kwargs["remind_at"] = inp.remind_at
+			if inp.recurrence is not None:
+				update_kwargs["recurrence"] = inp.recurrence
 			if inp.status is not None and inp.status != "completed":
 				update_kwargs["status"] = ReminderStatus(inp.status)
 			try:
@@ -265,6 +274,7 @@ class ReminderWriteTool(Tool[AppContext]):
 					description=inp.description,
 					due_at=inp.due_at,
 					remind_at=inp.remind_at,
+					recurrence=inp.recurrence,
 				),
 				__app_context__.session,
 				principal=__app_context__.principal,

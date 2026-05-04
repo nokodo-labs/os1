@@ -14,6 +14,7 @@ from sqlalchemy.sql import ColumnElement, Select
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.agent import Agent
+from api.models.calendar import Calendar
 from api.models.file import File
 from api.models.group import Group, GroupMembership
 from api.models.many_to_many import user_role_association
@@ -87,6 +88,12 @@ RESOURCE_CONFIG: dict[ResourceType, ResourceConfig] = {
 		rule_fk=AccessRule.file_id,
 		owner_fk=File.owner_id,
 		deleted_at_col=File.deleted_at,
+	),
+	ResourceType.CALENDAR: ResourceConfig(
+		id_col=Calendar.id,
+		rule_fk=AccessRule.calendar_id,
+		owner_fk=Calendar.owner_id,
+		deleted_at_col=None,
 	),
 	ResourceType.PLUGIN: ResourceConfig(
 		id_col=Plugin.id,

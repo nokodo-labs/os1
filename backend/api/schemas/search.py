@@ -8,12 +8,14 @@ from enum import StrEnum
 from pydantic import Field
 
 from api.schemas.common import ORMModel
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
 class SearchResultType(StrEnum):
 	THREAD = "thread"
 	REMINDER = "reminder"
+	CALENDAR_EVENT = "calendar_event"
 	NOTE = "note"
 	MEMORY = "memory"
 
@@ -77,6 +79,7 @@ class SearchResultItem(ORMModel):
 	title: str
 	preview: str | None = None
 	score: float | None = None
+	metadata: JSONObject = Field(default_factory=dict)
 	created_at: datetime
 	updated_at: datetime
 

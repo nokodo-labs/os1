@@ -22,6 +22,7 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
+from api.v1.service import calendar as calendar_service
 from api.v1.service import memories as memories_service
 from api.v1.service import notes as notes_service
 from api.v1.service import reminders as reminders_service
@@ -50,6 +51,7 @@ async def search_stream(
 			SearchResultType.NOTE,
 			SearchResultType.THREAD,
 			SearchResultType.REMINDER,
+			SearchResultType.CALENDAR_EVENT,
 		]
 
 	# embed query once instead of per-resource-type to avoid redundant API calls
@@ -92,6 +94,17 @@ async def search_stream(
 				query_embedding=query_embedding,
 			)
 		)
+	if SearchResultType.CALENDAR_EVENT in types:
+		coros.append(
+			calendar_service.search_calendar_events(
+				q,
+				db,
+				principal=principal,
+				limit=per_type,
+				search_params=search_params,
+				query_embedding=query_embedding,
+			)
+		)
 
 	count = 0
 	for task in asyncio.as_completed(coros):
@@ -113,10 +126,12 @@ async def vectorize_all(
 	notes = await notes_service.vectorize_all_notes(db)
 	threads = await threads_service.vectorize_all_threads(db)
 	reminders = await reminders_service.vectorize_all_reminders(db)
+	calendar_events = await calendar_service.vectorize_all_calendar_events(db)
 	memories = await memories_service.vectorize_all_memories(db)
 	return {
 		"notes": notes,
 		"threads": threads,
 		"reminders": reminders,
+		"calendar_events": calendar_events,
 		"memories": memories,
 	}

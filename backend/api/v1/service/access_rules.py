@@ -64,6 +64,8 @@ def _apply_resource_fk(
 			access_rule.task_id = resource_id
 		case ResourceType.FILE:
 			access_rule.file_id = resource_id
+		case ResourceType.CALENDAR:
+			access_rule.calendar_id = resource_id
 		case ResourceType.PLUGIN:
 			access_rule.plugin_id = resource_id
 		case ResourceType.PROMPT:
