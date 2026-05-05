@@ -1,6 +1,6 @@
 [project]
 name = "nokodo-ai"
-version = "0.2.0-rc.0"
+version = "1.0.0-rc.0"
 description = "Core library for nokodo AI"
 requires-python = ">=3.13"
 dependencies = [ # library-only dependencies
