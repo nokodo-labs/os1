@@ -39,11 +39,13 @@ from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import reminders as reminder_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/reminder-lists", tags=["reminder-lists"])
+reminders_router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 
 @router.get("", response_model=list[ReminderListWithCounts])
@@ -102,6 +104,17 @@ async def search_reminder_lists(
 		cursor=cursor,
 		search_params=SearchParams(mode=mode),
 	)
+
+
+@reminders_router.post("/revectorize")
+async def revectorize_reminders(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all reminders into qdrant. admin only."""
+	require_admin(principal)
+	count = await reminder_service.vectorize_all_reminders(db)
+	return {"vectorized": count}
 
 
 @router.get("/{list_id}", response_model=ReminderListSchema)

@@ -60,7 +60,15 @@ async def _reminder_should_revectorize(
 	data: ReminderUpdate,
 	session: AsyncSession,
 ) -> bool:
-	_fields = {"title", "description", "list_id"}
+	_fields = {
+		"title",
+		"description",
+		"list_id",
+		"parent_id",
+		"due_at",
+		"remind_at",
+		"status",
+	}
 	update_data = data.model_dump(exclude_unset=True, mode="python")
 	return bool(_fields & update_data.keys())
 

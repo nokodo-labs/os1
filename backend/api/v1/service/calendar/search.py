@@ -69,7 +69,15 @@ async def _calendar_event_should_revectorize(
 	data: CalendarEventUpdate,
 	session: AsyncSession,
 ) -> bool:
-	_fields = {"title", "description", "location", "virtual_url"}
+	_fields = {
+		"title",
+		"description",
+		"start_at",
+		"end_at",
+		"recurrence",
+		"location",
+		"virtual_url",
+	}
 	update_data = data.model_dump(exclude_unset=True, mode="python")
 	return bool(_fields & update_data.keys())
 

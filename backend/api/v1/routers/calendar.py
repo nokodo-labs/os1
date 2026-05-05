@@ -38,6 +38,7 @@ from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import calendar as calendar_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
@@ -103,6 +104,17 @@ async def search_calendars(
 		cursor=cursor,
 		search_params=SearchParams(mode=mode),
 	)
+
+
+@router.post("/events/revectorize")
+async def revectorize_calendar_events(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all calendar events into qdrant. admin only."""
+	require_admin(principal)
+	count = await calendar_service.vectorize_all_calendar_events(db)
+	return {"vectorized": count}
 
 
 @router.get("/{calendar_id}", response_model=CalendarSchema)
