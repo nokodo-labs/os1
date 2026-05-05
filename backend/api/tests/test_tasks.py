@@ -6,7 +6,7 @@ from taskiq.brokers.inmemory_broker import InMemoryBroker
 from taskiq.schedule_sources import LabelScheduleSource
 
 from api.models.task import TaskStatus, TaskType
-from api.schemas.task import TaskCreate, TaskUpdate
+from api.schemas.task import TaskCreate, TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
 from api.taskiq import broker
 from api.v1.service import tasks as task_service
@@ -289,7 +289,8 @@ async def test_task_registry_exposes_static_schedules() -> None:
 	await source.startup()
 	schedules = await source.get_schedules()
 	task_names = {schedule.task_name for schedule in schedules}
-	assert "reminders.dispatch_due_notifications" in task_names
+	assert "reminders.dispatch_due_notifications" not in task_names
+	assert "calendar.dispatch_due_notifications" not in task_names
 	assert THREAD_INACTIVITY_SWEEP_TASK in task_names
 
 
@@ -316,17 +317,16 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 
 	tasks = await task_service.list_tasks(
 		db_session,
-		user_id=user.id,
 		principal=principal,
+		filters=TaskListFilters(user_id=user.id),
 	)
 	assert len(tasks) >= 3
 
 	# Test filter
 	tasks_pending = await task_service.list_tasks(
 		db_session,
-		user_id=user.id,
-		status_filter=TaskStatus.RUNNING,
 		principal=principal,
+		filters=TaskListFilters(user_id=user.id, status_filter=TaskStatus.RUNNING),
 	)
 	assert len(tasks_pending) >= 3
 
@@ -363,7 +363,7 @@ async def test_task_update_no_changes_does_not_touch_last_event(
 	filtered = await task_service.list_tasks(
 		db_session,
 		principal=principal,
-		status_filter=TaskStatus.RUNNING,
+		filters=TaskListFilters(status_filter=TaskStatus.RUNNING),
 	)
 	assert filtered
 

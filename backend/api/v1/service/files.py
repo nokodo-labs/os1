@@ -29,7 +29,8 @@ from api.models.file import File, FileSource, FileStatus
 from api.models.many_to_many import file_project_association
 from api.models.project import Project
 from api.permissions import ResourceType
-from api.schemas.file import FileCreate, FileUpdate
+from api.schemas.file import File as FileOut
+from api.schemas.file import FileCreate, FileListFilters, FileUpdate
 from api.settings import settings
 from api.storage import get_storage_backend
 from api.storage.base import MimeType
@@ -42,6 +43,10 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.projects import load_projects
+from api.v1.service.resource_payload_cache import (
+	get_or_set_resource_payload_cache,
+	invalidate_resource_payload_cache,
+)
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -49,15 +54,29 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 log = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
 # internal helpers
-# ---------------------------------------------------------------------------
 
 
 async def _get_file(file_id: TypeID, session: AsyncSession) -> File:
 	"""fetch a file record by id (no access check)."""
 	result = await session.execute(
 		select(File).where(File.id == file_id, File.deleted_at.is_(None))
+	)
+	file = result.scalars().one_or_none()
+	if not file:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="file not found",
+		)
+	return file
+
+
+async def _get_file_with_projects(file_id: TypeID, session: AsyncSession) -> File:
+	"""fetch a file record with project links by id (no access check)."""
+	result = await session.execute(
+		select(File)
+		.where(File.id == file_id, File.deleted_at.is_(None))
+		.options(selectinload(File.projects))
 	)
 	file = result.scalars().one_or_none()
 	if not file:
@@ -121,7 +140,7 @@ async def _emit_file_event(
 	origin_session_id: str | None = None,
 ) -> None:
 	"""publish a file lifecycle event."""
-	data: dict[str, str | None] = {"file_id": file_id}
+	data: dict[str, str | None] = {"id": str(file_id)}
 	if filename is not None:
 		data["filename"] = filename
 	event = Event(
@@ -441,13 +460,14 @@ async def get_file_url(
 async def list_files(
 	session: AsyncSession,
 	principal: Principal,
-	project_id: TypeID | None = None,
+	filters: FileListFilters | None = None,
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: str = "created_at",
 	sort_dir: SortDir = "desc",
 ) -> list[File]:
 	"""list files accessible by the principal."""
+	file_filters = filters or FileListFilters()
 	stmt = select(File).where(
 		File.deleted_at.is_(None),
 		resource_access_predicate(
@@ -456,11 +476,11 @@ async def list_files(
 			required_level=AccessLevel.READER,
 		),
 	)
-	if project_id is not None:
+	if file_filters.project_id is not None:
 		stmt = stmt.join(
 			file_project_association,
 			File.id == file_project_association.c.file_id,
-		).where(file_project_association.c.project_id == project_id)
+		).where(file_project_association.c.project_id == file_filters.project_id)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -504,6 +524,34 @@ async def get_file(
 			detail="file not found",
 		)
 	return file
+
+
+async def get_file_payload(
+	file_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	use_cache: bool = True,
+) -> FileOut:
+	"""get a file API payload after resource access is validated."""
+	await require_resource_access(
+		file_id,
+		session,
+		principal,
+		ResourceType.FILE,
+		required_level=AccessLevel.READER,
+	)
+
+	async def load_payload() -> FileOut:
+		return FileOut.model_validate(await _get_file_with_projects(file_id, session))
+
+	if not use_cache:
+		return await load_payload()
+	return await get_or_set_resource_payload_cache(
+		ResourceType.FILE,
+		file_id,
+		FileOut,
+		load_payload,
+	)
 
 
 async def update_file(
@@ -555,6 +603,7 @@ async def update_file(
 		filename=file.filename,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
 	return file
 
 
@@ -592,3 +641,4 @@ async def delete_file(
 		user_id=principal.user_id,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)

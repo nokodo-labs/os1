@@ -16,7 +16,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.task import Task, TaskStatus, TaskType
 from api.schemas.task import Task as TaskSchema
-from api.schemas.task import TaskCreate, TaskUpdate
+from api.schemas.task import TaskCreate, TaskListFilters, TaskUpdate
 from api.taskiq import broker
 from api.v1.service import events as event_service
 from api.v1.service import task_bus
@@ -345,27 +345,28 @@ async def find_active_task(
 async def list_tasks(
 	session: AsyncSession,
 	principal: Principal,
-	user_id: str | None = None,
-	status_filter: TaskStatus | None = None,
-	state_filter: str | None = None,
+	filters: TaskListFilters | None = None,
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 ) -> list[Task]:
+	task_filters = filters or TaskListFilters()
 	stmt = select(Task)
 
 	if principal.is_admin:
-		if user_id is not None:
-			stmt = stmt.where(Task.user_id == user_id)
+		if task_filters.user_id is not None:
+			stmt = stmt.where(Task.user_id == task_filters.user_id)
 	else:
 		stmt = stmt.where(Task.user_id == principal.user.id)
 
-	if status_filter is not None:
-		stmt = stmt.where(Task.status == status_filter)
-	if state_filter == "active":
+	if task_filters.spawned_thread_id is not None:
+		stmt = stmt.where(Task.spawned_thread_id == str(task_filters.spawned_thread_id))
+	if task_filters.status_filter is not None:
+		stmt = stmt.where(Task.status == task_filters.status_filter)
+	if task_filters.state_filter == "active":
 		stmt = stmt.where(Task.status.in_((TaskStatus.PENDING, TaskStatus.RUNNING)))
-	elif state_filter == "ended":
+	elif task_filters.state_filter == "ended":
 		stmt = stmt.where(Task.status.in_(tuple(_TERMINAL_STATUSES)))
 
 	stmt = apply_sort(

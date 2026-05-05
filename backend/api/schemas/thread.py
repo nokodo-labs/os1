@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
+from api.models.thread_summary import SummaryType
 from api.schemas.common import (
 	MetadataModel,
 	MetadataUpdateModel,
@@ -25,6 +26,14 @@ type ThreadSortBy = (
 		"title",
 	]
 )
+
+
+class ThreadListFilters(BaseModel):
+	"""filters for listing threads."""
+
+	owner_id: TypeID | None = None
+	include_hidden: bool = False
+	is_archived: bool | None = None
 
 
 def _populate_project_ids(data: Any) -> Any:
@@ -107,6 +116,19 @@ class Thread(ThreadBase, TimestampedModel):
 	@classmethod
 	def _ensure_project_ids(cls, data: Any) -> Any:
 		return _populate_project_ids(data)
+
+
+class ThreadSummaryRecord(MetadataModel, TimestampedModel):
+	"""stored summary record for a thread."""
+
+	id: TypeID
+	thread_id: TypeID
+	type: SummaryType
+	start_message_id: TypeID | None = None
+	end_message_id: TypeID | None = None
+	message_count: int = 0
+	content: str = ""
+	superseded_by_id: TypeID | None = None
 
 
 class ThreadSwitchRequest(ORMModel):

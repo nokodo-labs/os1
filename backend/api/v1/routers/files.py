@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
@@ -17,7 +18,7 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 )
 from api.schemas.file import File as FileSchema
-from api.schemas.file import FileCreate, FileSortBy, FileUpdate
+from api.schemas.file import FileCreate, FileListFilters, FileSortBy, FileUpdate
 from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import files as file_service
@@ -82,7 +83,7 @@ async def upload_file(
 
 @router.get("", response_model=list[FileSchema])
 async def list_files(
-	project_id: TypeID | None = None,
+	filters: Annotated[FileListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: FileSortBy = "created_at",
@@ -94,7 +95,7 @@ async def list_files(
 	return await file_service.list_files(
 		db,
 		principal=principal,
-		project_id=project_id,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,
@@ -107,9 +108,9 @@ async def get_file(
 	file_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> File:
+) -> FileSchema:
 	"""fetch a file by id."""
-	return await file_service.get_file(file_id, db, principal=principal)
+	return await file_service.get_file_payload(file_id, db, principal=principal)
 
 
 @router.get("/{file_id}/content")

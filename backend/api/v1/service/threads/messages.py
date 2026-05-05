@@ -16,6 +16,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.message import Message, MessageType
 from api.models.thread import Thread
+from api.permissions import ResourceType
 from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.sorting import CommonSortBy
 from api.v1.service import events as event_service
@@ -24,6 +25,7 @@ from api.v1.service.authorization import (
 	require_thread_access,
 	thread_access_predicate,
 )
+from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.threads.core import (
 	_ensure_admin_for_hidden,
@@ -35,6 +37,10 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _invalidate_thread_payload(thread_id: TypeID) -> None:
+	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
 
 
 async def list_messages(
@@ -354,6 +360,7 @@ async def switch_branch(
 			status_code=status.HTTP_409_CONFLICT,
 			detail="branch state changed concurrently; please retry",
 		) from exc
+	await _invalidate_thread_payload(thread_id)
 	return thread
 
 
@@ -458,6 +465,7 @@ async def create_message(
 		),
 		origin_session_id=origin_session_id,
 	)
+	await _invalidate_thread_payload(thread_id)
 
 	return message
 
@@ -507,6 +515,7 @@ async def update_user_message(
 	for field, value in update_data.items():
 		setattr(message, field, value)
 	now = datetime.now(tz=UTC)
+	message.updated_at = now
 	thread.last_activity_at = now
 	thread.updated_at = now
 	await session.flush()
@@ -546,6 +555,7 @@ async def update_user_message(
 		),
 		origin_session_id=origin_session_id,
 	)
+	await _invalidate_thread_payload(thread_id)
 
 	return message
 
@@ -668,6 +678,7 @@ async def delete_user_message_turn(
 		),
 		origin_session_id=origin_session_id,
 	)
+	await _invalidate_thread_payload(thread_id)
 
 	# publish_event commits; refresh thread to get server-side updated_at
 	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])

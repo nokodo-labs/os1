@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
-from api.models.task import Task, TaskStatus
+from api.models.task import Task
 from api.schemas.sorting import SortDir
 from api.schemas.task import Task as TaskSchema
 from api.schemas.task import (
 	TaskCancelRequest,
 	TaskCreate,
+	TaskListFilters,
 	TaskSortBy,
-	TaskStateFilter,
 	TaskUpdate,
 )
 from api.v1.service import tasks as task_service
@@ -40,9 +41,7 @@ async def create_task(
 
 @router.get("", response_model=list[TaskSchema])
 async def list_tasks(
-	user_id: TypeID | None = None,
-	status_filter: TaskStatus | None = None,
-	state_filter: TaskStateFilter | None = None,
+	filters: Annotated[TaskListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: TaskSortBy = "created_at",
@@ -54,9 +53,7 @@ async def list_tasks(
 	return await task_service.list_tasks(
 		db,
 		principal=principal,
-		user_id=user_id,
-		status_filter=status_filter,
-		state_filter=state_filter,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,

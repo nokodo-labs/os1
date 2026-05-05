@@ -5,11 +5,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.models.event import EventScope
 from api.schemas.common import MetadataModel, TimestampedModel
 from nokodo_ai.utils.typeid import TypeID
+
+
+class EventListFilters(BaseModel):
+	"""filters for listing events."""
+
+	scope: EventScope | None = None
+	thread_id: TypeID | None = None
+	task_id: TypeID | None = None
+	user_id: TypeID | None = None
+	since: datetime | None = None
 
 
 class EventBase(MetadataModel):

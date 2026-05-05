@@ -19,7 +19,7 @@ from api.models.event_types import EventType
 from api.models.note import Note
 from api.permissions import ResourceType
 from api.schemas.note import Note as NoteOut
-from api.schemas.note import NoteCreate, NoteUpdate
+from api.schemas.note import NoteCreate, NoteListFilters, NoteUpdate
 from api.schemas.search import (
 	CursorPage,
 	SearchMode,
@@ -34,10 +34,15 @@ from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
 	require_project_access,
+	require_resource_access,
 	resource_access_predicate,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.projects import load_projects
+from api.v1.service.resource_payload_cache import (
+	get_or_set_resource_payload_cache,
+	invalidate_resource_payload_cache,
+)
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
@@ -48,24 +53,19 @@ from api.v1.service.vectorize import (
 	vectorize_resource,
 )
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
 
 
-async def _get_note(
-	note_id: TypeID,
-	session: AsyncSession,
-	principal: Principal,
-) -> Note:
+async def _load_note(note_id: TypeID, session: AsyncSession) -> Note:
 	stmt = (
 		select(Note)
 		.where(Note.id == note_id, Note.deleted_at.is_(None))
 		.options(selectinload(Note.projects))
 	)
-	if not principal.is_admin:
-		stmt = stmt.where(Note.user_id == principal.user.id)
 	result = await session.execute(stmt)
 	note = result.scalars().one_or_none()
 	if not note:
@@ -74,6 +74,22 @@ async def _get_note(
 			detail="note not found",
 		)
 	return note
+
+
+async def _get_note(
+	note_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> Note:
+	await require_resource_access(
+		note_id,
+		session,
+		principal,
+		ResourceType.NOTE,
+		required_level=required_level,
+	)
+	return await _load_note(note_id, session)
 
 
 async def create_note(
@@ -135,20 +151,18 @@ async def create_note(
 async def list_notes(
 	session: AsyncSession,
 	principal: Principal,
-	user_id: TypeID | None = None,
-	labels: list[str] | None = None,
+	filters: NoteListFilters | None = None,
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 ) -> list[Note]:
-	effective_user_id = user_id
-	if not principal.is_admin:
-		effective_user_id = TypeID(principal.user.id)
-
 	stmt = (
 		apply_sort(
-			select(Note).where(Note.deleted_at.is_(None)),
+			select(Note).where(
+				Note.deleted_at.is_(None),
+				resource_access_predicate(principal, ResourceType.NOTE),
+			),
 			sort_by=sort_by,
 			sort_dir=sort_dir,
 			columns={
@@ -162,12 +176,13 @@ async def list_notes(
 		.limit(limit)
 		.options(selectinload(Note.projects))
 	)
+	note_filters = filters or NoteListFilters()
 
-	if effective_user_id:
-		stmt = stmt.where(Note.user_id == effective_user_id)
+	if note_filters.user_id is not None:
+		stmt = stmt.where(Note.user_id == note_filters.user_id)
 
-	if labels:
-		stmt = stmt.where(Note.labels.contains(labels))
+	if note_filters.labels:
+		stmt = stmt.where(Note.labels.contains(note_filters.labels))
 
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
@@ -181,6 +196,34 @@ async def get_note(
 	return await _get_note(note_id, session, principal)
 
 
+async def get_note_payload(
+	note_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	use_cache: bool = True,
+) -> NoteOut:
+	"""get a note API payload after resource access is validated."""
+	await require_resource_access(
+		note_id,
+		session,
+		principal,
+		ResourceType.NOTE,
+		required_level=AccessLevel.READER,
+	)
+
+	async def load_payload() -> NoteOut:
+		return NoteOut.model_validate(await _load_note(note_id, session))
+
+	if not use_cache:
+		return await load_payload()
+	return await get_or_set_resource_payload_cache(
+		ResourceType.NOTE,
+		note_id,
+		NoteOut,
+		load_payload,
+	)
+
+
 async def update_note(
 	note_id: TypeID,
 	note_in: NoteUpdate,
@@ -188,7 +231,12 @@ async def update_note(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Note:
-	note = await _get_note(note_id, session, principal)
+	note = await _get_note(
+		note_id,
+		session,
+		principal,
+		required_level=AccessLevel.EDITOR,
+	)
 
 	update_data = note_in.model_dump(exclude_unset=True, by_alias=True)
 	new_project_ids = update_data.pop("project_ids", None)
@@ -205,6 +253,7 @@ async def update_note(
 		setattr(note, key, value)
 
 	await session.flush()
+	await session.refresh(note, attribute_names=["updated_at"])
 
 	# partial event: only changed fields + id + updated_at
 	event_data = note_in.model_dump(mode="json", exclude_unset=True, by_alias=True)
@@ -222,6 +271,7 @@ async def update_note(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
 
 	if await NOTE_SPEC.should_revectorize(note, note_in, session):
 		await vectorize_resource(
@@ -242,7 +292,12 @@ async def delete_note(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> None:
-	note = await _get_note(note_id, session, principal)
+	note = await _get_note(
+		note_id,
+		session,
+		principal,
+		required_level=AccessLevel.EDITOR,
+	)
 	if settings.soft_delete.notes:
 		note.soft_delete()
 	else:
@@ -259,6 +314,7 @@ async def delete_note(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
 
 	await remove_vectorized_resource(
 		NOTE_SPEC, resource_id=str(note_id), session=session
@@ -345,21 +401,21 @@ async def _autocomplete_notes(
 	limit: int = 5,
 ) -> list[SearchResultItem]:
 	"""pg_trgm autocomplete for notes on title and content."""
+	pattern = contains_pattern(q)
 	stmt = (
 		select(Note)
 		.where(
 			Note.deleted_at.is_(None),
+			resource_access_predicate(principal, ResourceType.NOTE),
 			or_(
 				func.similarity(Note.title, q) > 0.1,
-				Note.title.ilike(f"%{q}%"),
-				Note.content.ilike(f"%{q}%"),
+				Note.title.ilike(pattern, escape="\\"),
+				Note.content.ilike(pattern, escape="\\"),
 			),
 		)
 		.order_by(func.similarity(Note.title, q).desc())
 		.limit(limit)
 	)
-	if not principal.is_admin:
-		stmt = stmt.where(Note.user_id == principal.user.id)
 	result = await db.execute(stmt)
 	return [
 		SearchResultItem(

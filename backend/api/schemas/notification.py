@@ -1,4 +1,4 @@
-"""Notification schemas."""
+"""notification schemas."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 class NotificationBase(ORMModel):
-	"""Mutable notification fields."""
+	"""mutable notification fields."""
 
 	user_id: TypeID
 	event_id: TypeID
@@ -20,7 +20,7 @@ class NotificationBase(ORMModel):
 
 
 class Notification(NotificationBase, TimestampedModel):
-	"""Response schema."""
+	"""response schema."""
 
 	id: TypeID
 	read_at: datetime | None = None
@@ -28,8 +28,14 @@ class Notification(NotificationBase, TimestampedModel):
 
 
 class NotificationCreate(BaseModel):
-	"""Request schema for creating notification(s)."""
+	"""request schema for creating notification(s)."""
 
 	title: str
 	body: str
 	user_ids: list[TypeID]
+
+
+class NotificationListFilters(BaseModel):
+	"""filters for listing notifications."""
+
+	only_unread: bool = False

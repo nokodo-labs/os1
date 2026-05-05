@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,7 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 )
 from api.schemas.note import Note as NoteSchema
-from api.schemas.note import NoteCreate, NoteSortBy, NoteUpdate
+from api.schemas.note import NoteCreate, NoteListFilters, NoteSortBy, NoteUpdate
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
@@ -46,8 +48,7 @@ async def create_note(
 
 @router.get("", response_model=list[NoteSchema])
 async def list_notes(
-	user_id: TypeID | None = None,
-	labels: list[str] | None = Query(default=None),
+	filters: Annotated[NoteListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: NoteSortBy = "updated_at",
@@ -59,8 +60,7 @@ async def list_notes(
 	return await note_service.list_notes(
 		db,
 		principal=principal,
-		user_id=user_id,
-		labels=labels,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,
@@ -104,9 +104,9 @@ async def get_note(
 	note_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Note:
+) -> NoteSchema:
 	"""fetch a single note."""
-	return await note_service.get_note(note_id, db, principal=principal)
+	return await note_service.get_note_payload(note_id, db, principal=principal)
 
 
 @router.put("/{note_id}", response_model=NoteSchema)
@@ -148,9 +148,9 @@ async def enhance_note(
 	note_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Note:
+) -> NoteSchema:
 	"""enhance a note using AI. stub - returns the note unchanged until implemented."""
-	return await note_service.get_note(note_id, db, principal=principal)
+	return await note_service.get_note_payload(note_id, db, principal=principal)
 
 
 # access rules

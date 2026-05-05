@@ -6,6 +6,7 @@ from api.v1.service.threads.core import (
 	create_thread,
 	delete_thread,
 	get_thread,
+	get_thread_payload,
 	list_threads,
 	update_thread,
 )
@@ -55,6 +56,7 @@ __all__ = [
 	"generate_thread_metadata",
 	"get_current_branch",
 	"get_thread",
+	"get_thread_payload",
 	"get_unread_counts",
 	"handle_typing_event",
 	"list_events_for_message_ids",

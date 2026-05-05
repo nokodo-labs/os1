@@ -19,14 +19,19 @@ from api.models.user import User
 from api.permissions import ResourceType
 from api.schemas.message import Message as MessageOut
 from api.schemas.thread import Thread as ThreadOut
-from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.schemas.thread import ThreadCreate, ThreadListFilters, ThreadUpdate
 from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	require_permission,
+	require_thread_access,
 	thread_access_predicate,
+)
+from api.v1.service.resource_payload_cache import (
+	get_or_set_resource_payload_cache,
+	invalidate_resource_payload_cache,
 )
 from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.threads.participants import ensure_participant
@@ -40,6 +45,11 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _invalidate_project_payload_caches(project_ids: set[TypeID]) -> None:
+	for project_id in project_ids:
+		await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
 
 
 def _message_event_data(message: Message) -> dict[str, object]:
@@ -116,6 +126,30 @@ async def _load_thread(
 	return thread
 
 
+async def _load_thread_payload_source(
+	thread_id: TypeID,
+	session: AsyncSession,
+	include_hidden: bool = False,
+) -> Thread:
+	stmt = (
+		select(Thread)
+		.options(selectinload(Thread.projects))
+		.where(Thread.id == thread_id)
+	)
+	if include_hidden:
+		stmt = stmt.execution_options(include_deleted=True)
+	else:
+		stmt = stmt.where(Thread.deleted_at.is_(None))
+	result = await session.execute(stmt)
+	thread = result.scalars().unique().one_or_none()
+	if not thread:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="Thread not found",
+		)
+	return thread
+
+
 async def create_thread(
 	thread_in: ThreadCreate,
 	session: AsyncSession,
@@ -166,6 +200,7 @@ async def create_thread(
 	await event_service.publish_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
+	await _invalidate_project_payload_caches({project.id for project in projects})
 
 	return thread
 
@@ -173,15 +208,14 @@ async def create_thread(
 async def list_threads(
 	session: AsyncSession,
 	principal: Principal,
-	owner_id: TypeID | None = None,
+	filters: ThreadListFilters | None = None,
 	skip: int = 0,
 	limit: int = 20,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
-	include_hidden: bool = False,
-	is_archived: bool | None = None,
 ) -> list[Thread]:
-	_ensure_admin_for_hidden(include_hidden, principal)
+	thread_filters = filters or ThreadListFilters()
+	_ensure_admin_for_hidden(thread_filters.include_hidden, principal)
 	stmt = (
 		select(Thread)
 		.options(
@@ -192,22 +226,22 @@ async def list_threads(
 			thread_access_predicate(
 				principal,
 				required_level=AccessLevel.READER,
-				include_hidden=include_hidden,
+				include_hidden=thread_filters.include_hidden,
 			)
 		)
 	)
 
-	if owner_id is not None:
-		stmt = stmt.where(Thread.owner_id == owner_id)
+	if thread_filters.owner_id is not None:
+		stmt = stmt.where(Thread.owner_id == thread_filters.owner_id)
 
 	# always exclude temporary threads from listings
-	if not include_hidden:
+	if not thread_filters.include_hidden:
 		stmt = stmt.where(Thread.is_temporary.is_(False))
 
-	if is_archived is not None:
-		stmt = stmt.where(Thread.is_archived == is_archived)
+	if thread_filters.is_archived is not None:
+		stmt = stmt.where(Thread.is_archived == thread_filters.is_archived)
 
-	if include_hidden:
+	if thread_filters.include_hidden:
 		stmt = stmt.execution_options(include_deleted=True)
 
 	stmt = apply_sort(
@@ -240,6 +274,39 @@ async def get_thread(
 		principal,
 		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
+	)
+
+
+async def get_thread_payload(
+	thread_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	include_hidden: bool = False,
+	use_cache: bool = True,
+) -> ThreadOut:
+	"""get a thread API payload after access is validated."""
+	_ensure_admin_for_hidden(include_hidden, principal)
+	await require_thread_access(
+		thread_id,
+		session,
+		principal,
+		required_level=AccessLevel.READER,
+		include_hidden=include_hidden,
+	)
+
+	async def load_payload() -> ThreadOut:
+		return ThreadOut.model_validate(
+			await _load_thread_payload_source(thread_id, session, include_hidden)
+		)
+
+	if not use_cache:
+		return await load_payload()
+	return await get_or_set_resource_payload_cache(
+		ResourceType.THREAD,
+		thread_id,
+		ThreadOut,
+		load_payload,
+		variant="hidden" if include_hidden else "default",
 	)
 
 
@@ -289,13 +356,17 @@ async def update_thread(
 		thread.current_message_id = new_current_message_id """
 
 	project_ids = update_data.pop("project_ids", None)
+	old_project_ids = {project.id for project in thread.projects}
 	for field, value in update_data.items():
 		setattr(thread, field, value)
 
+	new_project_ids: set[TypeID] | None = None
 	if project_ids is not None:
-		thread.projects = await project_service.load_projects(
+		projects = await project_service.load_projects(
 			project_ids, session, principal, required_level=AccessLevel.EDITOR
 		)
+		thread.projects = projects
+		new_project_ids = {project.id for project in projects}
 
 	await session.flush()
 
@@ -327,6 +398,7 @@ async def update_thread(
 		await event_service.publish_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
+	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
 
 	# re-index if searchable fields changed
 	if await THREAD_SPEC.should_revectorize(thread, thread_in, session):
@@ -339,6 +411,9 @@ async def update_thread(
 				str(thread.id), ResourceType.THREAD, session
 			),
 		)
+
+	if new_project_ids is not None:
+		await _invalidate_project_payload_caches(old_project_ids | new_project_ids)
 
 	if (
 		owner_changed
@@ -382,6 +457,7 @@ async def delete_thread(
 		)
 
 	owner_id = str(thread.owner_id)
+	project_ids = {project.id for project in thread.projects}
 
 	if permanent or not settings.soft_delete.threads:
 		await session.delete(thread)
@@ -401,7 +477,9 @@ async def delete_thread(
 	await event_service.publish_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
+	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
 
 	await remove_vectorized_resource(
 		THREAD_SPEC, resource_id=str(thread_id), session=session
 	)
+	await _invalidate_project_payload_caches(project_ids)

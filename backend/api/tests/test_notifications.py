@@ -12,6 +12,7 @@ from api.models.event import Event, EventScope
 from api.models.notification import Notification
 from api.models.thread import Thread
 from api.permissions import ResourceType
+from api.schemas.notification import NotificationListFilters
 from api.schemas.user import UserCreate
 from api.v1.service import notifications as notification_service
 from api.v1.service import users as user_service
@@ -121,8 +122,8 @@ async def test_list_unread_notifications(
 	notifications = await notification_service.list_user_notifications(
 		db_session,
 		user_id=user.id,
-		only_unread=True,
 		principal=principal,
+		filters=NotificationListFilters(only_unread=True),
 	)
 	assert len(notifications) == 1
 
@@ -137,8 +138,8 @@ async def test_list_unread_notifications(
 	notifications = await notification_service.list_user_notifications(
 		db_session,
 		user_id=user.id,
-		only_unread=True,
 		principal=principal,
+		filters=NotificationListFilters(only_unread=True),
 	)
 	assert len(notifications) == 0
 

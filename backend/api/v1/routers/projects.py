@@ -67,9 +67,11 @@ async def get_project(
 	project_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Project:
+) -> ProjectSchema:
 	"""fetch a project by id."""
-	return await project_service.get_project(project_id, db, principal=principal)
+	return await project_service.get_project_payload(
+		project_id, db, principal=principal
+	)
 
 
 @router.patch("/{project_id}", response_model=ProjectSchema)

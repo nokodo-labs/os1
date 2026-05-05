@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy import update
@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local, get_db
 from api.logging import get_logger
-from api.models.event import Event, EventScope
+from api.models.event import Event
 from api.models.user import User
 from api.schemas.event import Event as EventSchema
-from api.schemas.event import EventCreate
+from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service import auth as auth_service
 from api.v1.service import events as event_service
 from api.v1.service import threads as thread_service
@@ -48,11 +48,7 @@ async def emit_event(
 
 @router.get("", response_model=list[EventSchema])
 async def list_events(
-	scope: EventScope | None = None,
-	thread_id: TypeID | None = None,
-	task_id: TypeID | None = None,
-	user_id: TypeID | None = None,
-	since: datetime | None = None,
+	filters: Annotated[EventListFilters, Depends()],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Event]:
@@ -60,11 +56,7 @@ async def list_events(
 	return await event_service.list_events(
 		db,
 		principal=principal,
-		scope=scope,
-		thread_id=thread_id,
-		task_id=task_id,
-		user_id=user_id,
-		since=since,
+		filters=filters,
 	)
 
 

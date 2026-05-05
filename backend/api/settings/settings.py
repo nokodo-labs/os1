@@ -146,7 +146,7 @@ class AIChatContextSettings(BaseModel):
 class AITaskSettings(BaseModel):
 	"""per-task model overrides for background AI tasks.
 
-	resolution order: per-task model_id → default_model_id → error.
+	resolution order: per-task model_id -> default_model_id -> error.
 	"""
 
 	default_model_id: str | None = Field(
@@ -296,6 +296,15 @@ class AIWindowingSettings(BaseModel):
 		ge=256,
 		description="tokens reserved for the model's response",
 	)
+	summarization_max_chars_per_message: int | None = Field(
+		default=2000,
+		ge=1,
+		description=(
+			"max characters per message in summarization transcripts. "
+			"keeps tokens manageable without losing essential context. "
+			"null for unlimited"
+		),
+	)
 
 
 class E2bSettings(BaseModel):
@@ -338,6 +347,21 @@ class CodeInterpreterSettings(BaseModel):
 		default=60,
 		ge=5,
 		description="execution timeout in seconds",
+	)
+	max_file_download_mb: int = Field(
+		default=10,
+		ge=1,
+		description="max file size downloadable from sandbox in MB",
+	)
+	max_output_chars: int = Field(
+		default=500_000,
+		ge=1000,
+		description="max output characters returned from code interpreter",
+	)
+	truncation_lines: int = Field(
+		default=50,
+		ge=5,
+		description="lines kept at head and tail when truncating output",
 	)
 
 
@@ -509,6 +533,16 @@ class LimitsSettings(BaseModel):
 		default=1000, ge=1, description="max messages per thread"
 	)
 	max_file_size_mb: int = Field(default=50, ge=1, description="max file size mb")
+	max_reminder_hierarchy_depth: int = Field(
+		default=8,
+		ge=1,
+		description="maximum nesting depth for sub-reminders",
+	)
+	max_scheduled_items_window_days: int = Field(
+		default=366,
+		ge=1,
+		description="maximum time window in days for scheduled items queries",
+	)
 	rate_limit_requests_per_minute: int = Field(
 		default=1500, ge=1, description="rate limit/min"
 	)
@@ -1317,6 +1351,16 @@ class CacheSettings(BaseModel):
 		frozen=True,
 		description="Redis / Valkey cache and pub/sub settings",
 	)
+	scheduled_items_ttl_seconds: int = Field(
+		default=30,
+		ge=1,
+		description="TTL for scheduled items cache entries",
+	)
+	resource_payload_ttl_seconds: int = Field(
+		default=30,
+		ge=1,
+		description="TTL for resource payload cache entries",
+	)
 
 
 class TaskiqSettings(BaseModel):
@@ -1376,6 +1420,7 @@ class DefaultPermissionsSettings(BaseModel):
 			ActionPermission.NOTES_CREATE,
 			ActionPermission.GROUPS_CREATE,
 			ActionPermission.REMINDERS_CREATE,
+			ActionPermission.CALENDAR_CREATE,
 			ActionPermission.MEMORIES_CREATE,
 			ActionPermission.TASKS_CREATE,
 			ActionPermission.FILES_CREATE,
@@ -1443,6 +1488,10 @@ class Settings(BaseSettings):
 	assets: AssetsSettings = Field(default_factory=AssetsSettings)
 	limits: LimitsSettings = Field(default_factory=LimitsSettings)
 	security: SecuritySettings = Field(default_factory=SecuritySettings)
+	notifications: NotificationSettings = Field(
+		default_factory=NotificationSettings,
+		description="notification delivery settings",
+	)
 	soft_delete: SoftDeleteSettings = Field(default_factory=SoftDeleteSettings)
 	web_search: WebSearchSettings = Field(
 		default_factory=WebSearchSettings,

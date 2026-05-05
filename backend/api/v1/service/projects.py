@@ -10,9 +10,16 @@ from sqlalchemy.orm import selectinload
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.models.many_to_many import thread_project_association
+from api.models.many_to_many import (
+	calendar_project_association,
+	file_project_association,
+	note_project_association,
+	reminder_list_project_association,
+	thread_project_association,
+)
 from api.models.project import Project
 from api.permissions import ResourceType
+from api.schemas.project import Project as ProjectSchema
 from api.schemas.project import ProjectCreate, ProjectUpdate
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
@@ -20,6 +27,10 @@ from api.v1.service.authorization import (
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
+)
+from api.v1.service.resource_payload_cache import (
+	get_or_set_resource_payload_cache,
+	invalidate_resource_payload_cache,
 )
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
@@ -39,6 +50,82 @@ async def _get_project(project_id: TypeID, session: AsyncSession) -> Project:
 			detail="project not found",
 		)
 	return project
+
+
+async def _invalidate_thread_payload_caches(thread_ids: set[TypeID]) -> None:
+	for thread_id in thread_ids:
+		await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
+
+
+async def _load_project_dependent_resource_ids(
+	project_id: TypeID,
+	session: AsyncSession,
+) -> dict[ResourceType, set[TypeID]]:
+	thread_ids = {
+		TypeID(str(thread_id))
+		for thread_id in (
+			await session.scalars(
+				select(thread_project_association.c.thread_id).where(
+					thread_project_association.c.project_id == project_id
+				)
+			)
+		).all()
+	}
+	file_ids = {
+		TypeID(str(file_id))
+		for file_id in (
+			await session.scalars(
+				select(file_project_association.c.file_id).where(
+					file_project_association.c.project_id == project_id
+				)
+			)
+		).all()
+	}
+	note_ids = {
+		TypeID(str(note_id))
+		for note_id in (
+			await session.scalars(
+				select(note_project_association.c.note_id).where(
+					note_project_association.c.project_id == project_id
+				)
+			)
+		).all()
+	}
+	reminder_list_ids = {
+		TypeID(str(reminder_list_id))
+		for reminder_list_id in (
+			await session.scalars(
+				select(reminder_list_project_association.c.reminder_list_id).where(
+					reminder_list_project_association.c.project_id == project_id
+				)
+			)
+		).all()
+	}
+	calendar_ids = {
+		TypeID(str(calendar_id))
+		for calendar_id in (
+			await session.scalars(
+				select(calendar_project_association.c.calendar_id).where(
+					calendar_project_association.c.project_id == project_id
+				)
+			)
+		).all()
+	}
+	return {
+		ResourceType.THREAD: thread_ids,
+		ResourceType.FILE: file_ids,
+		ResourceType.NOTE: note_ids,
+		ResourceType.REMINDER_LIST: reminder_list_ids,
+		ResourceType.CALENDAR: calendar_ids,
+	}
+
+
+async def _invalidate_resource_payload_caches(
+	resource_ids: dict[ResourceType, set[TypeID]],
+) -> None:
+	for resource_type, ids in resource_ids.items():
+		for resource_id in ids:
+			await invalidate_resource_payload_cache(resource_type, resource_id)
 
 
 async def resolve_thread_project_id(
@@ -103,7 +190,10 @@ async def create_project(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.PROJECT_CREATED,
-		data={"project_id": project_id, "name": project.name},
+		data={
+			"id": str(project_id),
+			"name": project.name,
+		},
 		user_id=principal.user_id,
 		project_id=project_id,
 	)
@@ -160,6 +250,34 @@ async def get_project(
 	return await _get_project(project_id, session)
 
 
+async def get_project_payload(
+	project_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	use_cache: bool = True,
+) -> ProjectSchema:
+	"""get a project API payload after resource access is validated."""
+	await require_resource_access(
+		project_id,
+		session,
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.READER,
+	)
+
+	async def load_payload() -> ProjectSchema:
+		return ProjectSchema.model_validate(await _get_project(project_id, session))
+
+	if not use_cache:
+		return await load_payload()
+	return await get_or_set_resource_payload_cache(
+		ResourceType.PROJECT,
+		project_id,
+		ProjectSchema,
+		load_payload,
+	)
+
+
 async def update_project(
 	project_id: TypeID,
 	project_in: ProjectUpdate,
@@ -176,6 +294,7 @@ async def update_project(
 		required_level=AccessLevel.EDITOR,
 	)
 	project = await _get_project(project_id, session)
+	thread_ids = {thread.id for thread in project.threads}
 	updates = project_in.model_dump(exclude_unset=True, by_alias=True)
 	for field, value in updates.items():
 		setattr(project, field, value)
@@ -185,7 +304,10 @@ async def update_project(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.PROJECT_UPDATED,
-		data={"project_id": str(project_id), "name": project.name},
+		data={
+			"id": str(project_id),
+			"name": project.name,
+		},
 		user_id=principal.user_id,
 		project_id=str(project_id),
 	)
@@ -194,6 +316,8 @@ async def update_project(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
+	await _invalidate_thread_payload_caches(thread_ids)
 	return await _get_project(project_id, session)
 
 
@@ -212,6 +336,10 @@ async def delete_project(
 		required_level=AccessLevel.EDITOR,
 	)
 	project = await _get_project(project_id, session)
+	dependent_resource_ids = await _load_project_dependent_resource_ids(
+		project_id,
+		session,
+	)
 	if not principal.is_admin and project.owner_id != principal.user_id:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
@@ -222,7 +350,7 @@ async def delete_project(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.PROJECT_DELETED,
-		data={"project_id": project_id},
+		data={"id": str(project_id)},
 		user_id=principal.user_id,
 		project_id=project_id,
 	)
@@ -231,3 +359,5 @@ async def delete_project(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
+	await _invalidate_resource_payload_caches(dependent_resource_ids)

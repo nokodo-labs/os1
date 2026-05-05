@@ -15,8 +15,9 @@ from api.models.task import Task, TaskStatus, TaskType
 from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.agent import AgentConfig, AgentCreate
+from api.schemas.memory import MemoryListFilters
 from api.schemas.message import MessageCreate
-from api.schemas.task import TaskUpdate
+from api.schemas.task import TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
 from api.v1.service import (
 	agents,
@@ -190,7 +191,7 @@ async def test_tasks_update_no_changes(db_session: AsyncSession) -> None:
 	filtered = await tasks.list_tasks(
 		db_session,
 		principal=principal,
-		status_filter=TaskStatus.PENDING,
+		filters=TaskListFilters(status_filter=TaskStatus.PENDING),
 	)
 	assert filtered
 
@@ -210,7 +211,9 @@ async def test_memories_admin_user_filter(db_session: AsyncSession) -> None:
 	db_session.add(memory)
 	await db_session.commit()
 	listed = await memories.list_memories(
-		db_session, principal=principal, user_id=other_user.id
+		db_session,
+		principal=principal,
+		filters=MemoryListFilters(user_id=other_user.id),
 	)
 	assert listed and listed[0].user_id == other_user.id
 

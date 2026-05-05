@@ -7,6 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.prompt import Prompt
+from api.permissions import ResourceType
+from api.schemas.prompt import Prompt as PromptOut
 from api.schemas.prompt import PromptCreate, PromptUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
@@ -15,6 +17,10 @@ from api.v1.service.prompt_runtime import (
 	http_error_from_validation,
 	normalize_command,
 	validate_prompt_content,
+)
+from api.v1.service.resource_payload_cache import (
+	get_or_set_resource_payload_cache,
+	invalidate_resource_payload_cache,
 )
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
@@ -151,9 +157,21 @@ async def get_prompt(
 	prompt_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
-) -> Prompt:
+	use_cache: bool = True,
+) -> PromptOut:
 	require_permission(principal, "prompts:read")
-	return await _get_prompt(prompt_id, session)
+
+	async def load_payload() -> PromptOut:
+		return PromptOut.model_validate(await _get_prompt(prompt_id, session))
+
+	if not use_cache:
+		return await load_payload()
+	return await get_or_set_resource_payload_cache(
+		ResourceType.PROMPT,
+		prompt_id,
+		PromptOut,
+		load_payload,
+	)
 
 
 async def update_prompt(
@@ -202,6 +220,7 @@ async def update_prompt(
 	session.add(prompt)
 	await session.commit()
 	await session.refresh(prompt)
+	await invalidate_resource_payload_cache(ResourceType.PROMPT, prompt_id)
 	return prompt
 
 
@@ -214,3 +233,4 @@ async def delete_prompt(
 	prompt = await _get_prompt(prompt_id, session)
 	await session.delete(prompt)
 	await session.commit()
+	await invalidate_resource_payload_cache(ResourceType.PROMPT, prompt_id)

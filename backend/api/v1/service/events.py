@@ -13,8 +13,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Coroutine
-from datetime import datetime
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Header, HTTPException, WebSocket, status
@@ -23,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
 from api.local_tasks import create_background_task
-from api.models.event import Event, EventScope
+from api.models.event import Event
 from api.models.event_types import EventType
 from api.permissions import ResourceType
-from api.schemas.event import EventCreate
+from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import list_accessible_user_ids, require_permission
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -43,77 +43,122 @@ if TYPE_CHECKING:
 	from api.models.event import Event as EventModel
 
 
-# --- access-based event routing ---
-# maps event types to the resource type + data-key that holds the resource ID.
-# events not listed here fall back to owner-only or broadcast routing.
+@dataclass(frozen=True)
+class _EventResourceTarget:
+	resource_type: ResourceType
+	data_keys: tuple[str, ...]
 
-_EVENT_ROUTING: dict[str, tuple[ResourceType, str]] = {
-	# note events
-	EventType.NOTE_CREATED: (ResourceType.NOTE, "id"),
-	EventType.NOTE_UPDATED: (ResourceType.NOTE, "id"),
-	EventType.NOTE_DELETED: (ResourceType.NOTE, "id"),
-	# thread events
-	EventType.THREAD_CREATED: (ResourceType.THREAD, "id"),
-	EventType.THREAD_UPDATED: (ResourceType.THREAD, "id"),
-	EventType.THREAD_DELETED: (ResourceType.THREAD, "id"),
-	EventType.THREAD_READ: (ResourceType.THREAD, "thread_id"),
-	# message events (route via parent thread)
-	EventType.MESSAGE_CREATED: (ResourceType.THREAD, "thread_id"),
-	EventType.MESSAGE_UPDATED: (ResourceType.THREAD, "thread_id"),
-	EventType.MESSAGE_DELETED: (ResourceType.THREAD, "thread_id"),
-	# file events
-	EventType.FILE_CREATED: (ResourceType.FILE, "id"),
-	EventType.FILE_UPDATED: (ResourceType.FILE, "id"),
-	EventType.FILE_DELETED: (ResourceType.FILE, "id"),
-	EventType.FILE_PROCESSING: (ResourceType.FILE, "id"),
-	EventType.FILE_READY: (ResourceType.FILE, "id"),
-	# agent events
-	EventType.AGENT_CREATED: (ResourceType.AGENT, "id"),
-	EventType.AGENT_UPDATED: (ResourceType.AGENT, "id"),
-	EventType.AGENT_DELETED: (ResourceType.AGENT, "id"),
-	# project events
-	EventType.PROJECT_CREATED: (ResourceType.PROJECT, "id"),
-	EventType.PROJECT_UPDATED: (ResourceType.PROJECT, "id"),
-	EventType.PROJECT_DELETED: (ResourceType.PROJECT, "id"),
-	# memory events
-	EventType.MEMORY_CREATED: (ResourceType.MEMORY, "id"),
-	EventType.MEMORY_UPDATED: (ResourceType.MEMORY, "id"),
-	EventType.MEMORY_DELETED: (ResourceType.MEMORY, "id"),
-	# reminder list events
-	EventType.REMINDER_LIST_CREATED: (ResourceType.REMINDER_LIST, "id"),
-	EventType.REMINDER_LIST_UPDATED: (ResourceType.REMINDER_LIST, "id"),
-	EventType.REMINDER_LIST_DELETED: (ResourceType.REMINDER_LIST, "id"),
-	# reminder events (route via parent list)
-	EventType.REMINDER_CREATED: (ResourceType.REMINDER_LIST, "list_id"),
-	EventType.REMINDER_UPDATED: (ResourceType.REMINDER_LIST, "list_id"),
-	EventType.REMINDER_COMPLETED: (ResourceType.REMINDER_LIST, "list_id"),
-	EventType.REMINDER_DELETED: (ResourceType.REMINDER_LIST, "list_id"),
-	# group events
-	EventType.GROUP_CREATED: (ResourceType.GROUP, "id"),
-	EventType.GROUP_UPDATED: (ResourceType.GROUP, "id"),
-	EventType.GROUP_DELETED: (ResourceType.GROUP, "id"),
-	EventType.GROUP_MEMBER_ADDED: (ResourceType.GROUP, "group_id"),
-	EventType.GROUP_MEMBER_REMOVED: (ResourceType.GROUP, "group_id"),
-	# run events (route via thread)
-	EventType.RUN_STARTED: (ResourceType.THREAD, "thread_id"),
-	EventType.RUN_COMPLETED: (ResourceType.THREAD, "thread_id"),
-	EventType.RUN_ERROR: (ResourceType.THREAD, "thread_id"),
-	EventType.RUN_STEERING_QUEUED: (ResourceType.THREAD, "thread_id"),
-	EventType.RUN_STEERING_INJECTED: (ResourceType.THREAD, "thread_id"),
-	EventType.RUN_STEERING_DROPPED: (ResourceType.THREAD, "thread_id"),
-	# task events
-	EventType.TASK_CREATED: (ResourceType.TASK, "task_id"),
-	EventType.TASK_UPDATED: (ResourceType.TASK, "task_id"),
-	EventType.TASK_COMPLETED: (ResourceType.TASK, "task_id"),
-	EventType.TASK_FAILED: (ResourceType.TASK, "task_id"),
-	EventType.TASK_CANCELLED: (ResourceType.TASK, "task_id"),
-	# tool events (route via thread)
-	EventType.TOOL_PROGRESS: (ResourceType.THREAD, "thread_id"),
-	EventType.TOOL_CUSTOM: (ResourceType.THREAD, "thread_id"),
-	EventType.TOOL_NOTIFICATION: (ResourceType.THREAD, "thread_id"),
-	# citation events (route via thread)
-	EventType.CITATION_SOURCES: (ResourceType.THREAD, "thread_id"),
+
+def _event_target(
+	resource_type: ResourceType,
+	data_keys: tuple[str, ...],
+) -> _EventResourceTarget:
+	return _EventResourceTarget(
+		resource_type=resource_type,
+		data_keys=data_keys,
+	)
+
+
+_EVENT_ROUTING_TARGETS: dict[str, _EventResourceTarget] = {
+	EventType.NOTE_CREATED: _event_target(ResourceType.NOTE, ("id",)),
+	EventType.NOTE_UPDATED: _event_target(ResourceType.NOTE, ("id",)),
+	EventType.NOTE_DELETED: _event_target(ResourceType.NOTE, ("id",)),
+	EventType.THREAD_CREATED: _event_target(ResourceType.THREAD, ("id",)),
+	EventType.THREAD_UPDATED: _event_target(ResourceType.THREAD, ("id",)),
+	EventType.THREAD_DELETED: _event_target(ResourceType.THREAD, ("id",)),
+	EventType.THREAD_READ: _event_target(ResourceType.THREAD, ("thread_id", "id")),
+	EventType.MESSAGE_CREATED: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.MESSAGE_UPDATED: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.MESSAGE_DELETED: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.FILE_CREATED: _event_target(ResourceType.FILE, ("id",)),
+	EventType.FILE_UPDATED: _event_target(ResourceType.FILE, ("id",)),
+	EventType.FILE_DELETED: _event_target(ResourceType.FILE, ("id",)),
+	EventType.FILE_PROCESSING: _event_target(ResourceType.FILE, ("id",)),
+	EventType.FILE_READY: _event_target(ResourceType.FILE, ("id",)),
+	EventType.AGENT_CREATED: _event_target(ResourceType.AGENT, ("id",)),
+	EventType.AGENT_UPDATED: _event_target(ResourceType.AGENT, ("id",)),
+	EventType.AGENT_DELETED: _event_target(ResourceType.AGENT, ("id",)),
+	EventType.PROJECT_CREATED: _event_target(ResourceType.PROJECT, ("id",)),
+	EventType.PROJECT_UPDATED: _event_target(ResourceType.PROJECT, ("id",)),
+	EventType.PROJECT_DELETED: _event_target(ResourceType.PROJECT, ("id",)),
+	EventType.MEMORY_CREATED: _event_target(ResourceType.MEMORY, ("id",)),
+	EventType.MEMORY_UPDATED: _event_target(ResourceType.MEMORY, ("id",)),
+	EventType.MEMORY_DELETED: _event_target(ResourceType.MEMORY, ("id",)),
+	EventType.REMINDER_LIST_CREATED: _event_target(
+		ResourceType.REMINDER_LIST,
+		("id",),
+	),
+	EventType.REMINDER_LIST_UPDATED: _event_target(
+		ResourceType.REMINDER_LIST,
+		("id",),
+	),
+	EventType.REMINDER_LIST_DELETED: _event_target(
+		ResourceType.REMINDER_LIST,
+		("id",),
+	),
+	EventType.REMINDER_CREATED: _event_target(ResourceType.REMINDER_LIST, ("list_id",)),
+	EventType.REMINDER_UPDATED: _event_target(ResourceType.REMINDER_LIST, ("list_id",)),
+	EventType.REMINDER_COMPLETED: _event_target(
+		ResourceType.REMINDER_LIST,
+		("list_id",),
+	),
+	EventType.REMINDER_DELETED: _event_target(ResourceType.REMINDER_LIST, ("list_id",)),
+	EventType.CALENDAR_CREATED: _event_target(ResourceType.CALENDAR, ("id",)),
+	EventType.CALENDAR_UPDATED: _event_target(ResourceType.CALENDAR, ("id",)),
+	EventType.CALENDAR_DELETED: _event_target(ResourceType.CALENDAR, ("id",)),
+	EventType.CALENDAR_EVENT_CREATED: _event_target(
+		ResourceType.CALENDAR,
+		("calendar_id",),
+	),
+	EventType.CALENDAR_EVENT_UPDATED: _event_target(
+		ResourceType.CALENDAR,
+		("calendar_id",),
+	),
+	EventType.CALENDAR_EVENT_DELETED: _event_target(
+		ResourceType.CALENDAR,
+		("calendar_id",),
+	),
+	EventType.GROUP_CREATED: _event_target(ResourceType.GROUP, ("id",)),
+	EventType.GROUP_UPDATED: _event_target(ResourceType.GROUP, ("id",)),
+	EventType.GROUP_DELETED: _event_target(ResourceType.GROUP, ("id",)),
+	EventType.GROUP_MEMBER_ADDED: _event_target(ResourceType.GROUP, ("group_id",)),
+	EventType.GROUP_MEMBER_REMOVED: _event_target(ResourceType.GROUP, ("group_id",)),
+	EventType.RUN_STARTED: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.RUN_COMPLETED: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.RUN_ERROR: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.RUN_STEERING_QUEUED: _event_target(
+		ResourceType.THREAD,
+		("thread_id",),
+	),
+	EventType.RUN_STEERING_INJECTED: _event_target(
+		ResourceType.THREAD,
+		("thread_id",),
+	),
+	EventType.RUN_STEERING_DROPPED: _event_target(
+		ResourceType.THREAD,
+		("thread_id",),
+	),
+	EventType.TASK_CREATED: _event_target(ResourceType.TASK, ("task_id",)),
+	EventType.TASK_UPDATED: _event_target(ResourceType.TASK, ("task_id",)),
+	EventType.TASK_COMPLETED: _event_target(ResourceType.TASK, ("task_id",)),
+	EventType.TASK_FAILED: _event_target(ResourceType.TASK, ("task_id",)),
+	EventType.TASK_CANCELLED: _event_target(ResourceType.TASK, ("task_id",)),
+	EventType.TOOL_PROGRESS: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.TOOL_CUSTOM: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.TOOL_NOTIFICATION: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.CITATION_SOURCES: _event_target(ResourceType.THREAD, ("thread_id",)),
 }
+
+
+def _resource_id_from_data(
+	data: Mapping[str, object],
+	keys: tuple[str, ...],
+) -> TypeID | None:
+	for key in keys:
+		value = data.get(key)
+		if value is not None:
+			return TypeID(str(value))
+	return None
 
 
 def _resolve_routing(event: Event) -> tuple[ResourceType, TypeID] | None:
@@ -122,15 +167,13 @@ def _resolve_routing(event: Event) -> tuple[ResourceType, TypeID] | None:
 	returns None for events that should use the legacy routing path
 	(owner-only or broadcast).
 	"""
-	config = _EVENT_ROUTING.get(event.type)
-	if not config:
+	target = _EVENT_ROUTING_TARGETS.get(event.type)
+	if target is None:
 		return None
-	resource_type, data_key = config
-	# extract resource ID from event data
-	resource_id: TypeID | None = None
-	if event.data and data_key in event.data:
-		resource_id = TypeID(str(event.data[data_key]))
-	# fallback: thread-scoped resources can use event.thread_id
+	resource_type = target.resource_type
+	resource_id = (
+		_resource_id_from_data(event.data, target.data_keys) if event.data else None
+	)
 	if not resource_id and resource_type == ResourceType.THREAD and event.thread_id:
 		resource_id = event.thread_id
 	if not resource_id and resource_type == ResourceType.TASK and event.task_id:
@@ -157,6 +200,14 @@ def _build_event_data(
 		"message_id": str(event.message_id) if event.message_id else None,
 		"task_id": str(event.task_id) if event.task_id else None,
 		"project_id": str(event.project_id) if event.project_id else None,
+		"calendar_id": str(event.calendar_id) if event.calendar_id else None,
+		"calendar_event_id": str(event.calendar_event_id)
+		if event.calendar_event_id
+		else None,
+		"reminder_list_id": str(event.reminder_list_id)
+		if event.reminder_list_id
+		else None,
+		"reminder_id": str(event.reminder_id) if event.reminder_id else None,
 		"created_at": event.created_at.isoformat() if event.created_at else None,
 		"origin_session_id": origin_session_id,
 	}
@@ -258,7 +309,6 @@ EventEmitter = Callable[[Event], Awaitable[None]]
 
 
 def build_event_emitter(
-	*,
 	message_id_provider: Callable[[], str | None] | None = None,
 	before_persist: Callable[[Event], Awaitable[None]] | None = None,
 ) -> EventEmitter:
@@ -333,6 +383,10 @@ def build_event_emitter(
 				message_id=event.message_id,
 				task_id=event.task_id,
 				project_id=event.project_id,
+				calendar_id=event.calendar_id,
+				calendar_event_id=event.calendar_event_id,
+				reminder_list_id=event.reminder_list_id,
+				reminder_id=event.reminder_id,
 				metadata_=event.metadata_,
 			)
 			async with async_session_local() as bg_session:
@@ -346,7 +400,6 @@ def build_event_emitter(
 
 async def publish_event(
 	session: AsyncSession,
-	*,
 	event: Event,
 	origin_session_id: str | None = None,
 ) -> Event:
@@ -377,7 +430,6 @@ async def publish_event(
 async def emit_event(
 	event_in: EventCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Event:
 	"""emit an event via the API."""
@@ -394,27 +446,23 @@ async def emit_event(
 
 async def list_events(
 	session: AsyncSession,
-	*,
 	principal: Principal,
-	scope: EventScope | None = None,
-	thread_id: str | None = None,
-	task_id: str | None = None,
-	user_id: str | None = None,
-	since: datetime | None = None,
+	filters: EventListFilters | None = None,
 ) -> list[Event]:
 	require_permission(principal, "events:manage")
+	event_filters = filters or EventListFilters()
 	stmt = select(Event).order_by(Event.created_at.desc())
 
-	if scope is not None:
-		stmt = stmt.where(Event.scope == scope)
-	if thread_id is not None:
-		stmt = stmt.where(Event.thread_id == thread_id)
-	if task_id is not None:
-		stmt = stmt.where(Event.task_id == task_id)
-	if user_id is not None:
-		stmt = stmt.where(Event.user_id == user_id)
-	if since is not None:
-		stmt = stmt.where(Event.created_at >= since)
+	if event_filters.scope is not None:
+		stmt = stmt.where(Event.scope == event_filters.scope)
+	if event_filters.thread_id is not None:
+		stmt = stmt.where(Event.thread_id == event_filters.thread_id)
+	if event_filters.task_id is not None:
+		stmt = stmt.where(Event.task_id == event_filters.task_id)
+	if event_filters.user_id is not None:
+		stmt = stmt.where(Event.user_id == event_filters.user_id)
+	if event_filters.since is not None:
+		stmt = stmt.where(Event.created_at >= event_filters.since)
 
 	result = await session.execute(stmt.limit(200))
 	return list(result.scalars().all())

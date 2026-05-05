@@ -8,6 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessRule
+from api.models.agent import Agent
 from api.models.model import ModelType
 from api.models.user import User
 from api.permissions import AccessLevel
@@ -104,8 +105,44 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 
 	fetched = await agent_service.get_agent(agent.id, db_session, principal=principal)
 	assert fetched is not None
+	assert isinstance(fetched, Agent)
 	assert fetched.id == agent.id
 	assert fetched.name == "agent-get"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_payload_checks_access_before_cache(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""cache is not queried before agent access succeeds."""
+	admin = await _principal(db_session, is_admin=True)
+	non_admin = await _principal(db_session, is_admin=False)
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name="agent-cache-guard",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=admin,
+	)
+
+	async def fail_get_or_set(*_args: object) -> object:
+		pytest.fail("cache should not be queried before access succeeds")
+
+	monkeypatch.setattr(
+		agent_service,
+		"get_or_set_resource_payload_cache",
+		fail_get_or_set,
+	)
+
+	with pytest.raises(HTTPException):
+		await agent_service.get_agent_payload(
+			agent.id,
+			db_session,
+			principal=non_admin,
+		)
 
 
 @pytest.mark.asyncio

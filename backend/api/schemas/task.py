@@ -27,6 +27,15 @@ type TaskSortBy = (
 type TaskStateFilter = Literal["active", "ended"]
 
 
+class TaskListFilters(BaseModel):
+	"""filters for listing tasks."""
+
+	user_id: TypeID | None = None
+	spawned_thread_id: TypeID | None = None
+	status_filter: TaskStatus | None = None
+	state_filter: TaskStateFilter | None = None
+
+
 class TaskBase(MetadataModel):
 	"""common task fields."""
 

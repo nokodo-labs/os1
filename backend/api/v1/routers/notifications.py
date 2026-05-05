@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.notification import Notification
 from api.schemas.notification import Notification as NotificationSchema
-from api.schemas.notification import NotificationCreate
+from api.schemas.notification import NotificationCreate, NotificationListFilters
 from api.v1.service import notifications as notification_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
@@ -39,7 +41,7 @@ async def create_notifications(
 @router.get("/users/{user_id}", response_model=list[NotificationSchema])
 async def list_user_notifications(
 	user_id: TypeID,
-	only_unread: bool = False,
+	filters: Annotated[NotificationListFilters, Depends()],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
@@ -48,7 +50,7 @@ async def list_user_notifications(
 		db,
 		principal=principal,
 		user_id=user_id,
-		only_unread=only_unread,
+		filters=filters,
 	)
 
 

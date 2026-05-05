@@ -56,7 +56,7 @@ async def get_prompt(
 	prompt_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Prompt:
+) -> PromptSchema:
 	"""fetch a prompt."""
 	return await prompt_service.get_prompt(prompt_id, db, principal=principal)
 

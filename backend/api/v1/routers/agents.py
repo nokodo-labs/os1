@@ -56,9 +56,9 @@ async def get_agent(
 	agent_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Agent:
+) -> AgentSchema:
 	"""Fetch an agent."""
-	return await agent_service.get_agent(agent_id, db, principal=principal)
+	return await agent_service.get_agent_payload(agent_id, db, principal=principal)
 
 
 @router.patch("/{agent_id}", response_model=AgentSchema)

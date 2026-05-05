@@ -22,6 +22,10 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.resource_payload_cache import (
+	get_or_set_resource_payload_cache,
+	invalidate_resource_payload_cache,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -78,7 +82,7 @@ async def create_agent(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.AGENT_CREATED,
-		data={"id": str(agent_id), **agent_data},
+		data=agent_data,
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -125,6 +129,34 @@ async def get_agent(
 	return await _get_agent(agent_id, session)
 
 
+async def get_agent_payload(
+	agent_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	use_cache: bool = True,
+) -> AgentSchema:
+	"""get an agent API payload after access is validated."""
+	if not _can_manage(principal):
+		await require_resource_access(
+			agent_id,
+			session,
+			principal,
+			ResourceType.AGENT,
+		)
+
+	async def load_payload() -> AgentSchema:
+		return AgentSchema.model_validate(await _get_agent(agent_id, session))
+
+	if not use_cache:
+		return await load_payload()
+	return await get_or_set_resource_payload_cache(
+		ResourceType.AGENT,
+		agent_id,
+		AgentSchema,
+		load_payload,
+	)
+
+
 async def update_agent(
 	agent_id: TypeID,
 	agent_in: AgentUpdate,
@@ -149,7 +181,7 @@ async def update_agent(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.AGENT_UPDATED,
-		data={"id": str(agent_id), **agent_data},
+		data=agent_data,
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -157,6 +189,7 @@ async def update_agent(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.AGENT, agent_id)
 	return await _get_agent(agent_id, session)
 
 
@@ -181,6 +214,7 @@ async def delete_agent(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_resource_payload_cache(ResourceType.AGENT, agent_id)
 
 
 async def set_agent_access_rules(
@@ -200,7 +234,7 @@ async def set_agent_access_rules(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.AGENT_UPDATED,
-		data={"id": agent_id, **agent_data},
+		data=agent_data,
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(session, event=event)

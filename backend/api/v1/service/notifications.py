@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.notification import Notification
+from api.schemas.notification import NotificationListFilters
 from api.v1.service.auth import Principal
 from api.v1.service.events import event_connections
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -43,10 +44,11 @@ async def list_user_notifications(
 	session: AsyncSession,
 	principal: Principal,
 	user_id: TypeID,
-	only_unread: bool = False,
+	filters: NotificationListFilters | None = None,
 ) -> list[Notification]:
 	if not principal.is_admin and user_id != principal.user_id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	notification_filters = filters or NotificationListFilters()
 
 	stmt = (
 		select(Notification)
@@ -56,7 +58,7 @@ async def list_user_notifications(
 		.order_by(Notification.created_at.desc())
 	)
 
-	if only_unread:
+	if notification_filters.only_unread:
 		stmt = stmt.where(Notification.read_at.is_(None))
 
 	result = await session.execute(stmt.limit(100))

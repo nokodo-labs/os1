@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
@@ -11,6 +13,7 @@ from api.models.access_rule import AccessLevel, AccessRule
 from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
+from api.models.thread_summary import ThreadSummary
 from api.permissions import ResourceType
 from api.schemas.access_rule import (
 	AccessRuleCreate,
@@ -30,8 +33,10 @@ from api.schemas.thread import (
 )
 from api.schemas.thread import (
 	ThreadCreate,
+	ThreadListFilters,
 	ThreadMetadataGenerateRequest,
 	ThreadSortBy,
+	ThreadSummaryRecord,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
 	ThreadUpdate,
@@ -51,6 +56,7 @@ from api.v1.service.authorization import (
 	require_admin,
 )
 from api.v1.service.events import SessionId
+from api.v1.service.threads import summaries as thread_summary_service
 from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
 
@@ -114,13 +120,11 @@ async def create_and_run(
 
 @router.get("", response_model=list[ThreadSchema])
 async def list_threads(
-	owner_id: TypeID | None = None,
+	filters: Annotated[ThreadListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 20,
 	sort_by: ThreadSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
-	include_hidden: bool = False,
-	is_archived: bool | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Thread]:
@@ -128,13 +132,11 @@ async def list_threads(
 	return await thread_service.list_threads(
 		db,
 		principal=principal,
-		owner_id=owner_id,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		include_hidden=include_hidden,
-		is_archived=is_archived,
 	)
 
 
@@ -191,9 +193,9 @@ async def get_thread(
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Thread:
+) -> ThreadSchema:
 	"""fetch a single thread."""
-	return await thread_service.get_thread(
+	return await thread_service.get_thread_payload(
 		thread_id,
 		db,
 		principal=principal,
@@ -239,6 +241,28 @@ async def generate_thread_metadata(
 		session=db,
 		replace=request.replace,
 		origin_session_id=x_session_id,
+	)
+
+
+@router.get("/{thread_id}/summaries", response_model=list[ThreadSummaryRecord])
+async def list_thread_summaries(
+	thread_id: TypeID,
+	include_superseded: bool = True,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[ThreadSummary]:
+	"""list stored summary records for a thread. admin only."""
+	require_admin(principal)
+	thread = await db.get(Thread, thread_id)
+	if thread is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="thread not found",
+		)
+	return await thread_summary_service.list_summaries(
+		thread_id,
+		db,
+		include_superseded=include_superseded,
 	)
 
 

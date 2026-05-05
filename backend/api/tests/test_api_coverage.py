@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -30,6 +31,7 @@ from api.models.message import (
 from api.models.model import Model as ModelORM
 from api.models.provider import Provider as ProviderORM
 from api.schemas.message import MessageCreate
+from api.schemas.thread import ThreadListFilters
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import runs as runs_router
@@ -326,7 +328,9 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	monkeypatch.setattr(
 		threads_router.thread_service, "list_threads", _return_thread_list
 	)
-	monkeypatch.setattr(threads_router.thread_service, "get_thread", _return_thread)
+	monkeypatch.setattr(
+		threads_router.thread_service, "get_thread_payload", _return_thread
+	)
 	monkeypatch.setattr(threads_router.thread_service, "update_thread", _return_thread)
 	monkeypatch.setattr(
 		threads_router.thread_service, "list_messages", _return_message_list
@@ -357,7 +361,11 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	listed = await threads_router.list_threads(principal=principal, db=None)  # type: ignore[arg-type]
+	listed = await threads_router.list_threads(  # type: ignore[arg-type]
+		filters=ThreadListFilters(),
+		principal=principal,  # type: ignore[arg-type]
+		db=None,  # type: ignore[arg-type]
+	)
 	fetched = await threads_router.get_thread("t", principal=principal, db=None)  # type: ignore[arg-type]
 	updated = await threads_router.update_thread(  # type: ignore[arg-type]
 		"t",  # type: ignore[arg-type]
@@ -579,7 +587,10 @@ async def test_prompts_service_get_prompt_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_prompts_service_list_and_get(monkeypatch: pytest.MonkeyPatch) -> None:
-	prompt_obj = SimpleNamespace(id="1", command="/p", content="hi")
+	now = datetime.now(UTC)
+	prompt_obj = SimpleNamespace(
+		id="1", command="/p", content="hi", created_at=now, updated_at=now
+	)
 
 	async def exec_prompts(_stmt: object) -> _FakeResult:  # type: ignore[arg-type]
 		return _FakeResult([prompt_obj])
@@ -597,7 +608,9 @@ async def test_prompts_service_list_and_get(monkeypatch: pytest.MonkeyPatch) -> 
 
 	monkeypatch.setattr(prompt_service, "_get_prompt", fake_get_prompt)
 	fetched = await prompt_service.get_prompt("1", session, principal=admin)  # type: ignore[arg-type]
-	assert fetched is prompt_obj
+	assert fetched.id == prompt_obj.id
+	assert fetched.command == "p"
+	assert fetched.content == prompt_obj.content
 
 
 @pytest.mark.asyncio

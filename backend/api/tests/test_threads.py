@@ -18,7 +18,7 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.schemas.content import TextContent
 from api.schemas.message import MessageCreate
-from api.schemas.thread import ThreadCreate, ThreadUpdate
+from api.schemas.thread import ThreadCreate, ThreadListFilters, ThreadUpdate
 from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
@@ -314,7 +314,7 @@ async def test_soft_deleted_threads_hidden(
 	service_threads = await thread_service.list_threads(
 		db_session,
 		principal=admin_principal,
-		include_hidden=True,
+		filters=ThreadListFilters(include_hidden=True),
 	)
 	service_ids = {str(t.id) for t in service_threads}
 	assert thread_id in service_ids
@@ -960,7 +960,7 @@ async def test_list_threads_filter_owner(
 	threads = await thread_service.list_threads(
 		db_session,
 		principal=principal,
-		owner_id=user.id,
+		filters=ThreadListFilters(owner_id=user.id),
 	)
 	assert len(threads) == 1
 	assert threads[0].owner_id == user.id
@@ -968,7 +968,7 @@ async def test_list_threads_filter_owner(
 	threads_empty = await thread_service.list_threads(
 		db_session,
 		principal=principal,
-		owner_id=new_typeid("user"),
+		filters=ThreadListFilters(owner_id=new_typeid("user")),
 	)
 	assert len(threads_empty) == 0
 

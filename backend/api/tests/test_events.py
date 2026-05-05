@@ -15,7 +15,7 @@ from api.models.notification import Notification
 from api.models.task import Task, TaskType
 from api.models.thread import Thread
 from api.models.user import User
-from api.schemas.event import EventCreate
+from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 
@@ -219,8 +219,8 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Filter by user
 	user_events = await event_service.list_events(
 		db_session,
-		user_id=user.id,
 		principal=principal,
+		filters=EventListFilters(user_id=user.id),
 	)
 	assert len(user_events) == 1
 	assert user_events[0].id == event1.id
@@ -228,8 +228,8 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Filter by scope
 	sys_events = await event_service.list_events(
 		db_session,
-		scope=EventScope.SYSTEM,
 		principal=principal,
+		filters=EventListFilters(scope=EventScope.SYSTEM),
 	)
 	assert len(sys_events) >= 1
 	assert event2.id in {e.id for e in sys_events}
@@ -237,16 +237,16 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Filter by since
 	future_events = await event_service.list_events(
 		db_session,
-		since=datetime.now() + timedelta(hours=1),
 		principal=principal,
+		filters=EventListFilters(since=datetime.now() + timedelta(hours=1)),
 	)
 	assert len(future_events) == 0
 
 	# Filter by thread_id
 	thread_events = await event_service.list_events(
 		db_session,
-		thread_id=thread.id,
 		principal=principal,
+		filters=EventListFilters(thread_id=thread.id),
 	)
 	assert len(thread_events) == 1
 	assert thread_events[0].id == event3.id
@@ -254,8 +254,8 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	# Filter by task_id
 	task_events = await event_service.list_events(
 		db_session,
-		task_id=task.id,
 		principal=principal,
+		filters=EventListFilters(task_id=task.id),
 	)
 	assert len(task_events) == 1
 	assert task_events[0].id == event4.id
