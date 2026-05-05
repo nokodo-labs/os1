@@ -35,6 +35,8 @@ from api.storage.local import LocalStorageBackend
 from api.storage.s3 import S3StorageBackend
 from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
+from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
+from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
 
 
 configure_psycopg_asyncio_event_loop_policy()
@@ -60,6 +62,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	if not boot_settings.TESTING:
 		await redis_client.connect()
 		await startup_taskiq()
+		await reconcile_calendar_event_notification_schedules()
+		await reconcile_reminder_notification_schedules()
 
 	# start the cross-worker cache invalidation subscriber. handlers are
 	# self-registered at import time by the modules that own resettable

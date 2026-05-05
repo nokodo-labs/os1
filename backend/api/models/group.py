@@ -75,12 +75,12 @@ class Group(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.subject_group_id",
+		back_populates="subject_group",
 		cascade="all, delete-orphan",
-		overlaps="subject_group",
 	)
 	resource_access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.group_id",
+		back_populates="group",
 		cascade="all, delete-orphan",
-		overlaps="group",
 	)

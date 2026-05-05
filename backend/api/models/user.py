@@ -16,6 +16,7 @@ from api.models.mixins import TypeIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
+	from api.models.calendar import Calendar, CalendarEvent
 	from api.models.file import File
 	from api.models.friendship import Friendship
 	from api.models.group import Group, GroupMembership
@@ -79,8 +80,8 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.subject_user_id",
+		back_populates="subject_user",
 		cascade="all, delete-orphan",
-		overlaps="subject_user",
 	)
 	projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
 	owned_groups: Mapped[list[Group]] = relationship("Group", back_populates="owner")
@@ -118,6 +119,16 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	)
 	notes: Mapped[list[Note]] = relationship(
 		"Note",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	calendar_events: Mapped[list[CalendarEvent]] = relationship(
+		"CalendarEvent",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	calendars: Mapped[list[Calendar]] = relationship(
+		"Calendar",
 		back_populates="owner",
 		cascade="all, delete-orphan",
 	)

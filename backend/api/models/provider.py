@@ -1,4 +1,4 @@
-"""Provider configuration model."""
+"""provider configuration model."""
 
 from __future__ import annotations
 
@@ -24,21 +24,21 @@ if TYPE_CHECKING:
 
 
 class ProviderStatus(StrEnum):
-	"""Operational state of a provider."""
+	"""operational state of a provider."""
 
 	ENABLED = "enabled"
 	DISABLED = "disabled"
 
 
 class ProviderType(StrEnum):
-	"""Type of provider deployment."""
+	"""type of provider deployment."""
 
 	LOCAL = "local"
 	EXTERNAL = "external"
 
 
 class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
-	"""Configuration for external model providers."""
+	"""configuration for external model providers."""
 
 	__tablename__ = "providers"
 	__typeid_prefix__ = "prov"
@@ -67,17 +67,17 @@ class Provider(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	@property
 	def manual_models(self) -> list[Model]:
-		"""Return models that were manually created."""
+		"""return models that were manually created."""
 		return [m for m in self.models if not m.is_autofetched]
 
 	@property
 	def autofetched_models(self) -> list[Model]:
-		"""Return models that were automatically fetched."""
+		"""return models that were automatically fetched."""
 		return [m for m in self.models if m.is_autofetched]
 
 	@property
 	def api_key(self) -> str | None:
-		"""Return decrypted api key for this provider, if set."""
+		"""return decrypted api key for this provider, if set."""
 		from api.settings import settings
 
 		if self.encrypted_api_key is None or self.encrypted_api_key.strip() == "":

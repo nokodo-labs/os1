@@ -1,4 +1,4 @@
-"""Prompt model."""
+"""prompt model."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class Prompt(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
-	"""Reusable, composable prompt template snippet."""
+	"""reusable, composable prompt template snippet."""
 
 	__tablename__ = "prompts"
 	__typeid_prefix__ = "prompt"
