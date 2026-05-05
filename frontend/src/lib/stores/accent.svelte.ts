@@ -17,6 +17,7 @@ export type AccentColorKey =
 	| 'gray'
 	| 'notes'
 	| 'reminders'
+	| 'calendar'
 	| 'lilac'
 
 // reactive state for current accent

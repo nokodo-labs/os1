@@ -25,7 +25,15 @@ export type FileDetailsPayload = {
 }
 
 export type ResourceAccessPayload = {
-	resourceType: 'thread' | 'file' | 'project' | 'group' | 'agent' | 'note' | 'reminder_list'
+	resourceType:
+		| 'thread'
+		| 'file'
+		| 'project'
+		| 'group'
+		| 'agent'
+		| 'note'
+		| 'reminder_list'
+		| 'calendar'
 	resourceId: string
 	title: string
 }
