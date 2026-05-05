@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import PydanticBaseSettingsSource
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -134,6 +134,89 @@ def test_qdrant_vector_database_defaults() -> None:
 	config = QdrantVectorDatabaseSettings()
 	assert config.url == "qdrant:6334"
 	assert config.use_grpc is True
+
+
+def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
+	patch = SettingsPatch.model_validate(
+		{
+			"ai": {
+				"tasks": {
+					"web_search_model_id": "model-chat",
+					"maintenance_max_chars_per_message": 3000,
+				},
+				"windowing": {
+					"summarization_max_chars_per_message": 3000,
+				},
+			},
+			"limits": {
+				"max_reminder_hierarchy_depth": 12,
+				"max_scheduled_items_window_days": 730,
+			},
+			"web_search": {
+				"agentic": {
+					"agent": "native",
+					"model_id": "model-chat",
+					"system_prompt": "search carefully",
+					"model_params": {"temperature": 0.1},
+					"max_iterations": 6,
+				},
+				"max_chars": 60000,
+				"blacklisted_domains": ["example.com"],
+				"search_engines": {"engine": "perplexity"},
+				"web_loaders": {"engine": "native", "max_chars": 40000},
+			},
+			"integrations": {
+				"perplexity": {
+					"api_key": "pplx-key",
+					"model": "sonar",
+					"search_context_usage": "high",
+					"temperature": 0.1,
+					"image_results_enabled": True,
+					"max_concurrent_requests": 4,
+				},
+				"searxng": {
+					"instance_url": "http://searxng.local",
+					"max_results": 12,
+					"max_concurrent_requests": 3,
+					"timeout_seconds": 8,
+				},
+			},
+			"code_interpreter": {
+				"max_file_download_mb": 20,
+				"max_output_chars": 200000,
+				"truncation_lines": 25,
+			},
+			"cache": {
+				"scheduled_items_ttl_seconds": 60,
+				"resource_payload_ttl_seconds": 45,
+			},
+		}
+	)
+
+	assert patch.web_search is not None
+	assert patch.web_search.agentic is not None
+	assert patch.web_search.agentic.agent == "native"
+	assert patch.web_search.web_loaders is not None
+	assert patch.web_search.web_loaders.max_chars == 40000
+	assert patch.integrations is not None
+	assert patch.integrations.perplexity is not None
+	assert patch.integrations.perplexity.image_results_enabled is True
+
+
+def test_settings_patch_rejects_old_web_search_integration_nesting() -> None:
+	with pytest.raises(ValidationError):
+		SettingsPatch.model_validate(
+			{
+				"web_search": {
+					"search_agent": "native",
+					"perplexity": {"api_key": "pplx-key"},
+					"search_engines": {
+						"engine": "perplexity",
+						"searxng": {"instance_url": "http://searxng.local"},
+					},
+				}
+			}
+		)
 
 
 @pytest.mark.asyncio

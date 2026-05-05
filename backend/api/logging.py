@@ -49,6 +49,16 @@ LEVEL_COLORS = {
 }
 
 
+NOISY_THIRD_PARTY_LOGGERS = (
+	"httpcore",
+	"httpx",
+	"watchfiles",
+	"openai",
+	"grpc",
+	"qdrant_client",
+)
+
+
 class ConsoleFormatter(logging.Formatter):
 	"""
 	human-readable colored formatter for development.
@@ -234,6 +244,13 @@ def get_log_level() -> int:
 	return logging.INFO
 
 
+def get_noisy_third_party_log_level(level: int) -> int:
+	"""keep chatty sdk debug logs quiet unless logging is set below debug."""
+	if level < logging.DEBUG:
+		return logging.NOTSET
+	return logging.WARNING
+
+
 def configure_logging(
 	level: int | None = None,
 	json_logs: bool | None = None,
@@ -285,8 +302,9 @@ def configure_logging(
 	sa.setLevel(logging.INFO if boot_settings.DEBUG else logging.WARNING)
 
 	# suppress noisy third-party loggers
-	for name in ("httpcore", "httpx", "watchfiles"):
-		logging.getLogger(name).setLevel(logging.WARNING)
+	noisy_logger_level = get_noisy_third_party_log_level(level)
+	for name in NOISY_THIRD_PARTY_LOGGERS:
+		logging.getLogger(name).setLevel(noisy_logger_level)
 
 
 def get_logger(name: str) -> logging.Logger:

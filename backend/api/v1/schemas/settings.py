@@ -23,7 +23,7 @@ from api.settings import (
 	PerplexityModel,
 	SearchAgent,
 	SearchContextUsage,
-	SearchRecencyFilter,
+	SearchEngine,
 	Settings,
 )
 
@@ -340,6 +340,16 @@ class LimitsSettingsPatch(BaseModel):
 		ge=1,
 		description="max file size mb",
 	)
+	max_reminder_hierarchy_depth: int | None = Field(
+		default=None,
+		ge=1,
+		description="maximum nesting depth for sub-reminders",
+	)
+	max_scheduled_items_window_days: int | None = Field(
+		default=None,
+		ge=1,
+		description="maximum time window in days for scheduled items queries",
+	)
 	rate_limit_requests_per_minute: int | None = Field(
 		default=None,
 		ge=1,
@@ -489,6 +499,15 @@ class AITaskSettingsPatch(BaseModel):
 		default=None,
 		description="model for memory post-processing (dedup, update, delete)",
 	)
+	web_search_model_id: str | None = Field(
+		default=None,
+		description="model for native agentic web search",
+	)
+	maintenance_max_chars_per_message: int | None = Field(
+		default=None,
+		ge=100,
+		description="max characters per message in thread maintenance transcripts",
+	)
 
 
 class AIAttachmentSettingsPatch(BaseModel):
@@ -572,6 +591,11 @@ class AIWindowingSettingsPatch(BaseModel):
 		ge=256,
 		description="tokens reserved for the model's response",
 	)
+	summarization_max_chars_per_message: int | None = Field(
+		default=None,
+		ge=100,
+		description="max characters per message in summarization transcripts",
+	)
 
 
 class ImageGenerationSettingsPatch(BaseModel):
@@ -615,6 +639,10 @@ class VideoGenerationSettingsPatch(BaseModel):
 		default=None,
 		description="enable video generation capabilities",
 	)
+	model: str | None = Field(
+		default=None,
+		description="model identifier for video generation",
+	)
 
 
 class AudioGenerationSettingsPatch(BaseModel):
@@ -623,6 +651,10 @@ class AudioGenerationSettingsPatch(BaseModel):
 	enabled: bool | None = Field(
 		default=None,
 		description="enable audio generation capabilities",
+	)
+	model: str | None = Field(
+		default=None,
+		description="model identifier for audio generation",
 	)
 
 
@@ -669,6 +701,21 @@ class CodeInterpreterSettingsPatch(BaseModel):
 		le=300,
 		description="execution timeout in seconds",
 	)
+	max_file_download_mb: int | None = Field(
+		default=None,
+		ge=1,
+		description="max file size downloadable from sandbox in MB",
+	)
+	max_output_chars: int | None = Field(
+		default=None,
+		ge=1000,
+		description="max output characters returned from code interpreter",
+	)
+	truncation_lines: int | None = Field(
+		default=None,
+		ge=5,
+		description="lines kept at head and tail when truncating output",
+	)
 
 
 class AISettingsPatch(BaseModel):
@@ -704,6 +751,21 @@ class DefaultPermissionsSettingsPatch(BaseModel):
 	action_permissions: list[ActionPermission] | None = Field(
 		default=None,
 		description="action permissions granted by default",
+	)
+
+
+class NotificationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	missed_grace_days: int | None = Field(
+		default=None,
+		ge=1,
+		description="days to look back for missed notifications",
+	)
+	lookahead_days: int | None = Field(
+		default=None,
+		ge=1,
+		description="days ahead to schedule notifications",
 	)
 
 
@@ -773,17 +835,21 @@ class WebLoaderSettingsPatch(BaseModel):
 		default=None,
 		description="user agent string for web loader requests",
 	)
+	max_chars: int | None = Field(
+		default=None,
+		ge=100,
+		description="maximum characters returned per fetched URL",
+	)
 	tavily: TavilySettingsPatch | None = None
 
 
 class SearchEngineSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	engine: Literal["google", "searxng"] | None = Field(
+	engine: SearchEngine | None = Field(
 		default=None,
-		description="web search engine to use",
+		description="web search engine",
 	)
-	searxng: SearxngSettingsPatch | None = None
 
 
 class PerplexitySettingsPatch(BaseModel):
@@ -807,13 +873,9 @@ class PerplexitySettingsPatch(BaseModel):
 		le=2.0,
 		description="sampling temperature (lower = more factual)",
 	)
-	search_recency_filter: SearchRecencyFilter | None = Field(
+	image_results_enabled: bool | None = Field(
 		default=None,
-		description="restrict search results to a time window",
-	)
-	return_images: bool | None = Field(
-		default=None,
-		description="include image URLs in perplexity search results",
+		description="allow web search tools to request image URLs from perplexity",
 	)
 	max_concurrent_requests: int | None = Field(
 		default=None,
@@ -822,12 +884,44 @@ class PerplexitySettingsPatch(BaseModel):
 	)
 
 
+class AgenticWebSearchSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	agent: SearchAgent | None = Field(
+		default=None,
+		description="agent provider to use for agentic web search",
+	)
+	model_id: str | None = Field(
+		default=None,
+		description="model id for the native agentic web search agent",
+	)
+	system_prompt: str | None = Field(
+		default=None,
+		description="system prompt for the native agentic web search agent",
+	)
+	model_params: dict[str, object] | None = Field(
+		default=None,
+		description="chat model parameters for the native agentic web search agent",
+	)
+	max_iterations: int | None = Field(
+		default=None,
+		ge=1,
+		le=20,
+		description="maximum native agentic web search turns",
+	)
+
+
 class WebSearchSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	search_agent: SearchAgent | None = Field(
+	agentic: AgenticWebSearchSettingsPatch | None = Field(
 		default=None,
-		description="agent to use for agentic web search tool",
+		description="agentic web search configuration",
+	)
+	max_chars: int | None = Field(
+		default=None,
+		ge=100,
+		description="maximum characters returned in web search result summaries",
 	)
 	blacklisted_domains: list[str] | None = Field(
 		default=None,
@@ -835,7 +929,6 @@ class WebSearchSettingsPatch(BaseModel):
 	)
 	search_engines: SearchEngineSettingsPatch | None = None
 	web_loaders: WebLoaderSettingsPatch | None = None
-	perplexity: PerplexitySettingsPatch | None = None
 
 
 class OpenWebUIDeploymentPatch(BaseModel):
@@ -880,6 +973,8 @@ class IntegrationsSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	open_webui: OpenWebUIIntegrationSettingsPatch | None = None
+	perplexity: PerplexitySettingsPatch | None = None
+	searxng: SearxngSettingsPatch | None = None
 
 
 class CacheRedisSettingsPatch(BaseModel):
@@ -890,6 +985,16 @@ class CacheSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	redis: CacheRedisSettingsPatch | None = None
+	scheduled_items_ttl_seconds: int | None = Field(
+		default=None,
+		ge=1,
+		description="TTL for scheduled items cache entries",
+	)
+	resource_payload_ttl_seconds: int | None = Field(
+		default=None,
+		ge=1,
+		description="TTL for resource payload cache entries",
+	)
 
 
 class TaskiqSettingsPatch(BaseModel):
@@ -912,6 +1017,7 @@ class SettingsPatch(BaseModel):
 	assets: AssetsSettingsPatch | None = None
 	limits: LimitsSettingsPatch | None = None
 	security: SecuritySettingsPatch | None = None
+	notifications: NotificationSettingsPatch | None = None
 	soft_delete: SoftDeleteSettingsPatch | None = None
 	web_search: WebSearchSettingsPatch | None = None
 	code_interpreter: CodeInterpreterSettingsPatch | None = None
@@ -931,6 +1037,7 @@ class SettingsVersions(BaseModel):
 	assets: int = 0
 	limits: int = 0
 	security: int = 0
+	notifications: int = 0
 	soft_delete: int = 0
 	web_search: int = 0
 	code_interpreter: int = 0

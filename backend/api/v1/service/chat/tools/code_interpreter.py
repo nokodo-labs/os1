@@ -19,6 +19,7 @@ from api.e2b import E2BClient, FileEntry
 from api.models.file import File, FileSource
 from api.settings import settings
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.message_metadata import E2B_SANDBOX_ID_KEY
 from api.v1.service.files import read_content, store_file
 from api.v1.service.projects import resolve_thread_project_id
 from nokodo_ai.context import AgentContext
@@ -30,11 +31,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
-
-_METADATA_SANDBOX_KEY = "e2b_sandbox_id"
-_MAX_OUTPUT_CHARS = 500_000
-_TRUNCATION_LINES = 50
-
 
 class CodeInterpreterInput(BaseModel):
 	"""input schema for code_interpreter tool."""
@@ -66,15 +62,17 @@ def _find_sandbox_id(thread: SDKThread) -> str | None:
 	for msg in reversed(thread.messages):
 		if msg.role != "tool":
 			continue
-		if msg.metadata and _METADATA_SANDBOX_KEY in msg.metadata:
-			value = msg.metadata[_METADATA_SANDBOX_KEY]
+		if msg.metadata:
+			value = msg.metadata.get(E2B_SANDBOX_ID_KEY)
 			if isinstance(value, str):
 				return value
 	return None
 
 
-def _truncate_field(text: str, max_lines: int = _TRUNCATION_LINES) -> str:
+def _truncate_field(text: str, max_lines: int | None = None) -> str:
 	"""truncate text keeping the first and last N lines."""
+	if max_lines is None:
+		max_lines = settings.code_interpreter.truncation_lines
 	lines = text.splitlines()
 	total = len(lines)
 	if total <= max_lines * 2:
@@ -106,6 +104,7 @@ async def _store_output_files(
 	async def _store(
 		entry: FileEntry, as_image: bool
 	) -> ImageContent | FileContent | None:
+		"""store one sandbox output and wrap it as message content."""
 		try:
 			stored = await store_file(
 				session,
@@ -192,6 +191,7 @@ async def _upload_input_files(
 
 
 def _compute_tool_description() -> str:
+	"""build the model-facing code interpreter tool description."""
 	desc = (
 		"execute Python code in a sandboxed notebook to perform "
 		"calculations, data analysis, file operations, or any "
@@ -223,6 +223,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
+		"""execute Python code in a reusable sandbox for the active thread."""
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 
@@ -247,6 +248,8 @@ class CodeInterpreterTool(Tool[AppContext]):
 		client = E2BClient(
 			api_key=ci_settings.e2b.api_key,
 			template=ci_settings.e2b.template,
+			timeout=ci_settings.timeout,
+			max_file_download_bytes=ci_settings.max_file_download_mb * 1024 * 1024,
 		)
 
 		try:
@@ -260,7 +263,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 					session=__app_context__.session,
 				)
 
-			result = await client.run_code(inp.code, timeout=ci_settings.timeout)
+			result = await client.run_code(inp.code)
 		except Exception:
 			logger.exception("code interpreter execution failed")
 			return self.error(
@@ -289,7 +292,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 		output = json.dumps(response, ensure_ascii=False)
 
 		# final safety cap on total JSON size
-		if len(output) > _MAX_OUTPUT_CHARS:
+		if len(output) > settings.code_interpreter.max_output_chars:
 			if "stdout" in response:
 				response["stdout"] = _truncate_field(
 					str(response["stdout"]), max_lines=20
@@ -325,7 +328,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 			**(__agent_context__.metadata or {}),
 		}
 		if result.sandbox_id:
-			metadata[_METADATA_SANDBOX_KEY] = result.sandbox_id
+			metadata[E2B_SANDBOX_ID_KEY] = result.sandbox_id
 
 		return ToolMessage(
 			tool_call_id=__agent_context__.tool_call_id,
