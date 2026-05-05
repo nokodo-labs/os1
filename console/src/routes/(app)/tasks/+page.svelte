@@ -11,19 +11,23 @@
 		ArrowDown,
 		ArrowUp,
 		Ban,
+		CalendarClock,
 		CheckCircle2,
 		Circle,
 		Clock3,
 		Hash,
+		ListChecks,
 		LoaderCircle,
 		RefreshCw,
 		Search,
 		User,
 		XCircle,
 	} from '@lucide/svelte'
+	import { SvelteDate } from 'svelte/reactivity'
 
 	type Task = Schemas['Task']
 	type TaskStatus = Schemas['TaskStatus']
+	type ScheduledItem = Schemas['ScheduledItem']
 	type SortKey = 'updated_at' | 'created_at' | 'status' | 'task_type' | 'stage' | 'last_event_at'
 	type SortDir = 'asc' | 'desc'
 	type ViewMode = 'live' | 'history' | 'all'
@@ -70,6 +74,7 @@
 	let view = $state<ViewMode>('live')
 	let statusFilter = $state<StatusFilter>('all')
 	let ownerFilter = $state('')
+	let threadFilter = $state('')
 	let sortKey = $state<SortKey>('last_event_at')
 	let sortDir = $state<SortDir>('desc')
 	let pageIndex = $state(0)
@@ -79,6 +84,9 @@
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
 	let cancellingTaskId = $state<string | null>(null)
+	let scheduledItems = $state<ScheduledItem[]>([])
+	let isLoadingScheduledItems = $state(false)
+	let scheduledItemsError = $state<string | null>(null)
 
 	const statusOptions = $derived.by(() => {
 		if (view === 'live') return liveStatusOptions
@@ -127,6 +135,7 @@
 
 	function taskContext(task: Task): string | null {
 		return (
+			task.spawned_thread_id ??
 			metadataString(task, 'integration') ??
 			metadataString(task, 'thread_id') ??
 			metadataString(task, 'deployment_origin')
@@ -174,6 +183,31 @@
 		return null
 	}
 
+	function scheduledWindow(): { startAt: string; endAt: string } {
+		const start = new SvelteDate()
+		start.setHours(0, 0, 0, 0)
+		const end = new SvelteDate(start.getTime())
+		end.setDate(end.getDate() + 14)
+		end.setHours(23, 59, 59, 999)
+		return { startAt: start.toISOString(), endAt: end.toISOString() }
+	}
+
+	function scheduledKindLabel(item: ScheduledItem): string {
+		return item.kind === 'event' ? 'calendar event' : 'reminder'
+	}
+
+	function scheduledKindClass(item: ScheduledItem): string {
+		return item.kind === 'event'
+			? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+			: 'border-sky-500/20 bg-sky-500/10 text-sky-300'
+	}
+
+	function scheduledContainerLabel(item: ScheduledItem): string {
+		if (item.calendar_id) return `calendar ${item.calendar_id}`
+		if (item.reminder_list_id) return `reminder list ${item.reminder_list_id}`
+		return item.container_id
+	}
+
 	async function cancelTask(task: Task) {
 		if (!isActiveStatus(task.status)) return
 		cancellingTaskId = task.id
@@ -196,8 +230,35 @@
 	$effect(() => {
 		if (!browser) return
 		void refreshToken
+		const window = scheduledWindow()
+
+		isLoadingScheduledItems = true
+		scheduledItemsError = null
+		api.GET('/v1/scheduled-items', {
+			params: {
+				query: {
+					start_at: window.startAt,
+					end_at: window.endAt,
+					include_completed: false,
+					limit: 12,
+				},
+			},
+		})
+			.then((result) => unwrap(result))
+			.then((loaded) => {
+				scheduledItems = loaded
+			})
+			.catch((err: unknown) => {
+				scheduledItemsError =
+					err instanceof Error ? err.message : 'failed to load scheduled tasks'
+				scheduledItems = []
+			})
+			.finally(() => {
+				isLoadingScheduledItems = false
+			})
 
 		const userId = ownerFilter.trim()
+		const threadId = threadFilter.trim()
 		const stateFilter = view === 'live' ? 'active' : view === 'history' ? 'ended' : undefined
 
 		isLoading = true
@@ -207,6 +268,7 @@
 			params: {
 				query: {
 					user_id: userId || undefined,
+					spawned_thread_id: threadId || undefined,
 					status_filter: statusFilter === 'all' ? undefined : statusFilter,
 					state_filter: stateFilter,
 					skip: pageIndex * limit,
@@ -246,6 +308,17 @@
 				<Input
 					placeholder="filter by user id..."
 					bind:value={ownerFilter}
+					class="w-full pl-8 sm:w-56 lg:w-72"
+					oninput={() => (pageIndex = 0)}
+				/>
+			</div>
+			<div class="relative w-full sm:w-auto sm:flex-1">
+				<Hash
+					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+				/>
+				<Input
+					placeholder="filter by thread id..."
+					bind:value={threadFilter}
 					class="w-full pl-8 sm:w-56 lg:w-72"
 					oninput={() => (pageIndex = 0)}
 				/>
@@ -316,6 +389,68 @@
 			</button>
 		{/each}
 	</div>
+
+	<section class="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<div>
+				<div class="flex items-center gap-2 text-sm font-medium text-zinc-100">
+					<CalendarClock class="h-4 w-4 text-rose-400" />
+					upcoming scheduled tasks
+				</div>
+				<div class="mt-1 text-xs text-zinc-500">calendar events and reminders due soon</div>
+			</div>
+			<span class="text-xs text-zinc-500">
+				{scheduledItems.length} item{scheduledItems.length === 1 ? '' : 's'} in 14 days
+			</span>
+		</div>
+
+		{#if isLoadingScheduledItems && scheduledItems.length === 0}
+			<div class="flex items-center justify-center py-8">
+				<NokodoLoader />
+			</div>
+		{:else if scheduledItemsError}
+			<div class="mt-4 rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200">
+				{scheduledItemsError}
+			</div>
+		{:else if scheduledItems.length === 0}
+			<div class="mt-4 rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
+				no scheduled tasks in the next 14 days
+			</div>
+		{:else}
+			<div class="mt-4 grid gap-2 lg:grid-cols-2">
+				{#each scheduledItems as item (item.id)}
+					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0 flex-1">
+								<div class="flex items-center gap-2">
+									{#if item.kind === 'event'}
+										<CalendarClock class="h-4 w-4 shrink-0 text-rose-400" />
+									{:else}
+										<ListChecks class="h-4 w-4 shrink-0 text-sky-400" />
+									{/if}
+									<span class="truncate text-sm font-medium text-zinc-100">{item.title}</span>
+								</div>
+								{#if item.description}
+									<div class="mt-1 line-clamp-1 text-xs text-zinc-400">{item.description}</div>
+								{/if}
+							</div>
+							<span class="shrink-0 rounded-md border px-2 py-0.5 text-xs {scheduledKindClass(item)}">
+								{scheduledKindLabel(item)}
+							</span>
+						</div>
+						<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+							<span class="inline-flex items-center gap-1.5">
+								<Clock3 class="h-3.5 w-3.5" />
+								{formatDate(item.effective_start_at)}
+							</span>
+							<span class="truncate">{scheduledContainerLabel(item)}</span>
+							<span>{item.status}</span>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</section>
 
 	{#if error}
 		<div
