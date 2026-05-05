@@ -1,6 +1,11 @@
 <script lang="ts">
 	import Search from '$lib/components/icons/Search.svelte'
 	import type { ToolExecution } from '$lib/tools'
+	import {
+		getWebSearchProgressItems,
+		getWebSearchQueries,
+		getWebSearchSources,
+	} from '$lib/tools/webSearch'
 
 	interface Props {
 		execution: ToolExecution
@@ -8,75 +13,13 @@
 
 	let { execution }: Props = $props()
 
-	/** parse search queries from tool events payload */
-	let searchQueries = $derived.by(() => {
-		for (const event of execution.events) {
-			const queries = event.data.payload?.queries
-			if (Array.isArray(queries)) {
-				return queries.filter((q): q is string => typeof q === 'string')
-			}
-		}
-		// fallback: use the tool call query argument
-		const query = execution.toolCall.arguments.query
-		if (typeof query === 'string' && query) return [query]
-		return []
-	})
-
-	/** parse sources from events or result */
-	let sources = $derived.by(() => {
-		// check events for sources payload
-		for (const event of execution.events) {
-			const s = event.data.payload?.sources
-			if (Array.isArray(s)) {
-				return s
-					.filter(
-						(item): item is { url: string; title?: string } =>
-							typeof item === 'object' &&
-							item !== null &&
-							typeof item.url === 'string'
-					)
-					.map((item) => ({
-						url: item.url,
-						title: item.title ?? null,
-						domain: safeHostname(item.url),
-					}))
-			}
-		}
-		// fallback: parse result text for "N. title - url" pattern
-		if (execution.result && !execution.result.isError) {
-			return parseSourcesFromText(execution.result.output)
-		}
-		return []
-	})
-
-	function safeHostname(url: string): string {
-		try {
-			return new URL(url).hostname.replace(/^www\./, '')
-		} catch {
-			return url
-		}
-	}
+	let searchQueries = $derived(getWebSearchQueries(execution))
+	let progressItems = $derived(getWebSearchProgressItems(execution))
+	let sources = $derived(getWebSearchSources(execution))
 
 	function faviconUrl(url: string): string {
-		const domain = safeHostname(url)
+		const domain = sources.find((source) => source.url === url)?.domain ?? url
 		return `https://www.google.com/s2/favicons?sz=32&domain=${domain}`
-	}
-
-	function parseSourcesFromText(
-		text: string
-	): Array<{ url: string; title: string | null; domain: string }> {
-		const results: Array<{ url: string; title: string | null; domain: string }> = []
-		const lines = text.split('\n')
-		for (const line of lines) {
-			// match "N. label - https://..." pattern
-			const match = line.match(/^\d+\.\s*(.+?)\s*-\s*(https?:\/\/\S+)/)
-			if (match) {
-				const title = match[1].trim()
-				const url = match[2].trim()
-				results.push({ url, title: title || null, domain: safeHostname(url) })
-			}
-		}
-		return results
 	}
 </script>
 
@@ -90,6 +33,29 @@
 				>
 					<Search class="text-foreground/60 h-3 w-3 shrink-0" />
 					<span class="line-clamp-1">{query}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
+	<!-- progress timeline -->
+	{#if progressItems.length > 0}
+		<div class="space-y-1">
+			{#each progressItems as item (item.id)}
+				<div class="text-foreground/55 flex items-center gap-2 px-1 text-xs">
+					<span class="bg-foreground/25 h-1.5 w-1.5 shrink-0 rounded-full"></span>
+					<span class="min-w-0 flex-1 truncate">{item.message}</span>
+					{#if item.resultCount !== null}
+						<span class="text-foreground/35 shrink-0 tabular-nums">
+							{item.resultCount}
+							{item.resultCount === 1 ? 'result' : 'results'}
+						</span>
+					{:else if item.sourceCount !== null}
+						<span class="text-foreground/35 shrink-0 tabular-nums">
+							{item.sourceCount}
+							{item.sourceCount === 1 ? 'source' : 'sources'}
+						</span>
+					{/if}
 				</div>
 			{/each}
 		</div>

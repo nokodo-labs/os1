@@ -17,9 +17,12 @@
 import type { components } from '$lib/api/types'
 import { files } from '$lib/stores/files.svelte'
 import { notes } from '$lib/stores/notes.svelte'
+import { countWebSearchSources, formatWebSearchProgressLine } from './webSearch'
 
 // re-export the reactive tracker
 export { ToolExecutionTracker } from './toolExecutionTracker.svelte'
+export { getWebSearchProgressItems, getWebSearchQueries, getWebSearchSources } from './webSearch'
+export type { WebSearchProgressItem, WebSearchSourceView } from './webSearch'
 
 // Core Types
 
@@ -458,6 +461,8 @@ export function formatToolEventLine(event: ToolEvent): string {
 	}
 
 	if (event.type === 'tool.progress') {
+		const webSearchLine = formatWebSearchProgressLine(event)
+		if (webSearchLine) return webSearchLine
 		if (event.data.message) return event.data.message
 		if (
 			event.data.step !== undefined &&
@@ -812,15 +817,6 @@ function safeHostname(url: string): string | null {
 	} catch {
 		return null
 	}
-}
-
-/** count web search sources from events payload */
-function countWebSearchSources(execution: ToolExecution): number | null {
-	for (const event of execution.events) {
-		const sources = event.data.payload?.sources
-		if (Array.isArray(sources)) return sources.length
-	}
-	return null
 }
 
 /** parse the JSON output from a completed tool result */

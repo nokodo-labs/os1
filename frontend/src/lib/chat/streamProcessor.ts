@@ -82,6 +82,12 @@ export function processDelta(
 				const toolCallId = typeof tool.tool_call_id === 'string' ? tool.tool_call_id : null
 				const output = typeof tool.tool_output === 'string' ? tool.tool_output : ''
 				const isError = tool.is_error === true
+				const toolMetadata =
+					tool.metadata &&
+					typeof tool.metadata === 'object' &&
+					!Array.isArray(tool.metadata)
+						? (tool.metadata as Record<string, unknown>)
+						: undefined
 
 				// extract attachment content parts (images, files) from tool message
 				const attachments = Array.isArray(tool.attachments) ? tool.attachments : []
@@ -101,6 +107,7 @@ export function processDelta(
 						output,
 						isError,
 						contentParts: attachmentParts.length > 0 ? attachmentParts : undefined,
+						metadata: toolMetadata,
 					})
 				}
 
@@ -120,7 +127,7 @@ export function processDelta(
 						tool_call_id: toolCallId,
 						is_error: isError,
 						metadata_: {
-							...(toolCallId ? { tool_call_id: toolCallId } : {}),
+							...(toolMetadata ?? {}),
 							...(runId ? { run_id: runId } : {}),
 						},
 						sender_agent_id: null,
