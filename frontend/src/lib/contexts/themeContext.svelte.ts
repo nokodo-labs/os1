@@ -84,6 +84,13 @@ export const accentColors: Record<
 		border: 'rgba(66, 133, 244, 0.2)',
 		shadow: 'rgba(66, 133, 244, 0.25)',
 	},
+	calendar: {
+		primary: '#d45446', // paper calendar red
+		rgb: '212 84 70',
+		bg: 'rgba(212, 84, 70, 0.02)',
+		border: 'rgba(212, 84, 70, 0.2)',
+		shadow: 'rgba(212, 84, 70, 0.24)',
+	},
 	lilac: {
 		primary: '#c4b5fd', // lilac (violet-300)
 		rgb: '196 181 253',

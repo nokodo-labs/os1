@@ -1,6 +1,7 @@
 <script module lang="ts">
 	import type SearchIcon from '$lib/components/icons/Search.svelte'
 	import type {
+		CalendarRouteId,
 		NotesRouteId,
 		RemindersRouteId,
 		SettingsRouteId,
@@ -18,6 +19,7 @@
 	type SuggestionRoute =
 		| '/'
 		| `/c/${string}`
+		| CalendarRouteId
 		| '/library'
 		| NotesRouteId
 		| RemindersRouteId
@@ -317,6 +319,10 @@
 		}
 		if (suggestion.id === 'library') {
 			onAction({ type: 'navigate', path: '/library' })
+			return
+		}
+		if (suggestion.id === 'calendar') {
+			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('calendar') })
 			return
 		}
 		onAction({ type: 'pulse', message: `${suggestion.title}: coming soon` })

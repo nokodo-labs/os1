@@ -66,7 +66,15 @@
 				await goto(resolve(appNavigation.getEntryRoute('reminders')))
 			},
 		},
-		{ id: 'calendar', title: 'calendar', icon: Calendar },
+		{
+			id: 'calendar',
+			title: 'calendar',
+			icon: Calendar,
+			accent: 'calendar',
+			action: async () => {
+				await goto(resolve(appNavigation.getEntryRoute('calendar')))
+			},
+		},
 		{ id: 'messages', title: 'messages', icon: ChatBubbles, accent: 'green' },
 		{
 			id: 'projects',

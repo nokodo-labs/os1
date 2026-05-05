@@ -24,6 +24,7 @@ import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
 import { agents } from '$lib/stores/agents.svelte'
 import { appReadiness } from '$lib/stores/appReadiness.svelte'
+import { calendars, calendarEvents } from '$lib/stores/calendars.svelte'
 import { chat } from '$lib/stores/chat.svelte'
 import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
 import { files } from '$lib/stores/files.svelte'
@@ -115,6 +116,8 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 					chat.threadCache.clear()
 					notes.invalidate()
 					projects.invalidate()
+					calendars.invalidate()
+					calendarEvents.invalidate()
 					reminders.invalidateAll()
 					invalidateSettings()
 					agents.invalidate()

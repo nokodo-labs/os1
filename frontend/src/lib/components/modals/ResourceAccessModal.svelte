@@ -99,6 +99,27 @@
 					if (data) fetched = data
 					break
 				}
+				case 'note': {
+					const { data } = await api.GET('/v1/notes/{note_id}/access-rules', {
+						params: { path: { note_id: payload.resourceId } },
+					})
+					if (data) fetched = data
+					break
+				}
+				case 'reminder_list': {
+					const { data } = await api.GET('/v1/reminder-lists/{list_id}/access-rules', {
+						params: { path: { list_id: payload.resourceId } },
+					})
+					if (data) fetched = data
+					break
+				}
+				case 'calendar': {
+					const { data } = await api.GET('/v1/calendars/{calendar_id}/access-rules', {
+						params: { path: { calendar_id: payload.resourceId } },
+					})
+					if (data) fetched = data
+					break
+				}
 			}
 			rules = fetched.map((r, i) => ({
 				id: r.id,
@@ -153,6 +174,24 @@
 				case 'agent':
 					await api.PUT('/v1/agents/{agent_id}/access-rules', {
 						params: { path: { agent_id: payload.resourceId } },
+						body,
+					})
+					break
+				case 'note':
+					await api.PUT('/v1/notes/{note_id}/access-rules', {
+						params: { path: { note_id: payload.resourceId } },
+						body,
+					})
+					break
+				case 'reminder_list':
+					await api.PUT('/v1/reminder-lists/{list_id}/access-rules', {
+						params: { path: { list_id: payload.resourceId } },
+						body,
+					})
+					break
+				case 'calendar':
+					await api.PUT('/v1/calendars/{calendar_id}/access-rules', {
+						params: { path: { calendar_id: payload.resourceId } },
 						body,
 					})
 					break
