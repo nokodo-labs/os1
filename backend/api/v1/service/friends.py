@@ -23,6 +23,7 @@ from api.models.user import User
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from nokodo_ai.utils.search import contains_pattern
 
 
 async def send_friend_request(
@@ -276,16 +277,17 @@ async def search_users(
 	username and display_name are always searched. email is only matched
 	when the target user has find_by_email enabled (privacy control).
 	"""
-	q = f"%{query}%"
+	q = contains_pattern(query)
 	stmt = (
 		select(User)
 		.where(
 			User.id != principal.user_id,
 			User.is_active.is_(True),
 			or_(
-				User.username.ilike(q),
-				User.display_name.ilike(q),
-				User.find_by_email.is_(True) & User.email.ilike(q),
+				User.username.ilike(q, escape="\\"),
+				User.display_name.ilike(q, escape="\\"),
+				User.find_by_email.is_(True)
+				& User.email.ilike(q, escape="\\"),
 			),
 		)
 		.limit(limit)

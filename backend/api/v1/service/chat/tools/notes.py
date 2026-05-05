@@ -95,6 +95,7 @@ class NoteGetTool(Tool[AppContext]):
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
+		"""retrieve a note by id or search notes and return structured results."""
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 		inp = NoteGetInput.model_validate(kwargs)
@@ -122,13 +123,13 @@ class NoteGetTool(Tool[AppContext]):
 				tool_call_id=__agent_context__.tool_call_id,
 				tool_output=json.dumps(result),
 				metadata={
-					"citable_sources": [
+					"_citable_sources": [
 						{
 							"source_type": "note",
 							"source_id": str(note.id),
 							"title": note.title,
-						},
-					],
+						}
+					]
 				},
 			)
 
@@ -168,15 +169,20 @@ class NoteGetTool(Tool[AppContext]):
 		]
 		n = len(results)
 		msg = f"found {n} {'note' if n == 1 else 'notes'}"
-		out = {"status": "success", "message": msg, "count": n, "results": results}
 		citable_sources: list[JSONValue] = [
 			{"source_type": "note", "source_id": item.id, "title": item.title}
 			for item in page.items
 		]
+		out = {
+			"status": "success",
+			"message": msg,
+			"count": n,
+			"results": results,
+		}
 		return ToolMessage(
 			tool_call_id=__agent_context__.tool_call_id,
 			tool_output=json.dumps(out),
-			metadata={"citable_sources": citable_sources},
+			metadata={"_citable_sources": citable_sources},
 		)
 
 
@@ -200,6 +206,7 @@ class NoteWriteTool(Tool[AppContext]):
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
+		"""create a new note or update an existing note for the current user."""
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 		inp = NoteWriteInput.model_validate(kwargs)

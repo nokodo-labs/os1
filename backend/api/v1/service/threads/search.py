@@ -39,6 +39,7 @@ from api.v1.service.vectorize import (
 	remove_vectorized_resource,
 )
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -144,6 +145,7 @@ async def _autocomplete_threads(
 	limit: int = 5,
 ) -> list[SearchResultItem]:
 	"""pg_trgm autocomplete for threads on title."""
+	pattern = contains_pattern(q)
 	stmt = (
 		select(Thread)
 		.where(
@@ -155,7 +157,7 @@ async def _autocomplete_threads(
 			),
 			or_(
 				func.similarity(Thread.title, q) > 0.1,
-				Thread.title.ilike(f"%{q}%"),
+				Thread.title.ilike(pattern, escape="\\"),
 			),
 		)
 		.order_by(func.similarity(Thread.title, q).desc())
