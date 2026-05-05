@@ -18,9 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import session_scope
 from api.models.thread_summary import SummaryType
-from api.v1.service import thread_summaries as summary_service
+from api.settings import settings
 from api.v1.service import threads as thread_service
+from api.v1.service.chat.message_metadata import persisted_message_metadata
 from api.v1.service.chat.models import resolve_task_chat_model
+from api.v1.service.threads import summaries as summary_service
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
@@ -33,11 +35,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 logger = logging.getLogger(__name__)
 
-# max chars per message in the transcript sent to the summarization model.
-# keeps tokens manageable without losing essential context.
-_MAX_CHARS_PER_MESSAGE = 2000
-
-# max chars to send to the summarization model. computed from
+# max chars to send to the condensation model. computed from
 # DEFAULT_CONTEXT_WINDOW (128K tokens) at ~4 chars/token, leaving
 # 30% headroom for the system prompt and response.
 _MAX_CONDENSATION_INPUT_CHARS = int(DEFAULT_CONTEXT_WINDOW * 4 * 0.70)
@@ -72,14 +70,17 @@ respond with ONLY the merged summary text, no preamble or formatting."""
 def _format_transcript(messages: Sequence[SDKMessage]) -> str:
 	"""format a list of SDK messages into a plain transcript."""
 	lines: list[str] = []
+	max_chars = settings.ai.windowing.summarization_max_chars_per_message
 	for msg in messages:
 		role = msg.role
 		if isinstance(msg, SDKToolMessage):
-			text = msg.tool_output[:_MAX_CHARS_PER_MESSAGE] if msg.tool_output else ""
+			text = msg.tool_output or ""
 		elif isinstance(msg, (SDKUserMessage, SDKAssistantMessage, SDKSystemMessage)):
-			text = (msg.text or "")[:_MAX_CHARS_PER_MESSAGE]
+			text = msg.text or ""
 		else:
 			text = ""
+		if max_chars is not None:
+			text = text[:max_chars]
 		if text:
 			lines.append(f"[{role}]: {text}")
 	return "\n".join(lines)
@@ -175,8 +176,10 @@ async def summarize_thread_message_range(
 					update={
 						"metadata": {
 							**(sdk.metadata or {}),
-							"message_id": str(message.id),
-							"created_at": message.created_at.isoformat(),
+							**persisted_message_metadata(
+								message.id,
+								message.created_at,
+							),
 						}
 					}
 				)

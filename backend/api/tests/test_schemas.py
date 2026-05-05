@@ -12,12 +12,14 @@ from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
 from api.schemas.content import TextContent
 from api.schemas.event import Event as EventSchema
-from api.schemas.message import MessageCreate
+from api.schemas.message import Message as MessageSchema
+from api.schemas.message import MessageCreate, public_message_metadata
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
 from api.schemas.runs import RunInput, RunRequest, ThreadCreateAndRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
+from api.v1.service.chat.run_helpers import message_to_sse_data
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -122,6 +124,74 @@ def test_message_create_normalizes_content_variants() -> None:
 	assert part_0.text == "world"
 	assert part_1.text == "model"
 	assert from_empty.content == []
+
+
+def test_public_message_metadata_strips_private_underscore_keys() -> None:
+	metadata = {
+		"run_id": "run_123",
+		"steering_state": "queued",
+		"custom_public": "visible",
+		"model_id": "public_if_present",
+		"message_id": "public_if_present",
+		"_provider_data": {"provider": {"tool_call_id": "call_secret"}},
+		"_citations_assigned": True,
+		"_citable_sources": [{"source_type": "url", "source_id": "secret"}],
+		"_web_fetch": {"domain": "example.com"},
+		"_web_search": {"engine": "perplexity"},
+	}
+
+	assert public_message_metadata(metadata) == {
+		"run_id": "run_123",
+		"steering_state": "queued",
+		"custom_public": "visible",
+		"model_id": "public_if_present",
+		"message_id": "public_if_present",
+	}
+
+
+def test_message_schema_serializes_public_tool_metadata() -> None:
+	now = datetime.now(tz=UTC)
+	message = MessageSchema(
+		id=new_typeid("msg"),
+		thread_id=new_typeid("thread"),
+		type=MessageType.TOOL,
+		content=[],
+		tool_call_id="call_123",
+		is_error=False,
+		metadata_={
+			"run_id": "run_123",
+			"_provider_data": {"provider": {"tool_call_id": "call_secret"}},
+			"_web_search": {"engine": "perplexity"},
+		},
+		created_at=now,
+		updated_at=now,
+	)
+
+	payload = message.model_dump(mode="json", by_alias=True)
+
+	assert payload["metadata_"] == {"run_id": "run_123"}
+
+
+def test_message_to_sse_data_serializes_public_tool_metadata() -> None:
+	now = datetime.now(tz=UTC)
+	message = SimpleNamespace(
+		id=new_typeid("msg"),
+		thread_id=new_typeid("thread"),
+		parent_id=None,
+		type=MessageType.TOOL,
+		content=[],
+		metadata_={
+			"run_id": "run_123",
+			"_message_id": "msg_internal",
+			"_provider_data": {"provider": {"tool_call_id": "call_secret"}},
+			"_web_search": {"engine": "perplexity"},
+		},
+		sender_agent_id=None,
+		sender_user_id=None,
+		created_at=now,
+	)
+
+	assert message_to_sse_data(message)["metadata_"] == {"run_id": "run_123"}
 
 
 def test_prompt_schema_validates_and_normalizes() -> None:

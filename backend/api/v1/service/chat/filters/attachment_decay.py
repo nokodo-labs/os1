@@ -32,6 +32,7 @@ from api.models.model import Model
 from api.settings import settings as app_settings
 from api.v1.service import threads as thread_service
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.prompt_runtime import SENTINEL_REFERENCED_ATTACHMENTS
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
@@ -370,14 +371,13 @@ def _is_modality_supported(
 def _extract_message_ids(thread: SDKThread) -> list[TypeID]:
 	"""extract message IDs from thread message metadata.
 
-	each sdk message carries its orm id as metadata["message_id"]
-	when loaded via load_sdk_thread.
+	each sdk message carries its orm id when loaded.
 	"""
 	ids: list[TypeID] = []
 	for msg in thread.messages:
-		mid = msg.metadata.get("message_id") if msg.metadata else None
+		mid = get_message_id(msg)
 		if mid:
-			ids.append(TypeID(str(mid)))
+			ids.append(TypeID(mid))
 	return ids
 
 
@@ -453,6 +453,7 @@ class AttachmentDecayFilter(Filter):
 		thread: SDKThread,
 		app_context: AppContext | None,
 	) -> SDKThread:
+		"""replace decayed attachments with prompt references for this turn."""
 		if app_context is None:
 			raise ValueError("AppContext is required for AttachmentDecayFilter")
 

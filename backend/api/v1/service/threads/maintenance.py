@@ -15,13 +15,13 @@ from api.models.thread import Thread
 from api.models.thread_summary import SummaryType, ThreadSummary
 from api.schemas.thread import ThreadUpdate
 from api.settings import settings
-from api.v1.service import thread_summaries as summary_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
 )
 from api.v1.service.chat.windowing import apply_context_windowing
+from api.v1.service.threads import summaries as summary_service
 from api.v1.service.threads.core import update_thread
 from api.v1.service.threads.messages import get_current_branch, walk_message_branch
 from api.v1.service.threads.metadata import thread_metadata_missing
@@ -37,8 +37,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 logger = logging.getLogger(__name__)
 
-
-_MAX_MAINTENANCE_CHARS_PER_MESSAGE = 2000
 
 _MAINTENANCE_PROMPT = """\
 given the active chat history, generate thread maintenance data.
@@ -200,20 +198,21 @@ async def maintain_thread_metadata(
 		).thread
 
 	transcript_lines: list[str] = []
-	for message in sdk_thread.messages:
+	for sdk_message in sdk_thread.messages:
 		text = ""
-		if isinstance(message, SDKToolMessage):
-			text = message.tool_output or ""
+		if isinstance(sdk_message, SDKToolMessage):
+			text = sdk_message.tool_output or ""
 		elif isinstance(
-			message,
+			sdk_message,
 			(SDKUserMessage, SDKAssistantMessage, SDKSystemMessage),
 		):
-			text = message.text or ""
+			text = sdk_message.text or ""
 		text = text.strip()
 		if text:
-			transcript_lines.append(
-				f"[{message.role}]: {text[:_MAX_MAINTENANCE_CHARS_PER_MESSAGE]}"
-			)
+			max_chars = settings.ai.tasks.maintenance_max_chars_per_message
+			if max_chars is not None:
+				text = text[:max_chars]
+			transcript_lines.append(f"[{sdk_message.role}]: {text}")
 
 	chat_model = await resolve_task_chat_model(session, "thread_maintenance")
 	structured = await run_chat_model_json_schema(

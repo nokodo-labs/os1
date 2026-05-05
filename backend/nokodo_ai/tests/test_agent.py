@@ -569,7 +569,7 @@ async def test_agent_tool_call_with_no_metadata_sets_empty_context_metadata() ->
 @pytest.mark.asyncio
 async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	"""when a tool returns a ToolMessage with custom metadata (e.g.
-	citable_sources) but no provider_data, the agent must still propagate
+	_citable_sources) but no provider_data, the agent must still propagate
 	provider_data from the original ToolCall into the ToolMessage.
 
 	regression test for the bug where deep_merge(overwrite=False) treated
@@ -596,7 +596,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 				tool_call_id=__agent_context__.tool_call_id,
 				tool_output="note content here",
 				metadata={
-					"citable_sources": [
+					"_citable_sources": [
 						{"source_type": "note", "source_id": "n1", "title": "My Note"},
 					],
 				},
@@ -637,7 +637,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	assert pd == {"anthropic.messages": {"tool_call_id": "toolu_01ABC"}}
 
 	# tool's own metadata must also be preserved
-	assert tool_msg.metadata.get("citable_sources") == [
+	assert tool_msg.metadata.get("_citable_sources") == [
 		{"source_type": "note", "source_id": "n1", "title": "My Note"},
 	]
 

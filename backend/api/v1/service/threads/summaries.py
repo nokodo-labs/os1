@@ -10,14 +10,13 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 async def create_summary(
-	*,
 	thread_id: TypeID,
 	summary_type: SummaryType,
 	content: str,
 	message_count: int,
+	session: AsyncSession,
 	start_message_id: TypeID | None = None,
 	end_message_id: TypeID | None = None,
-	session: AsyncSession,
 ) -> ThreadSummary:
 	"""create and persist a new thread summary."""
 	summary = ThreadSummary(
@@ -29,7 +28,7 @@ async def create_summary(
 		end_message_id=end_message_id,
 	)
 	session.add(summary)
-	await session.commit()
+	await session.flush()
 	await session.refresh(summary)
 	return summary
 
@@ -47,6 +46,20 @@ async def list_active_summaries(
 		)
 		.order_by(ThreadSummary.created_at.asc())
 	)
+	result = await session.execute(stmt)
+	return list(result.scalars().all())
+
+
+async def list_summaries(
+	thread_id: TypeID,
+	session: AsyncSession,
+	include_superseded: bool = True,
+) -> list[ThreadSummary]:
+	"""list stored summaries for a thread, ordered by creation."""
+	stmt = select(ThreadSummary).where(ThreadSummary.thread_id == thread_id)
+	if not include_superseded:
+		stmt = stmt.where(ThreadSummary.superseded_by_id.is_(None))
+	stmt = stmt.order_by(ThreadSummary.created_at.asc(), ThreadSummary.id.asc())
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
 
@@ -82,7 +95,7 @@ async def supersede_summaries(
 	result = await session.execute(stmt)
 	for summary in result.scalars().all():
 		summary.superseded_by_id = replacement_id
-	await session.commit()
+	await session.flush()
 
 
 async def get_summary(

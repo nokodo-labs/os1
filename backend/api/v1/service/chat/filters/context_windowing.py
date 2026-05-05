@@ -21,12 +21,12 @@ from pydantic import Field, PrivateAttr
 
 from api.database import async_session_local
 from api.settings import settings as app_settings
-from api.v1.service import thread_summaries as summary_service
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.windowing import (
 	apply_context_windowing,
 	enforce_combined_tool_budget,
 )
+from api.v1.service.threads import summaries as summary_service
 from api.v1.tasks.threads import (
 	start_condense_summaries_task,
 	start_summarize_messages_task,

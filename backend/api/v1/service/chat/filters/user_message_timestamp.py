@@ -8,6 +8,7 @@ from pydantic import Field
 
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.chat.message_metadata import CREATED_AT_KEY
 from nokodo_ai.messages import Message, TextContent, UserContentPart
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -28,6 +29,7 @@ class UserMessageTimestampFilter(Filter):
 		thread: SDKThread,
 		app_context: AppContext | None,
 	) -> SDKThread:
+		"""prepend each user message with its persisted creation timestamp."""
 		new_messages: list[Message] = []
 		for msg in thread.messages:
 			if not isinstance(msg, SDKUserMessage):
@@ -67,8 +69,9 @@ class UserMessageTimestampFilter(Filter):
 
 	@staticmethod
 	def _resolve_timestamp(msg: SDKUserMessage) -> str | None:
-		"""extract created_at from message metadata, or None if absent."""
-		iso = (msg.metadata or {}).get("created_at")
+		"""extract created_at from private message metadata, or None if absent."""
+		metadata = msg.metadata or {}
+		iso = metadata.get(CREATED_AT_KEY)
 		if not isinstance(iso, str):
 			return None
 		dt = datetime.fromisoformat(iso)

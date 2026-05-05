@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.chat.windowing import (
 	WindowingResult,
 	_build_summary_injection,
 	_build_window_info,
 	_find_summarized_cutoff,
-	_get_message_id,
 	_inject_summary_into_system,
 	_replace_chat_window_sentinel,
 	apply_context_windowing,
@@ -37,7 +37,7 @@ def _sys(text: str) -> SystemMessage:
 
 
 def _user(text: str, msg_id: str | None = None) -> UserMessage:
-	meta: JSONObject | None = {"message_id": msg_id} if msg_id else None
+	meta: JSONObject | None = {"_message_id": msg_id} if msg_id else None
 	return UserMessage(
 		content=[TextContent(text=text)],
 		metadata=meta,
@@ -45,7 +45,7 @@ def _user(text: str, msg_id: str | None = None) -> UserMessage:
 
 
 def _assistant(text: str, msg_id: str | None = None) -> AssistantMessage:
-	meta: JSONObject | None = {"message_id": msg_id} if msg_id else None
+	meta: JSONObject | None = {"_message_id": msg_id} if msg_id else None
 	return AssistantMessage(
 		content=[TextContent(text=text)],
 		metadata=meta,
@@ -69,24 +69,24 @@ def _mock_summary(
 	return s
 
 
-# -- _get_message_id --
+# -- get_message_id --
 
 
 class TestGetMessageId:
 	def test_returns_id_from_metadata(self) -> None:
 		msg = _user("hi", msg_id="msg_123")
-		assert _get_message_id(msg) == "msg_123"
+		assert get_message_id(msg) == "msg_123"
 
 	def test_returns_none_when_no_metadata(self) -> None:
 		msg = _user("hi")
-		assert _get_message_id(msg) is None
+		assert get_message_id(msg) is None
 
 	def test_returns_none_when_no_message_id_key(self) -> None:
 		msg = UserMessage(
 			content=[TextContent(text="hi")],
 			metadata={"other": "val"},
 		)
-		assert _get_message_id(msg) is None
+		assert get_message_id(msg) is None
 
 
 # -- _find_summarized_cutoff --

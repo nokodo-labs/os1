@@ -17,8 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.thread_summary import ThreadSummary
 from api.settings import settings as app_settings
-from api.v1.service import thread_summaries as summary_service
+from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.prompt_runtime import SENTINEL_CHAT_WINDOW_INFO
+from api.v1.service.threads import summaries as summary_service
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
@@ -48,14 +49,6 @@ class WindowingResult:
 	dropped_count: int = 0
 	total_tokens: int = 0
 	budget_tokens: int = 0
-
-
-def _get_message_id(msg: SDKMessage) -> str | None:
-	"""extract the ORM message ID from SDK message metadata."""
-	meta = msg.metadata
-	if meta and "message_id" in meta:
-		return str(meta["message_id"])
-	return None
 
 
 def _find_summarized_cutoff(
@@ -210,7 +203,7 @@ async def apply_context_windowing(
 		)
 
 	messages = list(thread.messages)
-	branch_ids = [_get_message_id(m) for m in messages]
+	branch_ids = [get_message_id(m) for m in messages]
 
 	# -- step 1: load summaries + exclude summarized messages --
 

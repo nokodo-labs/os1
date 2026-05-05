@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Annotated
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_serializer, field_validator, model_validator
 
 from api.models.message import MessageType
 from api.schemas.citations import Citation
@@ -21,11 +21,19 @@ from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
 # type adapter for content validation
 ContentPartList = Annotated[list[ContentPart], Field(default_factory=list)]
+
+
+def public_message_metadata(metadata: JSONObject | None) -> JSONObject:
+	"""return metadata safe to include in API/SSE message payloads."""
+	if not metadata:
+		return {}
+	return {key: value for key, value in metadata.items() if not key.startswith("_")}
 
 
 class MessageBase(MetadataModel):
@@ -205,3 +213,8 @@ class Message(MessageBase, TimestampedModel):
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
 	sender_user_id: TypeID | None = None
+
+	@field_serializer("metadata")
+	def serialize_public_metadata(self, metadata: JSONObject) -> JSONObject:
+		"""serialize only metadata that belongs on the public message surface."""
+		return public_message_metadata(metadata)

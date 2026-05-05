@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -52,7 +53,7 @@ def _tool_msg(
 ) -> ToolMessage:
 	meta: JSONObject = {}
 	if citable_sources is not None:
-		meta["citable_sources"] = citable_sources
+		meta["_citable_sources"] = citable_sources
 	if assigned:
 		meta["_citations_assigned"] = True
 	return ToolMessage(tool_call_id="tc_1", tool_output=output, metadata=meta or None)
@@ -66,11 +67,11 @@ def _assistant_msg(
 ) -> AssistantMessage:
 	meta: JSONObject = {}
 	if nci is not None:
-		meta["next_citation_index"] = nci
+		meta["_next_citation_index"] = nci
 	if citations is not None:
-		meta["citations"] = citations
+		meta["_citations"] = citations
 	if message_id is not None:
-		meta["message_id"] = message_id
+		meta["_message_id"] = message_id
 	return AssistantMessage.from_text(text).model_copy(
 		update={"metadata": meta or None},
 	)
@@ -140,7 +141,7 @@ class TestFindNciInWindow:
 
 	def test_skips_non_int_nci(self) -> None:
 		msg = _assistant_msg()
-		msg.metadata = {"next_citation_index": "not_an_int"}
+		msg.metadata = {"_next_citation_index": "not_an_int"}
 		thread = Thread(messages=[msg])
 		assert _find_nci_in_window(thread) is None
 
@@ -379,7 +380,7 @@ class TestAssignNewCitations:
 		f._assign_new_citations(thread, entries, 0)
 		assert entries == []
 
-	def test_skips_invalid_source_entries(self) -> None:
+	def test_malformed_source_entry_raises(self) -> None:
 		f = self._make_filter()
 		entries: list[Citation] = []
 		thread = Thread(
@@ -388,16 +389,26 @@ class TestAssignNewCitations:
 					output="content",
 					citable_sources=[
 						"not a dict",
-						{"no_source_type": True},
-						{"source_type": "url", "source_id": "valid"},
 					],
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries, 0)
-		# only the valid one should be assigned
-		assert len(entries) == 1
-		assert entries[0].source_id == "valid"
+		with pytest.raises(TypeError, match="_citable_sources items"):
+			f._assign_new_citations(thread, entries, 0)
+
+	def test_source_without_source_type_raises(self) -> None:
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="content",
+					citable_sources=[{"no_source_type": True}],
+				),
+			]
+		)
+		with pytest.raises(KeyError):
+			f._assign_new_citations(thread, entries, 0)
 
 	def test_multiple_sources_in_one_tool(self) -> None:
 		f = self._make_filter()
@@ -518,27 +529,28 @@ class TestAssignNewCitations:
 		f._assign_new_citations(thread, entries, 0)
 		assert entries == []
 
-	def test_all_sources_invalid_skips_tool(self) -> None:
+	def test_invalid_citable_sources_raise(self) -> None:
 		f = self._make_filter()
 		entries: list[Citation] = []
+		output = json.dumps({"content": "content"})
 		tool = ToolMessage(
 			tool_call_id="tc_1",
-			tool_output="content",
+			tool_output=output,
 			metadata={
-				"citable_sources": [
+				"_citable_sources": [
 					"not a dict",
 					42,
 					{"no_source_type": True},
-				],
+				]
 			},
 		)
 		thread = Thread(messages=[tool])
-		f._assign_new_citations(thread, entries, 0)
+		with pytest.raises(TypeError, match="_citable_sources items"):
+			f._assign_new_citations(thread, entries, 0)
 		assert entries == []
-		# tool output should be unchanged (no markers appended)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
-		assert msg.tool_output == "content"
+		assert msg.tool_output == output
 
 	def test_nci_floor_prevents_index_collision(self) -> None:
 		"""when nci is higher than entries count, new indices start at nci."""
@@ -716,30 +728,30 @@ class TestAssignNewCitations:
 			messages=[
 				ToolMessage(
 					tool_call_id="tc_1",
-					tool_output="first",
+					tool_output=json.dumps({"content": "first"}),
 					metadata={
-						"citable_sources": [
+						"_message_id": "msg_tool_1",
+						"_citable_sources": [
 							{
 								"source_type": "note",
 								"source_id": "note_1",
 								"title": "N",
-							},
+							}
 						],
-						"message_id": "msg_tool_1",
 					},
 				),
 				ToolMessage(
 					tool_call_id="tc_2",
-					tool_output="second",
+					tool_output=json.dumps({"content": "second"}),
 					metadata={
-						"citable_sources": [
+						"_message_id": "msg_tool_2",
+						"_citable_sources": [
 							{
 								"source_type": "note",
 								"source_id": "note_1",
 								"title": "N",
-							},
+							}
 						],
-						"message_id": "msg_tool_2",
 					},
 				),
 			]

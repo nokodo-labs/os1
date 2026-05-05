@@ -39,6 +39,7 @@ from api.v1.service.authorization import (
 	require_thread_access,
 )
 from api.v1.service.chat.filters.steering import SteeringFilter
+from api.v1.service.chat.message_metadata import MESSAGE_ID_KEY, get_message_id
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.chat.user_message import (
 	create_run_user_message,
@@ -141,7 +142,7 @@ async def enqueue_run_steering(
 	sdk_msg = SDKUserMessage(
 		content=resolved,
 		metadata={
-			"message_id": str(user_msg.id),
+			MESSAGE_ID_KEY: str(user_msg.id),
 		},
 	)
 
@@ -405,13 +406,13 @@ async def prepare_steering[AppContextT](
 	subscriber = await start_steering_subscriber(run_id)
 
 	async def _on_steering_injected(messages: list[SDKUserMessage]) -> None:
+		"""persist and broadcast steering messages injected into the run."""
 		injected_ids: list[TypeID] = []
 		for msg in messages:
-			meta = msg.metadata or {}
-			mid_raw = meta.get("message_id")
-			if mid_raw is None:
+			mid = get_message_id(msg)
+			if mid is None:
 				continue
-			injected_ids.append(TypeID(str(mid_raw)))
+			injected_ids.append(TypeID(mid))
 		if not injected_ids:
 			return
 		parent_id = parent_id_provider() if parent_id_provider is not None else None
@@ -437,6 +438,7 @@ async def prepare_steering[AppContextT](
 			)
 
 	async def _claim_pending() -> list[SDKUserMessage]:
+		"""claim queued steering messages for the steering filter."""
 		return await run_status_store.claim_pending_steering(run_id)
 
 	steering_filter = SteeringFilter(

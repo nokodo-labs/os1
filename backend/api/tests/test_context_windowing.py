@@ -78,7 +78,7 @@ def _sys(text: str) -> SystemMessage:
 
 
 def _user(text: str, msg_id: str | None = None) -> UserMessage:
-	meta: JSONObject | None = {"message_id": msg_id} if msg_id else None
+	meta: JSONObject | None = {"_message_id": msg_id} if msg_id else None
 	return UserMessage(
 		content=[TextContent(text=text)],
 		metadata=meta,
@@ -86,7 +86,7 @@ def _user(text: str, msg_id: str | None = None) -> UserMessage:
 
 
 def _assistant(text: str, msg_id: str | None = None) -> AssistantMessage:
-	meta: JSONObject | None = {"message_id": msg_id} if msg_id else None
+	meta: JSONObject | None = {"_message_id": msg_id} if msg_id else None
 	return AssistantMessage(
 		content=[TextContent(text=text)],
 		metadata=meta,

@@ -19,7 +19,7 @@ from api.models.event import Event
 from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
-from api.schemas.message import MessageCreate
+from api.schemas.message import MessageCreate, public_message_metadata
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.settings import settings as app_settings
 from api.v1.service import threads as thread_service
@@ -35,6 +35,11 @@ from api.v1.service.chat.filters.citation_index import (
 from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.hooks import resolve_hooks
+from api.v1.service.chat.message_metadata import (
+	MESSAGE_ID_KEY,
+	MODEL_ID_KEY,
+	NEXT_CITATION_INDEX_KEY,
+)
 from api.v1.service.chat.models import build_chat_model
 from api.v1.service.chat.run_helpers import (
 	broadcast_run_event,
@@ -261,6 +266,22 @@ def _schedule_terminate_broadcast(
 			),
 			name="broadcast_steering_dropped",
 		)
+
+
+def _public_delta_payload(value: object) -> object:
+	"""return a stream payload copy with every metadata object public-sanitized."""
+	if isinstance(value, dict):
+		return {
+			str(key): (
+				public_message_metadata(item)
+				if key == "metadata" and isinstance(item, dict)
+				else _public_delta_payload(item)
+			)
+			for key, item in value.items()
+		}
+	if isinstance(value, list):
+		return [_public_delta_payload(item) for item in value]
+	return value
 
 
 async def _broadcast_dropped_steering(
@@ -539,6 +560,7 @@ async def run_agent(
 		_model_id_for_persist: str | None = str(agent.model.id) if agent.model else None
 
 		async def _persist_message_worker(parent_id: TypeID | None) -> None:
+			"""persist streamed SDK messages in order for thread-bound runs."""
 			nonlocal persist_parent_override
 			assert thread_id is not None  # only runs when persist=True
 			last_parent_id = parent_id
@@ -568,10 +590,10 @@ async def run_agent(
 							# pick up without loading the full branch.
 							if ctx.citations:
 								nci = ctx.citations[-1].index + 1
-								create_in.metadata["next_citation_index"] = nci
+								create_in.metadata[NEXT_CITATION_INDEX_KEY] = nci
 						create_in.metadata["run_id"] = run_id
 						if _model_id_for_persist:
-							create_in.metadata["model_id"] = _model_id_for_persist
+							create_in.metadata[MODEL_ID_KEY] = _model_id_for_persist
 						if persist_parent_override is not None:
 							last_parent_id = persist_parent_override
 							persist_parent_override = None
@@ -597,6 +619,7 @@ async def run_agent(
 					message_queue.task_done()
 
 		async def _before_persist_event(event: Event) -> None:
+			"""wait for the active streamed message before persisting its event."""
 			msg_id = event.message_id
 			if not msg_id:
 				return
@@ -614,11 +637,13 @@ async def run_agent(
 				event.message_id = None
 
 		def _message_id_provider() -> str | None:
+			"""return the message id currently receiving streamed tool events."""
 			return active_message_id_for_events
 
 		async def _wait_for_persisted_parent(
 			message_id: TypeID | None,
 		) -> None:
+			"""wait for a streamed parent message before attaching steering output."""
 			if message_id is None:
 				return
 			evt = message_persisted.get(message_id)
@@ -640,6 +665,7 @@ async def run_agent(
 		else:
 			# ephemeral run - no thread to persist events to
 			async def _noop_emitter(_event: Event) -> None:
+				"""ignore tool events for ephemeral runs."""
 				pass
 
 			emitter = _noop_emitter
@@ -696,6 +722,7 @@ async def run_agent(
 		streaming_parent_id: TypeID | None = initial_parent_id
 
 		def _advance_parent_after_steering(message_id: TypeID) -> None:
+			"""advance streaming and persistence parents after steering injection."""
 			nonlocal persist_parent_override, streaming_parent_id
 			streaming_parent_id = message_id
 			persist_parent_override = message_id
@@ -728,6 +755,7 @@ async def run_agent(
 			)
 
 			def _alloc_message_id() -> TypeID:
+				"""allocate a deterministic message id and persistence wait handle."""
 				message_id = TypeID(new_typeid("msg"))
 				message_persisted[message_id] = asyncio.Event()
 				return message_id
@@ -736,12 +764,13 @@ async def run_agent(
 				message_id: TypeID | None,
 				delta: AgentDelta,
 			) -> dict[str, object]:
+				"""build a public sse delta envelope for any streamed message type."""
 				return {
 					"run_id": run_id,
 					"agent_id": agent_id,
 					"message_id": message_id,
 					"parent_id": streaming_parent_id,
-					"delta": delta.model_dump(mode="json"),
+					"delta": _public_delta_payload(delta.model_dump(mode="json")),
 				}
 
 			current_assistant_id: TypeID | None = None
@@ -845,7 +874,7 @@ async def run_agent(
 					message_id = tool_message_id
 					if delta.tool.metadata is None:
 						delta.tool.metadata = {}
-					delta.tool.metadata["message_id"] = tool_message_id
+					delta.tool.metadata[MESSAGE_ID_KEY] = str(tool_message_id)
 					tool_content: list[dict[str, object]] = []
 					if hasattr(delta.tool, "tool_output"):
 						output = delta.tool.tool_output or ""
@@ -888,6 +917,7 @@ async def run_agent(
 			# leave the run pinned in the store with subscribers waiting on
 			# a sentinel that never arrives.
 			async def _cancel_cleanup() -> None:
+				"""finalize partial state and broadcasts for a cancelled stream."""
 				await _finalize_partial_assistant_on_cancel(
 					run_id=run_id,
 					agent_id=agent_id,

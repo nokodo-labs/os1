@@ -15,10 +15,15 @@ from api.models.agent import Agent as AgentORM
 from api.models.event_types import EventType
 from api.models.message import Message as MessageORM
 from api.permissions import ResourceType
+from api.schemas.message import public_message_metadata
 from api.schemas.runs import ClientContext
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import list_accessible_user_ids
+from api.v1.service.chat.message_metadata import (
+	CITATIONS_KEY,
+	persisted_message_metadata,
+)
 from api.v1.service.events import event_connections
 from api.v1.service.prompt_runtime import render_agent_instructions
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
@@ -39,7 +44,7 @@ async def safe_rollback(session: AsyncSession) -> None:
 		pass
 
 
-def sse_event(*, event: str, data: dict[str, object]) -> bytes:
+def sse_event(event: str, data: dict[str, object]) -> bytes:
 	"""format an sse event (delegates to sse utils)."""
 	return sse_encode(event=event, data=data)
 
@@ -59,7 +64,7 @@ def message_to_sse_data(msg: MessageORM) -> dict[str, object]:
 		"parent_id": str(msg.parent_id) if msg.parent_id else None,
 		"type": msg.type.value,
 		"content": content_parts,
-		"metadata_": msg.metadata_ or {},
+		"metadata_": public_message_metadata(msg.metadata_ or {}),
 		"sender_agent_id": str(msg.sender_agent_id) if msg.sender_agent_id else None,
 		"sender_user_id": str(msg.sender_user_id) if msg.sender_user_id else None,
 		"created_at": msg.created_at.isoformat() if msg.created_at else None,
@@ -67,7 +72,6 @@ def message_to_sse_data(msg: MessageORM) -> dict[str, object]:
 
 
 async def broadcast_run_event(
-	*,
 	thread_id: TypeID,
 	agent_id: TypeID,
 	run_id: TypeID,
@@ -110,7 +114,7 @@ async def load_sdk_thread(
 	uses an optimized single-pass load (no redundant thread queries)
 	with a recursive CTE for branch walking.
 
-	each sdk message carries its orm id in metadata["message_id"]
+	each sdk message carries its orm id
 	so downstream filters can identify messages without needing a
 	separate lookup.
 
@@ -130,8 +134,7 @@ async def load_sdk_thread(
 		sdk = m.to_sdk()
 		enriched = {
 			**(sdk.metadata or {}),
-			"message_id": str(m.id),
-			"created_at": m.created_at.isoformat(),
+			**persisted_message_metadata(m.id, m.created_at),
 		}
 		# inject citations column into assistant message metadata so
 		# downstream filters can rebuild the citation index without a
@@ -140,7 +143,7 @@ async def load_sdk_thread(
 			citation_payload: list[JSONValue] = []
 			for citation in m.citations:
 				citation_payload.append(citation)
-			enriched["citations"] = citation_payload
+			enriched[CITATIONS_KEY] = citation_payload
 		sdk_messages.append(sdk.model_copy(update={"metadata": enriched}))
 
 	sdk_thread = SDKThread(

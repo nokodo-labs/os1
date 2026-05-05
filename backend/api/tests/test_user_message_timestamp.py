@@ -23,7 +23,7 @@ def _make_filter() -> UserMessageTimestampFilter:
 def _user(text: str, created_at: str | None = None) -> UserMessage:
 	meta = {}
 	if created_at is not None:
-		meta["created_at"] = created_at
+		meta["_created_at"] = created_at
 	return UserMessage.from_text(text).model_copy(update={"metadata": meta})
 
 
@@ -87,7 +87,7 @@ class TestSkipWithoutTimestamp:
 	@pytest.mark.asyncio
 	async def test_non_string_created_at_skips(self) -> None:
 		msg = UserMessage.from_text("bad meta").model_copy(
-			update={"metadata": {"created_at": 12345}}
+			update={"metadata": {"_created_at": 12345}}
 		)
 		thread = Thread(messages=[msg])
 
@@ -117,7 +117,7 @@ class TestImageOnlyMessage:
 	async def test_image_only_gets_text_part_prepended(self) -> None:
 		msg = UserMessage(
 			content=[ImageContent(url="https://example.com/img.png")],
-			metadata={"created_at": "2025-07-01T12:00:00+00:00"},
+			metadata={"_created_at": "2025-07-01T12:00:00+00:00"},
 		)
 		thread = Thread(messages=[msg])
 

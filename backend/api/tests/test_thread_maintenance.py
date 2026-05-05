@@ -11,11 +11,11 @@ from api.models.thread_summary import SummaryType
 from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserCreate
-from api.v1.service import thread_summaries as summary_service
 from api.v1.service import threads as thread_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
 from api.v1.service.threads import maintenance as thread_maintenance_service
+from api.v1.service.threads import summaries as summary_service
 
 
 async def _create_user_principal(
