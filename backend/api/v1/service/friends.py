@@ -286,8 +286,7 @@ async def search_users(
 			or_(
 				User.username.ilike(q, escape="\\"),
 				User.display_name.ilike(q, escape="\\"),
-				User.find_by_email.is_(True)
-				& User.email.ilike(q, escape="\\"),
+				User.find_by_email.is_(True) & User.email.ilike(q, escape="\\"),
 			),
 		)
 		.limit(limit)

@@ -685,9 +685,7 @@ async def complete_reminder(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
-	for completed_reminder in (
-		[reminder, *reminder.subtasks] if cascade else [reminder]
-	):
+	for completed_reminder in [reminder, *reminder.subtasks] if cascade else [reminder]:
 		await vectorize_resource(
 			spec=REMINDER_SPEC,
 			resource=completed_reminder,
