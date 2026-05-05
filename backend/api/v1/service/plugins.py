@@ -24,10 +24,10 @@ from api.v1.service.chat.hooks import (
 from api.v1.service.chat.hooks import (
 	get_registered_names as get_hook_names,
 )
-from api.v1.service.chat.tools import (
+from api.v1.service.chat.tools.registry import (
 	TOOL_REGISTRY,
 )
-from api.v1.service.chat.tools import (
+from api.v1.service.chat.tools.registry import (
 	get_registered_names as get_tool_names,
 )
 from nokodo_ai.utils.typeid import TypeID

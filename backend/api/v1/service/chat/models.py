@@ -294,6 +294,8 @@ async def resolve_task_chat_model(
 		model_id_str = task_settings.summarization_model_id
 	elif task == "memory_post_processing":
 		model_id_str = task_settings.memory_post_processing_model_id
+	elif task == "web_search":
+		model_id_str = task_settings.web_search_model_id
 
 	if model_id_str is None:
 		model_id_str = task_settings.default_model_id

@@ -1,11 +1,7 @@
-"""web search service - dispatches to the configured search agent."""
+"""web search service - engine search and agentic synthesis."""
 
-from .models import WebSearchError, WebSearchResult
+from .errors import WebSearchError
 from .search import search_web
 
 
-__all__ = [
-	"WebSearchError",
-	"WebSearchResult",
-	"search_web",
-]
+__all__ = ["WebSearchError", "search_web"]

@@ -173,6 +173,18 @@ class AITaskSettings(BaseModel):
 		default=None,
 		description="model for memory post-processing (dedup, update, delete)",
 	)
+	web_search_model_id: str | None = Field(
+		default=None,
+		description="model for native agentic web search",
+	)
+	maintenance_max_chars_per_message: int | None = Field(
+		default=2000,
+		ge=1,
+		description=(
+			"max characters per message in thread maintenance transcripts. "
+			"null for unlimited"
+		),
+	)
 
 
 class AIAttachmentSettings(BaseModel):
@@ -1054,16 +1066,15 @@ class WebLoaderSettings(BaseModel):
 	)
 
 
+SearchEngine = Literal["perplexity", "searxng", "bing", "google"]
+
+
 class SearchEngineSettings(BaseModel):
 	"""search engine configuration for web search"""
 
-	engine: Literal["google", "searxng"] = Field(
-		default="searxng",
-		description="web search engine to use for web search tool",
-	)
-	searxng: SearxngSettings = Field(
-		default_factory=SearxngSettings,
-		description="searxng-specific settings",
+	engine: SearchEngine = Field(
+		default="perplexity",
+		description="web search engine",
 	)
 
 
@@ -1077,18 +1088,30 @@ PerplexityModel = Literal[
 
 SearchContextUsage = Literal["low", "medium", "high"]
 
-SearchRecencyFilter = Literal["month", "week", "day", "hour"]
+SearchRecencyFilter = Literal["month", "week", "day", "hour", "year"]
 
 SearchAgent = Literal["native", "perplexity"]
 
 
+_DEFAULT_AGENTIC_WEB_SEARCH_PROMPT: Final[str] = """
+you are a focused web search agent.
+
+rules:
+- call web_search before answering.
+- use search results as evidence, not as a final answer.
+- synthesize the answer in your own words.
+- include citation markers like [1] when making sourced claims.
+- be concise, neutral, and clear when results disagree or are insufficient.
+""".strip()
+
+
 class PerplexitySettings(BaseModel):
-	"""perplexity-specific settings for web search."""
+	"""perplexity integration settings."""
 
 	api_key: str | None = settings_field(
 		default=None,
 		private=True,
-		description="api key for perplexity web search",
+		description="api key for the perplexity integration",
 	)
 	model: PerplexityModel = Field(
 		default="sonar",
@@ -1105,17 +1128,11 @@ class PerplexitySettings(BaseModel):
 		default=0.2,
 		ge=0.0,
 		le=2.0,
-		description="sampling temperature (lower = more factual)",
+		description="sampling temperature",
 	)
-	search_recency_filter: SearchRecencyFilter | None = Field(
-		default=None,
-		description=(
-			"restrict search results to a time window. None = no filter (all results)"
-		),
-	)
-	return_images: bool = Field(
+	image_results_enabled: bool = Field(
 		default=False,
-		description="include image URLs in perplexity search results",
+		description="allow web search tools to request image URLs from perplexity",
 	)
 	max_concurrent_requests: int = Field(
 		default=10,
@@ -1124,11 +1141,39 @@ class PerplexitySettings(BaseModel):
 	)
 
 
+class AgenticWebSearchSettings(BaseModel):
+	"""agentic web search configuration."""
+
+	agent: SearchAgent = Field(
+		default="native",
+		description="agent provider to use for agentic web search",
+	)
+	model_id: str | None = Field(
+		default=None,
+		description="model id for the native agentic web search agent",
+	)
+	system_prompt: str = Field(
+		default=_DEFAULT_AGENTIC_WEB_SEARCH_PROMPT,
+		description="system prompt for the native agentic web search agent",
+	)
+	model_params: dict[str, object] = Field(
+		default_factory=dict,
+		description="chat model parameters for the native agentic web search agent",
+	)
+	max_iterations: int = Field(
+		default=4,
+		ge=1,
+		le=20,
+		description="maximum native agentic web search turns",
+	)
+
+
 class WebSearchSettings(BaseModel):
 	"""web search provider configuration."""
 
-	search_agent: SearchAgent = Field(
-		default="native", description="agent to use for agentic web search tool."
+	agentic: AgenticWebSearchSettings = Field(
+		default_factory=AgenticWebSearchSettings,
+		description="agentic web search configuration",
 	)
 	max_chars: int = Field(
 		default=50_000,
@@ -1146,10 +1191,6 @@ class WebSearchSettings(BaseModel):
 	web_loaders: WebLoaderSettings = Field(
 		default_factory=WebLoaderSettings,
 		description="configuration for fetching and processing web content",
-	)
-	perplexity: PerplexitySettings = Field(
-		default_factory=PerplexitySettings,
-		description="perplexity-specific settings for agentic web search",
 	)
 
 
@@ -1211,6 +1252,29 @@ class IntegrationsSettings(BaseModel):
 	open_webui: OpenWebUIIntegrationSettings = Field(
 		default_factory=OpenWebUIIntegrationSettings,
 		description="Open WebUI integration",
+	)
+	perplexity: PerplexitySettings = Field(
+		default_factory=PerplexitySettings,
+		description="perplexity integration",
+	)
+	searxng: SearxngSettings = Field(
+		default_factory=SearxngSettings,
+		description="searxng integration",
+	)
+
+
+class NotificationSettings(BaseModel):
+	"""notification delivery tuning."""
+
+	missed_grace_days: int = Field(
+		default=7,
+		ge=1,
+		description="days to look back for missed notifications",
+	)
+	lookahead_days: int = Field(
+		default=366,
+		ge=1,
+		description="days ahead to schedule notifications",
 	)
 
 

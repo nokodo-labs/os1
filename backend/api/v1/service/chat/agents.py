@@ -50,7 +50,7 @@ from api.v1.service.chat.steering import (
 	persist_steering_state,
 	prepare_steering,
 )
-from api.v1.service.chat.tools import resolve_tools
+from api.v1.service.chat.tools.registry import resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
 from api.v1.service.events import build_event_emitter
