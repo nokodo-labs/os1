@@ -49,7 +49,7 @@ jobs:
       - name: check for differences between branches
         id: diff
         if: steps.config.outputs.has_config == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { data } = await github.rest.repos.compareCommits({
@@ -78,7 +78,7 @@ jobs:
 
       - name: setup Node.js
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
 
