@@ -57,9 +57,12 @@
 		// tasks
 		taskDefaultModelId?: string
 		taskThreadMetadataModelId?: string
+		taskThreadMaintenanceModelId?: string
 		taskInputAutocompleteModelId?: string
 		taskSummarizationModelId?: string
 		taskMemoryPostProcessingModelId?: string
+		taskWebSearchModelId?: string
+		taskMaintenanceMaxCharsPerMessage?: string
 		// media - images
 		mediaImagesEnabled?: boolean
 		mediaImagesModel?: string
@@ -87,6 +90,7 @@
 		windowingToolResultHardCap?: string
 		windowingToolResultsCombinedMaxShare?: string
 		windowingResponseHeadroom?: string
+		windowingSummarizationMaxCharsPerMessage?: string
 		// auxiliary (read-only)
 		agents?: Agent[]
 		models?: Model[]
@@ -111,9 +115,12 @@
 		retrievalPreBuild = $bindable(true),
 		taskDefaultModelId = $bindable(''),
 		taskThreadMetadataModelId = $bindable(''),
+		taskThreadMaintenanceModelId = $bindable(''),
 		taskInputAutocompleteModelId = $bindable(''),
 		taskSummarizationModelId = $bindable(''),
 		taskMemoryPostProcessingModelId = $bindable(''),
+		taskWebSearchModelId = $bindable(''),
+		taskMaintenanceMaxCharsPerMessage = $bindable(''),
 		mediaImagesEnabled = $bindable(true),
 		mediaImagesModel = $bindable(''),
 		mediaImagesDefaultSize = $bindable(''),
@@ -136,6 +143,7 @@
 		windowingToolResultHardCap = $bindable(''),
 		windowingToolResultsCombinedMaxShare = $bindable(''),
 		windowingResponseHeadroom = $bindable(''),
+		windowingSummarizationMaxCharsPerMessage = $bindable(''),
 		agents = [],
 		models = [],
 		providers = [],
@@ -460,6 +468,28 @@
 					</Select>
 				</div>
 				<div class="space-y-2">
+					<Label for="task_thread_maintenance_model">thread maintenance model</Label>
+					<p class="text-xs text-zinc-500">
+						model used for inactive-thread summaries and metadata maintenance.
+					</p>
+					<Select
+						value={taskThreadMaintenanceModelId}
+						onValueChange={(v: string) => (taskThreadMaintenanceModelId = v)}
+					>
+						<SelectTrigger id="task_thread_maintenance_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskThreadMaintenanceModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
 					<Label for="task_input_autocomplete_model">input autocomplete model</Label>
 					<p class="text-xs text-zinc-500">
 						model used to suggest completions as the user types.
@@ -524,6 +554,41 @@
 							{/each}
 						</SelectContent>
 					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_web_search_model">web search model</Label>
+					<p class="text-xs text-zinc-500">model used for native agentic web search.</p>
+					<Select
+						value={taskWebSearchModelId}
+						onValueChange={(v: string) => (taskWebSearchModelId = v)}
+					>
+						<SelectTrigger id="task_web_search_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskWebSearchModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_maintenance_max_chars">maintenance transcript max chars</Label>
+					<p class="text-xs text-zinc-500">
+						max characters per message in maintenance transcripts. leave empty for
+						unlimited.
+					</p>
+					<Input
+						id="task_maintenance_max_chars"
+						type="number"
+						min="1"
+						placeholder="unlimited"
+						bind:value={taskMaintenanceMaxCharsPerMessage}
+						class="rounded-xl"
+					/>
 				</div>
 			</div>
 			{#if modelsError}
@@ -723,6 +788,23 @@
 							min="0.10"
 							max="0.95"
 							bind:value={windowingToolResultsCombinedMaxShare}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="win_summarization_max_chars"
+							>summarization transcript max chars</Label
+						>
+						<p class="text-xs text-zinc-500">
+							max characters per message in summarization transcripts. leave empty for
+							unlimited.
+						</p>
+						<Input
+							id="win_summarization_max_chars"
+							type="number"
+							min="1"
+							placeholder="unlimited"
+							bind:value={windowingSummarizationMaxCharsPerMessage}
 							class="rounded-xl"
 						/>
 					</div>

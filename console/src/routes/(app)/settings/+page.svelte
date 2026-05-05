@@ -147,7 +147,7 @@
 			id: 'section-web-search',
 			label: 'web search',
 			keywords:
-				'search engine agent native perplexity sonar blacklisted domains exclude searxng google instance url max results concurrent requests timeout web loader tavily playwright user agent extract depth api key temperature recency filter return images',
+				'web search agentic agent native perplexity sonar model prompt params iterations search engine blacklisted domains exclude searxng bing google instance url max results max chars concurrent requests timeout web loader tavily playwright user agent extract depth api key temperature image results',
 			icon: Globe,
 			color: 'text-emerald-400',
 			activeBg: 'bg-emerald-500/10',
@@ -242,7 +242,7 @@
 		| 'opensearch'
 	type CodeInterpreterEngine = 'native' | 'e2b'
 	type SearchAgent = 'native' | 'perplexity'
-	type SearchEngine = 'google' | 'searxng'
+	type SearchEngine = 'perplexity' | 'searxng' | 'bing' | 'google'
 	type WebLoaderEngine = 'native' | 'tavily' | 'playwright'
 	type PerplexityModel =
 		| 'sonar'
@@ -251,7 +251,6 @@
 		| 'sonar-reasoning-pro'
 		| 'sonar-deep-research'
 	type SearchContextUsage = 'low' | 'medium' | 'high'
-	type SearchRecencyFilter = 'month' | 'week' | 'day' | 'hour'
 
 	let aiDefaultAgentIds = $state<string[]>([])
 
@@ -268,9 +267,12 @@
 
 	let aiTaskDefaultModelId = $state<string>('')
 	let aiTaskThreadMetadataModelId = $state<string>('')
+	let aiTaskThreadMaintenanceModelId = $state<string>('')
 	let aiTaskInputAutocompleteModelId = $state<string>('')
 	let aiTaskSummarizationModelId = $state<string>('')
 	let aiTaskMemoryPostProcessingModelId = $state<string>('')
+	let aiTaskWebSearchModelId = $state<string>('')
+	let aiTaskMaintenanceMaxCharsPerMessage = $state<string>('')
 
 	// AI media
 	let aiMediaImagesEnabled = $state(true)
@@ -299,6 +301,7 @@
 	let aiWindowingToolResultHardCap = $state<string>('')
 	let aiWindowingToolResultsCombinedMaxShare = $state<string>('')
 	let aiWindowingResponseHeadroom = $state<string>('')
+	let aiWindowingSummarizationMaxCharsPerMessage = $state<string>('')
 
 	let brandingSiteName = $state('')
 	let brandingLogoUrl = $state('')
@@ -383,9 +386,14 @@
 	let softDeleteFiles = $state(true)
 
 	// web search
-	let webSearchSearchAgent = $state<SearchAgent>('native')
+	let webSearchMaxChars = $state<string>('')
+	let webSearchAgenticAgent = $state<SearchAgent>('native')
+	let webSearchAgenticModelId = $state<string>('')
+	let webSearchAgenticSystemPrompt = $state<string>('')
+	let webSearchAgenticModelParams = $state<string>('{}')
+	let webSearchAgenticMaxIterations = $state<string>('')
 	let webSearchBlacklistedDomains = $state<string>('')
-	let webSearchEngineEngine = $state<SearchEngine>('searxng')
+	let webSearchEngineEngine = $state<SearchEngine>('perplexity')
 	let webSearchSearxngInstanceUrl = $state<string>('')
 	let webSearchSearxngMaxResults = $state<string>('')
 	let webSearchSearxngMaxConcurrentRequests = $state<string>('')
@@ -393,6 +401,7 @@
 	let webSearchWebLoaderEngine = $state<WebLoaderEngine>('native')
 	let webSearchWebLoaderTimeoutSeconds = $state<string>('')
 	let webSearchWebLoaderUserAgent = $state<string>('')
+	let webSearchWebLoaderMaxChars = $state<string>('')
 	let webSearchTavilyExtractDepth = $state<'basic' | 'advanced'>('advanced')
 	let webSearchTavilyApiKey = $state<string>('')
 	let webSearchTavilyMaxConcurrentRequests = $state<string>('')
@@ -400,8 +409,7 @@
 	let webSearchPerplexityModel = $state<PerplexityModel>('sonar')
 	let webSearchPerplexitySearchContextUsage = $state<SearchContextUsage>('medium')
 	let webSearchPerplexityTemperature = $state<string>('')
-	let webSearchPerplexitySearchRecencyFilter = $state<SearchRecencyFilter | ''>('')
-	let webSearchPerplexityReturnImages = $state(false)
+	let webSearchPerplexityImageResultsEnabled = $state(false)
 	let webSearchPerplexityMaxConcurrentRequests = $state<string>('')
 
 	// code interpreter
@@ -417,6 +425,7 @@
 			thread: null,
 			project: null,
 			file: null,
+			calendar: null,
 			note: null,
 			group: null,
 			reminder_list: null,
@@ -442,9 +451,12 @@
 		aiRetrievalPreBuild: true,
 		aiTaskDefaultModelId: '',
 		aiTaskThreadMetadataModelId: '',
+		aiTaskThreadMaintenanceModelId: '',
 		aiTaskInputAutocompleteModelId: '',
 		aiTaskSummarizationModelId: '',
 		aiTaskMemoryPostProcessingModelId: '',
+		aiTaskWebSearchModelId: '',
+		aiTaskMaintenanceMaxCharsPerMessage: '',
 		aiMediaImagesEnabled: true,
 		aiMediaImagesModel: '',
 		aiMediaImagesDefaultSize: '',
@@ -467,6 +479,7 @@
 		aiWindowingToolResultHardCap: '',
 		aiWindowingToolResultsCombinedMaxShare: '',
 		aiWindowingResponseHeadroom: '',
+		aiWindowingSummarizationMaxCharsPerMessage: '',
 		brandingSiteName: '',
 		brandingLogoUrl: '',
 		brandingFaviconUrl: '',
@@ -536,9 +549,14 @@
 		softDeleteThreads: true,
 		softDeleteNotes: true,
 		softDeleteFiles: true,
-		webSearchSearchAgent: 'native' as SearchAgent,
+		webSearchMaxChars: '',
+		webSearchAgenticAgent: 'native' as SearchAgent,
+		webSearchAgenticModelId: '',
+		webSearchAgenticSystemPrompt: '',
+		webSearchAgenticModelParams: '{}',
+		webSearchAgenticMaxIterations: '',
 		webSearchBlacklistedDomains: '',
-		webSearchEngineEngine: 'searxng' as SearchEngine,
+		webSearchEngineEngine: 'perplexity' as SearchEngine,
 		webSearchSearxngInstanceUrl: '',
 		webSearchSearxngMaxResults: '',
 		webSearchSearxngMaxConcurrentRequests: '',
@@ -546,6 +564,7 @@
 		webSearchWebLoaderEngine: 'native' as WebLoaderEngine,
 		webSearchWebLoaderTimeoutSeconds: '',
 		webSearchWebLoaderUserAgent: '',
+		webSearchWebLoaderMaxChars: '',
 		webSearchTavilyExtractDepth: 'advanced' as 'basic' | 'advanced',
 		webSearchTavilyApiKey: '',
 		webSearchTavilyMaxConcurrentRequests: '',
@@ -553,8 +572,7 @@
 		webSearchPerplexityModel: 'sonar' as PerplexityModel,
 		webSearchPerplexitySearchContextUsage: 'medium' as SearchContextUsage,
 		webSearchPerplexityTemperature: '',
-		webSearchPerplexitySearchRecencyFilter: '' as SearchRecencyFilter | '',
-		webSearchPerplexityReturnImages: false,
+		webSearchPerplexityImageResultsEnabled: false,
 		webSearchPerplexityMaxConcurrentRequests: '',
 		codeInterpreterEnabled: true,
 		codeInterpreterEngine: 'e2b' as CodeInterpreterEngine,
@@ -567,8 +585,10 @@
 				thread: null,
 				project: null,
 				file: null,
+				calendar: null,
 				note: null,
 				group: null,
+				reminder_list: null,
 			},
 			action_permissions: [],
 		} as DefaultPermissionsSettings,
@@ -591,9 +611,12 @@
 			aiRetrievalPreBuild !== original.aiRetrievalPreBuild ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
+			aiTaskThreadMaintenanceModelId !== original.aiTaskThreadMaintenanceModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
 			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
+			aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId ||
+			aiTaskMaintenanceMaxCharsPerMessage !== original.aiTaskMaintenanceMaxCharsPerMessage ||
 			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
 			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
@@ -610,6 +633,8 @@
 			aiWindowingToolResultsCombinedMaxShare !==
 				original.aiWindowingToolResultsCombinedMaxShare ||
 			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
+			aiWindowingSummarizationMaxCharsPerMessage !==
+				original.aiWindowingSummarizationMaxCharsPerMessage ||
 			brandingSiteName !== original.brandingSiteName ||
 			brandingLogoUrl !== original.brandingLogoUrl ||
 			brandingFaviconUrl !== original.brandingFaviconUrl ||
@@ -688,7 +713,12 @@
 			aiMediaImagesMaxN !== original.aiMediaImagesMaxN ||
 			aiMediaVideosEnabled !== original.aiMediaVideosEnabled ||
 			aiMediaAudioEnabled !== original.aiMediaAudioEnabled ||
-			webSearchSearchAgent !== original.webSearchSearchAgent ||
+			webSearchMaxChars !== original.webSearchMaxChars ||
+			webSearchAgenticAgent !== original.webSearchAgenticAgent ||
+			webSearchAgenticModelId !== original.webSearchAgenticModelId ||
+			webSearchAgenticSystemPrompt !== original.webSearchAgenticSystemPrompt ||
+			webSearchAgenticModelParams !== original.webSearchAgenticModelParams ||
+			webSearchAgenticMaxIterations !== original.webSearchAgenticMaxIterations ||
 			webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains ||
 			webSearchEngineEngine !== original.webSearchEngineEngine ||
 			webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
@@ -699,6 +729,7 @@
 			webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine ||
 			webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds ||
 			webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent ||
+			webSearchWebLoaderMaxChars !== original.webSearchWebLoaderMaxChars ||
 			webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
 			webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
 			webSearchTavilyMaxConcurrentRequests !==
@@ -708,9 +739,8 @@
 			webSearchPerplexitySearchContextUsage !==
 				original.webSearchPerplexitySearchContextUsage ||
 			webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
-			webSearchPerplexitySearchRecencyFilter !==
-				original.webSearchPerplexitySearchRecencyFilter ||
-			webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages ||
+			webSearchPerplexityImageResultsEnabled !==
+				original.webSearchPerplexityImageResultsEnabled ||
 			webSearchPerplexityMaxConcurrentRequests !==
 				original.webSearchPerplexityMaxConcurrentRequests ||
 			codeInterpreterEnabled !== original.codeInterpreterEnabled ||
@@ -735,6 +765,21 @@
 		return Boolean(v)
 	}
 
+	function formatJsonObject(value: unknown): string {
+		if (value === null || typeof value !== 'object' || Array.isArray(value)) return '{}'
+		return JSON.stringify(value, null, 2)
+	}
+
+	function parseJsonObject(value: string): Record<string, unknown> {
+		const trimmed = value.trim()
+		if (!trimmed) return {}
+		const parsed: unknown = JSON.parse(trimmed)
+		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			throw new Error('expected JSON object')
+		}
+		return Object.fromEntries(Object.entries(parsed))
+	}
+
 	function parseCommaList(value: string): string[] {
 		return value
 			.split(',')
@@ -750,6 +795,7 @@
 				thread: input.resource_access?.thread ?? null,
 				project: input.resource_access?.project ?? null,
 				file: input.resource_access?.file ?? null,
+				calendar: input.resource_access?.calendar ?? null,
 				note: input.resource_access?.note ?? null,
 				group: input.resource_access?.group ?? null,
 				reminder_list: input.resource_access?.reminder_list ?? null,
@@ -792,10 +838,16 @@
 		const tasks = ai?.tasks
 		aiTaskDefaultModelId = tasks?.default_model_id ?? ''
 		aiTaskThreadMetadataModelId = tasks?.thread_metadata_model_id ?? ''
+		aiTaskThreadMaintenanceModelId = tasks?.thread_maintenance_model_id ?? ''
 		aiTaskInputAutocompleteModelId = tasks?.input_autocomplete_model_id ?? ''
 		aiTaskSummarizationModelId = tasks?.summarization_model_id ?? ''
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		aiTaskMemoryPostProcessingModelId = (tasks as any)?.memory_post_processing_model_id ?? ''
+		aiTaskWebSearchModelId = tasks?.web_search_model_id ?? ''
+
+		aiTaskMaintenanceMaxCharsPerMessage = toStringOrEmpty(
+			(tasks as any)?.maintenance_max_chars_per_message
+		)
 
 		const attachments = ai?.attachments
 		aiAttachmentImageDecayTurns = toStringOrEmpty(attachments?.image_decay_turns)
@@ -818,6 +870,10 @@
 			windowing?.tool_results_combined_max_share
 		)
 		aiWindowingResponseHeadroom = toStringOrEmpty(windowing?.response_headroom)
+
+		aiWindowingSummarizationMaxCharsPerMessage = toStringOrEmpty(
+			(windowing as any)?.summarization_max_chars_per_message
+		)
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const aiMedia = (ai as any)?.media
@@ -860,10 +916,17 @@
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const webSearch = (r.data as any).web_search
-		webSearchSearchAgent = (webSearch?.search_agent ?? 'native') as SearchAgent
+		webSearchMaxChars = toStringOrEmpty(webSearch?.max_chars)
+		const agentic = webSearch?.agentic
+		webSearchAgenticAgent = (agentic?.agent ?? 'native') as SearchAgent
+		webSearchAgenticModelId = agentic?.model_id ?? ''
+		webSearchAgenticSystemPrompt = agentic?.system_prompt ?? ''
+		webSearchAgenticModelParams = formatJsonObject(agentic?.model_params)
+		webSearchAgenticMaxIterations = toStringOrEmpty(agentic?.max_iterations)
 		webSearchBlacklistedDomains = (webSearch?.blacklisted_domains ?? []).join(', ')
-		webSearchEngineEngine = (webSearch?.search_engines?.engine ?? 'searxng') as SearchEngine
-		const searxng = webSearch?.search_engines?.searxng
+		webSearchEngineEngine = (webSearch?.search_engines?.engine ?? 'perplexity') as SearchEngine
+		const integrations = r.data.integrations
+		const searxng = integrations?.searxng
 		webSearchSearxngInstanceUrl = toStringOrEmpty(searxng?.instance_url)
 		webSearchSearxngMaxResults = toStringOrEmpty(searxng?.max_results)
 		webSearchSearxngMaxConcurrentRequests = toStringOrEmpty(searxng?.max_concurrent_requests)
@@ -872,20 +935,18 @@
 		webSearchWebLoaderEngine = (webLoader?.engine ?? 'native') as WebLoaderEngine
 		webSearchWebLoaderTimeoutSeconds = toStringOrEmpty(webLoader?.timeout_seconds)
 		webSearchWebLoaderUserAgent = webLoader?.user_agent ?? ''
+		webSearchWebLoaderMaxChars = toStringOrEmpty(webLoader?.max_chars)
 		const tavily = webLoader?.tavily
 		webSearchTavilyExtractDepth = (tavily?.extract_depth ?? 'advanced') as 'basic' | 'advanced'
 		webSearchTavilyApiKey = tavily?.api_key ?? ''
 		webSearchTavilyMaxConcurrentRequests = toStringOrEmpty(tavily?.max_concurrent_requests)
-		const perplexity = webSearch?.perplexity
+		const perplexity = integrations?.perplexity
 		webSearchPerplexityApiKey = perplexity?.api_key ?? ''
 		webSearchPerplexityModel = (perplexity?.model ?? 'sonar') as PerplexityModel
 		webSearchPerplexitySearchContextUsage = (perplexity?.search_context_usage ??
 			'medium') as SearchContextUsage
 		webSearchPerplexityTemperature = toStringOrEmpty(perplexity?.temperature)
-		webSearchPerplexitySearchRecencyFilter = (perplexity?.search_recency_filter ?? '') as
-			| SearchRecencyFilter
-			| ''
-		webSearchPerplexityReturnImages = perplexity?.return_images ?? false
+		webSearchPerplexityImageResultsEnabled = perplexity?.image_results_enabled ?? false
 		webSearchPerplexityMaxConcurrentRequests = toStringOrEmpty(
 			perplexity?.max_concurrent_requests
 		)
@@ -1019,9 +1080,12 @@
 			aiRetrievalPreBuild,
 			aiTaskDefaultModelId,
 			aiTaskThreadMetadataModelId,
+			aiTaskThreadMaintenanceModelId,
 			aiTaskInputAutocompleteModelId,
 			aiTaskSummarizationModelId,
 			aiTaskMemoryPostProcessingModelId,
+			aiTaskWebSearchModelId,
+			aiTaskMaintenanceMaxCharsPerMessage,
 			aiAttachmentImageDecayTurns,
 			aiAttachmentAudioDecayTurns,
 			aiAttachmentVideoDecayTurns,
@@ -1036,6 +1100,7 @@
 			aiWindowingToolResultHardCap,
 			aiWindowingToolResultsCombinedMaxShare,
 			aiWindowingResponseHeadroom,
+			aiWindowingSummarizationMaxCharsPerMessage,
 			brandingSiteName,
 			brandingLogoUrl,
 			brandingFaviconUrl,
@@ -1113,7 +1178,12 @@
 			aiMediaImagesMaxN,
 			aiMediaVideosEnabled,
 			aiMediaAudioEnabled,
-			webSearchSearchAgent,
+			webSearchMaxChars,
+			webSearchAgenticAgent,
+			webSearchAgenticModelId,
+			webSearchAgenticSystemPrompt,
+			webSearchAgenticModelParams,
+			webSearchAgenticMaxIterations,
 			webSearchBlacklistedDomains,
 			webSearchEngineEngine,
 			webSearchSearxngInstanceUrl,
@@ -1123,6 +1193,7 @@
 			webSearchWebLoaderEngine,
 			webSearchWebLoaderTimeoutSeconds,
 			webSearchWebLoaderUserAgent,
+			webSearchWebLoaderMaxChars,
 			webSearchTavilyExtractDepth,
 			webSearchTavilyApiKey,
 			webSearchTavilyMaxConcurrentRequests,
@@ -1130,8 +1201,7 @@
 			webSearchPerplexityModel,
 			webSearchPerplexitySearchContextUsage,
 			webSearchPerplexityTemperature,
-			webSearchPerplexitySearchRecencyFilter,
-			webSearchPerplexityReturnImages,
+			webSearchPerplexityImageResultsEnabled,
 			webSearchPerplexityMaxConcurrentRequests,
 			codeInterpreterEnabled,
 			codeInterpreterEngine,
@@ -1212,9 +1282,12 @@
 		aiRetrievalPreBuild = original.aiRetrievalPreBuild
 		aiTaskDefaultModelId = original.aiTaskDefaultModelId
 		aiTaskThreadMetadataModelId = original.aiTaskThreadMetadataModelId
+		aiTaskThreadMaintenanceModelId = original.aiTaskThreadMaintenanceModelId
 		aiTaskInputAutocompleteModelId = original.aiTaskInputAutocompleteModelId
 		aiTaskSummarizationModelId = original.aiTaskSummarizationModelId
 		aiTaskMemoryPostProcessingModelId = original.aiTaskMemoryPostProcessingModelId
+		aiTaskWebSearchModelId = original.aiTaskWebSearchModelId
+		aiTaskMaintenanceMaxCharsPerMessage = original.aiTaskMaintenanceMaxCharsPerMessage
 		aiAttachmentImageDecayTurns = original.aiAttachmentImageDecayTurns
 		aiAttachmentAudioDecayTurns = original.aiAttachmentAudioDecayTurns
 		aiAttachmentVideoDecayTurns = original.aiAttachmentVideoDecayTurns
@@ -1229,6 +1302,8 @@
 		aiWindowingToolResultHardCap = original.aiWindowingToolResultHardCap
 		aiWindowingToolResultsCombinedMaxShare = original.aiWindowingToolResultsCombinedMaxShare
 		aiWindowingResponseHeadroom = original.aiWindowingResponseHeadroom
+		aiWindowingSummarizationMaxCharsPerMessage =
+			original.aiWindowingSummarizationMaxCharsPerMessage
 		aiMediaImagesEnabled = original.aiMediaImagesEnabled
 		aiMediaImagesModel = original.aiMediaImagesModel
 		aiMediaImagesDefaultSize = original.aiMediaImagesDefaultSize
@@ -1306,7 +1381,12 @@
 		softDeleteThreads = original.softDeleteThreads
 		softDeleteNotes = original.softDeleteNotes
 		softDeleteFiles = original.softDeleteFiles
-		webSearchSearchAgent = original.webSearchSearchAgent
+		webSearchMaxChars = original.webSearchMaxChars
+		webSearchAgenticAgent = original.webSearchAgenticAgent
+		webSearchAgenticModelId = original.webSearchAgenticModelId
+		webSearchAgenticSystemPrompt = original.webSearchAgenticSystemPrompt
+		webSearchAgenticModelParams = original.webSearchAgenticModelParams
+		webSearchAgenticMaxIterations = original.webSearchAgenticMaxIterations
 		webSearchBlacklistedDomains = original.webSearchBlacklistedDomains
 		webSearchEngineEngine = original.webSearchEngineEngine
 		webSearchSearxngInstanceUrl = original.webSearchSearxngInstanceUrl
@@ -1316,6 +1396,7 @@
 		webSearchWebLoaderEngine = original.webSearchWebLoaderEngine
 		webSearchWebLoaderTimeoutSeconds = original.webSearchWebLoaderTimeoutSeconds
 		webSearchWebLoaderUserAgent = original.webSearchWebLoaderUserAgent
+		webSearchWebLoaderMaxChars = original.webSearchWebLoaderMaxChars
 		webSearchTavilyExtractDepth = original.webSearchTavilyExtractDepth
 		webSearchTavilyApiKey = original.webSearchTavilyApiKey
 		webSearchTavilyMaxConcurrentRequests = original.webSearchTavilyMaxConcurrentRequests
@@ -1323,8 +1404,7 @@
 		webSearchPerplexityModel = original.webSearchPerplexityModel
 		webSearchPerplexitySearchContextUsage = original.webSearchPerplexitySearchContextUsage
 		webSearchPerplexityTemperature = original.webSearchPerplexityTemperature
-		webSearchPerplexitySearchRecencyFilter = original.webSearchPerplexitySearchRecencyFilter
-		webSearchPerplexityReturnImages = original.webSearchPerplexityReturnImages
+		webSearchPerplexityImageResultsEnabled = original.webSearchPerplexityImageResultsEnabled
 		webSearchPerplexityMaxConcurrentRequests = original.webSearchPerplexityMaxConcurrentRequests
 		codeInterpreterEnabled = original.codeInterpreterEnabled
 		codeInterpreterEngine = original.codeInterpreterEngine
@@ -1350,6 +1430,7 @@
 				thread: defaultPermissions.resource_access?.thread ?? null,
 				project: defaultPermissions.resource_access?.project ?? null,
 				file: defaultPermissions.resource_access?.file ?? null,
+				calendar: defaultPermissions.resource_access?.calendar ?? null,
 				note: defaultPermissions.resource_access?.note ?? null,
 				group: defaultPermissions.resource_access?.group ?? null,
 				reminder_list: defaultPermissions.resource_access?.reminder_list ?? null,
@@ -1389,9 +1470,11 @@
 			aiRetrievalPreBuild !== original.aiRetrievalPreBuild ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
+			aiTaskThreadMaintenanceModelId !== original.aiTaskThreadMaintenanceModelId ||
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
 			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
+			aiTaskMaintenanceMaxCharsPerMessage !== original.aiTaskMaintenanceMaxCharsPerMessage ||
 			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
 			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
@@ -1408,6 +1491,8 @@
 			aiWindowingToolResultsCombinedMaxShare !==
 				original.aiWindowingToolResultsCombinedMaxShare ||
 			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
+			aiWindowingSummarizationMaxCharsPerMessage !==
+				original.aiWindowingSummarizationMaxCharsPerMessage ||
 			aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
 			aiMediaImagesModel !== original.aiMediaImagesModel ||
 			aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
@@ -1463,9 +1548,12 @@
 			if (
 				aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 				aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
+				aiTaskThreadMaintenanceModelId !== original.aiTaskThreadMaintenanceModelId ||
 				aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 				aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
-				aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId
+				aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
+				aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId ||
+				aiTaskMaintenanceMaxCharsPerMessage !== original.aiTaskMaintenanceMaxCharsPerMessage
 			) {
 				aiPatch.tasks = {}
 				if (aiTaskDefaultModelId !== original.aiTaskDefaultModelId)
@@ -1475,6 +1563,10 @@
 				if (aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId)
 					aiPatch.tasks.thread_metadata_model_id = aiTaskThreadMetadataModelId
 						? aiTaskThreadMetadataModelId
+						: null
+				if (aiTaskThreadMaintenanceModelId !== original.aiTaskThreadMaintenanceModelId)
+					aiPatch.tasks.thread_maintenance_model_id = aiTaskThreadMaintenanceModelId
+						? aiTaskThreadMaintenanceModelId
 						: null
 				if (aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId)
 					aiPatch.tasks.input_autocomplete_model_id = aiTaskInputAutocompleteModelId
@@ -1490,6 +1582,19 @@
 					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					;(aiPatch.tasks as any).memory_post_processing_model_id =
 						aiTaskMemoryPostProcessingModelId ? aiTaskMemoryPostProcessingModelId : null
+				}
+				if (aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId)
+					aiPatch.tasks.web_search_model_id = aiTaskWebSearchModelId
+						? aiTaskWebSearchModelId
+						: null
+				if (
+					aiTaskMaintenanceMaxCharsPerMessage !==
+					original.aiTaskMaintenanceMaxCharsPerMessage
+				) {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					;(aiPatch.tasks as any).maintenance_max_chars_per_message = asNumberOrNull(
+						aiTaskMaintenanceMaxCharsPerMessage
+					)
 				}
 			}
 
@@ -1530,7 +1635,9 @@
 				aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
 				aiWindowingToolResultsCombinedMaxShare !==
 					original.aiWindowingToolResultsCombinedMaxShare ||
-				aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom
+				aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
+				aiWindowingSummarizationMaxCharsPerMessage !==
+					original.aiWindowingSummarizationMaxCharsPerMessage
 			) {
 				aiPatch.windowing = {}
 				if (aiWindowingEnabled !== original.aiWindowingEnabled)
@@ -1571,6 +1678,14 @@
 					aiPatch.windowing.response_headroom = asNumberOrNull(
 						aiWindowingResponseHeadroom
 					)
+				if (
+					aiWindowingSummarizationMaxCharsPerMessage !==
+					original.aiWindowingSummarizationMaxCharsPerMessage
+				) {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					;(aiPatch.windowing as any).summarization_max_chars_per_message =
+						asNumberOrNull(aiWindowingSummarizationMaxCharsPerMessage)
+				}
 			}
 
 			if (
@@ -2091,81 +2206,58 @@
 		}
 
 		if (
-			webSearchSearchAgent !== original.webSearchSearchAgent ||
+			webSearchMaxChars !== original.webSearchMaxChars ||
+			webSearchAgenticAgent !== original.webSearchAgenticAgent ||
+			webSearchAgenticModelId !== original.webSearchAgenticModelId ||
+			webSearchAgenticSystemPrompt !== original.webSearchAgenticSystemPrompt ||
+			webSearchAgenticModelParams !== original.webSearchAgenticModelParams ||
+			webSearchAgenticMaxIterations !== original.webSearchAgenticMaxIterations ||
 			webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains ||
 			webSearchEngineEngine !== original.webSearchEngineEngine ||
-			webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
-			webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
-			webSearchSearxngMaxConcurrentRequests !==
-				original.webSearchSearxngMaxConcurrentRequests ||
-			webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds ||
 			webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine ||
 			webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds ||
 			webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent ||
+			webSearchWebLoaderMaxChars !== original.webSearchWebLoaderMaxChars ||
 			webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
 			webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
-			webSearchTavilyMaxConcurrentRequests !==
-				original.webSearchTavilyMaxConcurrentRequests ||
-			webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey ||
-			webSearchPerplexityModel !== original.webSearchPerplexityModel ||
-			webSearchPerplexitySearchContextUsage !==
-				original.webSearchPerplexitySearchContextUsage ||
-			webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
-			webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages ||
-			webSearchPerplexitySearchRecencyFilter !==
-				original.webSearchPerplexitySearchRecencyFilter ||
-			webSearchPerplexityMaxConcurrentRequests !==
-				original.webSearchPerplexityMaxConcurrentRequests
+			webSearchTavilyMaxConcurrentRequests !== original.webSearchTavilyMaxConcurrentRequests
 		) {
 			const wsPatch: Record<string, unknown> = {}
-			if (webSearchSearchAgent !== original.webSearchSearchAgent)
-				wsPatch.search_agent = webSearchSearchAgent
+			if (webSearchMaxChars !== original.webSearchMaxChars)
+				wsPatch.max_chars = asNumberOrNull(webSearchMaxChars)
 			if (webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains)
 				wsPatch.blacklisted_domains = parseCommaList(webSearchBlacklistedDomains)
 
 			if (
-				webSearchEngineEngine !== original.webSearchEngineEngine ||
-				webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
-				webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
-				webSearchSearxngMaxConcurrentRequests !==
-					original.webSearchSearxngMaxConcurrentRequests ||
-				webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds
+				webSearchAgenticAgent !== original.webSearchAgenticAgent ||
+				webSearchAgenticModelId !== original.webSearchAgenticModelId ||
+				webSearchAgenticSystemPrompt !== original.webSearchAgenticSystemPrompt ||
+				webSearchAgenticModelParams !== original.webSearchAgenticModelParams ||
+				webSearchAgenticMaxIterations !== original.webSearchAgenticMaxIterations
 			) {
-				const sePatch: Record<string, unknown> = {}
-				if (webSearchEngineEngine !== original.webSearchEngineEngine)
-					sePatch.engine = webSearchEngineEngine
-				if (
-					webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
-					webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
-					webSearchSearxngMaxConcurrentRequests !==
-						original.webSearchSearxngMaxConcurrentRequests ||
-					webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds
-				) {
-					const searxngPatch: Record<string, unknown> = {}
-					if (webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl)
-						searxngPatch.instance_url = webSearchSearxngInstanceUrl || null
-					if (webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults)
-						searxngPatch.max_results = asNumberOrNull(webSearchSearxngMaxResults)
-					if (
-						webSearchSearxngMaxConcurrentRequests !==
-						original.webSearchSearxngMaxConcurrentRequests
-					)
-						searxngPatch.max_concurrent_requests = asNumberOrNull(
-							webSearchSearxngMaxConcurrentRequests
-						)
-					if (webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds)
-						searxngPatch.timeout_seconds = asNumberOrNull(
-							webSearchSearxngTimeoutSeconds
-						)
-					sePatch.searxng = searxngPatch
-				}
-				wsPatch.search_engines = sePatch
+				const agenticPatch: Record<string, unknown> = {}
+				if (webSearchAgenticAgent !== original.webSearchAgenticAgent)
+					agenticPatch.agent = webSearchAgenticAgent
+				if (webSearchAgenticModelId !== original.webSearchAgenticModelId)
+					agenticPatch.model_id = webSearchAgenticModelId || null
+				if (webSearchAgenticSystemPrompt !== original.webSearchAgenticSystemPrompt)
+					agenticPatch.system_prompt = webSearchAgenticSystemPrompt
+				if (webSearchAgenticModelParams !== original.webSearchAgenticModelParams)
+					agenticPatch.model_params = parseJsonObject(webSearchAgenticModelParams)
+				if (webSearchAgenticMaxIterations !== original.webSearchAgenticMaxIterations)
+					agenticPatch.max_iterations = asNumberOrNull(webSearchAgenticMaxIterations)
+				wsPatch.agentic = agenticPatch
+			}
+
+			if (webSearchEngineEngine !== original.webSearchEngineEngine) {
+				wsPatch.search_engines = { engine: webSearchEngineEngine }
 			}
 
 			if (
 				webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine ||
 				webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds ||
 				webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent ||
+				webSearchWebLoaderMaxChars !== original.webSearchWebLoaderMaxChars ||
 				webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
 				webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
 				webSearchTavilyMaxConcurrentRequests !==
@@ -2178,6 +2270,8 @@
 					wlPatch.timeout_seconds = asNumberOrNull(webSearchWebLoaderTimeoutSeconds)
 				if (webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent)
 					wlPatch.user_agent = webSearchWebLoaderUserAgent || null
+				if (webSearchWebLoaderMaxChars !== original.webSearchWebLoaderMaxChars)
+					wlPatch.max_chars = asNumberOrNull(webSearchWebLoaderMaxChars)
 				if (
 					webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
 					webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
@@ -2201,49 +2295,90 @@
 				wsPatch.web_loaders = wlPatch
 			}
 
+			;(data as Record<string, unknown>).web_search = wsPatch
+		}
+
+		if (
+			webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
+			webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
+			webSearchSearxngMaxConcurrentRequests !==
+				original.webSearchSearxngMaxConcurrentRequests ||
+			webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds ||
+			webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey ||
+			webSearchPerplexityModel !== original.webSearchPerplexityModel ||
+			webSearchPerplexitySearchContextUsage !==
+				original.webSearchPerplexitySearchContextUsage ||
+			webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
+			webSearchPerplexityImageResultsEnabled !==
+				original.webSearchPerplexityImageResultsEnabled ||
+			webSearchPerplexityMaxConcurrentRequests !==
+				original.webSearchPerplexityMaxConcurrentRequests
+		) {
+			const integrationsPatch: Record<string, unknown> = {}
+			if (
+				webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
+				webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
+				webSearchSearxngMaxConcurrentRequests !==
+					original.webSearchSearxngMaxConcurrentRequests ||
+				webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds
+			) {
+				const searxngPatch: Record<string, unknown> = {}
+				if (webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl)
+					searxngPatch.instance_url = webSearchSearxngInstanceUrl || null
+				if (webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults)
+					searxngPatch.max_results = asNumberOrNull(webSearchSearxngMaxResults)
+				if (
+					webSearchSearxngMaxConcurrentRequests !==
+					original.webSearchSearxngMaxConcurrentRequests
+				)
+					searxngPatch.max_concurrent_requests = asNumberOrNull(
+						webSearchSearxngMaxConcurrentRequests
+					)
+				if (webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds)
+					searxngPatch.timeout_seconds = asNumberOrNull(webSearchSearxngTimeoutSeconds)
+				integrationsPatch.searxng = searxngPatch
+			}
+
 			if (
 				webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey ||
 				webSearchPerplexityModel !== original.webSearchPerplexityModel ||
 				webSearchPerplexitySearchContextUsage !==
 					original.webSearchPerplexitySearchContextUsage ||
 				webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature ||
-				webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages ||
-				webSearchPerplexitySearchRecencyFilter !==
-					original.webSearchPerplexitySearchRecencyFilter ||
+				webSearchPerplexityImageResultsEnabled !==
+					original.webSearchPerplexityImageResultsEnabled ||
 				webSearchPerplexityMaxConcurrentRequests !==
 					original.webSearchPerplexityMaxConcurrentRequests
 			) {
-				const plxPatch: Record<string, unknown> = {}
+				const perplexityPatch: Record<string, unknown> = {}
 				if (webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey)
-					plxPatch.api_key = webSearchPerplexityApiKey || null
+					perplexityPatch.api_key = webSearchPerplexityApiKey || null
 				if (webSearchPerplexityModel !== original.webSearchPerplexityModel)
-					plxPatch.model = webSearchPerplexityModel || null
+					perplexityPatch.model = webSearchPerplexityModel || null
 				if (
 					webSearchPerplexitySearchContextUsage !==
 					original.webSearchPerplexitySearchContextUsage
 				)
-					plxPatch.search_context_usage = webSearchPerplexitySearchContextUsage || null
+					perplexityPatch.search_context_usage =
+						webSearchPerplexitySearchContextUsage || null
 				if (webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature)
-					plxPatch.temperature = asNumberOrNull(webSearchPerplexityTemperature)
-				if (webSearchPerplexityReturnImages !== original.webSearchPerplexityReturnImages)
-					plxPatch.return_images = webSearchPerplexityReturnImages
+					perplexityPatch.temperature = asNumberOrNull(webSearchPerplexityTemperature)
 				if (
-					webSearchPerplexitySearchRecencyFilter !==
-					original.webSearchPerplexitySearchRecencyFilter
+					webSearchPerplexityImageResultsEnabled !==
+					original.webSearchPerplexityImageResultsEnabled
 				)
-					plxPatch.search_recency_filter = webSearchPerplexitySearchRecencyFilter || null
+					perplexityPatch.image_results_enabled = webSearchPerplexityImageResultsEnabled
 				if (
 					webSearchPerplexityMaxConcurrentRequests !==
 					original.webSearchPerplexityMaxConcurrentRequests
 				)
-					plxPatch.max_concurrent_requests = asNumberOrNull(
+					perplexityPatch.max_concurrent_requests = asNumberOrNull(
 						webSearchPerplexityMaxConcurrentRequests
 					)
-				wsPatch.perplexity = plxPatch
+				integrationsPatch.perplexity = perplexityPatch
 			}
 
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			;(data as any).web_search = wsPatch
+			;(data as Record<string, unknown>).integrations = integrationsPatch
 		}
 
 		if (
@@ -2462,12 +2597,19 @@
 										bind:retrievalTurns={aiRetrievalTurns}
 										bind:taskDefaultModelId={aiTaskDefaultModelId}
 										bind:taskThreadMetadataModelId={aiTaskThreadMetadataModelId}
+										bind:taskThreadMaintenanceModelId={
+											aiTaskThreadMaintenanceModelId
+										}
 										bind:taskInputAutocompleteModelId={
 											aiTaskInputAutocompleteModelId
 										}
 										bind:taskSummarizationModelId={aiTaskSummarizationModelId}
 										bind:taskMemoryPostProcessingModelId={
 											aiTaskMemoryPostProcessingModelId
+										}
+										bind:taskWebSearchModelId={aiTaskWebSearchModelId}
+										bind:taskMaintenanceMaxCharsPerMessage={
+											aiTaskMaintenanceMaxCharsPerMessage
 										}
 										bind:mediaImagesEnabled={aiMediaImagesEnabled}
 										bind:mediaImagesModel={aiMediaImagesModel}
@@ -2501,6 +2643,9 @@
 											aiWindowingToolResultsCombinedMaxShare
 										}
 										bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
+										bind:windowingSummarizationMaxCharsPerMessage={
+											aiWindowingSummarizationMaxCharsPerMessage
+										}
 										{agents}
 										{models}
 										{providers}
@@ -2626,7 +2771,12 @@
 							{:else if activeSection === 'section-web-search'}
 								<section>
 									<SettingsWebSearch
-										bind:searchAgent={webSearchSearchAgent}
+										bind:maxChars={webSearchMaxChars}
+										bind:agenticAgent={webSearchAgenticAgent}
+										bind:agenticModelId={webSearchAgenticModelId}
+										bind:agenticSystemPrompt={webSearchAgenticSystemPrompt}
+										bind:agenticModelParams={webSearchAgenticModelParams}
+										bind:agenticMaxIterations={webSearchAgenticMaxIterations}
 										bind:blacklistedDomains={webSearchBlacklistedDomains}
 										bind:engineEngine={webSearchEngineEngine}
 										bind:searxngInstanceUrl={webSearchSearxngInstanceUrl}
@@ -2640,6 +2790,7 @@
 											webSearchWebLoaderTimeoutSeconds
 										}
 										bind:webLoaderUserAgent={webSearchWebLoaderUserAgent}
+										bind:webLoaderMaxChars={webSearchWebLoaderMaxChars}
 										bind:tavilyExtractDepth={webSearchTavilyExtractDepth}
 										bind:tavilyApiKey={webSearchTavilyApiKey}
 										bind:tavilyMaxConcurrentRequests={
@@ -2651,15 +2802,16 @@
 											webSearchPerplexitySearchContextUsage
 										}
 										bind:perplexityTemperature={webSearchPerplexityTemperature}
-										bind:perplexityReturnImages={
-											webSearchPerplexityReturnImages
-										}
-										bind:perplexitySearchRecencyFilter={
-											webSearchPerplexitySearchRecencyFilter
+										bind:perplexityImageResultsEnabled={
+											webSearchPerplexityImageResultsEnabled
 										}
 										bind:perplexityMaxConcurrentRequests={
 											webSearchPerplexityMaxConcurrentRequests
 										}
+										{models}
+										{providers}
+										{isFetchingModels}
+										{modelsError}
 									/>
 								</section>
 							{:else if activeSection === 'section-code-interpreter'}
