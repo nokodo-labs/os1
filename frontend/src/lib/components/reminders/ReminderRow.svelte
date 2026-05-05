@@ -8,7 +8,11 @@
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import { PopupMenu } from '$lib/components/primitives'
 	import { device } from '$lib/stores/device.svelte'
-	import type { ReminderListWithCounts, ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
+	import type {
+		ReminderListWithCounts,
+		ReminderUpdate,
+		ReminderWithSubtasks,
+	} from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import { SvelteDate } from 'svelte/reactivity'
 
@@ -24,7 +28,7 @@
 		onToggleComplete: () => void | Promise<void>
 		onMove: (targetListId: string | null) => void | Promise<void>
 		onDelete: () => void | boolean | Promise<void | boolean>
-		onUpdate: (updates: { title?: string; description?: string | null }) => void | Promise<void>
+		onUpdate: (updates: ReminderUpdate) => void | Promise<void>
 		availableLists: ReminderListWithCounts[]
 		motion?: Motion
 		motionDelayMs?: number
@@ -48,8 +52,12 @@
 	let rootEl: HTMLDivElement | null = $state(null)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
 	let titleInputEl: HTMLInputElement | null = $state(null)
+	let dateButtonEl: HTMLButtonElement | null = $state(null)
+	let repeatButtonEl: HTMLButtonElement | null = $state(null)
 
 	let isMenuOpen = $state(false)
+	let isDatePickerOpen = $state(false)
+	let isRepeatMenuOpen = $state(false)
 
 	let editedTitle = $state('')
 	let editedDescription = $state('')
@@ -85,6 +93,85 @@
 		if (!props.reminder.due_at || props.reminder.status === 'completed') return false
 		return new SvelteDate(props.reminder.due_at) < new SvelteDate()
 	})
+
+	// recurrence presets: rrule strings mapped to friendly labels.
+	// covers ~95% of reminder use cases without a custom rrule builder.
+	const RECURRENCE_PRESETS = [
+		{ value: '', label: 'never' },
+		{ value: 'FREQ=DAILY', label: 'every day' },
+		{ value: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', label: 'every weekday' },
+		{ value: 'FREQ=WEEKLY', label: 'every week' },
+		{ value: 'FREQ=MONTHLY', label: 'every month' },
+		{ value: 'FREQ=YEARLY', label: 'every year' },
+	] as const
+
+	const recurrenceLabel = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		const rule = props.reminder.recurrence?.rrule?.[0] ?? ''
+		if (!rule) return null
+		const preset = RECURRENCE_PRESETS.find((p) => p.value === rule)
+		return preset ? preset.label : 'custom'
+	})
+
+	/** convert an ISO datetime to the local-tz format used by datetime-local inputs. */
+	function isoToLocalInput(iso: string | null | undefined): string {
+		if (!iso) return ''
+		const d = new SvelteDate(iso)
+		if (Number.isNaN(d.getTime())) return ''
+		// build YYYY-MM-DDTHH:mm in local time without converting to UTC.
+		const pad = (n: number) => String(n).padStart(2, '0')
+		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+	}
+
+	/** convert a datetime-local string back to a UTC ISO string for the API. */
+	function localInputToIso(value: string): string | null {
+		if (!value) return null
+		const d = new SvelteDate(value)
+		if (Number.isNaN(d.getTime())) return null
+		return d.toISOString()
+	}
+
+	let dueDraft = $state('')
+
+	$effect(() => {
+		if (props.kind !== 'edit') return
+		if (isDatePickerOpen) return // don't clobber while user is editing
+		dueDraft = isoToLocalInput(props.reminder.due_at)
+	})
+
+	function handleDueChange(value: string) {
+		if (props.kind !== 'edit') return
+		dueDraft = value
+		const iso = localInputToIso(value)
+		void props.onUpdate({ due_at: iso })
+	}
+
+	function clearDue() {
+		if (props.kind !== 'edit') return
+		dueDraft = ''
+		void props.onUpdate({ due_at: null })
+		isDatePickerOpen = false
+	}
+
+	function handleRecurrence(value: string) {
+		if (props.kind !== 'edit') return
+		isRepeatMenuOpen = false
+		void props.onUpdate({
+			recurrence: value
+				? {
+						rrule: [value],
+						rdate: [],
+						exdate: [],
+						timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+					}
+				: null,
+		})
+	}
+
+	function currentRecurrenceRule(): string {
+		if (props.kind !== 'edit') return ''
+		return props.reminder.recurrence?.rrule?.[0] ?? ''
+	}
 
 	async function focusTitle() {
 		await tick()
@@ -349,25 +436,57 @@
 				></textarea>
 
 				<div class="flex flex-wrap items-center gap-2 pl-9">
-					<button
-						type="button"
-						class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {hasDueDate
-							? isOverdue
-								? 'text-red-400'
-								: 'text-foreground/70'
-							: 'text-foreground/55'}"
-					>
-						<Calendar variant="solid" class="h-3.5 w-3.5" />
-						<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
-					</button>
+					{#if props.kind === 'edit'}
+						<button
+							bind:this={dateButtonEl}
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {hasDueDate
+								? isOverdue
+									? 'text-red-400'
+									: 'text-foreground/70'
+								: 'text-foreground/55'}"
+							onclick={(event) => {
+								event.stopPropagation()
+								isDatePickerOpen = !isDatePickerOpen
+							}}
+						>
+							<Calendar variant="solid" class="h-3.5 w-3.5" />
+							<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
+						</button>
 
-					<button
-						type="button"
-						class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
-					>
-						<ArrowPath class="h-3.5 w-3.5" />
-						<span>repeat</span>
-					</button>
+						<button
+							bind:this={repeatButtonEl}
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {recurrenceLabel
+								? 'text-foreground/70'
+								: 'text-foreground/55'}"
+							onclick={(event) => {
+								event.stopPropagation()
+								isRepeatMenuOpen = !isRepeatMenuOpen
+							}}
+						>
+							<ArrowPath class="h-3.5 w-3.5" />
+							<span>{recurrenceLabel ?? 'repeat'}</span>
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
+							disabled
+						>
+							<Calendar variant="solid" class="h-3.5 w-3.5" />
+							<span>add date/time</span>
+						</button>
+
+						<button
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
+							disabled
+						>
+							<ArrowPath class="h-3.5 w-3.5" />
+							<span>repeat</span>
+						</button>
+					{/if}
 
 					{#if props.kind === 'create'}
 						<button
@@ -443,6 +562,65 @@
 						return props.onDelete()
 					}}
 				/>
+			</div>
+		</PopupMenu>
+
+		<PopupMenu
+			open={isDatePickerOpen}
+			anchorEl={dateButtonEl}
+			onClose={() => (isDatePickerOpen = false)}
+		>
+			<div class="flex flex-col gap-2 p-3" style="min-width: 220px;">
+				<label class="text-foreground/55 text-xs font-medium" for="due-input">
+					due date and time
+				</label>
+				<input
+					id="due-input"
+					type="datetime-local"
+					class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/85 border px-3 py-1.5 text-sm outline-none"
+					value={dueDraft}
+					onclick={(e) => e.stopPropagation()}
+					oninput={(e) => handleDueChange((e.target as HTMLInputElement).value)}
+				/>
+				{#if hasDueDate}
+					<button
+						type="button"
+						class="rounded-pill text-foreground/70 hover:bg-foreground/10 cursor-pointer border-none bg-transparent px-3 py-1.5 text-left text-sm transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							clearDue()
+						}}
+					>
+						clear
+					</button>
+				{/if}
+			</div>
+		</PopupMenu>
+
+		<PopupMenu
+			open={isRepeatMenuOpen}
+			anchorEl={repeatButtonEl}
+			onClose={() => (isRepeatMenuOpen = false)}
+		>
+			<div class="flex flex-col gap-0.5 p-1" style="min-width: 180px;">
+				{#each RECURRENCE_PRESETS as preset (preset.value)}
+					{@const isCurrent = currentRecurrenceRule() === preset.value}
+					<button
+						type="button"
+						class="rounded-pill hover:bg-foreground/10 flex cursor-pointer items-center justify-between border-none bg-transparent px-3 py-1.5 text-left text-sm transition-colors {isCurrent
+							? 'text-foreground'
+							: 'text-foreground/75'}"
+						onclick={(event) => {
+							event.stopPropagation()
+							handleRecurrence(preset.value)
+						}}
+					>
+						<span>{preset.label}</span>
+						{#if isCurrent}
+							<Check class="h-4 w-4" strokeWidth="2" />
+						{/if}
+					</button>
+				{/each}
 			</div>
 		</PopupMenu>
 	{/if}

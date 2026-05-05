@@ -30,6 +30,8 @@ export type Counts = {
 	completed_count: number
 }
 
+export type ReminderUpdate = components['schemas']['ReminderUpdate']
+
 export type ListSortBy = 'position' | 'name' | 'created_at' | 'updated_at'
 export type SortDir = 'asc' | 'desc'
 export type ReminderListsSortMode = `${ListSortBy}:${SortDir}`
@@ -90,6 +92,29 @@ class RemindersCache {
 	/** sort mode for reminder lists */
 	listsSortMode = $state<ReminderListsSortMode>('position:asc')
 
+	/**
+	 * in-flight optimistic creates keyed by `${listId ?? ''}|${title}`.
+	 * values are tempIds in create order so identical titles do not overwrite each other.
+	 */
+	readonly #pendingCreates = new SvelteMap<string, string[]>()
+
+	#pendingKey(listId: string | null, title: string): string {
+		return `${this.#listKey(listId)}|${title}`
+	}
+
+	#addPendingCreate(key: string, tempId: string): void {
+		this.#pendingCreates.set(key, [...(this.#pendingCreates.get(key) ?? []), tempId])
+	}
+
+	#removePendingCreate(key: string, tempId: string): void {
+		const remaining = (this.#pendingCreates.get(key) ?? []).filter((id) => id !== tempId)
+		if (remaining.length === 0) {
+			this.#pendingCreates.delete(key)
+			return
+		}
+		this.#pendingCreates.set(key, remaining)
+	}
+
 	// event stream integration
 
 	/**
@@ -118,7 +143,7 @@ class RemindersCache {
 		if (!data) return
 
 		switch (message.type) {
-			// ── reminder events ──
+			// reminder events
 			case 'reminder.created': {
 				const incoming = data as unknown as ReminderWithSubtasks
 				if (!incoming?.id) return
@@ -138,14 +163,31 @@ class RemindersCache {
 						})
 					}
 				} else if (!entry.reminders.some((r) => r.id === incoming.id)) {
-					// top-level: append (dedup against optimistic add)
+					// adopt any in-flight optimistic placeholder for this
+					// (list, title) pair: replace tempId in place rather than
+					// appending a duplicate.
+					const pendingKey = this.#pendingKey(listId, incoming.title)
 					const withSubtasks = { ...incoming, subtasks: incoming.subtasks ?? [] }
-					this.#remindersCache.set(key, {
-						reminders: [...entry.reminders, withSubtasks],
-						fetchedAt: entry.fetchedAt,
-					})
+					const tempId = (this.#pendingCreates.get(pendingKey) ?? []).find((id) =>
+						entry.reminders.some((r) => r.id === id)
+					)
+					if (tempId && entry.reminders.some((r) => r.id === tempId)) {
+						this.#remindersCache.set(key, {
+							reminders: entry.reminders.map((r) =>
+								r.id === tempId ? withSubtasks : r
+							),
+							fetchedAt: entry.fetchedAt,
+						})
+						this.#removePendingCreate(pendingKey, tempId)
+					} else {
+						// top-level: append (no matching optimistic placeholder)
+						this.#remindersCache.set(key, {
+							reminders: [...entry.reminders, withSubtasks],
+							fetchedAt: entry.fetchedAt,
+						})
+					}
 				} else {
-					// already exists (optimistic add): apply authoritative data
+					// already exists (optimistic add by real id): apply authoritative data
 					this.#updateReminderInCache(listId, {
 						...incoming,
 						subtasks: incoming.subtasks ?? [],
@@ -231,7 +273,7 @@ class RemindersCache {
 				break
 			}
 
-			// ── reminder list events ──
+			// reminder list events
 			case 'reminder_list.created': {
 				const list = data as unknown as ReminderListWithCounts
 				if (!list?.id || !this.#listsCache) return
@@ -309,13 +351,26 @@ class RemindersCache {
 	}
 
 	#listKey(listId: string | null): string {
-		return listId ?? 'default'
+		const defaultListId = this.defaultList?.id ?? null
+		return listId === null || listId === defaultListId ? 'default' : listId
+	}
+
+	async #resolveListId(listId: string | null): Promise<string | null> {
+		if (listId !== null) return listId
+		const existing = this.defaultList
+		if (existing) return existing.id
+		const lists = await this.loadLists()
+		return lists.find((list) => list.is_default)?.id ?? lists[0]?.id ?? null
 	}
 
 	// lists
 
 	get lists(): ReminderListWithCounts[] {
 		return this.#listsCache ? [...this.#listsCache.data.values()] : []
+	}
+
+	get defaultList(): ReminderListWithCounts | null {
+		return this.lists.find((list) => list.is_default) ?? this.lists[0] ?? null
 	}
 
 	/**
@@ -359,7 +414,7 @@ class RemindersCache {
 
 		this.#listsInFlight = (async () => {
 			const { sort_by, sort_dir } = this.#parseSortMode()
-			const { data, error } = await api.GET('/v1/reminders/lists', {
+			const { data, error } = await api.GET('/v1/reminder-lists', {
 				params: { query: { include_counts: true, sort_by, sort_dir } },
 			})
 			if (error || !data) return this.lists
@@ -470,16 +525,22 @@ class RemindersCache {
 		if (existing) return existing
 
 		const promise = (async () => {
-			const query: { list_id?: string | null; include_subtasks?: boolean } = {
-				include_subtasks: true,
-			}
-			if (listId !== null) query.list_id = listId
+			const apiListId = await this.#resolveListId(listId)
+			if (!apiListId) return this.getReminders(listId)
 
-			const { data, error } = await api.GET('/v1/reminders', {
-				params: { query },
+			const { data, error } = await api.GET('/v1/reminder-lists/{list_id}/reminders', {
+				params: {
+					path: { list_id: apiListId },
+					query: {
+						include_subtasks: true,
+						limit: 500,
+						sort_by: 'position',
+						sort_dir: 'asc',
+					},
+				},
 			})
 			if (error || !data) return this.getReminders(listId)
-			const reminders = data as ReminderWithSubtasks[]
+			const reminders = data
 			this.setReminders(listId, reminders)
 			return reminders
 		})()
@@ -527,12 +588,13 @@ class RemindersCache {
 		this.#listsCache?.data.set(tempId, placeholder)
 
 		try {
-			const { data, error } = await api.POST('/v1/reminders/lists', {
+			const { data, error } = await api.POST('/v1/reminder-lists', {
 				body: {
 					name: params.name,
 					icon: params.icon ?? null,
 					color: params.color ?? null,
 					position: 0,
+					is_default: false,
 					project_ids: [],
 				},
 			})
@@ -567,7 +629,7 @@ class RemindersCache {
 		this.#remindersCache.delete(listId)
 
 		try {
-			const { error } = await api.DELETE('/v1/reminders/lists/{list_id}', {
+			const { error } = await api.DELETE('/v1/reminder-lists/{list_id}', {
 				params: { path: { list_id: listId } },
 			})
 			if (error) {
@@ -596,13 +658,18 @@ class RemindersCache {
 		options?: { rollback?: boolean }
 	): Promise<ReminderWithSubtasks | null> {
 		const doRollback = options?.rollback ?? true
+		const apiListId = await this.#resolveListId(params.listId)
+		if (!apiListId) {
+			showError('could not create reminder')
+			return null
+		}
 		// optimistic: add placeholder reminder immediately
 		const tempId = `temp-${Date.now()}`
 		const placeholder: ReminderWithSubtasks = {
 			id: tempId,
 			title: params.title,
 			description: params.description ?? null,
-			list_id: params.listId,
+			list_id: apiListId,
 			status: 'pending',
 			position: 0,
 			owner_id: '',
@@ -619,12 +686,16 @@ class RemindersCache {
 			})
 		}
 		this.#recomputeCounts(params.listId)
+		// register the in-flight create so the WS handler can adopt the
+		// placeholder by (list, title) if the event beats the POST response.
+		const pendingKey = this.#pendingKey(params.listId, params.title)
+		this.#addPendingCreate(pendingKey, tempId)
 
 		try {
-			const { data, error } = await api.POST('/v1/reminders', {
+			const { data, error } = await api.POST('/v1/reminder-lists/{list_id}/reminders', {
+				params: { path: { list_id: apiListId } },
 				body: {
 					title: params.title,
-					list_id: params.listId,
 					description: params.description,
 					status: 'pending',
 					position: 0,
@@ -632,6 +703,7 @@ class RemindersCache {
 			})
 
 			if (error || !data) {
+				this.#removePendingCreate(pendingKey, tempId)
 				if (doRollback) {
 					this.#removeReminderFromCache(params.listId, tempId)
 					this.#recomputeCounts(params.listId)
@@ -640,18 +712,33 @@ class RemindersCache {
 				return null
 			}
 
-			// replace placeholder with real reminder
-			const created = { ...data, subtasks: [] } as ReminderWithSubtasks
+			// replace placeholder with real reminder (if not already adopted by WS)
+			const created: ReminderWithSubtasks = { ...data, subtasks: [] }
 			const currentEntry = this.#remindersCache.get(key)
 			if (currentEntry) {
-				this.#remindersCache.set(key, {
-					reminders: currentEntry.reminders.map((r) => (r.id === tempId ? created : r)),
-					fetchedAt: currentEntry.fetchedAt,
-				})
+				const hasReal = currentEntry.reminders.some((r) => r.id === created.id)
+				const hasTemp = currentEntry.reminders.some((r) => r.id === tempId)
+				if (hasReal && hasTemp) {
+					// WS already adopted but we also still have temp: drop temp
+					this.#remindersCache.set(key, {
+						reminders: currentEntry.reminders.filter((r) => r.id !== tempId),
+						fetchedAt: currentEntry.fetchedAt,
+					})
+				} else if (hasTemp) {
+					this.#remindersCache.set(key, {
+						reminders: currentEntry.reminders.map((r) =>
+							r.id === tempId ? created : r
+						),
+						fetchedAt: currentEntry.fetchedAt,
+					})
+				}
+				// hasReal && !hasTemp: WS already adopted, nothing to do
 			}
+			this.#removePendingCreate(pendingKey, tempId)
 
 			return created
 		} catch {
+			this.#removePendingCreate(pendingKey, tempId)
 			if (doRollback) {
 				this.#removeReminderFromCache(params.listId, tempId)
 				this.#recomputeCounts(params.listId)
@@ -675,9 +762,12 @@ class RemindersCache {
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
 		try {
-			const { error } = await api.POST('/v1/reminders/{reminder_id}/complete', {
-				params: { path: { reminder_id: reminder.id } },
-			})
+			const { error } = await api.POST(
+				'/v1/reminder-lists/{list_id}/reminders/{reminder_id}/complete',
+				{
+					params: { path: { list_id: reminder.list_id, reminder_id: reminder.id } },
+				}
+			)
 
 			if (error) {
 				if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
@@ -707,10 +797,13 @@ class RemindersCache {
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
 		try {
-			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
-				params: { path: { reminder_id: reminder.id } },
-				body: { status: 'pending' },
-			})
+			const { error } = await api.PATCH(
+				'/v1/reminder-lists/{list_id}/reminders/{reminder_id}',
+				{
+					params: { path: { list_id: reminder.list_id, reminder_id: reminder.id } },
+					body: { status: 'pending' },
+				}
+			)
 
 			if (error) {
 				if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
@@ -727,26 +820,29 @@ class RemindersCache {
 	}
 
 	/**
-	 * update a reminder's title/description.
+	 * update a reminder.
 	 * WS delivers authoritative state.
 	 */
 	async updateReminder(
 		reminder: ReminderWithSubtasks,
-		updates: { title?: string; description?: string | null },
+		updates: ReminderUpdate,
 		options?: { rollback?: boolean }
 	): Promise<ReminderWithSubtasks | null> {
 		const doRollback = options?.rollback ?? true
 		const previous = this.#findReminderInCache(reminder.list_id, reminder.id) ?? reminder
 
 		// optimistic update
-		const optimistic = { ...previous, ...updates } as ReminderWithSubtasks
+		const optimistic = this.#applyReminderUpdate(previous, updates)
 		this.#updateReminderInCache(reminder.list_id, optimistic)
 
 		try {
-			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
-				params: { path: { reminder_id: reminder.id } },
-				body: updates,
-			})
+			const { error } = await api.PATCH(
+				'/v1/reminder-lists/{list_id}/reminders/{reminder_id}',
+				{
+					params: { path: { list_id: reminder.list_id, reminder_id: reminder.id } },
+					body: updates,
+				}
+			)
 
 			if (error) {
 				if (doRollback) this.#updateReminderInCache(reminder.list_id, previous)
@@ -784,9 +880,12 @@ class RemindersCache {
 		}
 
 		try {
-			const { error } = await api.DELETE('/v1/reminders/{reminder_id}', {
-				params: { path: { reminder_id: reminder.id } },
-			})
+			const { error } = await api.DELETE(
+				'/v1/reminder-lists/{list_id}/reminders/{reminder_id}',
+				{
+					params: { path: { list_id: reminder.list_id, reminder_id: reminder.id } },
+				}
+			)
 
 			if (error) {
 				if (doRollback && snapshot && existing) {
@@ -823,12 +922,17 @@ class RemindersCache {
 	): Promise<ReminderWithSubtasks | null> {
 		const doRollback = options?.rollback ?? true
 		const currentListId = reminder.list_id ?? null
-		if (currentListId === targetListId) return reminder
+		const targetApiListId = await this.#resolveListId(targetListId)
+		if (!targetApiListId) {
+			showError('could not move reminder')
+			return null
+		}
+		if (currentListId === targetApiListId) return reminder
 
 		const previous = this.#findReminderInCache(currentListId, reminder.id) ?? reminder
 		const optimistic: ReminderWithSubtasks = {
 			...previous,
-			list_id: targetListId,
+			list_id: targetApiListId,
 		}
 
 		// optimistic: move between caches
@@ -836,10 +940,13 @@ class RemindersCache {
 		this.#appendReminderToCache(targetListId, optimistic)
 
 		try {
-			const { error } = await api.PATCH('/v1/reminders/{reminder_id}', {
-				params: { path: { reminder_id: reminder.id } },
-				body: { list_id: targetListId },
-			})
+			const { error } = await api.PATCH(
+				'/v1/reminder-lists/{list_id}/reminders/{reminder_id}',
+				{
+					params: { path: { list_id: reminder.list_id, reminder_id: reminder.id } },
+					body: { list_id: targetApiListId },
+				}
+			)
 
 			if (error) {
 				if (doRollback) {
@@ -858,6 +965,24 @@ class RemindersCache {
 			}
 			showError('could not move reminder')
 			return null
+		}
+	}
+
+	#applyReminderUpdate(
+		previous: ReminderWithSubtasks,
+		updates: ReminderUpdate
+	): ReminderWithSubtasks {
+		return {
+			...previous,
+			title: updates.title ?? previous.title,
+			description: 'description' in updates ? updates.description : previous.description,
+			due_at: 'due_at' in updates ? updates.due_at : previous.due_at,
+			remind_at: 'remind_at' in updates ? updates.remind_at : previous.remind_at,
+			recurrence: 'recurrence' in updates ? updates.recurrence : previous.recurrence,
+			status: updates.status ?? previous.status,
+			parent_id: 'parent_id' in updates ? updates.parent_id : previous.parent_id,
+			position: updates.position ?? previous.position,
+			list_id: updates.list_id ?? previous.list_id,
 		}
 	}
 

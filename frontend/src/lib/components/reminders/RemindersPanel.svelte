@@ -4,7 +4,11 @@
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
-	import { reminders, type ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
+	import {
+		reminders,
+		type ReminderUpdate,
+		type ReminderWithSubtasks,
+	} from '$lib/stores/reminders.svelte'
 	import { tick } from 'svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 	import ReminderRow from './ReminderRow.svelte'
@@ -160,10 +164,7 @@
 		return ok
 	}
 
-	async function updateReminder(
-		reminder: ReminderWithSubtasks,
-		updates: { title?: string; description?: string | null }
-	) {
+	async function updateReminder(reminder: ReminderWithSubtasks, updates: ReminderUpdate) {
 		await reminders.updateReminder(reminder, updates)
 	}
 
@@ -267,8 +268,7 @@
 						onDeselect={() => {
 							expandedReminderId = null
 						}}
-						onUpdate={(updates: { title?: string; description?: string | null }) =>
-							updateReminder(reminder, updates)}
+						onUpdate={(updates: ReminderUpdate) => updateReminder(reminder, updates)}
 					/>
 				{/each}
 
@@ -344,10 +344,8 @@
 									onDeselect={() => {
 										expandedReminderId = null
 									}}
-									onUpdate={(updates: {
-										title?: string
-										description?: string | null
-									}) => updateReminder(reminder, updates)}
+									onUpdate={(updates: ReminderUpdate) =>
+										updateReminder(reminder, updates)}
 								/>
 							{/each}
 						</div>
