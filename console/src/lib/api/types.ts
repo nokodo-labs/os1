@@ -594,6 +594,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/threads/{thread_id}/summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Thread Summaries
+         * @description list stored summary records for a thread. admin only.
+         */
+        get: operations["list_thread_summaries_v1_threads__thread_id__summaries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/threads/{thread_id}/messages": {
         parameters: {
             query?: never;
@@ -1022,6 +1042,234 @@ export interface paths {
          * @description Persist and broadcast an event.
          */
         post: operations["emit_event_v1_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Calendars
+         * @description list calendars accessible to the current user.
+         */
+        get: operations["list_calendars_v1_calendars_get"];
+        put?: never;
+        /**
+         * Create Calendar
+         * @description create a calendar.
+         */
+        post: operations["create_calendar_v1_calendars_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendars/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Calendars
+         * @description search calendar events with cursor-based pagination.
+         */
+        get: operations["search_calendars_v1_calendars_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendars/events/revectorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revectorize Calendar Events
+         * @description vectorize all calendar events into qdrant. admin only.
+         */
+        post: operations["revectorize_calendar_events_v1_calendars_events_revectorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Calendar
+         * @description get a calendar.
+         */
+        get: operations["get_calendar_v1_calendars__calendar_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Calendar
+         * @description delete a calendar.
+         */
+        delete: operations["delete_calendar_v1_calendars__calendar_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Calendar
+         * @description update a calendar.
+         */
+        patch: operations["update_calendar_v1_calendars__calendar_id__patch"];
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Calendar Access Rules
+         * @description list access rules for a calendar.
+         */
+        get: operations["list_calendar_access_rules_v1_calendars__calendar_id__access_rules_get"];
+        /**
+         * Set Calendar Access Rules
+         * @description replace access rules for a calendar.
+         */
+        put: operations["set_calendar_access_rules_v1_calendars__calendar_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Calendar Events
+         * @description list events for a calendar accessible to the current user.
+         */
+        get: operations["list_calendar_events_v1_calendars__calendar_id__events_get"];
+        put?: never;
+        /**
+         * Create Calendar Event
+         * @description create a calendar event.
+         */
+        post: operations["create_calendar_event_v1_calendars__calendar_id__events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Calendar Event
+         * @description get a calendar event.
+         */
+        get: operations["get_calendar_event_v1_calendars__calendar_id__events__event_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Calendar Event
+         * @description delete a calendar event series.
+         */
+        delete: operations["delete_calendar_event_v1_calendars__calendar_id__events__event_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Calendar Event
+         * @description update a calendar event.
+         */
+        patch: operations["update_calendar_event_v1_calendars__calendar_id__events__event_id__patch"];
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}/events/{event_id}/occurrence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Calendar Event Occurrence
+         * @description edit one calendar event occurrence.
+         */
+        patch: operations["edit_calendar_event_occurrence_v1_calendars__calendar_id__events__event_id__occurrence_patch"];
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}/events/{event_id}/series/following": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Calendar Event Series
+         * @description split and edit this/following event occurrences.
+         */
+        patch: operations["edit_calendar_event_series_v1_calendars__calendar_id__events__event_id__series_following_patch"];
+        trace?: never;
+    };
+    "/v1/calendars/{calendar_id}/events/{event_id}/occurrence/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Calendar Event Occurrence
+         * @description cancel one calendar event occurrence.
+         */
+        post: operations["cancel_calendar_event_occurrence_v1_calendars__calendar_id__events__event_id__occurrence_cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1736,144 +1984,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/reminders/lists": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Reminder Lists
-         * @description list all reminder lists, optionally with counts.
-         */
-        get: operations["list_reminder_lists_v1_reminders_lists_get"];
-        put?: never;
-        /**
-         * Create Reminder List
-         * @description create a new reminder list.
-         */
-        post: operations["create_reminder_list_v1_reminders_lists_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/reminders/lists/{list_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Reminder List
-         * @description get a reminder list by id.
-         */
-        get: operations["get_reminder_list_v1_reminders_lists__list_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete Reminder List
-         * @description delete a reminder list and all its reminders.
-         */
-        delete: operations["delete_reminder_list_v1_reminders_lists__list_id__delete"];
-        options?: never;
-        head?: never;
-        /**
-         * Update Reminder List
-         * @description update a reminder list.
-         */
-        patch: operations["update_reminder_list_v1_reminders_lists__list_id__patch"];
-        trace?: never;
-    };
-    "/v1/reminders/lists/{list_id}/counts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Reminder List Counts
-         * @description get reminder counts for a specific list.
-         */
-        get: operations["get_reminder_list_counts_v1_reminders_lists__list_id__counts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/reminders/counts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Default Reminder List Counts
-         * @description get reminder counts for the default list (reminders without a list).
-         */
-        get: operations["get_default_reminder_list_counts_v1_reminders_counts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/reminders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Reminders
-         * @description list reminders. omit list_id for default list.
-         *
-         *     include_subtasks eagerly loads subtasks.
-         */
-        get: operations["list_reminders_v1_reminders_get"];
-        put?: never;
-        /**
-         * Create Reminder
-         * @description create a new reminder.
-         */
-        post: operations["create_reminder_v1_reminders_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/reminders/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search Reminders
-         * @description search reminders with cursor-based pagination.
-         */
-        get: operations["search_reminders_v1_reminders_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/reminders/revectorize": {
         parameters: {
             query?: never;
@@ -1894,7 +2004,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/reminders/{reminder_id}": {
+    "/v1/reminder-lists": {
         parameters: {
             query?: never;
             header?: never;
@@ -1902,67 +2012,91 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Reminder
-         * @description get a reminder by id with subtasks.
+         * List Reminder Lists
+         * @description list reminder lists accessible to the current user.
          */
-        get: operations["get_reminder_v1_reminders__reminder_id__get"];
+        get: operations["list_reminder_lists_v1_reminder_lists_get"];
+        put?: never;
+        /**
+         * Create Reminder List
+         * @description create a reminder list.
+         */
+        post: operations["create_reminder_list_v1_reminder_lists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminder-lists/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Reminder Lists
+         * @description search reminders with cursor-based pagination.
+         */
+        get: operations["search_reminder_lists_v1_reminder_lists_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminder-lists/{list_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Reminder List
+         * @description get a reminder list.
+         */
+        get: operations["get_reminder_list_v1_reminder_lists__list_id__get"];
         put?: never;
         post?: never;
         /**
-         * Delete Reminder
-         * @description delete a reminder.
+         * Delete Reminder List
+         * @description delete a reminder list.
          */
-        delete: operations["delete_reminder_v1_reminders__reminder_id__delete"];
+        delete: operations["delete_reminder_list_v1_reminder_lists__list_id__delete"];
         options?: never;
         head?: never;
         /**
-         * Update Reminder
-         * @description update a reminder.
+         * Update Reminder List
+         * @description update a reminder list.
          */
-        patch: operations["update_reminder_v1_reminders__reminder_id__patch"];
+        patch: operations["update_reminder_list_v1_reminder_lists__list_id__patch"];
         trace?: never;
     };
-    "/v1/reminders/{reminder_id}/complete": {
+    "/v1/reminder-lists/{list_id}/counts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Complete Reminder
-         * @description mark a reminder as completed, optionally cascading to subtasks.
+         * Get Reminder List Counts
+         * @description get reminder counts for a list.
          */
-        post: operations["complete_reminder_v1_reminders__reminder_id__complete_post"];
+        get: operations["get_reminder_list_counts_v1_reminder_lists__list_id__counts_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/reminders/{reminder_id}/move": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Move Reminder
-         * @description move a reminder to a different list (or default list if null).
-         */
-        post: operations["move_reminder_v1_reminders__reminder_id__move_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/reminders/lists/{list_id}/access-rules": {
+    "/v1/reminder-lists/{list_id}/access-rules": {
         parameters: {
             query?: never;
             header?: never;
@@ -1973,12 +2107,144 @@ export interface paths {
          * List Reminder List Access Rules
          * @description list access rules for a reminder list.
          */
-        get: operations["list_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_get"];
+        get: operations["list_reminder_list_access_rules_v1_reminder_lists__list_id__access_rules_get"];
         /**
          * Set Reminder List Access Rules
          * @description replace access rules for a reminder list.
          */
-        put: operations["set_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_put"];
+        put: operations["set_reminder_list_access_rules_v1_reminder_lists__list_id__access_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminder-lists/{list_id}/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Reminders
+         * @description list reminders in a reminder list.
+         */
+        get: operations["list_reminders_v1_reminder_lists__list_id__reminders_get"];
+        put?: never;
+        /**
+         * Create Reminder
+         * @description create a reminder in a reminder list.
+         */
+        post: operations["create_reminder_v1_reminder_lists__list_id__reminders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminder-lists/{list_id}/reminders/{reminder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Reminder
+         * @description get a reminder in a reminder list.
+         */
+        get: operations["get_reminder_v1_reminder_lists__list_id__reminders__reminder_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Reminder
+         * @description delete a reminder series in a reminder list.
+         */
+        delete: operations["delete_reminder_v1_reminder_lists__list_id__reminders__reminder_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Reminder
+         * @description update a reminder in a reminder list.
+         */
+        patch: operations["update_reminder_v1_reminder_lists__list_id__reminders__reminder_id__patch"];
+        trace?: never;
+    };
+    "/v1/reminder-lists/{list_id}/reminders/{reminder_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Reminder
+         * @description complete a non-recurring reminder in a reminder list.
+         */
+        post: operations["complete_reminder_v1_reminder_lists__list_id__reminders__reminder_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminder-lists/{list_id}/reminders/{reminder_id}/occurrence/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Reminder Occurrence
+         * @description complete one recurring reminder occurrence.
+         */
+        post: operations["complete_reminder_occurrence_v1_reminder_lists__list_id__reminders__reminder_id__occurrence_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reminder-lists/{list_id}/reminders/{reminder_id}/series/following": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit Reminder Series
+         * @description split and edit this/following reminder occurrences.
+         */
+        patch: operations["edit_reminder_series_v1_reminder_lists__list_id__reminders__reminder_id__series_following_patch"];
+        trace?: never;
+    };
+    "/v1/scheduled-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Scheduled Items
+         * @description list merged scheduled instances from calendar and reminder domains.
+         */
+        get: operations["list_scheduled_items_v1_scheduled_items_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2913,7 +3179,7 @@ export interface components {
          * AITaskSettings
          * @description per-task model overrides for background AI tasks.
          *
-         *     resolution order: per-task model_id → default_model_id → error.
+         *     resolution order: per-task model_id -> default_model_id -> error.
          */
         AITaskSettings: {
             /**
@@ -2946,6 +3212,17 @@ export interface components {
              * @description model for memory post-processing (dedup, update, delete)
              */
             memory_post_processing_model_id?: string | null;
+            /**
+             * Web Search Model Id
+             * @description model for native agentic web search
+             */
+            web_search_model_id?: string | null;
+            /**
+             * Maintenance Max Chars Per Message
+             * @description max characters per message in thread maintenance transcripts
+             * @default 2000
+             */
+            maintenance_max_chars_per_message: number;
         };
         /** AITaskSettingsPatch */
         AITaskSettingsPatch: {
@@ -2979,6 +3256,16 @@ export interface components {
              * @description model for memory post-processing (dedup, update, delete)
              */
             memory_post_processing_model_id?: string | null;
+            /**
+             * Web Search Model Id
+             * @description model for native agentic web search
+             */
+            web_search_model_id?: string | null;
+            /**
+             * Maintenance Max Chars Per Message
+             * @description max characters per message in thread maintenance transcripts
+             */
+            maintenance_max_chars_per_message?: number | null;
         };
         /**
          * AIWindowingSettings
@@ -3049,6 +3336,12 @@ export interface components {
              * @default 4096
              */
             response_headroom: number;
+            /**
+             * Summarization Max Chars Per Message
+             * @description max characters per message in summarization transcripts. keeps tokens manageable without losing essential context
+             * @default 2000
+             */
+            summarization_max_chars_per_message: number;
         };
         /** AIWindowingSettingsPatch */
         AIWindowingSettingsPatch: {
@@ -3102,6 +3395,11 @@ export interface components {
              * @description tokens reserved for the model's response
              */
             response_headroom?: number | null;
+            /**
+             * Summarization Max Chars Per Message
+             * @description max characters per message in summarization transcripts
+             */
+            summarization_max_chars_per_message?: number | null;
         };
         /**
          * AccessLevel
@@ -3181,6 +3479,8 @@ export interface components {
             group_id?: string | null;
             /** Reminder List Id */
             reminder_list_id?: string | null;
+            /** Calendar Id */
+            calendar_id?: string | null;
         };
         /**
          * AccessibilityPreferences
@@ -3225,7 +3525,7 @@ export interface components {
          *     naming convention: {domain}:{action}
          * @enum {string}
          */
-        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "frontend:access" | "console:access";
+        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "calendar:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "frontend:access" | "console:access";
         /**
          * ActiveRunOut
          * @description lightweight snapshot of an in-memory active run.
@@ -3394,6 +3694,80 @@ export interface components {
             profile_image_url?: string | null;
         };
         /**
+         * AgenticWebSearchSettings
+         * @description agentic web search configuration.
+         */
+        AgenticWebSearchSettings: {
+            /**
+             * Agent
+             * @description agent provider to use for agentic web search
+             * @default native
+             * @enum {string}
+             */
+            agent: "native" | "perplexity";
+            /**
+             * Model Id
+             * @description model id for the native agentic web search agent
+             */
+            model_id?: string | null;
+            /**
+             * System Prompt
+             * @description system prompt for the native agentic web search agent
+             * @default you are a focused web search agent.
+             *
+             *     rules:
+             *     - call web_search before answering.
+             *     - use search results as evidence, not as a final answer.
+             *     - synthesize the answer in your own words.
+             *     - include citation markers like [1] when making sourced claims.
+             *     - be concise, neutral, and clear when results disagree or are insufficient.
+             */
+            system_prompt: string;
+            /**
+             * Model Params
+             * @description chat model parameters for the native agentic web search agent
+             */
+            model_params?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Max Iterations
+             * @description maximum native agentic web search turns
+             * @default 4
+             */
+            max_iterations: number;
+        };
+        /** AgenticWebSearchSettingsPatch */
+        AgenticWebSearchSettingsPatch: {
+            /**
+             * Agent
+             * @description agent provider to use for agentic web search
+             */
+            agent?: ("native" | "perplexity") | null;
+            /**
+             * Model Id
+             * @description model id for the native agentic web search agent
+             */
+            model_id?: string | null;
+            /**
+             * System Prompt
+             * @description system prompt for the native agentic web search agent
+             */
+            system_prompt?: string | null;
+            /**
+             * Model Params
+             * @description chat model parameters for the native agentic web search agent
+             */
+            model_params?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Max Iterations
+             * @description maximum native agentic web search turns
+             */
+            max_iterations?: number | null;
+        };
+        /**
          * AppearancePreferences
          * @description user appearance preferences.
          */
@@ -3489,6 +3863,11 @@ export interface components {
              * @description enable audio generation capabilities
              */
             enabled?: boolean | null;
+            /**
+             * Model
+             * @description model identifier for audio generation
+             */
+            model?: string | null;
         };
         /** Body_login_access_token_v1_auth_login_access_token_post */
         Body_login_access_token_v1_auth_login_access_token_post: {
@@ -3672,10 +4051,331 @@ export interface components {
         CacheSettings: {
             /** @description Redis / Valkey cache and pub/sub settings */
             redis?: components["schemas"]["CacheRedisSettings"];
+            /**
+             * Scheduled Items Ttl Seconds
+             * @description TTL for scheduled items cache entries
+             * @default 30
+             */
+            scheduled_items_ttl_seconds: number;
+            /**
+             * Resource Payload Ttl Seconds
+             * @description TTL for resource payload cache entries
+             * @default 30
+             */
+            resource_payload_ttl_seconds: number;
         };
         /** CacheSettingsPatch */
         CacheSettingsPatch: {
             redis?: components["schemas"]["CacheRedisSettingsPatch"] | null;
+            /**
+             * Scheduled Items Ttl Seconds
+             * @description TTL for scheduled items cache entries
+             */
+            scheduled_items_ttl_seconds?: number | null;
+            /**
+             * Resource Payload Ttl Seconds
+             * @description TTL for resource payload cache entries
+             */
+            resource_payload_ttl_seconds?: number | null;
+        };
+        /**
+         * Calendar
+         * @description calendar response schema.
+         */
+        Calendar: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Color
+             * @default #d45446
+             */
+            color: string;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Timezone */
+            timezone?: string | null;
+            /** Project Ids */
+            project_ids?: string[];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
+        };
+        /**
+         * CalendarCreate
+         * @description payload to create a calendar.
+         */
+        CalendarCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Color
+             * @default #d45446
+             */
+            color: string;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Timezone */
+            timezone?: string | null;
+            /** Project Ids */
+            project_ids?: string[];
+        };
+        /**
+         * CalendarEvent
+         * @description calendar event response schema.
+         */
+        CalendarEvent: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Start At
+             * Format: date-time
+             */
+            start_at: string;
+            /**
+             * End At
+             * Format: date-time
+             */
+            end_at: string;
+            /**
+             * All Day
+             * @default false
+             */
+            all_day: boolean;
+            /** Timezone */
+            timezone?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
+            /** Notification Offsets */
+            notification_offsets?: components["schemas"]["CalendarNotificationOffset"][];
+            /** Location */
+            location?: string | null;
+            /** Virtual Url */
+            virtual_url?: string | null;
+            /** Labels */
+            labels?: string[];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id: string;
+            /**
+             * Calendar Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            calendar_id: string;
+            /** Recurrence Until */
+            recurrence_until?: string | null;
+            /** Series Origin Id */
+            series_origin_id?: string | null;
+        };
+        /**
+         * CalendarEventCreate
+         * @description payload to create a calendar event.
+         */
+        CalendarEventCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Start At
+             * Format: date-time
+             */
+            start_at: string;
+            /**
+             * End At
+             * Format: date-time
+             */
+            end_at: string;
+            /**
+             * All Day
+             * @default false
+             */
+            all_day: boolean;
+            /** Timezone */
+            timezone?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
+            /** Notification Offsets */
+            notification_offsets?: components["schemas"]["CalendarNotificationOffset"][];
+            /** Location */
+            location?: string | null;
+            /** Virtual Url */
+            virtual_url?: string | null;
+            /** Labels */
+            labels?: string[];
+        };
+        /**
+         * CalendarEventUpdate
+         * @description payload to update a calendar event.
+         */
+        CalendarEventUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Start At */
+            start_at?: string | null;
+            /** End At */
+            end_at?: string | null;
+            /** All Day */
+            all_day?: boolean | null;
+            /** Timezone */
+            timezone?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
+            /** Notification Offsets */
+            notification_offsets?: components["schemas"]["CalendarNotificationOffset"][] | null;
+            /** Location */
+            location?: string | null;
+            /** Virtual Url */
+            virtual_url?: string | null;
+            /** Labels */
+            labels?: string[] | null;
+        };
+        CalendarNotificationOffset: number;
+        /**
+         * CalendarOccurrenceCancel
+         * @description payload to cancel one event occurrence.
+         */
+        CalendarOccurrenceCancel: {
+            /**
+             * Original Occurrence At
+             * Format: date-time
+             */
+            original_occurrence_at: string;
+        };
+        /**
+         * CalendarOccurrenceEdit
+         * @description payload to edit one event occurrence.
+         */
+        CalendarOccurrenceEdit: {
+            /**
+             * Original Occurrence At
+             * Format: date-time
+             */
+            original_occurrence_at: string;
+            /** New Start At */
+            new_start_at?: string | null;
+            /** New End At */
+            new_end_at?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Virtual Url */
+            virtual_url?: string | null;
+        };
+        /**
+         * CalendarSeriesEdit
+         * @description payload to split and edit this and following event occurrences.
+         */
+        CalendarSeriesEdit: {
+            /**
+             * Original Occurrence At
+             * Format: date-time
+             */
+            original_occurrence_at: string;
+            /** New Start At */
+            new_start_at?: string | null;
+            /** New End At */
+            new_end_at?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Virtual Url */
+            virtual_url?: string | null;
+            /** All Day */
+            all_day?: boolean | null;
+            /** Timezone */
+            timezone?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
+            /** Notification Offsets */
+            notification_offsets?: number[] | null;
+            /** Labels */
+            labels?: string[] | null;
+        };
+        /**
+         * CalendarUpdate
+         * @description payload to update a calendar.
+         */
+        CalendarUpdate: {
+            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Color */
+            color?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
         };
         /**
          * ChromaVectorDatabaseSettings
@@ -3921,6 +4621,24 @@ export interface components {
              * @default 60
              */
             timeout: number;
+            /**
+             * Max File Download Mb
+             * @description max file size downloadable from sandbox in MB
+             * @default 10
+             */
+            max_file_download_mb: number;
+            /**
+             * Max Output Chars
+             * @description max output characters returned from code interpreter
+             * @default 500000
+             */
+            max_output_chars: number;
+            /**
+             * Truncation Lines
+             * @description lines kept at head and tail when truncating output
+             * @default 50
+             */
+            truncation_lines: number;
         };
         /** CodeInterpreterSettingsPatch */
         CodeInterpreterSettingsPatch: {
@@ -3940,6 +4658,21 @@ export interface components {
              * @description execution timeout in seconds
              */
             timeout?: number | null;
+            /**
+             * Max File Download Mb
+             * @description max file size downloadable from sandbox in MB
+             */
+            max_file_download_mb?: number | null;
+            /**
+             * Max Output Chars
+             * @description max output characters returned from code interpreter
+             */
+            max_output_chars?: number | null;
+            /**
+             * Truncation Lines
+             * @description lines kept at head and tail when truncating output
+             */
+            truncation_lines?: number | null;
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
@@ -4034,6 +4767,7 @@ export interface components {
             thread?: components["schemas"]["AccessLevel"] | null;
             project?: components["schemas"]["AccessLevel"] | null;
             file?: components["schemas"]["AccessLevel"] | null;
+            calendar?: components["schemas"]["AccessLevel"] | null;
             note?: components["schemas"]["AccessLevel"] | null;
             group?: components["schemas"]["AccessLevel"] | null;
             reminder_list?: components["schemas"]["AccessLevel"] | null;
@@ -4190,7 +4924,7 @@ export interface components {
         };
         /**
          * EventScope
-         * @description Domain scopes for events.
+         * @description domain scopes for events.
          * @enum {string}
          */
         EventScope: "system" | "user" | "thread" | "message" | "task" | "project" | "file";
@@ -4439,7 +5173,7 @@ export interface components {
         FriendshipStatus: "pending" | "accepted" | "declined" | "removed";
         /**
          * Group
-         * @description Group schema.
+         * @description group schema.
          */
         Group: {
             /**
@@ -4475,7 +5209,7 @@ export interface components {
         };
         /**
          * GroupCreate
-         * @description Schema for creating a group.
+         * @description schema for creating a group.
          */
         GroupCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -4492,7 +5226,7 @@ export interface components {
         GroupMemberRole: "owner" | "admin" | "member";
         /**
          * GroupMembershipCreate
-         * @description Schema for adding a member to a group.
+         * @description schema for adding a member to a group.
          */
         GroupMembershipCreate: {
             /**
@@ -4505,7 +5239,7 @@ export interface components {
         };
         /**
          * GroupMembershipResponse
-         * @description Schema for a group membership.
+         * @description schema for a group membership.
          */
         GroupMembershipResponse: {
             /**
@@ -4522,7 +5256,7 @@ export interface components {
         };
         /**
          * GroupUpdate
-         * @description Schema for updating a group.
+         * @description schema for updating a group.
          */
         GroupUpdate: {
             metadata_?: components["schemas"]["JSONObject-Input"] | null;
@@ -4680,10 +5414,16 @@ export interface components {
         IntegrationsSettings: {
             /** @description Open WebUI integration */
             open_webui?: components["schemas"]["OpenWebUIIntegrationSettings"];
+            /** @description perplexity integration */
+            perplexity?: components["schemas"]["PerplexitySettings"];
+            /** @description searxng integration */
+            searxng?: components["schemas"]["SearxngSettings"];
         };
         /** IntegrationsSettingsPatch */
         IntegrationsSettingsPatch: {
             open_webui?: components["schemas"]["OpenWebUIIntegrationSettingsPatch"] | null;
+            perplexity?: components["schemas"]["PerplexitySettingsPatch"] | null;
+            searxng?: components["schemas"]["SearxngSettingsPatch"] | null;
         };
         "JSONObject-Input": {
             [key: string]: components["schemas"]["JSONValue-Input"];
@@ -4737,6 +5477,18 @@ export interface components {
              */
             max_file_size_mb: number;
             /**
+             * Max Reminder Hierarchy Depth
+             * @description maximum nesting depth for sub-reminders
+             * @default 8
+             */
+            max_reminder_hierarchy_depth: number;
+            /**
+             * Max Scheduled Items Window Days
+             * @description maximum time window in days for scheduled items queries
+             * @default 366
+             */
+            max_scheduled_items_window_days: number;
+            /**
              * Rate Limit Requests Per Minute
              * @description rate limit/min
              * @default 1500
@@ -4760,6 +5512,16 @@ export interface components {
              * @description max file size mb
              */
             max_file_size_mb?: number | null;
+            /**
+             * Max Reminder Hierarchy Depth
+             * @description maximum nesting depth for sub-reminders
+             */
+            max_reminder_hierarchy_depth?: number | null;
+            /**
+             * Max Scheduled Items Window Days
+             * @description maximum time window in days for scheduled items queries
+             */
+            max_scheduled_items_window_days?: number | null;
             /**
              * Rate Limit Requests Per Minute
              * @description rate limit/min
@@ -5277,7 +6039,7 @@ export interface components {
         };
         /**
          * Notification
-         * @description Response schema.
+         * @description response schema.
          */
         Notification: {
             /**
@@ -5316,7 +6078,7 @@ export interface components {
         };
         /**
          * NotificationCreate
-         * @description Request schema for creating notification(s).
+         * @description request schema for creating notification(s).
          */
         NotificationCreate: {
             /** Title */
@@ -5341,6 +6103,37 @@ export interface components {
              * @description whether notification sounds are enabled
              */
             sound?: boolean | null;
+        };
+        /**
+         * NotificationSettings
+         * @description notification delivery tuning.
+         */
+        NotificationSettings: {
+            /**
+             * Missed Grace Days
+             * @description days to look back for missed notifications
+             * @default 7
+             */
+            missed_grace_days: number;
+            /**
+             * Lookahead Days
+             * @description days ahead to schedule notifications
+             * @default 366
+             */
+            lookahead_days: number;
+        };
+        /** NotificationSettingsPatch */
+        NotificationSettingsPatch: {
+            /**
+             * Missed Grace Days
+             * @description days to look back for missed notifications
+             */
+            missed_grace_days?: number | null;
+            /**
+             * Lookahead Days
+             * @description days ahead to schedule notifications
+             */
+            lookahead_days?: number | null;
         };
         /**
          * OIDCSettings
@@ -5676,12 +6469,12 @@ export interface components {
         };
         /**
          * PerplexitySettings
-         * @description perplexity-specific settings for web search.
+         * @description perplexity integration settings.
          */
         PerplexitySettings: {
             /**
              * Api Key
-             * @description api key for perplexity web search
+             * @description api key for the perplexity integration
              */
             api_key?: string | null;
             /**
@@ -5700,21 +6493,16 @@ export interface components {
             search_context_usage: "low" | "medium" | "high";
             /**
              * Temperature
-             * @description sampling temperature (lower = more factual)
+             * @description sampling temperature
              * @default 0.2
              */
             temperature: number;
             /**
-             * Search Recency Filter
-             * @description restrict search results to a time window. None = no filter (all results)
-             */
-            search_recency_filter?: ("month" | "week" | "day" | "hour") | null;
-            /**
-             * Return Images
-             * @description include image URLs in perplexity search results
+             * Image Results Enabled
+             * @description allow web search tools to request image URLs from perplexity
              * @default false
              */
-            return_images: boolean;
+            image_results_enabled: boolean;
             /**
              * Max Concurrent Requests
              * @description max concurrent requests to perplexity (queue excess)
@@ -5745,15 +6533,10 @@ export interface components {
              */
             temperature?: number | null;
             /**
-             * Search Recency Filter
-             * @description restrict search results to a time window
+             * Image Results Enabled
+             * @description allow web search tools to request image URLs from perplexity
              */
-            search_recency_filter?: ("month" | "week" | "day" | "hour") | null;
-            /**
-             * Return Images
-             * @description include image URLs in perplexity search results
-             */
-            return_images?: boolean | null;
+            image_results_enabled?: boolean | null;
             /**
              * Max Concurrent Requests
              * @description max concurrent requests to perplexity
@@ -6196,13 +6979,13 @@ export interface components {
         };
         /**
          * ProviderStatus
-         * @description Operational state of a provider.
+         * @description operational state of a provider.
          * @enum {string}
          */
         ProviderStatus: "enabled" | "disabled";
         /**
          * ProviderType
-         * @description Type of provider deployment.
+         * @description type of provider deployment.
          * @enum {string}
          */
         ProviderType: "local" | "external";
@@ -6271,6 +7054,23 @@ export interface components {
              * @description api key for qdrant
              */
             api_key?: string | null;
+        };
+        /**
+         * Recurrence
+         * @description structured recurrence value for schedule-capable masters.
+         */
+        Recurrence: {
+            /**
+             * Rrule
+             * @description iCalendar RRULE lines. the field name follows the RRULE property name even though multiple lines are allowed.
+             */
+            rrule?: string[];
+            /** Rdate */
+            rdate?: string[];
+            /** Exdate */
+            exdate?: string[];
+            /** Timezone */
+            timezone?: string | null;
         };
         /**
          * RedisVectorDatabaseSettings
@@ -6345,12 +7145,9 @@ export interface components {
             due_at?: string | null;
             /** Remind At */
             remind_at?: string | null;
-            /** Recurrence */
-            recurrence?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
             /** @default pending */
             status: components["schemas"]["ReminderStatus"];
-            /** List Id */
-            list_id?: string | null;
             /** Parent Id */
             parent_id?: string | null;
             /** Source Thread Id */
@@ -6370,8 +7167,17 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /**
+             * List Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            list_id: string;
             /** Completed At */
             completed_at?: string | null;
+            /** Recurrence Until */
+            recurrence_until?: string | null;
+            /** Series Origin Id */
+            series_origin_id?: string | null;
         };
         /**
          * ReminderCreate
@@ -6387,12 +7193,9 @@ export interface components {
             due_at?: string | null;
             /** Remind At */
             remind_at?: string | null;
-            /** Recurrence */
-            recurrence?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
             /** @default pending */
             status: components["schemas"]["ReminderStatus"];
-            /** List Id */
-            list_id?: string | null;
             /** Parent Id */
             parent_id?: string | null;
             /** Source Thread Id */
@@ -6402,6 +7205,8 @@ export interface components {
              * @default 0
              */
             position: number;
+            /** List Id */
+            list_id?: string | null;
         };
         /**
          * ReminderList
@@ -6433,10 +7238,12 @@ export interface components {
              */
             position: number;
             /**
-             * Project Ids
-             * @default []
+             * Is Default
+             * @default false
              */
-            project_ids: string[];
+            is_default: boolean;
+            /** Project Ids */
+            project_ids?: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -6468,10 +7275,12 @@ export interface components {
              */
             position: number;
             /**
-             * Project Ids
-             * @default []
+             * Is Default
+             * @default false
              */
-            project_ids: string[];
+            is_default: boolean;
+            /** Project Ids */
+            project_ids?: string[];
         };
         /**
          * ReminderListUpdate
@@ -6489,6 +7298,8 @@ export interface components {
             icon?: string | null;
             /** Position */
             position?: number | null;
+            /** Is Default */
+            is_default?: boolean | null;
             /** Project Ids */
             project_ids?: string[] | null;
         };
@@ -6522,10 +7333,12 @@ export interface components {
              */
             position: number;
             /**
-             * Project Ids
-             * @default []
+             * Is Default
+             * @default false
              */
-            project_ids: string[];
+            is_default: boolean;
+            /** Project Ids */
+            project_ids?: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -6553,6 +7366,39 @@ export interface components {
             completed_count: number;
         };
         /**
+         * ReminderOccurrenceComplete
+         * @description payload to complete one reminder occurrence.
+         */
+        ReminderOccurrenceComplete: {
+            /**
+             * Original Occurrence At
+             * Format: date-time
+             */
+            original_occurrence_at: string;
+        };
+        /**
+         * ReminderSeriesEdit
+         * @description payload to split and edit this and following reminder occurrences.
+         */
+        ReminderSeriesEdit: {
+            /**
+             * Original Occurrence At
+             * Format: date-time
+             */
+            original_occurrence_at: string;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Remind At */
+            remind_at?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
+            /** Position */
+            position?: number | null;
+        };
+        /**
          * ReminderStatus
          * @description status of a reminder.
          * @enum {string}
@@ -6572,8 +7418,7 @@ export interface components {
             due_at?: string | null;
             /** Remind At */
             remind_at?: string | null;
-            /** Recurrence */
-            recurrence?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
             status?: components["schemas"]["ReminderStatus"] | null;
             /** List Id */
             list_id?: string | null;
@@ -6606,12 +7451,9 @@ export interface components {
             due_at?: string | null;
             /** Remind At */
             remind_at?: string | null;
-            /** Recurrence */
-            recurrence?: string | null;
+            recurrence?: components["schemas"]["Recurrence"] | null;
             /** @default pending */
             status: components["schemas"]["ReminderStatus"];
-            /** List Id */
-            list_id?: string | null;
             /** Parent Id */
             parent_id?: string | null;
             /** Source Thread Id */
@@ -6631,8 +7473,17 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /**
+             * List Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            list_id: string;
             /** Completed At */
             completed_at?: string | null;
+            /** Recurrence Until */
+            recurrence_until?: string | null;
+            /** Series Origin Id */
+            series_origin_id?: string | null;
             /** Subtasks */
             subtasks?: components["schemas"]["Reminder"][];
         };
@@ -6945,6 +7796,65 @@ export interface components {
              */
             retry_mode?: ("legacy" | "standard" | "adaptive") | null;
         };
+        /** @enum {string} */
+        ScheduledEventStatus: "scheduled" | "cancelled";
+        /**
+         * ScheduledItem
+         * @description merged scheduled calendar/reminder instance.
+         */
+        ScheduledItem: {
+            kind: components["schemas"]["ScheduledItemKind"];
+            /** Id */
+            id: string;
+            /**
+             * Parent Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            parent_id: string;
+            /**
+             * Container Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            container_id: string;
+            /**
+             * Original Occurrence At
+             * Format: date-time
+             */
+            original_occurrence_at: string;
+            /**
+             * Effective Start At
+             * Format: date-time
+             */
+            effective_start_at: string;
+            /** Effective End At */
+            effective_end_at?: string | null;
+            /**
+             * All Day
+             * @default false
+             */
+            all_day: boolean;
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Color */
+            color?: string | null;
+            /** Status */
+            status: components["schemas"]["ScheduledEventStatus"] | components["schemas"]["ReminderStatus"];
+            /**
+             * Readonly
+             * @default false
+             */
+            readonly: boolean;
+            /** Calendar Id */
+            calendar_id?: string | null;
+            /** Reminder List Id */
+            reminder_list_id?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+        };
+        /** @enum {string} */
+        ScheduledItemKind: "event" | "reminder";
         /**
          * SearchEngineSettings
          * @description search engine configuration for web search
@@ -6952,22 +7862,19 @@ export interface components {
         SearchEngineSettings: {
             /**
              * Engine
-             * @description web search engine to use for web search tool
-             * @default searxng
+             * @description web search engine
+             * @default perplexity
              * @enum {string}
              */
-            engine: "google" | "searxng";
-            /** @description searxng-specific settings */
-            searxng?: components["schemas"]["SearxngSettings"];
+            engine: "perplexity" | "searxng" | "bing" | "google";
         };
         /** SearchEngineSettingsPatch */
         SearchEngineSettingsPatch: {
             /**
              * Engine
-             * @description web search engine to use
+             * @description web search engine
              */
-            engine?: ("google" | "searxng") | null;
-            searxng?: components["schemas"]["SearxngSettingsPatch"] | null;
+            engine?: ("perplexity" | "searxng" | "bing" | "google") | null;
         };
         /**
          * SearchMode
@@ -6998,6 +7905,7 @@ export interface components {
             preview?: string | null;
             /** Score */
             score?: number | null;
+            metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Created At
              * Format: date-time
@@ -7013,7 +7921,7 @@ export interface components {
          * SearchResultType
          * @enum {string}
          */
-        SearchResultType: "thread" | "reminder" | "note" | "memory";
+        SearchResultType: "thread" | "reminder" | "calendar_event" | "note" | "memory";
         /**
          * SearxngSettings
          * @description searxng-specific settings for web search.
@@ -7225,6 +8133,8 @@ export interface components {
             assets?: components["schemas"]["AssetsSettings"];
             limits?: components["schemas"]["LimitsSettings"];
             security?: components["schemas"]["SecuritySettings"];
+            /** @description notification delivery settings */
+            notifications?: components["schemas"]["NotificationSettings"];
             soft_delete?: components["schemas"]["SoftDeleteSettings"];
             /** @description web search provider settings */
             web_search?: components["schemas"]["WebSearchSettings"];
@@ -7247,6 +8157,7 @@ export interface components {
             assets?: components["schemas"]["AssetsSettingsPatch"] | null;
             limits?: components["schemas"]["LimitsSettingsPatch"] | null;
             security?: components["schemas"]["SecuritySettingsPatch"] | null;
+            notifications?: components["schemas"]["NotificationSettingsPatch"] | null;
             soft_delete?: components["schemas"]["SoftDeleteSettingsPatch"] | null;
             web_search?: components["schemas"]["WebSearchSettingsPatch"] | null;
             code_interpreter?: components["schemas"]["CodeInterpreterSettingsPatch"] | null;
@@ -7302,6 +8213,11 @@ export interface components {
              * @default 0
              */
             security: number;
+            /**
+             * Notifications
+             * @default 0
+             */
+            notifications: number;
             /**
              * Soft Delete
              * @default 0
@@ -7456,6 +8372,12 @@ export interface components {
             local?: components["schemas"]["LocalStorageConfigPatch"] | null;
             s3?: components["schemas"]["S3StorageConfigPatch"] | null;
         };
+        /**
+         * SummaryType
+         * @description type of thread summary.
+         * @enum {string}
+         */
+        SummaryType: "window" | "condensed";
         /**
          * Task
          * @description response model.
@@ -7836,6 +8758,50 @@ export interface components {
             left_at?: string | null;
             /** Last Read Message Id */
             last_read_message_id?: string | null;
+        };
+        /**
+         * ThreadSummaryRecord
+         * @description stored summary record for a thread.
+         */
+        ThreadSummaryRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            type: components["schemas"]["SummaryType"];
+            /** Start Message Id */
+            start_message_id?: string | null;
+            /** End Message Id */
+            end_message_id?: string | null;
+            /**
+             * Message Count
+             * @default 0
+             */
+            message_count: number;
+            /**
+             * Content
+             * @default
+             */
+            content: string;
+            /** Superseded By Id */
+            superseded_by_id?: string | null;
         };
         /**
          * ThreadSwitchRequest
@@ -8357,6 +9323,11 @@ export interface components {
              * @description enable video generation capabilities
              */
             enabled?: boolean | null;
+            /**
+             * Model
+             * @description model identifier for video generation
+             */
+            model?: string | null;
         };
         /**
          * Visibility
@@ -8443,6 +9414,11 @@ export interface components {
              * @description user agent string for web loader requests
              */
             user_agent?: string | null;
+            /**
+             * Max Chars
+             * @description maximum characters returned per fetched URL
+             */
+            max_chars?: number | null;
             tavily?: components["schemas"]["TavilySettingsPatch"] | null;
         };
         /**
@@ -8450,13 +9426,8 @@ export interface components {
          * @description web search provider configuration.
          */
         WebSearchSettings: {
-            /**
-             * Search Agent
-             * @description agent to use for agentic web search tool.
-             * @default native
-             * @enum {string}
-             */
-            search_agent: "native" | "perplexity";
+            /** @description agentic web search configuration */
+            agentic?: components["schemas"]["AgenticWebSearchSettings"];
             /**
              * Max Chars
              * @description maximum characters returned in web search result summaries
@@ -8472,16 +9443,16 @@ export interface components {
             search_engines?: components["schemas"]["SearchEngineSettings"];
             /** @description configuration for fetching and processing web content */
             web_loaders?: components["schemas"]["WebLoaderSettings"];
-            /** @description perplexity-specific settings for agentic web search */
-            perplexity?: components["schemas"]["PerplexitySettings"];
         };
         /** WebSearchSettingsPatch */
         WebSearchSettingsPatch: {
+            /** @description agentic web search configuration */
+            agentic?: components["schemas"]["AgenticWebSearchSettingsPatch"] | null;
             /**
-             * Search Agent
-             * @description agent to use for agentic web search tool
+             * Max Chars
+             * @description maximum characters returned in web search result summaries
              */
-            search_agent?: ("native" | "perplexity") | null;
+            max_chars?: number | null;
             /**
              * Blacklisted Domains
              * @description domains to exclude from web search results
@@ -8489,7 +9460,6 @@ export interface components {
             blacklisted_domains?: string[] | null;
             search_engines?: components["schemas"]["SearchEngineSettingsPatch"] | null;
             web_loaders?: components["schemas"]["WebLoaderSettingsPatch"] | null;
-            perplexity?: components["schemas"]["PerplexitySettingsPatch"] | null;
         };
     };
     responses: never;
@@ -10400,11 +11370,11 @@ export interface operations {
     list_threads_v1_threads_get: {
         parameters: {
             query?: {
-                owner_id?: string | null;
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("last_activity_at" | "title");
                 sort_dir?: "asc" | "desc";
+                owner_id?: string | null;
                 include_hidden?: boolean;
                 is_archived?: boolean | null;
             };
@@ -11294,6 +12264,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_thread_summaries_v1_threads__thread_id__summaries_get: {
+        parameters: {
+            query?: {
+                include_superseded?: boolean;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSummaryRecord"][];
                 };
             };
             /** @description bad request */
@@ -13115,13 +14181,14 @@ export interface operations {
     list_tasks_v1_tasks_get: {
         parameters: {
             query?: {
-                user_id?: string | null;
-                status_filter?: components["schemas"]["TaskStatus"] | null;
-                state_filter?: components["schemas"]["TaskStateFilter"] | null;
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("status" | "task_type" | "stage" | "last_event_at");
                 sort_dir?: "asc" | "desc";
+                user_id?: string | null;
+                spawned_thread_id?: string | null;
+                status_filter?: components["schemas"]["TaskStatus"] | null;
+                state_filter?: components["schemas"]["TaskStateFilter"] | null;
             };
             header?: never;
             path?: never;
@@ -13886,6 +14953,1666 @@ export interface operations {
             };
         };
     };
+    list_calendars_v1_calendars_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | ("name" | "position");
+                sort_dir?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_calendar_v1_calendars_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    search_calendars_v1_calendars_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+                mode?: components["schemas"]["SearchMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revectorize_calendar_events_v1_calendars_events_revectorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_calendar_v1_calendars__calendar_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_calendar_v1_calendars__calendar_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_calendar_v1_calendars__calendar_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calendar"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_calendar_access_rules_v1_calendars__calendar_id__access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_calendar_access_rules_v1_calendars__calendar_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_calendar_events_v1_calendars__calendar_id__events_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                sort_by?: components["schemas"]["CommonSortBy"] | ("start_at" | "end_at" | "title");
+                sort_dir?: "asc" | "desc";
+                start_at?: string | null;
+                end_at?: string | null;
+                q?: string | null;
+            };
+            header?: never;
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEvent"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_calendar_event_v1_calendars__calendar_id__events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEvent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_calendar_event_v1_calendars__calendar_id__events__event_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEvent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_calendar_event_v1_calendars__calendar_id__events__event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_calendar_event_v1_calendars__calendar_id__events__event_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEvent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    edit_calendar_event_occurrence_v1_calendars__calendar_id__events__event_id__occurrence_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarOccurrenceEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledItem"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    edit_calendar_event_series_v1_calendars__calendar_id__events__event_id__series_following_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarSeriesEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEvent"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    cancel_calendar_event_occurrence_v1_calendars__calendar_id__events__event_id__occurrence_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                calendar_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarOccurrenceCancel"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     create_notifications_v1_notifications_post: {
         parameters: {
             query?: never;
@@ -14552,11 +17279,11 @@ export interface operations {
     list_memories_v1_memories_get: {
         parameters: {
             query: {
-                user_id: string;
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("category" | "content_length" | "last_accessed_at" | "confidence");
                 sort_dir?: "asc" | "desc";
+                user_id: string;
                 search?: string | null;
             };
             header?: never;
@@ -15415,18 +18142,21 @@ export interface operations {
     list_notes_v1_notes_get: {
         parameters: {
             query?: {
-                user_id?: string | null;
-                labels?: string[] | null;
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | "title";
                 sort_dir?: "asc" | "desc";
+                user_id?: string | null;
             };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": string[] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -17923,11 +20653,11 @@ export interface operations {
     list_files_v1_files_get: {
         parameters: {
             query?: {
-                project_id?: string | null;
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("filename" | "size_bytes");
                 sort_dir?: "asc" | "desc";
+                project_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -18889,7 +21619,101 @@ export interface operations {
             };
         };
     };
-    list_reminder_lists_v1_reminders_lists_get: {
+    revectorize_reminders_v1_reminders_revectorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_reminder_lists_v1_reminder_lists_get: {
         parameters: {
             query?: {
                 include_counts?: boolean;
@@ -18987,7 +21811,7 @@ export interface operations {
             };
         };
     };
-    create_reminder_list_v1_reminders_lists_post: {
+    create_reminder_list_v1_reminder_lists_post: {
         parameters: {
             query?: never;
             header?: {
@@ -19085,7 +21909,104 @@ export interface operations {
             };
         };
     };
-    get_reminder_list_v1_reminders_lists__list_id__get: {
+    search_reminder_lists_v1_reminder_lists_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+                mode?: components["schemas"]["SearchMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_reminder_list_v1_reminder_lists__list_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -19179,7 +22100,7 @@ export interface operations {
             };
         };
     };
-    delete_reminder_list_v1_reminders_lists__list_id__delete: {
+    delete_reminder_list_v1_reminder_lists__list_id__delete: {
         parameters: {
             query?: never;
             header?: {
@@ -19273,7 +22194,7 @@ export interface operations {
             };
         };
     };
-    update_reminder_list_v1_reminders_lists__list_id__patch: {
+    update_reminder_list_v1_reminder_lists__list_id__patch: {
         parameters: {
             query?: never;
             header?: {
@@ -19373,7 +22294,7 @@ export interface operations {
             };
         };
     };
-    get_reminder_list_counts_v1_reminders_lists__list_id__counts_get: {
+    get_reminder_list_counts_v1_reminder_lists__list_id__counts_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -19469,11 +22390,13 @@ export interface operations {
             };
         };
     };
-    get_default_reminder_list_counts_v1_reminders_counts_get: {
+    list_reminder_list_access_rules_v1_reminder_lists__list_id__access_rules_get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                list_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -19484,9 +22407,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
                 };
             };
             /** @description bad request */
@@ -19563,19 +22484,118 @@ export interface operations {
             };
         };
     };
-    list_reminders_v1_reminders_get: {
+    set_reminder_list_access_rules_v1_reminder_lists__list_id__access_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_reminders_v1_reminder_lists__list_id__reminders_get: {
         parameters: {
             query?: {
-                list_id?: string | null;
-                status_filter?: components["schemas"]["ReminderStatus"] | null;
                 include_subtasks?: boolean;
                 skip?: number;
                 limit?: number;
                 sort_by?: "position" | "due_at" | "created_at" | "updated_at" | "title";
                 sort_dir?: "asc" | "desc";
+                status_filter?: components["schemas"]["ReminderStatus"] | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                list_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -19663,13 +22683,15 @@ export interface operations {
             };
         };
     };
-    create_reminder_v1_reminders_post: {
+    create_reminder_v1_reminder_lists__list_id__reminders_post: {
         parameters: {
             query?: never;
             header?: {
                 "x-session-id"?: string | null;
             };
-            path?: never;
+            path: {
+                list_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -19761,202 +22783,12 @@ export interface operations {
             };
         };
     };
-    search_reminders_v1_reminders_search_get: {
-        parameters: {
-            query: {
-                q: string;
-                limit?: number;
-                cursor?: string | null;
-                mode?: components["schemas"]["SearchMode"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    revectorize_reminders_v1_reminders_revectorize_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    get_reminder_v1_reminders__reminder_id__get: {
+    get_reminder_v1_reminder_lists__list_id__reminders__reminder_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                list_id: string;
                 reminder_id: string;
             };
             cookie?: never;
@@ -20046,13 +22878,14 @@ export interface operations {
             };
         };
     };
-    delete_reminder_v1_reminders__reminder_id__delete: {
+    delete_reminder_v1_reminder_lists__list_id__reminders__reminder_id__delete: {
         parameters: {
             query?: never;
             header?: {
                 "x-session-id"?: string | null;
             };
             path: {
+                list_id: string;
                 reminder_id: string;
             };
             cookie?: never;
@@ -20140,13 +22973,14 @@ export interface operations {
             };
         };
     };
-    update_reminder_v1_reminders__reminder_id__patch: {
+    update_reminder_v1_reminder_lists__list_id__reminders__reminder_id__patch: {
         parameters: {
             query?: never;
             header?: {
                 "x-session-id"?: string | null;
             };
             path: {
+                list_id: string;
                 reminder_id: string;
             };
             cookie?: never;
@@ -20240,7 +23074,7 @@ export interface operations {
             };
         };
     };
-    complete_reminder_v1_reminders__reminder_id__complete_post: {
+    complete_reminder_v1_reminder_lists__list_id__reminders__reminder_id__complete_post: {
         parameters: {
             query?: {
                 cascade?: boolean;
@@ -20249,6 +23083,7 @@ export interface operations {
                 "x-session-id"?: string | null;
             };
             path: {
+                list_id: string;
                 reminder_id: string;
             };
             cookie?: never;
@@ -20338,211 +23173,21 @@ export interface operations {
             };
         };
     };
-    move_reminder_v1_reminders__reminder_id__move_post: {
+    complete_reminder_occurrence_v1_reminder_lists__list_id__reminders__reminder_id__occurrence_complete_post: {
         parameters: {
-            query?: {
-                target_list_id?: string | null;
-                position?: number | null;
-            };
+            query?: never;
             header?: {
                 "x-session-id"?: string | null;
             };
             path: {
+                list_id: string;
                 reminder_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Reminder"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    list_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                list_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccessRuleResponse"][];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    set_reminder_list_access_rules_v1_reminders_lists__list_id__access_rules_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                list_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AccessRuleCreate"][];
+                "application/json": components["schemas"]["ReminderOccurrenceComplete"];
             };
         };
         responses: {
@@ -20552,7 +23197,205 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccessRuleResponse"][];
+                    "application/json": components["schemas"]["ScheduledItem"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    edit_reminder_series_v1_reminder_lists__list_id__reminders__reminder_id__series_following_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                list_id: string;
+                reminder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderSeriesEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_scheduled_items_v1_scheduled_items_get: {
+        parameters: {
+            query: {
+                limit?: number;
+                start_at: string;
+                end_at: string;
+                include_completed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledItem"][];
                 };
             };
             /** @description bad request */
