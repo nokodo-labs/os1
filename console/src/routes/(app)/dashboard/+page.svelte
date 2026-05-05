@@ -12,6 +12,7 @@
 		Activity,
 		Bot,
 		Brain,
+		CalendarDays,
 		FileText,
 		Folder,
 		ListChecks,
@@ -50,6 +51,7 @@
 				roles,
 				prompts,
 				lists,
+				calendars,
 			] = await Promise.all([
 				api
 					.GET('/v1/users', { params: { query: { limit: 10000, skip: 0 } } })
@@ -88,9 +90,13 @@
 					.then((r) => unwrap(r))
 					.catch(() => []),
 				api
-					.GET('/v1/reminders/lists', {
+					.GET('/v1/reminder-lists', {
 						params: { query: { limit: 10000, include_counts: true } },
 					})
+					.then((r) => unwrap(r))
+					.catch(() => []),
+				api
+					.GET('/v1/calendars', { params: { query: { limit: 10000 } } })
 					.then((r) => unwrap(r))
 					.catch(() => []),
 			])
@@ -155,6 +161,12 @@
 					value: lists.reduce((sum, l) => sum + (l.total_count ?? 0), 0),
 					icon: ListChecks,
 					color: 'text-lime-400',
+				},
+				{
+					label: 'calendars',
+					value: calendars.length,
+					icon: CalendarDays,
+					color: 'text-rose-400',
 				},
 			]
 		} catch (e: unknown) {

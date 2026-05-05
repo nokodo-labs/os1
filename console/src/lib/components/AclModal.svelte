@@ -30,6 +30,7 @@
 			| 'note'
 			| 'memory'
 			| 'reminder_list'
+			| 'calendar'
 		resourceId: string
 		title?: string
 	} = $props()
@@ -129,8 +130,14 @@
 				)
 			} else if (resourceType === 'reminder_list') {
 				entries = unwrap(
-					await api.GET('/v1/reminders/lists/{list_id}/access-rules', {
+					await api.GET('/v1/reminder-lists/{list_id}/access-rules', {
 						params: { path: { list_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'calendar') {
+				entries = unwrap(
+					await api.GET('/v1/calendars/{calendar_id}/access-rules', {
+						params: { path: { calendar_id: resourceId } },
 					})
 				)
 			}
@@ -158,6 +165,10 @@
 			agent_id: resourceType === 'agent' ? resourceId : null,
 			group_id: resourceType === 'group' ? resourceId : null,
 			file_id: resourceType === 'file' ? resourceId : null,
+			note_id: resourceType === 'note' ? resourceId : null,
+			memory_id: resourceType === 'memory' ? resourceId : null,
+			reminder_list_id: resourceType === 'reminder_list' ? resourceId : null,
+			calendar_id: resourceType === 'calendar' ? resourceId : null,
 			subject_user_id: null,
 			subject_group_id: null,
 			subject_role_id: null,
@@ -259,8 +270,15 @@
 				)
 			} else if (resourceType === 'reminder_list') {
 				entries = unwrap(
-					await api.PUT('/v1/reminders/lists/{list_id}/access-rules', {
+					await api.PUT('/v1/reminder-lists/{list_id}/access-rules', {
 						params: { path: { list_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'calendar') {
+				entries = unwrap(
+					await api.PUT('/v1/calendars/{calendar_id}/access-rules', {
+						params: { path: { calendar_id: resourceId } },
 						body,
 					})
 				)

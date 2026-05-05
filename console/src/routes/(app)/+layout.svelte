@@ -3,10 +3,11 @@
 	import { page } from '$app/state'
 	import { auth } from '$lib/auth.svelte'
 	import {
+		Activity,
 		Bot,
 		Box,
 		Brain,
-		Activity,
+		CalendarDays,
 		Database,
 		FileText,
 		FlaskConical,
@@ -57,6 +58,7 @@
 		| '/projects'
 		| '/notes'
 		| '/reminders'
+		| '/calendars'
 		| '/tasks'
 		| '/files'
 		| '/memories'
@@ -165,6 +167,14 @@
 			icon: ListChecks,
 			color: 'text-sky-400',
 			activeBg: 'bg-sky-500/15',
+		},
+		{
+			href: resolve('/calendars'),
+			match: '/calendars',
+			label: 'calendars',
+			icon: CalendarDays,
+			color: 'text-rose-400',
+			activeBg: 'bg-rose-500/15',
 		},
 		{
 			href: '/tasks',

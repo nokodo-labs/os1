@@ -50,30 +50,41 @@
 	let revectorizeResult = $state<RevectorizeResult | null>(null)
 
 	// per-resource revectorize state
-	type ResourceKey = 'notes' | 'threads' | 'reminders' | 'memories'
+	type ResourceKey = 'notes' | 'threads' | 'memories' | 'reminders' | 'calendar_events'
+	const RESOURCE_KEYS: ResourceKey[] = [
+		'notes',
+		'threads',
+		'memories',
+		'reminders',
+		'calendar_events',
+	]
 	const RESOURCE_ENDPOINTS = {
 		notes: '/v1/notes/revectorize',
 		threads: '/v1/threads/revectorize',
-		reminders: '/v1/reminders/revectorize',
 		memories: '/v1/memories/revectorize',
+		reminders: '/v1/reminders/revectorize',
+		calendar_events: '/v1/calendars/events/revectorize',
 	} as const
 	let isRevectorizingResource = $state<Record<ResourceKey, boolean>>({
 		notes: false,
 		threads: false,
-		reminders: false,
 		memories: false,
+		reminders: false,
+		calendar_events: false,
 	})
 	let revectorizeResourceResult = $state<Record<ResourceKey, RevectorizeResult | null>>({
 		notes: null,
 		threads: null,
-		reminders: null,
 		memories: null,
+		reminders: null,
+		calendar_events: null,
 	})
 	let revectorizeResourceError = $state<Record<ResourceKey, string | null>>({
 		notes: null,
 		threads: null,
-		reminders: null,
 		memories: null,
+		reminders: null,
+		calendar_events: null,
 	})
 
 	// delete state
@@ -246,7 +257,12 @@
 				<Search class="mr-2 h-4 w-4" />
 				search
 			</Button>
-			<Button variant="outline" class="rounded-xl" onclick={revectorizeAll} disabled={isReindexing}>
+			<Button
+				variant="outline"
+				class="rounded-xl"
+				onclick={revectorizeAll}
+				disabled={isReindexing}
+			>
 				<RefreshCw class="mr-2 h-4 w-4 {isReindexing ? 'animate-spin' : ''}" />
 				{isReindexing ? 'revectorizing...' : 'revectorize all'}
 			</Button>
@@ -290,7 +306,7 @@
 		<CardContent class="py-4">
 			<p class="mb-3 text-sm font-medium text-zinc-300">revectorize by resource</p>
 			<div class="flex flex-wrap gap-3">
-				{#each ['notes', 'threads', 'reminders', 'memories'] as ResourceKey[] as resource (resource)}
+				{#each RESOURCE_KEYS as resource (resource)}
 					<div class="flex flex-col gap-1">
 						<Button
 							variant="outline"

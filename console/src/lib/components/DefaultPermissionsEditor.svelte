@@ -13,7 +13,14 @@
 
 	let { value = $bindable<PermissionsValue>(), allowInherit = true } = $props()
 
-	type ResourceField = 'thread' | 'project' | 'file' | 'note' | 'group' | 'reminder_list'
+	type ResourceField =
+		| 'thread'
+		| 'project'
+		| 'file'
+		| 'calendar'
+		| 'note'
+		| 'group'
+		| 'reminder_list'
 
 	const accessLevelOptions: Array<{ value: AccessLevel; label: string }> = [
 		{ value: 'reader', label: 'reader' },
@@ -25,6 +32,7 @@
 		{ key: 'thread', label: 'threads' },
 		{ key: 'project', label: 'projects' },
 		{ key: 'file', label: 'files' },
+		{ key: 'calendar', label: 'calendars' },
 		{ key: 'note', label: 'notes' },
 		{ key: 'group', label: 'groups' },
 		{ key: 'reminder_list', label: 'reminder lists' },
@@ -51,6 +59,7 @@
 				{ value: 'groups:create', label: 'groups' },
 				{ value: 'memories:create', label: 'memories' },
 				{ value: 'reminders:create', label: 'reminders' },
+				{ value: 'calendar:create', label: 'calendars' },
 				{ value: 'tasks:create', label: 'tasks' },
 			],
 		},

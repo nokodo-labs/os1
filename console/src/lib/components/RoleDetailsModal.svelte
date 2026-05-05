@@ -57,6 +57,7 @@
 				thread: input.resource_access?.thread ?? null,
 				project: input.resource_access?.project ?? null,
 				file: input.resource_access?.file ?? null,
+				calendar: input.resource_access?.calendar ?? null,
 				note: input.resource_access?.note ?? null,
 				group: input.resource_access?.group ?? null,
 				reminder_list: input.resource_access?.reminder_list ?? null,
