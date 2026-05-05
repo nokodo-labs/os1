@@ -211,11 +211,13 @@
 		return path === '/login' || path === '/signup'
 	})
 
-	// auth pages (and backend-unreachable screen) use the admin-configured auth background
+	// page-level wallpaper overrides use one resolver to avoid stale cleanup races.
 	$effect(() => {
 		if (isAuthRoute || backendUnreachable) {
+			background.clearPageConfig()
 			background.setPage(background.auth)
 		} else {
+			background.clearPageConfig()
 			background.clearPage()
 		}
 	})

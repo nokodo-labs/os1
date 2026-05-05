@@ -138,7 +138,7 @@
 		}
 
 		for (const list of reminders.lists) {
-			if (list.project_ids.includes(projectId)) {
+			if ((list.project_ids ?? []).includes(projectId)) {
 				items.push(reminderListToResource(list))
 			}
 		}
@@ -156,7 +156,7 @@
 		loading = true
 		await Promise.all([
 			projects.load(),
-			chat.refreshThreads(),
+			chat.recentThreads.length === 0 ? chat.refreshThreads() : chat.fetchUnreadCounts(),
 			notes.load(),
 			reminders.loadListsAndCounts(),
 			files.load(),
@@ -202,7 +202,7 @@
 			const list = reminders.lists.find((l) => l.id === resource.id)
 			const currentIds = list?.project_ids ?? []
 			if (!currentIds.includes(projectId)) {
-				await api.PATCH('/v1/reminders/lists/{list_id}', {
+				await api.PATCH('/v1/reminder-lists/{list_id}', {
 					params: { path: { list_id: resource.id } },
 					body: { project_ids: [...currentIds, projectId] },
 				})
