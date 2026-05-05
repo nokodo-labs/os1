@@ -3,18 +3,35 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type Message = Schemas['Message']
+	type Task = Schemas['Task']
 	type Thread = Schemas['Thread']
+	type ThreadSummaryRecord = Schemas['ThreadSummaryRecord']
 
 	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
 	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadFlowView from '$lib/components/thread-flow/ThreadFlowView.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import { ChevronDown, Download, FileJson, FileText, GitBranch, Trash2, X } from '@lucide/svelte'
+	import {
+		AlertTriangle,
+		Ban,
+		Brain,
+		CheckCircle2,
+		ChevronDown,
+		Circle,
+		Clock3,
+		Download,
+		FileJson,
+		FileText,
+		GitBranch,
+		LoaderCircle,
+		Trash2,
+		X,
+	} from '@lucide/svelte'
 	import { Dialog, DropdownMenu } from 'bits-ui'
 	import { tick } from 'svelte'
 
-	type ViewTab = 'messages' | 'tree'
+	type ViewTab = 'messages' | 'tree' | 'summaries'
 
 	type Props = {
 		open: boolean
@@ -36,12 +53,40 @@
 	let messagesEl = $state<HTMLDivElement | null>(null)
 	let activeTab = $state<ViewTab>('tree')
 	let allMessagesLoaded = $state(false)
+	let summaries = $state<ThreadSummaryRecord[]>([])
+	let isLoadingSummaries = $state(false)
+	let summariesError = $state<string | null>(null)
+	let threadTasks = $state<Task[]>([])
+	let isLoadingTasks = $state(false)
+	let tasksError = $state<string | null>(null)
 	let isWipeConfirming = $state(false)
 	let isWiping = $state(false)
 	let wipeError = $state<string | null>(null)
 	let showAclModal = $state(false)
 
 	const messagePageSize = 60
+	const summaryTaskNames = [
+		'chat.summarize_messages',
+		'chat.condense_summaries',
+		'thread.maintenance',
+	]
+
+	const activeSummaries = $derived(
+		summaries.filter((summary) => summary.superseded_by_id == null)
+	)
+	const supersededSummaries = $derived(
+		summaries.filter((summary) => summary.superseded_by_id != null)
+	)
+	const currentBranchSummary = $derived(
+		activeSummaries.find(
+			(summary) =>
+				thread?.current_message_id && summary.end_message_id === thread.current_message_id
+		) ?? null
+	)
+	const compactionSummaries = $derived(
+		activeSummaries.filter((summary) => summary.id !== currentBranchSummary?.id)
+	)
+	const summaryTasks = $derived(threadTasks.filter((task) => isSummaryTask(task)))
 
 	type ThreadWithDeletedAt = Thread & { deleted_at?: string | null }
 
@@ -85,7 +130,7 @@
 
 	function exportJson() {
 		if (!thread) return
-		const payload = { thread, messages }
+		const payload = { thread, messages, summaries, tasks: threadTasks }
 		const name = (thread.title ?? thread.id).replace(/[^a-zA-Z0-9_-]/g, '_')
 		downloadBlob(JSON.stringify(payload, null, 2), `thread-${name}.json`, 'application/json')
 	}
@@ -130,6 +175,60 @@
 
 	function errorMessage(e: unknown): string {
 		return e instanceof Error ? e.message : String(e)
+	}
+
+	function formatDate(value: string | null | undefined): string {
+		if (!value) return 'never'
+		const date = new Date(value)
+		if (Number.isNaN(date.getTime())) return 'unknown'
+		return date.toLocaleString()
+	}
+
+	function metadataString(task: Task, key: string): string | null {
+		const value = task.metadata_?.[key]
+		return typeof value === 'string' && value.trim() ? value : null
+	}
+
+	function taskName(task: Task): string {
+		return metadataString(task, 'task_name') ?? task.task_type.replaceAll('_', ' ')
+	}
+
+	function isSummaryTask(task: Task): boolean {
+		const name = metadataString(task, 'task_name')
+		return name != null && summaryTaskNames.includes(name)
+	}
+
+	function taskResultText(task: Task): string | null {
+		if (!task.result) return null
+		return JSON.stringify(task.result, null, 2)
+	}
+
+	function summaryRange(summary: ThreadSummaryRecord): string {
+		if (!summary.start_message_id && !summary.end_message_id) return 'unbound range'
+		return `${summary.start_message_id ?? 'start'} -> ${summary.end_message_id ?? 'end'}`
+	}
+
+	function summaryStateLabel(summary: ThreadSummaryRecord): string {
+		if (summary.superseded_by_id) return 'superseded'
+		if (thread?.current_message_id && summary.end_message_id === thread.current_message_id)
+			return 'current branch'
+		return 'active compaction'
+	}
+
+	function summaryStateClass(summary: ThreadSummaryRecord): string {
+		if (summary.superseded_by_id) return 'border-zinc-700 bg-zinc-800/70 text-zinc-300'
+		if (thread?.current_message_id && summary.end_message_id === thread.current_message_id)
+			return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+		return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+	}
+
+	function taskStatusClass(task: Task): string {
+		if (task.status === 'running') return 'border-lime-500/20 bg-lime-500/10 text-lime-300'
+		if (task.status === 'pending') return 'border-sky-500/20 bg-sky-500/10 text-sky-300'
+		if (task.status === 'complete')
+			return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+		if (task.status === 'failed') return 'border-red-500/20 bg-red-500/10 text-red-300'
+		return 'border-zinc-600/40 bg-zinc-700/40 text-zinc-300'
 	}
 
 	function contentToText(message: Message) {
@@ -216,6 +315,52 @@
 		}
 	}
 
+	async function loadThreadSummaries(id: string) {
+		isLoadingSummaries = true
+		summariesError = null
+		summaries = []
+
+		try {
+			summaries = unwrap(
+				await api.GET('/v1/threads/{thread_id}/summaries', {
+					params: {
+						path: { thread_id: id },
+						query: { include_superseded: true },
+					},
+				})
+			)
+		} catch (e: unknown) {
+			summariesError = errorMessage(e) || 'failed to load summaries'
+		} finally {
+			isLoadingSummaries = false
+		}
+	}
+
+	async function loadThreadTasks(id: string) {
+		isLoadingTasks = true
+		tasksError = null
+		threadTasks = []
+
+		try {
+			threadTasks = unwrap(
+				await api.GET('/v1/tasks', {
+					params: {
+						query: {
+							spawned_thread_id: id,
+							limit: 100,
+							sort_by: 'last_event_at',
+							sort_dir: 'desc',
+						},
+					},
+				})
+			)
+		} catch (e: unknown) {
+			tasksError = errorMessage(e) || 'failed to load tasks'
+		} finally {
+			isLoadingTasks = false
+		}
+	}
+
 	async function loadOlderMessages() {
 		if (!threadId) return
 		if (!messageHasMore) return
@@ -279,10 +424,19 @@
 		messageSkip = 0
 		messageHasMore = true
 		messageError = null
+		summaries = []
+		summariesError = null
+		threadTasks = []
+		tasksError = null
 		activeTab = 'tree'
 		allMessagesLoaded = false
 
-		Promise.all([loadThreadMeta(threadId), loadLatestMessages(threadId)])
+		Promise.all([
+			loadThreadMeta(threadId),
+			loadLatestMessages(threadId),
+			loadThreadSummaries(threadId),
+			loadThreadTasks(threadId),
+		])
 			.then(() => {
 				void loadAllMessages()
 			})
@@ -486,8 +640,19 @@
 										<GitBranch class="h-3.5 w-3.5" />
 										tree
 									</button>
+									<button
+										class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors {activeTab ===
+										'summaries'
+											? 'bg-zinc-800 text-zinc-100'
+											: 'text-zinc-400 hover:text-zinc-200'}"
+										onclick={() => (activeTab = 'summaries')}
+									>
+										<Brain class="h-3.5 w-3.5" />
+										summaries
+									</button>
 									<span class="ml-auto text-xs text-zinc-500">
-										{messages.length} loaded{messageHasMore ? '+' : ''}
+										{messages.length} messages{messageHasMore ? '+' : ''} / {summaries.length}
+										summaries
 									</span>
 								</div>
 
@@ -581,6 +746,285 @@
 											/>
 										</div>
 									{/if}
+								{/if}
+
+								<!-- summaries tab -->
+								{#if activeTab === 'summaries'}
+									<div class="max-h-[60vh] space-y-4 overflow-y-auto p-4">
+										{#if summariesError || tasksError}
+											<div
+												class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
+											>
+												{summariesError ?? tasksError}
+											</div>
+										{/if}
+
+										<div class="grid gap-2 sm:grid-cols-3">
+											<div
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<div class="text-xs text-zinc-500">
+													active summaries
+												</div>
+												<div
+													class="mt-1 text-2xl font-semibold tabular-nums"
+												>
+													{activeSummaries.length}
+												</div>
+											</div>
+											<div
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<div class="text-xs text-zinc-500">
+													superseded summaries
+												</div>
+												<div
+													class="mt-1 text-2xl font-semibold tabular-nums"
+												>
+													{supersededSummaries.length}
+												</div>
+											</div>
+											<div
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<div class="text-xs text-zinc-500">
+													related tasks
+												</div>
+												<div
+													class="mt-1 text-2xl font-semibold tabular-nums"
+												>
+													{summaryTasks.length}
+												</div>
+											</div>
+										</div>
+
+										<div
+											class="rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+										>
+											<div
+												class="mb-3 flex items-center justify-between gap-3"
+											>
+												<div>
+													<div class="text-sm font-medium">
+														current branch summary
+													</div>
+													<div class="text-xs text-zinc-500">
+														maintenance summary used for thread metadata
+														and recall.
+													</div>
+												</div>
+												{#if isLoadingSummaries}
+													<LoaderCircle
+														class="h-4 w-4 animate-spin text-zinc-500"
+													/>
+												{/if}
+											</div>
+											{#if currentBranchSummary}
+												<div class="space-y-3">
+													<div
+														class="flex flex-wrap items-center gap-2 text-xs text-zinc-500"
+													>
+														<span
+															class="rounded-md border px-2 py-0.5 {summaryStateClass(
+																currentBranchSummary
+															)}"
+														>
+															{summaryStateLabel(
+																currentBranchSummary
+															)}
+														</span>
+														<span>{currentBranchSummary.type}</span>
+														<span
+															>{currentBranchSummary.message_count} messages</span
+														>
+														<span
+															>{summaryRange(
+																currentBranchSummary
+															)}</span
+														>
+														<span
+															>{formatDate(
+																currentBranchSummary.updated_at
+															)}</span
+														>
+													</div>
+													<pre
+														class="max-h-56 overflow-auto rounded-xl border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs whitespace-pre-wrap text-zinc-100">{currentBranchSummary.content}</pre>
+												</div>
+											{:else}
+												<div
+													class="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500"
+												>
+													no current branch summary
+												</div>
+											{/if}
+										</div>
+
+										<div class="space-y-2">
+											<div class="text-sm font-medium">
+												active compaction summaries
+											</div>
+											{#if compactionSummaries.length === 0 && !isLoadingSummaries}
+												<div
+													class="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500"
+												>
+													no live compaction summaries
+												</div>
+											{/if}
+											{#each compactionSummaries as summary (summary.id)}
+												<div
+													class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+												>
+													<div
+														class="mb-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500"
+													>
+														<span
+															class="rounded-md border px-2 py-0.5 {summaryStateClass(
+																summary
+															)}"
+														>
+															{summaryStateLabel(summary)}
+														</span>
+														<span>{summary.type}</span>
+														<span>{summary.message_count} messages</span
+														>
+														<span>{summaryRange(summary)}</span>
+														<span>{formatDate(summary.created_at)}</span
+														>
+													</div>
+													<pre
+														class="max-h-40 overflow-auto font-mono text-xs whitespace-pre-wrap text-zinc-100">{summary.content}</pre>
+												</div>
+											{/each}
+										</div>
+
+										<div class="space-y-2">
+											<div class="text-sm font-medium">summary tasks</div>
+											{#if isLoadingTasks}
+												<div
+													class="flex items-center gap-2 text-xs text-zinc-500"
+												>
+													<LoaderCircle
+														class="h-3.5 w-3.5 animate-spin"
+													/>
+													loading tasks...
+												</div>
+											{:else if summaryTasks.length === 0}
+												<div
+													class="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500"
+												>
+													no summary tasks found
+												</div>
+											{/if}
+											{#each summaryTasks as task (task.id)}
+												{@const resultText = taskResultText(task)}
+												<div
+													class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+												>
+													<div
+														class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+													>
+														<div class="min-w-0 space-y-1">
+															<div
+																class="flex flex-wrap items-center gap-2"
+															>
+																<span class="text-sm font-medium"
+																	>{taskName(task)}</span
+																>
+																<span
+																	class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs {taskStatusClass(
+																		task
+																	)}"
+																>
+																	{#if task.status === 'running'}
+																		<LoaderCircle
+																			class="h-3 w-3 animate-spin"
+																		/>
+																	{:else if task.status === 'complete'}
+																		<CheckCircle2
+																			class="h-3 w-3"
+																		/>
+																	{:else if task.status === 'failed'}
+																		<AlertTriangle
+																			class="h-3 w-3"
+																		/>
+																	{:else if task.status === 'cancelled'}
+																		<Ban class="h-3 w-3" />
+																	{:else if task.status === 'pending'}
+																		<Clock3 class="h-3 w-3" />
+																	{:else}
+																		<Circle class="h-3 w-3" />
+																	{/if}
+																	{task.status}
+																</span>
+															</div>
+															<div
+																class="flex flex-wrap gap-2 text-xs text-zinc-500"
+															>
+																<span>{task.id}</span>
+																{#if task.stage}<span
+																		>{task.stage}</span
+																	>{/if}
+																<span
+																	>{formatDate(
+																		task.last_event_at ??
+																			task.updated_at
+																	)}</span
+																>
+															</div>
+														</div>
+														{#if typeof task.progress === 'number'}
+															<div
+																class="text-xs text-zinc-500 tabular-nums"
+															>
+																{task.progress}%
+															</div>
+														{/if}
+													</div>
+													{#if resultText}
+														<pre
+															class="mt-3 max-h-32 overflow-auto rounded-xl border border-zinc-800 bg-zinc-900 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">{resultText}</pre>
+													{/if}
+												</div>
+											{/each}
+										</div>
+
+										{#if supersededSummaries.length > 0}
+											<details
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<summary
+													class="cursor-pointer text-sm font-medium text-zinc-300"
+												>
+													superseded summary history
+												</summary>
+												<div class="mt-3 space-y-2">
+													{#each supersededSummaries as summary (summary.id)}
+														<div
+															class="rounded-xl border border-zinc-800 bg-zinc-900 p-3"
+														>
+															<div
+																class="mb-2 flex flex-wrap gap-2 text-xs text-zinc-500"
+															>
+																<span>{summary.type}</span>
+																<span
+																	>{summary.message_count} messages</span
+																>
+																<span>{summaryRange(summary)}</span>
+																{#if summary.superseded_by_id}
+																	<span
+																		>replaced by {summary.superseded_by_id}</span
+																	>
+																{/if}
+															</div>
+															<pre
+																class="max-h-32 overflow-auto font-mono text-xs whitespace-pre-wrap text-zinc-300">{summary.content}</pre>
+														</div>
+													{/each}
+												</div>
+											</details>
+										{/if}
+									</div>
 								{/if}
 							</div>
 						</div>
