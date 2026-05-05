@@ -98,4 +98,5 @@ coverage/
 *.bak
 *.tmp
 *.temp
+.openapi-schema.json
 /temp
