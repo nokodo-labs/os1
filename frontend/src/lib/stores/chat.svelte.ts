@@ -358,6 +358,8 @@ class ChatStore {
 	pendingChatStart = $state<PendingChatStart | null>(null)
 	pendingCreateAndRun = $state<PendingCreateAndRun | null>(null)
 	isLoadingThreads = $state(false)
+	isLoadingMoreThreads = $state(false)
+	hasMoreThreads = $state(false)
 
 	/** unread message counts per thread id (only threads with unread > 0) */
 	readonly unreadCounts = new SvelteMap<string, number>()
@@ -366,6 +368,8 @@ class ChatStore {
 	readonly drafts = new SvelteMap<string, string>()
 
 	#unsubscribe: (() => void) | null = null
+	#threadPaginationLimit = 25
+	#threadPaginationSkip = 0
 
 	getDraft = (key: string): string => {
 		return this.drafts.get(key) ?? ''
@@ -501,6 +505,10 @@ class ChatStore {
 		this.pendingChatStart = null
 		this.pendingCreateAndRun = null
 		this.isLoadingThreads = false
+		this.isLoadingMoreThreads = false
+		this.hasMoreThreads = false
+		this.#threadPaginationLimit = 25
+		this.#threadPaginationSkip = 0
 		this.drafts.clear()
 		this.unreadCounts.clear()
 	}
@@ -568,10 +576,15 @@ class ChatStore {
 		const token = getAccessToken()
 		if (!token) {
 			this.recentThreads = []
+			this.hasMoreThreads = false
+			this.#threadPaginationSkip = 0
 			return
 		}
 
 		const userId = getJwtUserId(token)
+		const limit = options?.limit ?? 20
+		this.#threadPaginationLimit = limit
+		this.#threadPaginationSkip = 0
 		this.isLoadingThreads = true
 
 		try {
@@ -580,7 +593,7 @@ class ChatStore {
 					query: {
 						owner_id: userId,
 						is_archived: false,
-						limit: options?.limit ?? 20,
+						limit,
 						skip: 0,
 						sort_by: 'last_activity_at',
 						sort_dir: 'desc',
@@ -588,11 +601,53 @@ class ChatStore {
 				},
 			})
 
-			this.recentThreads = data ?? []
+			const threads = data ?? []
+			this.recentThreads = threads
+			for (const thread of threads) this.threadCache.set(thread)
+			this.#threadPaginationSkip = threads.length
+			this.hasMoreThreads = threads.length === limit
 			// fetch unread counts alongside thread list
 			void this.fetchUnreadCounts()
 		} finally {
 			this.isLoadingThreads = false
+		}
+	}
+
+	loadMoreThreads = async (options?: { limit?: number }): Promise<void> => {
+		const token = getAccessToken()
+		if (!token) return
+		if (this.isLoadingThreads || this.isLoadingMoreThreads || !this.hasMoreThreads) return
+
+		const userId = getJwtUserId(token)
+		const limit = options?.limit ?? this.#threadPaginationLimit
+		const skip = this.#threadPaginationSkip
+		this.#threadPaginationLimit = limit
+		this.isLoadingMoreThreads = true
+
+		try {
+			const { data, error } = await api.GET('/v1/threads', {
+				params: {
+					query: {
+						owner_id: userId,
+						is_archived: false,
+						limit,
+						skip,
+						sort_by: 'last_activity_at',
+						sort_dir: 'desc',
+					},
+				},
+			})
+
+			if (error || !data) return
+
+			const existingThreadIds = new Set(this.recentThreads.map((thread) => thread.id))
+			const nextThreads = data.filter((thread) => !existingThreadIds.has(thread.id))
+			for (const thread of data) this.threadCache.set(thread)
+			this.recentThreads = [...this.recentThreads, ...nextThreads]
+			this.#threadPaginationSkip += data.length
+			this.hasMoreThreads = data.length === limit
+		} finally {
+			this.isLoadingMoreThreads = false
 		}
 	}
 }

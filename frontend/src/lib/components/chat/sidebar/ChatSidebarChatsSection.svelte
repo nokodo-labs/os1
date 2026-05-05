@@ -1,24 +1,70 @@
 <script lang="ts">
+	import { tick } from 'svelte'
+
 	import type { Thread } from '$lib/stores/chat.svelte'
 
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 
 	import ChatSidebarThreadRow from './ChatSidebarThreadRow.svelte'
 
-	export let expandedContentVisible: boolean
+	interface Props {
+		expandedContentVisible: boolean
+		isLoggedIn: boolean
+		threads: Thread[]
+		selectedChatId: string | null
+		isLoadingMoreThreads: boolean
+		hasMoreThreads: boolean
+		openThreadMenuId: string | null
+		onPrefetchThread: (threadId: string) => void
+		onOpenThread: (threadId: string) => void | Promise<void>
+		onLoadMoreThreads: () => void | Promise<void>
+		onToggleMenu: (threadId: string) => void
+		onCloseMenu: () => void
+		onRequestEdit: (thread: Thread) => void
+		onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
+	}
 
-	export let isLoggedIn: boolean
-	export let threads: Thread[]
-	export let selectedChatId: string | null
+	let {
+		expandedContentVisible,
+		isLoggedIn,
+		threads,
+		selectedChatId,
+		isLoadingMoreThreads,
+		hasMoreThreads,
+		openThreadMenuId,
+		onPrefetchThread,
+		onOpenThread,
+		onLoadMoreThreads,
+		onToggleMenu,
+		onCloseMenu,
+		onRequestEdit,
+		onDeleteThread,
+	}: Props = $props()
 
-	export let openThreadMenuId: string | null
-	export let onPrefetchThread: (threadId: string) => void
-	export let onOpenThread: (threadId: string) => void | Promise<void>
+	const LOAD_MORE_THRESHOLD_PX = 240
 
-	export let onToggleMenu: (threadId: string) => void
-	export let onCloseMenu: () => void
-	export let onRequestEdit: (thread: Thread) => void
-	export let onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
+	let scrollContainer = $state<HTMLDivElement | null>(null)
+
+	function requestLoadMoreThreads(): void {
+		if (!scrollContainer || !isLoggedIn || !hasMoreThreads || isLoadingMoreThreads) return
+		const remaining =
+			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight
+		if (remaining > LOAD_MORE_THRESHOLD_PX) return
+		void onLoadMoreThreads()
+	}
+
+	$effect(() => {
+		void threads.length
+		void expandedContentVisible
+		void hasMoreThreads
+		void isLoadingMoreThreads
+		if (!expandedContentVisible || !hasMoreThreads || isLoadingMoreThreads) return
+		void (async () => {
+			await tick()
+			requestLoadMoreThreads()
+		})()
+	})
 </script>
 
 <!-- Chats Section -->
@@ -34,7 +80,11 @@
 		></div>
 	</div>
 	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-		<div class="min-h-0 flex-1 overflow-y-auto">
+		<div
+			bind:this={scrollContainer}
+			class="min-h-0 flex-1 overflow-y-auto"
+			onscroll={requestLoadMoreThreads}
+		>
 			<div class="flex min-h-full flex-col space-y-0.5 px-3">
 				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
 					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
@@ -72,6 +122,11 @@
 							/>
 						</div>
 					{/each}
+					{#if isLoadingMoreThreads}
+						<div class="text-foreground/45 px-2 py-3 text-center text-xs font-medium">
+							<ShimmerText className="inline-block">loading more chats</ShimmerText>
+						</div>
+					{/if}
 				{/if}
 			</div>
 		</div>

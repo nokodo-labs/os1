@@ -57,6 +57,7 @@
 	let showTopLabels = $state(false)
 	let renderExpandedContent = $state(sidebar.isChatSidebarOpen)
 	let expandedContentVisible = $state(false)
+	let didRequestInitialThreads = $state(false)
 
 	$effect(() => {
 		const isOpen = sidebar.isChatSidebarOpen
@@ -146,7 +147,17 @@
 	]
 
 	$effect(() => {
-		if (session.isLoggedIn) void chat.refreshThreads({ limit: 25 })
+		if (!session.isLoggedIn) {
+			didRequestInitialThreads = false
+			return
+		}
+		if (didRequestInitialThreads) return
+		didRequestInitialThreads = true
+		if (chat.recentThreads.length === 0) {
+			void chat.refreshThreads({ limit: 25 })
+			return
+		}
+		void chat.fetchUnreadCounts()
 	})
 
 	function toggleThreadMenu(threadId: string) {
@@ -341,8 +352,11 @@
 				threads={chat.recentThreads}
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
+				isLoadingMoreThreads={chat.isLoadingMoreThreads}
+				hasMoreThreads={chat.hasMoreThreads}
 				onPrefetchThread={(threadId) => chat.threadCache.prefetchThread(threadId)}
 				onOpenThread={openThread}
+				onLoadMoreThreads={() => chat.loadMoreThreads()}
 				onToggleMenu={toggleThreadMenu}
 				onCloseMenu={closeThreadMenu}
 				onRequestEdit={requestEditThread}
