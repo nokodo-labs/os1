@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.plugin import Plugin, PluginType
-from api.schemas.plugin import PluginCreate
+from api.schemas.plugin import PluginCreate, PluginListFilters
 from api.v1.service import plugins as plugin_service
 
 
@@ -246,7 +246,7 @@ async def test_list_plugins_with_native_filters_db_by_type(
 		db_session,
 		principal=_admin,  # type: ignore[arg-type]
 		include_native=True,
-		plugin_type="tool",
+		filters=PluginListFilters(plugin_type="tool"),
 	)
 	assert any(p.is_native for p in filtered)
 	assert [p for p in filtered if not p.is_native and p.name == "db-tool"]
@@ -294,7 +294,7 @@ async def test_list_plugins_with_native_merges_db_plugins(
 		db_session,
 		principal=_admin,  # type: ignore[arg-type]
 		include_native=True,
-		plugin_type="tool",
+		filters=PluginListFilters(plugin_type="tool"),
 	)
 	assert {p.type for p in only_tools} == {"tool"}
 	assert all(p.name == "db-tool" for p in only_tools)

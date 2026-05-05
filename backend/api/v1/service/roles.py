@@ -11,11 +11,13 @@ from api.models.event_types import EventType
 from api.models.many_to_many import user_role_association
 from api.models.role import Role
 from api.models.user import User
-from api.permissions import DefaultPermissions
-from api.schemas.role import RoleCreate, RoleUpdate
+from api.schemas.role import RoleCreate, RoleListFilters, RoleUpdate
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authorization import (
+	invalidate_accessible_users_for_subject,
+	require_permission,
+)
 from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID
 
@@ -33,20 +35,21 @@ async def _role_member_ids(role_id: TypeID, session: AsyncSession) -> list[TypeI
 async def list_roles(
 	session: AsyncSession,
 	principal: Principal,
+	filters: RoleListFilters | None = None,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: str = "priority",
 	sort_dir: SortDir = "desc",
-	user_id: TypeID | None = None,
 ) -> list[Role]:
 	"""list all roles (requires roles:read permission)."""
 	require_permission(principal, "roles:read")
+	role_filters = filters or RoleListFilters()
 	stmt = select(Role)
-	if user_id is not None:
+	if role_filters.user_id is not None:
 		stmt = stmt.join(
 			user_role_association,
 			user_role_association.c.role_id == Role.id,
-		).where(user_role_association.c.user_id == user_id)
+		).where(user_role_association.c.user_id == role_filters.user_id)
 	stmt = (
 		apply_sort(
 			stmt,
@@ -125,18 +128,25 @@ async def update_role(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="role not found",
 		)
-	update_data = role_in.model_dump(exclude_unset=True, by_alias=True)
-	for field, value in update_data.items():
-		if field == "default_permissions" and value is not None:
-			dp = DefaultPermissions.model_validate(value)
-			role.default_permissions = dp.model_dump(
-				mode="json",
-				exclude_none=True,
-			)
-		else:
-			setattr(role, field, value)
+	changed = role_in.model_fields_set
+	default_permissions_changed = False
+	if "name" in changed and role_in.name is not None:
+		role.name = role_in.name
+	if "description" in changed:
+		role.description = role_in.description
+	if "quotas" in changed and role_in.quotas is not None:
+		role.quotas = role_in.quotas
+	if "priority" in changed and role_in.priority is not None:
+		role.priority = role_in.priority
+	if "default_permissions" in changed and role_in.default_permissions is not None:
+		role.set_default_permissions(role_in.default_permissions)
+		default_permissions_changed = True
+	if "metadata" in changed and role_in.metadata is not None:
+		role.metadata_ = role_in.metadata
 	await session.commit()
 	await session.refresh(role)
+	if default_permissions_changed:
+		await invalidate_accessible_users_for_subject("role", role_id, session)
 	return role
 
 
@@ -155,6 +165,7 @@ async def delete_role(
 		)
 	# resolve affected users before deletion
 	member_ids = await _role_member_ids(role_id, session)
+	await invalidate_accessible_users_for_subject("role", role_id, session)
 	await session.delete(role)
 	await session.commit()
 
@@ -232,6 +243,7 @@ async def set_role_members(
 			[{"role_id": role_id, "user_id": uid} for uid in user_ids],
 		)
 	await session.commit()
+	await invalidate_accessible_users_for_subject("role", role_id, session)
 
 	# notify all affected users (old + new members) so frontends refresh
 	all_affected = set(old_member_ids) | set(user_ids)

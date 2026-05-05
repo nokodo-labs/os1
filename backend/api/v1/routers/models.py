@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.model import Model
 from api.schemas.model import Model as ModelSchema
-from api.schemas.model import ModelCreate, ModelUpdate
+from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
 from api.v1.service import models as model_service
 from api.v1.service.auth import Principal, get_current_principal, require_admin
 
@@ -32,14 +34,14 @@ async def create_model(
 
 @router.get("", response_model=list[ModelSchema])
 async def list_models(
-	provider_id: str | None = None,
+	filters: Annotated[ModelListFilters, Depends()],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Model]:
 	"""List models with optional provider filter."""
 	return await model_service.list_models(
 		db,
-		provider_id=provider_id,
+		filters=filters,
 		principal=principal,
 	)
 

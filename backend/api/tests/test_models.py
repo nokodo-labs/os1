@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.base import StringEnum
 from api.models.model import ModelType
 from api.models.user import User
-from api.schemas.model import ModelCreate, ModelUpdate
+from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
 from api.schemas.provider import ProviderCreate
 from api.v1.service import models as model_service
 from api.v1.service import providers as provider_service
@@ -87,12 +87,16 @@ async def test_list_models(db_session: AsyncSession) -> None:
 	assert len(models) >= 1
 
 	models_filtered = await model_service.list_models(
-		db_session, provider_id=provider.id, principal=admin
+		db_session,
+		filters=ModelListFilters(provider_id=str(provider.id)),
+		principal=admin,
 	)
 	assert len(models_filtered) >= 1
 
 	models_empty = await model_service.list_models(
-		db_session, provider_id="nonexistent", principal=admin
+		db_session,
+		filters=ModelListFilters(provider_id="nonexistent"),
+		principal=admin,
 	)
 	assert len(models_empty) == 0
 

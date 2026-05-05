@@ -17,7 +17,7 @@ from api.database import build_cursor_page, decode_cursor
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.memory import Memory
-from api.schemas.memory import MemoryCreate, MemoryUpdate
+from api.schemas.memory import MemoryCreate, MemoryListFilters, MemoryUpdate
 from api.schemas.search import (
 	CursorPage,
 	SearchMode,
@@ -44,10 +44,12 @@ from api.v1.service.vectorize import (
 from nokodo_ai.messages import SystemMessage, UserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
 
 _POST_PROCESSING_PROMPT = """\
 you are a memory maintenance agent. you receive:
@@ -126,7 +128,7 @@ async def create_memory(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.MEMORY_CREATED,
-		data={"memory_id": str(memory_id)},
+		data={"id": str(memory_id)},
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -143,19 +145,21 @@ async def create_memory(
 async def list_memories(
 	session: AsyncSession,
 	principal: Principal,
-	user_id: TypeID,
+	filters: MemoryListFilters,
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
-	search: str | None = None,
 ) -> list[Memory]:
+	user_id = filters.user_id
 	if not principal.is_admin:
 		user_id = TypeID(principal.user.id)
 
 	base = select(Memory).where(Memory.user_id == user_id)
-	if search:
-		base = base.where(Memory.content.ilike(f"%{search}%"))
+	if filters.search:
+		base = base.where(
+			Memory.content.ilike(contains_pattern(filters.search), escape="\\")
+		)
 
 	stmt = (
 		apply_sort(
@@ -208,7 +212,7 @@ async def update_memory(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.MEMORY_UPDATED,
-		data={"memory_id": str(memory_id)},
+		data={"id": str(memory_id)},
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -237,7 +241,7 @@ async def delete_memory(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.MEMORY_DELETED,
-		data={"memory_id": str(memory_id)},
+		data={"id": str(memory_id)},
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -348,12 +352,13 @@ async def _autocomplete_memories(
 	limit: int = 5,
 ) -> list[SearchResultItem]:
 	"""pg_trgm autocomplete for memories on content."""
+	pattern = contains_pattern(q)
 	stmt = (
 		select(Memory)
 		.where(
 			or_(
 				func.similarity(Memory.content, q) > 0.1,
-				Memory.content.ilike(f"%{q}%"),
+				Memory.content.ilike(pattern, escape="\\"),
 			),
 		)
 		.order_by(func.similarity(Memory.content, q).desc())

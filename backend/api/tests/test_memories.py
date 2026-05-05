@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.schemas.memory import MemoryCreate
+from api.schemas.memory import MemoryCreate, MemoryListFilters
 from api.schemas.user import UserCreate
 from api.settings import settings
 from api.v1.service import memories as memory_service
@@ -61,8 +61,8 @@ async def test_list_memories(db_session: AsyncSession, memory_user: Any) -> None
 
 	memories = await memory_service.list_memories(
 		db_session,
-		user_id=memory_user.id,
 		principal=principal,
+		filters=MemoryListFilters(user_id=memory_user.id),
 	)
 	assert len(memories) >= 3
 
@@ -205,7 +205,7 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 	listed = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		user_id=TypeID(other.id),
+		filters=MemoryListFilters(user_id=TypeID(other.id)),
 	)
 	assert listed and listed[0].id == memory.id
 
@@ -258,6 +258,6 @@ async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> 
 	memories = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		user_id=TypeID(other.id),
+		filters=MemoryListFilters(user_id=TypeID(other.id)),
 	)
 	assert memories and all(mem.user_id == owner.id for mem in memories)

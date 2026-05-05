@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,7 @@ from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
 from api.schemas.group import Group as GroupSchema
 from api.schemas.group import (
 	GroupCreate,
+	GroupListFilters,
 	GroupMembershipCreate,
 	GroupMembershipResponse,
 	GroupSortBy,
@@ -31,11 +34,11 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 @router.get("", response_model=list[GroupSchema])
 async def read_groups(
+	filters: Annotated[GroupListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: GroupSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
-	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Group]:
@@ -47,7 +50,7 @@ async def read_groups(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		member_user_id=user_id,
+		filters=filters,
 	)
 
 

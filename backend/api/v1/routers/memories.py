@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,12 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 )
 from api.schemas.memory import Memory as MemorySchema
-from api.schemas.memory import MemoryCreate, MemorySortBy, MemoryUpdate
+from api.schemas.memory import (
+	MemoryCreate,
+	MemoryListFilters,
+	MemorySortBy,
+	MemoryUpdate,
+)
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
@@ -70,12 +77,11 @@ async def create_memory(
 
 @router.get("", response_model=list[MemorySchema])
 async def list_memories(
-	user_id: TypeID,
+	filters: Annotated[MemoryListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: MemorySortBy = "updated_at",
 	sort_dir: SortDir = "desc",
-	search: str | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[MemorySchema]:
@@ -83,12 +89,11 @@ async def list_memories(
 	items = await memory_service.list_memories(
 		db,
 		principal=principal,
-		user_id=user_id,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		search=search,
 	)
 	return [MemorySchema.model_validate(m) for m in items]
 

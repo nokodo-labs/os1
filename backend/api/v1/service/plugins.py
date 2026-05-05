@@ -9,7 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.plugin import Plugin
-from api.schemas.plugin import PluginCreate, PluginInfo, PluginTypeStr, PluginUpdate
+from api.schemas.plugin import (
+	PluginCreate,
+	PluginInfo,
+	PluginListFilters,
+	PluginTypeStr,
+	PluginUpdate,
+)
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 from api.v1.service.chat.filters import (
@@ -170,7 +176,7 @@ async def list_plugins(
 	session: AsyncSession,
 	principal: Principal,
 	include_native: Literal[False] = ...,
-	plugin_type: PluginTypeFilter = ...,
+	filters: PluginListFilters | None = ...,
 	skip: int = ...,
 	limit: int = ...,
 ) -> list[Plugin]: ...
@@ -181,7 +187,7 @@ async def list_plugins(
 	session: AsyncSession,
 	principal: Principal,
 	include_native: Literal[True],
-	plugin_type: PluginTypeFilter = ...,
+	filters: PluginListFilters | None = ...,
 	skip: int = ...,
 	limit: int = ...,
 ) -> list[PluginInfo]: ...
@@ -191,7 +197,7 @@ async def list_plugins(
 	session: AsyncSession,
 	principal: Principal,
 	include_native: bool = False,
-	plugin_type: PluginTypeFilter = None,
+	filters: PluginListFilters | None = None,
 	skip: int = 0,
 	limit: int = 50,
 ) -> list[Plugin] | list[PluginInfo]:
@@ -201,20 +207,21 @@ async def list_plugins(
 	when include_native is True, returns a merged list of PluginInfo (native + db).
 	"""
 	require_permission(principal, "plugins:read")
+	plugin_filters = filters or PluginListFilters()
 
 	if not include_native:
 		stmt = select(Plugin).order_by(Plugin.created_at.desc())
-		if plugin_type is not None:
-			stmt = stmt.where(Plugin.type == plugin_type)
+		if plugin_filters.plugin_type is not None:
+			stmt = stmt.where(Plugin.type == plugin_filters.plugin_type)
 		result = await session.execute(stmt.offset(skip).limit(limit))
 		return list(result.scalars().all())
 
 	# merged mode: native + database as PluginInfo
-	plugins: list[PluginInfo] = _list_native(plugin_type)
+	plugins: list[PluginInfo] = _list_native(plugin_filters.plugin_type)
 
 	stmt = select(Plugin).order_by(Plugin.created_at.desc())
-	if plugin_type is not None:
-		stmt = stmt.where(Plugin.type == plugin_type)
+	if plugin_filters.plugin_type is not None:
+		stmt = stmt.where(Plugin.type == plugin_filters.plugin_type)
 	result = await session.execute(stmt)
 
 	for db_plugin in result.scalars().all():

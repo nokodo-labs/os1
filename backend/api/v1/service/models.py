@@ -14,15 +14,12 @@ from sqlalchemy.orm import selectinload
 
 from api.models.model import InputModality, Model, ModelType
 from api.models.provider import Provider, ProviderStatus
-from api.schemas.model import ModelCreate, ModelUpdate
+from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 
 
 logger = logging.getLogger(__name__)
-
-
-# -- fetched model data -------------------------------------------------------
 
 
 @dataclass
@@ -38,7 +35,7 @@ class FetchedModel:
 	output_cost: float | None = None
 
 
-# -- defaults ------------------------------------------------------------------
+# defaults
 
 
 def _default_input_modalities(model_type: str) -> list[str]:
@@ -117,7 +114,7 @@ def _merge_headers(
 	return headers
 
 
-# -- openai model type inference -----------------------------------------------
+# openai model type inference
 
 
 def _infer_openai_model_type(model_id: str) -> ModelType:
@@ -147,7 +144,7 @@ def _infer_openai_modalities(model_id: str, model_type: ModelType) -> list[str]:
 	return _default_input_modalities(model_type.value)
 
 
-# -- openai parser -------------------------------------------------------------
+# openai parser
 
 
 def _parse_openai_models_payload(payload: object) -> list[FetchedModel]:
@@ -177,7 +174,7 @@ def _parse_openai_models_payload(payload: object) -> list[FetchedModel]:
 	return results
 
 
-# -- anthropic parser ----------------------------------------------------------
+# anthropic parser
 
 
 def _parse_anthropic_models_payload(
@@ -216,7 +213,7 @@ def _parse_anthropic_models_payload(
 	)
 
 
-# -- google parser -------------------------------------------------------------
+# google parser
 
 
 def _infer_google_model_type(
@@ -300,7 +297,7 @@ def _parse_google_models_payload(
 	)
 
 
-# -- fetch functions -----------------------------------------------------------
+# fetch functions
 
 
 async def _fetch_openai_compatible_models(
@@ -358,7 +355,7 @@ async def _fetch_google_models(
 		params["pageToken"] = next_token
 
 
-# -- autofetch sync ------------------------------------------------------------
+# autofetch sync
 
 
 def _is_valid_autofetch_provider(provider: Provider) -> bool:
@@ -528,7 +525,7 @@ async def _fetch_models_for_provider(
 	)
 
 
-# -- CRUD helpers --------------------------------------------------------------
+# CRUD helpers
 
 
 async def _ensure_provider(
@@ -644,18 +641,19 @@ async def create_model(
 async def list_models(
 	session: AsyncSession,
 	principal: Principal,
-	provider_id: str | None = None,
+	filters: ModelListFilters | None = None,
 ) -> list[Model]:
 	require_permission(principal, "models:manage")
-	await _sync_autofetched_models(session, provider_id=provider_id)
+	model_filters = filters or ModelListFilters()
+	await _sync_autofetched_models(session, provider_id=model_filters.provider_id)
 	stmt = (
 		select(Model)
 		.options(selectinload(Model.provider))
 		.order_by(Model.created_at.desc())
 	)
 
-	if provider_id:
-		stmt = stmt.where(Model.provider_id == provider_id)
+	if model_filters.provider_id:
+		stmt = stmt.where(Model.provider_id == model_filters.provider_id)
 
 	result = await session.execute(stmt)
 	return list(result.scalars().all())

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +11,7 @@ from api.database import get_db
 from api.models.role import Role
 from api.models.user import User
 from api.schemas.role import Role as RoleSchema
-from api.schemas.role import RoleCreate, RoleSortBy, RoleUpdate
+from api.schemas.role import RoleCreate, RoleListFilters, RoleSortBy, RoleUpdate
 from api.schemas.sorting import SortDir
 from api.schemas.user import User as UserSchema
 from api.v1.service import roles as roles_service
@@ -22,11 +24,11 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 
 @router.get("", response_model=list[RoleSchema])
 async def read_roles(
+	filters: Annotated[RoleListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: RoleSortBy = "priority",
 	sort_dir: SortDir = "desc",
-	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Role]:
@@ -38,7 +40,7 @@ async def read_roles(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		user_id=user_id,
+		filters=filters,
 	)
 
 

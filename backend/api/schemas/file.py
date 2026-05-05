@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.models.file import FileSource, FileStatus
 from api.schemas.common import (
@@ -19,6 +19,12 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 type FileSortBy = CommonSortBy | Literal["filename", "size_bytes"]
+
+
+class FileListFilters(BaseModel):
+	"""filters for listing files."""
+
+	project_id: TypeID | None = None
 
 
 class FileBase(MetadataModel):

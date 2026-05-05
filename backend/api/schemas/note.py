@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from api.schemas.sorting import CommonSortBy
@@ -13,6 +13,13 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 type NoteSortBy = CommonSortBy | Literal["title"]
+
+
+class NoteListFilters(BaseModel):
+	"""filters for listing notes."""
+
+	user_id: TypeID | None = None
+	labels: list[str] | None = None
 
 
 class NoteBase(MetadataModel):

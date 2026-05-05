@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.models.model import InputModality, ModelType
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+
+
+class ModelListFilters(BaseModel):
+	"""filters for listing models."""
+
+	provider_id: str | None = None
 
 
 class ModelBase(MetadataModel):

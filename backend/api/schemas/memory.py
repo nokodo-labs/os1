@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Base64Bytes
+from pydantic import Base64Bytes, BaseModel, Field
 
 from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
 from api.schemas.sorting import CommonSortBy
@@ -21,6 +21,13 @@ type MemorySortBy = (
 		"confidence",
 	]
 )
+
+
+class MemoryListFilters(BaseModel):
+	"""filters for listing memories."""
+
+	user_id: TypeID
+	search: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 class MemoryBase(MetadataModel):

@@ -12,7 +12,12 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.group import Group, GroupMembership
 from api.permissions import ResourceType
-from api.schemas.group import GroupCreate, GroupMembershipCreate, GroupUpdate
+from api.schemas.group import (
+	GroupCreate,
+	GroupListFilters,
+	GroupMembershipCreate,
+	GroupUpdate,
+)
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
@@ -28,13 +33,14 @@ from nokodo_ai.utils.typeid import TypeID
 async def list_groups(
 	session: AsyncSession,
 	principal: Principal,
+	filters: GroupListFilters | None = None,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
-	member_user_id: TypeID | None = None,
 ) -> list[Group]:
 	"""list groups accessible by the principal."""
+	group_filters = filters or GroupListFilters()
 	stmt = select(Group).where(
 		resource_access_predicate(
 			principal,
@@ -42,11 +48,11 @@ async def list_groups(
 			required_level=AccessLevel.READER,
 		)
 	)
-	if member_user_id is not None:
+	if group_filters.user_id is not None:
 		stmt = stmt.join(
 			GroupMembership,
 			GroupMembership.group_id == Group.id,
-		).where(GroupMembership.user_id == member_user_id)
+		).where(GroupMembership.user_id == group_filters.user_id)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -122,7 +128,7 @@ async def create_group(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.GROUP_CREATED,
-		data={"group_id": group_id, "name": group.name},
+		data={"id": group_id, "name": group.name},
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -162,7 +168,7 @@ async def update_group(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.GROUP_UPDATED,
-		data={"group_id": group_id, "name": group.name},
+		data={"id": str(group_id), "name": group.name},
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(
@@ -197,7 +203,7 @@ async def delete_group(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.GROUP_DELETED,
-		data={"group_id": group_id},
+		data={"id": str(group_id)},
 		user_id=principal.user_id,
 	)
 	await event_service.publish_event(

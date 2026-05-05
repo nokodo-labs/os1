@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.permissions import DefaultPermissions
 from api.schemas.common import (
@@ -18,6 +18,12 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 type RoleSortBy = CommonSortBy | Literal["priority", "name"]
+
+
+class RoleListFilters(BaseModel):
+	"""filters for listing roles."""
+
+	user_id: TypeID | None = None
 
 
 class RoleBase(MetadataModel):

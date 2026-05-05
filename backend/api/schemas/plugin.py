@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.models.plugin import PluginType
 from api.schemas.common import (
@@ -18,6 +18,12 @@ from nokodo_ai.utils.typeid import TypeID
 
 PluginTypeStr = Literal["tool", "filter", "hook"]
 type PluginTypeFilter = PluginTypeStr | None
+
+
+class PluginListFilters(BaseModel):
+	"""filters for listing plugins."""
+
+	plugin_type: PluginTypeFilter = None
 
 
 class PluginBase(MetadataModel):
