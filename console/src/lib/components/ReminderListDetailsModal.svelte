@@ -3,7 +3,7 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type ReminderList = Schemas['ReminderList']
-	type Reminder = Schemas['Reminder']
+	type Reminder = Schemas['ReminderWithSubtasks']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -90,7 +90,7 @@
 		saveError = null
 		saveSuccess = false
 		try {
-			const r = await api.PATCH('/v1/reminders/lists/{list_id}', {
+			const r = await api.PATCH('/v1/reminder-lists/{list_id}', {
 				params: { path: { list_id: list.id } },
 				body: {
 					name: editName.trim() || undefined,
@@ -118,7 +118,7 @@
 		isDeleting = true
 		deleteError = null
 		try {
-			const r = await api.DELETE('/v1/reminders/lists/{list_id}', {
+			const r = await api.DELETE('/v1/reminder-lists/{list_id}', {
 				params: { path: { list_id: list.id } },
 			})
 			unwrap(r)
@@ -141,7 +141,7 @@
 		isEditing = false
 		reminders = []
 		remindersError = null
-		api.GET('/v1/reminders/lists/{list_id}', { params: { path: { list_id: listId } } })
+		api.GET('/v1/reminder-lists/{list_id}', { params: { path: { list_id: listId } } })
 			.then((r) => unwrap(r))
 			.then((l) => {
 				list = l
@@ -154,10 +154,10 @@
 			})
 		// load reminders for this list
 		isLoadingReminders = true
-		api.GET('/v1/reminders', {
+		api.GET('/v1/reminder-lists/{list_id}/reminders', {
 			params: {
+				path: { list_id: listId },
 				query: {
-					list_id: listId,
 					include_subtasks: true,
 					limit: 100,
 					sort_by: 'position',

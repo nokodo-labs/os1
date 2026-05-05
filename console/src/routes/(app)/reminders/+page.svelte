@@ -5,7 +5,6 @@
 	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
 	type SearchResultItem = Schemas['SearchResultItem']
 
-	import { auth } from '$lib/auth.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListDetailsModal from '$lib/components/ReminderListDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -72,7 +71,9 @@
 		}
 		isSearching = true
 		_searchTimer = setTimeout(() => {
-			api.GET('/v1/reminders/search', { params: { query: { q } } })
+			api.GET('/v1/reminder-lists/search', {
+				params: { query: { q, limit: 20 } },
+			})
 				.then((r) => unwrap(r))
 				.then((page) => {
 					searchResults = page.items
@@ -120,43 +121,20 @@
 		isLoading = true
 		error = null
 
-		Promise.all([
-			api
-				.GET('/v1/reminders/lists', {
-					params: {
-						query: {
-							include_counts: true,
-							sort_by: sortKey,
-							sort_dir: sortDir,
-							limit: 200,
-						},
+		api
+			.GET('/v1/reminder-lists', {
+				params: {
+					query: {
+						include_counts: true,
+						sort_by: sortKey,
+						sort_dir: sortDir,
+						limit: 200,
 					},
-				})
-				.then((r) => unwrap(r)),
-			api
-				.GET('/v1/reminders/counts', {})
-				.then((r) => r.data)
-				.catch(() => undefined),
-		])
-			.then(([listsResult, defaultCounts]) => {
-				const mergedLists = [...listsResult]
-				if (defaultCounts && defaultCounts.total_count > 0) {
-					// @ts-expect-error: We need a synthetic ID for UI logic
-					mergedLists.unshift({
-						id: '',
-						owner_id: auth.user?.id || '',
-						name: 'default list',
-						description: 'reminders without a specific list',
-						position: -1,
-						color: '#52525b', // zinc-500
-						created_at: new Date().toISOString(),
-						updated_at: new Date().toISOString(),
-						total_count: defaultCounts.total_count,
-						pending_count: defaultCounts.pending_count,
-						completed_count: defaultCounts.completed_count,
-					})
-				}
-				lists = mergedLists as typeof lists
+				},
+			})
+			.then((r) => unwrap(r))
+			.then((listsResult) => {
+				lists = listsResult
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load reminder lists'
