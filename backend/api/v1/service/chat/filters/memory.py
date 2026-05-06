@@ -88,8 +88,8 @@ class MemoryContextFilter(Filter):
 		entries = []
 		for mem in memories:
 			entry: dict = {"content": mem.content}
-			if mem.category:
-				entry["category"] = mem.category
+			if mem.tags:
+				entry["tags"] = mem.tags
 			if mem.created_at:
 				entry["created_at"] = mem.created_at.isoformat()
 			if mem.updated_at:
