@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
-	type DefaultPermissions_Output = Schemas['DefaultPermissions-Output']
+	type DefaultPermissions = Schemas['DefaultPermissions']
 	type Role = Schemas['Role']
 	type RoleCreate = Schemas['RoleCreate']
 
@@ -26,14 +25,12 @@
 
 	let name = $state('')
 	let description = $state('')
-	let defaultPermissions = $state<DefaultPermissions_Input>({
+	let defaultPermissions = $state<DefaultPermissions>({
 		resource_access: {},
 		action_permissions: [],
 	})
 
-	function normalizePermissions(
-		input: DefaultPermissions_Input | DefaultPermissions_Output
-	): DefaultPermissions_Input {
+	function normalizePermissions(input: DefaultPermissions): DefaultPermissions {
 		return {
 			resource_access: {
 				thread: input.resource_access?.thread ?? null,

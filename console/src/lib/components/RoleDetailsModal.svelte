@@ -2,8 +2,7 @@
 	import { browser } from '$app/environment'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
-	type DefaultPermissions_Output = Schemas['DefaultPermissions-Output']
+	type DefaultPermissions = Schemas['DefaultPermissions']
 	type Role = Schemas['Role']
 	type RoleUpdate = Schemas['RoleUpdate']
 	type User = Schemas['User']
@@ -13,7 +12,7 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
-	import { Trash2, X, Save } from '@lucide/svelte'
+	import { Save, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type Props = {
@@ -35,7 +34,7 @@
 
 	let name = $state('')
 	let description = $state('')
-	let defaultPermissions = $state<DefaultPermissions_Input>({
+	let defaultPermissions = $state<DefaultPermissions>({
 		resource_access: {},
 		action_permissions: [],
 	})
@@ -49,9 +48,7 @@
 	let addUserError = $state<string | null>(null)
 	let allUsers = $state<User[]>([])
 
-	function normalizePermissions(
-		input: DefaultPermissions_Input | DefaultPermissions_Output
-	): DefaultPermissions_Input {
+	function normalizePermissions(input: DefaultPermissions): DefaultPermissions {
 		return {
 			resource_access: {
 				thread: input.resource_access?.thread ?? null,
@@ -66,7 +63,7 @@
 		}
 	}
 
-	function emptyPermissions(): DefaultPermissions_Input {
+	function emptyPermissions(): DefaultPermissions {
 		return { resource_access: {}, action_permissions: [] }
 	}
 

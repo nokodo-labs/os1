@@ -3,13 +3,13 @@
 
 	type AccessLevel = Schemas['AccessLevel']
 	type ActionPermission = Schemas['ActionPermission']
-	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
+	type DefaultPermissions = Schemas['DefaultPermissions']
 
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
 
-	type PermissionsValue = DefaultPermissions_Input
+	type PermissionsValue = DefaultPermissions
 
 	let { value = $bindable<PermissionsValue>(), allowInherit = true } = $props()
 
