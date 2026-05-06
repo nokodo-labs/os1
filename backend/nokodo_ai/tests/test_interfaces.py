@@ -160,7 +160,6 @@ class _StubChatAdapter(BaseChatAdapter):
 	def __init__(
 		self,
 		response: AssistantMessage,
-		*,
 		stream_chunks: list[AssistantMessage] | None = None,
 	) -> None:
 		super().__init__()
@@ -174,7 +173,6 @@ class _StubChatAdapter(BaseChatAdapter):
 	def generate(  # type: ignore[override]
 		self,
 		messages: list[UserMessage],
-		*,
 		model: str,
 		stream: bool = False,
 		tools: list[ToolDefinition] | None = None,
@@ -208,7 +206,7 @@ class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 		self.seen: list[list[str]] = []
 		self.seen_models: list[str] = []
 
-	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
+	async def embed(self, texts: list[str], model: str) -> list[list[float]]:
 		self.seen.append(texts)
 		self.seen_models.append(model)
 		return [[float(len(t))] for t in texts]

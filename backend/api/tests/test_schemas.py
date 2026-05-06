@@ -54,7 +54,7 @@ def test_project_schema_populates_thread_ids() -> None:
 	project.threads = [thread]
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == [thread_id]  # type: ignore[attr-defined]
+	assert serialized.thread_ids == [thread_id]
 
 
 def test_project_schema_handles_empty_threads() -> None:
@@ -66,21 +66,18 @@ def test_project_schema_handles_empty_threads() -> None:
 	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == []  # type: ignore[attr-defined]
+	assert serialized.thread_ids == []
 
 
-def test_project_schema_respects_existing_thread_ids() -> None:
+def test_project_schema_handles_unloaded_threads() -> None:
 	owner_id = new_typeid("user")
-	preloaded_thread_id = new_typeid("thread")
 	project = _stamp_project(
 		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
 		project_id=new_typeid("proj"),
 	)
-	project.thread_ids = [preloaded_thread_id]  # type: ignore[attr-defined]
-	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == [preloaded_thread_id]  # type: ignore[attr-defined]
+	assert serialized.thread_ids == []
 
 
 def test_thread_schema_populates_project_ids() -> None:

@@ -116,7 +116,7 @@ def new_typeid(prefix: str) -> TypeID:
 	return TypeID(f"{prefix}{TYPEID_SEPARATOR}{suffix}")
 
 
-def is_typeid(value: str, *, prefix: str | None = None) -> bool:
+def is_typeid(value: str, prefix: str | None = None) -> bool:
 	if not isinstance(value, str):
 		return False
 
@@ -151,7 +151,7 @@ def is_typeid(value: str, *, prefix: str | None = None) -> bool:
 	return True
 
 
-def assert_typeid(value: str, *, prefix: str | None = None) -> str:
+def assert_typeid(value: str, prefix: str | None = None) -> str:
 	if not is_typeid(value, prefix=prefix):
 		if prefix is None:
 			raise ValueError("invalid typeid")

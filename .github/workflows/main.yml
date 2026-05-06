@@ -179,6 +179,7 @@ jobs:
     with:
       run_tests: true
       run_lint: true
+      run_type_check: true
     secrets: inherit
 
   frontend-ci:

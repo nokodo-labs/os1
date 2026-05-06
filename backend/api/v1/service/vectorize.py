@@ -62,7 +62,6 @@ def build_chunk[T](
 	spec: VectorSpec[T],
 	resource: T,
 	embedding: list[float],
-	*,
 	extra_metadata: dict[str, Any] | None = None,
 ) -> Chunk:
 	"""build a Chunk from a resource using its VectorSpec.
@@ -109,7 +108,6 @@ async def vectorize_resource[T](
 	spec: VectorSpec[T],
 	resource: T,
 	session: AsyncSession,
-	*,
 	extra_metadata: dict[str, Any] | None = None,
 ) -> None:
 	"""vectorize a single resource: delete existing chunks then insert fresh.

@@ -13,7 +13,7 @@ class OpenAIEmbeddingsAdapter(BaseOpenAIAdapter, BaseEmbeddingAdapter):
 
 	type: Literal["openai.embedding"] = "openai.embedding"
 
-	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
+	async def embed(self, texts: list[str], model: str) -> list[list[float]]:
 		"""generate embeddings using openai's embedding API."""
 		response = await self._client.embeddings.create(
 			model=model,

@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
-from typing import TYPE_CHECKING, Literal, cast, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 import openai
 
@@ -336,7 +336,7 @@ async def _openai_stream_to_assistant_messages(
 					"tool_calls",
 					"content_filter",
 				):
-					finish_reason = cast(FinishReason, choice.finish_reason)
+					finish_reason = choice.finish_reason
 				else:
 					logger.warning("unknown openai finish reason")
 
@@ -489,7 +489,7 @@ def _chat_completion_to_assistant_message(
 				finish_reason = "content_filter"
 				content.append(RefusalContent(reason=refusal_reason))
 			elif choice.finish_reason in ("stop", "length", "tool_calls"):
-				finish_reason = cast(FinishReason, choice.finish_reason)
+				finish_reason = choice.finish_reason
 	return AssistantMessage(
 		content=content,
 		tool_calls=tool_calls,

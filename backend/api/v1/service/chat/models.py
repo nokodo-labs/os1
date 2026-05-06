@@ -52,7 +52,6 @@ on_invalidation("task_models", reset_task_model_cache)
 
 def build_sdk_adapter_config(
 	provider: Provider,
-	*,
 	adapter_type: str,
 ) -> dict[str, object]:
 	"""build a fully explicit sdk adapter config dict from an orm Provider."""
@@ -68,7 +67,6 @@ def build_sdk_adapter_config(
 
 def build_chat_model(
 	model: Model,
-	*,
 	params: ChatGenerationParams | dict[str, object] | None = None,
 ) -> ChatModel:
 	"""create an sdk ChatModel with fully explicit adapter configuration.
@@ -107,7 +105,6 @@ def build_chat_model(
 
 async def run_chat_model_json_schema(
 	chat_model: ChatModel,
-	*,
 	thread: SDKThread,
 	json_schema: dict[str, object],
 ) -> dict[str, object]:
@@ -161,7 +158,6 @@ def build_embedding_model(model: Model) -> EmbeddingModel:
 
 async def resolve_model_for_run(
 	session: AsyncSession,
-	*,
 	agent_id: TypeID | None = None,
 	model_id: TypeID | None = None,
 	model: str | None = None,
@@ -226,7 +222,6 @@ async def resolve_model_for_run(
 
 async def resolve_chat_model(
 	session: AsyncSession,
-	*,
 	agent_id: TypeID | None = None,
 	model_id: TypeID | None = None,
 	model: str | None = None,

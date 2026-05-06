@@ -35,7 +35,6 @@ class AudioModel(AdapterEnabledBase[AudioAdapter]):
 	def create(
 		cls,
 		model_name: str,
-		*,
 		adapter: AudioAdapter | dict[str, Any],
 		**fields: Any,
 	) -> AudioModel:
@@ -46,7 +45,6 @@ class AudioModel(AdapterEnabledBase[AudioAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: Literal[False] = False,
 		params: AudioGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AudioGenerationResult]: ...
@@ -55,7 +53,6 @@ class AudioModel(AdapterEnabledBase[AudioAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: Literal[True],
 		params: AudioGenerationParams | dict[str, object] | None = None,
 	) -> AsyncIterator[AudioProgressEvent]: ...
@@ -63,7 +60,6 @@ class AudioModel(AdapterEnabledBase[AudioAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: bool = False,
 		params: AudioGenerationParams | dict[str, object] | None = None,
 	) -> Awaitable[AudioGenerationResult] | AsyncIterator[AudioProgressEvent]:

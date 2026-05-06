@@ -34,7 +34,6 @@ class EmbeddingModel(AdapterEnabledBase[EmbeddingsAdapter]):
 	def create(
 		cls,
 		model_name: str,
-		*,
 		adapter: EmbeddingsAdapter | dict[str, Any],
 		**fields: Any,
 	) -> EmbeddingModel:

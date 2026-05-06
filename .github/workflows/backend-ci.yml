@@ -13,6 +13,11 @@ on:
         description: "run linting"
         required: false
         default: true
+      run_type_check:
+        type: boolean
+        description: "run type checking"
+        required: false
+        default: true
   workflow_dispatch:
     inputs:
       run_tests:
@@ -22,6 +27,11 @@ on:
         default: true
       run_lint:
         description: "run linting"
+        type: boolean
+        required: false
+        default: true
+      run_type_check:
+        description: "run type checking"
         type: boolean
         required: false
         default: true
@@ -126,6 +136,10 @@ jobs:
       - name: lint code
         if: ${{ inputs.run_lint }}
         run: uv run ruff check . --output-format=github
+
+      - name: type check code
+        if: ${{ inputs.run_type_check }}
+        run: uv run ty check . ../tools/autogen-migration.py ../tools/export-openapi.py --output-format=github
 
       - name: run tests
         if: ${{ inputs.run_tests }}

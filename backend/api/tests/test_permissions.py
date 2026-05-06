@@ -306,7 +306,6 @@ class TestPrincipalPermissions:
 
 	def _make_principal(
 		self,
-		*,
 		permissions: frozenset[str] = frozenset(),
 		global_action_permissions: frozenset[str] = frozenset(),
 		is_superuser: bool = False,
@@ -514,7 +513,6 @@ class TestResourceAccessPredicateWithDefaults:
 	def _make_principal(
 		self,
 		user: User,
-		*,
 		resource_defaults: DefaultResourceAccess | None = None,
 		group_ids: tuple[TypeID, ...] = (),
 		role_ids: tuple[TypeID, ...] = (),

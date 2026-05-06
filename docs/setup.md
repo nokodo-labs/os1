@@ -61,9 +61,9 @@ the project includes comprehensive VS Code integration.
 
 **tasks** (`Ctrl+Shift+P` → "Tasks: Run Task"):
 
-- **Backend**: Install Dependencies, Run Server, Run Tests
+- **Backend**: Install Dependencies, Run Server, Run Tests, Type Check
 - **Frontend**: Install Dependencies, Dev Server, Build, Generate API Types
-- **Console**: Install Dependencies, Dev Server, Build, Generate API
+- **Console**: Install Dependencies, Dev Server, Build, Generate API Types
 - **Docker**: Ensure Dev Deps, Build All, Up, Down
 
 **debug configurations** (press `F5`):

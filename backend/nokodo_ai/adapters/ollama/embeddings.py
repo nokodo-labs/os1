@@ -13,7 +13,7 @@ class OllamaEmbeddingsAdapter(BaseOllamaAdapter, BaseEmbeddingAdapter):
 
 	type: Literal["ollama.embedding"] = "ollama.embedding"
 
-	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
+	async def embed(self, texts: list[str], model: str) -> list[list[float]]:
 		"""generate embeddings using ollama's embedding API."""
 		_ = (texts, model)
 		raise NotImplementedError("ollama embedding adapter not yet implemented")

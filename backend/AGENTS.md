@@ -7,6 +7,7 @@
 - Pydantic v2.11+ for validation
 - tabs, unix line endings
 - Ruff for linting/formatting/imports
+- ty for type checking
 - pytest for testing with fixtures and coverage
 - adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
 
@@ -96,6 +97,10 @@ to run backend tests manually instead:
 
 1.  follow the steps in `to run backend` above to ensure correct environment setup.
 2.  run `uv run pytest` from within the `backend/` directory.
+
+### to run type checks:
+
+- run `uv run ty check . ../tools/autogen-migration.py ../tools/export-openapi.py` from within the `backend/` directory.
 
 ## database migrations
 

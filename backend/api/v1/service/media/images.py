@@ -49,7 +49,6 @@ class ImageResult:
 async def generate_image(
 	session: AsyncSession,
 	prompt: str,
-	*,
 	owner_id: TypeID,
 	image: bytes | None = None,
 	mask: bytes | None = None,

@@ -139,7 +139,6 @@ class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		params: ImageGenerationParams,
 	) -> ImageGenerationResult:
 		client: AsyncOpenAI = self._client
@@ -177,10 +176,9 @@ class OpenAIImageAdapter(BaseOpenAIAdapter, BaseImageAdapter):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		image: bytes,
-		mask: bytes | None = None,
 		params: ImageGenerationParams,
+		mask: bytes | None = None,
 	) -> ImageGenerationResult:
 		client: AsyncOpenAI = self._client
 		size = _resolve_size(params)

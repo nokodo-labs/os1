@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -103,7 +104,7 @@ def _normalize_base_url(provider: Provider) -> str | None:
 
 def _merge_headers(
 	base: dict[str, str],
-	additional: dict | None,
+	additional: Mapping[object, object] | None,
 ) -> dict[str, str]:
 	headers = dict(base)
 	if additional is None:
@@ -149,17 +150,21 @@ def _infer_openai_modalities(model_id: str, model_type: ModelType) -> list[str]:
 
 def _parse_openai_models_payload(payload: object) -> list[FetchedModel]:
 	"""parse the openai-compatible /v1/models response into FetchedModel list."""
-	if not isinstance(payload, dict):
+	if not isinstance(payload, Mapping):
 		raise ValueError("invalid models payload")
-	data = payload.get("data")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	data = payload_map.get("data")
 	if not isinstance(data, list):
 		raise ValueError("invalid models payload")
 
 	results: list[FetchedModel] = []
 	for item in data:
-		if not isinstance(item, dict):
+		if not isinstance(item, Mapping):
 			continue
-		model_id = item.get("id")
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		model_id = item_map.get("id")
 		if not isinstance(model_id, str) or model_id.strip() == "":
 			continue
 		model_type = _infer_openai_model_type(model_id)
@@ -180,20 +185,24 @@ def _parse_openai_models_payload(payload: object) -> list[FetchedModel]:
 def _parse_anthropic_models_payload(
 	payload: object,
 ) -> tuple[list[FetchedModel], str | None, bool]:
-	if not isinstance(payload, dict):
+	if not isinstance(payload, Mapping):
 		raise ValueError("invalid models payload")
-	data = payload.get("data")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	data = payload_map.get("data")
 	if not isinstance(data, list):
 		raise ValueError("invalid models payload")
 
 	items: list[FetchedModel] = []
 	for item in data:
-		if not isinstance(item, dict):
+		if not isinstance(item, Mapping):
 			continue
-		model_id = item.get("id")
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		model_id = item_map.get("id")
 		if not isinstance(model_id, str) or model_id.strip() == "":
 			continue
-		display_name = item.get("display_name")
+		display_name = item_map.get("display_name")
 		# all anthropic models are multimodal chat models
 		items.append(
 			FetchedModel(
@@ -204,8 +213,8 @@ def _parse_anthropic_models_payload(
 			)
 		)
 
-	last_id = payload.get("last_id")
-	has_more = payload.get("has_more")
+	last_id = payload_map.get("last_id")
+	has_more = payload_map.get("has_more")
 	return (
 		items,
 		last_id if isinstance(last_id, str) and last_id.strip() != "" else None,
@@ -249,29 +258,35 @@ def _parse_google_models_payload(
 	payload: object,
 ) -> tuple[list[FetchedModel], str | None]:
 	"""parse the google generative language models response."""
-	if not isinstance(payload, dict):
+	if not isinstance(payload, Mapping):
 		raise ValueError("invalid models payload")
-	models_list = payload.get("models")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	models_list = payload_map.get("models")
 	if not isinstance(models_list, list):
 		raise ValueError("invalid models payload")
 
 	results: list[FetchedModel] = []
 	for item in models_list:
-		if not isinstance(item, dict):
+		if not isinstance(item, Mapping):
 			continue
-		full_name = item.get("name")
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		full_name = item_map.get("name")
 		if not isinstance(full_name, str) or full_name.strip() == "":
 			continue
 		# strip the "models/" prefix from google model names
 		model_id = full_name.removeprefix("models/")
 
-		display_name = item.get("displayName")
-		methods = item.get("supportedGenerationMethods", [])
-		if not isinstance(methods, list):
+		display_name = item_map.get("displayName")
+		raw_methods = item_map.get("supportedGenerationMethods", [])
+		if isinstance(raw_methods, list):
+			methods = [method for method in raw_methods if isinstance(method, str)]
+		else:
 			methods = []
 
 		model_type = _infer_google_model_type(methods, model_id)
-		input_token_limit = item.get("inputTokenLimit")
+		input_token_limit = item_map.get("inputTokenLimit")
 		context_window = (
 			int(input_token_limit)
 			if isinstance(input_token_limit, (int, float))
@@ -288,7 +303,7 @@ def _parse_google_models_payload(
 			)
 		)
 
-	next_page_token = payload.get("nextPageToken")
+	next_page_token = payload_map.get("nextPageToken")
 	return (
 		results,
 		next_page_token

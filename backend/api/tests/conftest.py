@@ -436,7 +436,6 @@ class EmbeddedPostgresCluster:
 	def _run_pg_ctl(
 		self,
 		action: str,
-		*,
 		extra: list[str] | None = None,
 		check: bool = True,
 	) -> None:

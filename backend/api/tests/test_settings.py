@@ -226,7 +226,7 @@ async def test_settings_write_locked_fields_not_writable(
 	# schema doesn't include write_locked fields, but service defends in depth.
 	class MaliciousPatch(SettingsPatch):
 		def model_dump(
-			self, *, exclude_unset: bool = False, **kwargs: Any
+			self, exclude_unset: bool = False, **kwargs: Any
 		) -> dict[str, Any]:  # type: ignore[override]
 			_ = exclude_unset, kwargs
 			return {

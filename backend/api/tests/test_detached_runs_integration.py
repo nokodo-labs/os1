@@ -53,7 +53,6 @@ class _FakeAgent:
 		thread_id: TypeID,
 		agent_id: TypeID,
 		principal: object,
-		*,
 		run_id_override: TypeID,
 		ready_event: asyncio.Event,
 		**_kwargs: object,

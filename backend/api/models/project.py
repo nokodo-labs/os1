@@ -83,3 +83,9 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		secondary=calendar_project_association,
 		back_populates="projects",
 	)
+
+	@property
+	def thread_ids(self) -> list[TypeID]:
+		if "threads" not in self.__dict__:
+			return []
+		return [thread.id for thread in self.threads if thread.id]

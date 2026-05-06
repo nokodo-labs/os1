@@ -48,7 +48,6 @@ def estimate_tokens(text: str) -> int:
 
 def compute_available_budget(
 	context_window: int | None,
-	*,
 	system_prompt_tokens: int = 0,
 	summary_tokens: int = 0,
 	response_headroom: int = DEFAULT_RESPONSE_HEADROOM,

@@ -523,7 +523,6 @@ def _tool_message_to_result_block(
 
 def _append_anthropic_assistant_message(
 	result: list[AnthropicMessageParam],
-	*,
 	assistant_text: str,
 	tool_blocks: list[AnthropicToolUseBlockParam],
 ) -> None:

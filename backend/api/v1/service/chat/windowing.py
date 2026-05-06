@@ -124,7 +124,6 @@ def _inject_summary_into_system(
 
 
 def _build_window_info(
-	*,
 	summary_count: int,
 	dropped_count: int,
 	total_tokens: int,
@@ -177,7 +176,6 @@ def _replace_chat_window_sentinel(
 
 async def apply_context_windowing(
 	thread: SDKThread,
-	*,
 	context_window: int | None,
 	thread_id: TypeID,
 	session: AsyncSession,
@@ -344,7 +342,6 @@ async def apply_context_windowing(
 
 def enforce_combined_tool_budget(
 	thread: SDKThread,
-	*,
 	context_window: int | None,
 ) -> SDKThread:
 	"""enforce a combined token budget across all tool results (Layer 2).

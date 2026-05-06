@@ -63,7 +63,8 @@ def schema_from_callable(
 	if not fields:
 		return {}
 
-	dynamic_model = create_model(f"{func.__name__}_params", **fields)
+	func_name = getattr(func, "__name__", "callable")
+	dynamic_model = create_model(f"{func_name}_params", **fields)
 	schema: JSONObject = {k: v for k, v in dynamic_model.model_json_schema().items()}
 	return schema
 

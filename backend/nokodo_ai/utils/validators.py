@@ -60,8 +60,6 @@ def warn_known_model(value: str, known_type: object) -> str:
 def validate[T](
 	value: object,
 	expected_type: TypeForm[T] | object,
-	# had to add "| object" to avoid type checker error-
-	# TODO: remove when PEP 747 is fully supported
 ) -> T:
 	"""validate that a value is of the expected type."""
 	type_origin = get_origin(expected_type)
@@ -83,16 +81,16 @@ def validate[T](
 		raise TypeError(f"expected type {expected_type}, got {type(value)}")
 
 	elif type_origin is Literal:
-		expected_type = cast(TypeForm[T], expected_type)
 		return validate_literal(value, expected_type)
 
 	elif type_origin is None:
-		if not isinstance(value, cast(type, expected_type)):
+		if not isinstance(expected_type, type):
+			raise TypeError(f"expected a type annotation, got {expected_type}")
+		if not isinstance(value, expected_type):
 			raise TypeError(f"expected type {expected_type}, got {type(value)}")
 
 	else:
 		# let pydantic handle complex types
-		expected_type = cast(TypeForm[T], expected_type)
 		return _validate_pydantic(value, expected_type)
 
 	return cast(T, value)
@@ -102,7 +100,8 @@ def _validate_pydantic[T](value: object, expected_type: TypeForm[T]) -> T:
 	"""validate that a value is of the expected pydantic model type."""
 
 	adapter: TypeAdapter[T] = TypeAdapter(expected_type)
-	return cast(T, adapter.validate_python(value))
+	validated = adapter.validate_python(value)
+	return validated
 
 
 class ArgCount(TypedDict):
@@ -121,7 +120,7 @@ def types_compatible(actual: Any, expected: Any) -> bool:
 
 	# if expected is a generic origin, check if actual's origin matches
 	if expected_origin is None and actual_origin is not None:
-		# expected is `list`, actual is `list[int]` → compatible
+		# expected is `list`, actual is `list[int]` -> compatible
 		return actual_origin is expected
 
 	if actual_origin is not None and expected_origin is not None:
@@ -166,9 +165,7 @@ def validate_callable(
 		if p.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)
 	]
 
-	# ─────────────────────────────────────────────────────────────────────────
 	# validate argument count
-	# ─────────────────────────────────────────────────────────────────────────
 	if expected_arg_count is not None:
 		min_count = expected_arg_count["min"]
 		max_count = expected_arg_count["max"]
@@ -186,9 +183,7 @@ def validate_callable(
 				f"got {actual_count}"
 			)
 
-	# ─────────────────────────────────────────────────────────────────────────
 	# validate argument names
-	# ─────────────────────────────────────────────────────────────────────────
 	if expected_arg_names is not None:
 		for i, expected_name in enumerate(expected_arg_names):
 			if i >= len(positional_params):
@@ -203,9 +198,7 @@ def validate_callable(
 					f"'{expected_name}', got '{actual_name}'"
 				)
 
-	# ─────────────────────────────────────────────────────────────────────────
 	# validate argument types
-	# ─────────────────────────────────────────────────────────────────────────
 	if expected_arg_types is not None:
 		for i, expected_type in enumerate(expected_arg_types):
 			if i >= len(positional_params):
@@ -229,9 +222,7 @@ def validate_callable(
 					f"expected {expected_type}"
 				)
 
-	# ─────────────────────────────────────────────────────────────────────────
 	# validate return type
-	# ─────────────────────────────────────────────────────────────────────────
 	if expected_return_type is not None:
 		return_type = hints.get("return")
 

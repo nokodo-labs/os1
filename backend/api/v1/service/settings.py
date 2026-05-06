@@ -39,7 +39,6 @@ async def get_versions(db: AsyncSession) -> SettingsVersions:
 async def update(
 	db: AsyncSession,
 	patch: SettingsPatch,
-	*,
 	expected_versions: SettingsVersions | None = None,
 	changed_by_id: str | None = None,
 	origin_session_id: str | None = None,

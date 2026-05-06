@@ -47,7 +47,6 @@ def get_privacy(user: User) -> UserPrivacy:
 
 def check_visibility(
 	setting: Visibility,
-	*,
 	is_friend: bool,
 	is_self: bool = False,
 ) -> bool:

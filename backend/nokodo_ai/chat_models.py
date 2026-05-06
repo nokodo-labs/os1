@@ -35,7 +35,6 @@ class ChatModel(ChatGenerationParams, AdapterEnabledBase[ChatAdapter]):
 	def create(
 		cls,
 		model_name: str,
-		*,
 		adapter: ChatAdapter | dict[str, Any],
 		**fields: Any,
 	) -> ChatModel:

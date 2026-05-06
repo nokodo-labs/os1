@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -19,7 +19,7 @@ from api.models.event import Event
 from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
-from api.schemas.message import MessageCreate, public_message_metadata
+from api.schemas.message import MessageCreate
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.settings import settings as app_settings
 from api.v1.service import threads as thread_service
@@ -77,10 +77,13 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 logger = logging.getLogger(__name__)
 
 
-# sentinel used to signal the persistence worker to drain and exit. a plain
-# object() is unambiguous and avoids the previous "tuple with empty
-# AssistantMessage" hack which made the queue type harder to read.
-_PERSIST_STOP: object = object()
+class _PersistStop:
+	"""sentinel used to signal the persistence worker to drain and exit."""
+
+
+_PERSIST_STOP = _PersistStop()
+
+type PersistQueueItem = tuple[TypeID, SDKMessage] | _PersistStop
 
 
 async def _resolve_run_thread(
@@ -182,7 +185,7 @@ async def _finalize_partial_assistant_on_cancel(
 	current_assistant_id: TypeID | None,
 	chat_deltas: list[SDKAssistantMessage],
 	persist: bool,
-	message_queue: asyncio.Queue,
+	message_queue: asyncio.Queue[PersistQueueItem],
 ) -> None:
 	"""persist whatever assistant content streamed before the cancel hit.
 
@@ -270,18 +273,33 @@ def _schedule_terminate_broadcast(
 
 def _public_delta_payload(value: object) -> object:
 	"""return a stream payload copy with every metadata object public-sanitized."""
-	if isinstance(value, dict):
-		return {
-			str(key): (
-				public_message_metadata(item)
-				if key == "metadata" and isinstance(item, dict)
-				else _public_delta_payload(item)
-			)
-			for key, item in value.items()
-		}
+	if isinstance(value, Mapping):
+		payload: dict[str, object] = {}
+		for key, item in value.items():
+			key_str = str(key)
+			if key_str == "metadata" and isinstance(item, Mapping):
+				payload[key_str] = {
+					str(meta_key): meta_value
+					for meta_key, meta_value in item.items()
+					if not str(meta_key).startswith("_")
+				}
+			else:
+				payload[key_str] = _public_delta_payload(item)
+		return payload
 	if isinstance(value, list):
 		return [_public_delta_payload(item) for item in value]
 	return value
+
+
+def _content_payload_list(value: object) -> list[dict[str, object]]:
+	"""coerce a serialized content field into run-status content parts."""
+	if not isinstance(value, list):
+		return []
+	content: list[dict[str, object]] = []
+	for item in value:
+		if isinstance(item, Mapping):
+			content.append({str(key): item_value for key, item_value in item.items()})
+	return content
 
 
 async def _broadcast_dropped_steering(
@@ -391,13 +409,18 @@ async def build_agent_from_orm(
 	cfg = agent_orm.config or {}
 	raw_chat_model_config = cfg.get("chat_model")
 	if raw_chat_model_config is not None and not isinstance(
-		raw_chat_model_config, dict
+		raw_chat_model_config, Mapping
 	):
 		raise ValueError(f"agent {agent_orm.id} chat_model config must be an object")
+	chat_model_config = (
+		{str(key): value for key, value in raw_chat_model_config.items()}
+		if isinstance(raw_chat_model_config, Mapping)
+		else None
+	)
 
 	chat_model = build_chat_model(
 		agent_orm.model,
-		params=raw_chat_model_config,
+		params=chat_model_config,
 	)
 
 	# resolve plugins from agent's plugin_ids
@@ -519,12 +542,11 @@ async def run_agent(
 			await run_status_store.publish(run_id, frame)
 			yield frame
 			initial_parent_id = user_msg.id
-			user_content = user_msg_data.get("content")
 			await run_status_store.add_message(
 				run_id,
 				message_id=user_msg.id,
 				message_type="user",
-				content=user_content if isinstance(user_content, list) else [],
+				content=_content_payload_list(user_msg_data.get("content")),
 				parent_id=user_msg.parent_id,
 				sender_agent_id=None,
 				created_at=(
@@ -549,9 +571,9 @@ async def run_agent(
 			return
 
 		# background persistence + event correlation state (persist only)
-		message_queue: asyncio.Queue[tuple[str, SDKMessage] | object] = asyncio.Queue()
-		message_persisted: dict[str, asyncio.Event] = {}
-		active_message_id_for_events: str | None = None
+		message_queue: asyncio.Queue[PersistQueueItem] = asyncio.Queue()
+		message_persisted: dict[TypeID, asyncio.Event] = {}
+		active_message_id_for_events: TypeID | None = None
 		persist_parent_override: TypeID | None = None
 
 		# capture model_id for message metadata before the worker starts.
@@ -566,11 +588,10 @@ async def run_agent(
 			last_parent_id = parent_id
 			while True:
 				item = await message_queue.get()
-				if item is _PERSIST_STOP:
+				if isinstance(item, _PersistStop):
 					message_queue.task_done()
 					return
-				assert isinstance(item, tuple)
-				message_id_str, sdk_msg = item
+				message_id, sdk_msg = item
 				try:
 					async with async_session_local() as bg_session:
 						create_in = MessageCreate.from_sdk_message(
@@ -603,17 +624,17 @@ async def run_agent(
 							message_in=create_in,
 							session=bg_session,
 							principal=principal,
-							message_id=TypeID(message_id_str),
+							message_id=message_id,
 							origin_session_id=origin_session_id,
 						)
 						last_parent_id = TypeID(str(persisted.id))
 				except Exception:
 					logger.exception(
 						"failed to persist streamed message",
-						extra={"message_id": message_id_str},
+						extra={"message_id": str(message_id)},
 					)
 				finally:
-					evt = message_persisted.get(message_id_str)
+					evt = message_persisted.get(message_id)
 					if evt is not None:
 						evt.set()
 					message_queue.task_done()
@@ -638,7 +659,9 @@ async def run_agent(
 
 		def _message_id_provider() -> str | None:
 			"""return the message id currently receiving streamed tool events."""
-			return active_message_id_for_events
+			if active_message_id_for_events is None:
+				return None
+			return str(active_message_id_for_events)
 
 		async def _wait_for_persisted_parent(
 			message_id: TypeID | None,
@@ -875,10 +898,10 @@ async def run_agent(
 					if delta.tool.metadata is None:
 						delta.tool.metadata = {}
 					delta.tool.metadata[MESSAGE_ID_KEY] = str(tool_message_id)
-					tool_content: list[dict[str, object]] = []
-					if hasattr(delta.tool, "tool_output"):
-						output = delta.tool.tool_output or ""
-						tool_content = [{"type": "text", "text": output}]
+					output = delta.tool.tool_output or ""
+					tool_content: list[dict[str, object]] = [
+						{"type": "text", "text": output}
+					]
 					for att in delta.tool.attachments:
 						tool_content.append(att.model_dump(mode="json"))
 					await run_status_store.add_message(

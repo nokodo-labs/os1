@@ -175,7 +175,6 @@ def collection_name(model_name: str) -> str:
 
 def resource_filter(
 	resource_type: str,
-	*,
 	resource_id: str | None = None,
 	owner_id: str | None = None,
 ) -> ChunkFilter:
@@ -197,7 +196,6 @@ def resource_filter(
 
 def acl_filter(
 	resource_type: str,
-	*,
 	is_admin: bool,
 	user_id: str,
 	group_ids: tuple[str, ...] | list[str] = (),
@@ -268,7 +266,6 @@ async def _ensure_collection(
 async def upsert_chunks(
 	chunks: list[Chunk],
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None:
@@ -285,7 +282,6 @@ async def upsert_chunks(
 async def delete(
 	target: list[str],
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None: ...
@@ -295,7 +291,6 @@ async def delete(
 async def delete(
 	target: ChunkFilter,
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None: ...
@@ -304,7 +299,6 @@ async def delete(
 async def delete(
 	target: list[str] | ChunkFilter,
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None:
@@ -321,7 +315,6 @@ async def delete(
 
 
 async def search(
-	*,
 	session: AsyncSession,
 	query: list[float] | None = None,
 	text_query: str | None = None,
@@ -355,7 +348,6 @@ async def search(
 def merge_deduplicate(
 	results: Sequence[list[SearchResultItem] | BaseException],
 	limit: int,
-	*,
 	resource_name: str = "unknown",
 ) -> list[SearchResultItem]:
 	"""merge parallel search results, deduplicating by id.

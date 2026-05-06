@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
+from inspect import iscoroutinefunction
 from typing import Concatenate
 
 from pydantic import Field
@@ -129,8 +130,10 @@ def tool[AppContextT = None](
 	def decorator(
 		func: Callable[Concatenate[AgentContext, AppContextT | None, ...], ToolMessage],
 	) -> Tool[AppContextT]:
-		# validate structure only - skip type check on __app_context__ since it's
-		# a TypeVar that can be any type
+		if iscoroutinefunction(func):
+			raise TypeError("tool decorator requires a synchronous function")
+
+		# validate structure only; application context is generic by design.
 		validate_callable(
 			func,
 			expected_arg_types=[AgentContext],
@@ -139,11 +142,13 @@ def tool[AppContextT = None](
 			expected_return_type=ToolMessage,
 		)
 
-		# pre-generate schema from original func to avoid TypeVar resolution issues
+		# pre-generate schema from original func to avoid generic resolution issues.
 		schema = schema_from_callable(func, skip_self=False, skip_dunder=True)
 
+		# Ty 0.0.34 does not preserve closure-scoped PEP 695 type params
+		# for nested generic classes; mypy and basedpyright accept this shape.
 		class FuncTool(Tool[AppContextT]):
-			async def call(
+			async def call(  # ty: ignore[invalid-method-override]
 				self,
 				__agent_context__: AgentContext,
 				__app_context__: AppContextT | None,
@@ -151,13 +156,15 @@ def tool[AppContextT = None](
 			) -> ToolMessage:
 				return func(
 					__agent_context__,
-					__app_context__,
+					__app_context__,  # ty: ignore[invalid-argument-type]
 					**kwargs,
 				)
 
-		return FuncTool(
-			name=name or func.__name__,
-			description=description or func.__doc__ or "No description provided.",
+		func_name = getattr(func, "__name__", "tool")
+		func_doc = getattr(func, "__doc__", None)
+		return FuncTool(  # ty: ignore[invalid-return-type]
+			name=name or func_name,
+			description=description or func_doc or "no description provided.",
 			parameters=schema or None,
 		)
 

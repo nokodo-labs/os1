@@ -68,7 +68,6 @@ class PromptValidationError(ValueError):
 def _validate_graph(
 	prompt_map: dict[str, str],
 	start_key: str,
-	*,
 	max_depth: int = _MAX_DEPTH,
 ) -> None:
 	errors: list[str] = []
@@ -114,7 +113,6 @@ def _build_env(prompt_map: dict[str, str]) -> Environment:
 
 def render_prompt_from_map(
 	prompt_map: dict[str, str],
-	*,
 	command: str,
 	variables: dict[str, object] | None = None,
 	max_depth: int = _MAX_DEPTH,
@@ -134,7 +132,6 @@ def render_prompt_from_map(
 
 async def render_prompt_from_db(
 	session: AsyncSession,
-	*,
 	command: str,
 	variables: dict[str, object] | None = None,
 	max_depth: int = _MAX_DEPTH,
@@ -151,7 +148,6 @@ async def render_prompt_from_db(
 
 async def render_inline_with_prompts(
 	session: AsyncSession,
-	*,
 	text: str,
 	variables: dict[str, object] | None = None,
 	max_depth: int = _MAX_DEPTH,
@@ -170,7 +166,6 @@ async def render_inline_with_prompts(
 
 
 def validate_prompt_content(
-	*,
 	all_prompts: Iterable[Prompt],
 	command: str,
 	content: str,
@@ -197,7 +192,6 @@ def http_error_from_validation(err: PromptValidationError) -> HTTPException:
 def _resolve_bio(
 	ai_bio: str | None,
 	account_bio: str | None,
-	*,
 	use_account_bio: bool,
 ) -> str | None:
 	"""resolve the effective bio respecting the useAccountBio toggle."""
@@ -511,7 +505,6 @@ def build_prompt_variables(
 
 async def render_agent_instructions(
 	session: AsyncSession,
-	*,
 	text: str,
 	user: User | None = None,
 	client_context: ClientContext | None = None,

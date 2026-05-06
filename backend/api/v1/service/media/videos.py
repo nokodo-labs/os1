@@ -47,7 +47,6 @@ class VideoResult:
 async def generate_video(
 	session: AsyncSession,
 	prompt: str,
-	*,
 	owner_id: TypeID,
 	image: bytes | None = None,
 	duration: float | None = None,

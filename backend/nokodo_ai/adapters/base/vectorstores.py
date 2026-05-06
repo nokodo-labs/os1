@@ -209,7 +209,6 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		self,
 		collection_name: str,
 		target: ChunkFilter,
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None: ...
 

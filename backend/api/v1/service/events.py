@@ -264,7 +264,6 @@ class ConnectionManager:
 		self,
 		user_ids: list[TypeID],
 		data: dict[str, Any],
-		*,
 		exclude_user_id: TypeID | None = None,
 	) -> None:
 		"""send to all sessions of multiple users concurrently."""
@@ -288,7 +287,6 @@ class ConnectionManager:
 	async def broadcast_event(
 		self,
 		event: EventModel,
-		*,
 		origin_session_id: str | None = None,
 	) -> None:
 		"""legacy broadcast: owner-only or full broadcast.

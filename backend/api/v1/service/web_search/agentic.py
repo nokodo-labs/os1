@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 import perplexity as perplexity_sdk
@@ -292,7 +292,7 @@ async def _resolve_native_agentic_config(
 	chat_model_config: dict[str, object] | None = None
 	raw_chat_model_config = (agent.config or {}).get("chat_model")
 	if raw_chat_model_config is not None:
-		if not isinstance(raw_chat_model_config, dict):
+		if not isinstance(raw_chat_model_config, Mapping):
 			raise WebSearchError(
 				"native search agent chat_model config must be an object"
 			)
@@ -459,9 +459,12 @@ def _query_from_tool_arguments(arguments: object) -> str | None:
 			arguments = json.loads(arguments)
 		except json.JSONDecodeError:
 			return None
-	if not isinstance(arguments, dict):
+	if not isinstance(arguments, Mapping):
 		return None
-	query = arguments.get("query")
+	argument_map: dict[object, object] = {
+		key: value for key, value in arguments.items()
+	}
+	query = argument_map.get("query")
 	if isinstance(query, str) and query.strip():
 		return query.strip()
 	return None
@@ -490,9 +493,12 @@ def _engine_from_tool_metadata(message: ToolMessage) -> SearchEngine | None:
 	"""read the private search engine value attached by the web_search tool."""
 	metadata = message.metadata or {}
 	web_search = metadata.get("_web_search")
-	if not isinstance(web_search, dict):
+	if not isinstance(web_search, Mapping):
 		return None
-	match web_search.get("engine"):
+	web_search_map: dict[object, object] = {
+		key: value for key, value in web_search.items()
+	}
+	match web_search_map.get("engine"):
 		case "perplexity":
 			return "perplexity"
 		case "searxng":
@@ -560,19 +566,20 @@ def _collect_web_search_sources(
 
 def _source_from_payload(value: object) -> WebSearchSource | None:
 	"""normalize a source object from a JSON tool output payload."""
-	if not isinstance(value, dict):
+	if not isinstance(value, Mapping):
 		return None
-	title = value.get("title")
-	url = value.get("url")
-	snippet = value.get("snippet")
+	value_map: dict[object, object] = {key: item for key, item in value.items()}
+	title = value_map.get("title")
+	url = value_map.get("url")
+	snippet = value_map.get("snippet")
 	if not isinstance(title, str) or not isinstance(url, str):
 		return None
 	if not isinstance(snippet, str):
 		snippet = ""
-	date = value.get("date")
+	date = value_map.get("date")
 	if not isinstance(date, str):
 		date = None
-	last_updated = value.get("last_updated")
+	last_updated = value_map.get("last_updated")
 	if not isinstance(last_updated, str):
 		last_updated = None
 	return WebSearchSource(

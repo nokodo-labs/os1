@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from enum import StrEnum
 from functools import cache as functools_cache
-from typing import Any, Final, Literal, Self, cast
+from typing import Any, Final, Literal, Self
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic.fields import FieldInfo
 from pydantic_settings import (
 	BaseSettings,
 	DotEnvSettingsSource,
@@ -37,32 +39,29 @@ ENV_NESTED_DELIMITER: Final[str] = "__"
 
 def settings_field[T](
 	default: T,
-	*,
 	description: str | None = None,
-	default_factory: Any = None,
+	ge: int | float | None = None,
+	json_schema_extra: dict[str, object] | None = None,
 	private: bool = False,
 	write_locked: bool = False,
-	**kwargs: Any,
 ) -> T:
 	"""field with access flags.
 	args:
 		private: if True, excluded from non-admin API responses
 		write_locked: if True, cannot be updated via API (env-only)
 	"""
-	extra = kwargs.pop("json_schema_extra", {}) or {}
+	extra = dict(json_schema_extra or {})
 	if private:
 		extra["private"] = True
 	if write_locked:
 		extra["write_locked"] = True
-	field_kwargs = dict(
+	return Field(
+		default=default,
 		description=description,
+		ge=ge,
 		json_schema_extra=extra or None,
 		frozen=write_locked,
-		**kwargs,
 	)
-	if default_factory is not None:
-		return cast(T, Field(default_factory=default_factory, **field_kwargs))
-	return cast(T, Field(default, **field_kwargs))
 
 
 def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag, bool]:
@@ -1246,15 +1245,14 @@ class OpenWebUIDeployment(BaseModel):
 	@model_validator(mode="before")
 	@classmethod
 	def _migrate_label(cls, value: object) -> object:
-		if not isinstance(value, dict):
+		if not isinstance(value, Mapping):
 			return value
-		if "name" not in value and isinstance(value.get("label"), str):
-			value = dict(value)
-			value["name"] = value["label"]
-		if "description" not in value:
-			value = dict(value)
-			value["description"] = "Open WebUI import source"
-		return value
+		value_map: dict[object, object] = {key: item for key, item in value.items()}
+		if "name" not in value_map and isinstance(value_map.get("label"), str):
+			value_map["name"] = value_map["label"]
+		if "description" not in value_map:
+			value_map["description"] = "Open WebUI import source"
+		return value_map
 
 
 class OpenWebUIIntegrationSettings(BaseModel):
@@ -1451,7 +1449,9 @@ class _LenientEnvSettingsSource(EnvSettingsSource):
 	JSON to preserve startup-time config error visibility.
 	"""
 
-	def decode_complex_value(self, field_name: str, field_info: Any, value: Any) -> Any:
+	def decode_complex_value(
+		self, field_name: str, field: FieldInfo, value: Any
+	) -> Any:
 		try:
 			return json.loads(value)
 		except (json.JSONDecodeError, ValueError):
@@ -1463,7 +1463,9 @@ class _LenientEnvSettingsSource(EnvSettingsSource):
 class _LenientDotEnvSettingsSource(DotEnvSettingsSource):
 	"""Same as _LenientEnvSettingsSource but for .env file values."""
 
-	def decode_complex_value(self, field_name: str, field_info: Any, value: Any) -> Any:
+	def decode_complex_value(
+		self, field_name: str, field: FieldInfo, value: Any
+	) -> Any:
 		try:
 			return json.loads(value)
 		except (json.JSONDecodeError, ValueError):

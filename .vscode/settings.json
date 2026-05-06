@@ -17,7 +17,6 @@
 	"files.exclude": {
 		"**/__pycache__": true,
 		"**/.pytest_cache": true,
-		"**/.mypy_cache": true,
 		"**/.ruff_cache": true,
 		"**/node_modules": true,
 		"**/.svelte-kit": true
@@ -45,10 +44,10 @@
 			"source.organizeImports.ruff": "explicit"
 		}
 	},
-	"python.analysis.typeCheckingMode": "basic",
-	"python.analysis.autoImportCompletions": true,
-	"python.analysis.extraPaths": ["${workspaceFolder}/backend"],
-	"python.analysis.stubPath": "${workspaceFolder}/backend/stubs",
+	"python.languageServer": "None",
+	"ty.disableLanguageServices": false,
+	"ty.diagnosticMode": "workspace",
+	"ty.completions.autoImport": true,
 	"python.testing.pytestEnabled": true,
 	"python.testing.unittestEnabled": false,
 	"python.testing.cwd": "${workspaceFolder}/backend",
@@ -196,7 +195,7 @@
 		"eval": false,
 		"Invoke-Expression": false,
 		"iex": false,
-		"uv run mypy": true,
+		"uv run ty": true,
 		"uv run ruff": true,
 		"uv run pytest": true,
 		"uv tree": true,

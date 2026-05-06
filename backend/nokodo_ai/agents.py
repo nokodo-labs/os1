@@ -68,7 +68,7 @@ class Agent[AppContextT = None](Base):
 			name = "get_weather"
 			description = "get current weather"
 
-			async def call(self, agent_ctx, app_ctx, *, city: str) -> ToolMessage:
+			async def call(self, agent_ctx, app_ctx, city: str) -> ToolMessage:
 				return self.success(f"sunny in {city}", agent_ctx)
 
 		chat_model = ChatModel.create(

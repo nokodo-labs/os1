@@ -410,7 +410,6 @@ async def refresh_token_for_user(refresh_token: str, session: AsyncSession) -> T
 async def change_password(
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	current_password: str,
 	new_password: str,
 ) -> None:

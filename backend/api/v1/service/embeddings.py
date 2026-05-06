@@ -62,7 +62,6 @@ async def embed_text(text: str, session: AsyncSession) -> list[float]:
 async def embed_texts(
 	texts: list[str],
 	session: AsyncSession,
-	*,
 	batch_size: int | None = None,
 	parallel: bool = True,
 ) -> list[list[float]]:

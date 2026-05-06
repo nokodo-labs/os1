@@ -250,7 +250,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	async def _search_dense(
 		self,
 		collection_name: str,
-		*,
 		query: list[float],
 		limit: int,
 		offset: int | None,
@@ -280,7 +279,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	async def _search_sparse(
 		self,
 		collection_name: str,
-		*,
 		text_query: str,
 		limit: int,
 		offset: int | None,
@@ -304,7 +302,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	async def _search_hybrid(
 		self,
 		collection_name: str,
-		*,
 		query: list[float],
 		text_query: str,
 		limit: int,
@@ -402,7 +399,9 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		if isinstance(target, list):
 			if not target:
 				return
-			point_ids = [self._to_point_id(id_) for id_ in target]
+			point_ids: list[ExtendedPointId] = [
+				self._to_point_id(id_) for id_ in target
+			]
 			found = await self._client.retrieve(
 				collection_name=collection_name,
 				ids=point_ids,
@@ -418,7 +417,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 			await self._client.set_payload(
 				collection_name=collection_name,
 				payload=payload,
-				points=PointIdsList(points=point_ids),  # type: ignore[arg-type]
+				points=PointIdsList(points=point_ids),
 			)
 		else:
 			await self._client.set_payload(
@@ -430,7 +429,6 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 	def _build_result(
 		self,
 		point: ScoredPoint,
-		*,
 		score: float,
 	) -> ChunkSearchResult:
 		"""convert a Qdrant ScoredPoint to a ChunkSearchResult."""

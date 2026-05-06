@@ -42,7 +42,6 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 	def create(
 		cls,
 		collection: str,
-		*,
 		adapter: VectorstoreAdapter | dict[str, object],
 		**fields: object,
 	) -> Vectorstore:
@@ -52,7 +51,6 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 	async def add(
 		self,
 		chunks: list[Chunk],
-		*,
 		sparse: bool = False,
 	) -> None:
 		"""store chunks in the vectorstore.
@@ -66,7 +64,6 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 
 	async def search(
 		self,
-		*,
 		query: list[float] | None = None,
 		text_query: str | None = None,
 		limit: int = 10,
@@ -108,18 +105,17 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 
 	@overload
 	async def update(
-		self, target: list[str], *, payload: dict[str, object] | None = None
+		self, target: list[str], payload: dict[str, object] | None = None
 	) -> None: ...
 
 	@overload
 	async def update(
-		self, target: ChunkFilter, *, payload: dict[str, object] | None = None
+		self, target: ChunkFilter, payload: dict[str, object] | None = None
 	) -> None: ...
 
 	async def update(
 		self,
 		target: list[str] | ChunkFilter,
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None:
 		"""update matching chunks in place. see adapter.update for semantics."""
@@ -127,7 +123,6 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 
 	async def ensure_collection(
 		self,
-		*,
 		vector_size: int,
 		sparse: bool = False,
 		indexes: Index | None = None,

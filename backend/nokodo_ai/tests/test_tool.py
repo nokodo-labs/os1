@@ -31,7 +31,6 @@ class _NoopChatAdapter(BaseChatAdapter):
 
 def _make_agent_context(
 	tool_call_id: str = "tc1",
-	*,
 	metadata: JSONObject | None = None,
 ) -> AgentContext:
 	chat_model = ChatModel.model_construct(
@@ -53,7 +52,6 @@ class _AddTool(Tool[None]):
 		self,
 		__agent_context__: AgentContext,
 		__app_context__: None,
-		*,
 		a: int = 0,
 		b: int = 0,
 	) -> ToolMessage:
@@ -128,7 +126,6 @@ def test_tool_decorator_creates_tool_instance_and_schema() -> None:
 	def decorated(
 		__agent_context__: AgentContext,
 		__app_context__: None,
-		*,
 		value: int,
 	) -> ToolMessage:
 		return ToolMessage(
@@ -151,7 +148,6 @@ async def test_tool_decorator_executes_function() -> None:
 	def auto_named(
 		__agent_context__: AgentContext,
 		__app_context__: None,
-		*,
 		text: str,
 	) -> ToolMessage:
 		return ToolMessage(

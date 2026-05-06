@@ -456,7 +456,6 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 	async def _generate_once(
 		self,
 		messages: list[Message],
-		*,
 		model: str,
 		tools: list[ToolDefinition],
 		params: ChatGenerationParams,
@@ -512,7 +511,6 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 	async def _generate_streaming(
 		self,
 		messages: list[Message],
-		*,
 		model: str,
 		tools: list[ToolDefinition],
 		params: ChatGenerationParams,

@@ -472,7 +472,6 @@ class RunStatusStore:
 	async def add_message(
 		self,
 		run_id: TypeID,
-		*,
 		message_id: TypeID,
 		message_type: str,
 		content: list[dict[str, Any]],
@@ -507,7 +506,6 @@ class RunStatusStore:
 	async def update_streaming(
 		self,
 		run_id: TypeID,
-		*,
 		message_id: TypeID,
 		content: str,
 		tool_calls: list[dict[str, Any]] | None = None,

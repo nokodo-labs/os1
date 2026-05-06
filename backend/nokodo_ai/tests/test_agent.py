@@ -34,7 +34,6 @@ class _QueuedChatAdapter(BaseChatAdapter):
 
 	def __init__(
 		self,
-		*,
 		sync_responses: list[AssistantMessage] | None = None,
 		stream_responses: list[list[AssistantMessage]] | None = None,
 	) -> None:
@@ -95,7 +94,6 @@ class _EchoTool(Tool[None]):
 		self,
 		__agent_context__: AgentContext,
 		__app_context__: None,
-		*,
 		text: str,
 	) -> ToolMessage:
 		return self.success(

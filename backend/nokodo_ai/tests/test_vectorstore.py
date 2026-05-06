@@ -23,7 +23,6 @@ def make_store(collection: str) -> Vectorstore:
 def make_chunk(
 	chunk_id: str,
 	embedding: list[float],
-	*,
 	content: str = "",
 	metadata: dict | None = None,
 ) -> Chunk:

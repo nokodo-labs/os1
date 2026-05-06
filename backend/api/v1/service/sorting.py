@@ -23,7 +23,6 @@ def _order_expr(column: SortColumn, sort_dir: SortDir) -> ColumnElement[Any]:
 
 def apply_sort(
 	stmt: Select,
-	*,
 	sort_by: str,
 	sort_dir: SortDir,
 	columns: Mapping[str, SortColumn],

@@ -94,7 +94,6 @@ class ChatContextFilter(Filter):
 	async def _fetch_recent(
 		self,
 		app_context: AppContext,
-		*,
 		cfg: AIChatContextSettings,
 		exclude_id: TypeID | None,
 	) -> list[Thread]:
@@ -132,7 +131,6 @@ class ChatContextFilter(Filter):
 		self,
 		thread: SDKThread,
 		app_context: AppContext,
-		*,
 		cfg: AIChatContextSettings,
 		exclude_id: TypeID | None,
 	) -> list[Thread]:

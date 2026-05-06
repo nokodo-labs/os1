@@ -118,7 +118,6 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 
 	async def _run_structured(
 		chat_model: object,
-		*,
 		thread: object,
 		json_schema: dict[str, Any],
 	) -> dict[str, object]:
@@ -203,7 +202,6 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 
 	async def _run_structured(
 		chat_model: object,
-		*,
 		thread: Any,
 		json_schema: dict[str, Any],
 	) -> dict[str, object]:

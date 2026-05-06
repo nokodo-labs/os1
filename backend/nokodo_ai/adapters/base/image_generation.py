@@ -92,7 +92,6 @@ class BaseImageAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: Literal[False] = False,
 		image: bytes | None = None,
 		mask: bytes | None = None,
@@ -104,7 +103,6 @@ class BaseImageAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: Literal[True],
 		image: bytes | None = None,
 		mask: bytes | None = None,
@@ -115,7 +113,6 @@ class BaseImageAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: bool = False,
 		image: bytes | None = None,
 		mask: bytes | None = None,
@@ -145,7 +142,6 @@ class BaseImageAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		params: ImageGenerationParams,
 	) -> ImageGenerationResult:
 		"""create images from a text prompt."""
@@ -156,10 +152,9 @@ class BaseImageAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		image: bytes,
-		mask: bytes | None = None,
 		params: ImageGenerationParams,
+		mask: bytes | None = None,
 	) -> ImageGenerationResult:
 		"""edit an existing image with a text prompt."""
 		raise NotImplementedError
@@ -168,10 +163,9 @@ class BaseImageAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
+		params: ImageGenerationParams,
 		image: bytes | None = None,
 		mask: bytes | None = None,
-		params: ImageGenerationParams,
 	) -> AsyncIterator[ImageProgressEvent]:
 		"""streaming generation with progress events.
 

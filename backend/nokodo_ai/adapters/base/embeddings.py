@@ -15,7 +15,7 @@ class BaseEmbeddingAdapter(BaseAdapter, ABC):
 	"""
 
 	@abstractmethod
-	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
+	async def embed(self, texts: list[str], model: str) -> list[list[float]]:
 		"""generate embeddings for the given texts.
 
 		args:

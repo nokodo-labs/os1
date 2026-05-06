@@ -10,6 +10,7 @@ import base64
 import logging
 import mimetypes
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from e2b_code_interpreter import AsyncSandbox, FileType
@@ -193,6 +194,8 @@ class E2BClient:
 			content = await self._sandbox.files.read(filename, format="bytes")
 			if isinstance(content, str):
 				return content.encode("utf-8")
+			if isinstance(content, bytearray):
+				return bytes(content)
 			return content
 		except Exception:
 			return None
@@ -281,10 +284,10 @@ class E2BClient:
 		saves images to the sandbox filesystem and returns metadata.
 		"""
 		images: list[FileEntry] = []
-		if not hasattr(results, "__iter__"):
+		if not isinstance(results, Iterable):
 			return images
 
-		for result in results:  # type: ignore[union-attr]
+		for result in results:
 			for ext in ("png", "jpeg", "svg", "pdf"):
 				data_b64 = getattr(result, ext, None)
 				if not data_b64:

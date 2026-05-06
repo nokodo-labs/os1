@@ -94,7 +94,6 @@ class GooglePredictImageAdapter(BaseGoogleAdapter, BaseImageAdapter):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		params: ImageGenerationParams,
 	) -> ImageGenerationResult:
 		client: AsyncClient = self._client
@@ -121,10 +120,9 @@ class GooglePredictImageAdapter(BaseGoogleAdapter, BaseImageAdapter):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		image: bytes,
-		mask: bytes | None = None,
 		params: ImageGenerationParams,
+		mask: bytes | None = None,
 	) -> ImageGenerationResult:
 		client: AsyncClient = self._client
 

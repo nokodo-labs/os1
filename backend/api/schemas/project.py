@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
 from api.schemas.sorting import CommonSortBy
@@ -40,20 +40,3 @@ class Project(ProjectBase, TimestampedModel, ORMModel):
 	id: TypeID
 	owner_id: TypeID
 	thread_ids: list[TypeID] = Field(default_factory=list)
-
-	@model_validator(mode="before")
-	@classmethod
-	def _ensure_thread_ids(cls, data: Any) -> Any:
-		try:
-			from api.models.project import Project as ProjectModel  # type: ignore
-		except Exception:  # pragma: no cover
-			return data
-
-		if isinstance(data, ProjectModel) and not getattr(data, "thread_ids", None):
-			threads = getattr(data, "__dict__", {}).get("threads")
-			if threads:
-				thread_ids = [
-					thread.id for thread in threads if getattr(thread, "id", None)
-				]
-				setattr(data, "thread_ids", thread_ids)
-		return data

@@ -124,7 +124,6 @@ class MessageCreate(MetadataModel):
 	def from_sdk_message(
 		cls,
 		sdk_msg: SDKMessage,
-		*,
 		sender_agent_id: TypeID | None = None,
 		sender_user_id: TypeID | None = None,
 	) -> MessageCreate:

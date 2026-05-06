@@ -32,7 +32,7 @@ class ChatModelDelta(Base):
 	done: bool = Field(default=False)
 
 	@classmethod
-	def done_sentinel(cls, *, chunk_index: int) -> ChatModelDelta:
+	def done_sentinel(cls, chunk_index: int) -> ChatModelDelta:
 		return cls(message=AssistantMessage(), chunk_index=chunk_index, done=True)
 
 
@@ -50,7 +50,7 @@ class AgentDelta(Base):
 	done: bool = Field(default=False)
 
 	@classmethod
-	def done_sentinel(cls, *, chunk_index: int) -> AgentDelta:
+	def done_sentinel(cls, chunk_index: int) -> AgentDelta:
 		return cls(chunk_index=chunk_index, done=True)
 
 

@@ -39,7 +39,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_jwt_token(
 	subject: str | int,
-	*,
 	secret_key: str,
 	algorithm: str,
 	expires_delta: timedelta | None = None,
@@ -57,7 +56,6 @@ def create_jwt_token(
 
 def decode_jwt_token(
 	token: str,
-	*,
 	secret_key: str,
 	algorithms: Sequence[str],
 ) -> dict[str, Any]:
@@ -97,7 +95,6 @@ def decrypt_string_with_fallback(
 	cipher_text: str,
 	secret_key: str,
 	previous_keys: Sequence[str] = (),
-	*,
 	strict: bool = False,
 ) -> tuple[str, bool]:
 	"""Decrypt trying the current key first, then previous keys.

@@ -61,6 +61,21 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "backend: type check",
+			"type": "shell",
+			"command": "uv run ty check . ../tools/autogen-migration.py ../tools/export-openapi.py",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
 			"label": "backend: check API alive",
 			"type": "process",
 			"command": "node",

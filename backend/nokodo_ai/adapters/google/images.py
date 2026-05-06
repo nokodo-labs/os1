@@ -12,7 +12,14 @@ import logging
 from typing import Literal
 
 from google.genai.client import AsyncClient
-from google.genai.types import SafetyFilterLevel
+from google.genai.types import (
+	EditImageConfig,
+	EditMode,
+	GenerateImagesConfig,
+	SafetyFilterLevel,
+	_ReferenceImageAPI,
+	_ReferenceImageAPIOrDict,
+)
 
 from ..base.image_generation import (
 	BaseImageAdapter,
@@ -83,12 +90,9 @@ class GooglePredictImageAdapter(BaseGoogleAdapter, BaseImageAdapter):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		params: ImageGenerationParams,
 	) -> ImageGenerationResult:
 		client: AsyncClient = self._client
-
-		from google.genai.types import GenerateImagesConfig
 
 		config = GenerateImagesConfig(
 			number_of_images=params.n,
@@ -112,26 +116,11 @@ class GooglePredictImageAdapter(BaseGoogleAdapter, BaseImageAdapter):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		image: bytes,
-		mask: bytes | None = None,
 		params: ImageGenerationParams,
+		mask: bytes | None = None,
 	) -> ImageGenerationResult:
 		client: AsyncClient = self._client
-
-		config: dict[str, object] = {
-			"number_of_images": params.n,
-			"edit_mode": (
-				"EDIT_MODE_INPAINT_INSERTION" if mask else "EDIT_MODE_DEFAULT"
-			),
-		}
-
-		if params.output_format is not None:
-			config["output_mime_type"] = f"image/{params.output_format}"
-
-		safety = _resolve_safety_filter(params.content_filter)
-		if safety is not None:
-			config["safety_filter_level"] = safety
 
 		from google.genai.types import (
 			Image,
@@ -141,31 +130,47 @@ class GooglePredictImageAdapter(BaseGoogleAdapter, BaseImageAdapter):
 			RawReferenceImage,
 		)
 
-		ref_images: list[RawReferenceImage | MaskReferenceImage] = []
+		ref_images: list[_ReferenceImageAPIOrDict] = []
 		ref_images.append(
-			RawReferenceImage(
-				reference_image=Image(image_bytes=image),
-				reference_id=0,
+			_ReferenceImageAPI.model_validate(
+				RawReferenceImage(
+					reference_image=Image(image_bytes=image),
+					reference_id=0,
+				)
 			)
 		)
 
 		if mask is not None:
 			ref_images.append(
-				MaskReferenceImage(
-					reference_image=Image(image_bytes=mask),
-					reference_id=0,
-					config=MaskReferenceConfig(
-						mask_mode=MaskReferenceMode.MASK_MODE_USER_PROVIDED,
+				_ReferenceImageAPI.model_validate(
+					MaskReferenceImage(
+						reference_image=Image(image_bytes=mask),
+						reference_id=0,
+						config=MaskReferenceConfig(
+							mask_mode=MaskReferenceMode.MASK_MODE_USER_PROVIDED,
+						),
 					),
 				)
 			)
 
-		config["reference_images"] = ref_images
+		config = EditImageConfig(
+			number_of_images=params.n,
+			edit_mode=(
+				EditMode.EDIT_MODE_INPAINT_INSERTION
+				if mask
+				else EditMode.EDIT_MODE_DEFAULT
+			),
+			output_mime_type=(
+				f"image/{params.output_format}" if params.output_format else None
+			),
+			safety_filter_level=_resolve_safety_filter(params.content_filter),
+		)
 
-		response = await client.models.generate_images(
+		response = await client.models.edit_image(
 			model=model,
 			prompt=prompt,
-			config=config,  # type: ignore[arg-type]
+			reference_images=ref_images,
+			config=config,
 		)
 
 		return ImageGenerationResult(images=_extract_images(response))

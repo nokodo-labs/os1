@@ -47,7 +47,6 @@ class AudioResult:
 async def generate_audio(
 	session: AsyncSession,
 	prompt: str,
-	*,
 	owner_id: TypeID,
 	voice: str | None = None,
 	speed: float | None = None,

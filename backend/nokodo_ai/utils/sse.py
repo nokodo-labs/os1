@@ -15,7 +15,6 @@ from starlette.responses import StreamingResponse
 
 
 def sse_encode(
-	*,
 	event: str,
 	data: Mapping[str, Any] | BaseModel | None = None,
 ) -> bytes:
@@ -54,7 +53,6 @@ def sse_done() -> bytes:
 
 def sse_response(
 	stream: AsyncIterator[bytes],
-	*,
 	headers: dict[str, str] | None = None,
 ) -> StreamingResponse:
 	"""wrap an SSE bytes stream in a StreamingResponse with correct headers.

@@ -209,14 +209,15 @@ def _parse_images(value: object) -> list[PerplexityImageResult]:
 		if isinstance(item, str) and item:
 			parsed.append(PerplexityImageResult(url=item))
 		elif isinstance(item, Mapping):
-			url = _first_str(item, "url", "image_url")
+			item_mapping = dict(item)
+			url = _first_str(item_mapping, "url", "image_url")
 			if url is None:
 				continue
 			parsed.append(
 				PerplexityImageResult(
 					url=url,
-					title=_first_str(item, "title", "alt"),
-					source_url=_first_str(item, "source_url", "source"),
+					title=_first_str(item_mapping, "title", "alt"),
+					source_url=_first_str(item_mapping, "source_url", "source"),
 				)
 			)
 	return parsed
