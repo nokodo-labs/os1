@@ -30,7 +30,7 @@
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
-	type SortKey = 'updated_at' | 'created_at' | 'last_accessed_at' | 'confidence' | 'category'
+	type SortKey = 'updated_at' | 'created_at' | 'last_accessed_at' | 'confidence' | 'tags'
 	type SortDir = 'asc' | 'desc'
 
 	const sortOptions: Array<{ value: SortKey; label: string }> = [
@@ -38,11 +38,11 @@
 		{ value: 'created_at', label: 'created at' },
 		{ value: 'last_accessed_at', label: 'last accessed at' },
 		{ value: 'confidence', label: 'confidence' },
-		{ value: 'category', label: 'category' },
+		{ value: 'tags', label: 'tags' },
 	]
 
 	function defaultSortDir(sort: SortKey): SortDir {
-		if (sort === 'category') return 'asc'
+		if (sort === 'tags') return 'asc'
 		return 'desc'
 	}
 
@@ -427,13 +427,15 @@
 							</div>
 							<div class="min-w-0 flex-1 space-y-2">
 								<div class="flex flex-wrap items-center gap-2">
-									{#if m.category}
-										<span
-											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Tag class="h-3.5 w-3.5" />
-											{m.category}
-										</span>
+									{#if m.tags?.length}
+										{#each m.tags as tag (tag)}
+											<span
+												class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+											>
+												<Tag class="h-3.5 w-3.5" />
+												{tag}
+											</span>
+										{/each}
 									{/if}
 									{#if m.confidence !== null && m.confidence !== undefined}
 										<span

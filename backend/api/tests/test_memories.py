@@ -36,7 +36,7 @@ async def test_create_memory(db_session: AsyncSession, memory_user: Any) -> None
 	memory_in = MemoryCreate(
 		user_id=memory_user.id,
 		content="Test memory content",
-		category="test",
+		tags=["test"],
 	)
 	memory = await memory_service.create_memory(
 		memory_in,
@@ -150,13 +150,13 @@ async def test_list_memories_sorting(
 	resp_b = await client.post(
 		"/v1/memories",
 		headers=headers,
-		json={"user_id": user_id, "content": "b", "category": "b"},
+		json={"user_id": user_id, "content": "b", "tags": ["b"]},
 	)
 	assert resp_b.status_code == 201
 	resp_a = await client.post(
 		"/v1/memories",
 		headers=headers,
-		json={"user_id": user_id, "content": "a", "category": "a"},
+		json={"user_id": user_id, "content": "a", "tags": ["a"]},
 	)
 	assert resp_a.status_code == 201
 
@@ -165,14 +165,14 @@ async def test_list_memories_sorting(
 		headers=headers,
 		params={
 			"user_id": user_id,
-			"sort_by": "category",
+			"sort_by": "tags",
 			"sort_dir": "asc",
 			"limit": 50,
 		},
 	)
 	assert list_resp.status_code == 200
 	items = list_resp.json()
-	assert [m["category"] for m in items[:2]] == ["a", "b"]
+	assert [m["tags"] for m in items[:2]] == [["a"], ["b"]]
 
 
 @pytest.mark.asyncio

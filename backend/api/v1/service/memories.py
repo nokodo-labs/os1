@@ -43,7 +43,7 @@ from api.v1.service.vectorize import (
 )
 from nokodo_ai.messages import SystemMessage, UserMessage
 from nokodo_ai.threads import Thread as SDKThread
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
@@ -170,7 +170,7 @@ async def list_memories(
 				"updated_at": Memory.updated_at,
 				"created_at": Memory.created_at,
 				"content_length": func.length(Memory.content),
-				"category": Memory.category,
+				"tags": Memory.tags,
 				"last_accessed_at": Memory.last_accessed_at,
 				"confidence": Memory.confidence,
 			},
@@ -205,8 +205,8 @@ async def update_memory(
 		memory.content = memory_in.content
 	if memory_in.confidence is not None:
 		memory.confidence = memory_in.confidence
-	if memory_in.category is not None:
-		memory.category = memory_in.category
+	if memory_in.tags is not None:
+		memory.tags = memory_in.tags
 
 	event = Event(
 		scope=EventScope.USER,
@@ -295,10 +295,11 @@ def _memory_dense_text(memory: Memory) -> str:
 
 
 def _memory_metadata(memory: Memory) -> JSONObject:
+	tags: list[JSONValue] = list(memory.tags) if memory.tags else []
 	return {
 		"resource_type": "memory",
 		"owner_id": str(memory.user_id),
-		"category": memory.category or "",
+		"tags": tags,
 	}
 
 
@@ -307,7 +308,7 @@ async def _memory_should_revectorize(
 	memory_in: MemoryUpdate,
 	session: AsyncSession,
 ) -> bool:
-	_fields = {"content", "category"}
+	_fields = {"content", "tags"}
 	update_data = memory_in.model_dump(exclude_unset=True, mode="python")
 	return bool(_fields & update_data.keys())
 
@@ -372,7 +373,7 @@ async def _autocomplete_memories(
 			type=SearchResultType.MEMORY,
 			id=TypeID(mem.id),
 			title=mem.content[:80] if mem.content else "",
-			preview=mem.category,
+			preview=", ".join(mem.tags) if mem.tags else None,
 			created_at=mem.created_at,
 			updated_at=mem.updated_at,
 		)
@@ -431,7 +432,7 @@ async def _hybrid_search_memories(
 				type=SearchResultType.MEMORY,
 				id=TypeID(mem.id),
 				title=mem.content[:80] if mem.content else "",
-				preview=mem.category,
+				preview=", ".join(mem.tags) if mem.tags else None,
 				score=score_by_rid.get(rid),
 				created_at=mem.created_at,
 				updated_at=mem.updated_at,

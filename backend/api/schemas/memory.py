@@ -15,7 +15,7 @@ from nokodo_ai.utils.typeid import TypeID
 type MemorySortBy = (
 	CommonSortBy
 	| Literal[
-		"category",
+		"tags",
 		"content_length",
 		"last_accessed_at",
 		"confidence",
@@ -36,7 +36,7 @@ class MemoryBase(MetadataModel):
 	content: str
 	source_message_id: TypeID | None = None
 	confidence: float | None = None
-	category: str | None = None
+	tags: list[str] | None = None
 
 
 class MemoryCreate(MemoryBase):
@@ -50,7 +50,7 @@ class MemoryUpdate(MetadataUpdateModel):
 
 	content: str | None = None
 	confidence: float | None = None
-	category: str | None = None
+	tags: list[str] | None = None
 
 
 class Memory(MemoryBase, TimestampedModel):

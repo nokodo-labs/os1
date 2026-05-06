@@ -31,13 +31,13 @@ class MemorySearchInput(BaseModel):
 
 	query: str = Field(
 		...,
-		description=("natural language query describing what memories to recall."),
+		description=("natural language query describing what memories to recall"),
 	)
 	limit: int = Field(
 		default=5,
 		description="maximum number of relevant memories to return",
 		ge=1,
-		le=20,
+		le=30,
 	)
 
 
@@ -48,15 +48,16 @@ class MemoryCreateInput(BaseModel):
 
 	content: str = Field(
 		...,
-		description="the content of the memory to store. "
-		"all memories about the user MUST start with `User`.",
+		description="the content of the memory to store",
 		examples=[
 			"User's dog Ruby is a golden retriever",
+			"User loves pizza but only if it has mushrooms on it",
 		],
 	)
-	category: str | None = Field(
+	tags: list[str] | None = Field(
 		default=None,
-		description="optional category or tag for the memory",
+		description="optional tags/labels for the memory",
+		examples=[["preferences", "food"], ["pets", "family"]],
 	)
 
 
@@ -113,7 +114,7 @@ class MemoryRecallTool(Tool[AppContext]):
 			{
 				"id": item.id,
 				"title": item.title,
-				**({"category": item.preview} if item.preview else {}),
+				**({"tags": item.preview} if item.preview else {}),
 			}
 			for item in page.items
 		]
@@ -124,13 +125,13 @@ class MemoryRecallTool(Tool[AppContext]):
 
 
 class MemoryCreateTool(Tool[AppContext]):
-	"""store a new memory for the user."""
+	"""store a new memory."""
 
 	name: str = Field(default="memory_create")
 	description: str = Field(
 		default=(
-			"store a new memory. use this to permanently save important facts, "
-			"preferences, or context the user has shared during the conversation."
+			"store a new memory. use this to remember anything "
+			"you want, from what the user said in the chat."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -179,7 +180,7 @@ async def _persist_memory(
 			await memory_service.create_memory(
 				MemoryCreate(
 					content=inp.content,
-					category=inp.category,
+					tags=inp.tags,
 					user_id=user_id,
 				),
 				session,

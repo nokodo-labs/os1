@@ -99,7 +99,7 @@
 						<div class="space-y-3 lg:col-span-1">
 							<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm">
 								<div class="font-medium">
-									{memory.category ?? '(no category)'}
+									{memory.tags?.length ? memory.tags.join(', ') : '(no tags)'}
 								</div>
 								<div class="mt-2 space-y-1 text-xs text-zinc-400">
 									<div>id: {memory.id}</div>

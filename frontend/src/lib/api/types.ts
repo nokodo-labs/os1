@@ -3219,10 +3219,10 @@ export interface components {
             web_search_model_id?: string | null;
             /**
              * Maintenance Max Chars Per Message
-             * @description max characters per message in thread maintenance transcripts
+             * @description max characters per message in thread maintenance transcripts. null for unlimited
              * @default 2000
              */
-            maintenance_max_chars_per_message: number;
+            maintenance_max_chars_per_message: number | null;
         };
         /** AITaskSettingsPatch */
         AITaskSettingsPatch: {
@@ -3338,10 +3338,10 @@ export interface components {
             response_headroom: number;
             /**
              * Summarization Max Chars Per Message
-             * @description max characters per message in summarization transcripts. keeps tokens manageable without losing essential context
+             * @description max characters per message in summarization transcripts. keeps tokens manageable without losing essential context. null for unlimited
              * @default 2000
              */
-            summarization_max_chars_per_message: number;
+            summarization_max_chars_per_message: number | null;
         };
         /** AIWindowingSettingsPatch */
         AIWindowingSettingsPatch: {
@@ -3609,7 +3609,7 @@ export interface components {
             system_prompt?: string | null;
             /** Plugin Ids */
             plugin_ids?: string[];
-            config?: components["schemas"]["AgentConfig-Output"];
+            config?: components["schemas"]["AgentConfig"];
             /** Model Id */
             model_id?: string | null;
             /** Profile Image File Id */
@@ -3626,16 +3626,7 @@ export interface components {
          * AgentConfig
          * @description top-level typed view of ``agent.config``.
          */
-        "AgentConfig-Input": {
-            features?: components["schemas"]["AgentFeatures"];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * AgentConfig
-         * @description top-level typed view of ``agent.config``.
-         */
-        "AgentConfig-Output": {
+        AgentConfig: {
             features?: components["schemas"]["AgentFeatures"];
         } & {
             [key: string]: unknown;
@@ -3654,7 +3645,7 @@ export interface components {
             system_prompt?: string | null;
             /** Plugin Ids */
             plugin_ids?: string[];
-            config?: components["schemas"]["AgentConfig-Input"];
+            config?: components["schemas"]["AgentConfig"];
             /** Model Id */
             model_id?: string | null;
             /** Profile Image File Id */
@@ -3685,7 +3676,7 @@ export interface components {
             system_prompt?: string | null;
             /** Plugin Ids */
             plugin_ids?: string[] | null;
-            config?: components["schemas"]["AgentConfig-Input"] | null;
+            config?: components["schemas"]["AgentConfig"] | null;
             /** Model Id */
             model_id?: string | null;
             /** Profile Image File Id */
@@ -4708,21 +4699,7 @@ export interface components {
          *     action_permissions: set of action permissions granted by
          *             default.
          */
-        "DefaultPermissions-Input": {
-            resource_access?: components["schemas"]["DefaultResourceAccess"];
-            /** Action Permissions */
-            action_permissions?: components["schemas"]["ActionPermission"][];
-        };
-        /**
-         * DefaultPermissions
-         * @description default permissions model for both global settings and
-         *     role-scoped defaults.
-         *
-         *     resource_access: per-resource-type access level defaults.
-         *     action_permissions: set of action permissions granted by
-         *             default.
-         */
-        "DefaultPermissions-Output": {
+        DefaultPermissions: {
             resource_access?: components["schemas"]["DefaultResourceAccess"];
             /** Action Permissions */
             action_permissions?: components["schemas"]["ActionPermission"][];
@@ -5639,8 +5616,8 @@ export interface components {
             source_message_id?: string | null;
             /** Confidence */
             confidence?: number | null;
-            /** Category */
-            category?: string | null;
+            /** Tags */
+            tags?: string[] | null;
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -5668,8 +5645,8 @@ export interface components {
             source_message_id?: string | null;
             /** Confidence */
             confidence?: number | null;
-            /** Category */
-            category?: string | null;
+            /** Tags */
+            tags?: string[] | null;
             /**
              * User Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -5686,8 +5663,8 @@ export interface components {
             content?: string | null;
             /** Confidence */
             confidence?: number | null;
-            /** Category */
-            category?: string | null;
+            /** Tags */
+            tags?: string[] | null;
         };
         /**
          * Message
@@ -7547,7 +7524,7 @@ export interface components {
              * @default 0
              */
             priority: number;
-            default_permissions?: components["schemas"]["DefaultPermissions-Output"];
+            default_permissions?: components["schemas"]["DefaultPermissions"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -7573,7 +7550,7 @@ export interface components {
              * @default 0
              */
             priority: number;
-            default_permissions?: components["schemas"]["DefaultPermissions-Input"];
+            default_permissions?: components["schemas"]["DefaultPermissions"];
         };
         /**
          * RoleUpdate
@@ -7591,7 +7568,7 @@ export interface components {
             } | null;
             /** Priority */
             priority?: number | null;
-            default_permissions?: components["schemas"]["DefaultPermissions-Input"] | null;
+            default_permissions?: components["schemas"]["DefaultPermissions"] | null;
         };
         /**
          * RunInput
@@ -17281,7 +17258,7 @@ export interface operations {
             query: {
                 skip?: number;
                 limit?: number;
-                sort_by?: components["schemas"]["CommonSortBy"] | ("category" | "content_length" | "last_accessed_at" | "confidence");
+                sort_by?: components["schemas"]["CommonSortBy"] | ("tags" | "content_length" | "last_accessed_at" | "confidence");
                 sort_dir?: "asc" | "desc";
                 user_id: string;
                 search?: string | null;
