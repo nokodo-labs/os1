@@ -35,7 +35,7 @@
 		| 'updated_at'
 		| 'created_at'
 		| 'content_length'
-		| 'category'
+		| 'tags'
 		| 'last_accessed_at'
 		| 'confidence'
 
