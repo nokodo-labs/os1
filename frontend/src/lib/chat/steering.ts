@@ -6,7 +6,9 @@ import type { ApiMessage, SteeringState } from './types'
 
 export type { SteeringState }
 
-export function getMessageSteeringState(message: Pick<ApiMessage, 'metadata_'>): SteeringState | null {
+export function getMessageSteeringState(
+	message: Pick<ApiMessage, 'metadata_'>
+): SteeringState | null {
 	const meta = (message.metadata_ ?? {}) as Record<string, unknown>
 	const state = meta.steering_state
 	if (state === 'queued' || state === 'injected' || state === 'dropped') return state

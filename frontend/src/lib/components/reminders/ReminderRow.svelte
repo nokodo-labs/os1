@@ -1,12 +1,16 @@
 <script lang="ts">
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
+	import Bell from '$lib/components/icons/Bell.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Circle from '$lib/components/icons/Circle.svelte'
+	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
+	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
+	import XMark from '$lib/components/icons/XMark.svelte'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import { device } from '$lib/stores/device.svelte'
 	import type {
 		ReminderListWithCounts,
@@ -59,6 +63,8 @@
 	let isDatePickerOpen = $state(false)
 	let isRepeatMenuOpen = $state(false)
 
+	const DESCRIPTION_PREVIEW_MAX = 140
+
 	let editedTitle = $state('')
 	let editedDescription = $state('')
 
@@ -68,25 +74,55 @@
 	const isMotionOutUncomplete = $derived(props.motion === 'out-uncomplete')
 	const isMorphPlus = $derived(props.kind === 'edit' && props.iconMorph === 'plus-to-circle')
 	const hasDueDate = $derived(props.kind === 'edit' && props.reminder.due_at != null)
+	const hasRemindAt = $derived(props.kind === 'edit' && props.reminder.remind_at != null)
 	const formattedDueDate = $derived.by(() => {
 		if (props.kind !== 'edit') return null
 		if (!props.reminder.due_at) return null
+		return formatScheduleDateTime(props.reminder.due_at)
+	})
+	const formattedRemindAt = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		if (!props.reminder.remind_at) return null
+		return formatScheduleDateTime(props.reminder.remind_at)
+	})
+	const descriptionPreview = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		return truncateText(props.reminder.description, DESCRIPTION_PREVIEW_MAX)
+	})
 
-		const date = new SvelteDate(props.reminder.due_at)
+	function formatScheduleDateTime(iso: string): string {
+		const date = new SvelteDate(iso)
 		const now = new SvelteDate()
 		const isToday = date.toDateString() === now.toDateString()
 		const tomorrow = new SvelteDate(now)
 		tomorrow.setDate(tomorrow.getDate() + 1)
 		const isTomorrow = date.toDateString() === tomorrow.toDateString()
 
-		if (isToday) return 'today'
-		if (isTomorrow) return 'tomorrow'
+		const time = date
+			.toLocaleTimeString(undefined, {
+				hour: 'numeric',
+				minute: '2-digit',
+			})
+			.toLowerCase()
 
-		return date.toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric',
-		})
-	})
+		if (isToday) return `today ${time}`
+		if (isTomorrow) return `tomorrow ${time}`
+
+		const dateLabel = date
+			.toLocaleDateString(undefined, {
+				month: 'short',
+				day: 'numeric',
+			})
+			.toLowerCase()
+		return `${dateLabel} ${time}`
+	}
+
+	function truncateText(value: string | null | undefined, maxLength: number): string | null {
+		const trimmed = value?.trim()
+		if (!trimmed) return null
+		if (trimmed.length <= maxLength) return trimmed
+		return `${trimmed.slice(0, maxLength).trimEnd()}...`
+	}
 
 	const isOverdue = $derived.by(() => {
 		if (props.kind !== 'edit') return false
@@ -144,6 +180,20 @@
 		dueDraft = value
 		const iso = localInputToIso(value)
 		void props.onUpdate({ due_at: iso })
+	}
+
+	function setDuePreset(daysFromToday: number) {
+		if (props.kind !== 'edit') return
+		const date = new SvelteDate()
+		date.setDate(date.getDate() + daysFromToday)
+		if (daysFromToday === 0) {
+			date.setHours(date.getHours() + 1, 0, 0, 0)
+		} else {
+			date.setHours(9, 0, 0, 0)
+		}
+		dueDraft = isoToLocalInput(date.toISOString())
+		void props.onUpdate({ due_at: date.toISOString() })
+		isDatePickerOpen = false
 	}
 
 	function clearDue() {
@@ -394,7 +444,7 @@
 					<span class="title-text title-overlay" aria-hidden="true">{editedTitle}</span>
 				</div>
 			{:else}
-				<div class="text-foreground/90 min-w-0 truncate text-[0.95rem] leading-6">
+				<div class="text-foreground/90 min-w-0 text-[0.95rem] leading-6">
 					<span class="title-text">
 						{props.kind === 'edit' ? props.reminder.title : editedTitle}
 					</span>
@@ -506,44 +556,75 @@
 		</div>
 	</div>
 
-	{#if props.kind === 'edit' && (hasDueDate || props.reminder.description) && !props.expanded}
-		<div class="flex items-center gap-2 px-3 pb-2 pl-11">
-			{#if hasDueDate}
-				<span class="text-xs {isOverdue ? 'text-red-400' : 'text-foreground/55'}">
-					{formattedDueDate}
-				</span>
+	{#if props.kind === 'edit' && (descriptionPreview || hasDueDate || hasRemindAt || recurrenceLabel) && !props.expanded}
+		<div class="min-w-0 px-3 pb-2 pl-12">
+			{#if descriptionPreview}
+				<p class="text-foreground/60 min-w-0 text-xs leading-5 wrap-break-word">
+					{descriptionPreview}
+				</p>
+			{/if}
+
+			{#if hasDueDate || hasRemindAt || recurrenceLabel}
+				<div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+					{#if hasDueDate}
+						<span
+							class="rounded-pill border-foreground/10 bg-foreground/5 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs {isOverdue
+								? 'text-red-400'
+								: 'text-foreground/60'}"
+						>
+							<Calendar variant="solid" class="h-3.5 w-3.5 shrink-0" />
+							{formattedDueDate}
+						</span>
+					{/if}
+					{#if hasRemindAt}
+						<span
+							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs"
+						>
+							<Bell class="h-3.5 w-3.5 shrink-0" />
+							{formattedRemindAt}
+						</span>
+					{/if}
+					{#if recurrenceLabel}
+						<span
+							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs"
+						>
+							<ArrowPath class="h-3.5 w-3.5 shrink-0" />
+							{recurrenceLabel}
+						</span>
+					{/if}
+				</div>
 			{/if}
 		</div>
 	{/if}
 
 	{#if props.kind === 'edit'}
 		<PopupMenu open={isMenuOpen} anchorEl={menuButtonEl} onClose={() => (isMenuOpen = false)}>
-			<div class="text-foreground/55 px-3 pt-2 pb-1 text-xs font-medium">move</div>
+			<div
+				class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+			>
+				<ListBullet class="h-3.5 w-3.5" />
+				move to
+			</div>
 			<div class="max-h-44 overflow-auto">
-				<button
-					type="button"
-					class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
-					onclick={(event) => {
-						event.stopPropagation()
-						isMenuOpen = false
-						void props.onMove(null)
-					}}
-				>
-					reminders
-				</button>
-
 				{#each props.availableLists as list (list.id)}
-					<button
-						type="button"
-						class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+					<MenuItem
+						selected={props.reminder.list_id === list.id}
 						onclick={(event) => {
 							event.stopPropagation()
 							isMenuOpen = false
 							void props.onMove(list.id)
 						}}
 					>
+						{#snippet icon()}
+							<span
+								class="rounded-pill flex h-4 w-4 items-center justify-center"
+								style:background-color={list.color ?? 'rgba(255,255,255,0.1)'}
+							>
+								<span class="text-[0.55rem]">{list.icon ?? ''}</span>
+							</span>
+						{/snippet}
 						{list.name}
-					</button>
+					</MenuItem>
 				{/each}
 			</div>
 
@@ -570,29 +651,69 @@
 			anchorEl={dateButtonEl}
 			onClose={() => (isDatePickerOpen = false)}
 		>
-			<div class="flex flex-col gap-2 p-3" style="min-width: 220px;">
-				<label class="text-foreground/55 text-xs font-medium" for="due-input">
-					due date and time
+			<div class="flex w-72 max-w-[calc(100vw-1rem)] flex-col gap-3 p-2">
+				<div
+					class="text-foreground/50 flex items-center gap-2 px-1 text-xs font-semibold tracking-[0.08em] uppercase"
+				>
+					<Calendar variant="solid" class="h-3.5 w-3.5" />
+					schedule
+				</div>
+				<div class="grid grid-cols-3 gap-1">
+					<button
+						type="button"
+						class="rounded-pill bg-foreground/6 text-foreground/75 hover:bg-foreground/10 flex cursor-pointer items-center justify-center gap-1.5 border-none px-2 py-1.5 text-xs transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							setDuePreset(0)
+						}}
+					>
+						<ClockRotateRight class="h-3.5 w-3.5" />
+						today
+					</button>
+					<button
+						type="button"
+						class="rounded-pill bg-foreground/6 text-foreground/75 hover:bg-foreground/10 flex cursor-pointer items-center justify-center gap-1.5 border-none px-2 py-1.5 text-xs transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							setDuePreset(1)
+						}}
+					>
+						<Calendar class="h-3.5 w-3.5" />
+						tomorrow
+					</button>
+					<button
+						type="button"
+						class="rounded-pill bg-foreground/6 text-foreground/75 hover:bg-foreground/10 flex cursor-pointer items-center justify-center gap-1.5 border-none px-2 py-1.5 text-xs transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							setDuePreset(7)
+						}}
+					>
+						<ArrowPath class="h-3.5 w-3.5" />
+						next week
+					</button>
+				</div>
+				<label class="text-foreground/55 px-1 text-xs font-medium" for="due-input">
+					custom date and time
 				</label>
 				<input
 					id="due-input"
 					type="datetime-local"
-					class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/85 border px-3 py-1.5 text-sm outline-none"
+					class="rounded-pill border-foreground/14 bg-foreground/5 text-foreground/85 focus:border-foreground/30 border px-3 py-2 text-sm transition-colors outline-none"
 					value={dueDraft}
 					onclick={(e) => e.stopPropagation()}
 					oninput={(e) => handleDueChange((e.target as HTMLInputElement).value)}
 				/>
 				{#if hasDueDate}
-					<button
-						type="button"
-						class="rounded-pill text-foreground/70 hover:bg-foreground/10 cursor-pointer border-none bg-transparent px-3 py-1.5 text-left text-sm transition-colors"
+					<MenuItem
 						onclick={(event) => {
 							event.stopPropagation()
 							clearDue()
 						}}
 					>
+						{#snippet icon()}<XMark class="h-4 w-4" />{/snippet}
 						clear
-					</button>
+					</MenuItem>
 				{/if}
 			</div>
 		</PopupMenu>
@@ -602,24 +723,25 @@
 			anchorEl={repeatButtonEl}
 			onClose={() => (isRepeatMenuOpen = false)}
 		>
-			<div class="flex flex-col gap-0.5 p-1" style="min-width: 180px;">
+			<div class="flex min-w-56 flex-col gap-0.5 p-1">
+				<div
+					class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+				>
+					<ArrowPath class="h-3.5 w-3.5" />
+					repeat
+				</div>
 				{#each RECURRENCE_PRESETS as preset (preset.value)}
 					{@const isCurrent = currentRecurrenceRule() === preset.value}
-					<button
-						type="button"
-						class="rounded-pill hover:bg-foreground/10 flex cursor-pointer items-center justify-between border-none bg-transparent px-3 py-1.5 text-left text-sm transition-colors {isCurrent
-							? 'text-foreground'
-							: 'text-foreground/75'}"
+					<MenuItem
+						selected={isCurrent}
 						onclick={(event) => {
 							event.stopPropagation()
 							handleRecurrence(preset.value)
 						}}
 					>
-						<span>{preset.label}</span>
-						{#if isCurrent}
-							<Check class="h-4 w-4" strokeWidth="2" />
-						{/if}
-					</button>
+						{#snippet icon()}<ArrowPath class="h-4 w-4" />{/snippet}
+						{preset.label}
+					</MenuItem>
 				{/each}
 			</div>
 		</PopupMenu>
@@ -748,14 +870,18 @@
 
 	.title-text {
 		position: relative;
-		display: inline-block;
+		display: inline;
 		max-width: 100%;
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 
 	.title-overlay {
 		position: absolute;
+		display: inline-block;
 		left: 0;
 		top: 0;
+		max-width: 100%;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -764,6 +890,7 @@
 	}
 
 	.title-text::after {
+		display: none;
 		content: '';
 		position: absolute;
 		left: 0;
@@ -778,6 +905,12 @@
 
 	.is-completed .title-text::after {
 		transform: scaleX(1);
+	}
+
+	.is-completed .title-text {
+		text-decoration-line: line-through;
+		text-decoration-thickness: 2px;
+		text-decoration-color: rgba(255, 255, 255, 0.68);
 	}
 
 	.is-incoming {

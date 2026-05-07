@@ -164,7 +164,7 @@
 				<div
 					class="liquid-glass liquid-glass--frosted animate-pulse overflow-hidden rounded-2xl {layout ===
 					'grid'
-						? 'h-52'
+						? 'h-80'
 						: 'h-16'}"
 				></div>
 			{/each}

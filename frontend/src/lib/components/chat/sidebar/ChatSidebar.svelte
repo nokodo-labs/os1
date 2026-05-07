@@ -305,9 +305,7 @@
 		: device.isMobile
 			? 'pointer-events-none -translate-x-full'
 			: 'translate-x-0'}"
-	style="background-color: var(--accent-bg);{device.isMobile
-		? ''
-		: ' view-transition-name: chat-sidebar;'}"
+	style="background-color: var(--accent-bg);"
 	inert={device.isMobile ? !sidebar.isChatSidebarOpen : undefined}
 	use:expandOnClick
 >

@@ -5,6 +5,7 @@
 
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
+	import { device } from '$lib/stores/device.svelte'
 
 	import ChatSidebarThreadRow from './ChatSidebarThreadRow.svelte'
 
@@ -42,7 +43,7 @@
 		onDeleteThread,
 	}: Props = $props()
 
-	const LOAD_MORE_THRESHOLD_PX = 240
+	const LOAD_MORE_THRESHOLD_PX = 720
 
 	let scrollContainer = $state<HTMLDivElement | null>(null)
 
@@ -50,7 +51,8 @@
 		if (!scrollContainer || !isLoggedIn || !hasMoreThreads || isLoadingMoreThreads) return
 		const remaining =
 			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight
-		if (remaining > LOAD_MORE_THRESHOLD_PX) return
+		const threshold = Math.max(LOAD_MORE_THRESHOLD_PX, scrollContainer.clientHeight * 0.75)
+		if (remaining > threshold) return
 		void onLoadMoreThreads()
 	}
 
@@ -69,7 +71,9 @@
 
 <!-- Chats Section -->
 <div
-	class="flex min-h-0 w-full flex-1 flex-col transition-opacity duration-200 ease-out {expandedContentVisible
+	class="flex min-h-0 flex-1 flex-col transition-opacity duration-200 ease-out {device.isMobile
+		? 'w-full'
+		: 'w-72 shrink-0'} {expandedContentVisible
 		? 'opacity-100'
 		: 'pointer-events-none opacity-0'}"
 	inert={!expandedContentVisible || undefined}
@@ -108,7 +112,13 @@
 					</div>
 				{:else}
 					{#each threads as thread, index (thread.id)}
-						<div class={index === threads.length - 1 ? 'pb-5' : ''}>
+						<div
+							class={index === threads.length - 1
+								? device.isMobile
+									? 'pb-20'
+									: 'pb-5'
+								: ''}
+						>
 							<ChatSidebarThreadRow
 								{thread}
 								selected={selectedChatId === thread.id}

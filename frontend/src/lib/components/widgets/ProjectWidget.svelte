@@ -8,6 +8,7 @@
 	import { PopupMenu } from '$lib/components/primitives'
 	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
+	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
 	interface Props {
@@ -47,15 +48,43 @@
 
 <a
 	href={resolve(`/projects/${resource.id}`)}
-	class="group liquid-glass liquid-glass--frosted relative block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
+	class="group liquid-glass liquid-glass--frosted relative block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
-		: 'flex flex-col p-6'} {className}"
+		: 'flex min-h-80 flex-col p-6'} {className}"
 >
 	{#if layout === 'grid'}
-		<div class="mb-4 flex items-center gap-3">
+		<ResourcePreview tone="yellow" label="project" caption={stats} class="-mx-6 -mt-6">
+			{#snippet icon()}
+				<FinderFolder class="size-6" />
+			{/snippet}
+			{#if threadCount > 0 || noteCount > 0 || fileCount > 0}
+				<div class="flex h-full w-full items-end p-4">
+					<div
+						class="bg-background/65 text-foreground/70 flex w-full flex-wrap gap-1.5 rounded-2xl p-3 text-xs backdrop-blur-sm"
+					>
+						{#if threadCount > 0}
+							<span class="rounded-pill bg-foreground/10 px-2 py-1"
+								>{threadCount} chats</span
+							>
+						{/if}
+						{#if noteCount > 0}
+							<span class="rounded-pill bg-foreground/10 px-2 py-1"
+								>{noteCount} notes</span
+							>
+						{/if}
+						{#if fileCount > 0}
+							<span class="rounded-pill bg-foreground/10 px-2 py-1"
+								>{fileCount} files</span
+							>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</ResourcePreview>
+		<div class="mb-3 flex items-center gap-3">
 			<div
-				class="flex size-11 items-center justify-center rounded-xl bg-yellow-400/15 text-yellow-400"
+				class="flex size-10 items-center justify-center rounded-xl bg-yellow-400/15 text-yellow-400"
 			>
 				<FinderFolder class="size-5" />
 			</div>

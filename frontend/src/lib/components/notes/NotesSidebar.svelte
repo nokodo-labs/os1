@@ -2,19 +2,18 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
-	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -158,21 +157,34 @@
 					aria-haspopup="menu"
 					aria-expanded={isSortMenuOpen}
 				>
-					<ArrowsUpDown variant="solid" class="h-5 w-5" />
+					<SortIcon value={notes.sortMode} class="h-5 w-5" />
 				</button>
-				<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
+				<PopupMenu
+					open={isSortMenuOpen}
+					anchorEl={sortButtonEl}
+					onClose={closeSortMenu}
+					class="min-w-52"
+				>
+					<div
+						class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+					>
+						<SortIcon value={notes.sortMode} class="h-3.5 w-3.5" />
+						sort notes
+					</div>
 					{#each sortOptions as option (option.value)}
-						<button
-							type="button"
-							role="menuitem"
-							class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+						<MenuItem
+							selected={notes.sortMode === option.value}
 							onclick={() => {
 								notes.sortMode = option.value
 								closeSortMenu()
 							}}
 						>
-							{option.label}{notes.sortMode === option.value ? ' ✓' : ''}
-						</button>
+							{#snippet icon()}<SortIcon
+									value={option.value}
+									class="h-4 w-4"
+								/>{/snippet}
+							{option.label}
+						</MenuItem>
 					{/each}
 				</PopupMenu>
 				<button

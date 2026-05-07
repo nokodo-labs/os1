@@ -43,9 +43,9 @@
 	let searchDebounce: ReturnType<typeof setTimeout> | null = null
 	let abortController: AbortController | null = null
 
-	const filterOptions: { value: ResourceFilterMode; label: string; icon?: typeof ChatBubbles }[] =
+	const filterOptions: { value: ResourceFilterMode; label: string; icon: typeof ChatBubbles }[] =
 		[
-			{ value: 'all', label: 'all' },
+			{ value: 'all', label: 'all', icon: Grid },
 			{ value: 'threads', label: 'chats', icon: ChatBubbles },
 			{ value: 'notes', label: 'notes', icon: Document },
 			{ value: 'reminders', label: 'reminders', icon: CheckBox },
@@ -312,9 +312,10 @@
 		<div class="flex items-center gap-2">
 			<div class="scrollbar-none flex flex-1 gap-1 overflow-x-auto">
 				{#each filterOptions as opt (opt.value)}
+					{@const Icon = opt.icon}
 					<button
 						type="button"
-						class="rounded-pill shrink-0 cursor-pointer border px-3 py-1.5 text-xs transition-colors duration-150 {activeFilter ===
+						class="rounded-pill flex shrink-0 cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors duration-150 {activeFilter ===
 						opt.value
 							? 'border-foreground/20 bg-foreground/12 text-foreground/90'
 							: 'border-foreground/8 text-foreground/50 hover:bg-foreground/5 hover:text-foreground/70 bg-transparent'}"
@@ -323,6 +324,7 @@
 							if (searchQuery.trim()) void runSearch(searchQuery)
 						}}
 					>
+						<Icon class="size-3.5 shrink-0" />
 						{opt.label}
 					</button>
 				{/each}

@@ -5,7 +5,7 @@
  */
 
 import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
-import { SvelteMap } from 'svelte/reactivity'
+import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export interface ActiveRun {
 	threadId: string
@@ -82,8 +82,10 @@ class ActiveRunsStore {
 				run_id: string
 				agent_id: string
 			}>
+			const activeRunIds = new SvelteSet<string>()
 			for (const run of runs) {
 				if (run.run_id && run.thread_id) {
+					activeRunIds.add(run.run_id)
 					this.runs.set(run.run_id, {
 						threadId: run.thread_id,
 						runId: run.run_id,
@@ -91,6 +93,9 @@ class ActiveRunsStore {
 						startedAt: Date.now(),
 					})
 				}
+			}
+			for (const runId of this.runs.keys()) {
+				if (!activeRunIds.has(runId)) this.runs.delete(runId)
 			}
 		} else if (msg.type === 'run.started') {
 			const data = ((msg as Record<string, unknown>).data ?? {}) as {

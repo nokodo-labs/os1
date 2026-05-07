@@ -18,6 +18,9 @@ export type PendingCreateAndRun = {
 	stream: AsyncGenerator<CreateAndRunStreamDelta, void, unknown>
 }
 type ApiMessage = components['schemas']['Message']
+type ApiTask = components['schemas']['Task']
+
+const THREAD_MAINTENANCE_TASK = 'thread.maintenance'
 
 // cache TTL in milliseconds
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -364,12 +367,42 @@ class ChatStore {
 	/** unread message counts per thread id (only threads with unread > 0) */
 	readonly unreadCounts = new SvelteMap<string, number>()
 
+	/** thread ids currently handled by a metadata maintenance task */
+	readonly metadataGeneratingThreadIds = new SvelteSet<string>()
+
 	/** in-memory drafts keyed by context id (thread id or 'home') */
 	readonly drafts = new SvelteMap<string, string>()
 
 	#unsubscribe: (() => void) | null = null
 	#threadPaginationLimit = 25
 	#threadPaginationSkip = 0
+
+	#threadMetadataMissing(thread: Thread | null | undefined): boolean {
+		if (!thread) return true
+		return !thread.title?.trim() || !thread.tags || thread.tags.length === 0
+	}
+
+	#findKnownThread(threadId: string): Thread | null {
+		if (this.activeThread?.id === threadId) return this.activeThread
+		return this.recentThreads.find((thread) => thread.id === threadId) ?? null
+	}
+
+	#clearMetadataGeneratingIfReady(thread: Thread | null | undefined): void {
+		if (!thread) return
+		if (!this.#threadMetadataMissing(thread)) this.metadataGeneratingThreadIds.delete(thread.id)
+	}
+
+	#threadIdForMaintenanceTask(task: ApiTask | undefined): string | null {
+		if (!task) return null
+		const metadata = task.metadata_ ?? {}
+		if (metadata.task_name !== THREAD_MAINTENANCE_TASK) return null
+		if (typeof task.spawned_thread_id === 'string' && task.spawned_thread_id) {
+			return task.spawned_thread_id
+		}
+		return typeof metadata.thread_id === 'string' && metadata.thread_id
+			? metadata.thread_id
+			: null
+	}
 
 	getDraft = (key: string): string => {
 		return this.drafts.get(key) ?? ''
@@ -398,6 +431,7 @@ class ChatStore {
 			if (!thread?.id || thread.is_temporary) return
 			// update cache + prepend to recent threads (dedup)
 			this.threadCache.set(thread)
+			this.#clearMetadataGeneratingIfReady(thread)
 			if (!this.recentThreads.some((t) => t.id === thread.id)) {
 				this.recentThreads = [thread, ...this.recentThreads]
 			}
@@ -424,24 +458,52 @@ class ChatStore {
 			// merge into cache
 			const cached = this.threadCache.get(threadId)
 			if (cached) {
-				this.threadCache.set({ ...cached, ...patch })
+				const updated = { ...cached, ...patch }
+				this.threadCache.set(updated)
+				this.#clearMetadataGeneratingIfReady(updated)
 			} else {
 				this.threadCache.invalidate(threadId)
 			}
 
-			this.updateRecentThread(threadId, (t) => ({ ...t, ...patch }))
+			this.updateRecentThread(threadId, (t) => {
+				const updated = { ...t, ...patch }
+				this.#clearMetadataGeneratingIfReady(updated)
+				return updated
+			})
 
 			if (this.activeThread?.id === threadId) {
 				this.activeThread = { ...this.activeThread, ...patch }
+				this.#clearMetadataGeneratingIfReady(this.activeThread)
 			}
 		} else if (message.type === 'thread.deleted') {
 			const threadId = (data.id as string) ?? (message.thread_id as string)
 			if (!threadId) return
 
 			this.threadCache.invalidateAll(threadId)
+			this.metadataGeneratingThreadIds.delete(threadId)
 			this.removeRecentThread(threadId)
 			if (this.activeThread?.id === threadId) {
 				this.activeThread = null
+			}
+		} else if (message.type === 'run.error' || message.type === 'run.failed') {
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
+			if (threadId) this.metadataGeneratingThreadIds.delete(threadId)
+		} else if (message.type === 'task.created' || message.type === 'task.updated') {
+			const task = data.task as ApiTask | undefined
+			const threadId = this.#threadIdForMaintenanceTask(task)
+			if (threadId) this.metadataGeneratingThreadIds.add(threadId)
+		} else if (
+			message.type === 'task.completed' ||
+			message.type === 'task.failed' ||
+			message.type === 'task.cancelled'
+		) {
+			const task = data.task as ApiTask | undefined
+			const threadId = this.#threadIdForMaintenanceTask(task)
+			if (!threadId) return
+			if (message.type === 'task.completed') {
+				this.#clearMetadataGeneratingIfReady(this.#findKnownThread(threadId))
+			} else {
+				this.metadataGeneratingThreadIds.delete(threadId)
 			}
 		} else if (message.type === 'thread.read') {
 			// another session/tab marked a thread as read - sync unread state
@@ -511,6 +573,7 @@ class ChatStore {
 		this.#threadPaginationSkip = 0
 		this.drafts.clear()
 		this.unreadCounts.clear()
+		this.metadataGeneratingThreadIds.clear()
 	}
 
 	consumePendingChatStart = (threadId: string): string | null => {
@@ -603,7 +666,10 @@ class ChatStore {
 
 			const threads = data ?? []
 			this.recentThreads = threads
-			for (const thread of threads) this.threadCache.set(thread)
+			for (const thread of threads) {
+				this.threadCache.set(thread)
+				this.#clearMetadataGeneratingIfReady(thread)
+			}
 			this.#threadPaginationSkip = threads.length
 			this.hasMoreThreads = threads.length === limit
 			// fetch unread counts alongside thread list
@@ -642,7 +708,10 @@ class ChatStore {
 
 			const existingThreadIds = new Set(this.recentThreads.map((thread) => thread.id))
 			const nextThreads = data.filter((thread) => !existingThreadIds.has(thread.id))
-			for (const thread of data) this.threadCache.set(thread)
+			for (const thread of data) {
+				this.threadCache.set(thread)
+				this.#clearMetadataGeneratingIfReady(thread)
+			}
 			this.recentThreads = [...this.recentThreads, ...nextThreads]
 			this.#threadPaginationSkip += data.length
 			this.hasMoreThreads = data.length === limit

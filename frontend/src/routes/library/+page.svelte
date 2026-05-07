@@ -1,9 +1,9 @@
 <script lang="ts">
-	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import Clip from '$lib/components/icons/Clip.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type {
 		ResourceItem,
@@ -114,21 +114,31 @@
 		aria-haspopup="menu"
 		aria-expanded={isSortMenuOpen}
 	>
-		<ArrowsUpDown variant="solid" />
+		<SortIcon value={sort} />
 	</button>
-	<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
+	<PopupMenu
+		open={isSortMenuOpen}
+		anchorEl={sortButtonEl}
+		onClose={closeSortMenu}
+		class="min-w-52"
+	>
+		<div
+			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+		>
+			<SortIcon value={sort} class="h-3.5 w-3.5" />
+			sort files
+		</div>
 		{#each sortOptions as option (option.value)}
-			<button
-				type="button"
-				role="menuitem"
-				class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+			<MenuItem
+				selected={sort === option.value}
 				onclick={() => {
 					sort = option.value
 					closeSortMenu()
 				}}
 			>
-				{option.label}{sort === option.value ? ' \u2713' : ''}
-			</button>
+				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{option.label}
+			</MenuItem>
 		{/each}
 	</PopupMenu>
 {/snippet}

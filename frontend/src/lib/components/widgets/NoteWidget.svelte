@@ -3,6 +3,7 @@
 	import Document from '$lib/components/icons/Document.svelte'
 	import Label from '$lib/components/icons/Label.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
+	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
 	interface Props {
@@ -15,6 +16,7 @@
 
 	const labels = $derived((resource.meta?.labels as string[]) ?? [])
 	const wordCount = $derived((resource.meta?.word_count as number) ?? 0)
+	const strippedPreview = $derived(resource.preview ? stripMarkdown(resource.preview) : '')
 
 	function stripMarkdown(text: string): string {
 		return text
@@ -28,15 +30,32 @@
 
 <a
 	href={resolve(`/notes/${resource.id}`)}
-	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
+	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
-		: 'flex flex-col p-6'} {className}"
+		: 'flex min-h-80 flex-col p-6'} {className}"
 >
 	{#if layout === 'grid'}
-		<div class="mb-4 flex items-center gap-3">
+		<ResourcePreview
+			tone="amber"
+			label="note"
+			caption={wordCount > 0 ? `${wordCount} words` : 'text note'}
+			class="-mx-6 -mt-6"
+		>
+			{#snippet icon()}
+				<Document variant="solid" class="size-6" />
+			{/snippet}
+			{#if strippedPreview}
+				<div
+					class="bg-background/80 text-foreground/72 flex h-full w-full items-start overflow-hidden p-4 text-left text-xs leading-5"
+				>
+					<p class="line-clamp-6">{strippedPreview}</p>
+				</div>
+			{/if}
+		</ResourcePreview>
+		<div class="mb-3 flex items-center gap-3">
 			<div
-				class="flex size-11 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400"
+				class="flex size-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400"
 			>
 				<Document variant="solid" class="size-5" />
 			</div>
@@ -50,9 +69,9 @@
 		<h3 class="text-foreground mb-1.5 truncate text-xl font-semibold">
 			{resource.title || 'untitled note'}
 		</h3>
-		{#if resource.preview}
+		{#if strippedPreview}
 			<p class="text-foreground/70 mb-3 line-clamp-3 text-sm leading-relaxed">
-				{stripMarkdown(resource.preview)}
+				{strippedPreview}
 			</p>
 		{:else}
 			<p class="text-foreground/40 mb-3 text-sm italic">empty note</p>

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import type { Snippet } from 'svelte'
 
 	type SortOption = {
@@ -46,6 +48,9 @@
 	}: ModalListLayoutProps = $props()
 
 	const SCROLL_THRESHOLD = 100
+	const selectedSortValue = $derived(
+		sortOptions.find((_option, index) => index === sortIndex)?.value
+	)
 
 	function onScroll(e: Event): void {
 		const el = e.currentTarget as HTMLDivElement
@@ -71,15 +76,24 @@
 				oninput={(e) => onSearchInput(e.currentTarget.value)}
 			/>
 		</div>
-		<select
-			class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/70 focus:border-foreground/20 [&>option]:text-foreground/90 border px-3 py-2 text-sm transition-colors outline-none [&>option]:bg-neutral-900"
-			value={sortIndex}
-			onchange={(e) => onSortChange(Number(e.currentTarget.value))}
-		>
-			{#each sortOptions as opt, i (opt.value)}
-				<option value={i}>{opt.label}</option>
-			{/each}
-		</select>
+		<div class="relative shrink-0">
+			<SortIcon
+				value={selectedSortValue}
+				class="text-foreground/45 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
+			/>
+			<select
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/70 focus:border-foreground/20 [&>option]:text-foreground/90 min-w-40 appearance-none border py-2 pr-8 pl-9 text-sm transition-colors outline-none [&>option]:bg-neutral-900"
+				value={sortIndex}
+				onchange={(e) => onSortChange(Number(e.currentTarget.value))}
+			>
+				{#each sortOptions as opt, i (opt.value)}
+					<option value={i}>{opt.label}</option>
+				{/each}
+			</select>
+			<ChevronDown
+				class="text-foreground/45 pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2"
+			/>
+		</div>
 	</div>
 
 	<!-- scrollable list container -->

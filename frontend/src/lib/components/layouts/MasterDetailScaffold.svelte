@@ -77,7 +77,7 @@
 <!-- content area: scrollbar at edge, padding inside content -->
 <div
 	class="absolute inset-0 overflow-y-auto"
-	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content));"
+	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content)); view-transition-name: master-detail-content;"
 >
 	<div
 		class="flex min-h-full flex-col pb-10"

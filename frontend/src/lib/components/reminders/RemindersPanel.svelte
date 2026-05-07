@@ -9,7 +9,7 @@
 		type ReminderUpdate,
 		type ReminderWithSubtasks,
 	} from '$lib/stores/reminders.svelte'
-	import { tick } from 'svelte'
+	import { tick, untrack } from 'svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 	import ReminderRow from './ReminderRow.svelte'
 
@@ -27,6 +27,7 @@
 	let isAddingReminder = $state(false)
 	let isAddingExpanded = $state(false)
 	let expandedReminderId = $state<string | null>(null)
+	let loadToken = 0
 
 	/** animation state for reminders transitioning between pending/completed */
 	interface TransitionEntry {
@@ -72,7 +73,7 @@
 	})
 
 	const availableLists = $derived(reminders.lists)
-	const activeList = $derived(listId ? reminders.getListById(listId) : null)
+	const activeList = $derived(listId ? reminders.getListById(listId) : reminders.defaultList)
 
 	// helpers
 
@@ -124,12 +125,13 @@
 		}
 	}
 
-	async function loadReminders() {
+	async function loadReminders(targetListId: string | null) {
+		const token = ++loadToken
 		isLoading = true
 		try {
-			await reminders.loadReminders(listId)
+			await reminders.loadReminders(targetListId)
 		} finally {
-			isLoading = false
+			if (token === loadToken) isLoading = false
 		}
 	}
 
@@ -171,8 +173,11 @@
 	// effects
 
 	$effect(() => {
-		void loadReminders()
-		void reminders.loadListsAndCounts()
+		const currentListId = listId
+		void untrack(() => {
+			void loadReminders(currentListId)
+			void reminders.loadLists()
+		})
 	})
 
 	$effect(() => {

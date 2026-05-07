@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
-	import { getMediaUrls } from '$lib/config/media'
+	import NokodoBrandLogo from '$lib/components/NokodoBrandLogo.svelte'
 	import { activeRunsStore, type GlobalRunState } from '$lib/stores/activeRuns.svelte'
 
 	const {
@@ -18,10 +18,6 @@
 		onCloseClick: () => void
 	} = $props()
 
-	const mediaUrls = $derived(getMediaUrls())
-	const sidebarLogoSrc = $derived(
-		mediaUrls.sidebarLogo ?? 'https://nokodo.net/media/images/logo_full.svg'
-	)
 	const runState: GlobalRunState = $derived(activeRunsStore.state)
 
 	const orbBg = $derived.by((): string => {
@@ -70,11 +66,7 @@
 			: '-translate-y-0.5 opacity-0'}"
 		aria-hidden={!showTopLabels}
 	>
-		<img
-			src={sidebarLogoSrc}
-			alt="nokodo logo"
-			class="h-7 w-auto -translate-y-1.25 object-contain"
-		/>
+		<NokodoBrandLogo class="h-7 w-auto -translate-y-1.25 object-contain" />
 	</div>
 
 	<!-- close button -->

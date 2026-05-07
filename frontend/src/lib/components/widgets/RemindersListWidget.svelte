@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths'
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
+	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
 	interface Props {
@@ -22,15 +23,46 @@
 
 <a
 	href={resolve(`/reminders/lists/${resource.id}`)}
-	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
+	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
-		: 'flex flex-col p-6'} {className}"
+		: 'flex min-h-80 flex-col p-6'} {className}"
 >
 	{#if layout === 'grid'}
-		<div class="mb-4 flex items-center gap-3">
+		<ResourcePreview
+			tone="sky"
+			label="reminders"
+			caption={totalCount > 0 ? `${pendingCount} pending` : 'empty list'}
+			class="-mx-6 -mt-6"
+		>
+			{#snippet icon()}
+				{#if icon}
+					<span class="text-2xl">{icon}</span>
+				{:else}
+					<CheckBox variant="solid" class="size-6" />
+				{/if}
+			{/snippet}
+			{#if totalCount > 0}
+				<div class="flex h-full w-full flex-col justify-end p-4">
+					<div class="bg-background/65 rounded-2xl p-3 backdrop-blur-sm">
+						<div class="bg-foreground/10 h-2 w-full overflow-hidden rounded-full">
+							<div
+								class="h-full rounded-full transition-all duration-300"
+								style:width="{progress}%"
+								style:background-color={color ?? 'rgb(14 165 233)'}
+							></div>
+						</div>
+						<div class="text-foreground/60 mt-2 flex justify-between text-xs">
+							<span>{completedCount}/{totalCount} done</span>
+							<span>{Math.round(progress)}%</span>
+						</div>
+					</div>
+				</div>
+			{/if}
+		</ResourcePreview>
+		<div class="mb-3 flex items-center gap-3">
 			<div
-				class="flex size-11 items-center justify-center rounded-xl text-sky-400"
+				class="flex size-10 items-center justify-center rounded-xl text-sky-400"
 				style:background-color={color ? `${color}20` : 'rgb(14 165 233 / 0.15)'}
 				style:color={color ?? undefined}
 			>

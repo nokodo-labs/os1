@@ -5,18 +5,17 @@
 	import { api } from '$lib/api/client'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte'
-	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import EditProjectModal from '$lib/components/modals/EditProjectModal.svelte'
 	import ResourcePickerModal from '$lib/components/modals/ResourcePickerModal.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
-	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type {
 		ResourceFilterMode,
@@ -28,6 +27,7 @@
 	import type { Thread } from '$lib/stores/chat.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { apiFileToResource, files } from '$lib/stores/files.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { notes, type Note } from '$lib/stores/notes.svelte'
 	import { projects } from '$lib/stores/projects.svelte'
 	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
@@ -223,6 +223,12 @@
 		isPickerOpen = false
 	}
 
+	function handleItemClick(item: ResourceItem): void {
+		if (item.type === 'file') {
+			modals.open('file-details', { fileId: item.id })
+		}
+	}
+
 	$effect(() => {
 		void loadProjectData()
 	})
@@ -271,7 +277,18 @@
 	>
 		<AdjustmentsHorizontal />
 	</button>
-	<PopupMenu open={isFilterMenuOpen} anchorEl={filterButtonEl} onClose={closeMenus}>
+	<PopupMenu
+		open={isFilterMenuOpen}
+		anchorEl={filterButtonEl}
+		onClose={closeMenus}
+		class="min-w-52"
+	>
+		<div
+			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+		>
+			<AdjustmentsHorizontal class="h-3.5 w-3.5" />
+			filter resources
+		</div>
 		{#each filterOptions as option (option.value)}
 			<MenuItem
 				selected={filter === option.value}
@@ -280,6 +297,7 @@
 					closeMenus()
 				}}
 			>
+				{#snippet icon()}<AdjustmentsHorizontal class="h-4 w-4" />{/snippet}
 				{option.label}
 			</MenuItem>
 		{/each}
@@ -294,9 +312,15 @@
 		aria-haspopup="menu"
 		aria-expanded={isSortMenuOpen}
 	>
-		<ArrowsUpDown variant="solid" />
+		<SortIcon value={sort} />
 	</button>
-	<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeMenus}>
+	<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeMenus} class="min-w-52">
+		<div
+			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+		>
+			<SortIcon value={sort} class="h-3.5 w-3.5" />
+			sort resources
+		</div>
 		{#each sortOptions as option (option.value)}
 			<MenuItem
 				selected={sort === option.value}
@@ -305,6 +329,7 @@
 					closeMenus()
 				}}
 			>
+				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
 				{option.label}
 			</MenuItem>
 		{/each}
@@ -409,6 +434,7 @@
 			emptyMessage="no resources in this project yet"
 			pageSize={24}
 			class="flex-1"
+			onItemClick={handleItemClick}
 		/>
 	{/if}
 </div>

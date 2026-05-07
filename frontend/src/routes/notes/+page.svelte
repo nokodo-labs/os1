@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import NotesSidebar from '$lib/components/notes/NotesSidebar.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { notes, type NotesSortMode } from '$lib/stores/notes.svelte'
@@ -58,21 +58,31 @@
 		aria-haspopup="menu"
 		aria-expanded={isSortMenuOpen}
 	>
-		<ArrowsUpDown variant="solid" />
+		<SortIcon value={notes.sortMode} />
 	</button>
-	<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
+	<PopupMenu
+		open={isSortMenuOpen}
+		anchorEl={sortButtonEl}
+		onClose={closeSortMenu}
+		class="min-w-52"
+	>
+		<div
+			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+		>
+			<SortIcon value={notes.sortMode} class="h-3.5 w-3.5" />
+			sort notes
+		</div>
 		{#each sortOptions as option (option.value)}
-			<button
-				type="button"
-				role="menuitem"
-				class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+			<MenuItem
+				selected={notes.sortMode === option.value}
 				onclick={() => {
 					notes.sortMode = option.value
 					closeSortMenu()
 				}}
 			>
-				{option.label}{notes.sortMode === option.value ? ' ✓' : ''}
-			</button>
+				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{option.label}
+			</MenuItem>
 		{/each}
 	</PopupMenu>
 
@@ -90,7 +100,7 @@
 	<NotesSidebar selectedNoteId={null} isMobile={true} />
 {:else}
 	<div
-		class="flex h-[calc(100vh-var(--chrome-island-offset,0px)-var(--spacing-island-content)-2.5rem)] items-center justify-center"
+		class="flex h-[calc(100vh-var(--chrome-island-offset,0)-var(--spacing-island-content)-2.5rem)] items-center justify-center"
 	>
 		<p class="text-foreground/50 text-sm">select or create a note</p>
 	</div>

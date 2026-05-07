@@ -12,7 +12,8 @@ export type SettingsRouteId =
 	| '/settings/debug'
 
 export type NotesRouteId = '/notes' | `/notes/${string}`
-export type RemindersRouteId = '/reminders' | `/reminders/lists/${string}`
+type ReminderListRouteId = `/reminders/lists/${string}`
+export type RemindersRouteId = '/reminders' | ReminderListRouteId
 export type CalendarRouteId = '/calendar'
 
 export type SocialRouteId = '/social/friends' | '/social/groups'
@@ -56,8 +57,7 @@ function isNotesRoute(pathname: string): pathname is NotesRouteId {
 	return /^\/notes\/[^/]+$/.test(pathname)
 }
 
-function isRemindersRoute(pathname: string): pathname is RemindersRouteId {
-	if (pathname === '/reminders') return true
+function isReminderListRoute(pathname: string): pathname is ReminderListRouteId {
 	return /^\/reminders\/lists\/[^/]+$/.test(pathname)
 }
 
@@ -101,7 +101,7 @@ function readStoredReminders(): RemindersRouteId | '' {
 	try {
 		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}reminders`) ?? ''
 		const normalized = normalizePath(raw)
-		return isRemindersRoute(normalized) ? normalized : ''
+		return isReminderListRoute(normalized) ? normalized : ''
 	} catch {
 		return ''
 	}
@@ -202,7 +202,7 @@ class AppNavigationStore {
 				return
 			}
 			case 'reminders': {
-				if (!isRemindersRoute(normalized)) return
+				if (!isReminderListRoute(normalized)) return
 				this.lastRemindersRoute = normalized
 				this.persist('reminders', normalized)
 				return

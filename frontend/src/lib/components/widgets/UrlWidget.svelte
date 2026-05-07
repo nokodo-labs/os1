@@ -1,5 +1,6 @@
 <script lang="ts">
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
+	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
 	interface Props {
@@ -23,15 +24,27 @@
 	href={resource.href}
 	target="_blank"
 	rel="external noopener noreferrer"
-	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
+	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
-		: 'flex flex-col p-6'} {className}"
+		: 'flex min-h-80 flex-col p-6'} {className}"
 >
 	{#if layout === 'grid'}
-		<div class="mb-4 flex items-center gap-3">
+		<ResourcePreview tone="sky" label="web" caption={domain} class="-mx-6 -mt-6">
+			{#snippet icon()}
+				<GlobeAlt variant="solid" class="size-6" />
+			{/snippet}
+			{#if resource.preview}
+				<div
+					class="bg-background/80 text-foreground/70 flex h-full w-full items-end overflow-hidden p-4 text-left text-sm leading-6"
+				>
+					<p class="line-clamp-4">{resource.preview}</p>
+				</div>
+			{/if}
+		</ResourcePreview>
+		<div class="mb-3 flex items-center gap-3">
 			<div
-				class="flex size-11 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400"
+				class="flex size-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400"
 			>
 				<GlobeAlt variant="solid" class="size-5" />
 			</div>

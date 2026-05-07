@@ -356,10 +356,10 @@ class RemindersCache {
 	}
 
 	async #resolveListId(listId: string | null): Promise<string | null> {
-		if (listId !== null) return listId
-		const existing = this.defaultList
-		if (existing) return existing.id
-		const lists = await this.loadLists()
+		const lists = this.isListsFresh ? this.lists : await this.loadLists()
+		if (listId !== null) {
+			return lists.some((list) => list.id === listId) ? listId : null
+		}
 		return lists.find((list) => list.is_default)?.id ?? lists[0]?.id ?? null
 	}
 
@@ -526,20 +526,29 @@ class RemindersCache {
 
 		const promise = (async () => {
 			const apiListId = await this.#resolveListId(listId)
-			if (!apiListId) return this.getReminders(listId)
+			if (!apiListId) {
+				this.setReminders(listId, [])
+				return []
+			}
 
-			const { data, error } = await api.GET('/v1/reminder-lists/{list_id}/reminders', {
-				params: {
-					path: { list_id: apiListId },
-					query: {
-						include_subtasks: true,
-						limit: 500,
-						sort_by: 'position',
-						sort_dir: 'asc',
+			const { data, error, response } = await api.GET(
+				'/v1/reminder-lists/{list_id}/reminders',
+				{
+					params: {
+						path: { list_id: apiListId },
+						query: {
+							include_subtasks: true,
+							limit: 500,
+							sort_by: 'position',
+							sort_dir: 'asc',
+						},
 					},
-				},
-			})
-			if (error || !data) return this.getReminders(listId)
+				}
+			)
+			if (error || !data) {
+				if (response.status === 404) this.setReminders(listId, [])
+				return this.getReminders(listId)
+			}
 			const reminders = data
 			this.setReminders(listId, reminders)
 			return reminders

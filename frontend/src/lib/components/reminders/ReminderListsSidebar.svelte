@@ -3,12 +3,12 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
-	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import ReminderListRow from '$lib/components/reminders/ReminderListRow.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { reminders, type ReminderListsSortMode } from '$lib/stores/reminders.svelte'
@@ -26,7 +26,6 @@
 	let { selectedListId, isLoading = false, isMobile = false }: Props = $props()
 
 	const lists = $derived(reminders.lists)
-	const defaultCounts = $derived(reminders.defaultCounts)
 
 	let isAddingList = $state(false)
 	let newListName = $state('')
@@ -60,13 +59,14 @@
 	let editListId = $state<string | null>(null)
 	const editList = $derived(editListId ? reminders.getListById(editListId) : null)
 
-	function selectList(listId: string | null) {
-		const url = listId ? `/reminders/lists/${listId}` : '/reminders'
-		// @ts-expect-error resolve typing is narrower than our constructed URL
-		void goto(resolve(url as never), { keepFocus: true, noScroll: true })
+	function selectList(listId: string) {
+		void goto(resolve('/reminders/lists/[listId]', { listId }), {
+			keepFocus: true,
+			noScroll: true,
+		})
 	}
 
-	function prefetchList(listId: string | null): void {
+	function prefetchList(listId: string): void {
 		void reminders.loadReminders(listId, { force: false })
 	}
 
@@ -138,21 +138,34 @@
 					aria-haspopup="menu"
 					aria-expanded={isSortMenuOpen}
 				>
-					<ArrowsUpDown variant="solid" class="h-5 w-5" />
+					<SortIcon value={reminders.listsSortMode} class="h-5 w-5" />
 				</button>
-				<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
+				<PopupMenu
+					open={isSortMenuOpen}
+					anchorEl={sortButtonEl}
+					onClose={closeSortMenu}
+					class="min-w-52"
+				>
+					<div
+						class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+					>
+						<SortIcon value={reminders.listsSortMode} class="h-3.5 w-3.5" />
+						sort lists
+					</div>
 					{#each sortOptions as option (option.value)}
-						<button
-							type="button"
-							role="menuitem"
-							class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+						<MenuItem
+							selected={reminders.listsSortMode === option.value}
 							onclick={() => {
 								reminders.setListsSortMode(option.value)
 								closeSortMenu()
 							}}
 						>
-							{option.label}{reminders.listsSortMode === option.value ? ' ✓' : ''}
-						</button>
+							{#snippet icon()}<SortIcon
+									value={option.value}
+									class="h-4 w-4"
+								/>{/snippet}
+							{option.label}
+						</MenuItem>
 					{/each}
 				</PopupMenu>
 				<button
@@ -174,15 +187,6 @@
 	{:else}
 		<nav class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
 			<div class="space-y-1">
-				<ReminderListRow
-					title="reminders"
-					count={defaultCounts.pending_count}
-					selected={selectedListId === null}
-					leading={{ type: 'checkbox' }}
-					onPrefetch={() => prefetchList(null)}
-					onSelect={() => selectList(null)}
-				/>
-
 				{#each lists as list (list.id)}
 					<div class="relative">
 						<ReminderListRow
@@ -205,9 +209,7 @@
 							onClose={closeListMenu}
 							data-reminders-list-menu
 						>
-							<button
-								type="button"
-								class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+							<MenuItem
 								onclick={(event) => {
 									event.stopPropagation()
 									closeListMenu()
@@ -218,41 +220,51 @@
 									})
 								}}
 							>
-								<Share class="h-4 w-4" />
+								{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
 								share
-							</button>
-							<button
-								type="button"
-								class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+							</MenuItem>
+							<MenuItem
 								onclick={(event) => {
 									event.stopPropagation()
 									closeListMenu()
 									editListId = list.id
 								}}
 							>
-								<InfoCircle class="h-4 w-4" />
+								{#snippet icon()}<InfoCircle class="h-4 w-4" />{/snippet}
 								properties
-							</button>
-							<div class="bg-foreground/10 my-1 h-px w-full"></div>
-							<div class="mt-1">
-								<DeleteButton
-									confirm={true}
-									stopPropagation={true}
-									onTrigger={closeListMenu}
-									modalText={{
-										title: 'delete list?',
-										description: list.name,
-									}}
-									onDelete={async () => {
-										const ok = await reminders.deleteList(list.id)
-										if (!ok) return false
-										if (selectedListId === list.id) {
-											selectList(null)
-										}
-										return true
-									}}
-								/>
-							</div>
+							</MenuItem>
+							{#if !list.is_default}
+								<div class="bg-foreground/10 my-1 h-px w-full"></div>
+								<div class="mt-1">
+									<DeleteButton
+										confirm={true}
+										stopPropagation={true}
+										onTrigger={closeListMenu}
+										modalText={{
+											title: 'delete list?',
+											description: list.name,
+										}}
+										onDelete={async () => {
+											const ok = await reminders.deleteList(list.id)
+											if (!ok) return false
+											if (selectedListId === list.id) {
+												const fallbackList =
+													reminders.defaultList ??
+													reminders.lists[0] ??
+													null
+												if (fallbackList) {
+													selectList(fallbackList.id)
+												} else {
+													void goto(resolve('/reminders'), {
+														replaceState: true,
+													})
+												}
+											}
+											return true
+										}}
+									/>
+								</div>
+							{/if}
 						</PopupMenu>
 					</div>
 				{/each}

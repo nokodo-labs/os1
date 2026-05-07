@@ -15,6 +15,7 @@
 	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
 	import ResourceAccessModal from '$lib/components/modals/ResourceAccessModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
+	import NokodoBrandLogo from '$lib/components/NokodoBrandLogo.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import BackendReconnect from '$lib/components/system/BackendReconnect.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -51,12 +52,11 @@
 		) => { finished?: Promise<unknown> } | void
 	}
 
-	// global View Transitions hook.
-	// this ensures transitions run for ALL navigations (links, goto(), back/forward popstate).
+	// global view transitions hook.
+	// this ensures transitions run for all navigations (links, goto(), back/forward popstate).
 	// we intentionally skip same-path navigations (e.g. / <-> /?chat=new) so in-page
-	// animations keep controls interactive without the ViewTransition overlay.
-	/** home or chat page - transitions between these keep the sidebar filter */
-	function isChatOrHome(pathname: string): boolean {
+	// animations keep controls interactive without the view transition overlay.
+	function routeHasChatSidebar(pathname: string): boolean {
 		return pathname === '/' || pathname.startsWith('/c/')
 	}
 
@@ -72,12 +72,10 @@
 		return new Promise<void>((resolve) => {
 			const root = document.documentElement
 			root.dataset.vtActive = '1'
-
-			// keep sidebar backdrop-filter when both sides are home/chat pages
-			const bothChatOrHome = isChatOrHome(from.pathname) && isChatOrHome(to.pathname)
-			if (bothChatOrHome) {
-				root.dataset.vtKeepFilter = '1'
+			if (routeHasChatSidebar(from.pathname) && routeHasChatSidebar(to.pathname)) {
+				root.dataset.vtChatSidebar = '1'
 			}
+			void root.offsetWidth
 
 			const transition = start.call(document, async () => {
 				resolve()
@@ -86,7 +84,7 @@
 
 			const done = () => {
 				delete root.dataset.vtActive
-				delete root.dataset.vtKeepFilter
+				delete root.dataset.vtChatSidebar
 			}
 
 			// prefer the ViewTransition lifecycle when available.
@@ -377,6 +375,9 @@
 		/>
 	{:else if isAuthRoute}
 		<div class="h-app relative z-1 flex">
+			<div class="pointer-events-none fixed top-0 left-0 z-20 p-6 sm:p-8">
+				<NokodoBrandLogo class="h-7 w-auto object-contain opacity-95 sm:h-8" />
+			</div>
 			<div
 				class="relative flex min-w-0 flex-1 flex-col overflow-y-auto"
 				style="touch-action: pan-y; overscroll-behavior-y: contain;"
@@ -401,7 +402,7 @@
 
 			<!-- main content -->
 			<div
-				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
+				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0)+16px)]"
 				role="main"
 				style="touch-action: pan-y; overscroll-behavior-y: contain;"
 				bind:this={mainContentShell}

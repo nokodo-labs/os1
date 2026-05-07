@@ -41,9 +41,12 @@
 
 	const hasRun = $derived(activeRunsStore.hasActiveRuns(thread.id))
 	const hasUnread = $derived((chat.unreadCounts.get(thread.id) ?? 0) > 0)
-	const isGeneratingTitle = $derived(hasRun && !thread.title)
-	const displayTitle = $derived(thread.title || 'new chat')
+	const metadataGenerating = $derived(chat.metadataGeneratingThreadIds.has(thread.id))
+	const isMissingTitle = $derived(!thread.title?.trim())
 	const hasTags = $derived(thread.tags && thread.tags.length > 0)
+	const isGeneratingTitle = $derived((hasRun || metadataGenerating) && isMissingTitle)
+	const isGeneratingTags = $derived((hasRun || metadataGenerating) && !hasTags)
+	const displayTitle = $derived(thread.title || 'new chat')
 
 	const visibilityMode = $derived(
 		device.isMobile ? 'always' : hasRun || hasUnread ? 'overlay-always' : 'hover'
@@ -106,6 +109,12 @@
 							+{(thread.tags ?? []).length - 3}
 						</span>
 					{/if}
+				{:else if isGeneratingTags}
+					<ShimmerText
+						className="text-foreground/45 min-w-0 truncate text-[10px] leading-tight"
+					>
+						generating
+					</ShimmerText>
 				{/if}
 			</div>
 		</div>

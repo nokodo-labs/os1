@@ -393,16 +393,28 @@
 	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
 }
 
-/* chat sidebar transitions
-	- persisted across pages (shared element): no forced slide; allow hero-move/morph.
-	- not persisted (exists only in old or only in new): slide out/in.
-	`:only-child` matches when the snapshot has no counterpart.
-*/
-::view-transition-old(chat-sidebar):only-child {
+::view-transition-old(master-detail-content) {
+	animation: 220ms ease both vt-fade-out;
+}
+
+::view-transition-new(master-detail-content) {
+	animation: 260ms ease 90ms both vt-fade-in;
+}
+
+html[data-vt-chat-sidebar='1'] .chat-sidebar {
+	view-transition-name: chat-sidebar;
+}
+
+html[data-vt-chat-sidebar='1']::view-transition-group(chat-sidebar) {
+	animation-duration: 320ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-vt-chat-sidebar='1']::view-transition-old(chat-sidebar):only-child {
 	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
 }
 
-::view-transition-new(chat-sidebar):only-child {
+html[data-vt-chat-sidebar='1']::view-transition-new(chat-sidebar):only-child {
 	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-left;
 }
 
@@ -423,11 +435,9 @@
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* during ViewTransitions, force remove backdrop-filters on sidebars.
-	otherwise, it will not transition with the element but will linger for the duration of the transition then pop out.
-	whitelisted: transitions between homepage and chat pages keep the filter intact.
-*/
-html[data-vt-active='1']:not([data-vt-keep-filter]) .chat-sidebar {
+/* during view transitions, remove sidebar backdrop filters before snapshots are captured. */
+html[data-vt-active='1'] .chat-sidebar {
+	transition: none;
 	-webkit-backdrop-filter: none;
 	backdrop-filter: none;
 }

@@ -80,7 +80,7 @@
 	>
 		<LiquidMetal
 			tag="div"
-			class="rounded-popup min-w-44 p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55)] {className}"
+			class="rounded-popup border-foreground/12 bg-background/80 max-w-[min(calc(100vw-1rem),22rem)] min-w-44 border p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55),inset_0_1px_0_rgb(255_255_255/0.12)] backdrop-blur-[18px] {className}"
 		>
 			{@render children()}
 		</LiquidMetal>

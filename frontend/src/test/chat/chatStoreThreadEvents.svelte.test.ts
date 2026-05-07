@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeStreamMessage, makeThread, resetIdCounter } from './fixtures'
+import { makeApiMessage, makeStreamMessage, makeThread, resetIdCounter } from './fixtures'
 
 // --- module mocks (must be before imports that use them) ---
 
@@ -374,6 +374,71 @@ describe('ChatStore thread event handling', () => {
 			dispatch(makeStreamMessage('thread.read', { thread_id: 't2' }))
 
 			expect(chat.unreadCounts.get('t1')).toBe(5)
+		})
+	})
+
+	// -- message.created unread state --
+
+	describe('message.created unread state', () => {
+		it('marks assistant messages unread when the thread is not active', () => {
+			const message = makeApiMessage({ id: 'm1', thread_id: 't1', type: 'assistant' })
+
+			dispatch(makeStreamMessage('message.created', { ...message, thread_id: 't1' }))
+
+			expect(chat.unreadCounts.get('t1')).toBe(1)
+		})
+
+		it('marks tool messages unread', () => {
+			const message = makeApiMessage({ id: 'm1', thread_id: 't1', type: 'tool' })
+
+			dispatch(makeStreamMessage('message.created', { ...message, thread_id: 't1' }))
+
+			expect(chat.unreadCounts.get('t1')).toBe(1)
+		})
+	})
+
+	// -- post-run metadata generation state --
+
+	describe('thread metadata generation state', () => {
+		it('does not mark missing metadata generating after a run completes', () => {
+			const thread = makeThread({ id: 't1', title: null, tags: [] })
+			chat.recentThreads = [thread]
+
+			dispatch(makeStreamMessage('run.completed', { thread_id: 't1', run_id: 'run_1' }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(false)
+
+			dispatch(
+				makeStreamMessage('thread.updated', {
+					id: 't1',
+					title: 'generated title',
+					tags: ['generated'],
+				})
+			)
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(false)
+		})
+
+		it('tracks active thread maintenance tasks', () => {
+			const task = {
+				id: 'task_1',
+				user_id: 'user_1',
+				task_type: 'custom',
+				status: 'running',
+				progress: 0,
+				metadata_: { task_name: 'thread.maintenance', thread_id: 't1' },
+				spawned_thread_id: 't1',
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+			}
+
+			dispatch(makeStreamMessage('task.created', { task }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(true)
+
+			dispatch(makeStreamMessage('task.failed', { task }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(false)
 		})
 	})
 
