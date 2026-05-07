@@ -6,7 +6,7 @@
 			"type": "debugpy",
 			"request": "launch",
 			"module": "uvicorn",
-			"preLaunchTask": "Docker: ensure dev deps",
+			"preLaunchTask": "backend: ensure dev deps",
 			"args": [
 				"api.main:app",
 				"--host",
@@ -24,6 +24,44 @@
 			},
 			"console": "integratedTerminal",
 			"purpose": ["debug-in-terminal"]
+		},
+		{
+			"name": "backend: TaskIQ worker",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "api.taskiq",
+			"preLaunchTask": "Docker: ensure dev deps",
+			"args": [
+				"worker",
+				"api.taskiq:broker",
+				"api.tasks.registry",
+				"--workers",
+				"1",
+				"--max-async-tasks",
+				"25"
+			],
+			"justMyCode": true,
+			"subProcess": true,
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			},
+			"console": "integratedTerminal"
+		},
+		{
+			"name": "backend: TaskIQ scheduler",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "api.taskiq",
+			"preLaunchTask": "Docker: ensure dev deps",
+			"args": ["scheduler", "api.taskiq:scheduler", "api.tasks.registry"],
+			"justMyCode": true,
+			"subProcess": true,
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			},
+			"console": "integratedTerminal"
 		},
 		{
 			"name": "Python: current file",
@@ -113,6 +151,20 @@
 		}
 	],
 	"compounds": [
+		{
+			"name": "backend: API + TaskIQ",
+			"configurations": [
+				"backend: FastAPI Uvicorn server",
+				"backend: TaskIQ worker",
+				"backend: TaskIQ scheduler"
+			],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "backend",
+				"order": 1
+			}
+		},
 		{
 			"name": "full stack",
 			"configurations": [

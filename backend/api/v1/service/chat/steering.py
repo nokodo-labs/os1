@@ -452,7 +452,7 @@ async def prepare_steering[AppContextT](
 
 
 # cross-worker steering bus (redis pub/sub)
-# channel ``nokodo:run:{run_id}:steer`` carries control envelopes for a
+# channel ``nokodo-ai:run:{run_id}:steer`` carries control envelopes for a
 # single run. senders fan out to whichever worker is subscribed.
 
 _STEER_CHANNEL_SUFFIX: Final[str] = "steer"

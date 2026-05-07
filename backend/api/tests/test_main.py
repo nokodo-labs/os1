@@ -41,7 +41,39 @@ async def test_lifespan_initializes_database(monkeypatch: pytest.MonkeyPatch) ->
 	async def fake_init_db() -> None:
 		called["init"] = True
 
+	async def fake_noop() -> None:
+		return None
+
+	async def fake_start_invalidation_subscriber() -> None:
+		return None
+
+	async def fake_start_event_subscriber() -> None:
+		return None
+
 	monkeypatch.setattr(main_module, "init_db", fake_init_db)
+	monkeypatch.setattr(main_module, "startup_taskiq", fake_noop)
+	monkeypatch.setattr(main_module, "shutdown_taskiq", fake_noop)
+	monkeypatch.setattr(
+		main_module,
+		"reconcile_calendar_event_notification_schedules",
+		fake_noop,
+	)
+	monkeypatch.setattr(
+		main_module,
+		"reconcile_reminder_notification_schedules",
+		fake_noop,
+	)
+	monkeypatch.setattr(
+		main_module,
+		"start_invalidation_subscriber",
+		fake_start_invalidation_subscriber,
+	)
+	monkeypatch.setattr(
+		main_module,
+		"start_event_subscriber",
+		fake_start_event_subscriber,
+	)
+	monkeypatch.setattr(boot_settings, "ENV", "dev")
 	original_testing = boot_settings.TESTING
 	boot_settings.TESTING = False
 	try:

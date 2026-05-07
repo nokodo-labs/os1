@@ -113,6 +113,7 @@ class _TimingCaptureTool(Tool[None]):
 		__app_context__: None,
 		**kwargs: object,
 	) -> ToolMessage:
+		assert __agent_context__.tool_call_start_time is not None
 		self.captured_start_times.append(__agent_context__.tool_call_start_time)
 		return self.success("ok", __agent_context__)
 
@@ -344,7 +345,13 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 		name: str = "test_filter"
 		description: str = "test filter"
 
-		async def process(self, thread: Thread, app_context: None) -> Thread:
+		async def process(
+			self,
+			thread: Thread,
+			agent_context: AgentContext,
+			app_context: None,
+		) -> Thread:
+			assert agent_context.iteration == 0
 			seen.append("filter")
 			thread.add(SystemMessage.from_text("injected"))
 			return thread
@@ -353,7 +360,13 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 		name: str = "test_hook"
 		description: str = "test hook"
 
-		async def execute(self, thread: Thread, app_context: None) -> None:
+		async def execute(
+			self,
+			thread: Thread,
+			agent_context: AgentContext,
+			app_context: None,
+		) -> None:
+			assert agent_context.tool_call_id is None
 			seen.append("hook")
 
 	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage.from_text("ok")])
@@ -399,6 +412,51 @@ async def test_agent_sync_max_iterations_final_call_disables_tools() -> None:
 	params = adapter.calls[-1]["params"]
 	assert isinstance(params, ChatGenerationParams)
 	assert params.tool_choice == "none"
+
+
+@pytest.mark.asyncio
+async def test_agent_sync_runs_hooks_after_each_assistant_response() -> None:
+	"""sync hooks observe each assistant response appended by the loop."""
+	seen: list[list[str]] = []
+
+	class _TestHook(Hook[None]):
+		name: str = "test_hook"
+		description: str = "test hook"
+
+		async def execute(
+			self,
+			thread: Thread,
+			agent_context: AgentContext,
+			app_context: None,
+		) -> None:
+			assert agent_context.thread is thread
+			seen.append([message.role for message in thread.messages])
+
+	adapter = _QueuedChatAdapter(
+		sync_responses=[
+			AssistantMessage(
+				tool_calls=[ToolCall(id="tc1", name="echo", arguments={"text": "hi"})]
+			),
+			AssistantMessage.from_text("done"),
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	tools: list[Tool[None]] = [_EchoTool(name="echo", description="echo")]
+	hooks: list[Hook[None]] = [_TestHook()]
+	agent = Agent(
+		chat_model=chat_model,
+		tools=tools,
+		hooks=hooks,
+	)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	await agent.run(thread)
+
+	assert seen == [
+		["user", "assistant"],
+		["user", "assistant", "tool", "assistant"],
+	]
 
 
 @pytest.mark.asyncio
@@ -484,7 +542,13 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 		name: str = "test_filter"
 		description: str = "test filter"
 
-		async def process(self, thread: Thread, app_context: None) -> Thread:
+		async def process(
+			self,
+			thread: Thread,
+			agent_context: AgentContext,
+			app_context: None,
+		) -> Thread:
+			assert agent_context.iteration == 0
 			seen.append("filter")
 			thread.add(SystemMessage.from_text("injected"))
 			return thread
@@ -493,7 +557,13 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 		name: str = "test_hook"
 		description: str = "test hook"
 
-		async def execute(self, thread: Thread, app_context: None) -> None:
+		async def execute(
+			self,
+			thread: Thread,
+			agent_context: AgentContext,
+			app_context: None,
+		) -> None:
+			assert agent_context.tool_call_id is None
 			seen.append("hook")
 
 	adapter = _QueuedChatAdapter(stream_responses=[[AssistantMessage.from_text("ok")]])
@@ -512,6 +582,56 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 	assert any(
 		isinstance(m, SystemMessage) and m.text == "injected" for m in call_messages
 	)
+
+
+@pytest.mark.asyncio
+async def test_agent_streaming_runs_hooks_after_each_assistant_response() -> None:
+	"""streaming hooks observe each assistant response appended by the loop."""
+	seen: list[list[str]] = []
+
+	class _TestHook(Hook[None]):
+		name: str = "test_hook"
+		description: str = "test hook"
+
+		async def execute(
+			self,
+			thread: Thread,
+			agent_context: AgentContext,
+			app_context: None,
+		) -> None:
+			assert agent_context.thread is thread
+			seen.append([message.role for message in thread.messages])
+
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[
+				AssistantMessage(
+					tool_calls=[
+						ToolCall(id="tc1", name="echo", arguments={"text": "hi"})
+					]
+				)
+			],
+			[AssistantMessage.from_text("done")],
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	tools: list[Tool[None]] = [_EchoTool(name="echo", description="echo")]
+	hooks: list[Hook[None]] = [_TestHook()]
+	agent = Agent(
+		chat_model=chat_model,
+		tools=tools,
+		hooks=hooks,
+	)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	stream = await agent.run(thread, stream=True)
+	_ = [delta async for delta in stream]
+
+	assert seen == [
+		["user", "assistant"],
+		["user", "assistant", "tool", "assistant"],
+	]
 
 
 @pytest.mark.asyncio
@@ -589,9 +709,10 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 			__app_context__: None,
 			**kwargs: object,
 		) -> ToolMessage:
+			tool_call_id, _ = self.tool_call_context(__agent_context__)
 			# mimics NoteGetTool: returns custom metadata without provider_data
 			return ToolMessage(
-				tool_call_id=__agent_context__.tool_call_id,
+				tool_call_id=tool_call_id,
 				tool_output="note content here",
 				metadata={
 					"_citable_sources": [

@@ -24,7 +24,8 @@ from api.schemas.thread import ThreadCreate
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_thread_access
-from api.v1.service.chat import run_agent, run_bus
+from api.v1.service.chat import run_bus
+from api.v1.service.chat.agents import run_agent
 from api.v1.service.chat.run_status import run_status_store
 from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID, is_typeid, new_typeid

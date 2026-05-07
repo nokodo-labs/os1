@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import PydanticBaseSettingsSource
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from api.boot_settings import boot_settings
 from api.models.setting import SettingsDocument
 from api.settings import (
+	DEFAULT_SECRET_KEY,
 	BrandingSettings,
 	DbSettingsSource,
 	QdrantVectorDatabaseSettings,
@@ -85,6 +87,10 @@ def test_settings_field_flags_and_private_dump() -> None:
 
 	public = settings.custom_dump(exclude_private=True)
 	assert "secret_key" not in public["security"]
+	assert (
+		public["security"]["secret_key_uses_default"]
+		is settings.security.secret_key_uses_default
+	)
 	assert "analytics_key" not in public["branding"]
 	assert "api_key" not in public["assets"]["vector_database"]["qdrant"]
 	assert "url" not in public["cache"]["redis"]
@@ -134,6 +140,31 @@ def test_qdrant_vector_database_defaults() -> None:
 	config = QdrantVectorDatabaseSettings()
 	assert config.url == "qdrant:6334"
 	assert config.use_grpc is True
+
+
+def test_runtime_security_rejects_default_secret_in_production(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	runtime_settings = Settings(
+		security=SecuritySettings(secret_key=DEFAULT_SECRET_KEY)
+	)
+	monkeypatch.setattr(boot_settings, "TESTING", False)
+	monkeypatch.setattr(boot_settings, "ENV", "production")
+
+	with pytest.raises(RuntimeError, match="SECRET_KEY must be changed"):
+		runtime_settings.validate_runtime_security()
+
+
+def test_runtime_security_allows_default_secret_outside_production(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	runtime_settings = Settings(
+		security=SecuritySettings(secret_key=DEFAULT_SECRET_KEY)
+	)
+	monkeypatch.setattr(boot_settings, "TESTING", False)
+	monkeypatch.setattr(boot_settings, "ENV", "dev")
+
+	runtime_settings.validate_runtime_security()
 
 
 def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
@@ -190,17 +221,24 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 				"scheduled_items_ttl_seconds": 60,
 				"resource_payload_ttl_seconds": 45,
 			},
+			"tasks": {
+				"maintenance_backfill": {
+					"enabled": True,
+					"cron": "*/30 * * * *",
+					"batch_size": 25,
+					"max_lookback_days": 90,
+					"min_inactivity_hours": 12,
+				}
+			},
 		}
 	)
 
-	assert patch.web_search is not None
-	assert patch.web_search.agentic is not None
-	assert patch.web_search.agentic.agent == "native"
-	assert patch.web_search.web_loaders is not None
-	assert patch.web_search.web_loaders.max_chars == 40000
-	assert patch.integrations is not None
-	assert patch.integrations.perplexity is not None
-	assert patch.integrations.perplexity.image_results_enabled is True
+	dumped = patch.model_dump(exclude_unset=True)
+	assert dumped["web_search"]["agentic"]["agent"] == "native"
+	assert dumped["web_search"]["web_loaders"]["max_chars"] == 40000
+	assert dumped["integrations"]["perplexity"]["image_results_enabled"] is True
+	assert dumped["tasks"]["maintenance_backfill"]["enabled"] is True
+	assert dumped["tasks"]["maintenance_backfill"]["batch_size"] == 25
 
 
 def test_settings_patch_rejects_old_web_search_integration_nesting() -> None:
@@ -217,6 +255,26 @@ def test_settings_patch_rejects_old_web_search_integration_nesting() -> None:
 				}
 			}
 		)
+
+
+def test_settings_patch_distinguishes_missing_and_nullable_null() -> None:
+	assert SettingsPatch.model_validate({}).model_dump(exclude_unset=True) == {}
+	assert SettingsPatch.model_validate({"media": {"base_url": None}}).model_dump(
+		exclude_unset=True
+	) == {"media": {"base_url": None}}
+
+	with pytest.raises(ValidationError):
+		SettingsPatch.model_validate({"ui": None})
+	with pytest.raises(ValidationError):
+		SettingsPatch.model_validate({"ui": {"default_theme": None}})
+
+	schema = SettingsPatch.model_json_schema()
+	assert "null" not in str(
+		schema["$defs"]["UISettingsPatch"]["properties"]["default_theme"]
+	)
+	assert "null" in str(
+		schema["$defs"]["MediaSettingsPatch"]["properties"]["base_url"]
+	)
 
 
 @pytest.mark.asyncio

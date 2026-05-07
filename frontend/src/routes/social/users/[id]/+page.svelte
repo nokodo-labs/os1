@@ -114,7 +114,7 @@
 		if (!uid) return
 		const { data: res } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
-			body: { username: value || null },
+			body: { username: value || undefined },
 		})
 		if (res) session.currentUser = { ...res }
 	}, 600)

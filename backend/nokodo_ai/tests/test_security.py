@@ -3,8 +3,8 @@
 from datetime import timedelta
 
 import pytest
-from authlib.jose import JoseError
 from cryptography.fernet import InvalidToken
+from joserfc.errors import JoseError
 
 from nokodo_ai.utils.security import (
 	create_jwt_token,
@@ -57,7 +57,7 @@ def test_jwt_decode_invalid_algorithm() -> None:
 	)
 
 	# Try to decode allowing only HS512
-	with pytest.raises(JoseError, match="unexpected_alg"):
+	with pytest.raises(JoseError):
 		decode_jwt_token(token, secret_key=secret, algorithms=["HS512"])
 
 

@@ -97,8 +97,7 @@ async def events_stream(websocket: WebSocket) -> None:
 	# send active runs signal so the client knows which runs to resume
 	try:
 		signal = await get_active_runs_signal(user_id)
-		if signal is not None:
-			await websocket.send_json(signal)
+		await websocket.send_json(signal)
 	except Exception:
 		logger.debug("failed to send active runs signal for user %s", user_id)
 

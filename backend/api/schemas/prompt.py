@@ -7,7 +7,13 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from api.schemas.sorting import CommonSortBy
 
 
@@ -56,14 +62,12 @@ class PromptCreate(PromptBase):
 class PromptUpdate(MetadataUpdateModel):
 	"""payload for prompt update."""
 
-	command: str | None = None
-	content: str | None = None
+	command: str | MissingType = MISSING
+	content: str | MissingType = MISSING
 
 	@field_validator("command")
 	@classmethod
-	def _validate_command(cls, value: str | None) -> str | None:
-		if value is None:
-			return None
+	def _validate_command(cls, value: str) -> str:
 		# reuse the base validator logic
 		return PromptBase._validate_command(value)
 

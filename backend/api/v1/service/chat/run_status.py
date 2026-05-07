@@ -5,11 +5,11 @@ tracks active agent runs so any client can discover and resume them
 fanout / cancel / steering goes through redis primitives in the sibling
 modules:
 
-- ``run_bus`` mirrors every sse frame to ``nokodo:run:{run_id}:log`` (capped
-  list with TTL) and broadcasts on ``nokodo:run:{run_id}:sse`` for late /
+- ``run_bus`` mirrors every sse frame to ``nokodo-ai:run:{run_id}:log`` (capped
+	list with TTL) and broadcasts on ``nokodo-ai:run:{run_id}:sse`` for late /
   remote subscribers.
 - ``steering`` carries per-run user-message injection on
-  ``nokodo:run:{run_id}:steer`` and drop on ``...:drop``.
+	``nokodo-ai:run:{run_id}:steer`` and drop on ``...:drop``.
 - cancel uses a local ``run_id -> Task`` map for instant in-process cancel
   and falls back to a redis control channel publish so the owning worker
   can translate to ``task.cancel()``.
@@ -624,6 +624,18 @@ class RunStatusStore:
 		async with self._lock:
 			return self._runs.get(run_id)
 
+	async def has_in_flight_steering(self, run_id: TypeID) -> bool:
+		"""return whether a running API run still has steering to settle."""
+		async with self._lock:
+			rs = self._runs.get(run_id)
+			if rs is None or rs.state != RunState.RUNNING:
+				return False
+			return bool(
+				rs.pending_steering
+				or rs.claimed_steering
+				or not rs.steering_inbox.empty()
+			)
+
 	async def get_active_runs_for_thread(self, thread_id: TypeID) -> list[RunStatus]:
 		"""get all active runs for a given thread."""
 		async with self._lock:
@@ -664,18 +676,19 @@ class RunStatusStore:
 run_status_store = RunStatusStore()
 
 
-async def get_active_runs_signal(user_id: TypeID) -> dict[str, Any] | None:
+async def get_active_runs_signal(user_id: TypeID) -> dict[str, Any]:
 	"""build a single WS signal listing active agent runs for the user.
 
-	returns a ready-to-send dict ``{type: 'runs.active', data: [...]}``
-	or None if there are no active runs.  this is NOT catchup data - it's
-	a lightweight pointer list so the client knows which runs to resume
-	via the SSE endpoint.
+	returns a ready-to-send dict ``{type: 'runs.active', data: [...]}``.
+	an empty ``data`` list is meaningful: it tells the client to clear any
+	stale active-run pointers from a previous connection. this is NOT catchup
+	data - it's a lightweight pointer list so the client knows which runs to
+	resume via the SSE endpoint.
 	"""
 	# collect thread IDs from all currently active runs
 	all_runs = await run_status_store.get_all_active_runs()
 	if not all_runs:
-		return None
+		return {"type": "runs.active", "data": []}
 
 	unique_thread_ids = {rs.thread_id for rs in all_runs if rs.thread_id is not None}
 
@@ -695,7 +708,7 @@ async def get_active_runs_signal(user_id: TypeID) -> dict[str, Any] | None:
 		if rs.thread_id is not None and rs.thread_id in accessible_threads
 	]
 	if not matching_runs:
-		return None
+		return {"type": "runs.active", "data": []}
 
 	return {
 		"type": "runs.active",

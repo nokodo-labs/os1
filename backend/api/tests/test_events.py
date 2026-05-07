@@ -9,7 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.event import EventScope
+from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.models.task import Task, TaskType
@@ -129,6 +129,202 @@ async def test_emit_event_non_admin_cannot_notify_other_user(
 	# Avoid importing FastAPI HTTPException directly in tests; assert via status_code.
 	err = excinfo.value
 	assert getattr(err, "status_code", None) == 403
+
+
+@pytest.mark.asyncio
+async def test_emit_event_non_admin_cannot_target_other_user_scope(
+	db_session: AsyncSession,
+) -> None:
+	"""Non-admins cannot route user-scoped events to another user."""
+	actor = User(
+		email="scope_actor@example.com",
+		username="scope_actor_test",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	target = User(
+		email="scope_target@example.com",
+		username="scope_target_test",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add_all([actor, target])
+	await db_session.commit()
+	await db_session.refresh(actor)
+	await db_session.refresh(target)
+
+	principal = _non_admin_events_manager_principal(actor)
+
+	with pytest.raises(Exception) as excinfo:
+		await event_service.emit_event(
+			EventCreate(
+				scope=EventScope.USER,
+				scope_id=target.id,
+				type=EventType.NOTIFICATION_CUSTOM,
+				data={"foo": "bar"},
+				user_id=actor.id,
+			),
+			db_session,
+			principal=principal,
+		)
+
+	err = excinfo.value
+	assert getattr(err, "status_code", None) == 403
+
+
+@pytest.mark.asyncio
+async def test_publish_event_routes_user_scope_to_scope_id(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""For user-scoped events, scope_id is the recipient and user_id may be actor."""
+	actor = User(
+		email="route_actor@example.com",
+		username="route_actor_test",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	target = User(
+		email="route_target@example.com",
+		username="route_target_test",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add_all([actor, target])
+	await db_session.commit()
+	await db_session.refresh(actor)
+	await db_session.refresh(target)
+
+	captured: list[tuple[object, object, bool]] = []
+
+	async def fake_fanout_event_data(
+		event_data: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		_ = event_data
+		captured.append((recipient_ids, user_id, broadcast))
+
+	monkeypatch.setattr(
+		event_service,
+		"_fanout_event_data",
+		fake_fanout_event_data,
+	)
+
+	await event_service.publish_event(
+		db_session,
+		Event(
+			scope=EventScope.USER,
+			scope_id=target.id,
+			type=EventType.FRIEND_REQUEST_SENT,
+			data={"friendship_id": "f1"},
+			user_id=actor.id,
+		),
+	)
+
+	assert captured == [(None, target.id, False)]
+
+
+@pytest.mark.asyncio
+async def test_publish_event_broadcasts_system_scope(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""System scope is the explicit live broadcast target."""
+	captured: list[tuple[object, object, bool]] = []
+
+	async def fake_fanout_event_data(
+		event_data: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		_ = event_data
+		captured.append((recipient_ids, user_id, broadcast))
+
+	monkeypatch.setattr(
+		event_service,
+		"_fanout_event_data",
+		fake_fanout_event_data,
+	)
+
+	await event_service.publish_event(
+		db_session,
+		Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.SETTINGS_UPDATED,
+			data={"updated_sections": ["general"]},
+		),
+	)
+
+	assert captured == [(None, None, True)]
+
+
+@pytest.mark.asyncio
+async def test_publish_event_does_not_broadcast_unroutable_non_system_scope(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Unroutable non-system events are persisted without live delivery."""
+	actor = User(
+		email="unrouted_actor@example.com",
+		username="unrouted_actor_test",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(actor)
+	await db_session.commit()
+	await db_session.refresh(actor)
+
+	captured: list[tuple[object, object, bool]] = []
+
+	async def fake_fanout_event_data(
+		event_data: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		_ = event_data
+		captured.append((recipient_ids, user_id, broadcast))
+
+	monkeypatch.setattr(
+		event_service,
+		"_fanout_event_data",
+		fake_fanout_event_data,
+	)
+
+	await event_service.publish_event(
+		db_session,
+		Event(
+			scope=EventScope.THREAD,
+			type="custom.unrouted",
+			data={},
+			user_id=actor.id,
+		),
+	)
+
+	assert captured == []
 
 
 @pytest.mark.asyncio
@@ -267,8 +463,9 @@ async def test_events_router_endpoints(
 	admin_auth: dict[str, object],
 ) -> None:
 	"""Ensure the events router surfaces emitted events via HTTP."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers_raw = admin_auth["headers"]
+	assert isinstance(headers_raw, dict)
+	headers = {str(key): str(value) for key, value in headers_raw.items()}
 	event_payload = {
 		"scope": "system",
 		"type": "router.test",

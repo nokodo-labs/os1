@@ -2,6 +2,7 @@
 
 from api.settings.database import DbSettingsSource
 from api.settings.settings import (
+	DEFAULT_SECRET_KEY,
 	AssetsSettings,
 	BrandingSettings,
 	CacheRedisSettings,
@@ -35,6 +36,7 @@ from api.settings.settings import (
 	TaskiqSettings,
 	TasksSettings,
 	TavilySettings,
+	ThreadMaintenanceBackfillSettings,
 	UISettings,
 	VectorDatabaseProvider,
 	WeaviateVectorDatabaseSettings,
@@ -53,6 +55,7 @@ __all__ = [
 	"CacheRedisSettings",
 	"CacheSettings",
 	"ChromaVectorDatabaseSettings",
+	"DEFAULT_SECRET_KEY",
 	"CodeInterpreterEngine",
 	"CodeInterpreterSettings",
 	"DbSettingsSource",
@@ -82,6 +85,7 @@ __all__ = [
 	"TaskiqSettings",
 	"TasksSettings",
 	"TavilySettings",
+	"ThreadMaintenanceBackfillSettings",
 	"UISettings",
 	"VectorDatabaseProvider",
 	"WebLoaderSettings",

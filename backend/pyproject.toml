@@ -23,7 +23,7 @@ api = [
     "alembic>=1.13.3",
     "psycopg[binary]>=3.3.4",
     "python-multipart>=0.0.27",
-    "authlib>=1.7.1",
+    "joserfc>=1.6.4",
     "argon2-cffi>=23.1.0",
     "python-dotenv>=1.0.1",
     "jinja2>=3.1.4",
@@ -120,5 +120,4 @@ directory = "data/htmlcov"
 [dependency-groups]
 dev = [
     "ty>=0.0.34",
-    "types-authlib>=1.6.11.20260418",
 ]

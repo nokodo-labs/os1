@@ -8,6 +8,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 from api.models.reminder import ReminderStatus
+from api.schemas.common import MISSING, MissingType
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -82,26 +83,35 @@ class CalendarOccurrenceEdit(BaseModel):
 	"""payload to edit one event occurrence."""
 
 	original_occurrence_at: datetime
-	new_start_at: datetime | None = None
-	new_end_at: datetime | None = None
-	title: str | None = Field(default=None, max_length=200)
-	description: str | None = None
-	location: str | None = Field(default=None, max_length=255)
-	virtual_url: str | None = Field(default=None, max_length=512)
+	new_start_at: datetime | None | MissingType = MISSING
+	new_end_at: datetime | None | MissingType = MISSING
+	title: str | MissingType = Field(default=MISSING, max_length=200)
+	description: str | None | MissingType = MISSING
+	location: str | None | MissingType = Field(default=MISSING, max_length=255)
+	virtual_url: str | None | MissingType = Field(default=MISSING, max_length=512)
 
 
 class CalendarSeriesEdit(CalendarOccurrenceEdit):
 	"""payload to split and edit this and following event occurrences."""
 
-	all_day: bool | None = None
-	timezone: str | None = Field(default=None, max_length=64)
-	recurrence: Recurrence | None = None
-	notification_offsets: list[int] | None = Field(default=None, max_length=8)
-	labels: list[str] | None = None
+	all_day: bool | MissingType = MISSING
+	timezone: str | None | MissingType = Field(default=MISSING, max_length=64)
+	recurrence: Recurrence | None | MissingType = MISSING
+	notification_offsets: list[int] | MissingType = Field(
+		default=MISSING,
+		max_length=8,
+	)
+	labels: list[str] | MissingType = MISSING
 
 	@model_validator(mode="after")
 	def _validate_place(self) -> Self:
-		if self.location and self.virtual_url:
+		fields = self.model_fields_set
+		if (
+			"location" in fields
+			and "virtual_url" in fields
+			and self.location
+			and self.virtual_url
+		):
 			raise ValueError("location and virtual url are mutually exclusive")
 		return self
 
@@ -110,9 +120,9 @@ class ReminderSeriesEdit(BaseModel):
 	"""payload to split and edit this and following reminder occurrences."""
 
 	original_occurrence_at: datetime
-	title: str | None = Field(default=None, max_length=200)
-	description: str | None = None
-	due_at: datetime | None = None
-	remind_at: datetime | None = None
-	recurrence: Recurrence | None = None
-	position: float | None = None
+	title: str | MissingType = Field(default=MISSING, max_length=200)
+	description: str | None | MissingType = MISSING
+	due_at: datetime | None | MissingType = MISSING
+	remind_at: datetime | None | MissingType = MISSING
+	recurrence: Recurrence | None | MissingType = MISSING
+	position: float | MissingType = MISSING

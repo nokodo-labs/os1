@@ -7,7 +7,13 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from api.schemas.scheduled_item import Recurrence
 from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
@@ -47,13 +53,16 @@ class CalendarCreate(CalendarBase):
 class CalendarUpdate(MetadataUpdateModel):
 	"""payload to update a calendar."""
 
-	name: str | None = Field(default=None, min_length=1, max_length=100)
-	description: str | None = None
-	color: str | None = Field(default=None, min_length=4, max_length=7)
-	position: float | None = None
-	is_default: bool | None = None
-	timezone: str | None = Field(default=None, max_length=64)
-	project_ids: list[TypeID] | None = Field(default=None, max_length=100)
+	name: str | MissingType = Field(default=MISSING, min_length=1, max_length=100)
+	description: str | None | MissingType = MISSING
+	color: str | MissingType = Field(default=MISSING, min_length=4, max_length=7)
+	position: float | MissingType = MISSING
+	is_default: bool | MissingType = MISSING
+	timezone: str | None | MissingType = Field(default=MISSING, max_length=64)
+	project_ids: list[TypeID] | MissingType = Field(
+		default=MISSING,
+		max_length=100,
+	)
 
 
 class Calendar(CalendarBase, TimestampedModel):
@@ -104,34 +113,38 @@ class CalendarEventCreate(CalendarEventBase):
 class CalendarEventUpdate(MetadataUpdateModel):
 	"""payload to update a calendar event."""
 
-	title: str | None = Field(default=None, min_length=1, max_length=200)
-	description: str | None = None
-	start_at: datetime | None = None
-	end_at: datetime | None = None
-	all_day: bool | None = None
-	timezone: str | None = Field(default=None, max_length=64)
-	recurrence: Recurrence | None = None
-	notification_offsets: list[CalendarNotificationOffset] | None = Field(
-		default=None,
+	title: str | MissingType = Field(default=MISSING, min_length=1, max_length=200)
+	description: str | None | MissingType = MISSING
+	start_at: datetime | MissingType = MISSING
+	end_at: datetime | MissingType = MISSING
+	all_day: bool | MissingType = MISSING
+	timezone: str | None | MissingType = Field(default=MISSING, max_length=64)
+	recurrence: Recurrence | None | MissingType = MISSING
+	notification_offsets: list[CalendarNotificationOffset] | MissingType = Field(
+		default=MISSING,
 		max_length=8,
 	)
-	location: str | None = Field(default=None, max_length=255)
-	virtual_url: str | None = Field(default=None, max_length=512)
-	labels: list[str] | None = None
+	location: str | None | MissingType = Field(default=MISSING, max_length=255)
+	virtual_url: str | None | MissingType = Field(default=MISSING, max_length=512)
+	labels: list[str] | MissingType = MISSING
 
 	@field_validator("notification_offsets")
 	@classmethod
 	def _normalize_notification_offsets(
 		cls,
-		value: list[int] | None,
-	) -> list[int] | None:
-		if value is None:
-			return None
+		value: list[int],
+	) -> list[int]:
 		return sorted(set(value))
 
 	@model_validator(mode="after")
 	def _validate_place(self) -> Self:
-		if self.location and self.virtual_url:
+		fields = self.model_fields_set
+		if (
+			"location" in fields
+			and "virtual_url" in fields
+			and self.location
+			and self.virtual_url
+		):
 			raise ValueError("location and virtual url are mutually exclusive")
 		return self
 

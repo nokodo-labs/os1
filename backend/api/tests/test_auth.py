@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 
 import pytest
-from authlib.jose import jwt
 from fastapi import HTTPException
 from httpx import AsyncClient
+from joserfc import jwt
+from joserfc.jwk import OctKey
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -239,8 +240,10 @@ async def test_service_get_current_user_no_sub(db_session: AsyncSession) -> None
 
 	payload = {"exp": int(datetime.now(UTC).timestamp()) + 3600}
 	headers = {"alg": settings.security.jwt_algorithm, "typ": "JWT"}
-	token = jwt.encode(headers, payload, settings.security.secret_key)
-	token_str = token.decode("utf-8") if isinstance(token, bytes) else token
+	key = OctKey.import_key(settings.security.secret_key)
+	token_str = jwt.encode(
+		headers, payload, key, algorithms=[settings.security.jwt_algorithm]
+	)
 
 	with pytest.raises(HTTPException):
 		await auth_service.get_current_user(token_str, db_session)

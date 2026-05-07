@@ -11,8 +11,8 @@ problem:
 solution:
 
 - producer worker ALWAYS publishes each frame to redis pub/sub
-  ``nokodo:run:{run_id}:sse`` AND appends to a redis list
-  ``nokodo:run:{run_id}:log`` (with TTL) for late-subscriber catchup.
+	``nokodo-ai:run:{run_id}:sse`` AND appends to a redis list
+	``nokodo-ai:run:{run_id}:log`` (with TTL) for late-subscriber catchup.
 - subscribers ALWAYS prefer the local in-process path (zero hops) when
   the run is known locally. when not known locally, they fall back to
   ``subscribe_remote_run`` which fetches catchup via ``LRANGE`` and
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 _CHANNEL_SUFFIX: Final[str] = "sse"
-_LOG_KEY_PREFIX: Final[str] = "nokodo:run:"
+_LOG_KEY_PREFIX: Final[str] = "nokodo-ai:run:"
 _LOG_KEY_SUFFIX: Final[str] = ":log"
 _LOG_TTL_SECONDS: Final[int] = 10 * 60  # active-run catchup window
 _LOG_MAX_FRAMES: Final[int] = 4096  # bound per-run memory in redis

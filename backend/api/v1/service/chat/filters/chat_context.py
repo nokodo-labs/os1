@@ -20,6 +20,7 @@ from api.v1.service.authorization import thread_access_predicate
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.prompt_runtime import SENTINEL_CHAT_CONTEXT
 from api.v1.service.sorting import apply_sort
+from nokodo_ai.context import AgentContext
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -55,8 +56,10 @@ class ChatContextFilter(Filter):
 	async def process(
 		self,
 		thread: SDKThread,
+		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> SDKThread:
+		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for ChatContextFilter")
 

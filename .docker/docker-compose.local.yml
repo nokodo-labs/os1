@@ -28,11 +28,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
+      test: [ "CMD-SHELL", "pg_isready -U nokodo-ai-admin" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles: ["deps", "local"]
+    profiles: [ "deps", "local" ]
 
   qdrant:
     image: qdrant/qdrant:v1.17.1
@@ -43,21 +43,21 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    profiles: ["deps", "local"]
+    profiles: [ "deps", "local" ]
 
   valkey:
     image: valkey/valkey:9-alpine
     container_name: os1-valkey
     restart: unless-stopped
-    command: ["valkey-server", "--appendonly", "no", "--save", ""]
+    command: [ "valkey-server", "--appendonly", "no", "--save", "" ]
     ports:
       - "6380:6379"
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: [ "CMD", "valkey-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
-    profiles: ["deps", "local"]
+    profiles: [ "deps", "local" ]
 
   minio:
     image: minio/minio:latest
@@ -73,11 +73,11 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles: ["deps", "local"]
+    profiles: [ "deps", "local" ]
 
   backend:
     build:
@@ -97,12 +97,16 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      backend-worker:
+        condition: service_started
+      backend-scheduler:
+        condition: service_started
     volumes:
       - ../backend:/app
       - ../backend/data:/app/data
       - /app/__pycache__
     command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload
-    profiles: ["local"]
+    profiles: [ "local" ]
 
   backend-worker:
     build:
@@ -112,16 +116,21 @@ services:
     restart: unless-stopped
     environment: *backend-env
     depends_on:
-      backend:
+      db:
+        condition: service_healthy
+      qdrant:
         condition: service_started
+      minio:
+        condition: service_healthy
       valkey:
         condition: service_healthy
     volumes:
       - ../backend:/app
       - ../backend/data:/app/data
       - /app/__pycache__
-    command: taskiq worker api.taskiq:broker api.tasks.registry --workers 1 --max-async-tasks 25
-    profiles: ["local"]
+    command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
+      --workers 1 --max-async-tasks 25
+    profiles: [ "local" ]
 
   backend-scheduler:
     build:
@@ -131,16 +140,20 @@ services:
     restart: unless-stopped
     environment: *backend-env
     depends_on:
-      backend:
+      db:
+        condition: service_healthy
+      qdrant:
         condition: service_started
+      minio:
+        condition: service_healthy
       valkey:
         condition: service_healthy
     volumes:
       - ../backend:/app
       - ../backend/data:/app/data
       - /app/__pycache__
-    command: taskiq scheduler api.taskiq:scheduler api.tasks.registry
-    profiles: ["local"]
+    command: python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry
+    profiles: [ "local" ]
 
   frontend:
     build:
@@ -155,7 +168,7 @@ services:
     depends_on:
       backend:
         condition: service_started
-    profiles: ["local"]
+    profiles: [ "local" ]
 
   console:
     build:
@@ -170,7 +183,7 @@ services:
     depends_on:
       backend:
         condition: service_started
-    profiles: ["local"]
+    profiles: [ "local" ]
 
 volumes:
   postgres_data:

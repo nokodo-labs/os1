@@ -11,6 +11,27 @@ from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
+def auth_headers(auth: dict[str, object]) -> dict[str, str]:
+	headers = auth["headers"]
+	assert isinstance(headers, dict)
+	result: dict[str, str] = {}
+	for key, value in headers.items():
+		assert isinstance(key, str)
+		assert isinstance(value, str)
+		result[key] = value
+	return result
+
+
+def auth_user(auth: dict[str, object]) -> dict[str, object]:
+	user = auth["user"]
+	assert isinstance(user, dict)
+	result: dict[str, object] = {}
+	for key, value in user.items():
+		assert isinstance(key, str)
+		result[key] = value
+	return result
+
+
 @pytest.mark.asyncio
 async def test_create_user(client: AsyncClient) -> None:
 	"""Test creating a new user."""
@@ -40,8 +61,7 @@ async def test_create_user(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_users(client: AsyncClient, admin_auth: dict[str, object]) -> None:
 	"""Test retrieving list of users."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	response = await client.get("/v1/users", headers=headers)
 	assert response.status_code == 200
 	assert isinstance(response.json(), list)
@@ -52,8 +72,7 @@ async def test_get_users_sorting(
 	client: AsyncClient, admin_auth: dict[str, object]
 ) -> None:
 	"""List users supports server-side sort_by + sort_dir."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 
 	# Use lowercase alnum-only local parts so ordering is stable across DB collations.
 	created_emails = [
@@ -97,19 +116,20 @@ async def test_get_user_by_id(
 	user_auth: dict[str, object],
 ) -> None:
 	"""Test retrieving a specific user by ID."""
-	user = user_auth["user"]
-	assert isinstance(user, dict)
+	user = auth_user(user_auth)
 	user_id = user["id"]
+	assert isinstance(user_id, str)
+	user_email = user["email"]
+	assert isinstance(user_email, str)
 
 	# Then retrieve it
-	headers = user_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(user_auth)
 	response = await client.get(f"/v1/users/{user_id}", headers=headers)
 	assert response.status_code == 200
 
 	data = response.json()
 	assert data["id"] == user_id
-	assert data["email"] == user["email"]
+	assert data["email"] == user_email
 
 
 @pytest.mark.asyncio
@@ -117,8 +137,7 @@ async def test_get_nonexistent_user(
 	client: AsyncClient, admin_auth: dict[str, object]
 ) -> None:
 	"""Test retrieving a user that doesn't exist."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	response = await client.get(f"/v1/users/{new_typeid('user')}", headers=headers)
 	assert response.status_code == 404
 
@@ -134,8 +153,7 @@ async def test_create_duplicate_user(
 		"username": "duplicate_test",
 		"password": "password",
 	}
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	resp1 = await client.post("/v1/users", json=user_data, headers=headers)
 	assert resp1.status_code == 201
 

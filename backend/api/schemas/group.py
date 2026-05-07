@@ -8,8 +8,10 @@ from pydantic import BaseModel
 
 from api.models.group import GroupMemberRole
 from api.schemas.common import (
+	MISSING,
 	MetadataModel,
 	MetadataUpdateModel,
+	MissingType,
 	ORMModel,
 	TimestampedModel,
 )
@@ -42,8 +44,8 @@ class GroupCreate(GroupBase):
 class GroupUpdate(MetadataUpdateModel):
 	"""schema for updating a group."""
 
-	name: str | None = None
-	description: str | None = None
+	name: str | MissingType = MISSING
+	description: str | None | MissingType = MISSING
 
 
 class GroupMembershipResponse(ORMModel):

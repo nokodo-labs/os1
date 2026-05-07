@@ -35,8 +35,14 @@ from api.storage.local import LocalStorageBackend
 from api.storage.s3 import S3StorageBackend
 from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
+from api.v1.service.events import start_event_subscriber
 from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
 from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
+from api.v1.tasks.threads import (
+	fail_stale_thread_related_tasks,
+	reconcile_thread_inactivity_maintenance_schedules,
+	reconcile_thread_maintenance_backfill_schedule,
+)
 
 
 configure_psycopg_asyncio_event_loop_policy()
@@ -56,21 +62,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		boot_settings.ENV,
 	)
 
-	if not boot_settings.TESTING:
-		await init_db()
+	settings.validate_runtime_security()
 
 	if not boot_settings.TESTING:
+		await init_db()
 		await redis_client.connect()
 		await startup_taskiq()
+		await fail_stale_thread_related_tasks()
 		await reconcile_calendar_event_notification_schedules()
 		await reconcile_reminder_notification_schedules()
+		await reconcile_thread_inactivity_maintenance_schedules()
+		await reconcile_thread_maintenance_backfill_schedule()
 
 	# start the cross-worker cache invalidation subscriber. handlers are
 	# self-registered at import time by the modules that own resettable
 	# state (imported transitively through the router tree).
 	invalidation_task: asyncio.Task[None] | None = None
+	event_task: asyncio.Task[None] | None = None
 	if not boot_settings.TESTING:
 		invalidation_task = await start_invalidation_subscriber()
+		event_task = await start_event_subscriber()
 
 	storage_cfg = settings.assets.storage
 	if storage_cfg.backend == "s3":
@@ -101,6 +112,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	logger.info("shutting down")
 	if invalidation_task is not None:
 		invalidation_task.cancel()
+	if event_task is not None:
+		event_task.cancel()
 	await close_storage()
 	if not boot_settings.TESTING:
 		await shutdown_taskiq()

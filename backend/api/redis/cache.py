@@ -41,8 +41,8 @@ from api.redis.client import redis_client
 
 logger = logging.getLogger(__name__)
 
-_PREFIX = "nokodo_ai:cache:"
-_TAG_PREFIX = "nokodo_ai:tag:"
+_PREFIX = "nokodo-ai:cache:"
+_TAG_PREFIX = "nokodo-ai:tag:"
 
 
 class RedisCache:

@@ -19,6 +19,7 @@ from api.v1.service.chat.filters.citation_index import (
 	resolve_assistant_citations,
 )
 from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
@@ -85,6 +86,10 @@ def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 	ctx.thread_id = None
 	ctx.user_id = "user_test"
 	return ctx
+
+
+def _agent_context(thread: Thread) -> AgentContext:
+	return AgentContext(thread=thread)
 
 
 # _next_index
@@ -987,7 +992,7 @@ class TestCitationIndexFilterProcess:
 	async def test_returns_thread_when_no_app_context(self) -> None:
 		f = CitationIndexFilter()
 		thread = Thread(messages=[])
-		result = await f.process(thread, None)
+		result = await f.process(thread, _agent_context(thread), None)
 		assert result is thread
 
 	async def test_full_flow_assigns_and_resolves(self) -> None:
@@ -1008,7 +1013,7 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		result = await f.process(thread, ctx)
+		result = await f.process(thread, _agent_context(thread), ctx)
 		# citation should be assigned
 		assert len(ctx.citations) == 1
 		assert ctx.citations[0].index == 1
@@ -1046,7 +1051,7 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		result = await f.process(thread, ctx)
+		result = await f.process(thread, _agent_context(thread), ctx)
 		# entries should contain both rebuilt and new
 		assert len(ctx.citations) == 2
 		assert ctx.citations[0].index == 1
@@ -1078,7 +1083,7 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		await f.process(thread, ctx)
+		await f.process(thread, _agent_context(thread), ctx)
 		assert len(ctx.citations) == 1
 		assert ctx.citations[0].index == 1
 		assert ctx.citations[0].source_id == "https://x.com"
@@ -1105,7 +1110,7 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		await f.process(thread, ctx)
+		await f.process(thread, _agent_context(thread), ctx)
 		result = resolve_assistant_citations("check [1] out", ctx.citations)
 		assert len(result) == 1
 		assert result[0].index == 1

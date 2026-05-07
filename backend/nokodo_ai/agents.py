@@ -184,11 +184,20 @@ class Agent[AppContextT = None](Base):
 		produced: AgentProducedMessages = []
 
 		for iteration in range(self.max_iterations):
+			agent_context = AgentContext(
+				thread=thread,
+				model=self.chat_model,
+				iteration=iteration,
+			)
 			# apply filters to thread messages (pre-processing). filters can
 			# also inject messages from external sources (see SteeringFilter).
 			filtered_thread = thread
 			for filter_ in self.filters:
-				filtered_thread = await filter_.process(filtered_thread, app_context)
+				filtered_thread = await filter_.process(
+					filtered_thread,
+					agent_context=agent_context,
+					app_context=app_context,
+				)
 
 			current_tool_choice = tool_choice if self.tools else None
 
@@ -202,19 +211,16 @@ class Agent[AppContextT = None](Base):
 
 			# execute hooks after response (read-only observation)
 			for hook in self.hooks:
-				await hook.execute(thread, app_context)
+				await hook.execute(
+					thread,
+					agent_context=agent_context,
+					app_context=app_context,
+				)
 
 			if not assistant_response.tool_calls:
 				return produced
 
 			for tool_call in assistant_response.tool_calls:
-				agent_context = AgentContext(
-					thread=thread,
-					model=self.chat_model,
-					tool_call_id=tool_call.id,
-					iteration=iteration,
-					tool_call_start_time=tool_call.created_at_monotonic,
-				)
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
 					agent_context=agent_context,
@@ -244,11 +250,20 @@ class Agent[AppContextT = None](Base):
 		chunk_index = 0
 
 		for iteration in range(self.max_iterations):
+			agent_context = AgentContext(
+				thread=thread,
+				model=self.chat_model,
+				iteration=iteration,
+			)
 			# apply filters to thread (pre-processing). filters can also inject
 			# messages from external sources (see SteeringFilter).
 			filtered_thread = thread
 			for filter_ in self.filters:
-				filtered_thread = await filter_.process(filtered_thread, app_context)
+				filtered_thread = await filter_.process(
+					filtered_thread,
+					agent_context=agent_context,
+					app_context=app_context,
+				)
 
 			current_tool_choice = tool_choice if self.tools else None
 
@@ -271,7 +286,11 @@ class Agent[AppContextT = None](Base):
 
 			# execute hooks (read-only observation)
 			for hook in self.hooks:
-				await hook.execute(thread, app_context)
+				await hook.execute(
+					thread,
+					agent_context=agent_context,
+					app_context=app_context,
+				)
 
 			# no tool calls = final response, we're done
 			if not assistant_message.tool_calls:
@@ -280,13 +299,6 @@ class Agent[AppContextT = None](Base):
 
 			# execute each tool call
 			for tool_call in assistant_message.tool_calls:
-				agent_context = AgentContext(
-					thread=thread,
-					model=self.chat_model,
-					tool_call_id=tool_call.id,
-					iteration=iteration,
-					tool_call_start_time=tool_call.created_at_monotonic,
-				)
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
 					agent_context=agent_context,
@@ -436,7 +448,7 @@ class Agent[AppContextT = None](Base):
 			tool_call_id=tool_call.id,
 			iteration=agent_context.iteration,
 			retry_count=agent_context.retry_count,
-			tool_call_start_time=agent_context.tool_call_start_time,
+			tool_call_start_time=tool_call.created_at_monotonic,
 			metadata=tool_call.metadata or {},
 		)
 

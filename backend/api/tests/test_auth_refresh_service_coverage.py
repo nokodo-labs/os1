@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from authlib.jose import JoseError
 from fastapi import HTTPException
+from joserfc.errors import JoseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.settings import settings

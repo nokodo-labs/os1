@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from pydantic import Field
 
 from .base import Base
+from .context import AgentContext
 from .threads import Thread
 
 
@@ -33,12 +34,14 @@ class Filter[AppContextT = None](Base, ABC):
 	async def process(
 		self,
 		thread: Thread,
+		agent_context: AgentContext,
 		app_context: AppContextT | None,
 	) -> Thread:
 		"""process messages through this filter.
 
 		args:
 			thread: the current conversation thread
+			agent_context: runtime context for this agent iteration
 			app_context: application-specific context
 
 		returns:

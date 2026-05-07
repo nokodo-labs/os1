@@ -7,7 +7,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
 
@@ -40,10 +46,10 @@ class NoteCreate(NoteBase):
 class NoteUpdate(MetadataUpdateModel):
 	"""payload to update a note."""
 
-	title: str | None = None
-	content: str | None = None
-	labels: list[str] | None = None
-	project_ids: list[TypeID] | None = None
+	title: str | MissingType = MISSING
+	content: str | MissingType = MISSING
+	labels: list[str] | MissingType = MISSING
+	project_ids: list[TypeID] | MissingType = MISSING
 
 
 class Note(NoteBase, TimestampedModel):

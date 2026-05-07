@@ -4,8 +4,8 @@ this module centralizes event persistence + websocket broadcasting.
 
 resource events (note.*, thread.*, file.*, etc.) are automatically routed
 to all users with at least READER access to the affected resource.
-non-resource events (settings.*, user.*, stream.*) fall back to
-owner-only or broadcast routing.
+non-resource events route by scope: user scope targets scope_id, and system
+scope broadcasts globally.
 """
 
 from __future__ import annotations
@@ -23,10 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
 from api.local_tasks import create_background_task
-from api.models.event import Event
+from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.schemas.event import EventCreate, EventListFilters
+from api.v1.service import event_bus
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import list_accessible_user_ids, require_permission
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -183,6 +184,23 @@ def _resolve_routing(event: Event) -> tuple[ResourceType, TypeID] | None:
 	return (resource_type, resource_id)
 
 
+def _event_scope(event: Event) -> str:
+	if isinstance(event.scope, EventScope):
+		return event.scope.value
+	return str(event.scope)
+
+
+def _scope_user_recipient_id(event: Event) -> TypeID | None:
+	"""resolve the direct-user recipient from event scope."""
+	if _event_scope(event) == EventScope.USER.value and event.scope_id is not None:
+		return TypeID(str(event.scope_id))
+	return None
+
+
+def _scope_broadcasts(event: Event) -> bool:
+	return _event_scope(event) == EventScope.SYSTEM.value
+
+
 def _build_event_data(
 	event: EventModel,
 	origin_session_id: str | None = None,
@@ -191,7 +209,7 @@ def _build_event_data(
 	return {
 		"id": str(event.id),
 		"type": event.type,
-		"scope": (event.scope.value if hasattr(event.scope, "value") else event.scope),
+		"scope": _event_scope(event),
 		"scope_id": str(event.scope_id) if event.scope_id else None,
 		"data": event.data,
 		"version": event.version,
@@ -220,7 +238,8 @@ async def _resolve_recipient_ids(
 
 	uses a fresh read-only session so pending deletes in the caller's
 	transaction don't hide the resource row.
-	returns None when the event has no resource routing (fall back to legacy).
+	returns None when the event has no resource route; scope routing handles
+	direct-user or system broadcast delivery.
 	"""
 	routing = _resolve_routing(event)
 	if not routing:
@@ -228,6 +247,61 @@ async def _resolve_recipient_ids(
 	resource_type, resource_id = routing
 	async with async_session_local() as session:
 		return await list_accessible_user_ids(resource_type, resource_id, session)
+
+
+async def _broadcast_event_data(
+	event_data: dict[str, Any],
+	recipient_ids: list[TypeID] | None,
+	user_id: TypeID | str | None,
+	broadcast: bool,
+) -> None:
+	if recipient_ids is not None:
+		if recipient_ids:
+			await event_connections.send_to_users(recipient_ids, event_data)
+		return
+	if user_id:
+		await event_connections.send_to_user(TypeID(str(user_id)), event_data)
+	elif broadcast:
+		await event_connections.broadcast(event_data)
+
+
+async def _fanout_event_data(
+	event_data: dict[str, Any],
+	recipient_ids: list[TypeID] | None,
+	user_id: TypeID | str | None,
+	broadcast: bool,
+) -> None:
+	if recipient_ids is not None and not recipient_ids:
+		return
+	await _broadcast_event_data(event_data, recipient_ids, user_id, broadcast)
+	await event_bus.publish_event(
+		event_data,
+		recipient_ids=recipient_ids,
+		user_id=user_id,
+		broadcast=broadcast,
+	)
+
+
+async def _fanout_scope_event_data(
+	event: Event,
+	event_data: dict[str, Any],
+) -> None:
+	user_id = _scope_user_recipient_id(event)
+	if user_id is not None:
+		await _fanout_event_data(event_data, None, user_id, False)
+	elif _scope_broadcasts(event):
+		await _fanout_event_data(event_data, None, None, True)
+	else:
+		logger.debug(
+			"event has no live delivery target: type=%s scope=%s",
+			event.type,
+			_event_scope(event),
+		)
+
+
+async def start_event_subscriber() -> asyncio.Task[None]:
+	"""start the redis subscriber that rebroadcasts remote websocket events."""
+	return await event_bus.start_event_subscriber(_broadcast_event_data)
 
 
 class ConnectionManager:
@@ -289,15 +363,16 @@ class ConnectionManager:
 		event: EventModel,
 		origin_session_id: str | None = None,
 	) -> None:
-		"""legacy broadcast: owner-only or full broadcast.
+		"""broadcast a non-resource event according to its scope.
 
 		prefer publish_event() for persisted resource events (does access-based
 		routing automatically). this method is kept for the emitter fast-path.
 		"""
 		event_data = _build_event_data(event, origin_session_id)
-		if event.user_id:
-			await self.send_to_user(event.user_id, event_data)
-		else:
+		user_id = _scope_user_recipient_id(event)
+		if user_id is not None:
+			await self.send_to_user(user_id, event_data)
+		elif _scope_broadcasts(event):
 			await self.broadcast(event_data)
 
 
@@ -335,14 +410,9 @@ def build_event_emitter(
 						read_session,
 					)
 			user_ids = _recipient_cache[cache_key]
-			if user_ids:
-				await event_connections.send_to_users(user_ids, event_data)
-				return
-		# fallback: owner-only or broadcast
-		if event.user_id:
-			await event_connections.send_to_user(event.user_id, event_data)
-		else:
-			await event_connections.broadcast(event_data)
+			await _fanout_event_data(event_data, user_ids, None, False)
+			return
+		await _fanout_scope_event_data(event, event_data)
 
 	def _track(name: str, coro: Coroutine[object, object, object]) -> None:
 		create_background_task(coro, name=name)
@@ -401,7 +471,11 @@ async def publish_event(
 	event: Event,
 	origin_session_id: str | None = None,
 ) -> Event:
-	"""persist an event and broadcast to all users with access.
+	"""persist an event and deliver it through its explicit route.
+
+	resource events are sent to users with access. non-resource events route by
+	scope: user scope targets scope_id, system scope broadcasts, and other
+	unroutable scopes are persisted without live delivery.
 
 	recipient resolution uses a separate read-only session so that
 	pending hard-deletes in the caller's transaction don't hide the
@@ -415,12 +489,10 @@ async def publish_event(
 
 	event_data = _build_event_data(event, origin_session_id)
 
-	if recipient_ids:
-		await event_connections.send_to_users(recipient_ids, event_data)
-	elif event.user_id:
-		await event_connections.send_to_user(event.user_id, event_data)
+	if recipient_ids is not None:
+		await _fanout_event_data(event_data, recipient_ids, None, False)
 	else:
-		await event_connections.broadcast(event_data)
+		await _fanout_scope_event_data(event, event_data)
 
 	return event
 
@@ -438,6 +510,16 @@ async def emit_event(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
 			)
+	if (
+		event_in.scope == EventScope.USER
+		and event_in.scope_id is not None
+		and not principal.is_admin
+		and event_in.scope_id != principal.user_id
+	):
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
 	event = Event(**event_in.model_dump(by_alias=True))
 	return await publish_event(session, event=event)
 

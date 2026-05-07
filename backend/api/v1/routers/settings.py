@@ -68,6 +68,7 @@ async def update_settings(
 		# notify all workers to clear process-local caches
 		await publish_invalidation("embedding_model")
 		await publish_invalidation("task_models")
+		await publish_invalidation("thread_maintenance_backfill")
 	except svc.VersionConflictError as e:
 		raise HTTPException(
 			status.HTTP_409_CONFLICT,

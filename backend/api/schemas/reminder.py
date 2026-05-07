@@ -8,7 +8,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from api.models.reminder import ReminderStatus
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from api.schemas.scheduled_item import Recurrence
 from nokodo_ai.utils.typeid import TypeID
 
@@ -59,13 +65,13 @@ class ReminderListCreate(ReminderListBase):
 class ReminderListUpdate(MetadataUpdateModel):
 	"""schema for updating a reminder list."""
 
-	name: str | None = Field(default=None, max_length=100)
-	description: str | None = Field(default=None, max_length=500)
-	color: str | None = None
-	icon: str | None = None
-	position: float | None = None
-	is_default: bool | None = None
-	project_ids: list[TypeID] | None = None
+	name: str | MissingType = Field(default=MISSING, max_length=100)
+	description: str | None | MissingType = Field(default=MISSING, max_length=500)
+	color: str | None | MissingType = MISSING
+	icon: str | None | MissingType = MISSING
+	position: float | MissingType = MISSING
+	is_default: bool | MissingType = MISSING
+	project_ids: list[TypeID] | MissingType = MISSING
 
 
 class ReminderList(ReminderListBase, TimestampedModel):
@@ -109,15 +115,15 @@ class ReminderCreate(ReminderBase):
 class ReminderUpdate(MetadataUpdateModel):
 	"""schema for updating a reminder."""
 
-	title: str | None = Field(default=None, max_length=200)
-	description: str | None = None
-	due_at: datetime | None = None
-	remind_at: datetime | None = None
-	recurrence: Recurrence | None = None
-	status: ReminderStatus | None = None
-	list_id: TypeID | None = None
-	parent_id: TypeID | None = None
-	position: float | None = None
+	title: str | MissingType = Field(default=MISSING, max_length=200)
+	description: str | None | MissingType = MISSING
+	due_at: datetime | None | MissingType = MISSING
+	remind_at: datetime | None | MissingType = MISSING
+	recurrence: Recurrence | None | MissingType = MISSING
+	status: ReminderStatus | MissingType = MISSING
+	list_id: TypeID | MissingType = MISSING
+	parent_id: TypeID | None | MissingType = MISSING
+	position: float | MissingType = MISSING
 
 
 class Reminder(ReminderBase, TimestampedModel):

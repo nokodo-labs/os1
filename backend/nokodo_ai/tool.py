@@ -98,8 +98,9 @@ class Tool[AppContextT = None](Base, ABC):
 		agent_context: AgentContext,
 	) -> ToolMessage:
 		"""helper to create a successful tool response."""
+		tool_call_id, _ = self.tool_call_context(agent_context)
 		return ToolMessage(
-			tool_call_id=agent_context.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=output,
 			metadata=agent_context.metadata,
 			is_error=False,
@@ -111,12 +112,22 @@ class Tool[AppContextT = None](Base, ABC):
 		agent_context: AgentContext,
 	) -> ToolMessage:
 		"""helper to create an error tool response."""
+		tool_call_id, _ = self.tool_call_context(agent_context)
 		return ToolMessage(
-			tool_call_id=agent_context.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=message,
 			metadata=agent_context.metadata,
 			is_error=True,
 		)
+
+	@staticmethod
+	def tool_call_context(agent_context: AgentContext) -> tuple[str, float]:
+		"""return tool-specific context for a context inside tool execution."""
+		if agent_context.tool_call_id is None:
+			raise ValueError("tool_call_id is required during tool execution")
+		if agent_context.tool_call_start_time is None:
+			raise ValueError("tool_call_start_time is required during tool execution")
+		return agent_context.tool_call_id, agent_context.tool_call_start_time
 
 
 def tool[AppContextT = None](

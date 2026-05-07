@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 import pytest
-from authlib.jose import JoseError
+from joserfc.errors import JoseError
 
 from nokodo_ai.utils.security import (
 	create_jwt_token,

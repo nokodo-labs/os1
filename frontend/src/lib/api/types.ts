@@ -523,6 +523,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/threads/maintenance-backfill/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Thread Maintenance Backfill
+         * @description manually run one batch of the retroactive thread maintenance sweep.
+         *
+         *     admin-only. this intentionally ignores the scheduled backfill enabled flag
+         *     so admins can spot-check the sweep without leaving the periodic schedule on.
+         */
+        post: operations["run_thread_maintenance_backfill_v1_threads_maintenance_backfill_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/threads/unread-counts": {
         parameters: {
             query?: never;
@@ -2953,22 +2976,22 @@ export interface components {
              * Image Decay Turns
              * @description turns before image attachments decay to reference
              */
-            image_decay_turns?: number | null;
+            image_decay_turns?: number;
             /**
              * Audio Decay Turns
              * @description turns before audio attachments decay to reference
              */
-            audio_decay_turns?: number | null;
+            audio_decay_turns?: number;
             /**
              * Video Decay Turns
              * @description turns before video attachments decay to reference
              */
-            video_decay_turns?: number | null;
+            video_decay_turns?: number;
             /**
              * Reveal Decay Turns
              * @description turns before a revealed attachment decays again
              */
-            reveal_decay_turns?: number | null;
+            reveal_decay_turns?: number;
         };
         /** AIChatContextSettings */
         AIChatContextSettings: {
@@ -3004,22 +3027,22 @@ export interface components {
              * Enabled
              * @description enable cross-chat context enrichment
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Mode
              * @description how chats are selected for Agent context enrichment
              */
-            mode?: string | null;
+            mode?: string;
             /**
              * Top K
              * @description number of chats to use for context enrichment
              */
-            top_k?: number | null;
+            top_k?: number;
             /**
              * Similarity Threshold
              * @description similarity minimum threshold for chat context retrieval
              */
-            similarity_threshold?: number | null;
+            similarity_threshold?: number;
         };
         /**
          * AIMediaSettings
@@ -3035,9 +3058,12 @@ export interface components {
         };
         /** AIMediaSettingsPatch */
         AIMediaSettingsPatch: {
-            images?: components["schemas"]["ImageGenerationSettingsPatch"] | null;
-            videos?: components["schemas"]["VideoGenerationSettingsPatch"] | null;
-            audio?: components["schemas"]["AudioGenerationSettingsPatch"] | null;
+            /** Images */
+            images?: components["schemas"]["ImageGenerationSettingsPatch"];
+            /** Videos */
+            videos?: components["schemas"]["VideoGenerationSettingsPatch"];
+            /** Audio */
+            audio?: components["schemas"]["AudioGenerationSettingsPatch"];
         };
         /** AIMemorySettings */
         AIMemorySettings: {
@@ -3066,17 +3092,17 @@ export interface components {
              * Enable Memory
              * @description enable memory
              */
-            enable_memory?: boolean | null;
+            enable_memory?: boolean;
             /**
              * Similarity Threshold
              * @description similarity minimum threshold for memory retrieval
              */
-            similarity_threshold?: number | null;
+            similarity_threshold?: number;
             /**
              * Top K
              * @description number of relevant memories to retrieve
              */
-            top_k?: number | null;
+            top_k?: number;
         };
         /**
          * AIPreferences
@@ -3157,23 +3183,29 @@ export interface components {
              * Default Agent Ids
              * @description ordered list of default agent ids (tried in order)
              */
-            default_agent_ids?: string[] | null;
+            default_agent_ids?: string[];
             /**
              * Retrieval Turns
              * @description number of recent conversation turns for retrieval queries
              */
-            retrieval_turns?: number | null;
+            retrieval_turns?: number;
             /**
              * Retrieval Pre Build
              * @description pre-build retrieval query before filter loop
              */
-            retrieval_pre_build?: boolean | null;
-            memory?: components["schemas"]["AIMemorySettingsPatch"] | null;
-            chat_context?: components["schemas"]["AIChatContextSettingsPatch"] | null;
-            tasks?: components["schemas"]["AITaskSettingsPatch"] | null;
-            attachments?: components["schemas"]["AIAttachmentSettingsPatch"] | null;
-            windowing?: components["schemas"]["AIWindowingSettingsPatch"] | null;
-            media?: components["schemas"]["AIMediaSettingsPatch"] | null;
+            retrieval_pre_build?: boolean;
+            /** Memory */
+            memory?: components["schemas"]["AIMemorySettingsPatch"];
+            /** Chat Context */
+            chat_context?: components["schemas"]["AIChatContextSettingsPatch"];
+            /** Tasks */
+            tasks?: components["schemas"]["AITaskSettingsPatch"];
+            /** Attachments */
+            attachments?: components["schemas"]["AIAttachmentSettingsPatch"];
+            /** Windowing */
+            windowing?: components["schemas"]["AIWindowingSettingsPatch"];
+            /** Media */
+            media?: components["schemas"]["AIMediaSettingsPatch"];
         };
         /**
          * AITaskSettings
@@ -3349,52 +3381,52 @@ export interface components {
              * Enabled
              * @description enable context window management and summarization
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Max Messages
              * @description secondary message count guard
              */
-            max_messages?: number | null;
+            max_messages?: number;
             /**
              * Trigger Ratio
              * @description fraction of token budget to trigger background summarization
              */
-            trigger_ratio?: number | null;
+            trigger_ratio?: number;
             /**
              * Hard Ratio
              * @description fraction of token budget for hard truncation
              */
-            hard_ratio?: number | null;
+            hard_ratio?: number;
             /**
              * Summary Batch Size
              * @description number of oldest unsummarized messages per summary batch
              */
-            summary_batch_size?: number | null;
+            summary_batch_size?: number;
             /**
              * Max Summaries Before Condense
              * @description condense summaries when this many accumulate
              */
-            max_summaries_before_condense?: number | null;
+            max_summaries_before_condense?: number;
             /**
              * Tool Result Max Share
              * @description max fraction of budget for a single tool result
              */
-            tool_result_max_share?: number | null;
+            tool_result_max_share?: number;
             /**
              * Tool Result Hard Cap
              * @description absolute character ceiling per tool result
              */
-            tool_result_hard_cap?: number | null;
+            tool_result_hard_cap?: number;
             /**
              * Tool Results Combined Max Share
              * @description max fraction of budget for ALL tool results combined (Layer 2)
              */
-            tool_results_combined_max_share?: number | null;
+            tool_results_combined_max_share?: number;
             /**
              * Response Headroom
              * @description tokens reserved for the model's response
              */
-            response_headroom?: number | null;
+            response_headroom?: number;
             /**
              * Summarization Max Chars Per Message
              * @description max characters per message in summarization transcripts
@@ -3667,16 +3699,18 @@ export interface components {
          * @description payload for agent update.
          */
         AgentUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
             /** System Prompt */
             system_prompt?: string | null;
             /** Plugin Ids */
-            plugin_ids?: string[] | null;
-            config?: components["schemas"]["AgentConfig"] | null;
+            plugin_ids?: string[];
+            /** Config */
+            config?: components["schemas"]["AgentConfig"];
             /** Model Id */
             model_id?: string | null;
             /** Profile Image File Id */
@@ -3733,8 +3767,9 @@ export interface components {
             /**
              * Agent
              * @description agent provider to use for agentic web search
+             * @enum {string}
              */
-            agent?: ("native" | "perplexity") | null;
+            agent?: "native" | "perplexity";
             /**
              * Model Id
              * @description model id for the native agentic web search agent
@@ -3744,19 +3779,19 @@ export interface components {
              * System Prompt
              * @description system prompt for the native agentic web search agent
              */
-            system_prompt?: string | null;
+            system_prompt?: string;
             /**
              * Model Params
              * @description chat model parameters for the native agentic web search agent
              */
             model_params?: {
                 [key: string]: unknown;
-            } | null;
+            };
             /**
              * Max Iterations
              * @description maximum native agentic web search turns
              */
-            max_iterations?: number | null;
+            max_iterations?: number;
         };
         /**
          * AppearancePreferences
@@ -3824,11 +3859,16 @@ export interface components {
              * @description default embedding model id (Model.id)
              */
             default_embedding_model_id?: string | null;
-            vector_database?: components["schemas"]["VectorDatabaseSettingsPatch"] | null;
-            vector?: components["schemas"]["VectorSettingsPatch"] | null;
-            embeddings?: components["schemas"]["EmbeddingsSettingsPatch"] | null;
-            rerank?: components["schemas"]["RerankSettingsPatch"] | null;
-            storage?: components["schemas"]["StorageSettingsPatch"] | null;
+            /** Vector Database */
+            vector_database?: components["schemas"]["VectorDatabaseSettingsPatch"];
+            /** Vector */
+            vector?: components["schemas"]["VectorSettingsPatch"];
+            /** Embeddings */
+            embeddings?: components["schemas"]["EmbeddingsSettingsPatch"];
+            /** Rerank */
+            rerank?: components["schemas"]["RerankSettingsPatch"];
+            /** Storage */
+            storage?: components["schemas"]["StorageSettingsPatch"];
         };
         /**
          * AudioGenerationSettings
@@ -3853,7 +3893,7 @@ export interface components {
              * Enabled
              * @description enable audio generation capabilities
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Model
              * @description model identifier for audio generation
@@ -3968,7 +4008,7 @@ export interface components {
              * Site Name
              * @description site name
              */
-            site_name?: string | null;
+            site_name?: string;
             /**
              * Logo Url
              * @description logo url
@@ -3983,7 +4023,7 @@ export interface components {
              * Primary Color
              * @description primary color hex
              */
-            primary_color?: string | null;
+            primary_color?: string;
             /**
              * Support Email
              * @description support email
@@ -4057,17 +4097,18 @@ export interface components {
         };
         /** CacheSettingsPatch */
         CacheSettingsPatch: {
-            redis?: components["schemas"]["CacheRedisSettingsPatch"] | null;
+            /** Redis */
+            redis?: components["schemas"]["CacheRedisSettingsPatch"];
             /**
              * Scheduled Items Ttl Seconds
              * @description TTL for scheduled items cache entries
              */
-            scheduled_items_ttl_seconds?: number | null;
+            scheduled_items_ttl_seconds?: number;
             /**
              * Resource Payload Ttl Seconds
              * @description TTL for resource payload cache entries
              */
-            resource_payload_ttl_seconds?: number | null;
+            resource_payload_ttl_seconds?: number;
         };
         /**
          * Calendar
@@ -4257,28 +4298,36 @@ export interface components {
          * @description payload to update a calendar event.
          */
         CalendarEventUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
-            title?: string | null;
+            title?: string;
             /** Description */
             description?: string | null;
-            /** Start At */
-            start_at?: string | null;
-            /** End At */
-            end_at?: string | null;
+            /**
+             * Start At
+             * Format: date-time
+             */
+            start_at?: string;
+            /**
+             * End At
+             * Format: date-time
+             */
+            end_at?: string;
             /** All Day */
-            all_day?: boolean | null;
+            all_day?: boolean;
             /** Timezone */
             timezone?: string | null;
+            /** Recurrence */
             recurrence?: components["schemas"]["Recurrence"] | null;
             /** Notification Offsets */
-            notification_offsets?: components["schemas"]["CalendarNotificationOffset"][] | null;
+            notification_offsets?: components["schemas"]["CalendarNotificationOffset"][];
             /** Location */
             location?: string | null;
             /** Virtual Url */
             virtual_url?: string | null;
             /** Labels */
-            labels?: string[] | null;
+            labels?: string[];
         };
         CalendarNotificationOffset: number;
         /**
@@ -4307,7 +4356,7 @@ export interface components {
             /** New End At */
             new_end_at?: string | null;
             /** Title */
-            title?: string | null;
+            title?: string;
             /** Description */
             description?: string | null;
             /** Location */
@@ -4330,7 +4379,7 @@ export interface components {
             /** New End At */
             new_end_at?: string | null;
             /** Title */
-            title?: string | null;
+            title?: string;
             /** Description */
             description?: string | null;
             /** Location */
@@ -4338,35 +4387,37 @@ export interface components {
             /** Virtual Url */
             virtual_url?: string | null;
             /** All Day */
-            all_day?: boolean | null;
+            all_day?: boolean;
             /** Timezone */
             timezone?: string | null;
+            /** Recurrence */
             recurrence?: components["schemas"]["Recurrence"] | null;
             /** Notification Offsets */
-            notification_offsets?: number[] | null;
+            notification_offsets?: number[];
             /** Labels */
-            labels?: string[] | null;
+            labels?: string[];
         };
         /**
          * CalendarUpdate
          * @description payload to update a calendar.
          */
         CalendarUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
             /** Color */
-            color?: string | null;
+            color?: string;
             /** Position */
-            position?: number | null;
+            position?: number;
             /** Is Default */
-            is_default?: boolean | null;
+            is_default?: boolean;
             /** Timezone */
             timezone?: string | null;
             /** Project Ids */
-            project_ids?: string[] | null;
+            project_ids?: string[];
         };
         /**
          * ChromaVectorDatabaseSettings
@@ -4637,33 +4688,35 @@ export interface components {
              * Enabled
              * @description enable code interpreter capabilities
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Engine
              * @description sandbox engine
+             * @enum {string}
              */
-            engine?: ("native" | "e2b") | null;
-            e2b?: components["schemas"]["E2bSettingsPatch"] | null;
+            engine?: "native" | "e2b";
+            /** E2B */
+            e2b?: components["schemas"]["E2bSettingsPatch"];
             /**
              * Timeout
              * @description execution timeout in seconds
              */
-            timeout?: number | null;
+            timeout?: number;
             /**
              * Max File Download Mb
              * @description max file size downloadable from sandbox in MB
              */
-            max_file_download_mb?: number | null;
+            max_file_download_mb?: number;
             /**
              * Max Output Chars
              * @description max output characters returned from code interpreter
              */
-            max_output_chars?: number | null;
+            max_output_chars?: number;
             /**
              * Truncation Lines
              * @description lines kept at head and tail when truncating output
              */
-            truncation_lines?: number | null;
+            truncation_lines?: number;
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
@@ -4720,13 +4773,16 @@ export interface components {
         };
         /** DefaultPermissionsSettingsPatch */
         DefaultPermissionsSettingsPatch: {
-            /** @description per-resource-type default access levels */
-            resource_access?: components["schemas"]["DefaultResourceAccess"] | null;
+            /**
+             * Resource Access
+             * @description per-resource-type default access levels
+             */
+            resource_access?: components["schemas"]["DefaultResourceAccess"];
             /**
              * Action Permissions
              * @description action permissions granted by default
              */
-            action_permissions?: components["schemas"]["ActionPermission"][] | null;
+            action_permissions?: components["schemas"]["ActionPermission"][];
         };
         /**
          * DefaultResourceAccess
@@ -4782,12 +4838,12 @@ export interface components {
              * Template
              * @description E2B sandbox template
              */
-            template?: string | null;
+            template?: string;
             /**
              * Available Packages
              * @description pre-installed Python packages available in the sandbox
              */
-            available_packages?: string[] | null;
+            available_packages?: string[];
         };
         /**
          * EmbeddingsSettings
@@ -4813,12 +4869,12 @@ export interface components {
              * Vector Size
              * @description default embedding vector size
              */
-            vector_size?: number | null;
+            vector_size?: number;
             /**
              * Batch Size
              * @description embedding batch size
              */
-            batch_size?: number | null;
+            batch_size?: number;
         };
         /**
          * Event
@@ -5034,12 +5090,14 @@ export interface components {
          * @description payload to update a file record.
          */
         FileUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Filename */
             filename?: string | null;
             /** Project Ids */
-            project_ids?: string[] | null;
-            status?: components["schemas"]["FileStatus"] | null;
+            project_ids?: string[];
+            /** Status */
+            status?: components["schemas"]["FileStatus"];
         };
         /**
          * FriendRequestCreate
@@ -5236,9 +5294,10 @@ export interface components {
          * @description schema for updating a group.
          */
         GroupUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
         };
@@ -5351,7 +5410,7 @@ export interface components {
              * Enabled
              * @description enable image generation capabilities
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Model
              * @description model identifier for image generation
@@ -5361,7 +5420,7 @@ export interface components {
              * Default Size
              * @description default image size in WIDTHxHEIGHT format
              */
-            default_size?: string | null;
+            default_size?: string;
             /**
              * Default Steps
              * @description default number of generation steps
@@ -5371,12 +5430,12 @@ export interface components {
              * Default N
              * @description default number of images per prompt
              */
-            default_n?: number | null;
+            default_n?: number;
             /**
              * Max N
              * @description maximum number of images per request
              */
-            max_n?: number | null;
+            max_n?: number;
         };
         /**
          * InputModality
@@ -5398,9 +5457,12 @@ export interface components {
         };
         /** IntegrationsSettingsPatch */
         IntegrationsSettingsPatch: {
-            open_webui?: components["schemas"]["OpenWebUIIntegrationSettingsPatch"] | null;
-            perplexity?: components["schemas"]["PerplexitySettingsPatch"] | null;
-            searxng?: components["schemas"]["SearxngSettingsPatch"] | null;
+            /** Open Webui */
+            open_webui?: components["schemas"]["OpenWebUIIntegrationSettingsPatch"];
+            /** Perplexity */
+            perplexity?: components["schemas"]["PerplexitySettingsPatch"];
+            /** Searxng */
+            searxng?: components["schemas"]["SearxngSettingsPatch"];
         };
         "JSONObject-Input": {
             [key: string]: components["schemas"]["JSONValue-Input"];
@@ -5478,32 +5540,32 @@ export interface components {
              * Max Threads Per User
              * @description max threads per user
              */
-            max_threads_per_user?: number | null;
+            max_threads_per_user?: number;
             /**
              * Max Messages Per Thread
              * @description max messages per thread
              */
-            max_messages_per_thread?: number | null;
+            max_messages_per_thread?: number;
             /**
              * Max File Size Mb
              * @description max file size mb
              */
-            max_file_size_mb?: number | null;
+            max_file_size_mb?: number;
             /**
              * Max Reminder Hierarchy Depth
              * @description maximum nesting depth for sub-reminders
              */
-            max_reminder_hierarchy_depth?: number | null;
+            max_reminder_hierarchy_depth?: number;
             /**
              * Max Scheduled Items Window Days
              * @description maximum time window in days for scheduled items queries
              */
-            max_scheduled_items_window_days?: number | null;
+            max_scheduled_items_window_days?: number;
             /**
              * Rate Limit Requests Per Minute
              * @description rate limit/min
              */
-            rate_limit_requests_per_minute?: number | null;
+            rate_limit_requests_per_minute?: number;
         };
         /**
          * LocalStorageConfig
@@ -5523,7 +5585,7 @@ export interface components {
              * Root Path
              * @description root directory for local file storage
              */
-            root_path?: string | null;
+            root_path?: string;
         };
         /**
          * MediaSettings
@@ -5658,9 +5720,10 @@ export interface components {
          * @description payload to update a memory.
          */
         MemoryUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
-            content?: string | null;
+            content?: string;
             /** Confidence */
             confidence?: number | null;
             /** Tags */
@@ -5774,7 +5837,8 @@ export interface components {
          * @description payload for updating a user message's content in place.
          */
         MessageUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
         };
@@ -5908,20 +5972,22 @@ export interface components {
          * @description payload to update a model.
          */
         ModelUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Display Name */
             display_name?: string | null;
-            model_type?: components["schemas"]["ModelType"] | null;
+            /** Model Type */
+            model_type?: components["schemas"]["ModelType"];
             /** Input Modalities */
-            input_modalities?: components["schemas"]["InputModality"][] | null;
+            input_modalities?: components["schemas"]["InputModality"][];
             /** Endpoint */
             endpoint?: string | null;
             /** Adapter */
             adapter?: string | null;
             /** Capabilities */
-            capabilities?: string[] | null;
+            capabilities?: string[];
             /** Context Window */
             context_window?: number | null;
             /** Input Cost */
@@ -5929,9 +5995,9 @@ export interface components {
             /** Output Cost */
             output_cost?: number | null;
             /** Enabled */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /** Is Autofetched */
-            is_autofetched?: boolean | null;
+            is_autofetched?: boolean;
         };
         /**
          * Note
@@ -6004,15 +6070,16 @@ export interface components {
          * @description payload to update a note.
          */
         NoteUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
-            title?: string | null;
+            title?: string;
             /** Content */
-            content?: string | null;
+            content?: string;
             /** Labels */
-            labels?: string[] | null;
+            labels?: string[];
             /** Project Ids */
-            project_ids?: string[] | null;
+            project_ids?: string[];
         };
         /**
          * Notification
@@ -6105,12 +6172,12 @@ export interface components {
              * Missed Grace Days
              * @description days to look back for missed notifications
              */
-            missed_grace_days?: number | null;
+            missed_grace_days?: number;
             /**
              * Lookahead Days
              * @description days ahead to schedule notifications
              */
-            lookahead_days?: number | null;
+            lookahead_days?: number;
         };
         /**
          * OIDCSettings
@@ -6161,7 +6228,7 @@ export interface components {
              * Enabled
              * @description enable oidc authentication
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Issuer Url
              * @description oidc issuer url
@@ -6186,12 +6253,12 @@ export interface components {
              * Scopes
              * @description oidc scopes
              */
-            scopes?: string[] | null;
+            scopes?: string[];
             /**
              * Only
              * @description only allow login via oidc
              */
-            only?: boolean | null;
+            only?: boolean;
         };
         /** OpenAIChatCompletionChoice */
         OpenAIChatCompletionChoice: {
@@ -6391,9 +6458,9 @@ export interface components {
         /** OpenWebUIIntegrationSettingsPatch */
         OpenWebUIIntegrationSettingsPatch: {
             /** Enabled */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /** Deployments */
-            deployments?: components["schemas"]["OpenWebUIDeploymentPatch"][] | null;
+            deployments?: components["schemas"]["OpenWebUIDeploymentPatch"][];
         };
         /**
          * OpenWebUISourcesOut
@@ -6497,28 +6564,30 @@ export interface components {
             /**
              * Model
              * @description perplexity model to use for agentic search
+             * @enum {string}
              */
-            model?: ("sonar" | "sonar-pro" | "sonar-reasoning" | "sonar-reasoning-pro" | "sonar-deep-research") | null;
+            model?: "sonar" | "sonar-pro" | "sonar-reasoning" | "sonar-reasoning-pro" | "sonar-deep-research";
             /**
              * Search Context Usage
              * @description how much search context perplexity should use
+             * @enum {string}
              */
-            search_context_usage?: ("low" | "medium" | "high") | null;
+            search_context_usage?: "low" | "medium" | "high";
             /**
              * Temperature
              * @description sampling temperature (lower = more factual)
              */
-            temperature?: number | null;
+            temperature?: number;
             /**
              * Image Results Enabled
              * @description allow web search tools to request image URLs from perplexity
              */
-            image_results_enabled?: boolean | null;
+            image_results_enabled?: boolean;
             /**
              * Max Concurrent Requests
              * @description max concurrent requests to perplexity
              */
-            max_concurrent_requests?: number | null;
+            max_concurrent_requests?: number;
         };
         /**
          * PgvectorVectorDatabaseSettings
@@ -6695,18 +6764,20 @@ export interface components {
          * @description Payload for plugin update.
          */
         PluginUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
-            type?: components["schemas"]["PluginType"] | null;
+            /** Type */
+            type?: components["schemas"]["PluginType"];
             /** Author */
             author?: string | null;
             /** Version */
             version?: string | null;
             /** Source Code */
-            source_code?: string | null;
+            source_code?: string;
         };
         /**
          * PrivacyPreferences
@@ -6826,8 +6897,10 @@ export interface components {
          * @description Schema for updating a project.
          */
         ProjectUpdate: {
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
         };
@@ -6876,11 +6949,12 @@ export interface components {
          * @description payload for prompt update.
          */
         PromptUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Command */
-            command?: string | null;
+            command?: string;
             /** Content */
-            content?: string | null;
+            content?: string;
         };
         /**
          * Provider
@@ -6971,12 +7045,14 @@ export interface components {
          * @description partial provider update payload.
          */
         ProviderUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Adapter Type */
-            adapter_type?: string | null;
-            provider_type?: components["schemas"]["ProviderType"] | null;
+            adapter_type?: string;
+            /** Provider Type */
+            provider_type?: components["schemas"]["ProviderType"];
             /** Base Url */
             base_url?: string | null;
             /** Api Key */
@@ -6987,9 +7063,10 @@ export interface components {
             additional_headers?: {
                 [key: string]: string;
             } | null;
-            status?: components["schemas"]["ProviderStatus"] | null;
+            /** Status */
+            status?: components["schemas"]["ProviderStatus"];
             /** Is Autofetch Enabled */
-            is_autofetch_enabled?: boolean | null;
+            is_autofetch_enabled?: boolean;
         };
         /**
          * QdrantVectorDatabaseSettings
@@ -7020,12 +7097,12 @@ export interface components {
              * Url
              * @description qdrant endpoint url
              */
-            url?: string | null;
+            url?: string;
             /**
              * Use Grpc
              * @description use qdrant gRPC transport when available
              */
-            use_grpc?: boolean | null;
+            use_grpc?: boolean;
             /**
              * Api Key
              * @description api key for qdrant
@@ -7264,9 +7341,10 @@ export interface components {
          * @description schema for updating a reminder list.
          */
         ReminderListUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
             /** Color */
@@ -7274,11 +7352,11 @@ export interface components {
             /** Icon */
             icon?: string | null;
             /** Position */
-            position?: number | null;
+            position?: number;
             /** Is Default */
-            is_default?: boolean | null;
+            is_default?: boolean;
             /** Project Ids */
-            project_ids?: string[] | null;
+            project_ids?: string[];
         };
         /**
          * ReminderListWithCounts
@@ -7364,16 +7442,17 @@ export interface components {
              */
             original_occurrence_at: string;
             /** Title */
-            title?: string | null;
+            title?: string;
             /** Description */
             description?: string | null;
             /** Due At */
             due_at?: string | null;
             /** Remind At */
             remind_at?: string | null;
+            /** Recurrence */
             recurrence?: components["schemas"]["Recurrence"] | null;
             /** Position */
-            position?: number | null;
+            position?: number;
         };
         /**
          * ReminderStatus
@@ -7386,23 +7465,29 @@ export interface components {
          * @description schema for updating a reminder.
          */
         ReminderUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
-            title?: string | null;
+            title?: string;
             /** Description */
             description?: string | null;
             /** Due At */
             due_at?: string | null;
             /** Remind At */
             remind_at?: string | null;
+            /** Recurrence */
             recurrence?: components["schemas"]["Recurrence"] | null;
-            status?: components["schemas"]["ReminderStatus"] | null;
-            /** List Id */
-            list_id?: string | null;
+            /** Status */
+            status?: components["schemas"]["ReminderStatus"];
+            /**
+             * List Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            list_id?: string;
             /** Parent Id */
             parent_id?: string | null;
             /** Position */
-            position?: number | null;
+            position?: number;
         };
         /**
          * ReminderWithSubtasks
@@ -7487,13 +7572,14 @@ export interface components {
             /**
              * Default Strategy
              * @description default reranking strategy
+             * @enum {string}
              */
-            default_strategy?: ("none" | "native" | "external") | null;
+            default_strategy?: "none" | "native" | "external";
             /**
              * Top K
              * @description rerank top-k
              */
-            top_k?: number | null;
+            top_k?: number;
         };
         /**
          * Role
@@ -7557,18 +7643,20 @@ export interface components {
          * @description schema for updating a role.
          */
         RoleUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
-            name?: string | null;
+            name?: string;
             /** Description */
             description?: string | null;
             /** Quotas */
             quotas?: {
                 [key: string]: unknown;
-            } | null;
+            };
             /** Priority */
-            priority?: number | null;
-            default_permissions?: components["schemas"]["DefaultPermissions"] | null;
+            priority?: number;
+            /** Default Permissions */
+            default_permissions?: components["schemas"]["DefaultPermissions"];
         };
         /**
          * RunInput
@@ -7726,12 +7814,12 @@ export interface components {
              * Bucket
              * @description S3 bucket name
              */
-            bucket?: string | null;
+            bucket?: string;
             /**
              * Region
              * @description AWS region
              */
-            region?: string | null;
+            region?: string;
             /**
              * Access Key Id
              * @description S3 access key id
@@ -7746,32 +7834,33 @@ export interface components {
              * Prefix
              * @description key prefix within the bucket
              */
-            prefix?: string | null;
+            prefix?: string;
             /**
              * Presigned Url Ttl
              * @description presigned URL expiration in seconds
              */
-            presigned_url_ttl?: number | null;
+            presigned_url_ttl?: number;
             /**
              * Multipart Threshold
              * @description bytes above which multipart upload kicks in
              */
-            multipart_threshold?: number | null;
+            multipart_threshold?: number;
             /**
              * Multipart Chunk Size
              * @description multipart upload chunk size in bytes
              */
-            multipart_chunk_size?: number | null;
+            multipart_chunk_size?: number;
             /**
              * Max Retries
              * @description max retry attempts
              */
-            max_retries?: number | null;
+            max_retries?: number;
             /**
              * Retry Mode
              * @description botocore retry mode
+             * @enum {string}
              */
-            retry_mode?: ("legacy" | "standard" | "adaptive") | null;
+            retry_mode?: "legacy" | "standard" | "adaptive";
         };
         /** @enum {string} */
         ScheduledEventStatus: "scheduled" | "cancelled";
@@ -7850,8 +7939,9 @@ export interface components {
             /**
              * Engine
              * @description web search engine
+             * @enum {string}
              */
-            engine?: ("perplexity" | "searxng" | "bing" | "google") | null;
+            engine?: "perplexity" | "searxng" | "bing" | "google";
         };
         /**
          * SearchMode
@@ -7936,29 +8026,29 @@ export interface components {
              * Instance Url
              * @description base url for the searxng instance
              */
-            instance_url?: string | null;
+            instance_url?: string;
             /**
              * Max Results
              * @description max results to return from searxng
              */
-            max_results?: number | null;
+            max_results?: number;
             /**
              * Max Concurrent Requests
              * @description max concurrent requests to searxng
              */
-            max_concurrent_requests?: number | null;
+            max_concurrent_requests?: number;
             /**
              * Timeout Seconds
              * @description timeout for searxng API calls in seconds
              */
-            timeout_seconds?: number | null;
+            timeout_seconds?: number;
         };
         /** SecuritySettings */
         SecuritySettings: {
             /**
              * Secret Key
              * @description application secret key (env-only)
-             * @default changeme
+             * @default dev-secret-key-change-me-in-production
              */
             secret_key: string;
             /**
@@ -8056,6 +8146,11 @@ export interface components {
              *     ]
              */
             allowed_hosts: string[];
+            /**
+             * Secret Key Uses Default
+             * @description whether the application secret key is still a built-in default.
+             */
+            readonly secret_key_uses_default: boolean;
         };
         /** SecuritySettingsPatch */
         SecuritySettingsPatch: {
@@ -8063,7 +8158,7 @@ export interface components {
              * Allow Signups
              * @description allow new user signups
              */
-            allow_signups?: boolean | null;
+            allow_signups?: boolean;
             /**
              * Auto Signup Role Ids
              * @description role ids auto-applied to new signups
@@ -8073,33 +8168,34 @@ export interface components {
              * Access Token Expire Minutes
              * @description access token expire minutes
              */
-            access_token_expire_minutes?: number | null;
+            access_token_expire_minutes?: number;
             /**
              * Refresh Token Expire Days
              * @description refresh token expire days
              */
-            refresh_token_expire_days?: number | null;
+            refresh_token_expire_days?: number;
             /**
              * Auth Cookie Secure
              * @description set secure cookies
              */
-            auth_cookie_secure?: boolean | null;
+            auth_cookie_secure?: boolean;
             /**
              * Session Timeout Minutes
              * @description session timeout
              */
-            session_timeout_minutes?: number | null;
+            session_timeout_minutes?: number;
             /**
              * Require Email Verification
              * @description require email verification
              */
-            require_email_verification?: boolean | null;
+            require_email_verification?: boolean;
             /**
              * Allowed Email Domains
              * @description allowed domains
              */
-            allowed_email_domains?: string[] | null;
-            oidc?: components["schemas"]["OIDCSettingsPatch"] | null;
+            allowed_email_domains?: string[];
+            /** Oidc */
+            oidc?: components["schemas"]["OIDCSettingsPatch"];
         };
         /** Settings */
         Settings: {
@@ -8127,21 +8223,36 @@ export interface components {
         };
         /** SettingsPatch */
         SettingsPatch: {
-            ui?: components["schemas"]["UISettingsPatch"] | null;
-            ai?: components["schemas"]["AISettingsPatch"] | null;
-            branding?: components["schemas"]["BrandingSettingsPatch"] | null;
-            media?: components["schemas"]["MediaSettingsPatch"] | null;
-            assets?: components["schemas"]["AssetsSettingsPatch"] | null;
-            limits?: components["schemas"]["LimitsSettingsPatch"] | null;
-            security?: components["schemas"]["SecuritySettingsPatch"] | null;
-            notifications?: components["schemas"]["NotificationSettingsPatch"] | null;
-            soft_delete?: components["schemas"]["SoftDeleteSettingsPatch"] | null;
-            web_search?: components["schemas"]["WebSearchSettingsPatch"] | null;
-            code_interpreter?: components["schemas"]["CodeInterpreterSettingsPatch"] | null;
-            default_permissions?: components["schemas"]["DefaultPermissionsSettingsPatch"] | null;
-            integrations?: components["schemas"]["IntegrationsSettingsPatch"] | null;
-            cache?: components["schemas"]["CacheSettingsPatch"] | null;
-            tasks?: components["schemas"]["TasksSettingsPatch"] | null;
+            /** Ui */
+            ui?: components["schemas"]["UISettingsPatch"];
+            /** Ai */
+            ai?: components["schemas"]["AISettingsPatch"];
+            /** Branding */
+            branding?: components["schemas"]["BrandingSettingsPatch"];
+            /** Media */
+            media?: components["schemas"]["MediaSettingsPatch"];
+            /** Assets */
+            assets?: components["schemas"]["AssetsSettingsPatch"];
+            /** Limits */
+            limits?: components["schemas"]["LimitsSettingsPatch"];
+            /** Security */
+            security?: components["schemas"]["SecuritySettingsPatch"];
+            /** Notifications */
+            notifications?: components["schemas"]["NotificationSettingsPatch"];
+            /** Soft Delete */
+            soft_delete?: components["schemas"]["SoftDeleteSettingsPatch"];
+            /** Web Search */
+            web_search?: components["schemas"]["WebSearchSettingsPatch"];
+            /** Code Interpreter */
+            code_interpreter?: components["schemas"]["CodeInterpreterSettingsPatch"];
+            /** Default Permissions */
+            default_permissions?: components["schemas"]["DefaultPermissionsSettingsPatch"];
+            /** Integrations */
+            integrations?: components["schemas"]["IntegrationsSettingsPatch"];
+            /** Cache */
+            cache?: components["schemas"]["CacheSettingsPatch"];
+            /** Tasks */
+            tasks?: components["schemas"]["TasksSettingsPatch"];
         };
         /** SettingsResponse */
         SettingsResponse: {
@@ -8264,17 +8375,17 @@ export interface components {
              * Threads
              * @description soft-delete threads
              */
-            threads?: boolean | null;
+            threads?: boolean;
             /**
              * Notes
              * @description soft-delete notes
              */
-            notes?: boolean | null;
+            notes?: boolean;
             /**
              * Files
              * @description soft-delete files
              */
-            files?: boolean | null;
+            files?: boolean;
         };
         /**
          * SteerRunRequest
@@ -8344,10 +8455,13 @@ export interface components {
             /**
              * Backend
              * @description active storage backend: 'local' or 's3'
+             * @enum {string}
              */
-            backend?: ("local" | "s3") | null;
-            local?: components["schemas"]["LocalStorageConfigPatch"] | null;
-            s3?: components["schemas"]["S3StorageConfigPatch"] | null;
+            backend?: "local" | "s3";
+            /** Local */
+            local?: components["schemas"]["LocalStorageConfigPatch"];
+            /** S3 */
+            s3?: components["schemas"]["S3StorageConfigPatch"];
         };
         /**
          * SummaryType
@@ -8451,12 +8565,15 @@ export interface components {
          * @description mutable task fields for PATCH operations.
          */
         TaskUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
-            status?: components["schemas"]["TaskStatus"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Status */
+            status?: components["schemas"]["TaskStatus"];
             /** Progress */
             progress?: number | null;
             /** Stage */
             stage?: string | null;
+            /** Result */
             result?: components["schemas"]["JSONObject-Input"] | null;
         };
         /**
@@ -8467,7 +8584,7 @@ export interface components {
             /**
              * Queue Name
              * @description TaskIQ queue name used by API, worker, and scheduler processes.
-             * @default nokodo-ai
+             * @default nokodo-ai:taskiq:queue
              */
             queue_name: string;
             /**
@@ -8485,7 +8602,7 @@ export interface components {
             /**
              * Schedule Prefix
              * @description Redis key prefix for dynamic TaskIQ schedules.
-             * @default nokodo-ai:schedules
+             * @default nokodo-ai:taskiq:schedules
              */
             schedule_prefix: string;
         };
@@ -8498,10 +8615,15 @@ export interface components {
         TasksSettings: {
             /** @description TaskIQ execution and scheduling settings */
             taskiq?: components["schemas"]["TaskiqSettings"];
+            /** @description retroactive thread maintenance backfill settings. off by default; controls an optional periodic sweep that runs maintenance on stale threads in batches. */
+            maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettings"];
         };
         /** TasksSettingsPatch */
         TasksSettingsPatch: {
-            taskiq?: components["schemas"]["TaskiqSettingsPatch"] | null;
+            /** Taskiq */
+            taskiq?: components["schemas"]["TaskiqSettingsPatch"];
+            /** Maintenance Backfill */
+            maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettingsPatch"];
         };
         /**
          * TavilySettings
@@ -8532,8 +8654,9 @@ export interface components {
             /**
              * Extract Depth
              * @description depth of content extraction for tavily web loader
+             * @enum {string}
              */
-            extract_depth?: ("basic" | "advanced") | null;
+            extract_depth?: "basic" | "advanced";
             /**
              * Api Key
              * @description api key for tavily web loader
@@ -8543,7 +8666,7 @@ export interface components {
              * Max Concurrent Requests
              * @description max concurrent requests to tavily
              */
-            max_concurrent_requests?: number | null;
+            max_concurrent_requests?: number;
         };
         /**
          * TextContent
@@ -8693,6 +8816,80 @@ export interface components {
             project_ids?: string[];
         };
         /**
+         * ThreadMaintenanceBackfillSettings
+         * @description knobs for the optional retroactive thread maintenance sweep.
+         *
+         *     by default this is fully disabled. when enabled, a periodic background
+         *     task scans inactive threads for missing metadata or stale branch
+         *     summaries and dispatches maintenance tasks in bounded batches. each
+         *     maintenance run spends model tokens, so administrators must opt in
+         *     explicitly and set their own batch and lookback bounds.
+         *
+         *     note that this is independent from the per-thread inactivity timer
+         *     that resets on every run completion. that timer never enqueues
+         *     retroactive work.
+         */
+        ThreadMaintenanceBackfillSettings: {
+            /**
+             * Enabled
+             * @description enable the periodic retroactive thread maintenance sweep. when False, the schedule is removed and the task is a no-op.
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Cron
+             * @description cron expression for the periodic sweep, evaluated in UTC. defaults to once per day at 04:00 UTC.
+             * @default 0 4 * * *
+             */
+            cron: string;
+            /**
+             * Batch Size
+             * @description maximum number of threads dispatched per sweep run. each thread results in one maintenance task and one model spend.
+             * @default 10
+             */
+            batch_size: number;
+            /**
+             * Max Lookback Days
+             * @description only consider threads whose last_activity_at is within this many days. older threads are ignored to bound model spend.
+             * @default 30
+             */
+            max_lookback_days: number;
+            /**
+             * Min Inactivity Hours
+             * @description threads must have been inactive at least this long before the backfill sweep considers them. should be >= the live inactivity timer to avoid racing with it.
+             * @default 8
+             */
+            min_inactivity_hours: number;
+        };
+        /** ThreadMaintenanceBackfillSettingsPatch */
+        ThreadMaintenanceBackfillSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable the periodic retroactive thread maintenance sweep
+             */
+            enabled?: boolean;
+            /**
+             * Cron
+             * @description cron expression for the periodic sweep, evaluated in UTC
+             */
+            cron?: string;
+            /**
+             * Batch Size
+             * @description maximum number of threads dispatched per sweep run
+             */
+            batch_size?: number;
+            /**
+             * Max Lookback Days
+             * @description maximum last-activity lookback window in days
+             */
+            max_lookback_days?: number;
+            /**
+             * Min Inactivity Hours
+             * @description minimum inactivity before a thread is considered
+             */
+            min_inactivity_hours?: number;
+        };
+        /**
          * ThreadMetadataGenerateRequest
          * @description request body for generating thread metadata.
          */
@@ -8819,19 +9016,23 @@ export interface components {
          * @description payload for updating a thread.
          */
         ThreadUpdate: {
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
-            tags?: string[] | null;
+            tags?: string[];
             /** Is Archived */
-            is_archived?: boolean | null;
+            is_archived?: boolean;
             /** Is Temporary */
-            is_temporary?: boolean | null;
+            is_temporary?: boolean;
             /** Project Ids */
-            project_ids?: string[] | null;
-            /** Owner Id */
-            owner_id?: string | null;
+            project_ids?: string[];
+            /**
+             * Owner Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            owner_id?: string;
             /** Current Message Id */
             current_message_id?: string | null;
         };
@@ -8879,22 +9080,24 @@ export interface components {
              * Default Theme
              * @description 'light', 'dark', or 'system'
              */
-            default_theme?: string | null;
+            default_theme?: string;
             /**
              * Default Background
              * @description default background for the app
+             * @enum {string}
              */
-            default_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none") | null;
+            default_background?: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none";
             /**
              * Auth Pages Background
              * @description background for auth pages (login, signup)
+             * @enum {string}
              */
-            auth_pages_background?: ("galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none") | null;
+            auth_pages_background?: "galaxy" | "darkveil" | "lightbends" | "lightrays" | "silk" | "fog" | "clouds" | "clouds-dark" | "clouds2" | "clouds2-dark" | "grainient" | "iridescence" | "static" | "none";
             /**
              * Sidebar Collapsed
              * @description collapse sidebar
              */
-            sidebar_collapsed?: boolean | null;
+            sidebar_collapsed?: boolean;
         };
         /**
          * User
@@ -9081,14 +9284,20 @@ export interface components {
          * @description schema for updating a user.
          */
         UserUpdate: {
-            /** Email */
-            email?: string | null;
+            /**
+             * Email
+             * Format: email
+             */
+            email?: string;
             /** Password */
-            password?: string | null;
-            /** Username */
-            username?: string | null;
+            password?: string;
+            /**
+             * Username
+             * @example johndoe
+             */
+            username?: string;
             /** Is Active */
-            is_active?: boolean | null;
+            is_active?: boolean;
             /** Display Name */
             display_name?: string | null;
             /** Bio */
@@ -9096,19 +9305,21 @@ export interface components {
             /** Avatar Url */
             avatar_url?: string | null;
             /** Find By Email */
-            find_by_email?: boolean | null;
-            privacy?: components["schemas"]["UserPrivacy"] | null;
-            preferences?: components["schemas"]["UserPreferences"] | null;
+            find_by_email?: boolean;
+            /** Privacy */
+            privacy?: components["schemas"]["UserPrivacy"];
+            /** Preferences */
+            preferences?: components["schemas"]["UserPreferences"];
             /** Integration Tokens */
             integration_tokens?: {
                 [key: string]: unknown;
-            } | null;
+            };
             /** Usage Quotas */
             usage_quotas?: {
                 [key: string]: unknown;
-            } | null;
+            };
             /** Role Ids */
-            role_ids?: string[] | null;
+            role_ids?: string[];
         };
         /**
          * ValidationIssue
@@ -9211,16 +9422,25 @@ export interface components {
             /**
              * Provider
              * @description vector database provider
+             * @enum {string}
              */
-            provider?: ("qdrant" | "chroma" | "pinecone" | "weaviate" | "milvus" | "pgvector" | "redis" | "opensearch") | null;
-            qdrant?: components["schemas"]["QdrantVectorDatabaseSettingsPatch"] | null;
-            chroma?: components["schemas"]["ChromaVectorDatabaseSettingsPatch"] | null;
-            pinecone?: components["schemas"]["PineconeVectorDatabaseSettingsPatch"] | null;
-            weaviate?: components["schemas"]["WeaviateVectorDatabaseSettingsPatch"] | null;
-            milvus?: components["schemas"]["MilvusVectorDatabaseSettingsPatch"] | null;
-            pgvector?: components["schemas"]["PgvectorVectorDatabaseSettingsPatch"] | null;
-            redis?: components["schemas"]["RedisVectorDatabaseSettingsPatch"] | null;
-            opensearch?: components["schemas"]["OpensearchVectorDatabaseSettingsPatch"] | null;
+            provider?: "qdrant" | "chroma" | "pinecone" | "weaviate" | "milvus" | "pgvector" | "redis" | "opensearch";
+            /** Qdrant */
+            qdrant?: components["schemas"]["QdrantVectorDatabaseSettingsPatch"];
+            /** Chroma */
+            chroma?: components["schemas"]["ChromaVectorDatabaseSettingsPatch"];
+            /** Pinecone */
+            pinecone?: components["schemas"]["PineconeVectorDatabaseSettingsPatch"];
+            /** Weaviate */
+            weaviate?: components["schemas"]["WeaviateVectorDatabaseSettingsPatch"];
+            /** Milvus */
+            milvus?: components["schemas"]["MilvusVectorDatabaseSettingsPatch"];
+            /** Pgvector */
+            pgvector?: components["schemas"]["PgvectorVectorDatabaseSettingsPatch"];
+            /** Redis */
+            redis?: components["schemas"]["RedisVectorDatabaseSettingsPatch"];
+            /** Opensearch */
+            opensearch?: components["schemas"]["OpensearchVectorDatabaseSettingsPatch"];
         };
         /**
          * VectorSettings
@@ -9259,22 +9479,23 @@ export interface components {
              * Collection Template
              * @description collection name template with '{model}' placeholder
              */
-            collection_template?: string | null;
+            collection_template?: string;
             /**
              * Sparse Vectors Enabled
              * @description enable sparse vectors
              */
-            sparse_vectors_enabled?: boolean | null;
+            sparse_vectors_enabled?: boolean;
             /**
              * Fusion Algorithm
              * @description fusion algorithm
+             * @enum {string}
              */
-            fusion_algorithm?: ("rrf" | "dbsf") | null;
+            fusion_algorithm?: "rrf" | "dbsf";
             /**
              * Normalize Scores
              * @description normalize fused scores
              */
-            normalize_scores?: boolean | null;
+            normalize_scores?: boolean;
         };
         /**
          * VideoGenerationSettings
@@ -9299,7 +9520,7 @@ export interface components {
              * Enabled
              * @description enable video generation capabilities
              */
-            enabled?: boolean | null;
+            enabled?: boolean;
             /**
              * Model
              * @description model identifier for video generation
@@ -9379,24 +9600,26 @@ export interface components {
             /**
              * Engine
              * @description web loader engine to use
+             * @enum {string}
              */
-            engine?: ("native" | "tavily" | "playwright") | null;
+            engine?: "native" | "tavily" | "playwright";
             /**
              * Timeout Seconds
              * @description timeout for web loader fetch operations
              */
-            timeout_seconds?: number | null;
+            timeout_seconds?: number;
             /**
              * User Agent
              * @description user agent string for web loader requests
              */
-            user_agent?: string | null;
+            user_agent?: string;
             /**
              * Max Chars
              * @description maximum characters returned per fetched URL
              */
-            max_chars?: number | null;
-            tavily?: components["schemas"]["TavilySettingsPatch"] | null;
+            max_chars?: number;
+            /** Tavily */
+            tavily?: components["schemas"]["TavilySettingsPatch"];
         };
         /**
          * WebSearchSettings
@@ -9423,20 +9646,25 @@ export interface components {
         };
         /** WebSearchSettingsPatch */
         WebSearchSettingsPatch: {
-            /** @description agentic web search configuration */
-            agentic?: components["schemas"]["AgenticWebSearchSettingsPatch"] | null;
+            /**
+             * Agentic
+             * @description agentic web search configuration
+             */
+            agentic?: components["schemas"]["AgenticWebSearchSettingsPatch"];
             /**
              * Max Chars
              * @description maximum characters returned in web search result summaries
              */
-            max_chars?: number | null;
+            max_chars?: number;
             /**
              * Blacklisted Domains
              * @description domains to exclude from web search results
              */
-            blacklisted_domains?: string[] | null;
-            search_engines?: components["schemas"]["SearchEngineSettingsPatch"] | null;
-            web_loaders?: components["schemas"]["WebLoaderSettingsPatch"] | null;
+            blacklisted_domains?: string[];
+            /** Search Engines */
+            search_engines?: components["schemas"]["SearchEngineSettingsPatch"];
+            /** Web Loaders */
+            web_loaders?: components["schemas"]["WebLoaderSettingsPatch"];
         };
     };
     responses: never;
@@ -11755,6 +11983,102 @@ export interface operations {
                     "application/json": {
                         [key: string]: number;
                     };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    run_thread_maintenance_backfill_v1_threads_maintenance_backfill_run_post: {
+        parameters: {
+            query?: {
+                batch_size?: number | null;
+                max_lookback_days?: number | null;
+                min_inactivity_hours?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JSONObject-Output"];
                 };
             };
             /** @description bad request */

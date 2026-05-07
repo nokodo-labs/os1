@@ -59,7 +59,7 @@ from api.v1.service.chat.tools.registry import resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
 from api.v1.service.events import build_event_emitter
-from api.v1.tasks.threads import start_thread_maintenance_task
+from api.v1.tasks.threads import schedule_thread_inactivity_maintenance
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
 from nokodo_ai import Hook as SDKHook
@@ -696,6 +696,7 @@ async def run_agent(
 		ctx = AppContext(
 			session=session,
 			principal=principal,
+			run_id=run_id,
 			agent_id=agent_id,
 			thread_id=thread_id,
 			event_emitter=emitter,
@@ -985,22 +986,22 @@ async def run_agent(
 			thread_id, agent_id, run_id, error=False, dropped_steering=dropped
 		)
 
-		yield sse_event(event="done", data={})
-
-	if persist:
-		assert thread_id is not None  # persist=True requires a thread_id
-		if worker_task is not None:
+		if persist:
+			assert thread_id is not None  # persist=True requires a thread_id
+			if worker_task is not None:
+				try:
+					await asyncio.wait_for(asyncio.shield(worker_task), timeout=30)
+				except (TimeoutError, Exception):
+					logger.warning(
+						"persist worker did not finish cleanly before metadata gen"
+					)
 			try:
-				await asyncio.wait_for(asyncio.shield(worker_task), timeout=30)
-			except (TimeoutError, Exception):
-				logger.warning(
-					"persist worker did not finish cleanly before metadata gen"
-				)
-		async with async_session_local() as task_session:
-			await start_thread_maintenance_task(
-				task_session,
-				principal=principal,
-				thread_id=thread_id,
-				stage="starting maintenance",
-				origin_session_id=origin_session_id,
-			)
+				async with async_session_local() as task_session:
+					await schedule_thread_inactivity_maintenance(
+						thread_id,
+						task_session,
+					)
+			except Exception:
+				logger.exception("failed to schedule thread inactivity maintenance")
+
+		yield sse_event(event="done", data={})

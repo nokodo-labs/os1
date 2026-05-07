@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -59,14 +65,14 @@ class AgentCreate(AgentBase):
 class AgentUpdate(MetadataUpdateModel):
 	"""payload for agent update."""
 
-	name: str | None = None
-	description: str | None = None
-	system_prompt: str | None = None
-	plugin_ids: list[str] | None = None
-	config: AgentConfig | None = None
-	model_id: TypeID | None = None
-	profile_image_file_id: TypeID | None = None
-	profile_image_url: str | None = None
+	name: str | MissingType = MISSING
+	description: str | None | MissingType = MISSING
+	system_prompt: str | None | MissingType = MISSING
+	plugin_ids: list[str] | MissingType = MISSING
+	config: AgentConfig | MissingType = MISSING
+	model_id: TypeID | None | MissingType = MISSING
+	profile_image_file_id: TypeID | None | MissingType = MISSING
+	profile_image_url: str | None | MissingType = MISSING
 
 
 class Agent(AgentBase, TimestampedModel):

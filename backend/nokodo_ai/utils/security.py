@@ -10,8 +10,10 @@ from typing import Any
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerifyMismatchError
-from authlib.jose import JoseError, jwt
 from cryptography.fernet import Fernet, InvalidToken
+from joserfc import jwt
+from joserfc.jwk import OctKey
+from joserfc.jwt import JWTClaimsRegistry
 
 
 _PASSWORD_HASHER = PasswordHasher(
@@ -50,8 +52,8 @@ def create_jwt_token(
 	if additional_claims:
 		payload.update(additional_claims)
 	headers = {"alg": algorithm, "typ": "JWT"}
-	token = jwt.encode(headers, payload, secret_key)
-	return token.decode("utf-8") if isinstance(token, bytes) else token
+	key = OctKey.import_key(secret_key)
+	return jwt.encode(headers, payload, key, algorithms=[algorithm])
 
 
 def decode_jwt_token(
@@ -60,17 +62,14 @@ def decode_jwt_token(
 	algorithms: Sequence[str],
 ) -> dict[str, Any]:
 	"""Decode a JWT token and return its payload."""
-	claims = jwt.decode(
-		token,
-		secret_key,
-		claims_options={"exp": {"essential": True}},
+	key = OctKey.import_key(secret_key)
+	token_obj = jwt.decode(token, key, algorithms=list(algorithms))
+	registry = JWTClaimsRegistry(
+		now=int(datetime.now(UTC).timestamp()),
+		exp={"essential": True},
 	)
-	claims.validate(now=int(datetime.now(UTC).timestamp()))
-	allowed_algs = {alg.upper() for alg in algorithms}
-	token_alg = (claims.header.get("alg") or "").upper()
-	if allowed_algs and token_alg not in allowed_algs:
-		raise JoseError("unexpected_alg")
-	return dict(claims)
+	registry.validate(token_obj.claims)
+	return token_obj.claims
 
 
 def get_fernet_key(secret_key: str) -> bytes:

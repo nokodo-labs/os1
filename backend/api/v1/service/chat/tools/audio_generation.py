@@ -110,8 +110,9 @@ class GenerateAudioTool(Tool[AppContext]):
 		attachments = _build_attachments(results)
 		count = len(results)
 		label = "clip" if count == 1 else "clips"
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=json.dumps(
 				{
 					"status": "success",

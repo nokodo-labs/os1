@@ -5,9 +5,9 @@ from datetime import timedelta
 from typing import Annotated
 from urllib.parse import urlparse
 
-from authlib.jose import JoseError
 from fastapi import Depends, Header, HTTPException, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
+from joserfc.errors import JoseError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload

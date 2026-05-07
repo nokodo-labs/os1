@@ -204,9 +204,13 @@ async def get_unread_counts(
 		.outerjoin(part_alias, Message.thread_id == part_alias.c.thread_id)
 		.where(
 			or_(
+				Message.sender_user_id.is_(None),
+				Message.sender_user_id != str(principal.user.id),
+			),
+			or_(
 				part_alias.c.read_at.is_(None),
 				Message.created_at > part_alias.c.read_at,
-			)
+			),
 		)
 		.group_by(Message.thread_id)
 	)

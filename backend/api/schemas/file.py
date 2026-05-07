@@ -9,8 +9,10 @@ from pydantic import BaseModel, Field
 
 from api.models.file import FileSource, FileStatus
 from api.schemas.common import (
+	MISSING,
 	MetadataModel,
 	MetadataUpdateModel,
+	MissingType,
 	ORMModel,
 	TimestampedModel,
 )
@@ -48,9 +50,9 @@ class FileCreate(FileBase):
 class FileUpdate(MetadataUpdateModel):
 	"""payload to update a file record."""
 
-	filename: str | None = None
-	project_ids: list[TypeID] | None = None
-	status: FileStatus | None = None
+	filename: str | None | MissingType = MISSING
+	project_ids: list[TypeID] | MissingType = MISSING
+	status: FileStatus | MissingType = MISSING
 
 
 class File(FileBase, TimestampedModel, ORMModel):

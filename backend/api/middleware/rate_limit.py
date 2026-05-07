@@ -70,7 +70,7 @@ class RateLimitMiddleware:
 
 		try:
 			conn = redis_client.get()
-			rkey = f"nokodo_ai:rl:{identity}:{minute_bucket}"
+			rkey = f"nokodo-ai:rl:{identity}:{minute_bucket}"
 			weight = _METHOD_WEIGHT.get(method, _DEFAULT_WEIGHT)
 			count = await conn.incrby(rkey, weight)
 			if count == weight:

@@ -19,6 +19,7 @@ from pydantic import Field
 
 from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.tokens import (
@@ -99,8 +100,10 @@ class ToolResultTruncationFilter(Filter):
 	async def process(
 		self,
 		thread: SDKThread,
+		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> SDKThread:
+		_ = agent_context
 		context_window = app_context.context_window if app_context else None
 		char_limit = _compute_char_limit(context_window)
 		messages = list(thread.messages)

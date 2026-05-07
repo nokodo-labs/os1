@@ -105,9 +105,10 @@ class DelegateTool(Tool[AppContext]):
 			"status": "pending",
 			"result": None,
 		}
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
 			tool_output=json.dumps(response),
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			metadata={
 				"tool_response": True,
 				"timestamp": time(),

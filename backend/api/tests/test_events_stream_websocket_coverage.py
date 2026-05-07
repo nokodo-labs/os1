@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from authlib.jose import JoseError
 from fastapi import WebSocket
+from joserfc.errors import JoseError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -54,7 +54,7 @@ class _FakeWebSocket:
 			raise next_item
 		if not isinstance(next_item, dict):
 			raise AssertionError("expected dict or Exception")
-		return next_item
+		return {str(key): value for key, value in next_item.items()}
 
 
 class _FakeWebSocketNoOrigin(_FakeWebSocket):
@@ -116,6 +116,8 @@ def test_events_stream_ping(monkeypatch: pytest.MonkeyPatch) -> None:
 		with client.websocket_connect("/v1/events/stream") as ws:
 			connected = ws.receive_json()
 			assert connected["type"] == "stream.connected"
+			active_runs = ws.receive_json()
+			assert active_runs == {"type": "runs.active", "data": []}
 			ws.send_json({"type": "ping"})
 			pong = ws.receive_json()
 			assert pong["type"] == "stream.pong"
@@ -156,7 +158,8 @@ async def test_events_stream_loop_disconnect_and_finally(
 	await events_router.events_stream(cast(WebSocket, ws))
 
 	assert ws.sent[0]["type"] == "stream.connected"
-	assert ws.sent[1] == {"type": "stream.pong"}
+	assert ws.sent[1] == {"type": "runs.active", "data": []}
+	assert ws.sent[2] == {"type": "stream.pong"}
 	assert calls == [("connect", "user_1"), ("disconnect", "user_1")]
 
 

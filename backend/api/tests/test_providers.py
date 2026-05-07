@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
@@ -124,8 +126,7 @@ async def test_provider_router_endpoints(
 	admin_auth: dict[str, object],
 ) -> None:
 	"""Exercise list/detail/update routes to raise coverage."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = cast(dict[str, str], admin_auth["headers"])
 	create_resp = await client.post(
 		"/v1/providers",
 		json={

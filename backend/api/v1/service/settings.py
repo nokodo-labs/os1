@@ -101,8 +101,8 @@ async def update(
 		data={
 			"updated_sections": list(updates.keys()),
 			"versions": new_versions,
+			"updated_by_id": changed_by_id,
 		},
-		user_id=changed_by_id,
 	)
 	await event_service.publish_event(
 		db, event=event, origin_session_id=origin_session_id

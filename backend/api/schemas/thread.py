@@ -9,8 +9,10 @@ from pydantic import BaseModel, Field, model_validator
 
 from api.models.thread_summary import SummaryType
 from api.schemas.common import (
+	MISSING,
 	MetadataModel,
 	MetadataUpdateModel,
+	MissingType,
 	ORMModel,
 	TimestampedModel,
 )
@@ -78,13 +80,13 @@ class ThreadCreate(ThreadBase):
 class ThreadUpdate(MetadataUpdateModel):
 	"""payload for updating a thread."""
 
-	title: str | None = None
-	tags: list[str] | None = None
-	is_archived: bool | None = None
-	is_temporary: bool | None = None
-	project_ids: list[TypeID] | None = None
-	owner_id: TypeID | None = None
-	current_message_id: TypeID | None = None
+	title: str | None | MissingType = MISSING
+	tags: list[str] | MissingType = MISSING
+	is_archived: bool | MissingType = MISSING
+	is_temporary: bool | MissingType = MISSING
+	project_ids: list[TypeID] | MissingType = MISSING
+	owner_id: TypeID | MissingType = MISSING
+	current_message_id: TypeID | None | MissingType = MISSING
 
 
 class ThreadSummary(ORMModel):

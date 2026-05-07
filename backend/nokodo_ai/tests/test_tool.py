@@ -43,6 +43,7 @@ def _make_agent_context(
 		model=chat_model,
 		iteration=0,
 		tool_call_id=tool_call_id,
+		tool_call_start_time=0.0,
 		metadata=metadata or {},
 	)
 
@@ -128,8 +129,9 @@ def test_tool_decorator_creates_tool_instance_and_schema() -> None:
 		__app_context__: None,
 		value: int,
 	) -> ToolMessage:
+		tool_call_id, _ = Tool.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=str(value * 2),
 		)
 
@@ -150,8 +152,9 @@ async def test_tool_decorator_executes_function() -> None:
 		__app_context__: None,
 		text: str,
 	) -> ToolMessage:
+		tool_call_id, _ = Tool.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=text,
 		)
 

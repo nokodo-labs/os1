@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Collection
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
@@ -93,17 +94,25 @@ class TaskContext:
 type TaskRunner = Callable[[TaskContext], Awaitable[JSONObject | None]]
 
 _task_runners: dict[str, TaskRunner] = {}
+_task_runner_timeouts: dict[str, float] = {}
 
 
-def register_task_runner(name: str) -> Callable[[TaskRunner], TaskRunner]:
+def register_task_runner(
+	name: str,
+	timeout_seconds: float | None = None,
+) -> Callable[[TaskRunner], TaskRunner]:
 	"""register a Task ORM runner by stable name."""
 	if not name:
 		raise ValueError("task runner name is required")
+	if timeout_seconds is not None and timeout_seconds <= 0:
+		raise ValueError("task runner timeout must be positive")
 
 	def _decorator(runner: TaskRunner) -> TaskRunner:
 		if name in _task_runners:
 			raise RuntimeError(f"task runner already registered: {name}")
 		_task_runners[name] = runner
+		if timeout_seconds is not None:
+			_task_runner_timeouts[name] = timeout_seconds
 		return runner
 
 	return _decorator
@@ -189,17 +198,9 @@ def _merge_metadata(task: Task, metadata_update: JSONObject | None) -> None:
 
 
 def _apply_public_update(task: Task, task_in: TaskUpdate) -> None:
-	fields = task_in.model_fields_set
-	if "status" in fields and task_in.status is not None:
-		task.status = task_in.status
-	if "progress" in fields:
-		task.progress = task_in.progress
-	if "stage" in fields:
-		task.stage = task_in.stage
-	if "result" in fields:
-		task.result = task_in.result
-	if "metadata" in fields:
-		task.metadata_ = task_in.metadata or {}
+	update_data = task_in.model_dump(exclude_unset=True, by_alias=True)
+	for key, value in update_data.items():
+		setattr(task, key, value)
 
 
 def _apply_execution_update(
@@ -307,6 +308,12 @@ async def start_task(
 	await _publish_task_event(session, task, event_type=EventType.TASK_CREATED)
 	await session.commit()
 	await session.refresh(task)
+	logger.info(
+		"task created; enqueueing taskiq job task_id=%s task_name=%s user_id=%s",
+		task.id,
+		task_name,
+		principal.user.id,
+	)
 
 	try:
 		await enqueue_started_task(TypeID(task.id), runtime_payload=runtime or {})
@@ -322,6 +329,12 @@ async def start_task(
 			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
 			detail="failed to enqueue task",
 		) from exc
+	logger.info(
+		"taskiq job enqueued task_id=%s task_name=%s user_id=%s",
+		task.id,
+		task_name,
+		principal.user.id,
+	)
 
 	return task
 
@@ -442,6 +455,51 @@ async def update_task_execution(
 		return task
 
 
+async def fail_stale_active_tasks(
+	task_names: Collection[str],
+	stale_after: timedelta,
+	reason: str,
+) -> int:
+	"""mark old active task rows failed so they cannot block new work forever."""
+	if not task_names:
+		return 0
+	cutoff = datetime.now(tz=UTC) - stale_after
+	async with async_session_local() as session:
+		stmt = select(Task).where(
+			Task.status.in_((TaskStatus.PENDING, TaskStatus.RUNNING)),
+			Task.metadata_[TASK_NAME_METADATA_KEY].as_string().in_(tuple(task_names)),
+			or_(
+				Task.last_event_at <= cutoff,
+				and_(Task.last_event_at.is_(None), Task.updated_at <= cutoff),
+			),
+		)
+		result = await session.execute(stmt)
+		stale_tasks = list(result.scalars().all())
+		for task in stale_tasks:
+			runner_name = _runner_name(task) or "unknown"
+			last_event_at = task.last_event_at or task.updated_at or task.created_at
+			_apply_execution_update(
+				task,
+				status_value=TaskStatus.FAILED,
+				stage="stale task failed",
+				result={
+					"error": "stale_active_task",
+					"message": reason,
+					"task_name": runner_name,
+					"last_event_at": last_event_at.isoformat()
+					if last_event_at is not None
+					else None,
+				},
+			)
+			await _publish_task_event(
+				session,
+				task,
+				event_type=EventType.TASK_FAILED,
+			)
+			await task_bus.mark_task_end(TypeID(task.id))
+		return len(stale_tasks)
+
+
 async def cancel_task(
 	task_id: TypeID,
 	session: AsyncSession,
@@ -512,9 +570,20 @@ async def execute_started_task(
 			metadata=task.metadata_ or {},
 			runtime=runtime_payload or {},
 		)
+		logger.info(
+			"task execution started task_id=%s task_name=%s user_id=%s",
+			task.id,
+			runner_name,
+			task.user_id,
+		)
 
 	try:
-		result = await runner(context)
+		timeout_seconds = _task_runner_timeouts.get(runner_name)
+		if timeout_seconds is None:
+			result = await runner(context)
+		else:
+			async with asyncio.timeout(timeout_seconds):
+				result = await runner(context)
 		await context.check_cancelled()
 		await update_task_execution(
 			task_id,
@@ -523,12 +592,26 @@ async def execute_started_task(
 			stage="complete",
 			result=result or {},
 		)
+		logger.info("task execution completed task_id=%s", task_id)
 	except TaskCancelledError:
 		await update_task_execution(
 			task_id,
 			status_value=TaskStatus.CANCELLED,
 			stage="cancelled",
 		)
+		logger.info("task execution cancelled task_id=%s", task_id)
+	except TimeoutError:
+		logger.exception("task runner timed out: %s", task_id)
+		await update_task_execution(
+			task_id,
+			status_value=TaskStatus.FAILED,
+			stage="timed out",
+			result={
+				"error": "TimeoutError",
+				"message": "task runner exceeded its timeout",
+			},
+		)
+		raise
 	except Exception as exc:
 		logger.exception("task runner failed: %s", task_id)
 		await update_task_execution(

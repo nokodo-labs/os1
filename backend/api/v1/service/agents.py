@@ -166,8 +166,9 @@ async def update_agent(
 ) -> Agent:
 	require_permission(principal, "agents:manage")
 	agent = await _get_agent(agent_id, session)
-	if agent_in.model_id is not None:
-		await _ensure_model(agent_in.model_id, session)
+	model_id = agent_in.model_id
+	if "model_id" in agent_in.model_fields_set and isinstance(model_id, str):
+		await _ensure_model(model_id, session)
 
 	update_data = agent_in.model_dump(exclude_unset=True, by_alias=True)
 	for field, value in update_data.items():

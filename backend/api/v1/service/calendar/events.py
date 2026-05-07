@@ -344,38 +344,22 @@ async def update_calendar_event(
 	changed = data.model_fields_set
 	update_data = data.model_dump(exclude_unset=True, by_alias=True)
 	if "recurrence" in changed:
-		update_data["recurrence"] = recurrence_to_storage(data.recurrence)
-	start_at = data.start_at if data.start_at is not None else calendar_event.start_at
-	end_at = data.end_at if data.end_at is not None else calendar_event.end_at
+		update_data["recurrence"] = recurrence_to_storage(update_data["recurrence"])
+	start_at = calendar_event.start_at
+	if "start_at" in update_data:
+		start_at = update_data["start_at"]
+	end_at = calendar_event.end_at
+	if "end_at" in update_data:
+		end_at = update_data["end_at"]
 	validate_calendar_event_range(start_at, end_at)
-	if "title" in changed and data.title is not None:
-		calendar_event.title = data.title
-	if "description" in changed:
-		calendar_event.description = data.description
-	if "start_at" in changed and data.start_at is not None:
-		calendar_event.start_at = data.start_at
-	if "end_at" in changed and data.end_at is not None:
-		calendar_event.end_at = data.end_at
-	if "all_day" in changed and data.all_day is not None:
-		calendar_event.all_day = data.all_day
-	if "timezone" in changed:
-		calendar_event.timezone = data.timezone
-	if "recurrence" in changed:
-		calendar_event.recurrence = update_data["recurrence"]
-	if "notification_offsets" in changed and data.notification_offsets is not None:
-		calendar_event.notification_offsets = data.notification_offsets
-	if "location" in changed:
-		calendar_event.location = data.location
-		if data.location:
+	for key, value in update_data.items():
+		setattr(calendar_event, key, value)
+	if "location" in update_data:
+		if update_data["location"]:
 			calendar_event.virtual_url = None
-	if "virtual_url" in changed:
-		calendar_event.virtual_url = data.virtual_url
-		if data.virtual_url:
+	if "virtual_url" in update_data:
+		if update_data["virtual_url"]:
 			calendar_event.location = None
-	if "labels" in changed and data.labels is not None:
-		calendar_event.labels = data.labels
-	if "metadata" in changed and data.metadata is not None:
-		calendar_event.metadata_ = data.metadata
 	await session.flush()
 	await session.refresh(calendar_event)
 	await publish_calendar_event(
@@ -428,8 +412,9 @@ async def edit_calendar_event_occurrence(
 		session.add(override)
 	else:
 		override.cancelled_at = None
-	override.new_start_at = data.new_start_at
-	override.new_end_at = data.new_end_at
+	update_data = data.model_dump(exclude_unset=True)
+	override.new_start_at = update_data.get("new_start_at")
+	override.new_end_at = update_data.get("new_end_at")
 	override.payload_patch = _calendar_occurrence_payload_patch(data)
 	await session.flush()
 	await publish_calendar_event(
@@ -593,24 +578,22 @@ def _build_calendar_event_split(
 	calendar_event: CalendarEvent,
 	data: CalendarSeriesEdit,
 ) -> CalendarEvent:
-	changed = data.model_fields_set
+	update_data = data.model_dump(exclude_unset=True)
 	duration = calendar_event.end_at - calendar_event.start_at
-	new_start_at = data.new_start_at or data.original_occurrence_at
-	new_end_at = data.new_end_at or new_start_at + duration
+	new_start_at = update_data.get("new_start_at") or data.original_occurrence_at
+	new_end_at = update_data.get("new_end_at") or new_start_at + duration
 	validate_calendar_event_range(new_start_at, new_end_at)
 	return CalendarEvent(
 		owner_id=calendar_event.owner_id,
 		calendar_id=calendar_event.calendar_id,
-		title=data.title if data.title is not None else calendar_event.title,
-		description=data.description
-		if "description" in changed
-		else calendar_event.description,
+		title=update_data.get("title", calendar_event.title),
+		description=update_data.get("description", calendar_event.description),
 		start_at=new_start_at,
 		end_at=new_end_at,
-		all_day=data.all_day if data.all_day is not None else calendar_event.all_day,
-		timezone=data.timezone if "timezone" in changed else calendar_event.timezone,
-		recurrence=recurrence_to_storage(data.recurrence)
-		if "recurrence" in changed
+		all_day=update_data.get("all_day", calendar_event.all_day),
+		timezone=update_data.get("timezone", calendar_event.timezone),
+		recurrence=recurrence_to_storage(update_data["recurrence"])
+		if "recurrence" in update_data
 		else recurrence_to_storage(
 			recurrence_after_split(
 				calendar_event.start_at,
@@ -620,16 +603,13 @@ def _build_calendar_event_split(
 		),
 		recurrence_until=None,
 		series_origin_id=calendar_event.series_origin_id or calendar_event.id,
-		notification_offsets=data.notification_offsets
-		if data.notification_offsets is not None
-		else list(calendar_event.notification_offsets or []),
-		location=data.location if "location" in changed else calendar_event.location,
-		virtual_url=data.virtual_url
-		if "virtual_url" in changed
-		else calendar_event.virtual_url,
-		labels=data.labels
-		if data.labels is not None
-		else list(calendar_event.labels or []),
+		notification_offsets=update_data.get(
+			"notification_offsets",
+			list(calendar_event.notification_offsets or []),
+		),
+		location=update_data.get("location", calendar_event.location),
+		virtual_url=update_data.get("virtual_url", calendar_event.virtual_url),
+		labels=update_data.get("labels", list(calendar_event.labels or [])),
 		metadata_=dict(calendar_event.metadata_ or {}),
 	)
 
@@ -664,14 +644,10 @@ async def _move_calendar_event_overrides_after_split(
 
 def _calendar_occurrence_payload_patch(data: CalendarOccurrenceEdit) -> JSONObject:
 	patch: JSONObject = {}
-	if data.title is not None:
-		patch["title"] = data.title
-	if data.description is not None:
-		patch["description"] = data.description
-	if data.location is not None:
-		patch["location"] = data.location
-	if data.virtual_url is not None:
-		patch["virtual_url"] = data.virtual_url
+	update_data = data.model_dump(exclude_unset=True)
+	for key in ("title", "description", "location", "virtual_url"):
+		if key in update_data:
+			patch[key] = update_data[key]
 	return patch
 
 

@@ -10,6 +10,7 @@ from nokodo_ai import (
 	ChatModel,
 	EmbeddingModel,
 	Thread,
+	Tool,
 	ToolMessage,
 	UserMessage,
 	tool,
@@ -253,8 +254,9 @@ async def test_chat_model_streaming_with_tools() -> None:
 		__agent_context__: AgentContext,
 		__app_context__: None,
 	) -> ToolMessage:
+		tool_call_id, _ = Tool.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output="ok",
 		)
 

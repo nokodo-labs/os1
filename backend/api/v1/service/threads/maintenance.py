@@ -43,7 +43,7 @@ given the active chat history, generate thread maintenance data.
 
 return:
 - a concise title, emoji followed by 1-3 lowercase words
-- 0-6 short lowercase tags
+- 1-6 short lowercase tags
 - a concise but complete summary of the active chat branch
 
 preserve decisions, entities, user preferences, unresolved work, and useful
@@ -55,8 +55,16 @@ class _ThreadMaintenanceOut(BaseModel):
 	"""structured output schema for thread maintenance."""
 
 	title: str = Field(max_length=50)
-	tags: list[str] = Field(default_factory=list, max_length=6)
+	tags: list[str] = Field(min_length=1, max_length=6)
 	summary: str = Field(min_length=1)
+
+
+def _thread_eligible_for_maintenance(thread: Thread) -> bool:
+	return (
+		thread.deleted_at is None
+		and not thread.is_temporary
+		and thread.current_message_id is not None
+	)
 
 
 def _latest_branch_update(messages: Sequence[Message]) -> datetime | None:
@@ -84,15 +92,7 @@ def _summary_covers_branch(
 	return True
 
 
-async def thread_needs_maintenance(thread: Thread, session: AsyncSession) -> bool:
-	"""whether an inactive thread has missing metadata or a stale summary."""
-	if thread.deleted_at is not None or thread.is_temporary:
-		return False
-	if thread.current_message_id is None:
-		return False
-	if thread_metadata_missing(thread):
-		return True
-
+async def _thread_summary_stale(thread: Thread, session: AsyncSession) -> bool:
 	branch = await walk_message_branch(session, TypeID(thread.current_message_id))
 	latest_branch_update = _latest_branch_update(branch)
 	summaries = await summary_service.list_active_summaries(thread.id, session)
@@ -102,23 +102,59 @@ async def thread_needs_maintenance(thread: Thread, session: AsyncSession) -> boo
 	)
 
 
+def thread_needs_mandatory_maintenance(thread: Thread) -> bool:
+	"""whether missing required catalog metadata should be generated now."""
+	return _thread_eligible_for_maintenance(thread) and thread_metadata_missing(thread)
+
+
+async def thread_needs_deferred_maintenance(
+	thread: Thread,
+	session: AsyncSession,
+) -> bool:
+	"""whether summary-only work should wait for the inactivity timer."""
+	if not _thread_eligible_for_maintenance(thread):
+		return False
+	if thread_metadata_missing(thread):
+		return False
+	return await _thread_summary_stale(thread, session)
+
+
+async def thread_needs_maintenance(thread: Thread, session: AsyncSession) -> bool:
+	"""whether a thread needs mandatory metadata or deferred summary work."""
+	if thread_needs_mandatory_maintenance(thread):
+		return True
+	return await thread_needs_deferred_maintenance(thread, session)
+
+
 async def list_threads_due_for_maintenance(
 	session: AsyncSession,
 	inactive_before: datetime,
 	limit: int = 50,
+	inactive_since: datetime | None = None,
 ) -> list[Thread]:
-	"""return inactive threads whose metadata or branch summary is stale."""
-	stmt = (
-		select(Thread)
-		.where(
-			Thread.deleted_at.is_(None),
-			Thread.is_temporary.is_(False),
-			Thread.current_message_id.is_not(None),
-			Thread.last_activity_at <= inactive_before,
-		)
-		.order_by(Thread.last_activity_at.asc())
-		.limit(limit)
+	"""return inactive threads whose metadata or branch summary is stale.
+
+	args:
+		inactive_before: upper bound on `last_activity_at` (threads must be
+			at least this old to be considered).
+		limit: maximum number of eligible threads to return.
+		inactive_since: optional lower bound on `last_activity_at` so callers
+			can ignore threads older than a chosen lookback window. when
+			omitted, no lower bound is applied and arbitrarily old threads
+			are eligible.
+
+	results are ordered oldest-first to keep the work queue stable across
+	successive sweep batches and to drain the oldest stale items first.
+	"""
+	stmt = select(Thread).where(
+		Thread.deleted_at.is_(None),
+		Thread.is_temporary.is_(False),
+		Thread.current_message_id.is_not(None),
+		Thread.last_activity_at <= inactive_before,
 	)
+	if inactive_since is not None:
+		stmt = stmt.where(Thread.last_activity_at >= inactive_since)
+	stmt = stmt.order_by(Thread.last_activity_at.asc()).limit(limit)
 	threads = list((await session.execute(stmt)).scalars().all())
 	eligible: list[Thread] = []
 	for thread in threads:
@@ -229,13 +265,20 @@ async def maintain_thread_metadata(
 
 	updated_metadata = False
 	if metadata_needed:
-		update_in = ThreadUpdate(
-			title=out.title.strip().lower() or None
-			if replace_metadata or (thread.title or "").strip() == ""
-			else None,
-			tags=out.tags[:6] if replace_metadata or not thread.tags else None,
-		)
-		if update_in.title is not None or update_in.tags is not None:
+		update_fields: dict[str, object] = {}
+		desired_title = out.title.strip().lower() or None
+		if (
+			(replace_metadata or (thread.title or "").strip() == "")
+			and desired_title is not None
+			and desired_title != thread.title
+		):
+			update_fields["title"] = desired_title
+		if replace_metadata or not thread.tags:
+			desired_tags = out.tags[:6]
+			if desired_tags != (thread.tags or []):
+				update_fields["tags"] = desired_tags
+		if update_fields:
+			update_in = ThreadUpdate.model_validate(update_fields)
 			await update_thread(
 				thread_id,
 				update_in,
@@ -258,7 +301,7 @@ async def maintain_thread_metadata(
 		)
 		summary_id = TypeID(summary.id)
 		await summary_service.supersede_summaries(
-			[TypeID(summary.id) for summary in summaries],
+			[TypeID(summary.id) for summary in summaries if summary.id != summary_id],
 			summary_id,
 			session,
 		)

@@ -41,6 +41,8 @@ class AppContext:
 	- session: database access
 	- principal: authenticated user
 	- event_emitter: function to broadcast events in real-time
+	- run_id: active API run id, when the SDK is running inside a persisted run
+	- event_emitter: function to broadcast events in real-time
 	- context_window: model context window in tokens (from Model ORM)
 	- retrieval: shared embedding cache for the current run
 
@@ -56,6 +58,7 @@ class AppContext:
 	session: AsyncSession
 	principal: Principal
 	event_emitter: EventEmitter
+	run_id: TypeID | None = None
 	agent_id: TypeID | None = None
 	thread_id: TypeID | None = None
 	context_window: int | None = None
@@ -73,6 +76,7 @@ class AppContext:
 		return AppContext(
 			session=self.session,
 			principal=self.principal,
+			run_id=self.run_id,
 			agent_id=self.agent_id,
 			thread_id=self.thread_id,
 			event_emitter=emitter,

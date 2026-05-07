@@ -178,7 +178,7 @@ async def test_rate_limiter_uses_x_user_id_header() -> None:
 				assert call_args is not None
 				key = call_args[0][0]
 				assert "user_abc" in key
-				assert key.startswith("nokodo_ai:rl:")
+				assert key.startswith("nokodo-ai:rl:")
 	finally:
 		boot_settings.TESTING = prev
 

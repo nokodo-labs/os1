@@ -8,8 +8,10 @@ from pydantic import BaseModel, Field
 
 from api.permissions import DefaultPermissions
 from api.schemas.common import (
+	MISSING,
 	MetadataModel,
 	MetadataUpdateModel,
+	MissingType,
 	ORMModel,
 	TimestampedModel,
 )
@@ -45,11 +47,11 @@ class RoleCreate(RoleBase):
 class RoleUpdate(MetadataUpdateModel):
 	"""schema for updating a role."""
 
-	name: str | None = None
-	description: str | None = None
-	quotas: dict[str, Any] | None = None
-	priority: int | None = None
-	default_permissions: DefaultPermissions | None = None
+	name: str | MissingType = MISSING
+	description: str | None | MissingType = MISSING
+	quotas: dict[str, Any] | MissingType = MISSING
+	priority: int | MissingType = MISSING
+	default_permissions: DefaultPermissions | MissingType = MISSING
 
 
 class Role(RoleBase, TimestampedModel, ORMModel):

@@ -239,19 +239,6 @@ wheels = [
 ]
 
 [[package]]
-name = "authlib"
-version = "1.7.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "joserfc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/f2/e05664d5275ce811fd4e9df0a2b3f0086ee19a8a80358d95499fa82fd50c/authlib-1.7.1.tar.gz", hash = "sha256:8c09b0f9d080c823e594b52316af70f79a1fa4eed64d0363a076233c04ef063a", size = 175884, upload-time = "2026-05-04T08:11:25.033Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/82/730650ee5e5b598b7bfdc291b784bc2f6fe02a5671695485403365101088/authlib-1.7.1-py2.py3-none-any.whl", hash = "sha256:8470f4aa6b5590ac41bd81d6e6ee12448ce36a0da0af19bbed69fb53fb4e8ad9", size = 258826, upload-time = "2026-05-04T08:11:23.208Z" },
-]
-
-[[package]]
 name = "botocore"
 version = "1.43.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1192,11 +1179,11 @@ api = [
     { name = "aiobotocore" },
     { name = "alembic" },
     { name = "argon2-cffi" },
-    { name = "authlib" },
     { name = "e2b-code-interpreter" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jinja2" },
+    { name = "joserfc" },
     { name = "perplexityai" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
@@ -1224,7 +1211,6 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "ty" },
-    { name = "types-authlib" },
 ]
 
 [package.metadata]
@@ -1233,13 +1219,13 @@ requires-dist = [
     { name = "alembic", marker = "extra == 'api'", specifier = ">=1.13.3" },
     { name = "anthropic", specifier = ">=0.98.1" },
     { name = "argon2-cffi", marker = "extra == 'api'", specifier = ">=23.1.0" },
-    { name = "authlib", marker = "extra == 'api'", specifier = ">=1.7.1" },
     { name = "e2b-code-interpreter", marker = "extra == 'api'", specifier = ">=2.6.2" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.136.1" },
     { name = "google-genai", specifier = ">=1.75.0" },
     { name = "httpx", marker = "extra == 'api'", specifier = ">=0.27.2" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.2" },
     { name = "jinja2", marker = "extra == 'api'", specifier = ">=3.1.4" },
+    { name = "joserfc", marker = "extra == 'api'", specifier = ">=1.6.4" },
     { name = "openai", specifier = ">=2.34.0" },
     { name = "perplexityai", marker = "extra == 'api'", specifier = ">=0.32.1" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.3.4" },
@@ -1267,10 +1253,7 @@ requires-dist = [
 provides-extras = ["api", "dev"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "ty", specifier = ">=0.0.34" },
-    { name = "types-authlib", specifier = ">=1.6.11.20260418" },
-]
+dev = [{ name = "ty", specifier = ">=0.0.34" }]
 
 [[package]]
 name = "numpy"
@@ -2118,18 +2101,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/66/90/eec276a418a417441a785dd394424fee87682cf34af29fe026f46883149e/types_aiobotocore_s3-3.6.0.tar.gz", hash = "sha256:5eb816af93791b7f42f58b2dd3b5ecfe24da9de414a7390c05c392cf1d9ef5b4", size = 77715, upload-time = "2026-05-02T03:03:31.274Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/df/4f2dce96e6b71f3d8287351558824021a9857eb88506c6eb72c61b23bcb4/types_aiobotocore_s3-3.6.0-py3-none-any.whl", hash = "sha256:5af9f9710c9fe6ba9645852a0b13f6fca4eb44d87a35b0959063341a32f11b37", size = 85450, upload-time = "2026-05-02T03:03:29.054Z" },
-]
-
-[[package]]
-name = "types-authlib"
-version = "1.6.11.20260418"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/57/1f/1916a7cfc5482e2e29da1752c55b7d93ba58fc39972368d0f1fcd26a943b/types_authlib-1.6.11.20260418.tar.gz", hash = "sha256:591f11924f63ae85665ebd7f0524e8a2a4d141adeaf5204828e62bf08f4a956f", size = 46861, upload-time = "2026-04-18T04:21:49.139Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/97/0ab68862ba1a939bdaefbbf53f2e9ececb0fd9941570dc24b861ec0670fb/types_authlib-1.6.11.20260418-py3-none-any.whl", hash = "sha256:44534bf7d85b9a27579c26e044b7ef96a13b8d179f8492f0531a4649ab250814", size = 103942, upload-time = "2026-04-18T04:21:47.838Z" },
 ]
 
 [[package]]

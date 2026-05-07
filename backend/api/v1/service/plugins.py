@@ -285,9 +285,12 @@ async def update_plugin(
 
 	update_data = plugin_in.model_dump(exclude_unset=True, by_alias=True)
 
-	if plugin_in.name is not None:
+	if "name" in plugin_in.model_fields_set:
+		name = plugin_in.name
+		if not isinstance(name, str):
+			raise ValueError("invalid plugin name")
 		await _ensure_name_available(
-			plugin_in.name,
+			name,
 			session,
 			exclude_id=plugin_id,
 		)

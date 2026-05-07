@@ -155,12 +155,9 @@ async def update_group(
 		required_level=AccessLevel.EDITOR,
 	)
 	group = await _load_group(group_id, session)
-	if group_in.name is not None:
-		group.name = group_in.name
-	if group_in.description is not None:
-		group.description = group_in.description
-	if group_in.metadata is not None:
-		group.metadata_ = group_in.metadata
+	update_data = group_in.model_dump(exclude_unset=True, by_alias=True)
+	for key, value in update_data.items():
+		setattr(group, key, value)
 	session.add(group)
 	await session.flush()
 	await session.refresh(group)

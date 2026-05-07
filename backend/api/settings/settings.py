@@ -9,7 +9,14 @@ from enum import StrEnum
 from functools import cache as functools_cache
 from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic import (
+	BaseModel,
+	Field,
+	HttpUrl,
+	computed_field,
+	field_validator,
+	model_validator,
+)
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
 	BaseSettings,
@@ -35,6 +42,15 @@ _settings_logger = logging.getLogger(__name__)
 
 ENV_PREFIX: Final[str] = "NOKODO__"
 ENV_NESTED_DELIMITER: Final[str] = "__"
+DEFAULT_SECRET_KEY: Final[str] = "dev-secret-key-change-me-in-production"
+MINIMUM_SECRET_KEY_BYTES: Final[int] = 14
+UNSAFE_SECRET_KEYS: Final[frozenset[str]] = frozenset(
+	{
+		DEFAULT_SECRET_KEY,
+		"changeme",
+		"your-secret-key-here-change-in-production",
+	}
+)
 
 
 def settings_field[T](
@@ -929,11 +945,19 @@ class OIDCSettings(BaseModel):
 
 class SecuritySettings(BaseModel):
 	secret_key: str = settings_field(
-		default="changeme",
+		default=DEFAULT_SECRET_KEY,
 		private=True,
 		write_locked=True,
 		description="application secret key (env-only)",
 	)
+
+	@computed_field(
+		description="whether the application secret key is still a built-in default."
+	)
+	@property
+	def secret_key_uses_default(self) -> bool:
+		return self.secret_key.strip() in UNSAFE_SECRET_KEYS
+
 	previous_secret_keys: list[str] = settings_field(
 		[],
 		private=True,
@@ -1365,7 +1389,7 @@ class TaskiqSettings(BaseModel):
 	"""TaskIQ execution and scheduling topology."""
 
 	queue_name: str = settings_field(
-		default="nokodo-ai",
+		default="nokodo-ai:taskiq:queue",
 		write_locked=True,
 		description="TaskIQ queue name used by API, worker, and scheduler processes.",
 	)
@@ -1382,9 +1406,64 @@ class TaskiqSettings(BaseModel):
 		description="maximum Redis connections used by TaskIQ components.",
 	)
 	schedule_prefix: str = settings_field(
-		default="nokodo-ai:schedules",
+		default="nokodo-ai:taskiq:schedules",
 		write_locked=True,
 		description="Redis key prefix for dynamic TaskIQ schedules.",
+	)
+
+
+class ThreadMaintenanceBackfillSettings(BaseModel):
+	"""knobs for the optional retroactive thread maintenance sweep.
+
+	by default this is fully disabled. when enabled, a periodic background
+	task scans inactive threads for missing metadata or stale branch
+	summaries and dispatches maintenance tasks in bounded batches. each
+	maintenance run spends model tokens, so administrators must opt in
+	explicitly and set their own batch and lookback bounds.
+
+	note that this is independent from the per-thread inactivity timer
+	that resets on every run completion. that timer never enqueues
+	retroactive work.
+	"""
+
+	enabled: bool = settings_field(
+		default=False,
+		description=(
+			"enable the periodic retroactive thread maintenance sweep. "
+			"when False, the schedule is removed and the task is a no-op."
+		),
+	)
+	cron: str = settings_field(
+		default="0 4 * * *",
+		description=(
+			"cron expression for the periodic sweep, evaluated in UTC. "
+			"defaults to once per day at 04:00 UTC."
+		),
+	)
+	batch_size: int = settings_field(
+		default=10,
+		ge=1,
+		description=(
+			"maximum number of threads dispatched per sweep run. "
+			"each thread results in one maintenance task and one model spend."
+		),
+	)
+	max_lookback_days: int = settings_field(
+		default=30,
+		ge=1,
+		description=(
+			"only consider threads whose last_activity_at is within this "
+			"many days. older threads are ignored to bound model spend."
+		),
+	)
+	min_inactivity_hours: int = settings_field(
+		default=8,
+		ge=1,
+		description=(
+			"threads must have been inactive at least this long before the "
+			"backfill sweep considers them. should be >= the live "
+			"inactivity timer to avoid racing with it."
+		),
 	)
 
 
@@ -1396,6 +1475,14 @@ class TasksSettings(BaseModel):
 		json_schema_extra={"write_locked": True},
 		frozen=True,
 		description="TaskIQ execution and scheduling settings",
+	)
+	maintenance_backfill: ThreadMaintenanceBackfillSettings = Field(
+		default_factory=ThreadMaintenanceBackfillSettings,
+		description=(
+			"retroactive thread maintenance backfill settings. "
+			"off by default; controls an optional periodic sweep that "
+			"runs maintenance on stale threads in batches."
+		),
 	)
 
 
@@ -1552,6 +1639,26 @@ class Settings(BaseSettings):
 			)
 
 		return self.model_dump(exclude=exclude or None)
+
+	def validate_runtime_security(self) -> None:
+		"""fail production startup when the signing/encryption key is unsafe."""
+		from api.boot_settings import boot_settings
+
+		if boot_settings.TESTING or boot_settings.ENV != "production":
+			return
+
+		secret_key = self.security.secret_key.strip()
+		if len(secret_key.encode("utf-8")) < MINIMUM_SECRET_KEY_BYTES:
+			_settings_logger.critical("production secret key is too short")
+			raise RuntimeError(
+				"NOKODO__SECURITY__SECRET_KEY must be at least 14 bytes in production"
+			)
+		if secret_key in UNSAFE_SECRET_KEYS:
+			_settings_logger.critical("production secret key is still a default value")
+			raise RuntimeError(
+				"NOKODO__SECURITY__SECRET_KEY must be changed from the "
+				"default in production"
+			)
 
 	def reload(self) -> Self:
 		"""reload settings from all sources."""

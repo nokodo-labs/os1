@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.experimental.missing_sentinel import MISSING
 
 from nokodo_ai.types.json import JSONObject
+
+
+if TYPE_CHECKING:
+	from typing_extensions import Sentinel as MissingType
+else:
+	MissingType = MISSING
 
 
 class ORMModel(BaseModel):
@@ -29,9 +37,9 @@ class MetadataModel(ORMModel):
 
 
 class MetadataUpdateModel(ORMModel):
-	"""Adds optional metadata for update schemas (nullable = do not change)."""
+	"""Adds metadata support for update schemas."""
 
-	metadata: JSONObject | None = Field(default=None, alias="metadata_")
+	metadata: JSONObject | MissingType = Field(default=MISSING, alias="metadata_")
 
 
 class TimestampedModel(ORMModel):

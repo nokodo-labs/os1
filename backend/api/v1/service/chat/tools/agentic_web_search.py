@@ -195,8 +195,9 @@ class AgenticWebSearchTool(Tool[AppContext]):
 		}
 		output = json.dumps(payload, ensure_ascii=True)
 
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=output,
 			metadata=metadata,
 		)

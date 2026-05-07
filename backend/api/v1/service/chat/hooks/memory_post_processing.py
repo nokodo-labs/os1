@@ -10,9 +10,12 @@ from pydantic import Field
 from api.database import async_session_local
 from api.settings import settings as app_settings
 from api.v1.service.chat.hooks.base import Hook
+from api.v1.service.chat.run_status import run_status_store
 from api.v1.tasks.threads import (
 	start_memory_post_processing_task,
 )
+from nokodo_ai.context import AgentContext
+from nokodo_ai.messages import AssistantMessage
 from nokodo_ai.threads import Thread as SDKThread
 
 
@@ -20,6 +23,20 @@ if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 logger = logging.getLogger(__name__)
+
+
+async def _is_final_assistant_iteration(
+	thread: SDKThread,
+	app_context: AppContext,
+) -> bool:
+	if not thread.messages:
+		return False
+	last_message = thread.messages[-1]
+	if not isinstance(last_message, AssistantMessage) or last_message.tool_calls:
+		return False
+	if app_context.run_id is None:
+		return True
+	return not await run_status_store.has_in_flight_steering(app_context.run_id)
 
 
 class MemoryPostProcessingHook(Hook):
@@ -42,9 +59,13 @@ class MemoryPostProcessingHook(Hook):
 	async def execute(
 		self,
 		thread: SDKThread,
+		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> None:
+		_ = agent_context
 		if app_context is None:
+			return
+		if not await _is_final_assistant_iteration(thread, app_context):
 			return
 
 		# gate on user preference - skip when memories disabled.

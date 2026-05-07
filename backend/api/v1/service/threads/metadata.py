@@ -54,14 +54,13 @@ class _ThreadMetadataOut(BaseModel):
 		],
 	)
 	tags: list[str] = Field(
-		default_factory=list,
-		description="0-6 short lowercase tags",
-		max_length=6,
+		description="short lowercase tags",
+		max_length=15,
 	)
 
 
 def thread_metadata_missing(thread: Thread) -> bool:
-	"""whether thread title or tags still need to be generated."""
+	"""whether mandatory thread title or tags still need to be generated."""
 	return (thread.title or "").strip() == "" or not thread.tags
 
 
@@ -169,20 +168,18 @@ async def generate_thread_metadata(
 		desired_title = out.title.strip().lower() or None
 		desired_tags = out.tags[:6]
 
-		update_in = ThreadUpdate(
-			title=(
-				desired_title
-				if should_update_title and desired_title != thread.title
-				else None
-			),
-			tags=(
-				desired_tags
-				if should_update_tags and desired_tags != (thread.tags or [])
-				else None
-			),
-		)
-		if update_in.title is None and update_in.tags is None:
+		update_fields: dict[str, object] = {}
+		if (
+			should_update_title
+			and desired_title is not None
+			and desired_title != thread.title
+		):
+			update_fields["title"] = desired_title
+		if should_update_tags and desired_tags != (thread.tags or []):
+			update_fields["tags"] = desired_tags
+		if not update_fields:
 			return thread
+		update_in = ThreadUpdate.model_validate(update_fields)
 
 		result = await update_thread(
 			thread_id,

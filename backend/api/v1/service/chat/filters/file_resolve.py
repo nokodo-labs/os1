@@ -16,6 +16,7 @@ from pydantic import Field
 
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.files import resolve_file_data
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
 )
@@ -75,9 +76,11 @@ class FileResolveFilter(Filter):
 	async def process(
 		self,
 		thread: SDKThread,
+		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> SDKThread:
 		"""scan messages for unresolved file parts and populate data."""
+		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for FileResolveFilter")
 

@@ -30,7 +30,7 @@ class Thought(BaseModel):
 		max_length=50,
 		description=(
 			"a very brief summary of this thought, ideally 3-5 words. "
-			"used to display to users an overview of your thought process."
+			"displayed to users as an overview of your thought process."
 		),
 	)
 
@@ -75,7 +75,8 @@ class ThinkingTool(Tool[AppContext]):
 		first created (i.e. when the first streaming delta for this
 		tool call arrived), capturing the chat model's generation time.
 		"""
-		elapsed_time = monotonic() - __agent_context__.tool_call_start_time
+		_, start_time = self.tool_call_context(__agent_context__)
+		elapsed_time = monotonic() - start_time
 		try:
 			chain = ChainOfThoughts.model_validate(kwargs)
 		except Exception:

@@ -264,32 +264,34 @@ async def update_user(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> User:
+	changed = user_in.model_fields_set
 	if not principal.is_admin and user_id != principal.user.id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 	if not principal.is_admin:
-		if (
-			user_in.email is not None
-			or user_in.password is not None
-			or user_in.is_active is not None
-			or user_in.integration_tokens is not None
-			or user_in.usage_quotas is not None
-			or user_in.role_ids is not None
-		):
+		admin_fields = {
+			"email",
+			"password",
+			"is_active",
+			"integration_tokens",
+			"usage_quotas",
+			"role_ids",
+		}
+		if admin_fields & changed:
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="unsupported fields",
 			)
-		has_self_field = (
-			user_in.preferences is not None
-			or user_in.display_name is not None
-			or user_in.avatar_url is not None
-			or user_in.username is not None
-			or user_in.bio is not None
-			or user_in.find_by_email is not None
-			or user_in.privacy is not None
-		)
-		if not has_self_field:
+		self_fields = {
+			"preferences",
+			"display_name",
+			"avatar_url",
+			"username",
+			"bio",
+			"find_by_email",
+			"privacy",
+		}
+		if not self_fields & changed:
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="no updatable fields provided",
@@ -300,7 +302,8 @@ async def update_user(
 	# capture pre-mutation role membership so we can compute the symmetric
 	# difference and invalidate only the affected role subjects.
 	old_role_ids: set[TypeID] = set()
-	if principal.is_admin and user_in.role_ids is not None:
+	new_role_ids: set[TypeID] = set()
+	if principal.is_admin and "role_ids" in changed:
 		old_role_ids = {
 			TypeID(row[0])
 			for row in (
@@ -312,39 +315,42 @@ async def update_user(
 			).all()
 		}
 
-	if user_in.preferences is not None:
-		user.preferences = user_in.preferences.model_dump(
+	update_data = user_in.model_dump(
+		exclude_unset=True,
+		exclude={"password", "preferences", "privacy", "role_ids"},
+	)
+	for key, value in update_data.items():
+		setattr(user, key, value)
+
+	if "preferences" in changed:
+		preferences = user_in.model_dump(
+			exclude_unset=True,
+			exclude_none=True,
 			mode="json",
 			by_alias=True,
-			exclude_none=True,
-		)
-
-	# allow non-admin users to update their own display name and avatar
-	if user_in.display_name is not None:
-		user.display_name = user_in.display_name
-	if user_in.avatar_url is not None:
-		user.avatar_url = user_in.avatar_url
-	if user_in.username is not None:
-		user.username = user_in.username
-	if user_in.bio is not None:
-		user.bio = user_in.bio
-	if user_in.find_by_email is not None:
-		user.find_by_email = user_in.find_by_email
-	if user_in.privacy is not None:
-		user.privacy = user_in.privacy.model_dump(mode="json")
+			include={"preferences"},
+		)["preferences"]
+		user.preferences = preferences
+	if "privacy" in changed:
+		privacy = user_in.model_dump(
+			exclude_unset=True,
+			mode="json",
+			include={"privacy"},
+		)["privacy"]
+		user.privacy = privacy
 
 	if principal.is_admin:
-		if user_in.email is not None:
-			user.email = user_in.email
-		if user_in.is_active is not None:
-			user.is_active = user_in.is_active
-		if user_in.integration_tokens is not None:
-			user.integration_tokens = dict(user_in.integration_tokens)
-		if user_in.usage_quotas is not None:
-			user.usage_quotas = dict(user_in.usage_quotas)
-		if user_in.password is not None:
-			user.hashed_password = hash_password(user_in.password)
-		if user_in.role_ids is not None:
+		if "password" in changed:
+			password = user_in.password
+			if not isinstance(password, str):
+				raise ValueError("invalid password")
+			user.hashed_password = hash_password(password)
+		if "role_ids" in changed:
+			role_ids_data = user_in.model_dump(
+				exclude_unset=True,
+				include={"role_ids"},
+			)["role_ids"]
+			new_role_ids = {TypeID(str(role_id)) for role_id in role_ids_data}
 			# clear existing roles and insert new ones via the secondary table.
 			# FK constraints on user_roles will reject non-existent role IDs.
 			await session.execute(
@@ -352,12 +358,12 @@ async def update_user(
 					user_role_association.c.user_id == str(user.id)
 				)
 			)
-			if user_in.role_ids:
+			if new_role_ids:
 				await session.execute(
 					insert(user_role_association),
 					[
 						{"user_id": str(user.id), "role_id": str(rid)}
-						for rid in user_in.role_ids
+						for rid in new_role_ids
 					],
 				)
 
@@ -386,16 +392,15 @@ async def update_user(
 	# precise cache invalidation: only the subjects whose effective access
 	# could have changed. avoids a coarse 'invalidate everything' tag.
 	if principal.is_admin:
-		if user_in.is_active is not None:
+		if "is_active" in changed:
 			# direct user-rule grants for this user can flip in/out of the
 			# accessible_users list. invalidate per-subject:user.
 			await invalidate_accessible_users_for_subject(
 				subject_kind="user", subject_id=user.id, session=session
 			)
-		if user_in.role_ids is not None:
-			new_role_ids = set(user_in.role_ids)
-			changed = old_role_ids ^ new_role_ids
-			if changed:
+		if "role_ids" in changed:
+			role_ids_changed = old_role_ids ^ new_role_ids
+			if role_ids_changed:
 				await asyncio.gather(
 					*(
 						invalidate_accessible_users_for_subject(
@@ -403,12 +408,12 @@ async def update_user(
 							subject_id=changed_role_id,
 							session=session,
 						)
-						for changed_role_id in changed
+						for changed_role_id in role_ids_changed
 					)
 				)
 
 	# emit user.preferences_updated event when preferences changed
-	if user_in.preferences is not None:
+	if "preferences" in changed:
 		event = Event(
 			scope=EventScope.USER,
 			scope_id=user.id,

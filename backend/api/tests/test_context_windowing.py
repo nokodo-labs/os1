@@ -14,6 +14,7 @@ from api.v1.service.chat.windowing import (
 	_COMPACTED_NOTICE,
 	enforce_combined_tool_budget,
 )
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
 	Message,
@@ -102,6 +103,10 @@ def _tool(output: str, call_id: str = "call_1") -> ToolMessage:
 
 def _thread(*msgs: Message) -> Thread:
 	return Thread(messages=list(msgs))
+
+
+def _agent_context(thread: Thread) -> AgentContext:
+	return AgentContext(thread=thread)
 
 
 _TID = TypeID("th_123")
@@ -336,7 +341,7 @@ class TestContextWindowingFilter:
 		"""when app_context is None, thread is returned unchanged."""
 		f = ContextWindowingFilter()
 		thread = _thread(_user("hi"))
-		result = await f.process(thread, None)
+		result = await f.process(thread, _agent_context(thread), None)
 		assert result is thread
 
 	@pytest.mark.asyncio()
@@ -346,7 +351,7 @@ class TestContextWindowingFilter:
 		thread = _thread(_sys("system"), _user("hi"))
 		ctx = _mock_ctx(thread_id=None)
 
-		result = await f.process(thread, ctx)
+		result = await f.process(thread, _agent_context(thread), ctx)
 		assert result is thread
 
 	@pytest.mark.asyncio()
@@ -375,7 +380,7 @@ class TestContextWindowingFilter:
 			),
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			result = await f.process(thread, ctx)
+			result = await f.process(thread, _agent_context(thread), ctx)
 
 		mock_aw.assert_called_once()
 		assert result is thread
@@ -408,11 +413,11 @@ class TestContextWindowingFilter:
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
 
 			# first call: full windowing
-			await f.process(thread, ctx)
+			await f.process(thread, _agent_context(thread), ctx)
 			assert mock_aw.call_count == 1
 
 			# second call: guard only
-			await f.process(thread, ctx)
+			await f.process(thread, _agent_context(thread), ctx)
 			assert mock_aw.call_count == 1  # not called again
 			assert mock_guard.call_count == 2  # called both times
 
@@ -449,7 +454,7 @@ class TestContextWindowingFilter:
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
 
-			await f.process(thread, ctx)
+			await f.process(thread, _agent_context(thread), ctx)
 
 			mock_start_summary.assert_awaited_once()
 
@@ -490,7 +495,7 @@ class TestContextWindowingFilter:
 			mock_settings.ai.windowing.max_summaries_before_condense = threshold_val
 			mock_svc.count_active_summaries = AsyncMock(return_value=threshold_val)
 
-			await f.process(thread, ctx)
+			await f.process(thread, _agent_context(thread), ctx)
 
 			mock_start_condense.assert_awaited_once()
 
@@ -527,7 +532,7 @@ class TestContextWindowingFilter:
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
 
-			await f.process(thread, ctx)
+			await f.process(thread, _agent_context(thread), ctx)
 
 			mock_start_summary.assert_not_awaited()
 

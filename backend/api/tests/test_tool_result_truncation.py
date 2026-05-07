@@ -11,6 +11,7 @@ from api.v1.service.chat.filters.tool_result_truncation import (
 	_compute_char_limit,
 	_truncate_text,
 )
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
@@ -26,6 +27,10 @@ def _mock_app_ctx(context_window: int | None = 128_000) -> MagicMock:
 	ctx = MagicMock()
 	ctx.context_window = context_window
 	return ctx
+
+
+def _agent_context(thread: Thread) -> AgentContext:
+	return AgentContext(thread=thread)
 
 
 # -- _truncate_text --
@@ -118,7 +123,7 @@ class TestToolResultTruncationFilter:
 				AssistantMessage(content=[TextContent(text="hi")]),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		assert result.messages[0] == thread.messages[0]
 		assert result.messages[1] == thread.messages[1]
 
@@ -136,7 +141,7 @@ class TestToolResultTruncationFilter:
 				),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		msg = result.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert msg.tool_output == "short result"
@@ -156,7 +161,7 @@ class TestToolResultTruncationFilter:
 				),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		msg = result.messages[0]
 		assert isinstance(msg, ToolMessage)
 		truncated = msg.tool_output
@@ -181,7 +186,7 @@ class TestToolResultTruncationFilter:
 				),
 			]
 		)
-		result = await filter_.process(thread, ctx_small)
+		result = await filter_.process(thread, _agent_context(thread), ctx_small)
 		msg = result.messages[0]
 		assert isinstance(msg, ToolMessage)
 		truncated = msg.tool_output
@@ -207,7 +212,7 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_2", tool_output="small result"),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		# first tool message should be truncated
 		msg2 = result.messages[2]
 		assert isinstance(msg2, ToolMessage)
@@ -229,7 +234,7 @@ class TestToolResultTruncationFilter:
 				SystemMessage(content=[TextContent(text=long_system)]),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		msg = result.messages[0]
 		assert isinstance(msg, SystemMessage)
 		assert isinstance(msg.content[0], TextContent)
@@ -246,7 +251,7 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_1", tool_output=""),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		msg = result.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert msg.tool_output == ""
@@ -264,7 +269,7 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_1", tool_output=output),
 			]
 		)
-		result = await filter_.process(thread, ctx_none)
+		result = await filter_.process(thread, _agent_context(thread), ctx_none)
 		msg = result.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert "[... truncated:" in msg.tool_output
@@ -281,5 +286,5 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_1", tool_output="ok"),
 			]
 		)
-		result = await filter_.process(thread, ctx)
+		result = await filter_.process(thread, _agent_context(thread), ctx)
 		assert result is thread

@@ -162,8 +162,9 @@ class GenerateImageTool(Tool[AppContext]):
 		count = len(results)
 		action = "edited" if inp.file_id else "generated"
 		label = "image" if count == 1 else "images"
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=json.dumps(
 				{
 					"status": "success",

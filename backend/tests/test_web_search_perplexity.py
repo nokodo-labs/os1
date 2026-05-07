@@ -35,6 +35,7 @@ def _agent_context(tool_call_id: str) -> AgentContext:
 		thread=Thread(),
 		model=ChatModel.model_construct(model_name="stub"),
 		tool_call_id=tool_call_id,
+		tool_call_start_time=0.0,
 	)
 
 

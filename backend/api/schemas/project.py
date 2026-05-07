@@ -6,7 +6,14 @@ from typing import Literal
 
 from pydantic import Field
 
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	ORMModel,
+	TimestampedModel,
+)
 from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
 
@@ -27,11 +34,11 @@ class ProjectCreate(ProjectBase):
 	pass
 
 
-class ProjectUpdate(ORMModel):
+class ProjectUpdate(MetadataUpdateModel):
 	"""Schema for updating a project."""
 
-	name: str | None = None
-	description: str | None = None
+	name: str | MissingType = MISSING
+	description: str | None | MissingType = MISSING
 
 
 class Project(ProjectBase, TimestampedModel, ORMModel):

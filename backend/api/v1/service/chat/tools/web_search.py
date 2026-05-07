@@ -124,8 +124,9 @@ class WebSearchTool(Tool[AppContext]):
 		}
 		max_chars = settings.web_search.max_chars
 		output = _json_output_with_result_limit(payload, max_chars)
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=output,
 			metadata=metadata,
 		)
@@ -206,8 +207,9 @@ class FetchUrlTool(Tool[AppContext]):
 
 		payload: JSONObject = {"title": domain, "content": content}
 
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=json.dumps(payload, ensure_ascii=True),
 			metadata={
 				"_citable_sources": [

@@ -106,6 +106,24 @@ async def test_claim_pending_steering_unknown_run_returns_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_has_in_flight_steering_tracks_pending_and_claimed() -> None:
+	store = RunStatusStore()
+	await store.start_run(
+		run_id=TypeID("run_s8"),
+		thread_id=TypeID("t"),
+		agent_id=TypeID("a"),
+		user_id=TypeID("u"),
+	)
+	assert await store.has_in_flight_steering(TypeID("run_s8")) is False
+	await store.enqueue_steering(TypeID("run_s8"), TypeID("m1"), {"i": 1})
+	assert await store.has_in_flight_steering(TypeID("run_s8")) is True
+	await store.claim_pending_steering(TypeID("run_s8"))
+	assert await store.has_in_flight_steering(TypeID("run_s8")) is True
+	await store.mark_steering_injected(TypeID("run_s8"), [TypeID("m1")])
+	assert await store.has_in_flight_steering(TypeID("run_s8")) is False
+
+
+@pytest.mark.asyncio
 async def test_mark_steering_injected_removes_only_listed_ids() -> None:
 	store = RunStatusStore()
 	await store.start_run(

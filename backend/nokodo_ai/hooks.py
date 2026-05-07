@@ -7,15 +7,16 @@ from abc import ABC, abstractmethod
 from pydantic import Field
 
 from .base import Base
+from .context import AgentContext
 from .threads import Thread
 
 
 class Hook[AppContextT = None](Base, ABC):
 	"""base class for hooks.
 
-	hooks run AFTER an agent has finished processing (after all tool calls
-	and the final response). they receive the complete thread but CANNOT
-	modify anything - they are read-only observers.
+	hooks run after each assistant response is appended to the thread.
+	they receive the current thread but CANNOT modify anything - they are
+	read-only observers.
 
 	hooks are generic over AppContextT, allowing application-specific
 	context to be passed through the entire agent execution pipeline.
@@ -34,12 +35,14 @@ class Hook[AppContextT = None](Base, ABC):
 	async def execute(
 		self,
 		thread: Thread,
+		agent_context: AgentContext,
 		app_context: AppContextT | None,
 	) -> None:
-		"""execute the hook after agent completion.
+		"""execute the hook after an assistant response.
 
 		args:
-			thread: the complete conversation thread (read-only)
+			thread: the current conversation thread (read-only)
+			agent_context: runtime context for this agent iteration
 			app_context: application-specific context
 
 		returns:

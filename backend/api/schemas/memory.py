@@ -7,7 +7,13 @@ from typing import Literal
 
 from pydantic import Base64Bytes, BaseModel, Field
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
 
@@ -48,9 +54,9 @@ class MemoryCreate(MemoryBase):
 class MemoryUpdate(MetadataUpdateModel):
 	"""payload to update a memory."""
 
-	content: str | None = None
-	confidence: float | None = None
-	tags: list[str] | None = None
+	content: str | MissingType = MISSING
+	confidence: float | None | MissingType = MISSING
+	tags: list[str] | None | MissingType = MISSING
 
 
 class Memory(MemoryBase, TimestampedModel):

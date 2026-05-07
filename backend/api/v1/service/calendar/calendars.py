@@ -124,6 +124,7 @@ async def update_calendar(
 		required_level=AccessLevel.EDITOR,
 	)
 	changed = data.model_fields_set
+	update_data = data.model_dump(exclude_unset=True, by_alias=True)
 	if "is_default" in changed and data.is_default is True:
 		if calendar.owner_id != principal.user_id and not principal.is_admin:
 			raise HTTPException(
@@ -136,26 +137,15 @@ async def update_calendar(
 			except_id=calendar.id,
 			owner_id=calendar.owner_id,
 		)
-	if "name" in changed and data.name is not None:
-		calendar.name = data.name
-	if "description" in changed:
-		calendar.description = data.description
-	if "color" in changed and data.color is not None:
-		calendar.color = data.color
-	if "position" in changed and data.position is not None:
-		calendar.position = data.position
-	if "is_default" in changed and data.is_default is not None:
-		calendar.is_default = data.is_default
-	if "timezone" in changed:
-		calendar.timezone = data.timezone
-	if "project_ids" in changed and data.project_ids is not None:
+	new_project_ids = update_data.pop("project_ids", None)
+	if new_project_ids is not None:
 		calendar.projects = await load_calendar_projects(
-			data.project_ids,
+			new_project_ids,
 			session,
 			principal,
 		)
-	if "metadata" in changed and data.metadata is not None:
-		calendar.metadata_ = data.metadata
+	for key, value in update_data.items():
+		setattr(calendar, key, value)
 	await session.flush()
 	await session.refresh(calendar)
 	await session.refresh(calendar, attribute_names=["projects"])

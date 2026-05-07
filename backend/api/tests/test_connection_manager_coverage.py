@@ -20,9 +20,12 @@ def _make_websocket(
 	async def _send(message: object) -> None:
 		if not isinstance(message, dict):
 			raise AssertionError("expected asgi message dict")
-		if fail_send and message.get("type") == "websocket.send":
+		asgi_message = {
+			key: value for key, value in message.items() if isinstance(key, str)
+		}
+		if fail_send and asgi_message.get("type") == "websocket.send":
 			raise RuntimeError("send failed")
-		sent.append(message)
+		sent.append(asgi_message)
 
 	async def _receive() -> dict[str, object]:
 		return {"type": "websocket.connect"}
@@ -55,7 +58,7 @@ async def test_send_to_user_and_broadcast_exception_paths() -> None:
 	await manager.connect(TypeID("u"), ws_fail)
 
 	await manager.send_to_user(TypeID("u"), {"a": 1})
-	await manager.broadcast({"b": 2})
+	await manager.broadcast({"type": "stream.pong"})
 
 	await manager.disconnect(TypeID("u"), ws_ok)
 	await manager.disconnect(TypeID("u"), ws_fail)
@@ -77,8 +80,8 @@ async def test_broadcast_event_routes() -> None:
 	manager = _Manager()
 
 	event = Event(
-		scope=EventScope.THREAD,
-		scope_id=None,
+		scope=EventScope.USER,
+		scope_id=TypeID(new_typeid("user")),
 		type="t",
 		data={},
 		expires_at=None,
@@ -93,9 +96,34 @@ async def test_broadcast_event_routes() -> None:
 	event.created_at = datetime.now(UTC)
 
 	await manager.broadcast_event(event)
-	assert seen_send == [str(event.user_id)]
+	assert seen_send == [str(event.scope_id)]
+
+	event.scope = EventScope.PROJECT
+	event.scope_id = None
+	await manager.broadcast_event(event)
+	assert seen_broadcast == []
 
 	event.user_id = None
-	event.scope = EventScope.PROJECT
+	event.scope = EventScope.SYSTEM
 	await manager.broadcast_event(event)
-	assert seen_broadcast
+	assert seen_broadcast == [
+		{
+			"id": str(event.id),
+			"type": "t",
+			"scope": event.scope.value,
+			"scope_id": None,
+			"data": {},
+			"version": 1,
+			"user_id": None,
+			"thread_id": None,
+			"message_id": None,
+			"task_id": None,
+			"project_id": None,
+			"calendar_id": None,
+			"calendar_event_id": None,
+			"reminder_list_id": None,
+			"reminder_id": None,
+			"created_at": event.created_at.isoformat(),
+			"origin_session_id": None,
+		}
+	]

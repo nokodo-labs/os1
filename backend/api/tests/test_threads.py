@@ -543,6 +543,115 @@ async def test_service_create_thread(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unread_counts_include_tool_messages_but_ignore_own_user_messages(
+	db_session: AsyncSession,
+) -> None:
+	"""unread counts include every new message type from other senders."""
+	user = User(
+		email="unread_filter@example.com",
+		username="unread_filter",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = _principal(user)
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=user.id, title="unread filter"),
+		db_session,
+		principal=principal,
+	)
+	assistant_message = await thread_service.create_message(
+		thread.id,
+		MessageCreate(content="done", type=MessageType.ASSISTANT),
+		db_session,
+		principal=principal,
+	)
+	participant = await thread_service.ensure_participant(
+		thread.id,
+		user.id,
+		db_session,
+	)
+	participant.last_read_message_id = assistant_message.id
+	await db_session.flush()
+	await thread_service.create_message(
+		thread.id,
+		MessageCreate(
+			content="tool output",
+			type=MessageType.TOOL,
+			tool_call_id="tool_1",
+			is_error=False,
+		),
+		db_session,
+		principal=principal,
+	)
+	await thread_service.create_message(
+		thread.id,
+		MessageCreate(content="my follow-up", type=MessageType.USER),
+		db_session,
+		principal=principal,
+	)
+
+	counts = await thread_service.get_unread_counts(db_session, principal)
+
+	assert counts == {thread.id: 1}
+
+
+@pytest.mark.asyncio
+async def test_unread_counts_include_assistant_messages_after_read_marker(
+	db_session: AsyncSession,
+) -> None:
+	"""assistant replies after the read marker still count as unread."""
+	user = User(
+		email="unread_assistant@example.com",
+		username="unread_assistant",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = _principal(user)
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=user.id, title="unread assistant"),
+		db_session,
+		principal=principal,
+	)
+	user_message = await thread_service.create_message(
+		thread.id,
+		MessageCreate(content="hello", type=MessageType.USER),
+		db_session,
+		principal=principal,
+	)
+	participant = await thread_service.ensure_participant(
+		thread.id,
+		user.id,
+		db_session,
+	)
+	participant.last_read_message_id = user_message.id
+	await db_session.flush()
+	await thread_service.create_message(
+		thread.id,
+		MessageCreate(content="reply", type=MessageType.ASSISTANT),
+		db_session,
+		principal=principal,
+	)
+
+	counts = await thread_service.get_unread_counts(db_session, principal)
+
+	assert counts == {thread.id: 1}
+
+
+@pytest.mark.asyncio
 async def test_get_thread_not_found(
 	client: AsyncClient,
 	user_auth: dict[str, object],

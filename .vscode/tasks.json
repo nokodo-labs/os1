@@ -1,9 +1,7 @@
 {
 	"version": "2.0.0",
 	"tasks": [
-		// ═══════════════════════════════════════
 		// backend
-		// ═══════════════════════════════════════
 		{
 			"label": "backend: install dependencies",
 			"type": "shell",
@@ -24,7 +22,7 @@
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
-			"dependsOn": "Docker: ensure dev deps",
+			"dependsOn": "backend: ensure dev deps",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
@@ -34,6 +32,72 @@
 					"activeOnStart": true,
 					"beginsPattern": ".*",
 					"endsPattern": "Application startup complete"
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "backend: ensure dev deps",
+			"type": "shell",
+			"command": "echo backend dev deps ready",
+			"dependsOn": [
+				"Docker: ensure dev deps",
+				"backend: taskiq worker",
+				"backend: taskiq scheduler"
+			],
+			"dependsOrder": "parallel",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"close": true
+			}
+		},
+		{
+			"label": "backend: taskiq worker",
+			"type": "shell",
+			"command": "uv run python -m api.taskiq worker api.taskiq:broker api.tasks.registry --workers 1 --max-async-tasks 25",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"dependsOn": "Docker: ensure dev deps",
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "."
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*",
+					"endsPattern": "Listening started\\."
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "backend: taskiq scheduler",
+			"type": "shell",
+			"command": "uv run python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"dependsOn": "Docker: ensure dev deps",
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "."
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*",
+					"endsPattern": "Startup completed\\."
 				}
 			},
 			"presentation": {
@@ -106,9 +170,7 @@
 			"problemMatcher": []
 		},
 
-		// ═══════════════════════════════════════
 		// frontend
-		// ═══════════════════════════════════════
 		{
 			"label": "frontend: install dependencies",
 			"type": "shell",
@@ -240,9 +302,7 @@
 			}
 		},
 
-		// ═══════════════════════════════════════
 		// console
-		// ═══════════════════════════════════════
 		{
 			"label": "console: install dependencies",
 			"type": "shell",
@@ -333,9 +393,7 @@
 			}
 		},
 
-		// ═══════════════════════════════════════
 		// Docker
-		// ═══════════════════════════════════════
 		{
 			"label": "Docker: ensure dev deps",
 			"type": "shell",

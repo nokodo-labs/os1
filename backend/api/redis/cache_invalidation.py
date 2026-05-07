@@ -29,7 +29,7 @@ from api.redis.pubsub import PubSubChannel
 
 logger = logging.getLogger(__name__)
 
-_CHANNEL = PubSubChannel("nokodo_ai:cache:invalidate")
+_CHANNEL = PubSubChannel("nokodo-ai:cache:invalidate")
 
 InvalidationHandler = Callable[[], None]
 

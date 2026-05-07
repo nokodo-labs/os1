@@ -8,8 +8,10 @@ from pydantic import BaseModel, Field
 
 from api.models.plugin import PluginType
 from api.schemas.common import (
+	MISSING,
 	MetadataModel,
 	MetadataUpdateModel,
+	MissingType,
 	ORMModel,
 	TimestampedModel,
 )
@@ -48,12 +50,12 @@ class PluginCreate(PluginBase):
 class PluginUpdate(MetadataUpdateModel):
 	"""Payload for plugin update."""
 
-	name: str | None = None
-	description: str | None = None
-	type: PluginType | None = None
-	author: str | None = None
-	version: str | None = None
-	source_code: str | None = None
+	name: str | MissingType = MISSING
+	description: str | None | MissingType = MISSING
+	type: PluginType | MissingType = MISSING
+	author: str | None | MissingType = MISSING
+	version: str | None | MissingType = MISSING
+	source_code: str | MissingType = MISSING
 
 
 class Plugin(PluginBase, TimestampedModel):

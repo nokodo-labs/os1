@@ -5,7 +5,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from api.models.model import InputModality, ModelType
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 
 
 class ModelListFilters(BaseModel):
@@ -48,15 +54,15 @@ class Model(ModelBase, TimestampedModel):
 class ModelUpdate(MetadataUpdateModel):
 	"""payload to update a model."""
 
-	name: str | None = None
-	display_name: str | None = None
-	model_type: ModelType | None = None
-	input_modalities: list[InputModality] | None = None
-	endpoint: str | None = None
-	adapter: str | None = None
-	capabilities: list[str] | None = None
-	context_window: int | None = None
-	input_cost: float | None = None
-	output_cost: float | None = None
-	enabled: bool | None = None
-	is_autofetched: bool | None = None
+	name: str | MissingType = MISSING
+	display_name: str | None | MissingType = MISSING
+	model_type: ModelType | MissingType = MISSING
+	input_modalities: list[InputModality] | MissingType = MISSING
+	endpoint: str | None | MissingType = MISSING
+	adapter: str | None | MissingType = MISSING
+	capabilities: list[str] | MissingType = MISSING
+	context_window: int | None | MissingType = MISSING
+	input_cost: float | None | MissingType = MISSING
+	output_cost: float | None | MissingType = MISSING
+	enabled: bool | MissingType = MISSING
+	is_autofetched: bool | MissingType = MISSING

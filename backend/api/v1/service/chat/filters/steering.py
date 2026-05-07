@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 
 from pydantic import ConfigDict, Field, SkipValidation
 
+from nokodo_ai.context import AgentContext
 from nokodo_ai.filters import Filter
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -72,9 +73,10 @@ class SteeringFilter[AppContextT = None](Filter[AppContextT]):
 	async def process(
 		self,
 		thread: SDKThread,
+		agent_context: AgentContext,
 		app_context: AppContextT | None,
 	) -> SDKThread:
-		_ = app_context  # steering is application-agnostic
+		_ = (agent_context, app_context)  # steering is application-agnostic
 		drained = await self.claim()
 		if not drained:
 			return thread

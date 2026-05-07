@@ -34,6 +34,7 @@ from api.v1.service import threads as thread_service
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.prompt_runtime import SENTINEL_REFERENCED_ATTACHMENTS
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
 )
@@ -451,9 +452,11 @@ class AttachmentDecayFilter(Filter):
 	async def process(
 		self,
 		thread: SDKThread,
+		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> SDKThread:
 		"""replace decayed attachments with prompt references for this turn."""
+		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for AttachmentDecayFilter")
 

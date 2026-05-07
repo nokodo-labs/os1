@@ -119,8 +119,9 @@ class NoteGetTool(Tool[AppContext]):
 			}
 			if note.labels:
 				result["labels"] = [str(label) for label in note.labels]
+			tool_call_id, _ = self.tool_call_context(__agent_context__)
 			return ToolMessage(
-				tool_call_id=__agent_context__.tool_call_id,
+				tool_call_id=tool_call_id,
 				tool_output=json.dumps(result),
 				metadata={
 					"_citable_sources": [
@@ -179,8 +180,9 @@ class NoteGetTool(Tool[AppContext]):
 			"count": n,
 			"results": results,
 		}
+		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output=json.dumps(out),
 			metadata={"_citable_sources": citable_sources},
 		)
@@ -213,14 +215,17 @@ class NoteWriteTool(Tool[AppContext]):
 
 		if inp.note_id:
 			# update existing note
+			update_fields: dict[str, object] = {}
+			if inp.title is not None:
+				update_fields["title"] = inp.title
+			if inp.content is not None:
+				update_fields["content"] = inp.content
+			if inp.labels is not None:
+				update_fields["labels"] = inp.labels
 			try:
 				note = await note_service.update_note(
 					TypeID(inp.note_id),
-					NoteUpdate(
-						title=inp.title,
-						content=inp.content,
-						labels=inp.labels,
-					),
+					NoteUpdate.model_validate(update_fields),
 					__app_context__.session,
 					__app_context__.principal,
 				)

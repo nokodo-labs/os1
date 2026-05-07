@@ -502,30 +502,25 @@ async def update_reminder(
 	previous_list_id = reminder.list_id
 	target_list_id: TypeID | None = None
 	moved_descendants: list[Reminder] = []
-	if "recurrence" in data.model_fields_set:
-		update_data["recurrence"] = recurrence_to_storage(data.recurrence)
+	if "recurrence" in update_data:
+		update_data["recurrence"] = recurrence_to_storage(update_data["recurrence"])
 
-	if "status" in update_data and data.status is not None:
+	if "status" in update_data:
 		if (
-			data.status == ReminderStatus.COMPLETED
+			update_data["status"] == ReminderStatus.COMPLETED
 			and reminder.status != ReminderStatus.COMPLETED
 		):
 			update_data["completed_at"] = datetime.now(UTC)
-		elif data.status == ReminderStatus.PENDING:
+		elif update_data["status"] == ReminderStatus.PENDING:
 			update_data["completed_at"] = None
 
 	if "list_id" in update_data:
-		if data.list_id is None:
-			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-				detail="list id is required",
-			)
-		target_list_id = data.list_id
+		target_list_id = update_data["list_id"]
 		await get_reminder_list(target_list_id, session, principal=principal)
 	next_list_id = target_list_id or reminder.list_id
-	if "parent_id" in update_data and data.parent_id is not None:
+	if "parent_id" in update_data and update_data["parent_id"] is not None:
 		await _validate_reminder_parent_assignment(
-			data.parent_id,
+			update_data["parent_id"],
 			next_list_id,
 			session,
 			principal,
@@ -541,40 +536,14 @@ async def update_reminder(
 	if target_list_id is not None and target_list_id != previous_list_id:
 		moved_descendants = await _load_reminder_descendants(reminder.id, session)
 
-	if "title" in update_data:
-		if data.title is None:
-			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-				detail="title is required",
-			)
-		reminder.title = data.title
-	if "description" in update_data:
-		reminder.description = data.description
-	if "due_at" in update_data:
-		reminder.due_at = data.due_at
-	if "remind_at" in update_data:
-		reminder.remind_at = data.remind_at
-	if "recurrence" in update_data:
-		reminder.recurrence = update_data["recurrence"]
-	if "status" in update_data:
-		if data.status is None:
-			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-				detail="status is required",
-			)
-		reminder.status = data.status
-	if "completed_at" in update_data:
-		reminder.completed_at = update_data["completed_at"]
+	for key, value in update_data.items():
+		if key == "list_id":
+			continue
+		setattr(reminder, key, value)
 	if target_list_id is not None:
 		reminder.list_id = target_list_id
 		for descendant in moved_descendants:
 			descendant.list_id = target_list_id
-	if "parent_id" in update_data:
-		reminder.parent_id = data.parent_id
-	if "position" in update_data and data.position is not None:
-		reminder.position = data.position
-	if "metadata_" in update_data and data.metadata is not None:
-		reminder.metadata_ = data.metadata
 
 	await session.flush()
 	await session.refresh(reminder)
@@ -854,11 +823,11 @@ def _build_reminder_split(
 	reminder: Reminder,
 	data: ReminderSeriesEdit,
 ) -> Reminder:
-	changed = data.model_fields_set
+	update_data = data.model_dump(exclude_unset=True)
 	new_due_at, new_remind_at = _split_reminder_times(reminder, data)
 	new_recurrence = (
-		recurrence_to_storage(data.recurrence)
-		if "recurrence" in changed
+		recurrence_to_storage(update_data["recurrence"])
+		if "recurrence" in update_data
 		else recurrence_to_storage(
 			recurrence_after_split(
 				_reminder_anchor(reminder) or data.original_occurrence_at,
@@ -877,10 +846,8 @@ def _build_reminder_split(
 		list_id=reminder.list_id,
 		parent_id=reminder.parent_id,
 		source_thread_id=reminder.source_thread_id,
-		title=data.title if data.title is not None else reminder.title,
-		description=data.description
-		if "description" in changed
-		else reminder.description,
+		title=update_data.get("title", reminder.title),
+		description=update_data.get("description", reminder.description),
 		due_at=new_due_at,
 		remind_at=new_remind_at,
 		recurrence=new_recurrence,
@@ -888,7 +855,7 @@ def _build_reminder_split(
 		series_origin_id=reminder.series_origin_id or reminder.id,
 		status=ReminderStatus.PENDING,
 		completed_at=None,
-		position=data.position if data.position is not None else reminder.position,
+		position=update_data.get("position", reminder.position),
 		metadata_=dict(reminder.metadata_ or {}),
 	)
 
@@ -897,16 +864,16 @@ def _split_reminder_times(
 	reminder: Reminder,
 	data: ReminderSeriesEdit,
 ) -> tuple[datetime | None, datetime | None]:
-	changed = data.model_fields_set
-	if "due_at" in changed:
-		new_due_at = data.due_at
+	update_data = data.model_dump(exclude_unset=True)
+	if "due_at" in update_data:
+		new_due_at = update_data["due_at"]
 	elif reminder.due_at is not None:
 		new_due_at = data.original_occurrence_at
 	else:
 		new_due_at = None
 
-	if "remind_at" in changed:
-		new_remind_at = data.remind_at
+	if "remind_at" in update_data:
+		new_remind_at = update_data["remind_at"]
 	elif reminder.remind_at is not None and reminder.due_at is not None:
 		new_remind_at = data.original_occurrence_at + (
 			reminder.remind_at - reminder.due_at

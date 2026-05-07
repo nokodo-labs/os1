@@ -11,6 +11,7 @@ from api.models.event_types import EventType
 from api.models.many_to_many import user_role_association
 from api.models.role import Role
 from api.models.user import User
+from api.permissions import DefaultPermissions
 from api.schemas.role import RoleCreate, RoleListFilters, RoleUpdate
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
@@ -129,20 +130,20 @@ async def update_role(
 			detail="role not found",
 		)
 	changed = role_in.model_fields_set
+	update_data = role_in.model_dump(
+		exclude_unset=True,
+		by_alias=True,
+		exclude={"default_permissions"},
+	)
 	default_permissions_changed = False
-	if "name" in changed and role_in.name is not None:
-		role.name = role_in.name
-	if "description" in changed:
-		role.description = role_in.description
-	if "quotas" in changed and role_in.quotas is not None:
-		role.quotas = role_in.quotas
-	if "priority" in changed and role_in.priority is not None:
-		role.priority = role_in.priority
-	if "default_permissions" in changed and role_in.default_permissions is not None:
-		role.set_default_permissions(role_in.default_permissions)
+	for key, value in update_data.items():
+		setattr(role, key, value)
+	if "default_permissions" in changed:
+		default_permissions = role_in.default_permissions
+		if not isinstance(default_permissions, DefaultPermissions):
+			raise ValueError("invalid default permissions")
+		role.set_default_permissions(default_permissions)
 		default_permissions_changed = True
-	if "metadata" in changed and role_in.metadata is not None:
-		role.metadata_ = role_in.metadata
 	await session.commit()
 	await session.refresh(role)
 	if default_permissions_changed:

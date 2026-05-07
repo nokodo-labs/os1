@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Literal
 
 from fastapi import HTTPException, status
@@ -50,6 +50,14 @@ from nokodo_ai.utils.typeid import TypeID
 
 logger = logging.getLogger(__name__)
 
+MEMORY_POST_PROCESSING_QUERY_MAX_CHARS = 4000
+MEMORY_POST_PROCESSING_MEMORY_MAX_CHARS = 1200
+MEMORY_POST_PROCESSING_EMBED_TIMEOUT_SECONDS = 45
+MEMORY_POST_PROCESSING_SEARCH_TIMEOUT_SECONDS = 20
+MEMORY_POST_PROCESSING_MODEL_TIMEOUT_SECONDS = 60
+
+type MemoryPostProcessingProgress = Callable[[int, str], Awaitable[None]]
+
 
 _POST_PROCESSING_PROMPT = """\
 you are a memory maintenance agent. you receive:
@@ -89,6 +97,62 @@ class _MemoryPostProcessingResponse(BaseModel):
 	"""structured response from the post-processing model."""
 
 	actions: list[_MemoryPostProcessingAction] = Field(default_factory=list)
+
+
+class _MemoryPostProcessingTimeoutError(Exception):
+	def __init__(self, stage: str, cause: BaseException) -> None:
+		super().__init__(str(cause))
+		self.stage = stage
+		self.cause_type = type(cause).__name__
+		self.cause_message = str(cause)
+
+	def to_result(self) -> JSONObject:
+		return {
+			"skipped": True,
+			"reason": "provider_timeout",
+			"stage": self.stage,
+			"error": self.cause_type,
+			"message": self.cause_message[:500],
+		}
+
+
+def _is_timeout_exception(exc: BaseException) -> bool:
+	name = type(exc).__name__
+	return (
+		isinstance(exc, TimeoutError)
+		or name.endswith("TimeoutError")
+		or name.endswith("Timeout")
+	)
+
+
+async def _run_memory_stage[ResultT](
+	stage: str,
+	timeout_seconds: float,
+	operation: Awaitable[ResultT],
+) -> ResultT:
+	try:
+		async with asyncio.timeout(timeout_seconds):
+			return await operation
+	except Exception as exc:
+		if _is_timeout_exception(exc):
+			raise _MemoryPostProcessingTimeoutError(stage, exc) from exc
+		raise
+
+
+async def _notify_memory_post_processing_progress(
+	progress_callback: MemoryPostProcessingProgress | None,
+	progress: int,
+	stage: str,
+) -> None:
+	if progress_callback is not None:
+		await progress_callback(progress, stage)
+
+
+def _truncate_post_processing_text(value: str, max_chars: int) -> str:
+	trimmed = value.strip()
+	if len(trimmed) <= max_chars:
+		return trimmed
+	return trimmed[:max_chars].rstrip()
 
 
 async def _get_memory(
@@ -201,12 +265,9 @@ async def update_memory(
 	"""update a memory and sync with vectorstore if content changed."""
 	memory = await _get_memory(memory_id, session, principal)
 
-	if memory_in.content is not None:
-		memory.content = memory_in.content
-	if memory_in.confidence is not None:
-		memory.confidence = memory_in.confidence
-	if memory_in.tags is not None:
-		memory.tags = memory_in.tags
+	update_data = memory_in.model_dump(exclude_unset=True, by_alias=True)
+	for key, value in update_data.items():
+		setattr(memory, key, value)
 
 	event = Event(
 		scope=EventScope.USER,
@@ -557,21 +618,58 @@ async def post_process_relevant_memories(
 	session: AsyncSession,
 	principal: Principal,
 	max_related_memories: int = 10,
+	progress_callback: MemoryPostProcessingProgress | None = None,
 ) -> JSONObject:
 	"""update/delete memories relevant to the latest conversation context."""
-	query = query_text.strip()
+	query = _truncate_post_processing_text(
+		query_text,
+		MEMORY_POST_PROCESSING_QUERY_MAX_CHARS,
+	)
 	if not query:
 		return {"skipped": True, "reason": "empty query"}
 
-	memories = await query_relevant_memories(
-		query,
-		session,
-		principal=principal,
-		limit=max_related_memories,
-	)
+	try:
+		await _notify_memory_post_processing_progress(
+			progress_callback,
+			15,
+			"embedding memory query",
+		)
+		query_embedding = await _run_memory_stage(
+			"embedding memory query",
+			MEMORY_POST_PROCESSING_EMBED_TIMEOUT_SECONDS,
+			embed_text(text=query, session=session),
+		)
+		await _notify_memory_post_processing_progress(
+			progress_callback,
+			30,
+			"searching relevant memories",
+		)
+		memories = await _run_memory_stage(
+			"searching relevant memories",
+			MEMORY_POST_PROCESSING_SEARCH_TIMEOUT_SECONDS,
+			query_relevant_memories(
+				query,
+				session,
+				principal=principal,
+				limit=max_related_memories,
+				query_embedding=query_embedding,
+			),
+		)
+	except _MemoryPostProcessingTimeoutError as exc:
+		logger.warning(
+			"memory post-processing skipped after timeout stage=%s error=%s",
+			exc.stage,
+			exc.cause_type,
+		)
+		return exc.to_result()
 	if not memories:
 		return {"skipped": True, "reason": "no relevant memories"}
 
+	await _notify_memory_post_processing_progress(
+		progress_callback,
+		45,
+		"resolving memory model",
+	)
 	try:
 		chat_model = await resolve_task_chat_model(session, "memory_post_processing")
 	except ValueError:
@@ -583,31 +681,56 @@ async def post_process_relevant_memories(
 		memory_entries.append(
 			{
 				"id": str(memory.id),
-				"content": memory.content,
+				"content": _truncate_post_processing_text(
+					memory.content,
+					MEMORY_POST_PROCESSING_MEMORY_MAX_CHARS,
+				),
 				"updated_at": memory.updated_at.isoformat()
 				if memory.updated_at
 				else "",
 			}
 		)
 
-	raw = await run_chat_model_json_schema(
-		chat_model,
-		thread=SDKThread(
-			messages=[
-				SystemMessage.from_text(_POST_PROCESSING_PROMPT),
-				UserMessage.from_text(
-					"conversation context:\n"
-					f"{query}\n\nrelevant memories:\n"
-					f"{json.dumps(memory_entries, ensure_ascii=False)}"
-				),
-			]
-		),
-		json_schema=_MemoryPostProcessingResponse.model_json_schema(),
+	await _notify_memory_post_processing_progress(
+		progress_callback,
+		60,
+		"running memory model",
 	)
+	try:
+		raw = await _run_memory_stage(
+			"running memory model",
+			MEMORY_POST_PROCESSING_MODEL_TIMEOUT_SECONDS,
+			run_chat_model_json_schema(
+				chat_model,
+				thread=SDKThread(
+					messages=[
+						SystemMessage.from_text(_POST_PROCESSING_PROMPT),
+						UserMessage.from_text(
+							"conversation context:\n"
+							f"{query}\n\nrelevant memories:\n"
+							f"{json.dumps(memory_entries, ensure_ascii=False)}"
+						),
+					]
+				),
+				json_schema=_MemoryPostProcessingResponse.model_json_schema(),
+			),
+		)
+	except _MemoryPostProcessingTimeoutError as exc:
+		logger.warning(
+			"memory post-processing skipped after timeout stage=%s error=%s",
+			exc.stage,
+			exc.cause_type,
+		)
+		return exc.to_result()
 	result = _MemoryPostProcessingResponse.model_validate(raw)
 	if not result.actions:
 		return {"actions": 0, "updated": 0, "deleted": 0}
 
+	await _notify_memory_post_processing_progress(
+		progress_callback,
+		80,
+		"applying memory actions",
+	)
 	memory_ids = {str(memory.id) for memory in memories}
 	updated = 0
 	deleted = 0

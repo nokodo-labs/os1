@@ -17,7 +17,7 @@ from nokodo_ai.utils.typeid import TypeID
 logger = logging.getLogger(__name__)
 
 _CHANNEL_SUFFIX: Final[str] = "sse"
-_LOG_KEY_PREFIX: Final[str] = "nokodo:task:"
+_LOG_KEY_PREFIX: Final[str] = "nokodo-ai:task:"
 _LOG_KEY_SUFFIX: Final[str] = ":log"
 _LOG_TTL_SECONDS: Final[int] = 60 * 60 * 24
 _LOG_MAX_FRAMES: Final[int] = 2048

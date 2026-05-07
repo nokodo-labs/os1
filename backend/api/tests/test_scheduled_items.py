@@ -80,6 +80,17 @@ def recurrence_payload(rule: str) -> dict[str, object]:
 	return {"rrule": [rule], "rdate": [], "exdate": [], "timezone": "UTC"}
 
 
+def auth_headers(auth: dict[str, object]) -> dict[str, str]:
+	headers = auth["headers"]
+	assert isinstance(headers, dict)
+	result: dict[str, str] = {}
+	for key, value in headers.items():
+		assert isinstance(key, str)
+		assert isinstance(value, str)
+		result[key] = value
+	return result
+
+
 def ceil_to_minute(value: datetime) -> datetime:
 	if value.second == 0 and value.microsecond == 0:
 		return value
@@ -902,8 +913,7 @@ async def test_event_resource_links_use_nearest_emitting_resource(
 	admin_auth: dict[str, object],
 	db_session: AsyncSession,
 ) -> None:
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 
 	async def load_event(event_type: EventType, resource_id: str) -> Event:
 		result = await db_session.execute(
@@ -1114,8 +1124,7 @@ async def test_event_occurrence_edit_and_cancel_project_to_scheduled_items(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	start_at = utc_datetime(2026, 5, 1, 9)
 	end_at = start_at + timedelta(hours=1)
 	window_start = utc_datetime(2026, 5, 1)
@@ -1209,8 +1218,7 @@ async def test_reminder_occurrence_completion_only_completes_one_instance(
 	client: AsyncClient,
 	user_auth: dict[str, object],
 ) -> None:
-	headers = user_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(user_auth)
 	due_at = utc_datetime(2026, 6, 1, 8)
 	window_start = utc_datetime(2026, 6, 1)
 	window_end = utc_datetime(2026, 6, 4)
@@ -1296,8 +1304,7 @@ async def test_event_series_split_edits_following_occurrences(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	start_at = utc_datetime(2026, 7, 1, 9)
 	window_start = utc_datetime(2026, 7, 1)
 	window_end = utc_datetime(2026, 7, 6)
@@ -1364,8 +1371,7 @@ async def test_reminder_series_split_edits_following_occurrences(
 	client: AsyncClient,
 	user_auth: dict[str, object],
 ) -> None:
-	headers = user_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(user_auth)
 	due_at = utc_datetime(2026, 8, 1, 8)
 	window_start = utc_datetime(2026, 8, 1)
 	window_end = utc_datetime(2026, 8, 5)

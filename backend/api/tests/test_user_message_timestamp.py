@@ -7,6 +7,7 @@ import pytest
 from api.v1.service.chat.filters.user_message_timestamp import (
 	UserMessageTimestampFilter,
 )
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
 	ImageContent,
@@ -18,6 +19,10 @@ from nokodo_ai.threads import Thread
 
 def _make_filter() -> UserMessageTimestampFilter:
 	return UserMessageTimestampFilter()
+
+
+def _ctx(thread: Thread) -> AgentContext:
+	return AgentContext(thread=thread)
 
 
 def _user(text: str, created_at: str | None = None) -> UserMessage:
@@ -47,7 +52,7 @@ class TestTimestampPrepend:
 		msg = _user("hello", created_at="2025-06-15T10:30:00+00:00")
 		thread = Thread(messages=[msg])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		text = _result_user(result).text
 		assert text == "[2025-06-15 10:30 UTC] hello"
@@ -57,7 +62,7 @@ class TestTimestampPrepend:
 		msg = _user("hi", created_at="2024-12-31T23:59:00+00:00")
 		thread = Thread(messages=[msg])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		assert _result_user(result).text == "[2024-12-31 23:59 UTC] hi"
 
@@ -66,7 +71,7 @@ class TestTimestampPrepend:
 		msg = _user("test", created_at="2025-03-10T15:00:00+05:00")
 		thread = Thread(messages=[msg])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		# strftime uses the tz-aware datetime as-is (15:00 in +05:00)
 		assert "[2025-03-10 15:00 UTC]" in _result_user(result).text
@@ -80,7 +85,7 @@ class TestSkipWithoutTimestamp:
 		msg = _user("no timestamp")
 		thread = Thread(messages=[msg])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		assert _result_user(result).text == "no timestamp"
 
@@ -91,7 +96,7 @@ class TestSkipWithoutTimestamp:
 		)
 		thread = Thread(messages=[msg])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		assert _result_user(result).text == "bad meta"
 
@@ -105,7 +110,7 @@ class TestNonUserMessagesUntouched:
 		user = _user("question", created_at="2025-01-01T00:00:00+00:00")
 		thread = Thread(messages=[user, assistant])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		assert _result_assistant(result).text == "response"
 
@@ -121,7 +126,7 @@ class TestImageOnlyMessage:
 		)
 		thread = Thread(messages=[msg])
 
-		result = await _make_filter().process(thread, None)
+		result = await _make_filter().process(thread, _ctx(thread), None)
 
 		parts = _result_user(result).content
 		assert len(parts) == 2
@@ -144,10 +149,10 @@ class TestNoAccumulation:
 		thread = Thread(messages=[msg])
 		f = _make_filter()
 
-		first_pass = await f.process(thread, None)
+		first_pass = await f.process(thread, _ctx(thread), None)
 		first_text = _result_user(first_pass).text
 
-		second_pass = await f.process(first_pass, None)
+		second_pass = await f.process(first_pass, _ctx(first_pass), None)
 		second_text = _result_user(second_pass).text
 
 		assert first_text == "[2025-05-20 08:15 UTC] hello world"
@@ -162,7 +167,7 @@ class TestNoAccumulation:
 		f = _make_filter()
 
 		for i in range(5):
-			thread = await f.process(thread, None)
+			thread = await f.process(thread, _ctx(thread), None)
 
 		text = _result_user(thread).text
 		assert text == "[2025-01-01 00:00 UTC] stable", (
@@ -174,7 +179,7 @@ class TestNoAccumulation:
 		msg = _user("original", created_at="2025-03-15T09:00:00+00:00")
 		thread = Thread(messages=[msg])
 
-		await _make_filter().process(thread, None)
+		await _make_filter().process(thread, _ctx(thread), None)
 
 		# the original message object must still have its original text
 		assert msg.text == "original"

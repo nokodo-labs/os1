@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from api.schemas.common import TimestampedModel
+from api.schemas.common import MISSING, MissingType, TimestampedModel
 from api.schemas.preferences import UserPreferences
 from api.schemas.privacy import UserPrivacy
 from api.schemas.sorting import CommonSortBy
@@ -91,25 +91,23 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
 	"""schema for updating a user."""
 
-	email: EmailStr | None = None
-	password: str | None = None
-	username: Username | None = None
-	is_active: bool | None = None
-	display_name: str | None = None
-	bio: str | None = Field(default=None, max_length=500)
-	avatar_url: str | None = None
-	find_by_email: bool | None = None
-	privacy: UserPrivacy | None = None
-	preferences: UserPreferences | None = None
-	integration_tokens: dict[str, Any] | None = None
-	usage_quotas: dict[str, Any] | None = None
-	role_ids: list[TypeID] | None = None
+	email: EmailStr | MissingType = MISSING
+	password: str | MissingType = MISSING
+	username: Username | MissingType = MISSING
+	is_active: bool | MissingType = MISSING
+	display_name: str | None | MissingType = MISSING
+	bio: str | None | MissingType = Field(default=MISSING, max_length=500)
+	avatar_url: str | None | MissingType = MISSING
+	find_by_email: bool | MissingType = MISSING
+	privacy: UserPrivacy | MissingType = MISSING
+	preferences: UserPreferences | MissingType = MISSING
+	integration_tokens: dict[str, Any] | MissingType = MISSING
+	usage_quotas: dict[str, Any] | MissingType = MISSING
+	role_ids: list[TypeID] | MissingType = MISSING
 
 	@field_validator("username", mode="before")
 	@classmethod
-	def check_username(cls, v: str | None) -> str | None:
-		if v is None:
-			return None
+	def check_username(cls, v: str) -> str:
 		return _validate_username(v)
 
 

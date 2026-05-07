@@ -24,7 +24,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
+      test: [ "CMD-SHELL", "pg_isready -U nokodo-ai-admin" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -43,11 +43,11 @@ services:
     image: valkey/valkey:9-alpine
     container_name: os1-valkey
     restart: unless-stopped
-    command: ["valkey-server", "--appendonly", "yes"]
+    command: [ "valkey-server", "--appendonly", "yes" ]
     volumes:
       - valkey_data:/data
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: [ "CMD", "valkey-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -66,6 +66,10 @@ services:
         condition: service_started
       valkey:
         condition: service_healthy
+      backend-worker:
+        condition: service_started
+      backend-scheduler:
+        condition: service_started
     volumes:
       - backend_data:/app/data
 
@@ -75,13 +79,16 @@ services:
     restart: unless-stopped
     environment: *backend-env
     depends_on:
-      backend:
+      db:
+        condition: service_healthy
+      qdrant:
         condition: service_started
       valkey:
         condition: service_healthy
     volumes:
       - backend_data:/app/data
-    command: taskiq worker api.taskiq:broker api.tasks.registry --workers 1 --max-async-tasks 25
+    command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
+      --workers 1 --max-async-tasks 25
 
   backend-scheduler:
     image: ghcr.io/nokodo-labs/os1-backend:latest
@@ -89,13 +96,15 @@ services:
     restart: unless-stopped
     environment: *backend-env
     depends_on:
-      backend:
+      db:
+        condition: service_healthy
+      qdrant:
         condition: service_started
       valkey:
         condition: service_healthy
     volumes:
       - backend_data:/app/data
-    command: taskiq scheduler api.taskiq:scheduler api.tasks.registry
+    command: python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry
 
   frontend:
     image: ghcr.io/nokodo-labs/os1-frontend:latest

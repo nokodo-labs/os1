@@ -9,7 +9,13 @@ from pydantic import BaseModel, Field
 
 from api.models.event_types import EventType
 from api.models.task import TaskStatus, TaskType
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 from api.schemas.sorting import CommonSortBy
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
@@ -56,10 +62,10 @@ class TaskCreate(TaskBase):
 class TaskUpdate(MetadataUpdateModel):
 	"""mutable task fields for PATCH operations."""
 
-	status: TaskStatus | None = None
-	progress: int | None = None
-	stage: str | None = None
-	result: JSONObject | None = None
+	status: TaskStatus | MissingType = MISSING
+	progress: int | None | MissingType = MISSING
+	stage: str | None | MissingType = MISSING
+	result: JSONObject | None | MissingType = MISSING
 
 
 class Task(TaskBase, TimestampedModel):

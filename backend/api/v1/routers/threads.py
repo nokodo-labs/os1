@@ -57,6 +57,8 @@ from api.v1.service.authorization import (
 )
 from api.v1.service.events import SessionId
 from api.v1.service.threads import summaries as thread_summary_service
+from api.v1.tasks.threads import run_thread_maintenance_backfill_sweep
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
 
@@ -169,6 +171,27 @@ async def revectorize_threads(
 	require_admin(principal)
 	count = await thread_service.vectorize_all_threads(db)
 	return {"vectorized": count}
+
+
+@router.post("/maintenance-backfill/run")
+async def run_thread_maintenance_backfill(
+	batch_size: Annotated[int | None, Query(ge=1, le=200)] = None,
+	max_lookback_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+	min_inactivity_hours: Annotated[int | None, Query(ge=1, le=24 * 30)] = None,
+	principal: Principal = Depends(get_current_principal),
+) -> JSONObject:
+	"""manually run one batch of the retroactive thread maintenance sweep.
+
+	admin-only. this intentionally ignores the scheduled backfill enabled flag
+	so admins can spot-check the sweep without leaving the periodic schedule on.
+	"""
+	require_admin(principal)
+	return await run_thread_maintenance_backfill_sweep(
+		batch_size=batch_size,
+		max_lookback_days=max_lookback_days,
+		min_inactivity_hours=min_inactivity_hours,
+		respect_enabled=False,
+	)
 
 
 @router.get("/unread-counts", response_model=list[ThreadUnreadCount])
