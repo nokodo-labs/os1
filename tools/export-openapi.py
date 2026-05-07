@@ -10,6 +10,7 @@ import json
 import os
 import sys
 
+
 _here = os.path.dirname(os.path.abspath(__file__))
 _backend = os.path.abspath(os.path.join(_here, "..", "backend"))
 
@@ -25,13 +26,14 @@ os.environ.setdefault("TESTING", "true")
 
 from api.main import app  # noqa: E402
 
+
 schema = app.openapi()
 
 if output:
-    os.makedirs(os.path.dirname(output), exist_ok=True) if os.path.dirname(
-        output
-    ) else None
-    with open(output, "w", encoding="utf-8") as f:
-        json.dump(schema, f)
+	os.makedirs(os.path.dirname(output), exist_ok=True) if os.path.dirname(
+		output
+	) else None
+	with open(output, "w", encoding="utf-8") as f:
+		json.dump(schema, f)
 else:
-    json.dump(schema, sys.stdout)
+	json.dump(schema, sys.stdout)
